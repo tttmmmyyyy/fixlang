@@ -63,7 +63,6 @@ pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
-pub const ARRAY_GET_SIZE_NAME: &str = "get_size";
 pub const ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED: &str =
     "_unsafe_set_bounds_uniqueness_unchecked_unreleased";
 pub const ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED: &str =
@@ -112,6 +111,13 @@ pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+
+// The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
+pub const BOOL_FALSE_TAG: usize = 0;
+pub const BOOL_TRUE_TAG: usize = 1;
+// The fields of the result of `Std::unsafe_is_unique : a -> (Bool, a)`.
+pub const IS_UNIQUE_FLAG_FIELD: usize = 0;
+pub const IS_UNIQUE_VALUE_FIELD: usize = 1;
 
 // Number of array elements claimed by array debug info. The element count of an array
 // is only known at run time, which debug info cannot express here, so array debug types

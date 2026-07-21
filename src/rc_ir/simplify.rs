@@ -89,7 +89,7 @@ fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcE
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
-                    variant: arm.variant,
+                    tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: rewrite(&arm.body, ctx, changed),
                 })
@@ -184,7 +184,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     }
     // Pick the arm for the known tag. A catch-all arm binds the whole union (not the payload), so it
     // would not remove the construction; skip when only a catch-all matches.
-    let arm = arms.iter().find(|a| a.variant == Some(make.variant_index()))?;
+    let arm = arms.iter().find(|a| a.tag == Some(make.variant_index()))?;
     let body = substitute_expr(&arm.body, &single(&arm.payload.name, &payload.name));
     Some(replace_tail(&body, &mut |result| {
         substitute_expr(k2, &single(&m.name, &result.name))
@@ -250,7 +250,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             substitute_expr(&fresh, &single(&s.name, &produced.name))
         });
         new_arms.push(MatchArm {
-            variant: arm.variant,
+            tag: arm.tag,
             payload: arm.payload.clone(),
             body,
         });
@@ -279,7 +279,7 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
 /// to collapse the floated match, so the guard predicts the cancellation faithfully.
 fn arm_result_cancels_outer(body: &RcExprNode, outer_arms: &[MatchArm]) -> bool {
     match arm_tail_union_tag(body) {
-        Some(tag) => outer_arms.iter().any(|a| a.variant == Some(tag)),
+        Some(tag) => outer_arms.iter().any(|a| a.tag == Some(tag)),
         None => false,
     }
 }

@@ -7,15 +7,18 @@
 //! assertion need a triggering input and reachable code, whereas this is static and total.
 //!
 //! It checks the structural invariants of the RC IR: within each function every bound name is
-//! unique (no shadowing) and every variable use resolves to a binding in scope, or to a global — a
+//! unique (no shadowing), every variable use resolves to a binding in scope, or to a global — a
 //! function or a global value, both referenceable by name (a direct call's callee is a function
-//! name, not a local binding). Reference-count balance, use-after-consume, and closure
-//! capture/projection order are follow-ups: they need the ownership and consume model, and must be
-//! validated against the whole test suite to stay free of false positives.
+//! name, not a local binding) — and every `Retain`/`Release` names one reference-counting unit of
+//! its variable. Reference-count balance, use-after-consume, and closure capture/projection order
+//! are follow-ups: they need the ownership and consume model, and must be validated against the
+//! whole test suite to stay free of false positives.
 
 use crate::ast::name::FullName;
+use crate::ast::program::TypeEnv;
 use crate::misc::Set;
-use crate::rc_ir::ast::{RcExpr, RcExprNode, RcProgram, RcRhs};
+use crate::rc_ir::ast::{FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::rc_ir::borrow::rc_units;
 
 /// Check the well-formedness of every function and global, panicking on the first violation. A
 /// violation is an internal compiler error — the RC IR is malformed — so it aborts rather than
@@ -26,7 +29,7 @@ use crate::rc_ir::ast::{RcExpr, RcExprNode, RcProgram, RcRhs};
 /// compilation unit may not define, since separated compilation splits the program across units — and
 /// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
 /// names, so admitting the symbol names never masks a dangling local.
-pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, stage: &str) {
+pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str) {
     // The globally-referenceable names: every program symbol, plus this program's own functions and
     // globals — which include the clones borrow-ification and specialization mint (not program
     // symbols) and any unit-local function.
@@ -37,16 +40,25 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, stage: &str) {
     for g in &prog.globals {
         globals.insert(g.symbol.clone());
     }
+    // The functions alone, for a closure's target: a global value is referenceable by name but is
+    // not something a closure can be built from.
+    let funcs: Set<FullName> = prog.funcs.keys().map(|f| f.name.clone()).collect();
 
     for func in prog.funcs.values() {
-        let mut v = Validator::new(stage, &globals, func.name.name.to_string());
-        for p in func.params.iter().chain(func.cap.iter()) {
+        let mut v = Validator::new(
+            stage,
+            &globals,
+            &funcs,
+            type_env,
+            func.name.name.to_string(),
+        );
+        for p in func.params.iter().chain(func.capture.iter()) {
             v.bind(&p.name);
         }
         v.check_expr(&func.body);
     }
     for g in &prog.globals {
-        let mut v = Validator::new(stage, &globals, g.symbol.to_string());
+        let mut v = Validator::new(stage, &globals, &funcs, type_env, g.symbol.to_string());
         v.check_expr(&g.init);
     }
 }
@@ -56,16 +68,26 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, stage: &str) {
 struct Validator<'a> {
     stage: &'a str,
     globals: &'a Set<FullName>,
+    funcs: &'a Set<FullName>,
+    type_env: &'a TypeEnv,
     location: String,
     seen: Set<FullName>,
     scope: Set<FullName>,
 }
 
 impl<'a> Validator<'a> {
-    fn new(stage: &'a str, globals: &'a Set<FullName>, location: String) -> Self {
+    fn new(
+        stage: &'a str,
+        globals: &'a Set<FullName>,
+        funcs: &'a Set<FullName>,
+        type_env: &'a TypeEnv,
+        location: String,
+    ) -> Self {
         Validator {
             stage,
             globals,
+            funcs,
+            type_env,
             location,
             seen: Set::default(),
             scope: Set::default(),
@@ -86,6 +108,25 @@ impl<'a> Validator<'a> {
     }
 
     /// A variable use must resolve to a binding in scope or to a global (a function or global value).
+    /// A `Retain`/`Release` path stops at or above a reference-counting unit of its variable — at one
+    /// exactly once `split_rc_units` has run, and above one (a whole value, or a subtree holding
+    /// several units) before then. Descending past a unit is what must not happen: code generation
+    /// projects the path without checking it, so such a path would reference-count a part of the unit
+    /// instead of the unit, or a closure's function pointer instead of its capture.
+    fn check_rc_unit(&self, var: &RcVar, path: &FieldPath) {
+        let units = rc_units(&var.ty, self.type_env);
+        if !units.iter().any(|unit| unit.starts_with(path)) {
+            panic!(
+                "[RC IR validate] {}: reference counting `{}` at {:?} in `{}`, which reaches none of its units {:?}",
+                self.stage,
+                var.name.to_string(),
+                path,
+                self.location,
+                units
+            );
+        }
+    }
+
     fn use_var(&self, name: &FullName) {
         if !self.scope.contains(name) && !self.globals.contains(name) {
             panic!(
@@ -109,7 +150,13 @@ impl<'a> Validator<'a> {
                 self.check_expr(k);
                 self.scope.remove(&x.name);
             }
-            RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
+            RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
+                self.use_var(&v.name);
+                self.check_rc_unit(v, path);
+                self.check_expr(k);
+            }
+            // `Eval` names no RC unit — it only observes its variable — so there is no path to check.
+            RcExpr::Eval(v, k) => {
                 self.use_var(&v.name);
                 self.check_expr(k);
             }
@@ -136,7 +183,18 @@ impl<'a> Validator<'a> {
                     self.use_var(&a.name);
                 }
             }
-            RcRhs::Closure(_, caps) => {
+            RcRhs::Closure(fref, caps) => {
+                // A closure names a function of the program. A rewrite that mints a clone name and
+                // forgets to add its body leaves this reference dangling, which code generation only
+                // meets much later.
+                if !self.funcs.contains(&fref.name) {
+                    panic!(
+                        "[RC IR validate] {}: closure targets `{}`, which is not a function of the program, in `{}`",
+                        self.stage,
+                        fref.name.to_string(),
+                        self.location
+                    );
+                }
                 for c in caps {
                     self.use_var(&c.name);
                 }
@@ -172,7 +230,7 @@ mod tests {
             ty: make_i64_ty(),
             source: None,
             debug_name: None,
-            nonnull: false,
+            skip_null_check: false,
         }
     }
 
@@ -186,7 +244,9 @@ mod tests {
     /// Check `body` as a function whose only bindings in scope on entry are `params`.
     fn check(body: &RcExprNode, params: &[&str]) {
         let globals = Set::default();
-        let mut v = Validator::new("test", &globals, "f".to_string());
+        let type_env = TypeEnv::default();
+        let funcs = Set::default();
+        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
         for p in params {
             v.bind(&FullName::local(p));
         }
@@ -228,7 +288,9 @@ mod tests {
     fn accepts_use_of_a_global_name() {
         // let r = call g(); ret r   where g is a global (not a local binding)
         let globals: Set<FullName> = [FullName::local("g")].into_iter().collect();
-        let mut v = Validator::new("test", &globals, "f".to_string());
+        let type_env = TypeEnv::default();
+        let funcs = Set::default();
+        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
         let body = node(RcExpr::Let(
             var("r"),
             RcRhs::App(var("g"), vec![]),

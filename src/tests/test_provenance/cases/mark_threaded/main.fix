@@ -1,0 +1,15 @@
+module Main;
+
+// Publishing a value to other threads gives back a handle of unknown sharing, even though the value
+// it names is the one that went in. Dropping a uniqueness check rests on nothing else being able to
+// reach the value, which for a value other threads can reach holds only because a published value
+// can never be held through a handle the analysis reads as uniquely owned. So the write below keeps
+// its check, while the same write on the array before publication drops it.
+main : IO ();
+main = (
+    let local = Array::fill(4, 0);
+    let local = local.set(0, 1);
+    let published = local.mark_threaded;
+    let published = published.set(1, 2);
+    println $ published.@(1).to_string
+);

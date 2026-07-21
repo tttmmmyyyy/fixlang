@@ -8,6 +8,10 @@ module Main;
 // - `Array::swap` on a fresh array -> `Array::swap [unique]`.
 // - a generic `Array::act` on a fresh array -> its `unsafe_is_unique` folds to `is_unique[unique]`.
 // - a boxed-struct field `set` on a fresh struct -> `set_0 [unique]`.
+// - a fresh array passed through `assert_unique`, whose guard aborts rather than producing a value,
+//   comes out fresh, so the `set` after it drops its check too.
+// - an array built by a fill loop, which writes into it through the primitives that leave the
+//   uniqueness check to their caller, comes out fresh as well.
 type Rec = box struct { x : I64, y : I64 };
 
 main : IO ();
@@ -20,9 +24,15 @@ main = (
     let rec = Rec { x : 1, y : 2 };
     let rec = rec.set_x(10);
 
+    let guarded = Array::fill(4, 0).assert_unique(|_|"the array is shared");
+    let guarded = guarded.set(0, 7);
+
+    let built = Array::from_map(3, |i| i);
+    let built = built.set(0, 5);
+
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0)).to_string
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0)).to_string
 );

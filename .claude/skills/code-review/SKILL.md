@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
-argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. Each editing aspect runs twice — once inside the diff, once over the rest of the touched files for behavior-preserving cleanups — and the orchestrator commits every pass on its own, then applies `cargo fmt` as a final standalone commit, and records in memory how far this branch has now been reviewed. Use when: reviewing code just written by AI (uncommitted changes), reviewing whatever has accumulated since the last review ('review the unreviewed code' — resumes from the recorded checkpoint), or doing a pre-merge review of an entire branch."
+argument-hint: "Scope: 'unreviewed' for everything since this branch's last recorded review, 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
 # Code Review
 
-Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. As the editing aspects run, the orchestrator commits each one's changes as its own commit, and finishes with `cargo fmt` in a standalone commit — so every pass is a separate, reviewable commit and formatting churn never mixes with the substantive changes.
+Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. As the editing aspects run, the orchestrator commits each one's changes as its own commit — the fixes inside the diff and the cleanup that aspect made around it as two — and finishes with `cargo fmt` in a standalone commit, so every pass is a separate, reviewable commit and formatting churn never mixes with the substantive changes.
 
 ## Scope
 
@@ -15,10 +15,59 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 | Argument            | Base ref                                  | Use when                                                         |
 | ------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
 | (none)              | *ask the user* — see Procedure step 1     | The invoker did not specify a scope                              |
+| `unreviewed`        | the branch's recorded checkpoint — see *Review Checkpoints* | Reviewing whatever has accumulated since the last review, working tree included |
 | `uncommitted`       | `HEAD`                                    | Reviewing code just written / staged but not yet committed       |
 | `last N` (e.g. `last 3`) | `HEAD~N`                             | Reviewing the last N commits on the current branch               |
 | `branch`            | `$(git merge-base HEAD main)`             | Pre-merge review of the whole branch since it forked from `main` |
 | `<git ref>`         | `<git ref>`                               | Arbitrary base (a commit hash, another branch, etc.)             |
+
+Every scope reviews the working tree as it stands, so uncommitted changes are always included — the base ref decides only how far back the review reaches.
+
+## Review Checkpoints
+
+A completed review records how far it got, so the next one can pick up from there. The record lives in the session memory directory (the path is in the memory instructions the orchestrator already carries), as a single memory file named `code-review-checkpoints`, type `project`, holding one line per branch:
+
+```
+- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>
+```
+
+The recorded hash is `HEAD` **after** the review's own commits land, so the next review starts past the cleanup commits this one made. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+
+The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
+
+## Review Radius
+
+A review reaches past the hunks it was handed, because code improves only where someone is already working: the stretches between hunks are the stretches nobody ever cleans. Three rings, and the ring decides what an aspect may do:
+
+- **Ring 1 — the diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
+- **Ring 2 — the rest of each touched file.** Behavior-preserving cleanups apply, under the budget below; whatever else the aspect notices here becomes a finding.
+- **Ring 3 — the rest of the project.** Findings only. Aspects read ring 3 freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
+
+### What may be edited in ring 2
+
+Only edits that **preserve behavior by construction**, so that untouched code stays correct without leaning on tests the change under review never exercised:
+
+- Comments and doc comments, including one added to a pre-existing undocumented item.
+- Imports and qualified paths.
+- Renames of local bindings — `let`, loop and `match` binders, closure and function parameters.
+- Deletion of commented-out code.
+- Extraction of a block duplicated within the file into one function, with both call sites moved onto it.
+
+Everything else stays a finding in ring 2: item renames, moves, signature changes, splitting a function, narrowing mutable state, rewriting an algorithm, dropping a defensive branch. Each changes an interface or a behavior, and the change under review carries no test that would catch a mistake there.
+
+An unused private item outside the hunks is a finding as well, even though deleting it would compile: CLAUDE.md keeps such an item — and the `dead_code` warning it carries — as the reminder that a staged rollout still has a step to go, so the author decides whether it has served its purpose.
+
+### Budget
+
+Ring-2 work is opportunistic, so it is capped: **at most five edits per file per aspect**, taken nearest-first outward from the hunks, each one justifiable on its own. When candidates remain past the cap, report how many and let the author decide whether to widen. Three aspects sit outside the cap:
+
+- `shorten-qualifiers` applies its whole-file convention uncapped — a half-converted import block reads worse than either end state.
+- `code-quality`'s fail-loud fallback scan already covers the whole touched file as a correctness check, and runs as written in ring 1.
+- `no-personal-info` works in ring 1 alone: it gates what this diff would add to the history.
+
+### Modes
+
+Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied). Each mode is committed on its own, so the cleanup near the change is a separate commit the author can weigh — or revert — as one unit.
 
 ## Aspect Sequence
 
@@ -26,41 +75,53 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
 2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
-3. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
-4. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
-5. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
-6. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
-7. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
+3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
+4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
+5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
+6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, invariant assertions, shotgun-surgery annotation, root-cause vs symptom check, etc.).
+7. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
+8. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
+9. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
 
 ## Why Sequential, Not Parallel
 
 1. **Avoid conflicting edits.** The editing aspects modify files. Parallel runs would fight each other.
 2. **Each aspect should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
-3. **Per-aspect commits need it.** Each editing aspect is committed on its own (see the Procedure), which means running and committing them one at a time.
+3. **Per-aspect commits need it.** Each editing aspect is committed on its own, and each of its two modes separately again (see the Procedure), which means running and committing them one at a time.
 
 ## Procedure
 
-**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, and the extracted text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
 
 1. **Resolve the base ref** from the argument:
-   - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options:
-     1. **Uncommitted** — staged + unstaged changes (`HEAD`).
-     2. **Last N commits** — review the last N commits on the current branch (resolve to `HEAD~N`). When the user picks this, ask a follow-up question for `N`.
+   - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
+     1. **Since the last review** — everything after this branch's recorded checkpoint. Offer this first when a checkpoint exists for the current branch, naming the commit it would start from.
+     2. **Uncommitted** — staged + unstaged changes (`HEAD`).
      3. **Branch (vs main)** — everything since this branch forked from `main` (`$(git merge-base HEAD main)`).
-     4. **Custom git ref** — any commit hash / branch / tag the user names. Ask for the ref as a follow-up.
+     4. **Last N commits** — review the last N commits on the current branch (resolve to `HEAD~N`). When the user picks this, ask a follow-up question for `N`.
 
      After the user picks, resolve to the corresponding base ref using the rules below.
+   - `unreviewed` (also: "review the code that hasn't been reviewed yet", or any phrasing asking for what has accumulated since last time) → read the `code-review-checkpoints` memory and take the line for the current branch (`git branch --show-current`). Then:
+     - Verify the recorded hash is still an ancestor of `HEAD`: `git rev-parse --verify <hash>^{commit}` and `git merge-base --is-ancestor <hash> HEAD`. A hash that no longer resolves, or that sits outside this branch's history, means the branch was rebased or reset since the checkpoint was written — say so and ask the user for a base instead of guessing.
+     - When the hash equals `HEAD` and `git status --porcelain` is empty, there is nothing to review: report that and stop.
+     - When no line exists for this branch, say so and ask the user for a base, offering `$(git merge-base HEAD main)` as the natural starting point for a branch that has never been reviewed.
+     - When a merge brought in commits already reviewed on another branch, the diff will include them. Note it in the summary so the user can narrow the scope if the noise is not worth it.
    - `uncommitted` → `HEAD`.
    - `last N` (where N is a positive integer) → `HEAD~N`. Verify it resolves with `git rev-parse --verify HEAD~N`.
    - `branch` → `$(git merge-base HEAD main)`. Verify `main` exists; if the project uses a different default branch, abort and ask.
    - anything else → treat as a git ref. Verify it resolves with `git rev-parse --verify <ref>`.
-2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `test-sufficiency`. They only report findings; they make no edits.
-   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
-3. **Commit the code under review** — `uncommitted` scope only. If the working tree still holds the pending changes being reviewed (the scope was `uncommitted`, so the reviewed code is not yet committed), commit it now as its own commit, with a message describing the change (you have the context of what was just written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. If the tree is already clean (`branch` / `last N` scope, where the reviewed code is already committed), skip this.
-4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
+2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. They only report findings; they make no edits.
+   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
+3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. On a clean tree, skip this step.
+4. **Run the editing aspects, committing each mode separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. For each aspect, in turn:
+   - Run it in **`in-diff` mode**. If it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`).
+   - If it reported ring-2 candidates, run it again in **`neighborhood` mode**, handing it that list as its starting point, and commit what it changed as `code-review: <what this aspect did> — cleanup near the change`. An aspect that reported no candidates skips this second run.
+
+   A mode that changed nothing produces no commit. **Per-aspect, per-mode, fine-grained commits are the goal — never bundle several into one commit.**
 5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every finding the flag-only reviews (`design-fit`, `test-sufficiency`) raised; and list every commit created, with its short hash.
-7. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+6. **Record the checkpoint.** Take `git rev-parse --short HEAD` and write it to the `code-review-checkpoints` memory under the current branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+7. **Summarize.** For each editing aspect, give a one-line description of what it changed in each mode (or note it changed nothing), keeping the cleanup near the change visible as its own line so the author can judge it separately; surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
+8. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -68,15 +129,36 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 You are running one aspect of a code review.
 
 Aspect: <aspect-name>
+Mode: <in-diff | neighborhood>
 Base ref: <base>
 
 The base ref is the comparison point: review the diff between <base>
 and the current working tree, i.e. run your own `git diff <base>` to
 find the files and hunks to operate on.
 
+How far your edits may reach is set by the mode and by the radius rules
+below.
+
+In `in-diff` mode, edit inside the diff hunks (ring 1). Wherever the
+aspect would also fix something in the rest of a touched file, collect
+it as a **ring-2 candidate** — file, location, the one-line fix, and
+which convention it comes from — and leave that code alone.
+
+In `neighborhood` mode, work ring 2 of the touched files: start from
+the candidate list below, add anything it missed, keep the edits the
+radius rules allow, and turn the rest into findings.
+
+Ring-2 candidates carried over from the in-diff pass:
+<the list the in-diff run reported, or "none — this is the in-diff pass">
+
+----- BEGIN RADIUS RULES -----
+<paste the full text of the `## Review Radius` section here, including
+all its `### ...` sub-sections>
+----- END RADIUS RULES -----
+
 The full instructions for this aspect follow between the BEGIN/END
-markers. Treat them as your sole instructions. Do not look elsewhere
-for additional conventions.
+markers. Treat them, together with the radius rules, as your sole
+instructions. Do not look elsewhere for additional conventions.
 
 ----- BEGIN ASPECT INSTRUCTIONS -----
 <paste the full text of `## Aspect: <aspect-name>` here, including all
@@ -84,20 +166,38 @@ its `### ...` sub-sections, up to but not including the next
 `## Aspect:` heading or the end of file>
 ----- END ASPECT INSTRUCTIONS -----
 
-Apply any edits the aspect prescribes. If the aspect modifies code, run
-`cargo check` afterwards to confirm the project still builds.
+Apply the edits the aspect prescribes within your mode's ring. If you
+modified code, run `cargo check` afterwards to confirm the project
+still builds.
 
 Report back in under 100 words: which files you touched and a one-line
-summary of the change in each.
+summary of the change in each. Report separately, and in full, every
+finding the aspect asks you to flag, and — in the in-diff pass — the
+ring-2 candidate list. The word limit governs the summary of your
+edits; findings and candidates are added on top of it.
 ```
 
 ## What NOT to do
 
 - Don't run aspects in parallel.
-- Don't let subagents decide their own scope — always pass the resolved base.
+- Don't let subagents decide their own scope — always pass the resolved base and the mode.
+- Don't let a `neighborhood` pass edit past the radius rules: an interface change or a behavior change outside the hunks is a finding, whatever the mode.
+- Don't let neighborhood edits ride along in an `in-diff` commit — the split is what lets the author revert the cleanup on its own.
 - Don't continue the chain if a step fails.
 - Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
+- Don't record a checkpoint for a review that stopped early — the record must mean "everything up to here was reviewed".
+- Don't fall back to a guessed base when a recorded checkpoint fails to resolve — ask the user.
+
+---
+
+## Adding an Aspect or a Convention
+
+Every convention below is read in full by its aspect's subagent on every review, so the set is a shared budget: one that rarely fires spends the attention that the ones firing often need. What earns a place is a **class of mistake**, described so that it can be recognized in code written by another author, in another subsystem, months from now. A concrete case is welcome as the illustration; the rule is what the entry is made of.
+
+Before adding one, strip the case that prompted it away and read what remains. An entry that no longer says what to look for was a report about one incident — the durable form of that is a regression test, or an assertion at the invariant it violated. An entry that names a specific function, type, module, or pass fails the same way: only a reader who already knows the case can apply it.
+
+Prefer extending the convention whose subject already covers the class over adding a sibling beside it, and prefer a new convention inside an existing aspect over a new aspect. A new aspect earns its own section when it asks a question none of the existing ones ask — a different lens on the code, rather than another rule under a lens already here.
 
 ---
 
@@ -171,7 +271,7 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ### Scope Discipline
 
-- **Touch only test files in the diff.** Pre-existing tests with the same problem are out of scope unless the diff modifies them.
+- **Touch only test files the diff changed.** Within those files, the mode decides which tests you may edit: the ones the diff introduced or modified in `in-diff` mode, the file's other tests in `neighborhood` mode. A test file the diff leaves alone is out of scope in both.
 - **Do not change what the test verifies.** If the obvious fix would alter the property under test (e.g., switching from "does this declaration type-check" to "does this expression evaluate"), flag rather than apply.
 - **One unreferenced symbol at a time.** Multiple unreferenced declarations in one hunk may each have a different right answer.
 
@@ -212,6 +312,55 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 
 - **Flagged for review**: the goal as you understood it; then, per finding, the design concern, the concrete evidence in the code, and the alternative design with its rough cost.
 - If the design fits the goal well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
+
+---
+
+## Aspect: refactor-scope
+
+A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks: **did the change bend itself out of shape so that the existing code could stay untouched?**
+
+Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, because the defect lives in the relationship between the new item and the old one.
+
+This aspect **only flags**; it never refactors. Widening a change to reshape existing code is the author's call, and the ripple through call sites, tests, and downstream Fix programs needs judgment this review does not have.
+
+### Distinguish from design-fit
+
+`design-fit` judges the design of the new code against the goal, taking the existing code as a fixed backdrop. This aspect questions the backdrop: the shape that fits the goal may have required changing an existing function, type, or module, and the finding is the mark that leaving it alone left on the new code.
+
+### Scars to look for
+
+Each of these is concrete evidence in the diff that existing code was routed around:
+
+- **A near-duplicate of an existing item.** A new function, type, or pass that is an existing one plus a tweak — `resolve_symbol_with_span` beside `resolve_symbol`, a second visitor differing in one arm, a parallel enum carrying the same cases. The end state wants one generalized item with both call sites on it. This is the highest-yield check, and it takes a search across `src/`: the twin is usually in another module, which is exactly why the author wrote a fresh one.
+- **A `bool` or `Option` parameter added to an existing function to serve the new caller.** A flag argument is the record of a seam the author declined to move: the two behaviors want either two functions, or one function with the varying part lifted into the caller.
+- **A conversion or adapter that exists only because an upstream type stayed as it was.** The new code reshapes a value at every call because changing the type — or adding the constructor it wanted — would have touched more files.
+- **A constant, table, or invariant re-stated in the new code** because the existing copy lives in a module the change avoided. Beyond the duplication, this plants the shotgun-surgery trap that `code-quality` documents.
+- **A forwarding wrapper preserving a superseded signature.** The old entry point kept alive as a one-line delegation so its call sites need no edit. When every caller is inside this repository, updating them and deleting the forwarder is the cleaner end state.
+- **A special case grafted onto an existing function** where the general rule the new caller needs would have subsumed the old behavior as well.
+- **A superseded path left standing.** The change introduced the replacement, and the old code is still reachable because deleting it and its callers would have widened the diff. `code-quality` removes only dead items the diff itself introduced, so a path that *became* dead falls to this aspect.
+
+The litmus test: **explain the resulting code to someone who never saw the diff.** If the explanation of why there are two of something, why a flag exists, or why a conversion happens is "so that the change would touch fewer files", then the reason describes the diff — and the diff is gone the moment it lands, leaving behind only the thing it justified.
+
+### Discipline
+
+- **Flag only, never refactor.** No edits.
+- **Anchor every finding on a scar in the new code** — the duplicate, the flag, the adapter, the wrapper, the stranded path. Pre-existing mess that the change neither created nor bent around belongs to the editing aspects' neighborhood pass; raising it here buries the findings that the diff is actually responsible for.
+- **Price the ripple.** A finding must say what the refactor would touch: which files, roughly how many call sites, which tests. "Generalize this" with no estimate leaves the author no basis to decide.
+- **Name the compatibility cost.** Some existing items have consumers outside this repository — Fix standard-library signatures, the LSP protocol surface, APIs that external Fix projects call. Reshaping those is a compatibility decision; flag it all the same, and state that cost as part of the finding.
+- **An author who priced it already has answered.** When a commit message or a comment states why the existing code was left as it is, treat that as the decision and skip the finding.
+
+### Procedure
+
+1. Read `git log <base>..HEAD` and `git diff <base>`, and state in one or two sentences what the change is for.
+2. List the items the diff adds — functions, types, traits, passes, constants. For each, search `src/` for an existing counterpart it resembles in name, signature, or shape, and read any candidate in full before judging.
+3. For each existing item the diff **modifies**, read its pre-diff version (`git show <base>:<file>`) and ask whether the modification is a graft — a flag, an extra case, a widened type — where reshaping would have served the old and new callers together.
+4. For each existing item the diff **calls but leaves alone**, ask whether the new code bends around it: a conversion at every call site, a re-stated constant, a value threaded through only to satisfy its signature.
+5. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
+
+### Report
+
+- **Flagged for review**: per finding — the scar in the new code (file, and what it is), the existing code that would have to change, the end state you would aim for, and the cost of getting there.
+- If the change reshaped existing code wherever it needed to, say so in one line and flag nothing.
 
 ---
 
@@ -272,7 +421,7 @@ Walk the Rust code changed against the base ref, check it against the convention
 
 If the diff introduces logic that already exists elsewhere in the project, replace the duplicate with a call to the existing helper.
 
-This project is a compiler bundled with a sizable toolchain — LSP server, package manager, documentation generator, build runner. That breadth alone makes it overwhelmingly likely that "generic" supporting logic — file/path handling, name and span arithmetic, source-text scanning, dependency graph traversal, version comparison, manifest parsing, AST/type walks, identifier formatting, and so on — is already implemented somewhere in `src/`. Before writing such logic, **reason from the project's feature set first**: ask "is this the kind of helper a compiler / LSP / package manager / doc generator would plausibly already have?" When the answer is yes (it usually is), search the entire `src/` tree to confirm before adding a new one. Do not confine the search to the new code's neighborhood — helpers cross subsystem boundaries freely, and a routine written for one feature is often exactly what another wants.
+This project is a compiler bundled with a sizable toolchain — LSP server, package manager, documentation generator, build runner. That breadth alone makes it overwhelmingly likely that "generic" supporting logic — file/path handling, name and span arithmetic, source-text scanning, dependency graph traversal, version comparison, manifest parsing, AST/type walks, identifier formatting, and so on — is already implemented somewhere in `src/`. Before writing such logic, **reason from the project's feature set first**: ask "is this the kind of helper a compiler / LSP / package manager / doc generator would plausibly already have?" When the answer is yes (it usually is), search the entire `src/` tree to confirm before adding a new one. Search the whole tree rather than the files around the new code — helpers cross subsystem boundaries freely, and a routine written for one feature is often exactly what another wants.
 
 If your reasoning suggested the helper should exist but the search comes up empty, **add it where it ought to live, not where you happen to need it.** For example, if the diff inlines `s.start <= pos && pos <= s.end` for a `Span`, and you were expecting `Span` to expose an `includes` (or similarly named) method, add the method on `Span` rather than leaving the arithmetic at the call site. The very reasoning that made you go looking — "this is the kind of thing `Span` would expose" — applies just as strongly to *placing* the new helper as to *finding* an existing one. Inlining at the use site forfeits the benefit and guarantees the next caller will re-derive the same expression.
 
@@ -325,13 +474,43 @@ let elem = arr.get(i).copied().unwrap_or(0);   // is `i` out of range ever a rea
 
 The default in the **conservative / safe direction** is the one that slips through most often, because it reads as obviously harmless — an analysis defaulting to "assume shared" (`Dynamic`), a predicate to `false`, an ownership to `Borrow`, a lookup to an empty set. It is *not* harmless when the absorbed case is unreachable: the safe default still hides a logic bug at the point the invariant broke, and "safe today" is one refactor away from "unsafe tomorrow". **Reachability, not the safeness of the default, decides.** An unreachable case must fail loud however conservative its fallback looks; "it errs on the safe side" is not a reason to keep it. Do not let a `map_or(SAFE, …)` / `unwrap_or(SAFE)` pass just because `SAFE` could not itself miscompile.
 
-**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `debug_assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
+**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
 **Keep** the fallback only when the case turns out to be a **supported input** the caller legitimately reaches — and then document the concrete scenario, not a vague "just in case".
 **Report only** when converting to a hard failure could crash on inputs you cannot prove absent — flag it for the author to confirm the invariant.
 
 **Catch the refactor regression.** When a hunk *rewrites* an existing function, compare it against the version it replaced — not only against the review base. A refactor that relaxes a prior `assert!` / `unreachable!` / `panic!` into a silent default (a representation change that "simplifies" a fail-loud arm back into a `map_or(default)`) reintroduces a swallowed case, and that is as much a defect as writing one fresh. Read the pre-refactor body (`git show <base>:<file>` for the symbol) whenever a rewritten function now returns a default where it used to abort.
 
-**Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention that overrides the aspect's usual hunk-only discipline: scan every function of each file the diff touches. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
+**Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention that reaches past the mode's ring: scan every function of each file the diff touches, in either mode. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
+
+#### State the invariants the code leans on with an assertion
+
+The convention above removes a silent *handler* for a case that cannot arise. This one covers the other half: code that leans on a condition nothing states — a collection that must be non-empty, two sequences that must be the same length, a key the map is expected to already hold, an index within a bound computed somewhere else, a field that must be filled by the time this runs. The condition is load-bearing and the code never says so, so a violation shows up later as a wrong value rather than at the line whose assumption broke.
+
+An assertion is not defensive code, so this convention does not compete with *Don't add defensive code inside the trust boundary*. Defensive code absorbs a bad value and continues; an assertion refuses to continue. Trusting an internal caller means declining to *handle* their mistake — writing the invariant down is how that trust is stated.
+
+The cost of the check decides its form:
+
+- **Cheap check** — a comparison, a length equality, a `contains_key`, anything negligible beside the work it guards. Assert it unconditionally with `assert!` / `assert_eq!`, and put the offending values in the message.
+- **Expensive check** — a scan of the whole structure, a re-derivation of the result, a traversal proportional to (or worse than) the work being guarded. Gate it on compiler development mode: `if config.develop_mode { assert!(…) }`. The unit tests build their `Configuration` in development mode, so the check runs where it earns its cost, and a user's build pays nothing for it.
+
+```rust
+// Cheap: state it outright.
+assert_eq!(params.len(), args.len(), "arity mismatch: {:?} vs {:?}", params, args);
+
+// Expensive: the whole-graph walk runs for compiler development only.
+if config.develop_mode {
+    assert!(graph.is_acyclic(), "dependency graph gained a cycle at {}", node);
+}
+```
+
+**Never `debug_assert!`.** This project runs its tests in release (`cargo test --release`), where `debug_assert!` compiles to nothing — the assertion would be absent from exactly the runs meant to exercise it. Cheap checks use `assert!`; expensive ones use the `develop_mode` gate.
+
+**Assert internal invariants; report user errors.** A condition that a malformed source file, a broken manifest, or an unusual-but-legal user program can violate is input validation, and it belongs in the diagnostic path as an error — asserting it turns a bad user program into a compiler crash. Decide which side of the trust boundary the condition sits on before writing the assertion.
+
+Assert where the invariant is **established**, so a violation stops at its origin. When the establishing site is far from the code that depends on it, assert at the entry of the dependent code instead, and let the message name what was expected.
+
+**Apply** when the check is cheap, the expression is local to the code at hand, and the invariant is plainly the one the new code leans on.
+**Report only** when the check needs a `Configuration` the function does not carry — threading one in for an assertion is a design call — or when you cannot rule out that user input reaches the condition.
 
 #### Remove dead and half-finished code
 
@@ -531,9 +710,56 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 ### Scope Discipline
 
-- **Touch only code inside diff hunks.** Pre-existing violations in untouched parts of the file are out of scope — with one exception: *Don't let a fallback silently handle a case the author calls impossible* is applied to the whole of each touched file, per that convention's own scope note.
+- **Let the mode set the reach.** In `in-diff` mode, edit inside the diff hunks and collect what the rest of each touched file needs as ring-2 candidates; in `neighborhood` mode, work those candidates under the radius rules. One convention stands apart: *Don't let a fallback silently handle a case the author calls impossible* covers the whole of each touched file in `in-diff` mode already, per its own scope note — a swallowed case is a bug rather than opportunistic cleanup.
+- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, since nothing in this change's tests would catch a mistake there — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
 - **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
+
+---
+
+## Aspect: naming
+
+A name is the one piece of documentation every reader is guaranteed to read. A misleading name costs more than a missing comment: the reader trusts it, builds a wrong model of the code, and whatever gets written on top of that model inherits the mistake. This aspect reads the names the diff introduces and asks whether each lets the reader predict what the thing is.
+
+It works in two modes, split by how far a rename reaches:
+
+- **Item names** — modules, types, traits, trait methods, functions, methods, struct fields, enum variants, constants, and top-level Fix declarations. **Report only**: a rename here changes an interface and ripples across call sites, other crates, and Fix programs, so the author decides.
+- **Local names** — `let` bindings, `for` / `while let` binders, `match` arm binders, closure parameters, and function parameters. **Apply**: their scope is one function body, so the rename is mechanical and self-contained.
+
+### What to check
+
+One question: **can the reader predict the contents from the name?** Read the name, fix the expectation it creates, then read the body and check whether the expectation held. `result`, `tmp`, `step2_output` create no expectation — they name the slot the value sits in. `timeout` on a bare integer creates one with the unit guessed. A `check_ty` that now also mutates the environment creates a confident and wrong one, which is the costliest of the three.
+
+The rest is calibration that question alone does not supply:
+
+- **Read the pre-diff version of a rewritten item** (`git show <base>:<file>`) before judging its name. A name that survived a behavior change is the most common wrong name in a diff.
+- **The project's word wins.** A name can be clear on its own and still be wrong: `origin_info` beside an established `provenance`, or `prev` / `next` in a file that says `old` / `new`, makes the reader learn two words for one thing. `grep` the concept before choosing.
+- **Abbreviations are calibrated per project.** `ty`, `expr`, `idx`, `arg`, `ptr` are established here and read fine; a fresh `cfgm`, `rslv`, `ntc` costs the reader a decoding step.
+- **Grammar follows the role.** Functions and methods read as verb phrases (`resolve_symbol`); `bool`-returning predicates start with `is_` / `has_` / `can_`; conversions follow the Rust convention — `as_` for a cheap borrowing view, `to_` for a non-consuming conversion, `into_` for a consuming one. Types, modules, and fields read as noun phrases; a trait names a capability or a role.
+- **A negated boolean stacks into double negatives at the use site.** `not_ready`, `disable_check` become `ready`, `check_enabled`.
+- **Length scales with scope.** In a three-line scope the surrounding lines supply the picture, so `i`, `ty`, `n` carry it; a binding live across eighty lines, or an exported item, has to supply it alone. A long descriptive name inside a tight loop is noise.
+- **No good name is a design signal.** For an item it usually means two jobs, or a seam in the wrong place. Report it as a finding naming the two jobs, instead of settling for `process_step_2`.
+
+### Discipline
+
+- **Item names stay report-only in every mode.** A rename there is a project-vocabulary decision that ripples across the repository, so it belongs to the author whether the item sits in a hunk or elsewhere in the file.
+- **Local names follow the mode.** `in-diff` mode renames the local bindings the diff introduces or gives new meaning, and collects the rest of the touched file's misleading locals as ring-2 candidates; `neighborhood` mode renames those, under the radius rules. A local rename is contained in one function body, which is what makes it safe to carry into untouched code.
+- **A synonym is not an improvement.** Rename when the current name misleads, hides the meaning, or breaks the project's vocabulary. Renaming for taste costs review attention and muddies `git blame`.
+- **Check a proposed term against the codebase.** `grep` the candidate and the concept first — the right name is usually the one the project already uses.
+- **Parameter renames carry two obligations**: a parameter of a trait `impl` method keeps the name its trait declaration uses, and any `# Arguments` entry or doc-comment mention of the parameter is updated with it.
+- **Run `cargo check` after renames.**
+
+### Procedure
+
+1. Run `git diff <base>` to find changed files and hunks. Rust sources (`.rs`) and Fix sources (`.fix`, including Fix source strings embedded in tests) are in scope.
+2. Collect the names the diff introduces: item declarations and local bindings inside the hunks. For an item the diff rewrites, read its pre-diff version as well.
+3. Judge each name against *What to check*.
+4. For a local name that fails: rename it with `Edit` at every occurrence in its scope. For an item name that fails: collect it as a finding and leave the code alone.
+5. Run `cargo check`.
+6. Report:
+   - **Applied renames**: file, `old` -> `new`, one line on what the old name hid.
+   - **Flagged for review**: file, item, current name, proposed name, and what the current name misleads the reader about. When no good name is available, say what the item does that resists naming.
+   - If the names read well, say so in one line.
 
 ---
 
@@ -541,7 +767,7 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 Three related cleanups for Rust import style:
 
-1. **Shorten qualified paths** — replace `crate::foo::bar::Baz` with `Baz` plus a `use` import.
+1. **Shorten qualified paths** — replace `crate::foo::bar::Baz` with `Baz` plus a `use` import, as far as the short name still identifies what it names (see *Keep the qualifier that carries the meaning*).
 2. **Eliminate wildcard imports** — replace `use foo::*;` with an explicit list of the names actually used.
 3. **Collapse the use block** — remove blank lines between `use` statements at the top of the file. The project convention is one contiguous block; sectioning (std vs external vs crate, as `rust-analyzer` likes to do) is not meaningful here.
 
@@ -551,7 +777,7 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
 
 1. **Collect changed files**: Run `git diff --name-only <base>` to find affected files.
 
-2. **Identify cleanup targets**: For each affected file, search the **entire file** (not just diff lines). The diff is used only to determine *which files* to process — pre-existing violations in the same file are also fixed. Look for:
+2. **Identify cleanup targets**: For each affected file, search the **entire file**. The diff is used only to determine *which files* to process. In `in-diff` mode, fix the violations that sit in the diff hunks and list the file's remaining ones as ring-2 candidates; in `neighborhood` mode, fix those. This convention runs uncapped in ring 2 — a file whose import block is half converted reads worse than one at either end state. Look for:
    - **Wildcard imports**: `use module::*;` (and grouped variants like `use module::{*}`).
    - **Qualified paths**: `crate::module::Ident`, `crate::module::{A, B}`, `module::submodule::Ident`. Paths used as types, function calls, trait bounds, or in expressions.
    - **Blank lines inside the top-of-file `use` block**: any empty line between two `use` statements at the start of the file. These are typically `rust-analyzer`-inserted section breaks (std / external crates / `crate` / `super`) that the project does not want.
@@ -562,6 +788,7 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
    - **For each wildcard import** `use foo::*;`: list every identifier from `foo` actually referenced in the file, and rewrite the import as `use foo::{A, B, C};` (or merge into an existing line if one already imports from `foo`).
    - **For each qualified path**:
      - Determine the short name (last segment, e.g., `Baz` from `crate::foo::bar::Baz`).
+     - Apply the litmus test in *Keep the qualifier that carries the meaning*. When the module segment is what identifies the item, import that module and leave the call written as `module::item`.
      - Check if the short name conflicts with another import or a different qualified path in the same file.
        - **No conflict**: Add a `use` statement and replace all occurrences with the short name.
        - **Conflict**: Keep the minimal qualification needed to disambiguate (e.g., `bar::Baz` instead of full `crate::foo::bar::Baz`).
@@ -571,6 +798,14 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
 5. **Apply edits**: Add/update `use` statements in the import block, following the file's existing style. Replace qualified paths with short names.
 
 6. **Verify**: Build the project (`cargo check`) to confirm no compilation errors. Wildcard removal is the most error-prone step — if some identifier was implicitly pulled in via the wildcard, the build will fail and reveal it; add it to the explicit list.
+
+### Keep the qualifier that carries the meaning
+
+Shortening serves readability, so it stops where readability does. Some last segments are generic — `run`, `new`, `build`, `check`, `parse`, `visit`, `Config`, `Error`, `Builder` — and say only what *kind* of thing the item is, leaving *which* one to the module name. For those, the module segment is the meaning: `foo_opt_path::run()` tells the reader which pass runs, while a bare `run()` at the call site identifies nothing.
+
+The litmus test: reading the call site alone, does the short name identify what is being called? If it does, import it. If the module name is what identifies it, keep one module segment — the one that supplies the meaning — and import the module itself: `use crate::optimize::foo_opt_path;`, then call `foo_opt_path::run()`.
+
+This exception applies to the qualifier that identifies the item. Any remaining leading segments (`crate::optimize::` above) still shorten away.
 
 ### Collision Detection
 
@@ -649,7 +884,7 @@ Function comment shape:
 Test comment shape (for `#[test]` functions): the comment must state *what perspective the test exercises* — which behavior, edge case, or invariant it validates — not just "tests `foo`." Example: `/// Verifies that rename across an import boundary updates both the definition and the qualified callsite.`
 
 **Excluded:**
-- Pre-existing undocumented items in the same file — the convention covers only items the diff introduces or whose signature it modifies.
+- Pre-existing undocumented items in the same file, in `in-diff` mode — that mode covers the items the diff introduces or whose signature it modifies, and collects the file's other undocumented items as ring-2 candidates for the `neighborhood` pass to document.
 - Fix sample programs under `src/tests/test_*/cases/` (these are `.fix` files; this aspect only walks `.rs` anyway).
 - Items generated by `derive` macros or build scripts.
 
@@ -689,7 +924,9 @@ Point at things by a name the reader can search for — a function, type, module
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
-3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions.
+
+   In `neighborhood` mode, apply (a) and (b) to the rest of the file instead — its other comments and its undocumented items — under the radius rules. Every convention here edits prose alone, so all of them travel to ring 2.
+3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions; in `neighborhood` mode, the document's other prose.
 4. For each violation:
    - Identify which convention it is.
    - For a rewriting convention: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.

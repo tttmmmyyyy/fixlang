@@ -1,7 +1,7 @@
 // Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
 // The dump annotates each variable binding with the provenance the analysis computed, so a small
 // program with named `let`s lets us assert the analysis end to end: allocators produce `fresh`
-// values, reading a boxed element out of a boxed container is `dyn`, and constructing an unboxed
+// values, reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed
 // tuple carries each component's provenance through.
 
 #[cfg(test)]
@@ -84,10 +84,10 @@ mod integration_tests {
         assert_binding_prov(&dump, "arr", "[fresh]");
         assert_binding_prov(&dump, "strs", "[fresh]");
         // Reading a boxed element out of a boxed container yields an unknown value.
-        assert_binding_prov(&dump, "s0", "[dyn]");
+        assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
-        // `s0` is dyn.
-        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=dyn}]");
+        // `s0` is unknown.
+        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
     }
 
     #[test]
@@ -335,7 +335,7 @@ mod integration_tests {
         // which would free the caller's still-owned array.
         let via_borrow = func_block(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"));
         assert!(
-            via_borrow.iter().any(|l| l.contains("union_1(")),
+            via_borrow.iter().any(|l| l.contains("union_make_1(")),
             "the via_union borrow version should build the union:\n{}",
             via_borrow.join("\n")
         );
@@ -354,19 +354,34 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim");
         let dump = emit_main_rc_ir(&project_dir);
 
+        // A guard that aborts rather than producing a value says nothing about the value it guards,
+        // so a fresh array passed through `assert_unique` comes out fresh. Asking whether a value is
+        // being copied would otherwise remove the elimination the question is about.
+        assert_binding_prov(&dump, "guarded", "[fresh]");
+
+        // A fill loop writes into the array through primitives that leave the uniqueness check to
+        // their caller, which std satisfies by building the array a line earlier. What they return is
+        // therefore uniquely owned, so the operation after such a loop drops its check.
+        assert_binding_prov(&dump, "built", "[fresh]");
+
         // Each operation on a locally fresh (proven unique) value renders its dropped check as a
         // `[unique]` marker. Asserting the markers guards against silent *under*-elimination: a
         // regression that stops dropping a check would still pass the memcheck correctness tests
         // (which run the same whether or not elimination fires), but fails here.
         for elided in [
             // An array `set`.
-            "Array::set [unique]",
+            "array_set[unique]",
             // An array `swap`.
-            "Array::swap [unique]",
+            "array_swap[unique]",
             // A generic `act`, whose `unsafe_is_unique` folds to the constant `true`.
             "is_unique[unique]",
+            // The punch and the plug that `act` carries the update out with. Reaching the arm the
+            // `is_unique` guards means the array's reference count was one, so both drop their
+            // checks.
+            "array_punch[unique]",
+            "array_plug[unique]",
             // A boxed-struct field `set` (field 0).
-            "set_0 [unique]",
+            "struct_set_0[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -378,8 +393,104 @@ mod integration_tests {
         // `set` on an array read out of a boxed container is of unknown sharing, so its check stays
         // (a plain `Array::set(` with no `[unique]` marker).
         assert!(
-            dump.contains("Array::set("),
+            dump.contains("array_set("),
             "the set on an array of unknown sharing should keep its force-unique check:\n{}",
+            dump
+        );
+    }
+
+    /// The variable a dump line binds: the token after `let` on the line carrying `(as source_name)`.
+    fn binding_var(dump: &str, source_name: &str) -> String {
+        let marker = format!("(as {})", source_name);
+        let line = dump
+            .lines()
+            .find(|l| l.contains(&marker))
+            .unwrap_or_else(|| {
+                panic!(
+                    "no binding `(as {})` in the RC IR dump:\n{}",
+                    source_name, dump
+                )
+            });
+        line.trim_start()
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split(' ').next())
+            .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
+            .to_string()
+    }
+
+    /// Verifies that publishing a value to other threads yields a handle of unknown sharing: the
+    /// write before publication drops its check and the write on the published handle keeps it. The
+    /// elimination is sound for values other threads can reach only as long as this holds.
+    #[test]
+    fn test_published_value_keeps_its_check() {
+        let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert_binding_prov(&dump, "published", "[unknown]");
+        assert!(
+            dump.contains("array_set[unique]"),
+            "the set on the array before it is published should drop its check:\n{}",
+            dump
+        );
+        let published = binding_var(&dump, "published");
+        assert!(
+            dump.lines()
+                .any(|l| l.contains("array_set(") && l.contains(&published)),
+            "the set on the published handle {} should keep its check:\n{}",
+            published,
+            dump
+        );
+    }
+
+    /// Verifies both halves of what a write through a boxed value's data pointer declares — that its
+    /// own check is dropped on a value proven unique, and that the value it returns is `fresh` — for
+    /// the plain and the IO-context variant, which carry that value at different result positions.
+    #[test]
+    fn test_unique_check_elim_mutate_boxed() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_boxed");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The value each write hands back is uniquely owned, which is what lets the write that
+        // follows drop its check. A wrong result position would leave these of unknown sharing.
+        assert_binding_prov(&dump, "mutated", "[fresh]");
+        assert_binding_prov(&dump, "mutated_io", "[fresh]");
+
+        // Both writes go to a value nothing else holds, so both drop their check. The case's own
+        // writes are the only ones in the dump, so the checked form appearing at all is a failure.
+        for elided in ["mutate_boxed[unique]", "mutate_boxed_ios[unique]"] {
+            assert!(
+                dump.contains(elided),
+                "the write to a value proven unique should render `{}`:\n{}",
+                elided,
+                dump
+            );
+        }
+        for checked in ["mutate_boxed(", "mutate_boxed_ios("] {
+            assert!(
+                !dump.contains(checked),
+                "no write should keep its check, but `{}` is in the dump:\n{}",
+                checked,
+                dump
+            );
+        }
+    }
+
+    /// Verifies that a value updated through a field of an unboxed struct keeps the provenance that
+    /// lets its check be dropped, so a loop over such a struct re-checks nothing.
+    #[test]
+    fn test_unique_check_elim_through_struct_field() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The loop updates the array through a field of an unboxed struct. Taking that struct apart
+        // and putting it back together moves the fields in registers without touching a reference
+        // count, so the array reaches the `set` as the same value the loop was entered with: the
+        // clone reached with the fresh array drops the check, exactly as for a bare array. Without
+        // the field update carrying provenance through, every iteration would re-check an array
+        // already proven unique.
+        assert!(
+            dump.contains("array_set[unique]"),
+            "the set on the array carried through the struct field should drop its check:\n{}",
             dump
         );
     }
@@ -402,9 +513,9 @@ mod integration_tests {
         for line in dump.lines() {
             if line.starts_with("fn ") {
                 current = line;
-            } else if line.contains("Array::set [unique]") {
+            } else if line.contains("array_set[unique]") {
                 elided.push(current);
-            } else if line.contains("Array::set(") {
+            } else if line.contains("array_set(") {
                 checked.push(current);
             }
         }

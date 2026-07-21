@@ -14,5 +14,5 @@ pub mod provenance;
 pub mod rc_insert;
 pub mod rename;
 pub mod simplify;
-pub mod unique_elim;
+pub mod unique_check_elim;
 pub mod validate;

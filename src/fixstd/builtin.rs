@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::LLVMGen,
+    inline_llvm::{unique_check_on_boxed_leaf, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -18,18 +18,16 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_GET_SIZE_NAME,
-    ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME,
-    ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-    ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, ARROW_NAME, BOOL_NAME,
-    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
-    CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
-    DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
-    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-    STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
-    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
-    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
+    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
+    ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
+    BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
+    DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
+    I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
+    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STRING_NAME, STRUCT_GETTER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
+    U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
@@ -38,8 +36,8 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{Path, UniqueCheckOperand};
-use crate::rc_ir::provenance::{BaseSource, Provenance};
+use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
@@ -839,7 +837,7 @@ impl LLVMGen for InlineLLVMStringBuf {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -914,9 +912,10 @@ impl LLVMGen for InlineLLVMFixBody {
 
     fn name(&self) -> String {
         format!(
-            "fix({}, {})",
+            "fix({}, {}, {})",
             self.f_str.to_string(),
-            self.x_str.to_string()
+            self.x_str.to_string(),
+            self.cap_name.to_string()
         )
     }
 
@@ -1005,10 +1004,10 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_int({}, {}, {})",
-            self.from_name.to_string(),
+            "cast_int[{}, {}]({})",
             self.is_source_signed,
-            self.is_target_signed
+            self.is_target_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1183,9 +1182,9 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_int_to_float({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
+            "cast_int_to_float[{}]({})",
+            self.is_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1280,9 +1279,9 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_float_to_int({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
+            "cast_float_to_int[{}]({})",
+            self.is_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1603,7 +1602,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeFill {
 
     fn name(&self) -> String {
         format!(
-            "{ARRAY_NAME}::{ARRAY_UNSAFE_FILL_NAME}({}, {})",
+            "array_fill({}, {})",
             self.size_name.to_string(),
             self.value_name.to_string()
         )
@@ -1619,7 +1618,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeFill {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1699,12 +1698,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
     }
 
     fn name(&self) -> String {
-        format!(
-            "{}::{}({})",
-            ARRAY_NAME,
-            ARRAY_UNSAFE_EMPTY_NAME,
-            self.capacity_name.to_string()
-        )
+        format!("array_empty({})", self.capacity_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -1717,7 +1711,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1773,8 +1767,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {}, {})",
-            ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
+            "array_set_unreleased({}, {}, {})",
             self.idx_name.to_string(),
             self.value_name.to_string(),
             self.arr_name.to_string(),
@@ -1783,6 +1776,19 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op writes into the array in place, which the caller may ask for only where nothing else
+        // holds it: the name says the uniqueness is unchecked, not absent. So the array it returns is
+        // uniquely owned, exactly as it is out of a checked `set` — which is what lets the operation
+        // after a fill loop drop its check.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1874,8 +1880,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {})",
-            ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+            "array_get({}, {})",
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -1975,13 +1980,8 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}{}({}, {})",
-            ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-            if self.force_unique {
-                "_forceunique"
-            } else {
-                ""
-            },
+            "array_get_linear{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -2059,7 +2059,7 @@ impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::_pop_back_nonempty({})", self.arr_name.to_string())
+        format!("array_pop_back_nonempty({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2072,7 +2072,7 @@ impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2124,7 +2124,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::unsafe_set_size({}, {})",
+            "array_set_size({}, {})",
             self.len_name.to_string(),
             self.arr_name.to_string()
         )
@@ -2132,6 +2132,18 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // Writing the length in place carries the same promise from the caller as writing an element
+        // does, so the array this returns is uniquely owned — see
+        // `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased::result_prov`.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2283,8 +2295,8 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::set{}({}, {}, {})",
-            if self.force_unique { "" } else { " [unique]" },
+            "array_set{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.value_name.to_string(),
             self.array_name.to_string()
@@ -2299,15 +2311,15 @@ impl LLVMGen for InlineLLVMArraySetBody {
         ]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2322,7 +2334,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2415,13 +2427,13 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}{}({}, {}, {})",
+            "array_swap{}{}({}, {}, {})",
             if self.bounds_checked {
-                "swap"
+                ""
             } else {
-                "unsafe_swap_bounds_unchecked"
+                "_unchecked"
             },
-            if self.force_unique { "" } else { " [unique]" },
+            if self.force_unique { "" } else { "[unique]" },
             self.i_name.to_string(),
             self.j_name.to_string(),
             self.array_name.to_string()
@@ -2432,15 +2444,15 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2455,7 +2467,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2546,12 +2558,8 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
     fn name(&self) -> String {
         format!(
-            "PunchedArray::_unsafe_punch_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
+            "array_punch{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -2561,15 +2569,15 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2578,10 +2586,29 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         Box::new(c)
     }
 
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(PunchedArray a, a)`: the array with a hole, and the element moved out of it.
+        // The punched array is uniquely owned either way — force-uniquing clones it when it is shared,
+        // and the version without that check runs only where uniqueness is established already, by the
+        // optimizer having proven it or by the caller of the unsafe primitive having promised it. That
+        // is what lets the `plug` completing the update drop its own check. The element is moved out
+        // without a retain, so another holder of it may still be live: its leaves stay `Unknown`, since
+        // calling them `Fresh` would let a later in-place update overwrite shared data.
+        Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
+const PUNCHED_ARRAY_FIELD: usize = 0;
 
 // Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
 // returns the punched array together with the moved-out element.
@@ -2648,12 +2675,8 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
 
     fn name(&self) -> String {
         format!(
-            "PunchedArray::_unsafe_plug_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
+            "array_plug{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.elem_name.to_string(),
             self.punched_name.to_string(),
         )
@@ -2663,15 +2686,15 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         vec![&mut self.elem_name, &mut self.punched_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 1,
-                path: vec![0],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_FIELD], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2686,7 +2709,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2744,7 +2767,7 @@ impl LLVMGen for InlineLLVMArrayForceUniqueBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::force_unique({})", self.arr_name.to_string())
+        format!("array_force_unique({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2757,7 +2780,7 @@ impl LLVMGen for InlineLLVMArrayForceUniqueBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2806,8 +2829,7 @@ impl LLVMGen for InlineLLVMArrayCheckRange {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {})",
-            ARRAY_CHECK_RANGE,
+            "array_check_range({}, {})",
             self.idx_name.to_string(),
             self.size_name.to_string()
         )
@@ -2863,11 +2885,7 @@ impl LLVMGen for InlineLLVMArrayCheckSize {
     }
 
     fn name(&self) -> String {
-        format!(
-            "Array::{}({})",
-            ARRAY_CHECK_SIZE,
-            self.size_name.to_string()
-        )
+        format!("array_check_size({})", self.size_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2923,7 +2941,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::get_data_ptr({})", self.arr_name.to_string())
+        format!("array_data_ptr({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2984,11 +3002,7 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
     }
 
     fn name(&self) -> String {
-        format!(
-            "Array::{}({})",
-            ARRAY_GET_SIZE_NAME,
-            self.arr_name.to_string()
-        )
+        format!("array_size({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3041,7 +3055,7 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::get_capacity({})", self.arr_name.to_string())
+        format!("array_capacity({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3099,7 +3113,11 @@ impl LLVMGen for InlineLLVMStructGetBody {
     }
 
     fn name(&self) -> String {
-        format!("@{}({})", self.field_idx, self.var_name.to_string())
+        format!(
+            "struct_get_{}({})",
+            self.field_idx,
+            self.var_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3112,18 +3130,18 @@ impl LLVMGen for InlineLLVMStructGetBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed container the field is `Dyn` (contents not tracked); from an unboxed
+        // From a boxed container the field is `Unknown` (contents not tracked); from an unboxed
         // container it is a pure projection carrying the container's leaf at that field. A field
         // getter takes exactly the container, so `arg_tys[0]` is it.
         let container_boxed = arg_tys[0].is_box(type_env);
         if container_boxed {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
             let field = self.field_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![field];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(BaseSource::Arg(0, p))
+                Provenance::leaf(LeafOrigin::Arg(0, p))
             })
         }
     }
@@ -3185,7 +3203,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
 
     fn name(&self) -> String {
         format!(
-            "make_struct({})",
+            "struct_make({})",
             self.field_names
                 .iter()
                 .map(|n| n.to_string())
@@ -3208,8 +3226,8 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         // unboxed struct lays out its fields, so field `i`'s boxed leaves carry constructor operand
         // `i` (the path's head is the field index, its tail the position within that field).
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(BaseSource::Fresh),
-            Some((i, rest)) => Provenance::leaf(BaseSource::Arg(*i, rest.to_vec())),
+            None => Provenance::leaf(LeafOrigin::Fresh),
+            Some((i, rest)) => Provenance::leaf(LeafOrigin::Arg(*i, rest.to_vec())),
         })
     }
 
@@ -3246,7 +3264,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
 
     fn name(&self) -> String {
         format!(
-            "array_lit[{}]",
+            "array_lit({})",
             self.elem_names
                 .iter()
                 .map(|n| n.to_string())
@@ -3265,7 +3283,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3316,9 +3334,14 @@ impl LLVMGen for InlineLLVMFFICallBody {
 
     fn name(&self) -> String {
         format!(
-            "FFI_CALL{}[{}]",
-            if self.is_io { "_IOS" } else { "" },
-            self.fun_name
+            "ffi_call{}[{}]({})",
+            if self.is_io { "_ios" } else { "" },
+            self.fun_name,
+            self.arg_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 
@@ -3348,7 +3371,11 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 
     fn name(&self) -> String {
-        format!("#cap.{}({})", self.cap_idx, self.cap_name.to_string())
+        format!(
+            "capture_project_{}({})",
+            self.cap_idx,
+            self.cap_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3395,9 +3422,9 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
     fn name(&self) -> String {
         format!(
-            "#punch{}_{}({})",
-            if self.force_unique { "_fu" } else { "" },
+            "struct_punch_{}{}({})",
             self.field_idx,
+            if self.force_unique { "" } else { "[unique]" },
             self.var_name.to_string()
         )
     }
@@ -3406,15 +3433,15 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3423,10 +3450,58 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         Box::new(c)
     }
 
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(field, punched struct)`.
+        //
+        // A punched boxed struct is uniquely owned either way, for the reason
+        // `InlineLLVMArrayPunchBody::result_prov` gives, and that is what lets the `plug_in` completing
+        // the update drop its own check. The field is moved out without a retain, so another holder of
+        // it may still be live and its leaves stay `Unknown`.
+        //
+        // Punching an unboxed struct only takes it apart in registers: the field and the remaining
+        // fields carry the argument's, and nothing is retained or released. Declaring those
+        // passthroughs is what carries a boxed field — an array in a loop state, say — through
+        // `mod`/`act` with what is known about it intact. The punched-out field is left holding a
+        // value the struct no longer owns; it names nothing, so `Unknown` says the least about it.
+        let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
+        if punched_ty.is_box(type_env) {
+            return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
+        }
+        Provenance::build_shape(result_ty, type_env, &|path| {
+            // A boxed leaf of the result descends through the field or through the punched struct.
+            let (head, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed pair has a non-empty path");
+            if *head != PUNCHED_STRUCT_FIELD {
+                let mut p = vec![self.field_idx];
+                p.extend_from_slice(rest);
+                return Provenance::leaf(LeafOrigin::Arg(0, p));
+            }
+            // The punched struct is unboxed here, so a boxed leaf of it also starts with a field
+            // index.
+            let (field, _) = rest
+                .split_first()
+                .expect("a boxed leaf of an unboxed punched struct has a non-empty path");
+            if *field == self.field_idx {
+                Provenance::leaf(LeafOrigin::Unknown)
+            } else {
+                Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()))
+            }
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The index of the punched struct in the result of a struct punch, `(field, punched struct)`.
+const PUNCHED_STRUCT_FIELD: usize = 1;
 
 // Field punching function for a given struct.
 //
@@ -3509,9 +3584,9 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
     fn name(&self) -> String {
         format!(
-            "#plug_in_{}{}({}, {})",
-            if self.force_unique { "_fu" } else { "" },
+            "struct_plug_in_{}{}({}, {})",
             self.field_idx,
+            if self.force_unique { "" } else { "[unique]" },
             self.field_name.to_string(),
             self.punched_str_name.to_string(),
         )
@@ -3521,15 +3596,15 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         vec![&mut self.punched_str_name, &mut self.field_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3544,22 +3619,60 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
-        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
-        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
-        // input, like an array set. This is what lets a chain of field updates drop every check
-        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
-        // `Dyn` default suffices.
-        if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
-        }
+        replaced_field_prov(
+            result_ty,
+            type_env,
+            self.field_idx,
+            PLUG_IN_PUNCHED_ARG,
+            PLUG_IN_FIELD_ARG,
+        )
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+/// The operand positions of a struct `plug_in`: the punched struct, then the field value.
+const PLUG_IN_PUNCHED_ARG: usize = 0;
+const PLUG_IN_FIELD_ARG: usize = 1;
+
+/// The provenance of a struct rebuilt with the field at `field_idx` replaced, given the operand
+/// positions of the struct and of the new field value.
+///
+/// A boxed struct comes back uniquely owned: the op clones it when shared, and the version without
+/// that check runs only where uniqueness is established already, by the optimizer having proven it or
+/// by the caller of the unsafe primitive having promised it. The result's uniqueness therefore does
+/// not depend on the input, like an array set, which is what lets a chain of field updates drop every
+/// check after the first.
+///
+/// An unboxed struct is repackaged in registers: the replaced field carries the value operand's leaf
+/// and every other field the struct operand's, with nothing retained or released. Declaring those
+/// passthroughs is what carries a boxed field — an array in a loop state, say — through `mod`/`act`
+/// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
+/// result path and so stays consumed: `set` releases the value it replaces, and `plug_in` fills a
+/// hole holding a value the struct no longer owns.
+fn replaced_field_prov(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    field_idx: usize,
+    struct_arg: usize,
+    value_arg: usize,
+) -> Provenance {
+    if result_ty.is_box(type_env) {
+        return Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh);
+    }
+    Provenance::build_shape(result_ty, type_env, &|path| {
+        // A boxed leaf of an unboxed struct starts with a field index.
+        let (field, rest) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed struct has a non-empty path");
+        if *field == field_idx {
+            Provenance::leaf(LeafOrigin::Arg(value_arg, rest.to_vec()))
+        } else {
+            Provenance::leaf(LeafOrigin::Arg(struct_arg, path.clone()))
+        }
+    })
 }
 
 // Field plugging-in function for a given struct.
@@ -4375,9 +4488,9 @@ impl LLVMGen for InlineLLVMStructSetBody {
 
     fn name(&self) -> String {
         format!(
-            "set_{}{}({}, {})",
+            "struct_set_{}{}({}, {})",
             self.field_idx,
-            if self.force_unique { "" } else { " [unique]" },
+            if self.force_unique { "" } else { "[unique]" },
             self.value_name.to_string(),
             self.struct_name.to_string()
         )
@@ -4387,15 +4500,15 @@ impl LLVMGen for InlineLLVMStructSetBody {
         vec![&mut self.value_name, &mut self.struct_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 1,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -4410,23 +4523,23 @@ impl LLVMGen for InlineLLVMStructSetBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
-        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
-        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
-        // input, like an array set. This is what lets a chain of field updates drop every check
-        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
-        // `Dyn` default suffices.
-        if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
-        }
+        replaced_field_prov(
+            result_ty,
+            type_env,
+            self.field_idx as usize,
+            STRUCT_SET_STRUCT_ARG,
+            STRUCT_SET_VALUE_ARG,
+        )
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The operand positions of a struct `set`: the new field value, then the struct.
+const STRUCT_SET_VALUE_ARG: usize = 0;
+const STRUCT_SET_STRUCT_ARG: usize = 1;
 
 // `set` built-in function for a given struct.
 pub fn struct_set(
@@ -4509,7 +4622,11 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
     }
 
     fn name(&self) -> String {
-        format!("union_{}({})", self.field_idx, self.field_name.to_string())
+        format!(
+            "union_make_{}({})",
+            self.field_idx,
+            self.field_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4528,8 +4645,8 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         // its tail the position within that variant's payload.
         let active = self.variant_index();
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(BaseSource::Fresh),
-            Some((k, rest)) if *k == active => Provenance::leaf(BaseSource::Arg(0, rest.to_vec())),
+            None => Provenance::leaf(LeafOrigin::Fresh),
+            Some((k, rest)) if *k == active => Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec())),
             Some(_) => Set::default(),
         })
     }
@@ -4645,7 +4762,11 @@ impl LLVMGen for InlineLLVMUnionAsBody {
     }
 
     fn name(&self) -> String {
-        format!("as_{}({})", self.field_idx, self.union_arg_name.to_string())
+        format!(
+            "union_as_{}({})",
+            self.field_idx,
+            self.union_arg_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4658,18 +4779,18 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed union the payload is `Dyn`; from an unboxed union it is a pure projection
+        // From a boxed union the payload is `Unknown`; from an unboxed union it is a pure projection
         // carrying the scrutinee's leaf at that variant. `as` takes exactly the union, so
         // `arg_tys[0]` is it.
         let union_boxed = arg_tys[0].is_box(type_env);
         if union_boxed {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
             let variant = self.variant_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![variant];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(BaseSource::Arg(0, p))
+                Provenance::leaf(LeafOrigin::Arg(0, p))
             })
         }
     }
@@ -4760,7 +4881,11 @@ impl LLVMGen for InlineLLVMUnionIsBody {
     }
 
     fn name(&self) -> String {
-        format!("is_{}({})", self.field_idx, self.union_arg_name.to_string())
+        format!(
+            "union_is_{}({})",
+            self.field_idx,
+            self.union_arg_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4871,7 +4996,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
     fn name(&self) -> String {
         format!(
-            "mod_{}({}, {})",
+            "union_mod_{}({}, {})",
             self.field_idx,
             self.modifier_name.to_string(),
             self.union_name.to_string()
@@ -4976,11 +5101,25 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
     }
 
     fn name(&self) -> String {
-        format!("_undefined_internal({})", self.msg_name.to_string())
+        format!("undefined({})", self.msg_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.msg_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op aborts, so the value it stands for never exists and its leaves have no source at
+        // all — the bottom of the lattice, which is also the identity of the branch join. That is what
+        // makes a guard clause transparent: `if bad { undefined(msg) }; value` says nothing about
+        // `value`, where a source of unknown sharing would drag it down to unknown at the join and
+        // hold on to a check the guarded value does not need.
+        Provenance::uniform_bottom(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5158,6 +5297,9 @@ pub struct InlineLLVMIsUniqueFunctionBody {
     pub(crate) assume_unique: bool,
 }
 
+/// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
+pub const IS_UNIQUE_VALUE_ARG: usize = 0;
+
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -5226,15 +5368,15 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
         if self.assume_unique {
-            None
-        } else {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
+            return None;
         }
+        unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -5250,13 +5392,13 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         // `is_unique` returns `(Bool, a)` with the argument unchanged as the second component, yet
-        // its result stays the conservative `Dyn` so the borrow pass treats the argument as
+        // its result stays the conservative `Unknown` so the borrow pass treats the argument as
         // consumed. That consuming treatment is what makes `is_unique` detect sharing: a later use
         // of the argument forces a retain, so the container reads as shared at the check, and the
-        // fold (which keys on the operand through `op_containers`) correctly stays off. Declaring
+        // fold (which keys on the operand through `unique_check_operand_provs`) correctly stays off. Declaring
         // the argument a passthrough here would suppress that retain and report a shared container
         // as unique.
-        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5517,7 +5659,7 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_ptr_to_release_func({})", self.var_name.to_string())
+        format!("boxed_release_func_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5619,7 +5761,7 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_ptr_to_retain_func({})", self.var_name.to_string())
+        format!("boxed_retain_func_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5688,7 +5830,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_data_ptr({})", self.var_name.to_string())
+        format!("boxed_data_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5752,6 +5894,9 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
     io_act_name: FullName,
+    /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
+    /// one. Set false only where the value is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
@@ -5765,12 +5910,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let is_array = val.ty.is_array();
-        let val = if is_array {
-            make_array_unique(gc, val)
-        } else {
-            make_struct_union_unique(gc, val)
-        };
+        let val = force_unique_boxed(gc, val, self.force_unique);
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -5791,7 +5931,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
     fn name(&self) -> String {
         format!(
-            "mutate_boxed({}, {})",
+            "mutate_boxed{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string()
         )
@@ -5801,8 +5942,60 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         vec![&mut self.val_name, &mut self.io_act_name]
     }
 
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(value, action result)`. The value comes back uniquely owned, since this op
+        // clones it when shared and is given it unique otherwise — the same reasoning as an array set,
+        // and what lets an operation on the value that follows drop its check. The action's result
+        // comes out of an indirect call and stays `Unknown`.
+        Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+/// The operand position of the value a `mutate_boxed` writes into.
+const MUTATE_BOXED_VALUE_ARG: usize = 0;
+/// The path of that value in the result of `_mutate_boxed_internal`, `(value, action result)`.
+const MUTATE_BOXED_VALUE_FIELD: usize = 0;
+
+/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
+/// nothing when `force_unique` is false, which is set only where the value is known to be unique.
+fn force_unique_boxed<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    val: Object<'c>,
+    force_unique: bool,
+) -> Object<'c> {
+    if !force_unique {
+        return val;
+    }
+    if val.ty.is_array() {
+        make_array_unique(gc, val)
+    } else {
+        make_struct_union_unique(gc, val)
     }
 }
 
@@ -5832,6 +6025,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
                 Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
                     val_name: FullName::local(VAL_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
+                    force_unique: true,
                 }),
                 ab_ty,
                 None,
@@ -5848,6 +6042,8 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
     io_act_name: FullName,
     iostate_name: FullName,
+    /// As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
@@ -5862,12 +6058,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let is_array = val.ty.is_array();
-        let val = if is_array {
-            make_array_unique(gc, val)
-        } else {
-            make_struct_union_unique(gc, val)
-        };
+        let val = force_unique_boxed(gc, val, self.force_unique);
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -5897,7 +6088,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
     fn name(&self) -> String {
         format!(
-            "_mutate_boxed_ios_internal({}, {}, {})",
+            "mutate_boxed_ios{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string(),
             self.iostate_name.to_string(),
@@ -5912,10 +6104,45 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         ]
     }
 
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`, with the pair this op returns
+        // wrapped in the `IOState` it threads.
+        Provenance::fresh_under(
+            result_ty,
+            type_env,
+            &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
+        )
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The path of the returned pair in the result of `_mutate_boxed_ios_internal`, `(state, pair)`.
+const MUTATE_BOXED_IOS_PAIR_FIELD: usize = 1;
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
 pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5949,6 +6176,7 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
                 io_act_name: FullName::local(IO_ACT_NAME),
                 val_name: FullName::local(VAL_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
+                force_unique: true,
             }),
             ret_ty,
             None,
@@ -5967,7 +6195,7 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
     }
 
     fn name(&self) -> String {
-        "IOState::_unsafe_create".to_string()
+        "iostate_create".to_string()
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -6035,7 +6263,12 @@ impl LLVMGen for InlineLLVMDestructorMake {
     }
 
     fn name(&self) -> String {
-        "Std::FFI::Destructor::_make".to_string()
+        format!(
+            "destructor_make({}, {}, {})",
+            self.value.to_string(),
+            self.dtor.to_string(),
+            self.ios.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -6048,7 +6281,7 @@ impl LLVMGen for InlineLLVMDestructorMake {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6164,6 +6397,23 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op returns the object it was given, yet its result is `Unknown` and its argument is
+        // consumed, and it must stay that way. Unique-check elimination drops a check on the strength
+        // of a value being uniquely owned, which for a value another thread can reach is only sound
+        // because a threaded value can never be held through a `Fresh` handle: the two ways to make a
+        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Unknown` one.
+        // Declaring the argument a passthrough would break that on both counts, since it also declares
+        // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
+        // published to other threads, and a write through that handle would race.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn as_any(&self) -> &dyn Any {

@@ -34,6 +34,7 @@ mod test_signal;
 mod test_simplify;
 mod test_string;
 mod test_struct_destructure;
+mod test_struct_rmw;
 mod test_trait_implementable_type;
 mod test_type_sign_in_trait_impl;
 mod test_unbox_destructure;

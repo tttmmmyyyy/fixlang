@@ -19,14 +19,16 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar};
+use crate::rc_ir::ast::{
+    MatchArm, Ownership, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+};
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     let funcs = std::mem::take(&mut prog.funcs);
     let mut new_funcs = Map::default();
     for (fref, func) in funcs {
-        let inserter = FuncRc::new(type_env, &func);
+        let inserter = RcInserter::new(type_env, &func);
         new_funcs.insert(fref, inserter.insert_into_func(func));
     }
     prog.funcs = new_funcs;
@@ -35,8 +37,16 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     prog.globals = globals
         .into_iter()
         .map(|mut glob| {
-            let inserter = FuncRc::new_for_expr(type_env, &glob.init);
-            let (body, _live) = inserter.process(glob.init, &Set::default());
+            let inserter = RcInserter::new_for_global_init(type_env, &glob.init);
+            let (body, live) = inserter.insert_into_expr(glob.init, &Set::default());
+            // A global initializer takes no parameter and no capture, so it has no way to receive a
+            // value: a free local is a reference to a binding that lowering lost.
+            assert!(
+                live.is_empty(),
+                "the initializer of `{}` reads local variables it does not bind: {:?}",
+                glob.symbol.to_string(),
+                live
+            );
             glob.init = body;
             glob
         })
@@ -46,33 +56,47 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
 /// The reference-counting context for one function (or global initializer): the type environment
 /// and a table from every local variable name to its `RcVar` (used to recover a variable's type and
 /// span when placing a dead-branch release). Names are globally unique, so the table is unambiguous.
-struct FuncRc<'a> {
+struct RcInserter<'a> {
     type_env: &'a TypeEnv,
     vars: Map<FullName, RcVar>,
 }
 
-impl<'a> FuncRc<'a> {
+impl<'a> RcInserter<'a> {
     fn new(type_env: &'a TypeEnv, func: &RcFunc) -> Self {
         let mut vars = Map::default();
         for p in &func.params {
             vars.insert(p.name.clone(), p.clone());
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             vars.insert(cap.name.clone(), cap.clone());
         }
         collect_vars(&func.body, &mut vars);
-        FuncRc { type_env, vars }
+        RcInserter { type_env, vars }
     }
 
-    fn new_for_expr(type_env: &'a TypeEnv, expr: &RcExprNode) -> Self {
+    fn new_for_global_init(type_env: &'a TypeEnv, expr: &RcExprNode) -> Self {
         let mut vars = Map::default();
         collect_vars(expr, &mut vars);
-        FuncRc { type_env, vars }
+        RcInserter { type_env, vars }
     }
 
     /// Rewrite a function body, then release any parameter or capture that the body never uses.
     fn insert_into_func(&self, mut func: RcFunc) -> RcFunc {
-        let (body, live) = self.process(func.body, &Set::default());
+        let (body, live) = self.insert_into_expr(func.body, &Set::default());
+
+        // The body is built under the parameters and the capture alone, so nothing else can be live
+        // at its entry: a name that is would be a use with no binding to reach.
+        for name in &live {
+            assert!(
+                func.params
+                    .iter()
+                    .chain(func.capture.iter())
+                    .any(|input| &input.name == name),
+                "`{}` is live at the entry of `{}`, which binds it neither as a parameter nor as its capture",
+                name.to_string(),
+                func.name.name.to_string()
+            );
+        }
 
         let mut unused = vec![];
         for p in &func.params {
@@ -80,7 +104,7 @@ impl<'a> FuncRc<'a> {
                 unused.push(p.clone());
             }
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             if self.needs_rc(cap) && !live.contains(&cap.name) {
                 unused.push(cap.clone());
             }
@@ -91,15 +115,19 @@ impl<'a> FuncRc<'a> {
 
     /// Process one expression, given the set of local variables live *after* it. Returns the
     /// rewritten expression and the set of local variables live *before* it (at its entry).
-    fn process(&self, node: RcExprNode, live_after: &Set<FullName>) -> (RcExprNode, Set<FullName>) {
+    fn insert_into_expr(
+        &self,
+        node: RcExprNode,
+        live_after: &Set<FullName>,
+    ) -> (RcExprNode, Set<FullName>) {
         // The continuation chain recurses deeply for a large function (as lowering and code
         // generation do); grow the stack on demand so it does not overflow.
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.process_inner(node, live_after)
+            self.insert_into_expr_inner(node, live_after)
         })
     }
 
-    fn process_inner(
+    fn insert_into_expr_inner(
         &self,
         node: RcExprNode,
         live_after: &Set<FullName>,
@@ -108,7 +136,7 @@ impl<'a> FuncRc<'a> {
         match *node.expr {
             RcExpr::Ret(x) => {
                 let mut live = live_after.clone();
-                insert_local(&mut live, &x.name);
+                insert_if_local(&mut live, &x.name);
                 // Returning `x` consumes it. If `x` is also live after this expression — e.g. a match
                 // arm returns a variable that is used again after the match — it is consumed twice, so
                 // retain it here to provide the extra reference.
@@ -120,15 +148,15 @@ impl<'a> FuncRc<'a> {
                 (node, live)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
-                self.process_match(x, scrut, arms, cont, source, live_after)
+                self.insert_into_match(x, scrut, arms, cont, source, live_after)
             }
             RcExpr::Let(x, rhs, cont) => {
-                self.process_nonmatch_let(x, rhs, cont, source, live_after)
+                self.insert_into_operation_let(x, rhs, cont, source, live_after)
             }
             RcExpr::Destructure(container, fields, cont) => {
-                self.process_destructure(container, fields, cont, source, live_after)
+                self.insert_into_destructure(container, fields, cont, source, live_after)
             }
-            RcExpr::Eval(x, cont) => self.process_eval(x, cont, source, live_after),
+            RcExpr::Eval(x, cont) => self.insert_into_eval(x, cont, source, live_after),
             RcExpr::Retain(..) | RcExpr::Release(..) => {
                 panic!("RC insertion runs on a skeleton that has no Retain/Release nodes yet")
             }
@@ -138,14 +166,14 @@ impl<'a> FuncRc<'a> {
     /// An `eval x; cont`. `Eval` observes `x` without consuming it (a borrow), so — like a borrowed
     /// operand at its last use — `x` is released after the eval iff it is a local that needs reference
     /// counting and is dead in the continuation.
-    fn process_eval(
+    fn insert_into_eval(
         &self,
         x: RcVar,
         cont: RcExprNode,
         source: Option<Span>,
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
-        let (cont, live_cont) = self.process(cont, live_after);
+        let (cont, live_cont) = self.insert_into_expr(cont, live_after);
         let cont = if x.name.is_local() && !live_cont.contains(&x.name) && self.needs_rc(&x) {
             build_releases(vec![x.clone()], cont)
         } else {
@@ -156,12 +184,12 @@ impl<'a> FuncRc<'a> {
             source,
         };
         let mut live_before = live_cont;
-        insert_local(&mut live_before, &x.name);
+        insert_if_local(&mut live_before, &x.name);
         (node, live_before)
     }
 
-    /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `process_match`).
-    fn process_nonmatch_let(
+    /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `insert_into_match`).
+    fn insert_into_operation_let(
         &self,
         x: RcVar,
         rhs: RcRhs,
@@ -171,27 +199,27 @@ impl<'a> FuncRc<'a> {
     ) -> (RcExprNode, Set<FullName>) {
         assert!(
             !matches!(rhs, RcRhs::Match(..)),
-            "process_nonmatch_let received a Match rhs; a Match is handled by process_match"
+            "insert_into_operation_let received a Match rhs; a Match is handled by insert_into_match"
         );
-        let (cont, live_cont) = self.process(cont, live_after);
+        let (cont, live_cont) = self.insert_into_expr(cont, live_after);
 
         // Operand reference counting. Walk operands in reverse evaluation order so that, for a
         // variable used more than once, the last (right-most) use moves and the earlier uses retain.
         let operands = rhs_operands(&rhs);
-        let mut running = live_cont.clone();
+        let mut live_after_operand = live_cont.clone();
         let mut retains_before = vec![]; // Own operand used later -> retain before the statement.
         let mut releases_after = vec![]; // Borrow operand at its last use -> release after it.
-        for (v, borrowed) in operands.iter().rev() {
+        for (v, ownership) in operands.iter().rev() {
             if v.name.is_local() {
-                let used_later = running.contains(&v.name);
-                if *borrowed {
+                let used_later = live_after_operand.contains(&v.name);
+                if *ownership == Ownership::Borrow {
                     if !used_later && self.needs_rc(v) {
                         releases_after.push(v.clone());
                     }
                 } else if used_later && self.needs_rc(v) {
                     retains_before.push(v.clone());
                 }
-                running.insert(v.name.clone());
+                live_after_operand.insert(v.name.clone());
             }
         }
 
@@ -212,7 +240,7 @@ impl<'a> FuncRc<'a> {
         let mut live_before = live_cont;
         live_before.remove(&x.name);
         for (v, _) in &operands {
-            insert_local(&mut live_before, &v.name);
+            insert_if_local(&mut live_before, &v.name);
         }
         (node, live_before)
     }
@@ -224,7 +252,7 @@ impl<'a> FuncRc<'a> {
     /// and releases the container; an unboxed container moves the fields out and drops the fields not
     /// named here. So the field retains, the container release, and the dropped-field releases are not
     /// emitted here.
-    fn process_destructure(
+    fn insert_into_destructure(
         &self,
         container: RcVar,
         fields: Vec<(usize, RcVar)>,
@@ -232,7 +260,7 @@ impl<'a> FuncRc<'a> {
         source: Option<Span>,
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
-        let (cont, live_cont) = self.process(cont, live_after);
+        let (cont, live_cont) = self.insert_into_expr(cont, live_after);
 
         // A field the continuation never uses is dead: release it after the extraction.
         let mut dead = vec![];
@@ -255,12 +283,12 @@ impl<'a> FuncRc<'a> {
         for (_, fv) in &fields {
             live_before.remove(&fv.name);
         }
-        insert_local(&mut live_before, &container.name);
+        insert_if_local(&mut live_before, &container.name);
         (node, live_before)
     }
 
     /// A `let x = match scrut { arms }; cont`.
-    fn process_match(
+    fn insert_into_match(
         &self,
         x: RcVar,
         scrut: RcVar,
@@ -269,20 +297,23 @@ impl<'a> FuncRc<'a> {
         source: Option<Span>,
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
-        let (cont, live_cont) = self.process(cont, live_after);
+        // The liveness this returns is the union over the arms, so with no arm every variable live
+        // after the match would be reported dead before it and released early.
+        assert!(!arms.is_empty(), "a match has at least one arm");
+        let (cont, live_cont) = self.insert_into_expr(cont, live_after);
         // Variables used after the match (excluding the match result `x`): live across every arm.
-        let mut used_after = live_cont.clone();
-        used_after.remove(&x.name);
+        let mut live_after_match = live_cont.clone();
+        live_after_match.remove(&x.name);
 
         // The local variables live at an arm's head: those some arm uses from the enclosing scope,
         // plus those live after the match. The match consumes the scrutinee at an arm's head — a
         // variant arm releases the container, and otherwise the payload carries the scrutinee away —
         // so this, rather than the liveness after the match, is the liveness that follows that
         // consumption. Both the dead-branch releases and the scrutinee retain read it.
-        let arm_used: Vec<Set<FullName>> =
+        let free_in_arms: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
-        let mut live_at_arm_head: Set<FullName> = used_after.clone();
-        for u in &arm_used {
+        let mut live_at_arm_head: Set<FullName> = live_after_match.clone();
+        for u in &free_in_arms {
             for n in u {
                 live_at_arm_head.insert(n.clone());
             }
@@ -294,15 +325,15 @@ impl<'a> FuncRc<'a> {
 
         let mut new_arms = vec![];
         let mut live_before_arms: Set<FullName> = Set::default();
-        for (arm, used) in arms.into_iter().zip(arm_used.iter()) {
+        for (arm, used) in arms.into_iter().zip(free_in_arms.iter()) {
             let payload = arm.payload.clone();
-            let (body, body_live) = self.process(arm.body, &used_after);
+            let (body, body_live) = self.insert_into_expr(arm.body, &live_after_match);
 
             // Dead-branch (rule c): variables used in another arm but not this one, and dead after
             // the match, are released at this arm's head.
             let mut head = vec![];
             for n in &live_at_arm_head {
-                if !used.contains(n) && !used_after.contains(n) {
+                if !used.contains(n) && !live_after_match.contains(n) {
                     // A free local of an arm is bound in the enclosing scope, so it is a known variable.
                     let v = self
                         .vars
@@ -316,7 +347,7 @@ impl<'a> FuncRc<'a> {
             // Then the scrutinee container release (boxed union), for a variant arm only. A
             // catch-all arm binds the whole scrutinee as its payload, so the scrutinee flows into the
             // arm and is disposed through the payload, not by a container release here.
-            if release_container && arm.variant.is_some() && self.needs_rc(&scrut) {
+            if release_container && arm.tag.is_some() && self.needs_rc(&scrut) {
                 head.push(scrut.clone());
             }
             // Then release the payload if the arm body never uses it.
@@ -331,7 +362,7 @@ impl<'a> FuncRc<'a> {
             live_before_arms.remove(&payload.name);
 
             new_arms.push(MatchArm {
-                variant: arm.variant,
+                tag: arm.tag,
                 payload,
                 body,
             });
@@ -361,7 +392,7 @@ impl<'a> FuncRc<'a> {
 
         let mut live_before = live_before_arms;
         live_before.remove(&x.name);
-        insert_local(&mut live_before, &scrut.name);
+        insert_if_local(&mut live_before, &scrut.name);
         (node, live_before)
     }
 
@@ -391,27 +422,34 @@ impl<'a> FuncRc<'a> {
     }
 }
 
-/// The operands of a compound expression together with whether each is only borrowed, in evaluation
-/// order (callee before arguments). A `Match` rhs never reaches here; it is handled by
-/// `process_match`.
-fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, bool)> {
+/// The operands of a compound expression together with how each is taken, in evaluation order
+/// (callee before arguments). A `Match` rhs never reaches here; it is handled by
+/// `insert_into_match`.
+fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, Ownership)> {
     match rhs {
-        RcRhs::Var(v) => vec![(v.clone(), false)],
+        RcRhs::Var(v) => vec![(v.clone(), Ownership::Own)],
         RcRhs::App(callee, args) => {
-            let mut ops = vec![(callee.clone(), false)];
+            let mut ops = vec![(callee.clone(), Ownership::Own)];
             for a in args {
-                ops.push((a.clone(), false));
+                ops.push((a.clone(), Ownership::Own));
             }
             ops
         }
-        RcRhs::Closure(_, caps) => caps.iter().map(|c| (c.clone(), false)).collect(),
-        RcRhs::Llvm(gen, args) => args
+        RcRhs::Closure(_, caps) => caps.iter().map(|c| (c.clone(), Ownership::Own)).collect(),
+        RcRhs::Llvm(llvm_gen, args) => args
             .iter()
             .enumerate()
-            .map(|(i, a)| (a.clone(), gen.borrows_operand(i)))
+            .map(|(i, a)| {
+                let ownership = if llvm_gen.borrows_operand(i) {
+                    Ownership::Borrow
+                } else {
+                    Ownership::Own
+                };
+                (a.clone(), ownership)
+            })
             .collect(),
         RcRhs::Match(..) => {
-            unreachable!("a Match rhs is handled by process_match, not rhs_operands")
+            unreachable!("a Match rhs is handled by insert_into_match, not rhs_operands")
         }
     }
 }
@@ -438,7 +476,7 @@ fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     })
 }
 
-fn insert_local(set: &mut Set<FullName>, name: &FullName) {
+fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
     if name.is_local() {
         set.insert(name.clone());
     }
@@ -449,7 +487,7 @@ fn insert_local(set: &mut Set<FullName>, name: &FullName) {
 fn free_locals(node: &RcExprNode) -> Set<FullName> {
     let mut refs = Set::default();
     let mut bound = Set::default();
-    collect_refs_bound(node, &mut refs, &mut bound);
+    collect_referenced_and_bound(node, &mut refs, &mut bound);
     refs.retain(|n| !bound.contains(n));
     refs
 }
@@ -457,55 +495,59 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
 /// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
 /// a `Destructure` field — descending through the continuation and match arms.
-fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut Set<FullName>) {
+fn collect_referenced_and_bound(
+    node: &RcExprNode,
+    refs: &mut Set<FullName>,
+    bound: &mut Set<FullName>,
+) {
     match node.expr.as_ref() {
-        RcExpr::Ret(x) => insert_local(refs, &x.name),
+        RcExpr::Ret(x) => insert_if_local(refs, &x.name),
         RcExpr::Let(x, rhs, k) => {
             bound.insert(x.name.clone());
             match rhs {
-                RcRhs::Var(v) => insert_local(refs, &v.name),
+                RcRhs::Var(v) => insert_if_local(refs, &v.name),
                 RcRhs::App(callee, args) => {
-                    insert_local(refs, &callee.name);
+                    insert_if_local(refs, &callee.name);
                     for a in args {
-                        insert_local(refs, &a.name);
+                        insert_if_local(refs, &a.name);
                     }
                 }
                 RcRhs::Closure(_, caps) => {
                     for c in caps {
-                        insert_local(refs, &c.name);
+                        insert_if_local(refs, &c.name);
                     }
                 }
                 RcRhs::Llvm(_, args) => {
                     for a in args {
-                        insert_local(refs, &a.name);
+                        insert_if_local(refs, &a.name);
                     }
                 }
                 RcRhs::Match(scrut, arms) => {
-                    insert_local(refs, &scrut.name);
+                    insert_if_local(refs, &scrut.name);
                     for arm in arms {
                         bound.insert(arm.payload.name.clone());
-                        collect_refs_bound(&arm.body, refs, bound);
+                        collect_referenced_and_bound(&arm.body, refs, bound);
                     }
                 }
             }
-            collect_refs_bound(k, refs, bound);
+            collect_referenced_and_bound(k, refs, bound);
         }
         RcExpr::Destructure(container, fields, k) => {
-            insert_local(refs, &container.name);
+            insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
             }
-            collect_refs_bound(k, refs, bound);
+            collect_referenced_and_bound(k, refs, bound);
         }
         RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
-            insert_local(refs, &v.name);
-            collect_refs_bound(k, refs, bound);
+            insert_if_local(refs, &v.name);
+            collect_referenced_and_bound(k, refs, bound);
         }
     }
 }
 
 /// Record a local variable's `RcVar` in the table, keyed by name.
-fn note_var(vars: &mut Map<FullName, RcVar>, v: &RcVar) {
+fn record_if_local(vars: &mut Map<FullName, RcVar>, v: &RcVar) {
     if v.name.is_local() {
         vars.insert(v.name.clone(), v.clone());
     }
@@ -514,31 +556,31 @@ fn note_var(vars: &mut Map<FullName, RcVar>, v: &RcVar) {
 /// Collect every local variable's `RcVar` in an expression, keyed by name.
 fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
     match node.expr.as_ref() {
-        RcExpr::Ret(x) => note_var(vars, x),
+        RcExpr::Ret(x) => record_if_local(vars, x),
         RcExpr::Let(x, rhs, k) => {
-            note_var(vars, x);
+            record_if_local(vars, x);
             match rhs {
-                RcRhs::Var(v) => note_var(vars, v),
+                RcRhs::Var(v) => record_if_local(vars, v),
                 RcRhs::App(callee, args) => {
-                    note_var(vars, callee);
+                    record_if_local(vars, callee);
                     for a in args {
-                        note_var(vars, a);
+                        record_if_local(vars, a);
                     }
                 }
                 RcRhs::Closure(_, caps) => {
                     for c in caps {
-                        note_var(vars, c);
+                        record_if_local(vars, c);
                     }
                 }
                 RcRhs::Llvm(_, args) => {
                     for a in args {
-                        note_var(vars, a);
+                        record_if_local(vars, a);
                     }
                 }
                 RcRhs::Match(scrut, arms) => {
-                    note_var(vars, scrut);
+                    record_if_local(vars, scrut);
                     for arm in arms {
-                        note_var(vars, &arm.payload);
+                        record_if_local(vars, &arm.payload);
                         collect_vars(&arm.body, vars);
                     }
                 }
@@ -546,14 +588,14 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
             collect_vars(k, vars);
         }
         RcExpr::Destructure(container, fields, k) => {
-            note_var(vars, container);
+            record_if_local(vars, container);
             for (_, fv) in fields {
-                note_var(vars, fv);
+                record_if_local(vars, fv);
             }
             collect_vars(k, vars);
         }
         RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
-            note_var(vars, v);
+            record_if_local(vars, v);
             collect_vars(k, vars);
         }
     }

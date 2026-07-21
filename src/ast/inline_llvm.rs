@@ -2,8 +2,8 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
-use crate::rc_ir::ast::UniqueCheckOperand;
-use crate::rc_ir::provenance::{BaseSource, Provenance};
+use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
+use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin, Provenance};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -46,7 +46,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
             .collect()
     }
 
-    /// A display name (used by dumps and pretty-printing).
+    /// A display name for dumps and pretty-printing: the op's name, the attributes that select it
+    /// (in the name, or in brackets), then every operand in parentheses. An op with no operand shows
+    /// its literal there instead.
     fn name(&self) -> String;
 
     /// Whether this op is a primitive literal.
@@ -56,13 +58,23 @@ pub trait LLVMGen: DynClone + Send + Sync {
 
     /// Whether operand `i` is only borrowed (read without taking ownership). Default: every operand
     /// is owned.
+    ///
+    /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
     fn borrows_operand(&self, _i: usize) -> bool {
         false
     }
 
-    /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on.
-    /// Default: the op carries no such branch.
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
+    /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
+    /// the operand types the op is instantiated at. Default: the op carries no such branch.
+    ///
+    /// Whether the branch exists depends on those types, so an op that emits one declares it through
+    /// `unique_check_on_boxed_leaf`, which is where that dependence is stated. Readers may then take
+    /// a declared check to be one the op really emits.
+    fn unique_check_operand(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
         None
     }
 
@@ -73,20 +85,52 @@ pub trait LLVMGen: DynClone + Send + Sync {
         unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
 
-    /// The provenance of this op's result. Default: conservatively `Dyn` on every boxed leaf.
+    /// The provenance of this op's result. Default: conservatively `Unknown` on every boxed leaf.
+    ///
+    /// The conservative default is always sound, so an op that leaves it (here or in
+    /// `borrows_operand`) where a more precise declaration is possible says in a comment why it does
+    /// and what it gives up.
+    ///
+    /// An `Arg(i, path)` leaf that is its leaf's only source declares that the result leaf *is*
+    /// argument `i`'s leaf, which also declares that argument leaf unconsumed. It may therefore only
+    /// name a leaf the op passes through without producing a new reference to it — an op that hands
+    /// back a value whose reference count or sharing it also reports on, or that publishes the value,
+    /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
+    /// say why). A leaf that joins an argument with another source says only where the result's
+    /// sharing comes from: the op consumes that argument like any other.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     /// Downcast hook, for the few passes that special-case a concrete op.
     fn as_any(&self) -> &dyn Any;
 }
 dyn_clone::clone_trait_object!(LLVMGen);
+
+/// The uniqueness check an op emits on the value at `path` of operand `container_index`, if that
+/// value is reference-counted. `None` where it is not: an unboxed value is taken to be unique
+/// without a runtime test — `make_struct_union_unique` returns it unchanged and `is_unique` answers
+/// the constant `true` — so there is no branch to report and none to drop.
+pub fn unique_check_on_boxed_leaf(
+    container_index: usize,
+    path: FieldPath,
+    arg_tys: &[Arc<TypeNode>],
+    type_env: &TypeEnv,
+) -> Option<UniqueCheckOperand> {
+    let container_ty = &arg_tys[container_index];
+    if !boxed_leaf_paths(container_ty, type_env).contains(&path) {
+        return None;
+    }
+    Some(UniqueCheckOperand {
+        container_index,
+        path,
+    })
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {

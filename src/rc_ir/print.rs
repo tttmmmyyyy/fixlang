@@ -8,7 +8,8 @@
 use crate::ast::name::FullName;
 use crate::misc::Map;
 use crate::rc_ir::ast::{
-    Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+    FieldPath, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState,
+    RcVar,
 };
 use crate::rc_ir::provenance::Provenance;
 
@@ -17,7 +18,7 @@ use crate::rc_ir::provenance::Provenance;
 #[derive(Clone, Copy, Default)]
 pub struct Annotations<'a> {
     pub provs: Option<&'a Map<FullName, Provenance>>,
-    pub owns: Option<&'a Map<FullName, OwnershipShape>>,
+    pub param_ownerships: Option<&'a Map<FullName, OwnershipShape>>,
 }
 
 /// Render a whole program with the given annotations.
@@ -48,11 +49,11 @@ fn func_to_string(func: &RcFunc, ann: Annotations) -> String {
     let params = func
         .params
         .iter()
-        .map(|p| var_to_string(p, ann))
+        .map(|p| param_to_string(p, ann))
         .collect::<Vec<_>>()
         .join(", ");
-    let cap = match &func.cap {
-        Some(cap) => format!(", cap {}", var_to_string(cap, ann)),
+    let cap = match &func.capture {
+        Some(cap) => format!(", cap {}", param_to_string(cap, ann)),
         None => String::new(),
     };
     let mut out = format!(
@@ -67,39 +68,58 @@ fn func_to_string(func: &RcFunc, ann: Annotations) -> String {
 }
 
 /// A variable renders as its name annotated with its type, its source name in a binding position
-/// when it has one, its provenance when a provenance map is supplied, and — for a parameter — its
-/// inferred ownership when an ownership map is supplied.
+/// when it has one, and its provenance when a provenance map is supplied.
 fn var_to_string(var: &RcVar, ann: Annotations) -> String {
     let dbg = match &var.debug_name {
         Some(name) => format!(" (as {})", name),
         None => String::new(),
     };
-    let prov = match ann.provs.and_then(|m| m.get(&var.name)) {
-        Some(p) => format!(" [{}]", p.to_string()),
-        None => String::new(),
-    };
-    let own = match ann.owns.and_then(|m| m.get(&var.name)) {
-        Some(o) => format!(" {{{}}}", ownership_shape_to_string(o)),
+    // A map is supplied only after the analysis has run, and the analysis records every binding, so
+    // a variable missing from it is one the analysis walked past.
+    let prov = match ann.provs {
+        Some(provs) => {
+            let prov = provs.get(&var.name).unwrap_or_else(|| {
+                unreachable!("no provenance recorded for `{}`", var.name.to_string())
+            });
+            format!(" [{}]", prov.to_string())
+        }
         None => String::new(),
     };
     format!(
-        "{} : {}{}{}{}",
+        "{} : {}{}{}",
         var.name.to_string(),
         var.ty.to_string(),
         dbg,
-        prov,
-        own
+        prov
     )
+}
+
+/// A parameter or capture renders as a variable does, plus its inferred ownership when an ownership
+/// map is supplied. The map is keyed by the inputs alone, so it answers for exactly these positions.
+fn param_to_string(var: &RcVar, ann: Annotations) -> String {
+    let own = match ann.param_ownerships {
+        Some(ownerships) => {
+            let shape = ownerships.get(&var.name).unwrap_or_else(|| {
+                unreachable!(
+                    "no ownership inferred for the input `{}`",
+                    var.name.to_string()
+                )
+            });
+            format!(" {{{}}}", ownership_shape_to_string(shape))
+        }
+        None => String::new(),
+    };
+    format!("{}{}", var_to_string(var, ann), own)
 }
 
 /// Render an ownership shape: `own` / `borrow` for a boxed leaf, `u` where there is no boxed leaf,
 /// and a parenthesized list for an unboxed aggregate.
 fn ownership_shape_to_string(shape: &OwnershipShape) -> String {
     match shape {
-        OwnershipShape::Unboxed => "u".to_string(),
-        OwnershipShape::Boxed(Ownership::Own) => "own".to_string(),
-        OwnershipShape::Boxed(Ownership::Borrow) => "borrow".to_string(),
-        OwnershipShape::UnboxedAgg(children) => {
+        OwnershipShape::NoUnit => "u".to_string(),
+        OwnershipShape::Unit(Ownership::Own) => "own".to_string(),
+        OwnershipShape::Unit(Ownership::Borrow) => "borrow".to_string(),
+        OwnershipShape::Fields(children) => {
             let inner = children
                 .iter()
                 .map(ownership_shape_to_string)
@@ -136,7 +156,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out
         }
         RcExpr::Retain(var, path, state, cont) => {
-            let keyword = if var.nonnull {
+            let keyword = if var.skip_null_check {
                 "retain_nonnull"
             } else {
                 "retain"
@@ -153,7 +173,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out
         }
         RcExpr::Release(var, path, state, cont) => {
-            let keyword = if var.nonnull {
+            let keyword = if var.skip_null_check {
                 "release_nonnull"
             } else {
                 "release"
@@ -203,13 +223,14 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
         RcRhs::Closure(func, caps) => {
             format!("closure {}[{}]", func.name.name.to_string(), operands(caps))
         }
-        RcRhs::Llvm(gen, args) => {
-            format!("{}({})", gen.name(), operands(args))
+        RcRhs::Llvm(llvm_gen, _args) => {
+            // The op's name spells out its operands, so it is the whole right-hand side here.
+            llvm_gen.name()
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));
             for arm in arms {
-                let variant = match arm.variant {
+                let variant = match arm.tag {
                     Some(tag) => tag.to_string(),
                     None => "_".to_string(),
                 };
@@ -234,7 +255,7 @@ fn operands(vars: &[RcVar]) -> String {
 
 /// A path renders as a run of `.index` segments; the empty path (the whole value) renders as the
 /// empty string.
-fn path_to_string(path: &Path) -> String {
+fn path_to_string(path: &FieldPath) -> String {
     path.iter().map(|i| format!(".{}", i)).collect::<String>()
 }
 
