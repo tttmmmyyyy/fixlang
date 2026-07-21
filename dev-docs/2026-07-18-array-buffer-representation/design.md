@@ -789,6 +789,33 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
   `build_release_mark_nonnull_boxed_with`)。採用案(Array value が release を駆動)の実装手段であって別モデル
   ではないので、独立の選択肢としては扱わない。
 
+## 12. 本再設計が安全にする後続の最適化
+
+本再設計の実装対象ではない。反転が済んだ後に、独立に検討する。
+
+### 12.1 リテラルと空配列の immortal storage
+
+現状、文字列リテラルは `make_string_lit` -> `InlineLLVMStringBuf` -> `make_byte_array_copy` に落ち、**評価のたびに
+malloc + memcpy** する(バイト列自体は既に read-only global にあるのに、その複製を作っている)。
+`Array::empty(0)`(`impl Array a : Zero` の実体)も評価のたびに malloc する。
+
+やることは「storage を 1 つに固定し `refcnt_state = GLOBAL` にする」。実装の道は 2 つある:
+
+- **(a) global 値へ持ち上げる**(Fix / RC IR レベル)。リテラルを top-level の global 値に括り出すだけで、
+  既存機構だけで済む — 初期化時に 1 回 malloc し、`mark_global` が GLOBAL を書く。代償はアクセスごとの
+  初期化フラグ判定(`--threaded` では `pthread_once` 呼び出し)。
+- **(b) constant global を吐く**(codegen レベル)。`{ ControlBlock{1, GLOBAL}, [N x i8] }` を `.rodata` に置き、
+  値を `{ const ptr, len, len }` にする。初期化も判定も無く完全な定数になる。`.rodata` に置くのは、書き込む
+  経路が万一残っていたら silent corruption ではなく segfault で落ちるため。
+
+健全性は両案共通で既存の 3 機構が担保する: `build_branch_by_is_unique` は GLOBAL を必ず shared 側へ流すので
+書き込み系は COW する。retain は GLOBAL 分岐で何もしない。`mark_threaded` は `refcnt_state == LOCAL` のときだけ
+書くので `--threaded` でも触らない。
+
+**本再設計との関係**: 現行は `_size` / `_cap` が storage 側にあり、`_unsafe_set_size` などが共有配列でも COW せず
+そこへ書く。immortal storage をその経路に当てるとリテラルが恒久的に壊れる。再設計後は `_size` / `_cap` が
+value 側にあり、§5 の規則で storage への書き込みがすべて COW を経るので、この危険が消える。
+
 ## 13. 付録: 影響を受ける関数・InlineLLVM の全一覧(契約付き)
 
 本再設計が **追加 / 変更 / 削除 / 改名** する `std.fix` / `builtin.rs` / `stdlib.rs` / `object.rs` の対象の完全一覧。
