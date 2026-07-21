@@ -121,8 +121,8 @@ impl Provenance {
             boxed_leaf_paths(ty, type_env)
                 .into_iter()
                 .map(|path| {
-                    let ls = leaf(&path);
-                    (path, ls)
+                    let origins = leaf(&path);
+                    (path, origins)
                 })
                 .collect(),
         )
@@ -153,10 +153,10 @@ impl Provenance {
     /// only one side (not expected for same-typed operands) is carried through unchanged.
     fn join(&self, other: &Provenance) -> Provenance {
         let mut m = self.0.clone();
-        for (path, ls) in &other.0 {
+        for (path, origins) in &other.0 {
             m.entry(path.clone())
-                .and_modify(|acc| *acc = acc.union(ls).cloned().collect())
-                .or_insert_with(|| ls.clone());
+                .and_modify(|acc| *acc = acc.union(origins).cloned().collect())
+                .or_insert_with(|| origins.clone());
         }
         Provenance(m)
     }
@@ -180,9 +180,9 @@ impl Provenance {
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
     fn compose(&self, operand_provs: &[Provenance]) -> Provenance {
         let mut m = Map::default();
-        for (path, ls) in &self.0 {
+        for (path, origins) in &self.0 {
             let mut out = Set::default();
-            for src in ls {
+            for src in origins {
                 match src {
                     LeafOrigin::Fresh => {
                         out.insert(LeafOrigin::Fresh);
@@ -190,9 +190,9 @@ impl Provenance {
                     LeafOrigin::Unknown => {
                         out.insert(LeafOrigin::Unknown);
                     }
-                    LeafOrigin::Arg(j, sigma) => match operand_provs.get(*j) {
+                    LeafOrigin::Arg(j, arg_path) => match operand_provs.get(*j) {
                         Some(op) => {
-                            for s in op.leaf_origins_at(sigma) {
+                            for s in op.leaf_origins_at(arg_path) {
                                 out.insert(s);
                             }
                         }
@@ -214,10 +214,10 @@ impl Provenance {
     /// index stripped. A boxed value or a scalar has no such leaf, so it projects to the empty value.
     fn project(&self, i: usize) -> Provenance {
         let mut m = Map::default();
-        for (path, ls) in &self.0 {
+        for (path, origins) in &self.0 {
             if let Some((head, rest)) = path.split_first() {
                 if *head == i {
-                    m.insert(rest.to_vec(), ls.clone());
+                    m.insert(rest.to_vec(), origins.clone());
                 }
             }
         }
@@ -227,9 +227,9 @@ impl Provenance {
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
     fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
         let mut m = self.0.clone();
-        for (leaf_path, ls) in m.iter_mut() {
+        for (leaf_path, origins) in m.iter_mut() {
             if leaf_path.starts_with(path) {
-                *ls = Provenance::leaf(src.clone());
+                *origins = Provenance::leaf(src.clone());
             }
         }
         Provenance(m)
@@ -249,18 +249,18 @@ impl Provenance {
             return "unboxed".to_string();
         }
         if self.0.len() == 1 {
-            let (path, ls) = self.0.iter().next().unwrap();
+            let (path, origins) = self.0.iter().next().unwrap();
             if path.is_empty() {
-                return leaf_source_to_string(ls);
+                return leaf_source_to_string(origins);
             }
         }
         let mut entries: Vec<(&FieldPath, &LeafOrigins)> = self.0.iter().collect();
         entries.sort_by(|a, b| a.0.cmp(b.0));
         let inner = entries
             .iter()
-            .map(|(path, ls)| {
+            .map(|(path, origins)| {
                 let p = path.iter().map(|i| format!(".{}", i)).collect::<String>();
-                format!("{}={}", p, leaf_source_to_string(ls))
+                format!("{}={}", p, leaf_source_to_string(origins))
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -270,12 +270,12 @@ impl Provenance {
 
 /// Render a leaf origin as `fresh` / `unknown` / `arg{i}{.path}`, joining several with `|`, and the
 /// empty set (an absent union variant) as `_`.
-fn leaf_source_to_string(ls: &LeafOrigins) -> String {
-    if ls.is_empty() {
+fn leaf_source_to_string(origins: &LeafOrigins) -> String {
+    if origins.is_empty() {
         return "_".to_string();
     }
     // Sort for a deterministic dump (the set has no inherent order).
-    let mut parts: Vec<String> = ls
+    let mut parts: Vec<String> = origins
         .iter()
         .map(|s| match s {
             LeafOrigin::Fresh => "fresh".to_string(),
@@ -338,8 +338,8 @@ impl Uniqueness {
 /// Resolve one leaf source against the input uniqueness: `Unique` unless some source is `Dynamic` (a
 /// `Unknown`, or an `Arg` reaching a `Dynamic` input leaf). An empty set (an absent union variant, the
 /// bottom of the lattice) resolves to `Unique`.
-fn resolve_leaf(ls: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict {
-    for src in ls {
+fn resolve_leaf(origins: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict {
+    for src in origins {
         let rc = match src {
             LeafOrigin::Fresh => SharingVerdict::Unique,
             LeafOrigin::Unknown => SharingVerdict::Dynamic,
@@ -375,7 +375,7 @@ pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
     Uniqueness(
         prov.0
             .iter()
-            .map(|(path, ls)| (path.clone(), resolve_leaf(ls, inputs)))
+            .map(|(path, origins)| (path.clone(), resolve_leaf(origins, inputs)))
             .collect(),
     )
 }
@@ -506,14 +506,14 @@ impl<'a> Interpreter<'a> {
                 // union's payload in `interpret_match`). An unboxed container's fields carry the tracked
                 // provenance projected from the container.
                 let boxed = container.ty.is_box(self.type_env);
-                let cprov = self.prov_of(container, &env);
+                let container_prov = self.prov_of(container, &env);
                 for (idx, fv) in fields {
-                    let fprov = if boxed {
+                    let field_prov = if boxed {
                         Provenance::uniform(&fv.ty, self.type_env, LeafOrigin::Unknown)
                     } else {
-                        cprov.project(*idx)
+                        container_prov.project(*idx)
                     };
-                    self.record(fv, &fprov, &mut env);
+                    self.record(fv, &field_prov, &mut env);
                 }
                 self.note_unique_flag(container, fields);
                 self.interpret(cont, env)
@@ -533,27 +533,29 @@ impl<'a> Interpreter<'a> {
     ) -> Provenance {
         match rhs {
             RcRhs::Var(y) => self.prov_of(y, env),
-            RcRhs::Llvm(gen, args) => {
+            RcRhs::Llvm(llvm_gen, args) => {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.prov_of(a, env)).collect();
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
-                if let Some(uc) = gen.unique_check_operand() {
-                    self.unique_check_operand_provs
-                        .insert(result.name.clone(), arg_provs[uc.container_index].clone());
+                if let Some(check) = llvm_gen.unique_check_operand() {
+                    self.unique_check_operand_provs.insert(
+                        result.name.clone(),
+                        arg_provs[check.container_index].clone(),
+                    );
                     // `is_unique` is the one operation that answers a uniqueness question rather than
                     // acting on it, so its result is what makes a branch's condition readable as a
                     // fact about a value (`interpret_match` refines the `true` arm with it).
-                    if gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                    if llvm_gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
                         self.is_unique_tested_paths
-                            .insert(result.name.clone(), uc.path.clone());
+                            .insert(result.name.clone(), check.path.clone());
                     }
                 }
-                if gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                if llvm_gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
                     return is_unique_result(&result.ty, self.type_env, &arg_provs[0]);
                 }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                let decl = gen.result_prov(&result.ty, &arg_tys, self.type_env);
+                let decl = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
             }
             RcRhs::Closure(fref, _) => {
@@ -685,7 +687,7 @@ impl<'a> Interpreter<'a> {
         arms: &[MatchArm],
         env: &Map<FullName, Provenance>,
     ) -> (Provenance, Map<FullName, Provenance>) {
-        let sprov = self.prov_of(scrut, env);
+        let scrut_prov = self.prov_of(scrut, env);
         let mut joined_result: Option<Provenance> = None;
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
@@ -698,10 +700,10 @@ impl<'a> Interpreter<'a> {
                     if scrut.ty.is_box(self.type_env) {
                         Provenance::uniform(&arm.payload.ty, self.type_env, LeafOrigin::Unknown)
                     } else {
-                        sprov.project(tag)
+                        scrut_prov.project(tag)
                     }
                 }
-                None => sprov.clone(),
+                None => scrut_prov.clone(),
             };
             self.record(&arm.payload, &payload_prov, &mut arm_env);
             let (arm_prov, arm_exit) = self.interpret(&arm.body, arm_env);
@@ -865,10 +867,10 @@ mod tests {
     fn agg(children: Vec<Provenance>) -> Provenance {
         let mut m = Map::default();
         for (i, child) in children.into_iter().enumerate() {
-            for (path, ls) in child.0 {
+            for (path, origins) in child.0 {
                 let mut p = vec![i];
                 p.extend(path);
-                m.insert(p, ls);
+                m.insert(p, origins);
             }
         }
         Provenance(m)
@@ -880,10 +882,10 @@ mod tests {
 
     #[test]
     fn join_unions_leaf_sources() {
-        let ls = fresh().join(&unknown()).leaf_origins_at(&[]);
-        assert!(ls.contains(&LeafOrigin::Fresh));
-        assert!(ls.contains(&LeafOrigin::Unknown));
-        assert_eq!(ls.len(), 2);
+        let origins = fresh().join(&unknown()).leaf_origins_at(&[]);
+        assert!(origins.contains(&LeafOrigin::Fresh));
+        assert!(origins.contains(&LeafOrigin::Unknown));
+        assert_eq!(origins.len(), 2);
     }
 
     #[test]
@@ -916,11 +918,11 @@ mod tests {
     fn compose_keeps_fresh_and_unknown_and_unions_with_arg() {
         // `{fresh | arg1}` (a union-mod-style phi) composed with operand 1 = `dyn` yields
         // `{fresh | dyn}`.
-        let mut ls = Set::default();
-        ls.insert(LeafOrigin::Fresh);
-        ls.insert(LeafOrigin::Arg(1, vec![]));
+        let mut origins = Set::default();
+        origins.insert(LeafOrigin::Fresh);
+        origins.insert(LeafOrigin::Arg(1, vec![]));
         let mut dm = Map::default();
-        dm.insert(vec![], ls);
+        dm.insert(vec![], origins);
         let composed = Provenance(dm).compose(&[Provenance::empty(), unknown()]);
         let out = composed.leaf_origins_at(&[]);
         assert!(out.contains(&LeafOrigin::Fresh));

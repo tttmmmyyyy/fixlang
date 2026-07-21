@@ -34,21 +34,21 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// after that — lifted lambdas, and at higher optimization levels the borrow and specialization
     /// versions — are declared here, and only `prog`'s functions and globals are implemented.
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
-        let mut fn_map: Map<FuncRef, FunctionValue<'c>> = Map::default();
+        let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
             let fn_val = self
                 .module
                 .get_function(&func.name.name.to_string())
                 .unwrap_or_else(|| self.declare_rc_function(func));
-            fn_map.insert(fref.clone(), fn_val);
+            func_vals.insert(fref.clone(), fn_val);
         }
 
         for (fref, func) in prog.funcs.iter() {
-            self.implement_rc_function(func, fn_map[fref], &fn_map);
+            self.implement_rc_function(func, func_vals[fref], &func_vals);
         }
 
-        for glob in prog.globals.iter() {
-            self.implement_rc_global(glob, &fn_map);
+        for global_init in prog.globals.iter() {
+            self.implement_rc_global(global_init, &func_vals);
         }
     }
 
@@ -85,7 +85,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         &mut self,
         func: &RcFunc,
         fn_val: FunctionValue<'c>,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
         let _builder_guard = self.push_builder();
         let bb = self.context.append_basic_block(fn_val, "entry");
@@ -111,7 +111,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_push(&cap.name, &obj);
         }
 
-        self.eval_rc_expr(&func.body, true, fn_map);
+        self.eval_rc_expr(&func.body, true, func_vals);
     }
 
     /// Evaluate an RC IR expression. Returns the produced object when `tail` is false; when `tail` is
@@ -120,23 +120,23 @@ impl<'c, 'm> Generator<'c, 'm> {
         &mut self,
         node: &RcExprNode,
         tail: bool,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         self.push_debug_location(node.source.clone());
         // A deeply nested continuation recurses deeply here (as lowering and RC insertion do); grow
         // the stack on demand so a large program does not overflow it.
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.eval_rc_expr_body(node, tail, fn_map)
+            self.eval_rc_expr_inner(node, tail, func_vals)
         });
         self.pop_debug_location();
         result
     }
 
-    fn eval_rc_expr_body(
+    fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
         tail: bool,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         match node.expr.as_ref() {
             RcExpr::Ret(x) => {
@@ -160,7 +160,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 } else {
                     self.build_retain(obj);
                 }
-                self.eval_rc_expr(k, tail, fn_map)
+                self.eval_rc_expr(k, tail, func_vals)
             }
             RcExpr::Release(x, path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
@@ -172,20 +172,20 @@ impl<'c, 'm> Generator<'c, 'm> {
                 } else {
                     self.release(obj);
                 }
-                self.eval_rc_expr(k, tail, fn_map)
+                self.eval_rc_expr(k, tail, func_vals)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-                let match_tail = self.tail_fuses(x, k, tail);
-                let obj = self.eval_rc_match(x, scrut, arms, match_tail, fn_map);
+                let match_tail = self.binding_fuses_into_return(x, k, tail);
+                let obj = self.eval_rc_match(x, scrut, arms, match_tail, func_vals);
                 if match_tail {
                     // Each arm returned directly; the continuation is a pure rename to `Ret`.
                     None
                 } else {
-                    self.bind_and_continue(x, obj.unwrap(), k, tail, fn_map)
+                    self.bind_and_continue(x, obj.unwrap(), k, tail, func_vals)
                 }
             }
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let app_tail = self.tail_fuses(x, k, tail);
+                let app_tail = self.binding_fuses_into_return(x, k, tail);
                 let callee_obj = self.get_scoped_obj(&callee.name);
                 let arg_objs: Vec<Object<'c>> =
                     args.iter().map(|a| self.get_scoped_obj(&a.name)).collect();
@@ -193,21 +193,21 @@ impl<'c, 'm> Generator<'c, 'm> {
                 if app_tail {
                     None
                 } else {
-                    self.bind_and_continue(x, obj.unwrap(), k, tail, fn_map)
+                    self.bind_and_continue(x, obj.unwrap(), k, tail, func_vals)
                 }
             }
-            RcExpr::Let(x, RcRhs::Llvm(gen, _args), k) => {
+            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, _args), k) => {
                 // An inline-LLVM op may itself be in tail position (e.g. `FixBody`) and may diverge
                 // (e.g. the panic/undefined ops); in both cases `generate` returns `None`.
-                let llvm_tail = self.tail_fuses(x, k, tail);
-                match gen.generate_tail(self, &x.ty, llvm_tail) {
+                let llvm_tail = self.binding_fuses_into_return(x, k, tail);
+                match llvm_gen.generate_tail(self, &x.ty, llvm_tail) {
                     None => None,
-                    Some(obj) => self.bind_and_continue(x, obj, k, tail, fn_map),
+                    Some(obj) => self.bind_and_continue(x, obj, k, tail, func_vals),
                 }
             }
             RcExpr::Let(x, rhs, k) => {
-                let obj = self.eval_rc_rhs(rhs, &x.ty, fn_map);
-                self.bind_and_continue(x, obj, k, tail, fn_map)
+                let obj = self.eval_rc_rhs(rhs, &x.ty, func_vals);
+                self.bind_and_continue(x, obj, k, tail, func_vals)
             }
             RcExpr::Destructure(container, fields, k) => {
                 // Extract all fields at once (the container was retained beforehand by a `Retain`
@@ -216,12 +216,13 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // unboxed container moves the fields out and releases the fields not named here.
                 let cont_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
-                let subobjs = ObjectFieldType::get_struct_fields(self, &cont_obj, &field_indices);
-                for ((_, fv), obj) in fields.iter().zip(subobjs.iter()) {
+                let field_objs =
+                    ObjectFieldType::get_struct_fields(self, &cont_obj, &field_indices);
+                for ((_, fv), obj) in fields.iter().zip(field_objs.iter()) {
                     self.scope_push(&fv.name, obj);
-                    self.emit_rc_debug_local(fv, obj);
+                    self.emit_debug_local_variable(fv, obj);
                 }
-                let res = self.eval_rc_expr(k, tail, fn_map);
+                let res = self.eval_rc_expr(k, tail, func_vals);
                 for (_, fv) in fields {
                     self.scope_pop(&fv.name);
                 }
@@ -259,11 +260,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj: Object<'c>,
         k: &RcExprNode,
         tail: bool,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         self.scope_push(&x.name, &obj);
-        self.emit_rc_debug_local(x, &obj);
-        let res = self.eval_rc_expr(k, tail, fn_map);
+        self.emit_debug_local_variable(x, &obj);
+        let res = self.eval_rc_expr(k, tail, func_vals);
         self.scope_pop(&x.name);
         res
     }
@@ -274,13 +275,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// matching the current back end, which materializes every source `let` binding as a scoped
     /// value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
     /// fuse in every build.
-    fn tail_fuses(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
-        tail && is_tail_cont(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
+    fn binding_fuses_into_return(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
+        tail && carries_var_to_return(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
     }
 
     /// Emit a debug local variable for the binding of `var` to `obj`, when debug info is enabled and
     /// `var` carries a source-level name. A debugger can then inspect the value under that name.
-    fn emit_rc_debug_local(&mut self, var: &RcVar, obj: &Object<'c>) {
+    fn emit_debug_local_variable(&mut self, var: &RcVar, obj: &Object<'c>) {
         if self.has_di() {
             if let Some(name) = &var.debug_name {
                 self.create_debug_local_variable(name, obj);
@@ -289,61 +290,68 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
-    /// handled directly in `eval_rc_expr_body`.
+    /// handled directly in `eval_rc_expr_inner`.
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,
         result_ty: &Arc<TypeNode>,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Object<'c> {
         match rhs {
             RcRhs::Var(v) => self.get_scoped_obj(&v.name),
-            RcRhs::Closure(func, caps) => self.build_rc_closure(func, caps, result_ty, fn_map),
+            RcRhs::Closure(func, captures) => {
+                self.build_rc_closure(func, captures, result_ty, func_vals)
+            }
             RcRhs::App(..) | RcRhs::Match(..) | RcRhs::Llvm(..) => {
-                unreachable!("App, Match, and Llvm are handled in eval_rc_expr_body")
+                unreachable!("App, Match, and Llvm are handled in eval_rc_expr_inner")
             }
         }
     }
 
-    /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, caps)`.
+    /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,
-        caps: &[RcVar],
+        captures: &[RcVar],
         result_ty: &Arc<TypeNode>,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Object<'c> {
-        let fn_val = fn_map[func];
-        let mut lam = create_obj(result_ty.clone(), &vec![], None, self, Some("closure"));
+        let fn_val = func_vals[func];
+        let mut closure = create_obj(result_ty.clone(), &vec![], None, self, Some("closure"));
         let fn_ptr = fn_val.as_global_value().as_pointer_value();
-        lam = lam.insert_field(self, CLOSURE_FUNPTR_IDX, fn_ptr);
+        closure = closure.insert_field(self, CLOSURE_FUNPTR_IDX, fn_ptr);
 
-        let cap_ptr: BasicValueEnum<'c> = if caps.is_empty() {
+        let capture_ptr: BasicValueEnum<'c> = if captures.is_empty() {
             self.context
                 .ptr_type(AddressSpace::from(0))
                 .const_null()
                 .as_basic_value_enum()
         } else {
-            let cap_tys: Vec<Arc<TypeNode>> = caps.iter().map(|c| c.ty.clone()).collect();
+            let capture_tys: Vec<Arc<TypeNode>> = captures.iter().map(|c| c.ty.clone()).collect();
             let dyn_ty = make_dynamic_object_ty();
-            let cap_obj = create_obj(
+            let capture_obj = create_obj(
                 dyn_ty.clone(),
-                &cap_tys,
+                &capture_tys,
                 None,
                 self,
                 Some("captured_objects"),
             );
-            let cap_obj_str_ty = dyn_ty
-                .get_object_type(&cap_tys, self.type_env())
+            let capture_struct_ty = dyn_ty
+                .get_object_type(&capture_tys, self.type_env())
                 .to_struct_type(self, vec![]);
-            for (i, cap) in caps.iter().enumerate() {
+            for (i, cap) in captures.iter().enumerate() {
                 let val = self.get_scoped_obj(&cap.name).value;
-                cap_obj.insert_field_as(self, cap_obj_str_ty, i as u32 + DYNAMIC_OBJ_CAP_IDX, val);
+                capture_obj.insert_field_as(
+                    self,
+                    capture_struct_ty,
+                    i as u32 + DYNAMIC_OBJ_CAP_IDX,
+                    val,
+                );
             }
-            cap_obj.value
+            capture_obj.value
         };
-        lam = lam.insert_field(self, CLOSURE_CAPTURE_IDX, cap_ptr);
-        lam
+        closure = closure.insert_field(self, CLOSURE_CAPTURE_IDX, capture_ptr);
+        closure
     }
 
     /// Generate a `Match`. `tail` selects direct returns in each arm (no merge) versus a phi that
@@ -356,10 +364,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         scrut: &RcVar,
         arms: &[MatchArm],
         tail: bool,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
-        let is_box = scrut_obj.ty.is_box(self.type_env());
+        let scrut_is_boxed = scrut_obj.ty.is_box(self.type_env());
 
         let current_func = self
             .builder()
@@ -417,7 +425,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                         scrut_obj,
                         &arm.payload.ty,
                     );
-                    if is_box {
+                    if scrut_is_boxed {
                         self.build_retain(value.clone());
                     }
                     value
@@ -425,9 +433,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 None => self.get_scoped_obj_noretain(&scrut.name),
             };
             self.scope_push(&arm.payload.name, &payload_obj);
-            self.emit_rc_debug_local(&arm.payload, &payload_obj);
+            self.emit_debug_local_variable(&arm.payload, &payload_obj);
 
-            let arm_val = self.eval_rc_expr(&arm.body, tail, fn_map);
+            let arm_val = self.eval_rc_expr(&arm.body, tail, func_vals);
             self.scope_pop(&arm.payload.name);
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
@@ -462,25 +470,27 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// `implement_symbol`'s global branch, with the initializer evaluated from the RC IR.
     fn implement_rc_global(
         &mut self,
-        glob: &RcGlobalInit,
-        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+        global_init: &RcGlobalInit,
+        func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
         let acc_fn = self
             .module
-            .get_function(&format!("Get#{}", glob.symbol.to_string()))
+            .get_function(&format!("Get#{}", global_init.symbol.to_string()))
             .unwrap();
         if self.has_di() {
             let fn_name = acc_fn.get_name().to_str().unwrap().to_string();
-            acc_fn.set_subprogram(self.create_debug_subprogram(&fn_name, glob.init.source.clone()));
+            acc_fn.set_subprogram(
+                self.create_debug_subprogram(&fn_name, global_init.init.source.clone()),
+            );
         }
 
-        let obj_embed_ty = glob.ty.get_embedded_type(self, &vec![]);
+        let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
 
         // The storage for the initialized value, and the call-once flag.
         let global_var = self.module.add_global(
             obj_embed_ty,
             None,
-            &format!("GlobalVar#{}", glob.symbol.to_string()),
+            &format!("GlobalVar#{}", global_init.symbol.to_string()),
         );
         global_var.set_initializer(&obj_embed_ty.const_zero());
         global_var.set_linkage(Linkage::Internal);
@@ -498,7 +508,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let init_flag = self.module.add_global(
             flag_ty,
             None,
-            &format!("InitFlag#{}", glob.symbol.to_string()),
+            &format!("InitFlag#{}", global_init.symbol.to_string()),
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
@@ -537,7 +547,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             (init_bb, end_bb, None)
         } else {
-            let init_fn_name = format!("InitOnce#{}", glob.symbol.to_string());
+            let init_fn_name = format!("InitOnce#{}", global_init.symbol.to_string());
             let init_fn = self.module.add_function(
                 &init_fn_name,
                 self.context.void_type().fn_type(&[], false),
@@ -545,7 +555,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             if self.has_di() {
                 init_fn.set_subprogram(
-                    self.create_debug_subprogram(&init_fn_name, glob.init.source.clone()),
+                    self.create_debug_subprogram(&init_fn_name, global_init.init.source.clone()),
                 );
             }
             self.call_runtime(
@@ -571,7 +581,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         {
             self.builder().position_at_end(init_bb);
             let _scope_guard = self.push_scope();
-            let obj = self.eval_rc_expr(&glob.init, false, fn_map).unwrap();
+            let obj = self
+                .eval_rc_expr(&global_init.init, false, func_vals)
+                .unwrap();
             self.mark_global(obj.clone());
             self.builder()
                 .build_store(global_var_ptr, obj.value)
@@ -605,10 +617,10 @@ impl<'c, 'm> Generator<'c, 'm> {
 
 /// Whether the continuation `k` carries `x` to the terminator only by move-renames — i.e. the
 /// binding of `x` is in tail position.
-fn is_tail_cont(k: &RcExprNode, x: &FullName) -> bool {
+fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(r) => r.name == *x,
-        RcExpr::Let(y, RcRhs::Var(x2), k2) => x2.name == *x && is_tail_cont(k2, &y.name),
+        RcExpr::Let(y, RcRhs::Var(x2), k2) => x2.name == *x && carries_var_to_return(k2, &y.name),
         _ => false,
     }
 }

@@ -124,11 +124,11 @@ fn dump_rc_ir(
     // carries them; the pre-optimization dump shows the plain lowered RC IR.
     let post = stage == "post";
     let provs = post.then(|| analyze_program(rc_program, type_env).bindings);
-    let owns = (post && config.enable_borrow_optimization())
+    let param_ownerships = (post && config.enable_borrow_optimization())
         .then(|| param_ownership_shapes(rc_program, type_env));
     let ann = Annotations {
         provs: provs.as_ref(),
-        owns: owns.as_ref(),
+        param_ownerships: param_ownerships.as_ref(),
     };
 
     // Keep the functions and globals of the selected module. Every function name carries its source

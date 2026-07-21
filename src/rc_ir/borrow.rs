@@ -117,7 +117,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 }
 
 impl VarTable {
-    /// The vars of a function: its parameters and capture as `Param` origins, plus the `Binding` and
+    /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
     fn of(func: &RcFunc) -> VarTable {
         let mut vars = VarTable::empty();
@@ -155,7 +155,9 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
         RcExpr::Let(x, rhs, k) => {
             let def = match rhs {
                 RcRhs::Var(y) => Binding::Move(y.clone()),
-                RcRhs::Llvm(gen, args) => Binding::Llvm(gen.clone(), args.clone(), x.ty.clone()),
+                RcRhs::Llvm(llvm_gen, args) => {
+                    Binding::Llvm(llvm_gen.clone(), args.clone(), x.ty.clone())
+                }
                 RcRhs::Closure(fref, _) => {
                     vars.closure_targets.insert(x.name.clone(), fref.clone());
                     Binding::Producer
@@ -204,20 +206,20 @@ fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize
     match vars.bindings.get(var) {
         None | Some(Binding::Param) | Some(Binding::Producer) => here(),
         Some(Binding::Move(y)) => root(vars, type_env, &y.name, path),
-        Some(Binding::Llvm(gen, args, result_ty)) => {
+        Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
             // Constructing an unboxed union lays its payload in place, so the whole union's root is
             // the payload's root — the construction alias edge, dual to reading a payload out with
             // `match`. The whole-union path is where this matters: a leaf path descends into the
             // active variant, which the projection rule below already aliases through `result_prov`.
             if path.is_empty()
                 && !args.is_empty()
-                && gen.as_any().is::<InlineLLVMMakeUnionBody>()
+                && llvm_gen.as_any().is::<InlineLLVMMakeUnionBody>()
                 && !result_ty.is_box(type_env)
             {
                 return root(vars, type_env, &args[0].name, &[]);
             }
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            let decl = gen.result_prov(result_ty, &arg_tys, type_env);
+            let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
@@ -288,7 +290,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     out: &mut Vec<VarPath>,
 ) {
     match node.expr.as_ref() {
-        RcExpr::Ret(x) => push_leaves(&x.name, &x.ty, type_env, out),
+        RcExpr::Ret(x) => push_boxed_leaves(&x.name, &x.ty, type_env, out),
         RcExpr::Let(x, rhs, k) => {
             match rhs {
                 RcRhs::Match(_, arms) => {
@@ -356,12 +358,12 @@ fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
         RcRhs::Var(_) | RcRhs::Match(..) => {}
         RcRhs::Closure(_, caps) => {
             for c in caps {
-                push_leaves(&c.name, &c.ty, type_env, out);
+                push_boxed_leaves(&c.name, &c.ty, type_env, out);
             }
         }
         RcRhs::App(callee, args) => {
             // Calling a closure consumes it (the callee releases its capture).
-            push_leaves(&callee.name, &callee.ty, type_env, out);
+            push_boxed_leaves(&callee.name, &callee.ty, type_env, out);
             // Each argument at an owning position of the callee is consumed. An unresolved (indirect)
             // callee owns every position.
             let callee_params = resolve_callee_params(callee, vars, prog);
@@ -379,10 +381,10 @@ fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 }
             }
         }
-        RcRhs::Llvm(gen, args) => {
-            let passthrough = passthrough_arg_leaves(&**gen, result_ty, args, type_env);
+        RcRhs::Llvm(llvm_gen, args) => {
+            let passthrough = passthrough_arg_leaves(&**llvm_gen, result_ty, args, type_env);
             for (i, a) in args.iter().enumerate() {
-                if gen.borrows_operand(i) {
+                if llvm_gen.borrows_operand(i) {
                     continue;
                 }
                 for pi in boxed_leaves(&a.ty, type_env) {
@@ -424,18 +426,23 @@ fn resolve_callee_params<'a>(
 /// `as_arg_projection` with `root`: a leaf that joins an argument with another source aliases nothing and
 /// keeps its consume, and one whose sole source is `Arg` does both.
 fn passthrough_arg_leaves(
-    gen: &dyn LLVMGen,
+    llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
     args: &[RcVar],
     type_env: &TypeEnv,
 ) -> Set<(usize, FieldPath)> {
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-    let decl = gen.result_prov(result_ty, &arg_tys, type_env);
+    let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
     decl.leaves().filter_map(as_arg_projection).collect()
 }
 
 /// Push every boxed leaf of a value onto `out`.
-fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut Vec<VarPath>) {
+fn push_boxed_leaves(
+    var: &FullName,
+    ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    out: &mut Vec<VarPath>,
+) {
     for p in boxed_leaves(ty, type_env) {
         out.push((var.clone(), p));
     }
@@ -546,7 +553,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // The owned parameter units of every output version, keyed by the version's own parameter names:
     // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
     let mut owned_units: Set<VarPath> = Set::default();
-    let mut counter: u64 = 0;
+    let mut rename_counter: u64 = 0;
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
@@ -557,7 +564,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         }
         // `f_borrow`: a fresh clone whose owned units are the inferred ones, clamped to units.
         if let Some(bref) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, bref.clone(), &mut counter);
+            let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaves(&p.ty, type_env) {
                     if ownerships.own.contains(&(p.name.clone(), leaf.clone())) {
@@ -574,10 +581,10 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // of the routed callee's positions.
     let mut callee_params: Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>> = Map::default();
     for func in prog.funcs.values() {
-        callee_params.insert(func.name.clone(), param_name_tys(func));
+        callee_params.insert(func.name.clone(), param_names_and_types(func));
     }
     for (bref, clone, _) in &clones {
-        callee_params.insert(bref.clone(), param_name_tys(clone));
+        callee_params.insert(bref.clone(), param_names_and_types(clone));
     }
 
     // Rewrite every version's body: route its calls and adjust the reference counting.
@@ -616,11 +623,11 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             let vars = VarTable::body_only(&g.init);
             let ctx = RewriteCtx {
                 type_env,
-                is_borrow: false,
+                is_borrow_version: false,
                 owned_units: &owned_units,
                 borrow_versions: &borrow_versions,
                 callee_params: &callee_params,
-                tail: tail_apps(&g.init),
+                tail: tail_result_vars(&g.init),
                 vars,
             };
             RcGlobalInit {
@@ -681,7 +688,7 @@ pub fn param_ownership_shapes(
         for p in func.params.iter().chain(func.capture.iter()) {
             shapes.insert(
                 p.name.clone(),
-                shape_from_own(&p.name, &p.ty, &owned_units, type_env),
+                param_ownership_shape(&p.name, &p.ty, &owned_units, type_env),
             );
         }
     }
@@ -706,7 +713,7 @@ fn func_has_borrowable_param(func: &RcFunc, ownerships: &Ownerships, type_env: &
 }
 
 /// The name/type of each parameter and capture, in order.
-fn param_name_tys(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
+fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
     func.params
         .iter()
         .chain(func.capture.iter())
@@ -716,7 +723,7 @@ fn param_name_tys(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
 
 /// The ownership shape of one parameter, read from the owned-unit set: `Own` at a reference-counting
 /// unit that is owned, else `Borrow`.
-fn shape_from_own(
+fn param_ownership_shape(
     var: &FullName,
     ty: &Arc<TypeNode>,
     owned_units: &Set<VarPath>,
@@ -764,7 +771,7 @@ fn shape_from_own(
 
 /// The variables bound to an `App` or `Match` in tail position: a call in tail position must not be
 /// turned into a non-tail one by an after-call release, so routing consults this set.
-fn tail_apps(body: &RcExprNode) -> Set<FullName> {
+fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     let mut out = Set::default();
     mark_tail(body, true, &mut out);
     out
@@ -816,10 +823,10 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 fn clone_func(
     func: &RcFunc,
     new_ref: FuncRef,
-    counter: &mut u64,
+    rename_counter: &mut u64,
 ) -> (RcFunc, Map<FullName, FullName>) {
     let (params, capture, body, rename) =
-        fresh_rename_function(&func.params, &func.capture, &func.body, "b", counter);
+        fresh_rename_function(&func.params, &func.capture, &func.body, "b", rename_counter);
     (
         RcFunc {
             name: new_ref,
@@ -841,7 +848,7 @@ fn clone_func(
 /// whether it is the borrow clone, and the whole-program ownership and version tables.
 struct RewriteCtx<'a> {
     type_env: &'a TypeEnv,
-    is_borrow: bool,
+    is_borrow_version: bool,
     owned_units: &'a Set<VarPath>,
     borrow_versions: &'a Map<FuncRef, FuncRef>,
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
@@ -852,7 +859,7 @@ struct RewriteCtx<'a> {
 impl<'a> RewriteCtx<'a> {
     fn new(
         func: &RcFunc,
-        is_borrow: bool,
+        is_borrow_version: bool,
         owned_units: &'a Set<VarPath>,
         borrow_versions: &'a Map<FuncRef, FuncRef>,
         callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
@@ -860,11 +867,11 @@ impl<'a> RewriteCtx<'a> {
     ) -> RewriteCtx<'a> {
         RewriteCtx {
             type_env,
-            is_borrow,
+            is_borrow_version,
             owned_units,
             borrow_versions,
             callee_params,
-            tail: tail_apps(&func.body),
+            tail: tail_result_vars(&func.body),
             vars: VarTable::of(func),
         }
     }
@@ -879,7 +886,7 @@ impl<'a> RewriteCtx<'a> {
                 let callee = self.route(x, callee, args, k);
                 let (before, after) = self.call_rc(&callee, args);
                 let k = prepend_rc(after, true, self.rewrite(k));
-                let app = node_of(
+                let app = expr_node(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
                     &node.source,
                 );
@@ -894,7 +901,7 @@ impl<'a> RewriteCtx<'a> {
                         body: self.rewrite(&arm.body),
                     })
                     .collect();
-                node_of(
+                expr_node(
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrut.clone(), arms),
@@ -903,7 +910,7 @@ impl<'a> RewriteCtx<'a> {
                     &node.source,
                 )
             }
-            RcExpr::Let(x, rhs, k) => node_of(
+            RcExpr::Let(x, rhs, k) => expr_node(
                 RcExpr::Let(x.clone(), rhs.clone(), self.rewrite(k)),
                 &node.source,
             ),
@@ -913,11 +920,11 @@ impl<'a> RewriteCtx<'a> {
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, &node.source)
             }
-            RcExpr::Destructure(container, fields, k) => node_of(
+            RcExpr::Destructure(container, fields, k) => expr_node(
                 RcExpr::Destructure(container.clone(), fields.clone(), self.rewrite(k)),
                 &node.source,
             ),
-            RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+            RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
         }
     }
 
@@ -955,13 +962,13 @@ impl<'a> RewriteCtx<'a> {
         // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
         // key here.
         let bparams = &self.callee_params[bref];
-        args.iter().enumerate().any(|(q, arg)| {
+        args.iter().enumerate().any(|(arg_idx, arg)| {
             let last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
-                // `q` is in range since `args.len() <= params.len()`.
+                // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
-                    .contains(&(bparams[q].0.clone(), unit.clone()));
+                    .contains(&(bparams[arg_idx].0.clone(), unit.clone()));
                 callee_borrows && !(self.owns_unit(arg, unit) && last_use)
             })
         })
@@ -1006,13 +1013,15 @@ impl<'a> RewriteCtx<'a> {
         });
         let mut before = vec![];
         let mut after = vec![];
-        for (q, arg) in args.iter().enumerate() {
+        for (arg_idx, arg) in args.iter().enumerate() {
             for unit in rc_units(&arg.ty, self.type_env) {
                 // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
-                // one is indexed by `q`, which is in range since `args.len() <= params.len()`.
+                // one is indexed by `arg_idx`, which is in range since `args.len() <= params.len()`.
                 let callee_owns = match cparams {
                     None => true,
-                    Some(ps) => self.owned_units.contains(&(ps[q].0.clone(), unit.clone())),
+                    Some(ps) => self
+                        .owned_units
+                        .contains(&(ps[arg_idx].0.clone(), unit.clone())),
                 };
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -1037,7 +1046,7 @@ impl<'a> RewriteCtx<'a> {
         source: &Option<Span>,
     ) -> RcExprNode {
         let k = self.rewrite(k);
-        if !self.is_borrow {
+        if !self.is_borrow_version {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
         let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env)
@@ -1051,7 +1060,7 @@ impl<'a> RewriteCtx<'a> {
 }
 
 /// An expression node with the given source span.
-fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
+fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
         expr: Box::new(expr),
         source: source.clone(),
@@ -1072,7 +1081,7 @@ fn rc_node(
     } else {
         RcExpr::Retain(var, path, state, k)
     };
-    node_of(expr, source)
+    expr_node(expr, source)
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
@@ -1102,8 +1111,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
         RcRhs::Var(v) => v.name == *name,
         RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
         RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
-        RcRhs::Llvm(gen, args) => {
-            args.iter().any(|a| a.name == *name) || gen.free_vars().iter().any(|v| v == name)
+        RcRhs::Llvm(llvm_gen, args) => {
+            args.iter().any(|a| a.name == *name) || llvm_gen.free_vars().iter().any(|v| v == name)
         }
         RcRhs::Match(scrut, arms) => {
             scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))
@@ -1186,7 +1195,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
                     body: split_body(&arm.body, type_env),
                 })
                 .collect();
-            node_of(
+            expr_node(
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::Match(scrut.clone(), arms),
@@ -1195,15 +1204,15 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
                 &node.source,
             )
         }
-        RcExpr::Let(x, rhs, k) => node_of(
+        RcExpr::Let(x, rhs, k) => expr_node(
             RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => node_of(
+        RcExpr::Destructure(container, fields, k) => expr_node(
             RcExpr::Destructure(container.clone(), fields.clone(), split_body(k, type_env)),
             &node.source,
         ),
-        RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
     }
 }
 
@@ -1230,7 +1239,7 @@ fn split_rc(
 /// The pending retains at a program point: for each object (a reference-counting unit, keyed by its
 /// `root`), the stack of retains that have bumped it and not yet been un-bumped. A release un-bumps
 /// the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
-type Pend = Map<VarPath, Vec<NodeId>>;
+type PendingRetains = Map<VarPath, Vec<NodeId>>;
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
 /// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
@@ -1255,11 +1264,11 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             prog,
             owned_units: &owned_units,
             type_env,
-            needed: Set::default(),
-            pairs: Map::default(),
+            needed_retains: Set::default(),
+            unbump_releases: Map::default(),
             all_retains: vec![],
         };
-        analysis.walk(body, Pend::default(), true);
+        analysis.walk(body, PendingRetains::default(), true);
         drop_nodes(body, &analysis.cancelled())
     };
 
@@ -1299,10 +1308,10 @@ struct CancelAnalysis<'a> {
     owned_units: &'a Set<VarPath>,
     type_env: &'a TypeEnv,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
-    needed: Set<NodeId>,
+    needed_retains: Set<NodeId>,
     /// The releases each retain is un-bumped by; they are deleted together with the retain.
-    pairs: Map<NodeId, Vec<NodeId>>,
-    /// Every retain the walk saw, so the cancellable retains are those never made `needed`.
+    unbump_releases: Map<NodeId, Vec<NodeId>>,
+    /// Every retain the walk saw, so the cancellable retains are those never marked needed.
     all_retains: Vec<NodeId>,
 }
 
@@ -1311,7 +1320,7 @@ impl<'a> CancelAnalysis<'a> {
     /// the unit. A leaf below an unboxed union keys to the union root, so a whole-union retain and a
     /// payload consume land in the same bucket (without which a payload consume could not keep the
     /// union retain needed, and a later union release would wrongly cancel it).
-    fn key(&self, var: &FullName, path: &[usize]) -> VarPath {
+    fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
         let (r, rp) = root(self.vars, self.type_env, var, path);
         match self.vars.var_tys.get(&r) {
             Some(ty) => (r, truncate_to_unit(ty, &rp, self.type_env)),
@@ -1319,72 +1328,93 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// Walk a node forward, threading the pending-retain state. `leaf_mode` marks that a terminal
+    /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
     /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
     /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
     /// pending state at the node's exit, so a match arm's exit can be merged into its continuation.
-    fn walk(&mut self, node: &RcExprNode, pend: Pend, leaf_mode: bool) -> Pend {
+    fn walk(
+        &mut self,
+        node: &RcExprNode,
+        pending: PendingRetains,
+        returns_from_func: bool,
+    ) -> PendingRetains {
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.walk_inner(node, pend, leaf_mode)
+            self.walk_inner(node, pending, returns_from_func)
         })
     }
 
-    fn walk_inner(&mut self, node: &RcExprNode, mut pend: Pend, leaf_mode: bool) -> Pend {
+    fn walk_inner(
+        &mut self,
+        node: &RcExprNode,
+        mut pending: PendingRetains,
+        returns_from_func: bool,
+    ) -> PendingRetains {
         match node.expr.as_ref() {
             RcExpr::Retain(v, path, _, k) => {
                 let r = node_id(node);
                 self.all_retains.push(r);
-                self.pairs.entry(r).or_default();
-                pend.entry(self.key(&v.name, path)).or_default().push(r);
-                self.walk(k, pend, leaf_mode)
+                self.unbump_releases.entry(r).or_default();
+                pending
+                    .entry(self.unit_key(&v.name, path))
+                    .or_default()
+                    .push(r);
+                self.walk(k, pending, returns_from_func)
             }
             RcExpr::Release(v, path, _, k) => {
-                let o = self.key(&v.name, path);
-                if let Some(stack) = pend.get_mut(&o) {
-                    // A stack kept in `pend` is never empty (emptied stacks are removed below), so a
+                let o = self.unit_key(&v.name, path);
+                if let Some(stack) = pending.get_mut(&o) {
+                    // A stack kept in `pending` is never empty (emptied stacks are removed below), so a
                     // pending retain to pair with is always present.
-                    let r = stack.pop().expect("a stack kept in `pend` is non-empty");
-                    self.pairs.entry(r).or_default().push(node_id(node));
+                    let r = stack.pop().expect("a stack kept in `pending` is non-empty");
+                    self.unbump_releases
+                        .entry(r)
+                        .or_default()
+                        .push(node_id(node));
                     if stack.is_empty() {
-                        pend.remove(&o);
+                        pending.remove(&o);
                     }
                 }
-                self.walk(k, pend, leaf_mode)
+                self.walk(k, pending, returns_from_func)
             }
             RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
-                let arm_exits: Vec<Pend> = arms
+                let arm_exits: Vec<PendingRetains> = arms
                     .iter()
-                    .map(|arm| self.walk(&arm.body, pend.clone(), false))
+                    .map(|arm| self.walk(&arm.body, pending.clone(), false))
                     .collect();
-                let merged = self.merge(&pend, &arm_exits);
-                self.walk(k, merged, leaf_mode)
+                let merged = self.merge(&pending, &arm_exits);
+                self.walk(k, merged, returns_from_func)
             }
             RcExpr::Let(x, rhs, k) => {
-                self.consume_rhs(&mut pend, rhs, &x.ty);
-                self.walk(k, pend, leaf_mode)
+                self.consume_rhs(&mut pending, rhs, &x.ty);
+                self.walk(k, pending, returns_from_func)
             }
             RcExpr::Destructure(container, fields, k) => {
                 for pi in destructure_consumes(container, fields, self.type_env) {
-                    self.consume(&mut pend, &container.name, &pi);
+                    self.consume(&mut pending, &container.name, &pi);
                 }
-                self.walk(k, pend, leaf_mode)
+                self.walk(k, pending, returns_from_func)
             }
             RcExpr::Ret(_) => {
-                if leaf_mode {
+                if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
-                    for stack in pend.values() {
+                    for stack in pending.values() {
                         for &r in stack {
-                            self.needed.insert(r);
+                            self.needed_retains.insert(r);
                         }
                     }
                 }
-                pend
+                pending
             }
         }
     }
 
     /// Mark every retain the right-hand side consumes as needed.
-    fn consume_rhs(&mut self, pend: &mut Pend, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
+    fn consume_rhs(
+        &mut self,
+        pending: &mut PendingRetains,
+        rhs: &RcRhs,
+        result_ty: &Arc<TypeNode>,
+    ) {
         let owns = |p: &RcVar, pi: &FieldPath| {
             self.owned_units
                 .contains(&(p.name.clone(), truncate_to_unit(&p.ty, pi, self.type_env)))
@@ -1400,16 +1430,16 @@ impl<'a> CancelAnalysis<'a> {
             &mut consumed,
         );
         for (var, path) in consumed {
-            self.consume(pend, &var, &path);
+            self.consume(pending, &var, &path);
         }
     }
 
     /// A consume of a leaf: every retain pending for its unit is load-bearing here.
-    fn consume(&mut self, pend: &mut Pend, var: &FullName, path: &[usize]) {
-        let o = self.key(var, path);
-        if let Some(stack) = pend.remove(&o) {
+    fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
+        let o = self.unit_key(var, path);
+        if let Some(stack) = pending.remove(&o) {
             for r in stack {
-                self.needed.insert(r);
+                self.needed_retains.insert(r);
             }
         }
     }
@@ -1417,7 +1447,7 @@ impl<'a> CancelAnalysis<'a> {
     /// Merge match arms into their continuation: a retain pending in every arm's exit continues (a
     /// single downstream release un-bumps it on all paths); a retain pending in some but not all arms
     /// has a non-uniform fate and cannot be cleanly cancelled, so it is disqualified.
-    fn merge(&mut self, pend_in: &Pend, arm_exits: &[Pend]) -> Pend {
+    fn merge(&mut self, pend_in: &PendingRetains, arm_exits: &[PendingRetains]) -> PendingRetains {
         let n = arm_exits.len();
         let mut arms_pending: Map<NodeId, usize> = Map::default();
         for exit in arm_exits {
@@ -1432,12 +1462,12 @@ impl<'a> CancelAnalysis<'a> {
         }
         for (&r, &count) in &arms_pending {
             if count != n {
-                self.needed.insert(r);
+                self.needed_retains.insert(r);
             }
         }
         // Keep the retains pending in all arms, in the pre-match order so release pairing stays
         // innermost-first.
-        let mut merged = Pend::default();
+        let mut merged = PendingRetains::default();
         for (o, stack) in pend_in {
             let kept: Vec<NodeId> = stack
                 .iter()
@@ -1451,15 +1481,15 @@ impl<'a> CancelAnalysis<'a> {
         merged
     }
 
-    /// The nodes to delete: every cancellable retain (one never made needed and paired by at least
+    /// The nodes to delete: every cancellable retain (one never marked needed and paired by at least
     /// one release) together with the releases it pairs with.
     fn cancelled(&self) -> Set<NodeId> {
         let mut out = Set::default();
         for &r in &self.all_retains {
-            if self.needed.contains(&r) {
+            if self.needed_retains.contains(&r) {
                 continue;
             }
-            match self.pairs.get(&r) {
+            match self.unbump_releases.get(&r) {
                 Some(releases) if !releases.is_empty() => {
                     out.insert(r);
                     out.extend(releases.iter().copied());
@@ -1484,7 +1514,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             if to_delete.contains(&node_id(node)) {
                 k
             } else {
-                node_of(
+                expr_node(
                     RcExpr::Retain(v.clone(), path.clone(), *state, k),
                     &node.source,
                 )
@@ -1495,7 +1525,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             if to_delete.contains(&node_id(node)) {
                 k
             } else {
-                node_of(
+                expr_node(
                     RcExpr::Release(v.clone(), path.clone(), *state, k),
                     &node.source,
                 )
@@ -1510,7 +1540,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
                     body: drop_nodes(&arm.body, to_delete),
                 })
                 .collect();
-            node_of(
+            expr_node(
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::Match(scrut.clone(), arms),
@@ -1519,15 +1549,15 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
                 &node.source,
             )
         }
-        RcExpr::Let(x, rhs, k) => node_of(
+        RcExpr::Let(x, rhs, k) => expr_node(
             RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => node_of(
+        RcExpr::Destructure(container, fields, k) => expr_node(
             RcExpr::Destructure(container.clone(), fields.clone(), drop_nodes(k, to_delete)),
             &node.source,
         ),
-        RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
     }
 }
 

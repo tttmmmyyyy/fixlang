@@ -158,12 +158,12 @@ impl<'a> RcInserter<'a> {
         // Operand reference counting. Walk operands in reverse evaluation order so that, for a
         // variable used more than once, the last (right-most) use moves and the earlier uses retain.
         let operands = rhs_operands(&rhs);
-        let mut running = live_cont.clone();
+        let mut live_after_operand = live_cont.clone();
         let mut retains_before = vec![]; // Own operand used later -> retain before the statement.
         let mut releases_after = vec![]; // Borrow operand at its last use -> release after it.
         for (v, ownership) in operands.iter().rev() {
             if v.name.is_local() {
-                let used_later = running.contains(&v.name);
+                let used_later = live_after_operand.contains(&v.name);
                 if *ownership == Ownership::Borrow {
                     if !used_later && self.needs_rc(v) {
                         releases_after.push(v.clone());
@@ -171,7 +171,7 @@ impl<'a> RcInserter<'a> {
                 } else if used_later && self.needs_rc(v) {
                     retains_before.push(v.clone());
                 }
-                running.insert(v.name.clone());
+                live_after_operand.insert(v.name.clone());
             }
         }
 
@@ -251,18 +251,18 @@ impl<'a> RcInserter<'a> {
     ) -> (RcExprNode, Set<FullName>) {
         let (cont, live_cont) = self.insert_into_expr(cont, live_after);
         // Variables used after the match (excluding the match result `x`): live across every arm.
-        let mut used_after = live_cont.clone();
-        used_after.remove(&x.name);
+        let mut live_after_match = live_cont.clone();
+        live_after_match.remove(&x.name);
 
         // The local variables live at an arm's head: those some arm uses from the enclosing scope,
         // plus those live after the match. The match consumes the scrutinee at an arm's head — a
         // variant arm releases the container, and otherwise the payload carries the scrutinee away —
         // so this, rather than the liveness after the match, is the liveness that follows that
         // consumption. Both the dead-branch releases and the scrutinee retain read it.
-        let arm_used: Vec<Set<FullName>> =
+        let free_in_arms: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
-        let mut live_at_arm_head: Set<FullName> = used_after.clone();
-        for u in &arm_used {
+        let mut live_at_arm_head: Set<FullName> = live_after_match.clone();
+        for u in &free_in_arms {
             for n in u {
                 live_at_arm_head.insert(n.clone());
             }
@@ -274,15 +274,15 @@ impl<'a> RcInserter<'a> {
 
         let mut new_arms = vec![];
         let mut live_before_arms: Set<FullName> = Set::default();
-        for (arm, used) in arms.into_iter().zip(arm_used.iter()) {
+        for (arm, used) in arms.into_iter().zip(free_in_arms.iter()) {
             let payload = arm.payload.clone();
-            let (body, body_live) = self.insert_into_expr(arm.body, &used_after);
+            let (body, body_live) = self.insert_into_expr(arm.body, &live_after_match);
 
             // Dead-branch (rule c): variables used in another arm but not this one, and dead after
             // the match, are released at this arm's head.
             let mut head = vec![];
             for n in &live_at_arm_head {
-                if !used.contains(n) && !used_after.contains(n) {
+                if !used.contains(n) && !live_after_match.contains(n) {
                     // A free local of an arm is bound in the enclosing scope, so it is a known variable.
                     let v = self
                         .vars
@@ -385,11 +385,11 @@ fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, Ownership)> {
             ops
         }
         RcRhs::Closure(_, caps) => caps.iter().map(|c| (c.clone(), Ownership::Own)).collect(),
-        RcRhs::Llvm(gen, args) => args
+        RcRhs::Llvm(llvm_gen, args) => args
             .iter()
             .enumerate()
             .map(|(i, a)| {
-                let ownership = if gen.borrows_operand(i) {
+                let ownership = if llvm_gen.borrows_operand(i) {
                     Ownership::Borrow
                 } else {
                     Ownership::Own
@@ -436,7 +436,7 @@ fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
 fn free_locals(node: &RcExprNode) -> Set<FullName> {
     let mut refs = Set::default();
     let mut bound = Set::default();
-    collect_refs_bound(node, &mut refs, &mut bound);
+    collect_referenced_and_bound(node, &mut refs, &mut bound);
     refs.retain(|n| !bound.contains(n));
     refs
 }
@@ -444,7 +444,11 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
 /// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
 /// a `Destructure` field — descending through the continuation and match arms.
-fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut Set<FullName>) {
+fn collect_referenced_and_bound(
+    node: &RcExprNode,
+    refs: &mut Set<FullName>,
+    bound: &mut Set<FullName>,
+) {
     match node.expr.as_ref() {
         RcExpr::Ret(x) => insert_if_local(refs, &x.name),
         RcExpr::Let(x, rhs, k) => {
@@ -471,22 +475,22 @@ fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut S
                     insert_if_local(refs, &scrut.name);
                     for arm in arms {
                         bound.insert(arm.payload.name.clone());
-                        collect_refs_bound(&arm.body, refs, bound);
+                        collect_referenced_and_bound(&arm.body, refs, bound);
                     }
                 }
             }
-            collect_refs_bound(k, refs, bound);
+            collect_referenced_and_bound(k, refs, bound);
         }
         RcExpr::Destructure(container, fields, k) => {
             insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
             }
-            collect_refs_bound(k, refs, bound);
+            collect_referenced_and_bound(k, refs, bound);
         }
         RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) => {
             insert_if_local(refs, &v.name);
-            collect_refs_bound(k, refs, bound);
+            collect_referenced_and_bound(k, refs, bound);
         }
     }
 }

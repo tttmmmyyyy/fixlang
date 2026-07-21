@@ -49,8 +49,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         clone_names: Map::default(),
         requested: Set::default(),
         worklist: VecDeque::new(),
-        counter: 0,
-        funcs: Map::default(),
+        fresh_name_counter: 0,
+        output_funcs: Map::default(),
     };
 
     // Keep every function's all-`Dynamic` version, since a program's entry points are not
@@ -58,7 +58,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let frefs: Vec<FuncRef> = prog.funcs.keys().cloned().collect();
     for fref in &frefs {
         let ck = spec.canonical_key(fref);
-        spec.request(fref, ck);
+        spec.request_clone(fref, ck);
     }
     // A global initializer has no parameters, so its body resolves against no inputs.
     let globals: Vec<RcGlobalInit> = prog
@@ -67,18 +67,18 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         .map(|g| RcGlobalInit {
             symbol: g.symbol.clone(),
             ty: g.ty.clone(),
-            init: spec.rewrite_body(&g.init, &[]),
+            init: spec.rewrite_expr(&g.init, &[]),
         })
         .collect();
 
     // Materialize every requested clone; each materialization may request further clones.
     while let Some((fref, key)) = spec.worklist.pop_front() {
-        let clone = spec.materialize(&fref, &key);
-        spec.funcs.insert(clone.name.clone(), clone);
+        let clone = spec.materialize_clone(&fref, &key);
+        spec.output_funcs.insert(clone.name.clone(), clone);
     }
 
     RcProgram {
-        funcs: spec.funcs,
+        funcs: spec.output_funcs,
         globals,
         entry: prog.entry.clone(),
     }
@@ -100,9 +100,9 @@ struct Specializer<'a> {
     /// Every `(function, key)` already enqueued, so each is materialized once.
     requested: Set<(FuncRef, InputUniqueness)>,
     worklist: VecDeque<(FuncRef, InputUniqueness)>,
-    counter: u64,
+    fresh_name_counter: u64,
     /// The materialized clones, keyed by their output name.
-    funcs: Map<FuncRef, RcFunc>,
+    output_funcs: Map<FuncRef, RcFunc>,
 }
 
 impl<'a> Specializer<'a> {
@@ -123,7 +123,7 @@ impl<'a> Specializer<'a> {
     /// The uniqueness of every input of the clone `(func, key)`: the key gives the parameters; a
     /// closure capture (the input past the parameters) is always all-`Dynamic`, since closures are not
     /// specialized.
-    fn resolve_inputs(&self, func: &RcFunc, key: &InputUniqueness) -> Vec<Uniqueness> {
+    fn clone_inputs(&self, func: &RcFunc, key: &InputUniqueness) -> Vec<Uniqueness> {
         let mut inputs = key.clone();
         if let Some(cap) = &func.capture {
             inputs.push(Uniqueness::all_dynamic(&cap.ty, self.type_env));
@@ -133,16 +133,16 @@ impl<'a> Specializer<'a> {
 
     /// The output name of the clone `(fref, key)`: the original name for the canonical (all-`Dynamic`)
     /// key, otherwise a fresh name minted (and memoized) once per key.
-    fn name_of(&mut self, fref: &FuncRef, key: &InputUniqueness) -> FuncRef {
+    fn clone_name(&mut self, fref: &FuncRef, key: &InputUniqueness) -> FuncRef {
         if *key == self.canonical_key(fref) {
             return fref.clone();
         }
         if let Some(n) = self.clone_names.get(&(fref.clone(), key.clone())) {
             return n.clone();
         }
-        self.counter += 1;
+        self.fresh_name_counter += 1;
         let mut n = fref.name.clone();
-        n.name = format!("{}#u{}", n.name, self.counter);
+        n.name = format!("{}#u{}", n.name, self.fresh_name_counter);
         let nref = FuncRef { name: n };
         self.clone_names
             .insert((fref.clone(), key.clone()), nref.clone());
@@ -151,8 +151,8 @@ impl<'a> Specializer<'a> {
 
     /// Request the clone `(fref, key)`: return its output name and, the first time, enqueue it for
     /// materialization.
-    fn request(&mut self, fref: &FuncRef, key: InputUniqueness) -> FuncRef {
-        let name = self.name_of(fref, &key);
+    fn request_clone(&mut self, fref: &FuncRef, key: InputUniqueness) -> FuncRef {
+        let name = self.clone_name(fref, &key);
         if self.requested.insert((fref.clone(), key.clone())) {
             self.worklist.push_back((fref.clone(), key));
         }
@@ -162,16 +162,21 @@ impl<'a> Specializer<'a> {
     /// Materialize one clone: rewrite the original body under the clone's inputs (flipping the checks
     /// its key makes provable and routing its direct calls), then, for a fresh clone, give every local
     /// a fresh name so its names do not collide with the original's.
-    fn materialize(&mut self, fref: &FuncRef, key: &InputUniqueness) -> RcFunc {
+    fn materialize_clone(&mut self, fref: &FuncRef, key: &InputUniqueness) -> RcFunc {
         let func = self.prog.funcs[fref].clone();
-        let inputs = self.resolve_inputs(&func, key);
-        let body = self.rewrite_body(&func.body, &inputs);
-        let name = self.name_of(fref, key);
+        let inputs = self.clone_inputs(&func, key);
+        let body = self.rewrite_expr(&func.body, &inputs);
+        let name = self.clone_name(fref, key);
         if name == *fref {
             return RcFunc { body, ..func };
         }
-        let (params, capture, body, rename) =
-            fresh_rename_function(&func.params, &func.capture, &body, "u", &mut self.counter);
+        let (params, capture, body, rename) = fresh_rename_function(
+            &func.params,
+            &func.capture,
+            &body,
+            "u",
+            &mut self.fresh_name_counter,
+        );
         RcFunc {
             name,
             fn_ty: func.fn_ty.clone(),
@@ -201,30 +206,30 @@ impl<'a> Specializer<'a> {
 
     /// Rewrite a function body under `inputs` (the uniqueness of the enclosing clone's inputs),
     /// growing the stack for deeply nested bodies.
-    fn rewrite_body(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
+    fn rewrite_expr(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.rewrite_body_inner(node, inputs)
+            self.rewrite_expr_inner(node, inputs)
         })
     }
 
     /// Rewrite one expression node under `inputs`: route its direct calls to specialized clones and
     /// elide the uniqueness checks `inputs` make provable, recursing into continuations and match arms.
-    fn rewrite_body_inner(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
+    fn rewrite_expr_inner(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
         let expr = match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let callee = self.route(x, callee, inputs);
+                let callee = self.retarget_call(x, callee, inputs);
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::App(callee, args.clone()),
-                    self.rewrite_body(k, inputs),
+                    self.rewrite_expr(k, inputs),
                 )
             }
-            RcExpr::Let(x, RcRhs::Llvm(gen, args), k) => {
-                let gen = self.elide_unique_check_if_provable(x, gen, inputs);
+            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
+                let llvm_gen = self.elide_unique_check_if_provable(x, llvm_gen, inputs);
                 RcExpr::Let(
                     x.clone(),
-                    RcRhs::Llvm(gen, args.clone()),
-                    self.rewrite_body(k, inputs),
+                    RcRhs::Llvm(llvm_gen, args.clone()),
+                    self.rewrite_expr(k, inputs),
                 )
             }
             RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
@@ -233,13 +238,13 @@ impl<'a> Specializer<'a> {
                     .map(|arm| MatchArm {
                         tag: arm.tag,
                         payload: arm.payload.clone(),
-                        body: self.rewrite_body(&arm.body, inputs),
+                        body: self.rewrite_expr(&arm.body, inputs),
                     })
                     .collect();
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::Match(scrutinee.clone(), arms),
-                    self.rewrite_body(k, inputs),
+                    self.rewrite_expr(k, inputs),
                 )
             }
             // `Var` and `Closure` need no routing (a closure's target keeps its original name, whose
@@ -247,24 +252,24 @@ impl<'a> Specializer<'a> {
             // Listed explicitly (not a catch-all) so a new `RcRhs` that might need routing fails to
             // compile here instead of silently passing through.
             RcExpr::Let(x, rhs @ (RcRhs::Var(_) | RcRhs::Closure(_, _)), k) => {
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_body(k, inputs))
+                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_expr(k, inputs))
             }
             RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
                 v.clone(),
                 path.clone(),
                 *state,
-                self.rewrite_body(k, inputs),
+                self.rewrite_expr(k, inputs),
             ),
             RcExpr::Release(v, path, state, k) => RcExpr::Release(
                 v.clone(),
                 path.clone(),
                 *state,
-                self.rewrite_body(k, inputs),
+                self.rewrite_expr(k, inputs),
             ),
             RcExpr::Destructure(container, fields, k) => RcExpr::Destructure(
                 container.clone(),
                 fields.clone(),
-                self.rewrite_body(k, inputs),
+                self.rewrite_expr(k, inputs),
             ),
             RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         };
@@ -277,7 +282,7 @@ impl<'a> Specializer<'a> {
     /// Route a direct call: retarget the callee to the clone for the argument uniqueness this call
     /// passes, requesting that clone. An indirect call (the callee is a closure value, not a function
     /// name) is left as is. A funptr function is specialized; a closure named directly is not.
-    fn route(&mut self, call: &RcVar, callee: &RcVar, inputs: &[Uniqueness]) -> RcVar {
+    fn retarget_call(&mut self, call: &RcVar, callee: &RcVar, inputs: &[Uniqueness]) -> RcVar {
         let cref = FuncRef {
             name: callee.name.clone(),
         };
@@ -290,7 +295,7 @@ impl<'a> Specializer<'a> {
             return callee.clone();
         }
         let key = self.callee_key(call, g, inputs);
-        let name = self.request(&cref, key);
+        let name = self.request_clone(&cref, key);
         let mut c = callee.clone();
         c.name = name.name;
         c
@@ -322,14 +327,14 @@ impl<'a> Specializer<'a> {
     fn elide_unique_check_if_provable(
         &self,
         result: &RcVar,
-        gen: &Box<dyn LLVMGen>,
+        llvm_gen: &Box<dyn LLVMGen>,
         inputs: &[Uniqueness],
     ) -> Box<dyn LLVMGen> {
-        let Some(uc) = gen.unique_check_operand() else {
-            return gen.clone();
+        let Some(check) = llvm_gen.unique_check_operand() else {
+            return llvm_gen.clone();
         };
         // `interp_rhs` records `unique_check_operand_provs` for exactly the ops that carry a `unique_check_operand`
-        // — the same condition the `let Some(uc)` guard above passed — so the entry always exists.
+        // — the same condition the `let Some(check)` guard above passed — so the entry always exists.
         let container_prov = self
             .analysis
             .unique_check_operand_provs
@@ -340,11 +345,11 @@ impl<'a> Specializer<'a> {
                     result.name
                 )
             });
-        let unique = leaf_is_unique(container_prov, &uc.path, inputs);
+        let unique = leaf_is_unique(container_prov, &check.path, inputs);
         if unique {
-            gen.assuming_unique()
+            llvm_gen.assuming_unique()
         } else {
-            gen.clone()
+            llvm_gen.clone()
         }
     }
 }
@@ -359,7 +364,7 @@ fn funcs_reaching_unique_check(prog: &RcProgram) -> Set<FuncRef> {
     for (fref, func) in &prog.funcs {
         let mut cs = vec![];
         let mut has_unique_check = false;
-        scan_body(&func.body, prog, &mut cs, &mut has_unique_check);
+        collect_callees_and_unique_check(&func.body, prog, &mut cs, &mut has_unique_check);
         if has_unique_check {
             reaches_unique_check.insert(fref.clone());
         }
@@ -384,7 +389,7 @@ fn funcs_reaching_unique_check(prog: &RcProgram) -> Set<FuncRef> {
 }
 
 /// Collect a body's direct callees (functions of `prog`) and whether it performs a uniqueness check.
-fn scan_body(
+fn collect_callees_and_unique_check(
     node: &RcExprNode,
     prog: &RcProgram,
     callees: &mut Vec<FuncRef>,
@@ -393,8 +398,8 @@ fn scan_body(
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
         RcExpr::Let(_, rhs, k) => {
             match rhs {
-                RcRhs::Llvm(gen, _) => {
-                    if gen.unique_check_operand().is_some() {
+                RcRhs::Llvm(llvm_gen, _) => {
+                    if llvm_gen.unique_check_operand().is_some() {
                         *has_unique_check = true;
                     }
                 }
@@ -408,15 +413,20 @@ fn scan_body(
                 }
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
-                        scan_body(&arm.body, prog, callees, has_unique_check);
+                        collect_callees_and_unique_check(
+                            &arm.body,
+                            prog,
+                            callees,
+                            has_unique_check,
+                        );
                     }
                 }
                 RcRhs::Var(_) | RcRhs::Closure(..) => {}
             }
-            scan_body(k, prog, callees, has_unique_check);
+            collect_callees_and_unique_check(k, prog, callees, has_unique_check);
         }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Destructure(_, _, k) => {
-            scan_body(k, prog, callees, has_unique_check)
+            collect_callees_and_unique_check(k, prog, callees, has_unique_check)
         }
         RcExpr::Ret(_) => {}
     })

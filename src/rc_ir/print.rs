@@ -18,7 +18,7 @@ use crate::rc_ir::provenance::Provenance;
 #[derive(Clone, Copy, Default)]
 pub struct Annotations<'a> {
     pub provs: Option<&'a Map<FullName, Provenance>>,
-    pub owns: Option<&'a Map<FullName, OwnershipShape>>,
+    pub param_ownerships: Option<&'a Map<FullName, OwnershipShape>>,
 }
 
 /// Render a whole program with the given annotations.
@@ -79,7 +79,7 @@ fn var_to_string(var: &RcVar, ann: Annotations) -> String {
         Some(p) => format!(" [{}]", p.to_string()),
         None => String::new(),
     };
-    let own = match ann.owns.and_then(|m| m.get(&var.name)) {
+    let own = match ann.param_ownerships.and_then(|m| m.get(&var.name)) {
         Some(o) => format!(" {{{}}}", ownership_shape_to_string(o)),
         None => String::new(),
     };
@@ -199,8 +199,8 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
         RcRhs::Closure(func, caps) => {
             format!("closure {}[{}]", func.name.name.to_string(), operands(caps))
         }
-        RcRhs::Llvm(gen, args) => {
-            format!("{}({})", gen.name(), operands(args))
+        RcRhs::Llvm(llvm_gen, args) => {
+            format!("{}({})", llvm_gen.name(), operands(args))
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));
