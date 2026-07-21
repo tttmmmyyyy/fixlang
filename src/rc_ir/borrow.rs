@@ -224,7 +224,9 @@ fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
             // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
-            match as_arg_projection(&decl.leaf_origins_at(path)) {
+            // A path with no declared leaf is not a projection either: a reference-counting unit
+            // path may name the root of an unboxed union, which is a subtree rather than a leaf.
+            match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => root(vars, type_env, &args[j].name, &p),
                 None => here(),
             }
@@ -461,7 +463,7 @@ fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
 /// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
 /// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
 /// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
-fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
+pub fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
     out

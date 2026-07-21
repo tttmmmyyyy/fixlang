@@ -34,7 +34,7 @@ use crate::ast::types::TypeNode;
 use crate::constants::{
     BOOL_TRUE_TAG, CLOSURE_CAPTURE_IDX, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD,
 };
-use crate::fixstd::builtin::InlineLLVMIsUniqueFunctionBody;
+use crate::fixstd::builtin::{InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG};
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -166,8 +166,8 @@ impl Provenance {
     /// root `[]` (which `root` does to test whether the whole value is a single boxed leaf). The empty
     /// set is the bottom of the lattice, so an absent leaf resolves to `Unique`, matching a recorded
     /// `⊥`.
-    pub fn leaf_origins_at(&self, path: &[usize]) -> LeafOrigins {
-        self.0.get(path).cloned().unwrap_or_default()
+    pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
+        self.0.get(path)
     }
 
     /// The source of every boxed leaf, in no particular order (the paths are not reported).
@@ -190,19 +190,27 @@ impl Provenance {
                     LeafOrigin::Unknown => {
                         out.insert(LeafOrigin::Unknown);
                     }
-                    LeafOrigin::Arg(j, arg_path) => match operand_provs.get(*j) {
-                        Some(op) => {
-                            for s in op.leaf_origins_at(arg_path) {
-                                out.insert(s);
-                            }
+                    // Every `Arg` names an operand: an op declares only its own argument slots, and a
+                    // call supplies one operand per input of the callee's result provenance.
+                    LeafOrigin::Arg(j, arg_path) => {
+                        let operand = operand_provs.get(*j).unwrap_or_else(|| {
+                            unreachable!(
+                                "a declaration names input {} but {} operands were supplied",
+                                j,
+                                operand_provs.len()
+                            )
+                        });
+                        // A declared `Arg(j, σ)` names a boxed leaf of operand `j`.
+                        let leaf = operand.leaf_origins_at(arg_path).unwrap_or_else(|| {
+                            unreachable!(
+                                "a declaration names input {} at {:?}, which is not a boxed leaf of it",
+                                j, arg_path
+                            )
+                        });
+                        for s in leaf {
+                            out.insert(s.clone());
                         }
-                        // An argument index with no operand (a partial application, or a stray
-                        // `Arg` in a callee's effect) is resolved conservatively to `Unknown` rather
-                        // than dropped, which would wrongly leave the leaf `⊥` (unique).
-                        None => {
-                            out.insert(LeafOrigin::Unknown);
-                        }
-                    },
+                    }
                 }
             }
             m.insert(path.clone(), out);
@@ -383,7 +391,12 @@ pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
 /// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
 /// its function's input uniqueness.
 pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) -> bool {
-    resolve_leaf(&prov.leaf_origins_at(path), inputs) == SharingVerdict::Unique
+    // A declared uniqueness check names a boxed leaf of its operand, and a value's type decides both
+    // its leaves and the shape of its provenance.
+    let origins = prov.leaf_origins_at(path).unwrap_or_else(|| {
+        unreachable!("no provenance leaf at {:?}, where a checked leaf is", path)
+    });
+    resolve_leaf(origins, inputs) == SharingVerdict::Unique
 }
 
 /// The provenance analysis of one function or global initializer: a forward abstract interpretation
@@ -444,13 +457,20 @@ impl<'a> Interpreter<'a> {
         self.bindings.insert(var.name.clone(), prov.clone());
     }
 
-    /// The provenance of an operand from the environment; a value not in scope (a global reference)
-    /// has `Unknown` boxed leaves.
+    /// The provenance of an operand. A global is shared from its initializer on, so its boxed leaves
+    /// are `Unknown`; a local is bound before it is read, so the environment holds it.
     fn prov_of(&self, var: &RcVar, env: &Map<FullName, Provenance>) -> Provenance {
-        match env.get(&var.name) {
-            Some(p) => p.clone(),
-            None => Provenance::uniform(&var.ty, self.type_env, LeafOrigin::Unknown),
+        if !var.name.is_local() {
+            return Provenance::uniform(&var.ty, self.type_env, LeafOrigin::Unknown);
         }
+        env.get(&var.name)
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "local `{}` is read before its binding",
+                    var.name.to_string()
+                )
+            })
+            .clone()
     }
 
     /// Interpret an expression, threading the environment forward. Returns the provenance of the
@@ -485,10 +505,14 @@ impl<'a> Interpreter<'a> {
                 self.interpret(cont, env)
             }
             RcExpr::Retain(var, path, _, cont) => {
-                if let Some(p) = env.get(&var.name) {
-                    let demoted = p.demote(path);
-                    env.insert(var.name.clone(), demoted);
-                }
+                // Reference counting is inserted for locals only, so the retained value is in scope.
+                let demoted = env
+                    .get(&var.name)
+                    .unwrap_or_else(|| {
+                        unreachable!("retained local `{}` is not in scope", var.name.to_string())
+                    })
+                    .demote(path);
+                env.insert(var.name.clone(), demoted);
                 // A retain is how a second reference to a value comes into existence, so it ends what
                 // an `is_unique` established: the count it read is no longer the count that holds. The
                 // retain may name an alias of the tested value rather than the value itself, and
@@ -536,9 +560,10 @@ impl<'a> Interpreter<'a> {
             RcRhs::Llvm(llvm_gen, args) => {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.prov_of(a, env)).collect();
+                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
-                if let Some(check) = llvm_gen.unique_check_operand() {
+                if let Some(check) = llvm_gen.unique_check_operand(&arg_tys, self.type_env) {
                     self.unique_check_operand_provs.insert(
                         result.name.clone(),
                         arg_provs[check.container_index].clone(),
@@ -552,9 +577,12 @@ impl<'a> Interpreter<'a> {
                     }
                 }
                 if llvm_gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
-                    return is_unique_result(&result.ty, self.type_env, &arg_provs[0]);
+                    return is_unique_result(
+                        &result.ty,
+                        self.type_env,
+                        &arg_provs[IS_UNIQUE_VALUE_ARG],
+                    );
                 }
-                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let decl = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
             }
@@ -574,8 +602,14 @@ impl<'a> Interpreter<'a> {
 
     /// The provenance of a call. A direct call — one whose callee resolves to a known function (a
     /// closure value built here, or a top-level function referenced by name) — composes that
-    /// function's effect with the actual arguments. An indirect call, or a partial application whose
-    /// argument count does not match the callee's parameters, is conservatively `Unknown`.
+    /// function's result provenance with the actual arguments. An indirect call is conservatively
+    /// `Unknown`.
+    ///
+    /// A callee's result provenance is symbolic in its capture as well as its parameters, while a
+    /// call supplies only the arguments. The capture never survives into it: the capture object is
+    /// boxed, so the `Destructure` at the callee's entry reads every captured value as `Unknown`, and
+    /// the object itself cannot be part of a result of a different type. `compose` therefore finds an
+    /// operand for every `Arg` it meets.
     fn interpret_app(
         &mut self,
         result: &RcVar,
@@ -595,15 +629,20 @@ impl<'a> Interpreter<'a> {
             };
             self.func_result_provs.contains_key(&fref).then_some(fref)
         });
-        if let Some(fref) = target {
-            if let Some(effect) = self.func_result_provs.get(&fref) {
-                // The effect is symbolic in the callee's parameters; substitute the actual
-                // arguments (`compose` resolves any unmatched parameter to `Unknown`, so an arity
-                // mismatch stays sound).
-                return effect.compose(&arg_provs);
-            }
-        }
-        Provenance::uniform(&result.ty, self.type_env, LeafOrigin::Unknown)
+        let Some(fref) = target else {
+            return Provenance::uniform(&result.ty, self.type_env, LeafOrigin::Unknown);
+        };
+        // Both ways of resolving the target name a function of the program, and every function has a
+        // result provenance.
+        self.func_result_provs
+            .get(&fref)
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "callee `{}` has no result provenance",
+                    fref.name.to_string()
+                )
+            })
+            .compose(&arg_provs)
     }
 
     /// Record that a `Destructure` takes apart an `is_unique` result, pairing the flag it returns with
@@ -622,9 +661,6 @@ impl<'a> Interpreter<'a> {
         else {
             return;
         };
-        if !boxed_leaf_paths(&value.ty, self.type_env).contains(&path) {
-            return;
-        }
         self.flag_to_tested_leaf
             .insert(flag.name.clone(), (value.clone(), path));
     }
@@ -753,7 +789,12 @@ fn is_unique_result(
         if *field != IS_UNIQUE_VALUE_FIELD {
             unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
         }
-        operand.leaf_origins_at(rest)
+        // The result's leaves under the value field are the operand's own, so the operand records one
+        // at every path reached here.
+        operand
+            .leaf_origins_at(rest)
+            .unwrap_or_else(|| unreachable!("the is_unique operand has no leaf at {:?}", rest))
+            .clone()
     })
 }
 
@@ -882,7 +923,8 @@ mod tests {
 
     #[test]
     fn join_unions_leaf_sources() {
-        let origins = fresh().join(&unknown()).leaf_origins_at(&[]);
+        let joined = fresh().join(&unknown());
+        let origins = joined.leaf_origins_at(&[]).unwrap();
         assert!(origins.contains(&LeafOrigin::Fresh));
         assert!(origins.contains(&LeafOrigin::Unknown));
         assert_eq!(origins.len(), 2);
@@ -924,7 +966,7 @@ mod tests {
         let mut dm = Map::default();
         dm.insert(vec![], origins);
         let composed = Provenance(dm).compose(&[Provenance::empty(), unknown()]);
-        let out = composed.leaf_origins_at(&[]);
+        let out = composed.leaf_origins_at(&[]).unwrap();
         assert!(out.contains(&LeafOrigin::Fresh));
         assert!(out.contains(&LeafOrigin::Unknown));
         assert_eq!(out.len(), 2);
@@ -935,6 +977,7 @@ mod tests {
         let a = agg(vec![Provenance::empty(), arg(1, vec![0])]);
         assert!(a
             .leaf_origins_at(&[1])
+            .unwrap()
             .contains(&LeafOrigin::Arg(1, vec![0])));
     }
 

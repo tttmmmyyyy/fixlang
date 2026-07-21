@@ -25,6 +25,7 @@
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::program::TypeEnv;
+use crate::ast::types::TypeNode;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
@@ -34,6 +35,7 @@ use crate::rc_ir::provenance::{
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 /// The input-uniqueness a function clone is specialized on: the uniqueness of each parameter.
 type InputUniqueness = Vec<Uniqueness>;
@@ -45,7 +47,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         prog,
         type_env,
         analysis,
-        reaches_unique_check: funcs_reaching_unique_check(prog),
+        reaches_unique_check: funcs_reaching_unique_check(prog, type_env),
         clone_names: Map::default(),
         requested: Set::default(),
         worklist: VecDeque::new(),
@@ -225,7 +227,7 @@ impl<'a> Specializer<'a> {
                 )
             }
             RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
-                let llvm_gen = self.elide_unique_check_if_provable(x, llvm_gen, inputs);
+                let llvm_gen = self.elide_unique_check_if_provable(x, llvm_gen, args, inputs);
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::Llvm(llvm_gen, args.clone()),
@@ -302,10 +304,9 @@ impl<'a> Specializer<'a> {
     }
 
     /// The key of a direct callee `g`: the uniqueness of each argument at the call, resolved against
-    /// the caller's own input uniqueness. An arity mismatch (a partial application) resolves to the
-    /// canonical key, leaving the callee unspecialized.
+    /// the caller's own input uniqueness.
     fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> InputUniqueness {
-        // `interp_app` records `call_arg_provs` for every call, so the entry always exists.
+        // `interpret_app` records `call_arg_provs` for every call, so the entry always exists.
         let arg_provs = self
             .analysis
             .call_arg_provs
@@ -313,12 +314,17 @@ impl<'a> Specializer<'a> {
             .unwrap_or_else(|| {
                 unreachable!("call_arg_provs has no entry for the call {:?}", call.name)
             });
-        if arg_provs.len() == g.params.len() {
-            arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
-        } else {
-            // An arity mismatch (a partial application) resolves to the canonical key.
-            self.canonical_key_of(g)
-        }
+        // Code generation requires every call to supply one argument per parameter, so the key has one
+        // entry per parameter.
+        assert_eq!(
+            arg_provs.len(),
+            g.params.len(),
+            "call to `{}` supplies {} arguments to {} parameters",
+            g.name.name.to_string(),
+            arg_provs.len(),
+            g.params.len()
+        );
+        arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
     }
 
     /// Drop the runtime uniqueness check from an operation whose checked container this clone's inputs
@@ -328,12 +334,14 @@ impl<'a> Specializer<'a> {
         &self,
         result: &RcVar,
         llvm_gen: &Box<dyn LLVMGen>,
+        args: &[RcVar],
         inputs: &[Uniqueness],
     ) -> Box<dyn LLVMGen> {
-        let Some(check) = llvm_gen.unique_check_operand() else {
+        let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+        let Some(check) = llvm_gen.unique_check_operand(&arg_tys, self.type_env) else {
             return llvm_gen.clone();
         };
-        // `interp_rhs` records `unique_check_operand_provs` for exactly the ops that carry a `unique_check_operand`
+        // `interpret_rhs` records `unique_check_operand_provs` for exactly the ops that carry a `unique_check_operand`
         // — the same condition the `let Some(check)` guard above passed — so the entry always exists.
         let container_prov = self
             .analysis
@@ -357,14 +365,20 @@ impl<'a> Specializer<'a> {
 /// The functions whose body reaches a uniqueness check (a force-unique op or `is_unique`) — directly,
 /// or through a direct call to another such function. Only these are worth specializing; the rest are
 /// the same under every key. A least fixed point over the direct-call graph.
-fn funcs_reaching_unique_check(prog: &RcProgram) -> Set<FuncRef> {
+fn funcs_reaching_unique_check(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncRef> {
     // Each function's direct callees, and whether its own body performs a uniqueness check.
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
     let mut reaches_unique_check: Set<FuncRef> = Set::default();
     for (fref, func) in &prog.funcs {
         let mut cs = vec![];
         let mut has_unique_check = false;
-        collect_callees_and_unique_check(&func.body, prog, &mut cs, &mut has_unique_check);
+        collect_callees_and_unique_check(
+            &func.body,
+            prog,
+            type_env,
+            &mut cs,
+            &mut has_unique_check,
+        );
         if has_unique_check {
             reaches_unique_check.insert(fref.clone());
         }
@@ -392,14 +406,16 @@ fn funcs_reaching_unique_check(prog: &RcProgram) -> Set<FuncRef> {
 fn collect_callees_and_unique_check(
     node: &RcExprNode,
     prog: &RcProgram,
+    type_env: &TypeEnv,
     callees: &mut Vec<FuncRef>,
     has_unique_check: &mut bool,
 ) {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
         RcExpr::Let(_, rhs, k) => {
             match rhs {
-                RcRhs::Llvm(llvm_gen, _) => {
-                    if llvm_gen.unique_check_operand().is_some() {
+                RcRhs::Llvm(llvm_gen, args) => {
+                    let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                    if llvm_gen.unique_check_operand(&arg_tys, type_env).is_some() {
                         *has_unique_check = true;
                     }
                 }
@@ -416,6 +432,7 @@ fn collect_callees_and_unique_check(
                         collect_callees_and_unique_check(
                             &arm.body,
                             prog,
+                            type_env,
                             callees,
                             has_unique_check,
                         );
@@ -423,10 +440,10 @@ fn collect_callees_and_unique_check(
                 }
                 RcRhs::Var(_) | RcRhs::Closure(..) => {}
             }
-            collect_callees_and_unique_check(k, prog, callees, has_unique_check);
+            collect_callees_and_unique_check(k, prog, type_env, callees, has_unique_check);
         }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Destructure(_, _, k) => {
-            collect_callees_and_unique_check(k, prog, callees, has_unique_check)
+            collect_callees_and_unique_check(k, prog, type_env, callees, has_unique_check)
         }
         RcExpr::Ret(_) => {}
     })

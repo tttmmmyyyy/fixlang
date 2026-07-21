@@ -18,7 +18,7 @@ use crate::generator::{Generator, Object};
 use crate::misc::Map;
 use crate::object::{create_obj, lambda_function_type, ObjectFieldType};
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::AsDIScope;
@@ -40,6 +40,15 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .module
                 .get_function(&func.name.name.to_string())
                 .unwrap_or_else(|| self.declare_rc_function(func));
+            // A function is implemented once. A name minted here that collides with one already
+            // implemented would take a second body, appended after the first `entry` block and never
+            // reached, dropping one of the two.
+            assert_eq!(
+                fn_val.count_basic_blocks(),
+                0,
+                "function `{}` is implemented twice",
+                func.name.name.to_string()
+            );
             func_vals.insert(fref.clone(), fn_val);
         }
 
@@ -143,12 +152,25 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.get_scoped_obj(&x.name);
                 self.build_tail(obj, tail)
             }
-            RcExpr::Retain(x, path, _state, k) => {
+            RcExpr::Retain(x, path, state, k) => {
+                // Only the runtime three-way dispatch is implemented; whoever adds the state
+                // inference must implement the states it produces here.
+                assert_eq!(
+                    *state,
+                    RcState::Unknown,
+                    "reference-count state dispatch is not implemented"
+                );
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): retain
                     // without the null check that a possibly-null capture object needs.
+                    //
+                    // The bit describes the whole variable, so it says nothing about a sub-object.
+                    assert!(
+                        path.is_empty(),
+                        "`skip_null_check` describes the whole variable, not a projection of it"
+                    );
                     //
                     // The `skip_null_check` bit is set only on capture objects, and a capture object
                     // flows linearly — projected (a borrow), released at its last use, moved when
@@ -162,12 +184,25 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
                 self.eval_rc_expr(k, tail, func_vals)
             }
-            RcExpr::Release(x, path, _state, k) => {
+            RcExpr::Release(x, path, state, k) => {
+                // Only the runtime three-way dispatch is implemented; whoever adds the state
+                // inference must implement the states it produces here.
+                assert_eq!(
+                    *state,
+                    RcState::Unknown,
+                    "reference-count state dispatch is not implemented"
+                );
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): release
                     // without the null check that a possibly-null capture object needs.
+                    //
+                    // The bit describes the whole variable, so it says nothing about a sub-object.
+                    assert!(
+                        path.is_empty(),
+                        "`skip_null_check` describes the whole variable, not a projection of it"
+                    );
                     self.release_nonnull_boxed(&obj);
                 } else {
                     self.release(obj);
@@ -197,11 +232,22 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
             }
             RcExpr::Let(x, RcRhs::Llvm(llvm_gen, _args), k) => {
-                // An inline-LLVM op may itself be in tail position (e.g. `FixBody`) and may diverge
-                // (e.g. the panic/undefined ops); in both cases `generate` returns `None`.
+                // An inline-LLVM op may build the tail return itself (`FixBody`), in which case it
+                // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
+                // yields an undef value, so the continuation is generated as dead code.
                 let llvm_tail = self.binding_fuses_into_return(x, k, tail);
                 match llvm_gen.generate_tail(self, &x.ty, llvm_tail) {
-                    None => None,
+                    None => {
+                        // Yielding no value says the op built the return, which it may only do in
+                        // tail position; elsewhere the continuation below would be dropped and the
+                        // block left without a terminator.
+                        assert!(
+                            llvm_tail,
+                            "inline-LLVM op `{}` yielded no value outside tail position",
+                            llvm_gen.name()
+                        );
+                        None
+                    }
                     Some(obj) => self.bind_and_continue(x, obj, k, tail, func_vals),
                 }
             }
@@ -241,9 +287,22 @@ impl<'c, 'm> Generator<'c, 'm> {
         let mut cur = obj;
         for &idx in path {
             let field_ty = if cur.ty.is_closure() {
-                // The only unit path into a closure names its capture object, its second field.
+                // The only unit path into a closure names its capture object, its second field. The
+                // other field is the function pointer, which a reference-count operation must never
+                // reach.
+                assert_eq!(
+                    idx as u32, CLOSURE_CAPTURE_IDX,
+                    "a reference-counting unit path into a closure names its capture"
+                );
                 make_dynamic_object_ty()
             } else {
+                // Descending is what a path into an aggregate does; a unit root is where it stops,
+                // so a path going on past one would reference-count a part of that unit rather than
+                // the unit. (A closure is not a unit root: its unit is the capture, reached above.)
+                assert!(
+                    !cur.ty.is_rc_unit_root(self.type_env()),
+                    "a reference-counting unit path descends past the unit it names"
+                );
                 cur.ty.field_types(self.type_env())[idx].clone()
             };
             let val = cur.extract_field(self, idx as u32);
@@ -402,6 +461,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             cases.push((tag_val, arm_bbs[i]));
         }
         if cases.is_empty() {
+            // The only arm takes every value of the scrutinee: it is either a catch-all, or the one
+            // variant of its union. A variant arm standing alone over a multi-variant union would
+            // bind the payload of whichever variant is actually there.
+            assert!(
+                arms[0].tag.is_none() || scrut_obj.ty.field_types(self.type_env()).len() == 1,
+                "a match with one variant arm must be over a single-variant union"
+            );
             self.builder().build_unconditional_branch(else_bb).unwrap();
         } else {
             let tag_val = ObjectFieldType::get_union_tag(self, &scrut_obj);
@@ -439,7 +505,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_pop(&arm.payload.name);
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
-            // arm that returned (tail) or diverged yields `None` and contributes nothing.
+            // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds
+            // the phi an undef value from its unreachable block.
             if let Some(arm_val) = arm_val {
                 let end_bb = self.builder().get_insert_block().unwrap();
                 incomings.push((arm_val.value, end_bb));

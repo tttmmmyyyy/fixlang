@@ -53,7 +53,15 @@ pub fn lower_program(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symb
     for sym in symbols {
         match lowerer.lower_symbol(sym) {
             LoweredSymbol::Func(f) => {
-                lowerer.funcs.insert(f.name.clone(), f);
+                let name = f.name.clone();
+                // A second function of the same name would replace the first, leaving every call to
+                // it running the other one's body.
+                let previous = lowerer.funcs.insert(name.clone(), f);
+                assert!(
+                    previous.is_none(),
+                    "two RC IR functions are named `{}`",
+                    name.name.to_string()
+                );
             }
             LoweredSymbol::Global(g) => globals.push(g),
         }
@@ -128,7 +136,8 @@ impl<'a> Lowerer<'a> {
             .as_ref()
             .expect("a lambda is lowered while a top-level symbol is being lowered")
             .to_namespace();
-        // The `#` cannot appear in a source name, so `<symbol>::closure#N` never collides with one.
+        // The namespace is built from a symbol name, whose components come from module and namespace
+        // declarations, so `<symbol>::closure#N` names no source-level value.
         let name = FullName::new(&ns, &format!("closure#{}", self.closure_counter));
         self.closure_counter += 1;
         FuncRef { name }
@@ -328,13 +337,22 @@ impl<'a> Lowerer<'a> {
             // A local: reuse the variable already bound (it is already an atom).
             Some(var) => var,
             // A global: an atom naming the global, materialized by code generation.
-            None => RcVar {
-                name: v.name.clone(),
-                ty: ty.clone(),
-                source: source.clone(),
-                debug_name: None,
-                skip_null_check: false,
-            },
+            None => {
+                // A local reaching here is a lowering that lost its binding, and the atom it would
+                // build carries a local name with nothing bound to it.
+                assert!(
+                    !v.name.is_local(),
+                    "local variable `{}` is not bound during RC IR lowering",
+                    v.name.to_string()
+                );
+                RcVar {
+                    name: v.name.clone(),
+                    ty: ty.clone(),
+                    source: source.clone(),
+                    debug_name: None,
+                    skip_null_check: false,
+                }
+            }
         }
     }
 
@@ -438,7 +456,12 @@ impl<'a> Lowerer<'a> {
 
         let func_ref = self.fresh_closure_ref();
         let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures);
-        self.funcs.insert(func_ref.clone(), rc_func);
+        let previous = self.funcs.insert(func_ref.clone(), rc_func);
+        assert!(
+            previous.is_none(),
+            "two RC IR functions are named `{}`",
+            func_ref.name.name.to_string()
+        );
 
         let result = self.fresh_var("closure", ty, source.clone());
         bindings.push(PendingBinding::Let(

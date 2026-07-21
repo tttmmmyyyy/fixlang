@@ -23,7 +23,7 @@ use crate::{
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
-        unique_elim::specialize,
+        unique_check_elim::specialize,
     },
     tool::stopwatch::StopWatch,
 };
@@ -90,7 +90,7 @@ fn optimize_rc_program(
     };
     let validate = |prog: &RcProgram, stage: &str| {
         if config.develop_mode {
-            crate::rc_ir::validate::validate(prog, &symbol_names, stage);
+            crate::rc_ir::validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
 

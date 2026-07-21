@@ -1,5 +1,5 @@
 //! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`,
-//! `unique_elim`). Because RC IR names are globally unique, a clone must give every binder a fresh
+//! `unique_check_elim`). Because RC IR names are globally unique, a clone must give every binder a fresh
 //! name so the clone's names do not collide with the original's. The single entry point,
 //! `fresh_rename_function`, clones a function's parameters, capture, and body this way; `pass_tag`
 //! distinguishes each cloning pass's fresh names from the others'.
@@ -36,21 +36,24 @@ pub(crate) fn fresh_rename_function(
     (new_params, new_cap, new_body, renaming)
 }
 
-/// Assign `name` a fresh globally-unique name (unless it already has one), suffixed with `pass_tag`
-/// and a counter.
+/// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,
     renaming: &mut Map<FullName, FullName>,
     counter: &mut u64,
 ) {
-    if renaming.contains_key(name) {
-        return;
-    }
     *counter += 1;
     let mut fresh = name.clone();
     fresh.name = format!("{}#{}{}", fresh.name, pass_tag, counter);
-    renaming.insert(name.clone(), fresh);
+    // Names are unique within a function, so a second fresh name for one binder would merge two
+    // variables of the clone into one.
+    let previous = renaming.insert(name.clone(), fresh);
+    assert!(
+        previous.is_none(),
+        "`{}` is bound twice in one function",
+        name.to_string()
+    );
 }
 
 /// Record a fresh name for every variable bound in a function body.
@@ -60,14 +63,30 @@ fn assign_fresh_names_to_binders(
     renaming: &mut Map<FullName, FullName>,
     counter: &mut u64,
 ) {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter)
+    })
+}
+
+fn assign_fresh_names_to_binders_inner(
+    node: &RcExprNode,
+    pass_tag: &str,
+    renaming: &mut Map<FullName, FullName>,
+    counter: &mut u64,
+) {
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
             assign_fresh_name(&x.name, pass_tag, renaming, counter);
-            if let RcRhs::Match(_, arms) = rhs {
-                for arm in arms {
-                    assign_fresh_name(&arm.payload.name, pass_tag, renaming, counter);
-                    assign_fresh_names_to_binders(&arm.body, pass_tag, renaming, counter);
+            // Listed explicitly (not a catch-all) so a new `RcRhs` that binds a name fails to compile
+            // here instead of leaving that binder pointing at the original function's variable.
+            match rhs {
+                RcRhs::Match(_, arms) => {
+                    for arm in arms {
+                        assign_fresh_name(&arm.payload.name, pass_tag, renaming, counter);
+                        assign_fresh_names_to_binders(&arm.body, pass_tag, renaming, counter);
+                    }
                 }
+                RcRhs::Var(_) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
             }
             assign_fresh_names_to_binders(k, pass_tag, renaming, counter);
         }
@@ -97,6 +116,10 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || rename_expr_inner(node, renaming))
+}
+
+fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
             rename_var(x, renaming),

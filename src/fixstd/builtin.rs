@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::LLVMGen,
+    inline_llvm::{unique_check_on_boxed_leaf, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -2324,15 +2324,15 @@ impl LLVMGen for InlineLLVMArraySetBody {
         ]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2457,15 +2457,15 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2586,15 +2586,15 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2707,15 +2707,15 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         vec![&mut self.elem_name, &mut self.punched_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 1,
-                path: vec![0],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_FIELD], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3450,15 +3450,15 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3613,15 +3613,15 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         vec![&mut self.punched_str_name, &mut self.field_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: PLUG_IN_PUNCHED_ARG,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -4517,15 +4517,15 @@ impl LLVMGen for InlineLLVMStructSetBody {
         vec![&mut self.value_name, &mut self.struct_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: STRUCT_SET_STRUCT_ARG,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -5302,6 +5302,9 @@ pub struct InlineLLVMIsUniqueFunctionBody {
     pub(crate) assume_unique: bool,
 }
 
+/// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
+pub const IS_UNIQUE_VALUE_ARG: usize = 0;
+
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -5370,15 +5373,15 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
         if self.assume_unique {
-            None
-        } else {
-            Some(UniqueCheckOperand {
-                container_index: 0,
-                path: vec![],
-            })
+            return None;
         }
+        unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -5944,15 +5947,15 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         vec![&mut self.val_name, &mut self.io_act_name]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: MUTATE_BOXED_VALUE_ARG,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -6106,15 +6109,15 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         ]
     }
 
-    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
-        if self.force_unique {
-            Some(UniqueCheckOperand {
-                container_index: MUTATE_BOXED_VALUE_ARG,
-                path: vec![],
-            })
-        } else {
-            None
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
         }
+        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {

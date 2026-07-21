@@ -249,6 +249,9 @@ impl<'a> RcInserter<'a> {
         source: Option<Span>,
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
+        // The liveness this returns is the union over the arms, so with no arm every variable live
+        // after the match would be reported dead before it and released early.
+        assert!(!arms.is_empty(), "a match has at least one arm");
         let (cont, live_cont) = self.insert_into_expr(cont, live_after);
         // Variables used after the match (excluding the match result `x`): live across every arm.
         let mut live_after_match = live_cont.clone();
