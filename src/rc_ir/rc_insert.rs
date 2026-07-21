@@ -38,7 +38,15 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
         .into_iter()
         .map(|mut glob| {
             let inserter = RcInserter::new_for_global_init(type_env, &glob.init);
-            let (body, _live) = inserter.insert_into_expr(glob.init, &Set::default());
+            let (body, live) = inserter.insert_into_expr(glob.init, &Set::default());
+            // A global initializer takes no parameter and no capture, so it has no way to receive a
+            // value: a free local is a reference to a binding that lowering lost.
+            assert!(
+                live.is_empty(),
+                "the initializer of `{}` reads local variables it does not bind: {:?}",
+                glob.symbol.to_string(),
+                live
+            );
             glob.init = body;
             glob
         })
@@ -75,6 +83,20 @@ impl<'a> RcInserter<'a> {
     /// Rewrite a function body, then release any parameter or capture that the body never uses.
     fn insert_into_func(&self, mut func: RcFunc) -> RcFunc {
         let (body, live) = self.insert_into_expr(func.body, &Set::default());
+
+        // The body is built under the parameters and the capture alone, so nothing else can be live
+        // at its entry: a name that is would be a use with no binding to reach.
+        for name in &live {
+            assert!(
+                func.params
+                    .iter()
+                    .chain(func.capture.iter())
+                    .any(|input| &input.name == name),
+                "`{}` is live at the entry of `{}`, which binds it neither as a parameter nor as its capture",
+                name.to_string(),
+                func.name.name.to_string()
+            );
+        }
 
         let mut unused = vec![];
         for p in &func.params {

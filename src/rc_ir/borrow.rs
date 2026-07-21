@@ -418,7 +418,16 @@ fn resolve_callee_params<'a>(
             };
             prog.funcs.contains_key(&fref).then_some(fref)
         })?;
-    prog.funcs.get(&fref).map(|f| f.params.as_slice())
+    // A closure target is registered as a function when it is lifted, and the other way in resolved
+    // the name against the program already, so the callee is there either way. Reporting it absent
+    // here would read as an indirect call and quietly give up the borrow optimization.
+    let func = prog.funcs.get(&fref).unwrap_or_else(|| {
+        unreachable!(
+            "callee `{}` is not a function of the program",
+            fref.name.to_string()
+        )
+    });
+    Some(func.params.as_slice())
 }
 
 /// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result — the pure
@@ -1324,10 +1333,18 @@ impl<'a> CancelAnalysis<'a> {
     /// union retain needed, and a later union release would wrongly cancel it).
     fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
         let (r, rp) = root(self.vars, self.type_env, var, path);
-        match self.vars.var_tys.get(&r) {
-            Some(ty) => (r, truncate_to_unit(ty, &rp, self.type_env)),
-            None => (r, rp),
-        }
+        let Some(ty) = self.vars.var_tys.get(&r) else {
+            // A root with no type here is a global: the table holds the function's own variables.
+            // Reference counting is inserted for locals only and a global's reachable graph is
+            // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
+            assert!(
+                !r.is_local(),
+                "local `{}` has no recorded type",
+                r.to_string()
+            );
+            return (r, rp);
+        };
+        (r, truncate_to_unit(ty, &rp, self.type_env))
     }
 
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
@@ -1491,13 +1508,15 @@ impl<'a> CancelAnalysis<'a> {
             if self.needed_retains.contains(&r) {
                 continue;
             }
-            match self.unbump_releases.get(&r) {
-                Some(releases) if !releases.is_empty() => {
-                    out.insert(r);
-                    out.extend(releases.iter().copied());
-                }
-                // A retain with no un-bump release is left in place to keep the counting balanced.
-                _ => {}
+            // The walk records an entry for every retain it meets, and only retains it met are here.
+            let releases = self
+                .unbump_releases
+                .get(&r)
+                .unwrap_or_else(|| unreachable!("retain {:?} was never seen by the walk", r));
+            // A retain with no un-bump release is left in place to keep the counting balanced.
+            if !releases.is_empty() {
+                out.insert(r);
+                out.extend(releases.iter().copied());
             }
         }
         out

@@ -40,16 +40,25 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
     for g in &prog.globals {
         globals.insert(g.symbol.clone());
     }
+    // The functions alone, for a closure's target: a global value is referenceable by name but is
+    // not something a closure can be built from.
+    let funcs: Set<FullName> = prog.funcs.keys().map(|f| f.name.clone()).collect();
 
     for func in prog.funcs.values() {
-        let mut v = Validator::new(stage, &globals, type_env, func.name.name.to_string());
+        let mut v = Validator::new(
+            stage,
+            &globals,
+            &funcs,
+            type_env,
+            func.name.name.to_string(),
+        );
         for p in func.params.iter().chain(func.capture.iter()) {
             v.bind(&p.name);
         }
         v.check_expr(&func.body);
     }
     for g in &prog.globals {
-        let mut v = Validator::new(stage, &globals, type_env, g.symbol.to_string());
+        let mut v = Validator::new(stage, &globals, &funcs, type_env, g.symbol.to_string());
         v.check_expr(&g.init);
     }
 }
@@ -59,6 +68,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 struct Validator<'a> {
     stage: &'a str,
     globals: &'a Set<FullName>,
+    funcs: &'a Set<FullName>,
     type_env: &'a TypeEnv,
     location: String,
     seen: Set<FullName>,
@@ -69,12 +79,14 @@ impl<'a> Validator<'a> {
     fn new(
         stage: &'a str,
         globals: &'a Set<FullName>,
+        funcs: &'a Set<FullName>,
         type_env: &'a TypeEnv,
         location: String,
     ) -> Self {
         Validator {
             stage,
             globals,
+            funcs,
             type_env,
             location,
             seen: Set::default(),
@@ -166,7 +178,18 @@ impl<'a> Validator<'a> {
                     self.use_var(&a.name);
                 }
             }
-            RcRhs::Closure(_, caps) => {
+            RcRhs::Closure(fref, caps) => {
+                // A closure names a function of the program. A rewrite that mints a clone name and
+                // forgets to add its body leaves this reference dangling, which code generation only
+                // meets much later.
+                if !self.funcs.contains(&fref.name) {
+                    panic!(
+                        "[RC IR validate] {}: closure targets `{}`, which is not a function of the program, in `{}`",
+                        self.stage,
+                        fref.name.to_string(),
+                        self.location
+                    );
+                }
                 for c in caps {
                     self.use_var(&c.name);
                 }
@@ -217,7 +240,8 @@ mod tests {
     fn check(body: &RcExprNode, params: &[&str]) {
         let globals = Set::default();
         let type_env = TypeEnv::default();
-        let mut v = Validator::new("test", &globals, &type_env, "f".to_string());
+        let funcs = Set::default();
+        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
         for p in params {
             v.bind(&FullName::local(p));
         }
@@ -260,7 +284,8 @@ mod tests {
         // let r = call g(); ret r   where g is a global (not a local binding)
         let globals: Set<FullName> = [FullName::local("g")].into_iter().collect();
         let type_env = TypeEnv::default();
-        let mut v = Validator::new("test", &globals, &type_env, "f".to_string());
+        let funcs = Set::default();
+        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
         let body = node(RcExpr::Let(
             var("r"),
             RcRhs::App(var("g"), vec![]),

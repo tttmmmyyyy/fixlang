@@ -153,9 +153,21 @@ impl<'a> Lowerer<'a> {
     }
 
     fn unbind(&mut self, ast_name: &FullName) {
-        if let Some(stack) = self.scope.get_mut(ast_name) {
-            stack.pop();
-        }
+        // Every `unbind` closes a `bind`, so both the name and a binding for it are there. An unbind
+        // with nothing to undo means the two have gone out of step, and every later `resolve` in the
+        // enclosing scope reads a scope that no longer describes the program.
+        let stack = self.scope.get_mut(ast_name).unwrap_or_else(|| {
+            unreachable!(
+                "unbinding `{}`, which was never bound",
+                ast_name.to_string()
+            )
+        });
+        stack.pop().unwrap_or_else(|| {
+            unreachable!(
+                "unbinding `{}`, whose binding stack is empty",
+                ast_name.to_string()
+            )
+        });
     }
 
     fn resolve(&self, ast_name: &FullName) -> Option<RcVar> {
@@ -391,11 +403,16 @@ impl<'a> Lowerer<'a> {
             .collect();
         // Rewrite the generator's embedded operand names to the fresh local names, so code
         // generation resolves them from scope.
-        for (slot, var) in llvm_gen
-            .free_vars_mut()
-            .into_iter()
-            .zip(operand_vars.iter())
-        {
+        let slots = llvm_gen.free_vars_mut();
+        // The operands were built from this op's free variables, so the two correspond. Were they to
+        // differ, `zip` would leave the operands past the shorter one naming variables that lowering
+        // has replaced.
+        assert_eq!(
+            slots.len(),
+            operand_vars.len(),
+            "an op's free variables and its lowered operands must correspond"
+        );
+        for (slot, var) in slots.into_iter().zip(operand_vars.iter()) {
             *slot = var.name.clone();
         }
         let result = self.fresh_var("v", ty, source.clone());
