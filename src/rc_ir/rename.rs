@@ -27,9 +27,9 @@ pub(crate) fn fresh_rename_function(
 ) {
     let mut rename: Map<FullName, FullName> = Map::default();
     for p in params.iter().chain(cap.iter()) {
-        fresh_rename(&p.name, marker, &mut rename, counter);
+        assign_fresh_name(&p.name, marker, &mut rename, counter);
     }
-    collect_binders(body, marker, &mut rename, counter);
+    assign_fresh_names_to_binders(body, marker, &mut rename, counter);
     let new_params = params.iter().map(|p| rename_var(p, &rename)).collect();
     let new_cap = cap.as_ref().map(|c| rename_var(c, &rename));
     let new_body = rename_expr(body, &rename);
@@ -38,7 +38,7 @@ pub(crate) fn fresh_rename_function(
 
 /// Assign `name` a fresh globally-unique name (unless it already has one), suffixed with `marker`
 /// and a counter.
-fn fresh_rename(
+fn assign_fresh_name(
     name: &FullName,
     marker: &str,
     rename: &mut Map<FullName, FullName>,
@@ -54,7 +54,7 @@ fn fresh_rename(
 }
 
 /// Record a fresh name for every variable bound in a function body.
-fn collect_binders(
+fn assign_fresh_names_to_binders(
     node: &RcExprNode,
     marker: &str,
     rename: &mut Map<FullName, FullName>,
@@ -62,23 +62,23 @@ fn collect_binders(
 ) {
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
-            fresh_rename(&x.name, marker, rename, counter);
+            assign_fresh_name(&x.name, marker, rename, counter);
             if let RcRhs::Match(_, arms) = rhs {
                 for arm in arms {
-                    fresh_rename(&arm.payload.name, marker, rename, counter);
-                    collect_binders(&arm.body, marker, rename, counter);
+                    assign_fresh_name(&arm.payload.name, marker, rename, counter);
+                    assign_fresh_names_to_binders(&arm.body, marker, rename, counter);
                 }
             }
-            collect_binders(k, marker, rename, counter);
+            assign_fresh_names_to_binders(k, marker, rename, counter);
         }
         RcExpr::Destructure(_, fields, k) => {
             for (_, fv) in fields {
-                fresh_rename(&fv.name, marker, rename, counter);
+                assign_fresh_name(&fv.name, marker, rename, counter);
             }
-            collect_binders(k, marker, rename, counter);
+            assign_fresh_names_to_binders(k, marker, rename, counter);
         }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
-            collect_binders(k, marker, rename, counter)
+            assign_fresh_names_to_binders(k, marker, rename, counter)
         }
         RcExpr::Ret(_) => {}
     }

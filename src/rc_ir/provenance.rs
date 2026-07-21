@@ -166,7 +166,7 @@ impl Provenance {
     /// root `[]` (which `root` does to test whether the whole value is a single boxed leaf). The empty
     /// set is the bottom of the lattice, so an absent leaf resolves to `Unique`, matching a recorded
     /// `⊥`.
-    pub fn leaf_at(&self, path: &[usize]) -> LeafOrigins {
+    pub fn leaf_origins_at(&self, path: &[usize]) -> LeafOrigins {
         self.0.get(path).cloned().unwrap_or_default()
     }
 
@@ -192,7 +192,7 @@ impl Provenance {
                     }
                     LeafOrigin::Arg(j, sigma) => match operand_provs.get(*j) {
                         Some(op) => {
-                            for s in op.leaf_at(sigma) {
+                            for s in op.leaf_origins_at(sigma) {
                                 out.insert(s);
                             }
                         }
@@ -318,7 +318,7 @@ impl Uniqueness {
     /// The `SharingVerdict` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
     /// caller (`resolve_leaf`) resolves an `Arg`'s path, which addresses a boxed leaf of the input's
     /// type — so a miss is a malformed provenance, not a case to default away.
-    fn leaf_at(&self, path: &[usize]) -> SharingVerdict {
+    fn verdict_at(&self, path: &[usize]) -> SharingVerdict {
         self.0.get(path).copied().unwrap_or_else(|| {
             unreachable!(
                 "path {:?} is not a boxed leaf of the uniqueness shape",
@@ -354,7 +354,7 @@ fn resolve_leaf(ls: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict {
                         inputs.len()
                     )
                 })
-                .leaf_at(path),
+                .verdict_at(path),
         };
         if rc == SharingVerdict::Dynamic {
             return SharingVerdict::Dynamic;
@@ -383,16 +383,16 @@ pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
 /// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
 /// its function's input uniqueness.
 pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) -> bool {
-    resolve_leaf(&prov.leaf_at(path), inputs) == SharingVerdict::Unique
+    resolve_leaf(&prov.leaf_origins_at(path), inputs) == SharingVerdict::Unique
 }
 
 /// The provenance analysis of one function or global initializer: a forward abstract interpretation
 /// that records each variable's provenance at its binding point.
-struct Interp<'a> {
+struct Interpreter<'a> {
     type_env: &'a TypeEnv,
     /// Each function's result provenance, symbolic in its parameters (`Arg`), used to compose a
     /// direct call at its call site. Built to a fixed point before the recording pass.
-    effects: &'a Map<FuncRef, Provenance>,
+    func_result_provs: &'a Map<FuncRef, Provenance>,
     /// The function each local closure value targets, so a call through it resolves to a direct
     /// callee. Populated as `Closure` bindings are interpreted (a forward pass sees them first).
     closure_targets: Map<FullName, FuncRef>,
@@ -404,31 +404,31 @@ struct Interp<'a> {
     /// live environment at the operation, so a container demoted to `Unknown` by an intervening `Retain` is
     /// seen as `Unknown` here — the flow-sensitive fact unique-check elimination needs to decide, per
     /// operation, whether the container is still unique.
-    op_containers: Map<FullName, Provenance>,
+    unique_check_operand_provs: Map<FullName, Provenance>,
     /// For each call, keyed by its result variable, the provenance of each argument at the call's
     /// program point. Specialization keys the callee's clone on these (resolved against the caller's
     /// own input uniqueness), again taking the call-point value rather than the arguments' bindings.
-    call_args: Map<FullName, Vec<Provenance>>,
+    call_arg_provs: Map<FullName, Vec<Provenance>>,
     /// The result of each `is_unique`, mapped to the path of the leaf whose reference count it tested,
     /// so that destructuring the result can pair the flag it returns with the value it returns.
-    is_unique_results: Map<FullName, FieldPath>,
+    is_unique_tested_paths: Map<FullName, FieldPath>,
     /// A variable holding an `is_unique` flag, mapped to the value the same operation returned and the
     /// path of the tested leaf. The arm a `match` on that flag takes for `true` runs where the leaf's
     /// reference count was one, so that arm may read the leaf as uniquely owned.
-    unique_flags: Map<FullName, (RcVar, FieldPath)>,
+    flag_to_tested_leaf: Map<FullName, (RcVar, FieldPath)>,
 }
 
-impl<'a> Interp<'a> {
-    fn new(type_env: &'a TypeEnv, effects: &'a Map<FuncRef, Provenance>) -> Self {
-        Interp {
+impl<'a> Interpreter<'a> {
+    fn new(type_env: &'a TypeEnv, func_result_provs: &'a Map<FuncRef, Provenance>) -> Self {
+        Interpreter {
             type_env,
-            effects,
+            func_result_provs,
             closure_targets: Map::default(),
             bindings: Map::default(),
-            op_containers: Map::default(),
-            call_args: Map::default(),
-            is_unique_results: Map::default(),
-            unique_flags: Map::default(),
+            unique_check_operand_provs: Map::default(),
+            call_arg_provs: Map::default(),
+            is_unique_tested_paths: Map::default(),
+            flag_to_tested_leaf: Map::default(),
         }
     }
 
@@ -446,7 +446,7 @@ impl<'a> Interp<'a> {
 
     /// The provenance of an operand from the environment; a value not in scope (a global reference)
     /// has `Unknown` boxed leaves.
-    fn operand(&self, var: &RcVar, env: &Map<FullName, Provenance>) -> Provenance {
+    fn prov_of(&self, var: &RcVar, env: &Map<FullName, Provenance>) -> Provenance {
         match env.get(&var.name) {
             Some(p) => p.clone(),
             None => Provenance::uniform(&var.ty, self.type_env, LeafOrigin::Unknown),
@@ -455,34 +455,34 @@ impl<'a> Interp<'a> {
 
     /// Interpret an expression, threading the environment forward. Returns the provenance of the
     /// expression's value (the value its final `Ret` returns) and the environment at its exit.
-    fn interp(
+    fn interpret(
         &mut self,
         node: &RcExprNode,
         env: Map<FullName, Provenance>,
     ) -> (Provenance, Map<FullName, Provenance>) {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.interp_inner(node, env))
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.interpret_inner(node, env))
     }
 
-    fn interp_inner(
+    fn interpret_inner(
         &mut self,
         node: &RcExprNode,
         mut env: Map<FullName, Provenance>,
     ) -> (Provenance, Map<FullName, Provenance>) {
         match node.expr.as_ref() {
-            RcExpr::Ret(x) => (self.operand(x, &env), env),
+            RcExpr::Ret(x) => (self.prov_of(x, &env), env),
             // A `match` needs its arms' exit environments joined for the continuation (a variable
             // demoted on one arm but live after the match must stay demoted downstream), so it is
             // handled separately from the other right-hand sides.
             RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
-                let (result, exit_env) = self.interp_match(scrut, arms, &env);
+                let (result, exit_env) = self.interpret_match(scrut, arms, &env);
                 env = exit_env;
                 self.record(x, &result, &mut env);
-                self.interp(cont, env)
+                self.interpret(cont, env)
             }
             RcExpr::Let(x, rhs, cont) => {
-                let prov = self.interp_rhs(x, rhs, &env);
+                let prov = self.interpret_rhs(x, rhs, &env);
                 self.record(x, &prov, &mut env);
-                self.interp(cont, env)
+                self.interpret(cont, env)
             }
             RcExpr::Retain(var, path, _, cont) => {
                 if let Some(p) = env.get(&var.name) {
@@ -493,20 +493,20 @@ impl<'a> Interp<'a> {
                 // an `is_unique` established: the count it read is no longer the count that holds. The
                 // retain may name an alias of the tested value rather than the value itself, and
                 // telling that apart needs the object identity the borrow pass computes, so every
-                // pending flag goes — the refinement `refine_by_condition` performs would otherwise
+                // pending flag goes — the refinement `refine_by_unique_flag` performs would otherwise
                 // restore a value the retain had just shared.
-                self.is_unique_results.clear();
-                self.unique_flags.clear();
-                self.interp(cont, env)
+                self.is_unique_tested_paths.clear();
+                self.flag_to_tested_leaf.clear();
+                self.interpret(cont, env)
             }
-            RcExpr::Release(_, _, _, cont) => self.interp(cont, env),
+            RcExpr::Release(_, _, _, cont) => self.interpret(cont, env),
             RcExpr::Destructure(container, fields, cont) => {
                 // Destructuring a boxed container retains each field out of the shared allocation, so
                 // every field's boxed leaf is `Unknown` (the same read-out-of-a-shared-box rule as a boxed
-                // union's payload in `interp_match`). An unboxed container's fields carry the tracked
+                // union's payload in `interpret_match`). An unboxed container's fields carry the tracked
                 // provenance projected from the container.
                 let boxed = container.ty.is_box(self.type_env);
-                let cprov = self.operand(container, &env);
+                let cprov = self.prov_of(container, &env);
                 for (idx, fv) in fields {
                     let fprov = if boxed {
                         Provenance::uniform(&fv.ty, self.type_env, LeafOrigin::Unknown)
@@ -516,7 +516,7 @@ impl<'a> Interp<'a> {
                     self.record(fv, &fprov, &mut env);
                 }
                 self.note_unique_flag(container, fields);
-                self.interp(cont, env)
+                self.interpret(cont, env)
             }
         }
     }
@@ -525,27 +525,27 @@ impl<'a> Interp<'a> {
     /// caller for its environment join).
     ///
     /// One operation is read here rather than through its `result_prov`: see `is_unique_result`.
-    fn interp_rhs(
+    fn interpret_rhs(
         &mut self,
         result: &RcVar,
         rhs: &RcRhs,
         env: &Map<FullName, Provenance>,
     ) -> Provenance {
         match rhs {
-            RcRhs::Var(y) => self.operand(y, env),
+            RcRhs::Var(y) => self.prov_of(y, env),
             RcRhs::Llvm(gen, args) => {
                 let arg_provs: Vec<Provenance> =
-                    args.iter().map(|a| self.operand(a, env)).collect();
+                    args.iter().map(|a| self.prov_of(a, env)).collect();
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
                 if let Some(uc) = gen.unique_check_operand() {
-                    self.op_containers
+                    self.unique_check_operand_provs
                         .insert(result.name.clone(), arg_provs[uc.container_index].clone());
                     // `is_unique` is the one operation that answers a uniqueness question rather than
                     // acting on it, so its result is what makes a branch's condition readable as a
-                    // fact about a value (`interp_match` refines the `true` arm with it).
+                    // fact about a value (`interpret_match` refines the `true` arm with it).
                     if gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
-                        self.is_unique_results
+                        self.is_unique_tested_paths
                             .insert(result.name.clone(), uc.path.clone());
                     }
                 }
@@ -563,9 +563,9 @@ impl<'a> Interp<'a> {
                     .insert(result.name.clone(), fref.clone());
                 Provenance::uniform(&result.ty, self.type_env, LeafOrigin::Fresh)
             }
-            RcRhs::App(callee, args) => self.interp_app(result, callee, args, env),
+            RcRhs::App(callee, args) => self.interpret_app(result, callee, args, env),
             RcRhs::Match(..) => {
-                unreachable!("a Match rhs is handled by interp_inner for its environment join")
+                unreachable!("a Match rhs is handled by interpret_inner for its environment join")
             }
         }
     }
@@ -574,7 +574,7 @@ impl<'a> Interp<'a> {
     /// closure value built here, or a top-level function referenced by name) — composes that
     /// function's effect with the actual arguments. An indirect call, or a partial application whose
     /// argument count does not match the callee's parameters, is conservatively `Unknown`.
-    fn interp_app(
+    fn interpret_app(
         &mut self,
         result: &RcVar,
         callee: &RcVar,
@@ -583,18 +583,18 @@ impl<'a> Interp<'a> {
     ) -> Provenance {
         // Snapshot the arguments' provenance at this call's program point, for specialization to key
         // the callee's clone on (again, the call-point value rather than the arguments' bindings).
-        let arg_provs: Vec<Provenance> = args.iter().map(|a| self.operand(a, env)).collect();
-        self.call_args
+        let arg_provs: Vec<Provenance> = args.iter().map(|a| self.prov_of(a, env)).collect();
+        self.call_arg_provs
             .insert(result.name.clone(), arg_provs.clone());
 
         let target = self.closure_targets.get(&callee.name).cloned().or_else(|| {
             let fref = FuncRef {
                 name: callee.name.clone(),
             };
-            self.effects.contains_key(&fref).then_some(fref)
+            self.func_result_provs.contains_key(&fref).then_some(fref)
         });
         if let Some(fref) = target {
-            if let Some(effect) = self.effects.get(&fref) {
+            if let Some(effect) = self.func_result_provs.get(&fref) {
                 // The effect is symbolic in the callee's parameters; substitute the actual
                 // arguments (`compose` resolves any unmatched parameter to `Unknown`, so an arity
                 // mismatch stays sound).
@@ -612,7 +612,7 @@ impl<'a> Interp<'a> {
     /// A result reached any other way (projected field by field, say) is simply not paired, and the
     /// refinement is skipped.
     fn note_unique_flag(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
-        let Some(path) = self.is_unique_results.get(&container.name).cloned() else {
+        let Some(path) = self.is_unique_tested_paths.get(&container.name).cloned() else {
             return;
         };
         let field = |i: usize| fields.iter().find(|(idx, _)| *idx == i).map(|(_, v)| v);
@@ -623,7 +623,7 @@ impl<'a> Interp<'a> {
         if !boxed_leaf_paths(&value.ty, self.type_env).contains(&path) {
             return;
         }
-        self.unique_flags
+        self.flag_to_tested_leaf
             .insert(flag.name.clone(), (value.clone(), path));
     }
 
@@ -632,7 +632,7 @@ impl<'a> Interp<'a> {
     /// tested leaf's reference count was one — no other holder exists — so the arm may read the leaf as
     /// uniquely owned however little the analysis knows about where the value came from. A `Retain`
     /// inside the arm demotes it again, as it does any other leaf.
-    fn refine_by_condition(
+    fn refine_by_unique_flag(
         &self,
         scrut: &RcVar,
         arm: &MatchArm,
@@ -642,7 +642,7 @@ impl<'a> Interp<'a> {
         if arm.tag != Some(BOOL_TRUE_TAG) {
             return env;
         }
-        let Some((value, path)) = self.unique_flags.get(&scrut.name) else {
+        let Some((value, path)) = self.flag_to_tested_leaf.get(&scrut.name) else {
             return env;
         };
         // The flag and the value are bound by one `Destructure` upstream of this `match`, so the value
@@ -671,7 +671,7 @@ impl<'a> Interp<'a> {
             // The capture sits just past the parameters in the argument numbering.
             self.seed_param(cap, func.params.len(), &mut env);
         }
-        let (result, _exit) = self.interp(&func.body, env);
+        let (result, _exit) = self.interpret(&func.body, env);
         result
     }
 
@@ -679,17 +679,17 @@ impl<'a> Interp<'a> {
     /// provenances and their exit environments pointwise. The joined exit environment carries a
     /// demotion that happened on only one arm forward to the continuation (a variable made `Unknown` in
     /// one branch must stay `Unknown` where the branches merge).
-    fn interp_match(
+    fn interpret_match(
         &mut self,
         scrut: &RcVar,
         arms: &[MatchArm],
         env: &Map<FullName, Provenance>,
     ) -> (Provenance, Map<FullName, Provenance>) {
-        let sprov = self.operand(scrut, env);
+        let sprov = self.prov_of(scrut, env);
         let mut joined_result: Option<Provenance> = None;
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
-            let mut arm_env = self.refine_by_condition(scrut, arm, env);
+            let mut arm_env = self.refine_by_unique_flag(scrut, arm, env);
             // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
             // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
             // a boxed union it is read out of the shared container, so its every boxed leaf is `Unknown`.
@@ -704,7 +704,7 @@ impl<'a> Interp<'a> {
                 None => sprov.clone(),
             };
             self.record(&arm.payload, &payload_prov, &mut arm_env);
-            let (arm_prov, arm_exit) = self.interp(&arm.body, arm_env);
+            let (arm_prov, arm_exit) = self.interpret(&arm.body, arm_env);
             joined_result = Some(match joined_result {
                 None => arm_prov,
                 Some(acc) => acc.join(&arm_prov),
@@ -751,7 +751,7 @@ fn is_unique_result(
         if *field != IS_UNIQUE_VALUE_FIELD {
             unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
         }
-        operand.leaf_at(rest)
+        operand.leaf_origins_at(rest)
     })
 }
 
@@ -772,24 +772,24 @@ fn join_envs(
 
 /// The result of analyzing a whole program. Names are globally unique, so each map is a single flat
 /// table keyed by variable name.
-pub struct Analysis {
+pub struct ProvenanceAnalysis {
     /// Each variable's provenance at its binding point (for the RC IR dump annotation).
     pub bindings: Map<FullName, Provenance>,
     /// For each operation that branches on a container's uniqueness (a force-unique op or `is_unique`,
     /// keyed by its result variable), that container operand's provenance at the operation's program
     /// point, which unique-check elimination resolves.
-    pub op_containers: Map<FullName, Provenance>,
+    pub unique_check_operand_provs: Map<FullName, Provenance>,
     /// For each call (keyed by its result variable), the arguments' provenance at the call's program
     /// point, which specialization resolves to key the callee's clone.
-    pub call_args: Map<FullName, Vec<Provenance>>,
+    pub call_arg_provs: Map<FullName, Vec<Provenance>>,
 }
 
 /// Analyze every function and global initializer of `prog`.
-pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Analysis {
+pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
     // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.
-    let mut effects: Map<FuncRef, Provenance> = prog
+    let mut func_result_provs: Map<FuncRef, Provenance> = prog
         .funcs
         .values()
         .map(|f| {
@@ -800,45 +800,45 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Analysis {
         })
         .collect();
     loop {
-        let mut next = effects.clone();
+        let mut next = func_result_provs.clone();
         let mut changed = false;
         for func in prog.funcs.values() {
-            let mut interp = Interp::new(type_env, &effects);
-            let result = interp.run_func(func);
-            let merged = effects[&func.name].join(&result);
-            if merged != effects[&func.name] {
+            let mut interpreter = Interpreter::new(type_env, &func_result_provs);
+            let result = interpreter.run_func(func);
+            let merged = func_result_provs[&func.name].join(&result);
+            if merged != func_result_provs[&func.name] {
                 next.insert(func.name.clone(), merged);
                 changed = true;
             }
         }
-        effects = next;
+        func_result_provs = next;
         if !changed {
             break;
         }
     }
 
-    // Phase 2: record every variable's provenance using the converged effects.
+    // Phase 2: record every variable's provenance using the converged func_result_provs.
     let mut bindings = Map::default();
-    let mut op_containers = Map::default();
-    let mut call_args = Map::default();
+    let mut unique_check_operand_provs = Map::default();
+    let mut call_arg_provs = Map::default();
     for func in prog.funcs.values() {
-        let mut interp = Interp::new(type_env, &effects);
-        interp.run_func(func);
-        bindings.extend(interp.bindings);
-        op_containers.extend(interp.op_containers);
-        call_args.extend(interp.call_args);
+        let mut interpreter = Interpreter::new(type_env, &func_result_provs);
+        interpreter.run_func(func);
+        bindings.extend(interpreter.bindings);
+        unique_check_operand_provs.extend(interpreter.unique_check_operand_provs);
+        call_arg_provs.extend(interpreter.call_arg_provs);
     }
     for glob in &prog.globals {
-        let mut interp = Interp::new(type_env, &effects);
-        let _ = interp.interp(&glob.init, Map::default());
-        bindings.extend(interp.bindings);
-        op_containers.extend(interp.op_containers);
-        call_args.extend(interp.call_args);
+        let mut interpreter = Interpreter::new(type_env, &func_result_provs);
+        let _ = interpreter.interpret(&glob.init, Map::default());
+        bindings.extend(interpreter.bindings);
+        unique_check_operand_provs.extend(interpreter.unique_check_operand_provs);
+        call_arg_provs.extend(interpreter.call_arg_provs);
     }
-    Analysis {
+    ProvenanceAnalysis {
         bindings,
-        op_containers,
-        call_args,
+        unique_check_operand_provs,
+        call_arg_provs,
     }
 }
 
@@ -880,7 +880,7 @@ mod tests {
 
     #[test]
     fn join_unions_leaf_sources() {
-        let ls = fresh().join(&unknown()).leaf_at(&[]);
+        let ls = fresh().join(&unknown()).leaf_origins_at(&[]);
         assert!(ls.contains(&LeafOrigin::Fresh));
         assert!(ls.contains(&LeafOrigin::Unknown));
         assert_eq!(ls.len(), 2);
@@ -922,7 +922,7 @@ mod tests {
         let mut dm = Map::default();
         dm.insert(vec![], ls);
         let composed = Provenance(dm).compose(&[Provenance::empty(), unknown()]);
-        let out = composed.leaf_at(&[]);
+        let out = composed.leaf_origins_at(&[]);
         assert!(out.contains(&LeafOrigin::Fresh));
         assert!(out.contains(&LeafOrigin::Unknown));
         assert_eq!(out.len(), 2);
@@ -931,7 +931,9 @@ mod tests {
     #[test]
     fn leaf_at_navigates_to_the_boxed_leaf() {
         let a = agg(vec![Provenance::empty(), arg(1, vec![0])]);
-        assert!(a.leaf_at(&[1]).contains(&LeafOrigin::Arg(1, vec![0])));
+        assert!(a
+            .leaf_origins_at(&[1])
+            .contains(&LeafOrigin::Arg(1, vec![0])));
     }
 
     #[test]

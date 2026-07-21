@@ -29,12 +29,14 @@ use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
-use crate::rc_ir::provenance::{analyze_program, leaf_is_unique, resolve, Analysis, Uniqueness};
+use crate::rc_ir::provenance::{
+    analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
+};
 use crate::rc_ir::rename::fresh_rename_function;
 use std::collections::VecDeque;
 
 /// The input-uniqueness a function clone is specialized on: the uniqueness of each parameter.
-type Key = Vec<Uniqueness>;
+type InputUniqueness = Vec<Uniqueness>;
 
 /// Specialize `prog` and eliminate the unique checks each specialization makes provable.
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
@@ -43,7 +45,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         prog,
         type_env,
         analysis,
-        beneficial: beneficial_funcs(prog),
+        reaches_unique_check: funcs_reaching_unique_check(prog),
         clone_names: Map::default(),
         requested: Set::default(),
         worklist: VecDeque::new(),
@@ -87,17 +89,17 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 struct Specializer<'a> {
     prog: &'a RcProgram,
     type_env: &'a TypeEnv,
-    analysis: Analysis,
+    analysis: ProvenanceAnalysis,
     /// The functions worth specializing: those whose body reaches a uniqueness check (a force-unique
     /// op or `is_unique`), directly or through a direct call. A function that reaches none (a read-only
     /// function) is the same under every key, so specializing it would only make redundant clones; its
     /// calls route to its canonical version.
-    beneficial: Set<FuncRef>,
+    reaches_unique_check: Set<FuncRef>,
     /// The fresh name of each non-canonical clone `(function, key)`.
-    clone_names: Map<(FuncRef, Key), FuncRef>,
+    clone_names: Map<(FuncRef, InputUniqueness), FuncRef>,
     /// Every `(function, key)` already enqueued, so each is materialized once.
-    requested: Set<(FuncRef, Key)>,
-    worklist: VecDeque<(FuncRef, Key)>,
+    requested: Set<(FuncRef, InputUniqueness)>,
+    worklist: VecDeque<(FuncRef, InputUniqueness)>,
     counter: u64,
     /// The materialized clones, keyed by their output name.
     funcs: Map<FuncRef, RcFunc>,
@@ -106,12 +108,12 @@ struct Specializer<'a> {
 impl<'a> Specializer<'a> {
     /// The all-`Dynamic` key of a function: nothing is known about its inputs' uniqueness. The clone
     /// on this key keeps the original name.
-    fn canonical_key(&self, fref: &FuncRef) -> Key {
+    fn canonical_key(&self, fref: &FuncRef) -> InputUniqueness {
         self.canonical_key_of(&self.prog.funcs[fref])
     }
 
     /// The all-`Dynamic` key built from a function's parameter types.
-    fn canonical_key_of(&self, func: &RcFunc) -> Key {
+    fn canonical_key_of(&self, func: &RcFunc) -> InputUniqueness {
         func.params
             .iter()
             .map(|p| Uniqueness::all_dynamic(&p.ty, self.type_env))
@@ -121,7 +123,7 @@ impl<'a> Specializer<'a> {
     /// The uniqueness of every input of the clone `(func, key)`: the key gives the parameters; a
     /// closure capture (the input past the parameters) is always all-`Dynamic`, since closures are not
     /// specialized.
-    fn resolve_inputs(&self, func: &RcFunc, key: &Key) -> Vec<Uniqueness> {
+    fn resolve_inputs(&self, func: &RcFunc, key: &InputUniqueness) -> Vec<Uniqueness> {
         let mut inputs = key.clone();
         if let Some(cap) = &func.capture {
             inputs.push(Uniqueness::all_dynamic(&cap.ty, self.type_env));
@@ -131,7 +133,7 @@ impl<'a> Specializer<'a> {
 
     /// The output name of the clone `(fref, key)`: the original name for the canonical (all-`Dynamic`)
     /// key, otherwise a fresh name minted (and memoized) once per key.
-    fn name_of(&mut self, fref: &FuncRef, key: &Key) -> FuncRef {
+    fn name_of(&mut self, fref: &FuncRef, key: &InputUniqueness) -> FuncRef {
         if *key == self.canonical_key(fref) {
             return fref.clone();
         }
@@ -149,7 +151,7 @@ impl<'a> Specializer<'a> {
 
     /// Request the clone `(fref, key)`: return its output name and, the first time, enqueue it for
     /// materialization.
-    fn request(&mut self, fref: &FuncRef, key: Key) -> FuncRef {
+    fn request(&mut self, fref: &FuncRef, key: InputUniqueness) -> FuncRef {
         let name = self.name_of(fref, &key);
         if self.requested.insert((fref.clone(), key.clone())) {
             self.worklist.push_back((fref.clone(), key));
@@ -160,7 +162,7 @@ impl<'a> Specializer<'a> {
     /// Materialize one clone: rewrite the original body under the clone's inputs (flipping the checks
     /// its key makes provable and routing its direct calls), then, for a fresh clone, give every local
     /// a fresh name so its names do not collide with the original's.
-    fn materialize(&mut self, fref: &FuncRef, key: &Key) -> RcFunc {
+    fn materialize(&mut self, fref: &FuncRef, key: &InputUniqueness) -> RcFunc {
         let func = self.prog.funcs[fref].clone();
         let inputs = self.resolve_inputs(&func, key);
         let body = self.rewrite_body(&func.body, &inputs);
@@ -218,7 +220,7 @@ impl<'a> Specializer<'a> {
                 )
             }
             RcExpr::Let(x, RcRhs::Llvm(gen, args), k) => {
-                let gen = self.maybe_elide(x, gen, inputs);
+                let gen = self.elide_unique_check_if_provable(x, gen, inputs);
                 RcExpr::Let(
                     x.clone(),
                     RcRhs::Llvm(gen, args.clone()),
@@ -284,7 +286,7 @@ impl<'a> Specializer<'a> {
         };
         // Only funptr functions worth specializing are cloned; a closure named directly (unusual) and
         // a read-only function keep their always-present all-`Dynamic` version.
-        if g.capture.is_some() || !self.beneficial.contains(&cref) {
+        if g.capture.is_some() || !self.reaches_unique_check.contains(&cref) {
             return callee.clone();
         }
         let key = self.callee_key(call, g, inputs);
@@ -297,11 +299,14 @@ impl<'a> Specializer<'a> {
     /// The key of a direct callee `g`: the uniqueness of each argument at the call, resolved against
     /// the caller's own input uniqueness. An arity mismatch (a partial application) resolves to the
     /// canonical key, leaving the callee unspecialized.
-    fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> Key {
-        // `interp_app` records `call_args` for every call, so the entry always exists.
-        let arg_provs =
-            self.analysis.call_args.get(&call.name).unwrap_or_else(|| {
-                unreachable!("call_args has no entry for the call {:?}", call.name)
+    fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> InputUniqueness {
+        // `interp_app` records `call_arg_provs` for every call, so the entry always exists.
+        let arg_provs = self
+            .analysis
+            .call_arg_provs
+            .get(&call.name)
+            .unwrap_or_else(|| {
+                unreachable!("call_arg_provs has no entry for the call {:?}", call.name)
             });
         if arg_provs.len() == g.params.len() {
             arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
@@ -314,7 +319,7 @@ impl<'a> Specializer<'a> {
     /// Drop the runtime uniqueness check from an operation whose checked container this clone's inputs
     /// make unique — a force-unique mutation loses its clone-when-shared, and an `is_unique` becomes
     /// the constant `true`, which lets the back end fold the branch it guarded.
-    fn maybe_elide(
+    fn elide_unique_check_if_provable(
         &self,
         result: &RcVar,
         gen: &Box<dyn LLVMGen>,
@@ -323,15 +328,15 @@ impl<'a> Specializer<'a> {
         let Some(uc) = gen.unique_check_operand() else {
             return gen.clone();
         };
-        // `interp_rhs` records `op_containers` for exactly the ops that carry a `unique_check_operand`
+        // `interp_rhs` records `unique_check_operand_provs` for exactly the ops that carry a `unique_check_operand`
         // — the same condition the `let Some(uc)` guard above passed — so the entry always exists.
         let container_prov = self
             .analysis
-            .op_containers
+            .unique_check_operand_provs
             .get(&result.name)
             .unwrap_or_else(|| {
                 unreachable!(
-                    "op_containers has no entry for the unique-check op {:?}",
+                    "unique_check_operand_provs has no entry for the unique-check op {:?}",
                     result.name
                 )
             });
@@ -347,25 +352,27 @@ impl<'a> Specializer<'a> {
 /// The functions whose body reaches a uniqueness check (a force-unique op or `is_unique`) — directly,
 /// or through a direct call to another such function. Only these are worth specializing; the rest are
 /// the same under every key. A least fixed point over the direct-call graph.
-fn beneficial_funcs(prog: &RcProgram) -> Set<FuncRef> {
+fn funcs_reaching_unique_check(prog: &RcProgram) -> Set<FuncRef> {
     // Each function's direct callees, and whether its own body performs a uniqueness check.
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
-    let mut beneficial: Set<FuncRef> = Set::default();
+    let mut reaches_unique_check: Set<FuncRef> = Set::default();
     for (fref, func) in &prog.funcs {
         let mut cs = vec![];
         let mut has_unique_check = false;
         scan_body(&func.body, prog, &mut cs, &mut has_unique_check);
         if has_unique_check {
-            beneficial.insert(fref.clone());
+            reaches_unique_check.insert(fref.clone());
         }
         callees.insert(fref.clone(), cs);
     }
-    // A function that calls a beneficial function is itself beneficial.
+    // A function that calls a reaches_unique_check function is itself reaches_unique_check.
     loop {
         let mut changed = false;
         for (fref, cs) in &callees {
-            if !beneficial.contains(fref) && cs.iter().any(|c| beneficial.contains(c)) {
-                beneficial.insert(fref.clone());
+            if !reaches_unique_check.contains(fref)
+                && cs.iter().any(|c| reaches_unique_check.contains(c))
+            {
+                reaches_unique_check.insert(fref.clone());
                 changed = true;
             }
         }
@@ -373,7 +380,7 @@ fn beneficial_funcs(prog: &RcProgram) -> Set<FuncRef> {
             break;
         }
     }
-    beneficial
+    reaches_unique_check
 }
 
 /// Collect a body's direct callees (functions of `prog`) and whether it performs a uniqueness check.

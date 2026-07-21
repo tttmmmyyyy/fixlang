@@ -5397,7 +5397,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         // its result stays the conservative `Unknown` so the borrow pass treats the argument as
         // consumed. That consuming treatment is what makes `is_unique` detect sharing: a later use
         // of the argument forces a retain, so the container reads as shared at the check, and the
-        // fold (which keys on the operand through `op_containers`) correctly stays off. Declaring
+        // fold (which keys on the operand through `unique_check_operand_provs`) correctly stays off. Declaring
         // the argument a passthrough here would suppress that retain and report a shared container
         // as unique.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
