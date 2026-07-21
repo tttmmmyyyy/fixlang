@@ -78,7 +78,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
 4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
 5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
-6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
+6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, invariant assertions, shotgun-surgery annotation, root-cause vs symptom check, etc.).
 7. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
 8. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
 9. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
@@ -474,13 +474,43 @@ let elem = arr.get(i).copied().unwrap_or(0);   // is `i` out of range ever a rea
 
 The default in the **conservative / safe direction** is the one that slips through most often, because it reads as obviously harmless — an analysis defaulting to "assume shared" (`Dynamic`), a predicate to `false`, an ownership to `Borrow`, a lookup to an empty set. It is *not* harmless when the absorbed case is unreachable: the safe default still hides a logic bug at the point the invariant broke, and "safe today" is one refactor away from "unsafe tomorrow". **Reachability, not the safeness of the default, decides.** An unreachable case must fail loud however conservative its fallback looks; "it errs on the safe side" is not a reason to keep it. Do not let a `map_or(SAFE, …)` / `unwrap_or(SAFE)` pass just because `SAFE` could not itself miscompile.
 
-**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `debug_assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
+**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
 **Keep** the fallback only when the case turns out to be a **supported input** the caller legitimately reaches — and then document the concrete scenario, not a vague "just in case".
 **Report only** when converting to a hard failure could crash on inputs you cannot prove absent — flag it for the author to confirm the invariant.
 
 **Catch the refactor regression.** When a hunk *rewrites* an existing function, compare it against the version it replaced — not only against the review base. A refactor that relaxes a prior `assert!` / `unreachable!` / `panic!` into a silent default (a representation change that "simplifies" a fail-loud arm back into a `map_or(default)`) reintroduces a swallowed case, and that is as much a defect as writing one fresh. Read the pre-refactor body (`git show <base>:<file>` for the symbol) whenever a rewritten function now returns a default where it used to abort.
 
 **Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention that reaches past the mode's ring: scan every function of each file the diff touches, in either mode. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
+
+#### State the invariants the code leans on with an assertion
+
+The convention above removes a silent *handler* for a case that cannot arise. This one covers the other half: code that leans on a condition nothing states — a collection that must be non-empty, two sequences that must be the same length, a key the map is expected to already hold, an index within a bound computed somewhere else, a field that must be filled by the time this runs. The condition is load-bearing and the code never says so, so a violation shows up later as a wrong value rather than at the line whose assumption broke.
+
+An assertion is not defensive code, so this convention does not compete with *Don't add defensive code inside the trust boundary*. Defensive code absorbs a bad value and continues; an assertion refuses to continue. Trusting an internal caller means declining to *handle* their mistake — writing the invariant down is how that trust is stated.
+
+The cost of the check decides its form:
+
+- **Cheap check** — a comparison, a length equality, a `contains_key`, anything negligible beside the work it guards. Assert it unconditionally with `assert!` / `assert_eq!`, and put the offending values in the message.
+- **Expensive check** — a scan of the whole structure, a re-derivation of the result, a traversal proportional to (or worse than) the work being guarded. Gate it on compiler development mode: `if config.develop_mode { assert!(…) }`. The unit tests build their `Configuration` in development mode, so the check runs where it earns its cost, and a user's build pays nothing for it.
+
+```rust
+// Cheap: state it outright.
+assert_eq!(params.len(), args.len(), "arity mismatch: {:?} vs {:?}", params, args);
+
+// Expensive: the whole-graph walk runs for compiler development only.
+if config.develop_mode {
+    assert!(graph.is_acyclic(), "dependency graph gained a cycle at {}", node);
+}
+```
+
+**Never `debug_assert!`.** This project runs its tests in release (`cargo test --release`), where `debug_assert!` compiles to nothing — the assertion would be absent from exactly the runs meant to exercise it. Cheap checks use `assert!`; expensive ones use the `develop_mode` gate.
+
+**Assert internal invariants; report user errors.** A condition that a malformed source file, a broken manifest, or an unusual-but-legal user program can violate is input validation, and it belongs in the diagnostic path as an error — asserting it turns a bad user program into a compiler crash. Decide which side of the trust boundary the condition sits on before writing the assertion.
+
+Assert where the invariant is **established**, so a violation stops at its origin. When the establishing site is far from the code that depends on it, assert at the entry of the dependent code instead, and let the message name what was expected.
+
+**Apply** when the check is cheap, the expression is local to the code at hand, and the invariant is plainly the one the new code leans on.
+**Report only** when the check needs a `Configuration` the function does not carry — threading one in for an assertion is a design call — or when you cannot rule out that user input reaches the condition.
 
 #### Remove dead and half-finished code
 
@@ -681,7 +711,7 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 ### Scope Discipline
 
 - **Let the mode set the reach.** In `in-diff` mode, edit inside the diff hunks and collect what the rest of each touched file needs as ring-2 candidates; in `neighborhood` mode, work those candidates under the radius rules. One convention stands apart: *Don't let a fallback silently handle a case the author calls impossible* covers the whole of each touched file in `in-diff` mode already, per its own scope note — a swallowed case is a bug rather than opportunistic cleanup.
-- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, since nothing in this change's tests would catch a mistake there — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
+- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, since nothing in this change's tests would catch a mistake there — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
 - **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
 
