@@ -191,6 +191,16 @@ edits; findings and candidates are added on top of it.
 
 ---
 
+## Adding an Aspect or a Convention
+
+Every convention below is read in full by its aspect's subagent on every review, so the set is a shared budget: one that rarely fires spends the attention that the ones firing often need. What earns a place is a **class of mistake**, described so that it can be recognized in code written by another author, in another subsystem, months from now. A concrete case is welcome as the illustration; the rule is what the entry is made of.
+
+Before adding one, strip the case that prompted it away and read what remains. An entry that no longer says what to look for was a report about one incident — the durable form of that is a regression test, or an assertion at the invariant it violated. An entry that names a specific function, type, module, or pass fails the same way: only a reader who already knows the case can apply it.
+
+Prefer extending the convention whose subject already covers the class over adding a sibling beside it, and prefer a new convention inside an existing aspect over a new aspect. A new aspect earns its own section when it asks a question none of the existing ones ask — a different lens on the code, rather than another rule under a lens already here.
+
+---
+
 # Review Aspects
 
 The sections below are referenced by name from the orchestrator. Each is self-contained: a subagent should be able to apply an aspect by reading only its section.
