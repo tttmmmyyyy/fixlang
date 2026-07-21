@@ -3636,28 +3636,13 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The `plug_in` that completes a `mod` of a boxed struct leaves it uniquely owned — this op
-        // clones when shared, and the punch it completes force-uniques — so the result's uniqueness
-        // does not depend on the input, like an array set. This is what lets a chain of field updates
-        // drop every check after the first.
-        if result_ty.is_box(type_env) {
-            return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
-        }
-        // Plugging into an unboxed struct puts it back together in registers: the plugged field holds
-        // the field operand and every other field holds the punched struct's, with nothing retained or
-        // released. Declaring those passthroughs is the other half of what carries a boxed field
-        // through `mod`/`act` with what is known about it intact.
-        Provenance::build_shape(result_ty, type_env, &|path| {
-            // A boxed leaf of an unboxed struct starts with a field index.
-            let (field, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed struct has a non-empty path");
-            if *field == self.field_idx {
-                Provenance::leaf(BaseSource::Arg(PLUG_IN_FIELD_ARG, rest.to_vec()))
-            } else {
-                Provenance::leaf(BaseSource::Arg(PLUG_IN_PUNCHED_ARG, path.clone()))
-            }
-        })
+        replaced_field_prov(
+            result_ty,
+            type_env,
+            self.field_idx,
+            PLUG_IN_PUNCHED_ARG,
+            PLUG_IN_FIELD_ARG,
+        )
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3668,6 +3653,44 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 /// The operand positions of a struct `plug_in`: the punched struct, then the field value.
 const PLUG_IN_PUNCHED_ARG: usize = 0;
 const PLUG_IN_FIELD_ARG: usize = 1;
+
+/// The provenance of a struct rebuilt with the field at `field_idx` replaced, given the operand
+/// positions of the struct and of the new field value.
+///
+/// A boxed struct comes back uniquely owned: the op clones it when shared, and the version without
+/// that check runs only where uniqueness is established already, by the optimizer having proven it or
+/// by the caller of the unsafe primitive having promised it. The result's uniqueness therefore does
+/// not depend on the input, like an array set, which is what lets a chain of field updates drop every
+/// check after the first.
+///
+/// An unboxed struct is repackaged in registers: the replaced field carries the value operand's leaf
+/// and every other field the struct operand's, with nothing retained or released. Declaring those
+/// passthroughs is what carries a boxed field — an array in a loop state, say — through `mod`/`act`
+/// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
+/// result path and so stays consumed: `set` releases the value it replaces, and `plug_in` fills a
+/// hole holding a value the struct no longer owns.
+fn replaced_field_prov(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    field_idx: usize,
+    struct_arg: usize,
+    value_arg: usize,
+) -> Provenance {
+    if result_ty.is_box(type_env) {
+        return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
+    }
+    Provenance::build_shape(result_ty, type_env, &|path| {
+        // A boxed leaf of an unboxed struct starts with a field index.
+        let (field, rest) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed struct has a non-empty path");
+        if *field == field_idx {
+            Provenance::leaf(BaseSource::Arg(value_arg, rest.to_vec()))
+        } else {
+            Provenance::leaf(BaseSource::Arg(struct_arg, path.clone()))
+        }
+    })
+}
 
 // Field plugging-in function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `Sx -> F -> S` where `Sx` is the punched struct type.
@@ -4517,27 +4540,13 @@ impl LLVMGen for InlineLLVMStructSetBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct `set` leaves the struct uniquely owned — it clones when shared and writes in
-        // place when unique — so the result's uniqueness does not depend on the input, like an array
-        // set. This is what lets a chain of field updates drop every check after the first.
-        if result_ty.is_box(type_env) {
-            return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
-        }
-        // An unboxed struct is repackaged in registers: the updated field holds the value operand, and
-        // every other field holds the same field of the struct operand. No new reference is made, so
-        // both are passthroughs, exactly as when the struct is built from its fields. The replaced
-        // field's old leaf reaches no result path and so stays consumed, which is the release above.
-        Provenance::build_shape(result_ty, type_env, &|path| {
-            // A boxed leaf of an unboxed struct starts with a field index.
-            let (field, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed struct has a non-empty path");
-            if *field == self.field_idx as usize {
-                Provenance::leaf(BaseSource::Arg(STRUCT_SET_VALUE_ARG, rest.to_vec()))
-            } else {
-                Provenance::leaf(BaseSource::Arg(STRUCT_SET_STRUCT_ARG, path.clone()))
-            }
-        })
+        replaced_field_prov(
+            result_ty,
+            type_env,
+            self.field_idx as usize,
+            STRUCT_SET_STRUCT_ARG,
+            STRUCT_SET_VALUE_ARG,
+        )
     }
 
     fn as_any(&self) -> &dyn Any {
