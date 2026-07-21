@@ -1,7 +1,7 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
-argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit, and records in memory how far this branch has now been reviewed. Use when: reviewing code just written by AI (uncommitted changes), reviewing whatever has accumulated since the last review ('review the unreviewed code' — resumes from the recorded checkpoint), or doing a pre-merge review of an entire branch."
+argument-hint: "Scope: 'unreviewed' for everything since this branch's last recorded review, 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
 # Code Review
@@ -15,10 +15,25 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 | Argument            | Base ref                                  | Use when                                                         |
 | ------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
 | (none)              | *ask the user* — see Procedure step 1     | The invoker did not specify a scope                              |
+| `unreviewed`        | the branch's recorded checkpoint — see *Review Checkpoints* | Reviewing whatever has accumulated since the last review, working tree included |
 | `uncommitted`       | `HEAD`                                    | Reviewing code just written / staged but not yet committed       |
 | `last N` (e.g. `last 3`) | `HEAD~N`                             | Reviewing the last N commits on the current branch               |
 | `branch`            | `$(git merge-base HEAD main)`             | Pre-merge review of the whole branch since it forked from `main` |
 | `<git ref>`         | `<git ref>`                               | Arbitrary base (a commit hash, another branch, etc.)             |
+
+Every scope reviews the working tree as it stands, so uncommitted changes are always included — the base ref decides only how far back the review reaches.
+
+## Review Checkpoints
+
+A completed review records how far it got, so the next one can pick up from there. The record lives in the session memory directory (the path is in the memory instructions the orchestrator already carries), as a single memory file named `code-review-checkpoints`, type `project`, holding one line per branch:
+
+```
+- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>
+```
+
+The recorded hash is `HEAD` **after** the review's own commits land, so the next review starts past the cleanup commits this one made. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+
+The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
 
 ## Aspect Sequence
 
@@ -45,24 +60,30 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 **Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, and the extracted text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
 
 1. **Resolve the base ref** from the argument:
-   - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options:
-     1. **Uncommitted** — staged + unstaged changes (`HEAD`).
-     2. **Last N commits** — review the last N commits on the current branch (resolve to `HEAD~N`). When the user picks this, ask a follow-up question for `N`.
+   - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
+     1. **Since the last review** — everything after this branch's recorded checkpoint. Offer this first when a checkpoint exists for the current branch, naming the commit it would start from.
+     2. **Uncommitted** — staged + unstaged changes (`HEAD`).
      3. **Branch (vs main)** — everything since this branch forked from `main` (`$(git merge-base HEAD main)`).
-     4. **Custom git ref** — any commit hash / branch / tag the user names. Ask for the ref as a follow-up.
+     4. **Last N commits** — review the last N commits on the current branch (resolve to `HEAD~N`). When the user picks this, ask a follow-up question for `N`.
 
      After the user picks, resolve to the corresponding base ref using the rules below.
+   - `unreviewed` (also: "review the code that hasn't been reviewed yet", or any phrasing asking for what has accumulated since last time) → read the `code-review-checkpoints` memory and take the line for the current branch (`git branch --show-current`). Then:
+     - Verify the recorded hash is still an ancestor of `HEAD`: `git rev-parse --verify <hash>^{commit}` and `git merge-base --is-ancestor <hash> HEAD`. A hash that no longer resolves, or that sits outside this branch's history, means the branch was rebased or reset since the checkpoint was written — say so and ask the user for a base instead of guessing.
+     - When the hash equals `HEAD` and `git status --porcelain` is empty, there is nothing to review: report that and stop.
+     - When no line exists for this branch, say so and ask the user for a base, offering `$(git merge-base HEAD main)` as the natural starting point for a branch that has never been reviewed.
+     - When a merge brought in commits already reviewed on another branch, the diff will include them. Note it in the summary so the user can narrow the scope if the noise is not worth it.
    - `uncommitted` → `HEAD`.
    - `last N` (where N is a positive integer) → `HEAD~N`. Verify it resolves with `git rev-parse --verify HEAD~N`.
    - `branch` → `$(git merge-base HEAD main)`. Verify `main` exists; if the project uses a different default branch, abort and ask.
    - anything else → treat as a git ref. Verify it resolves with `git rev-parse --verify <ref>`.
 2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. They only report findings; they make no edits.
    - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
-3. **Commit the code under review** — `uncommitted` scope only. If the working tree still holds the pending changes being reviewed (the scope was `uncommitted`, so the reviewed code is not yet committed), commit it now as its own commit, with a message describing the change (you have the context of what was just written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. If the tree is already clean (`branch` / `last N` scope, where the reviewed code is already committed), skip this.
+3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. On a clean tree, skip this step.
 4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
 5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); and list every commit created, with its short hash.
-7. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+6. **Record the checkpoint.** Take `git rev-parse --short HEAD` and write it to the `code-review-checkpoints` memory under the current branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+7. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
+8. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -102,6 +123,8 @@ of your edits, and the findings are added on top of it.
 - Don't continue the chain if a step fails.
 - Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
+- Don't record a checkpoint for a review that stopped early — the record must mean "everything up to here was reviewed".
+- Don't fall back to a guessed base when a recorded checkpoint fails to resolve — ask the user.
 
 ---
 
