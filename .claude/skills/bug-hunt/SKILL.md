@@ -1,0 +1,149 @@
+---
+name: bug-hunt
+description: "Hunt for latent bugs in a chosen target with three finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. Report-only: it never fixes code and never commits. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
+argument-hint: "Target (a subsystem path, a branch's diff, the standard library, or the whole compiler) and optionally the angles to search from. If omitted, the skill asks."
+---
+
+# Bug Hunt
+
+Find bugs that are already in the code and that nobody is looking for. The deliverable is a report: for each bug, what it is, a test that reproduces it, a fix the author can weigh, and a barrier that stops the class from coming back.
+
+This skill **never edits the code under test and never commits**. A compiler fix needs the author's judgment and a test, and the hunt runs unattended often enough that silent fixes would be dangerous. Its only writes are its own *Techniques That Found Bugs* section and the hunt log in memory.
+
+`code-review` is the complement: it applies conventions to a diff, in one pass, and it edits. A hunt is shaped differently — most of what a search turns up is wrong and has to be killed before it reaches the user, and bugs run out only when repeated search stops finding new ones. One hunt is one wave of that search, small enough to run often; the hunt log is what makes the waves add up.
+
+## Target and Lens
+
+The invoker names the target, and optionally the lens. When either is missing, ask with `AskUserQuestion` before starting.
+
+**Targets** — anything with a boundary the hunt can enumerate:
+
+- A subsystem path (`src/rc_ir/`, `src/typecheck.rs`, the LSP server, the package manager, the documentation generator).
+- The diff of a branch or a range of commits.
+- The Fix standard library (`std.fix`) and the behavior `Document.md` promises for it — a documented behavior the compiler does not deliver is a bug in one of the two.
+- The whole compiler, which the scout pass then splits into areas.
+
+**Lenses** — a lens is a search angle handed to one finder, so that the three look for different things instead of converging on the same shallow three bugs. A lens is powerful for the same reason it is dangerous: a finder told to look for boundary bugs will find boundary bugs, and will walk past everything else. So a hunt **derives its two lenses from the target** rather than picking them off a list, and gives the third finder no lens at all:
+
+- In the scout pass, read the target and write down what it is responsible for: the invariants it maintains, the inputs it accepts, the guarantees its callers rely on, the ways it can fail silently. Each of those is a candidate lens, phrased as a question about *this* target.
+- Take two that are blind to each other. Two lenses that would read the same code the same way are one lens.
+- **The third finder runs unlensed**, told to ignore the angles the hunt chose and report whatever is actually wrong. It is the check on the lens set itself, and comparing its yield against the other two says whether the lenses are helping or narrowing.
+
+Recurring angles look roughly like the following. Treat them as calibration for how wide a lens should be, and let the target dictate the actual set — a hunt that only ever asks the questions on this list will only ever find the classes of bug already known to this project:
+
+- Miscompilation — a valid program compiled into code that computes the wrong thing.
+- Memory and reference counting — leaks, double frees, use-after-free, an ownership declaration that disagrees with what the code does.
+- Boundary and edge cases — empty input, one element, first and last, the recursion base case, overflow, the degenerate shape.
+- Invariants — something the code relies on without checking, and a path that violates it.
+- Error and failure paths — the arm nobody runs on input nobody sends.
+- Tool behavior — the build cache, dependency resolution, the LSP answers, the generated documentation.
+
+The hunt log holds the angles previous hunts used and what each returned. Start somewhere else: a lens that has been run twice with nothing to show is spent, and the classes named by the last hunt's completeness critic are the strongest candidates for this one.
+
+## Severity
+
+Report most severe first, and use this ordering when the budget forces a choice about what to chase. It ranks the classes seen most often; a bug that fits none of them is ranked by the damage it does before it is noticed, which is what the ordering is really made of.
+
+1. **Miscompilation** — valid program, wrong behavior, no diagnostic.
+2. **Crash on valid input** — the compiler panics or aborts on a program it should accept, or on one it should reject with a diagnostic.
+3. **Memory error** — leak, double free, use-after-free in the emitted program or in the compiler.
+4. **Wrong diagnostic** — an error reported at the wrong place, with the wrong cause, or missing entirely for an invalid program.
+5. **Tool misbehavior** — a stale build, a wrong dependency resolution, an LSP answer that points at the wrong symbol.
+
+## Evidence Bar
+
+A candidate becomes a finding when it carries a **concrete failing scenario**: named inputs or program state, the path they take, and the wrong output or crash they produce. Everything else is speculation and stays out of the report.
+
+Rank the evidence honestly in each finding:
+
+- **Executed** — the failure was reproduced by running something. This is what the hunt is for; prefer it wherever the target allows.
+- **Traced** — the failing path was followed line by line through the code, and every step is cited by file and symbol. Say what stops it from being executed.
+
+A finding with neither is dropped.
+
+## Procedure
+
+A hunt is **three finder subagents and the orchestrator**. Keeping the fan-out at three is what makes the hunt cheap enough to run on a schedule, and the schedule is where the depth comes from: one hunt is one wave, and the hunt log carries what has been searched from wave to wave.
+
+1. **Resolve the target and the angles.** Ask with `AskUserQuestion` when the invocation left either open. Confirm the working tree is clean (`git status --porcelain`) and note the current commit — the hunt reports against that state.
+2. **Read the hunt log** from memory: what previous hunts covered, which angles they used and what each returned, which candidates were dismissed and why, and which confirmed bugs are still unfixed. A dismissed candidate is re-raised only with evidence the refutation did not have.
+3. **Scout, inline.** Read enough of the target to split it into areas and to derive the angles (see *Target and Lens*). Then fix the three assignments: **two derived angles, and one unlensed finder**. Each gets the areas it owns, so that together they cover the target. Report the assignment before launching, so a mis-scoped hunt is caught in seconds rather than after three subagents finish.
+4. **Launch the three finders in parallel** with the `Agent` tool, in a single block, and wait for all three. Brief each with: the target and its areas, its angle (or, for the third, the instruction to ignore the hunt's angles and report whatever is actually wrong), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that every temporary probe is reverted before it finishes. Each returns candidates: file, symbol, claim, failing scenario, and whether the evidence is executed or traced.
+5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
+6. **Deepen each survivor, inline**: the four deliverables under *Report*.
+7. **Critique the coverage.** With all three reports in hand, name the classes of bug that these angles could not have surfaced, whatever their yield. That answer goes in the report and becomes the strongest candidate angle for the next hunt.
+8. **Report**, then **append** any technique that earns it, then **update the hunt log**.
+9. **Leave the tree as you found it.** Verify `git status --porcelain` is empty, and that every probe is reverted.
+
+## Report
+
+Per bug, most severe first:
+
+- **What it is** — the defect in one or two sentences, with file and symbol, plus the failing scenario and whether the evidence is executed or traced.
+- **Reproduction test** — a test in the shape this project uses: a Fix compile-and-run test for language and standard-library behavior (reaching the thing under test from `main`), an integration test running the real `fix` binary for tool behavior, a Rust unit test for compiler internals. Give the test body, and say what it does today versus what it should do.
+- **Fix proposal** — the root cause, then what to change. When the root cause is a design gap rather than a line, say so and name the options.
+- **Barrier** — see *Recurrence Barriers*.
+
+Close with what the hunt covered: the areas, the three angles and what each returned, how many candidates were examined and how many the refutation killed, and the classes of bug these angles could not have surfaced. A hunt that found nothing reports that plainly along with its coverage — a clean sweep of a well-worn subsystem is information, and so is an unlensed finder that out-yields both lenses.
+
+## Recurrence Barriers
+
+Every bug gets one barrier, chosen for what would actually have caught it:
+
+- **A `code-review` convention** — when a reader of the diff could have recognized the mistake from the code alone, **and the mistake is a class rather than an incident**. State the class: the convention has to fire on code a different author writes in a different subsystem, with the bug you found serving as one illustration of it. A convention that names the function, type, or pass where you found it can only be applied by someone who already knows the bug, so it protects nothing. When the class already has a home in an existing convention, extend that one. This is the strongest barrier and also the most expensive: every convention is read in full by every future review, so the set is a shared budget and a rarely-firing entry dilutes the ones that fire often.
+- **A regression test** — when a specific input pins the behavior. The default choice, and the right one whenever the bug is about *this* code rather than a class of code.
+- **A runtime assertion** — when the real gap is an invariant nobody stated. Assert it where it is established, so a violation stops at its origin instead of surfacing as a wrong answer downstream. A cheap check asserts unconditionally; one whose cost is comparable to the work it guards runs under `config.develop_mode`, which the unit tests enable. `debug_assert!` has no place here: the suite runs in release, where it compiles away. An assertion is for an internal invariant — a condition a user's source file can violate belongs in the diagnostic path as an error instead.
+
+Propose exactly one, and say why the other two are weaker for this bug. Adding a convention for a one-off input, or a test for a mistake that will recur in the next twenty diffs, spends the barrier in the wrong place.
+
+## Techniques That Found Bugs
+
+How to hunt, learned from hunts that worked. A finder reads this section before starting.
+
+**The bar for adding one.** Write an entry when the technique would help a future hunt on **a different subsystem and a different bug**. The test to apply before writing: strip out the bug you just found — does the entry still tell a finder what to do? A technique tied to one function, one type, or one pass fails it and belongs in the bug report instead; it teaches a future finder nothing and costs it attention. Name the mechanism and the class of bug it exposes, and let the bug you found be an illustration rather than the content. When an existing entry already covers the ground, extend that entry rather than adding a neighbor. When an entry stops paying, delete it. This section is worth reading only while it stays short.
+
+### Make the impossible case fail loud, then run the suite
+
+Where the code absorbs a case the author believes cannot happen — a catch-all `_ =>`, an `unwrap_or`, a `map_or`, a silent clamp — replace it with a panic and run the tests. When the arm fires, the swallowed case was reachable and something upstream is already broken. Swallowed cases are where latent bugs live, because the wrong value keeps flowing and the failure appears somewhere else entirely. Revert the probe afterwards.
+
+### Run the same program at every optimization level
+
+`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must agree. A difference is a miscompilation by definition, with no judgment call about intent, and it points straight at the pass that differs. This is the cheapest miscompile detector available, and it needs no expected output — the levels check each other.
+
+### Compare against a baseline binary on a large real corpus
+
+Build the compiler at a known-good commit, build it again at the commit under test, and run both over a body of real Fix code — a multi-project library, a bank of solved problems, an external project. Output differences and new build failures surface what small tests miss, because real code combines features in ways a test author never writes down.
+
+### Reproduce on the baseline before blaming the change
+
+Every failure a hunt finds gets run against the merge base or the unmodified upstream first. Pre-existing failures, environment noise, and third-party library defects all look exactly like a fresh bug until this step. This is the single highest-yield false-positive filter, and it costs one run.
+
+### Run the emitted programs under valgrind memcheck
+
+Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret the report against the same baseline: a glibc thread-local pattern or a third-party library's internal allocation will show up identically on unmodified code.
+
+## Hygiene
+
+- **The tree stays clean.** Probes — a panicking arm, a temporary definition added to `std.fix`, a debug print — are reverted by the agent that made them, and the orchestrator checks `git status --porcelain` before reporting.
+- **Builds run in release.** `cargo test --release`, and only the optimization levels the target can affect.
+- **The machine is shared.** A sweep that builds a corpus at several optimization levels saturates the machine; run it when the machine is idle, and say in the report that the timing matters if any measurement is part of the evidence.
+
+## The Hunt Log
+
+One hunt is one wave, so the log is what turns a schedule of small hunts into a search that keeps going. Kept in the session memory directory (the path is in the memory instructions the orchestrator already carries) as a memory file named `bug-hunt-log`, type `project`:
+
+- One line per hunt: date, target, commit, the three angles, and what each returned. A lens that has now returned nothing twice is spent — retire it, and say so on the line.
+- One line per dismissed candidate: what was claimed, and why the refutation killed it. This is what keeps a periodic hunt from re-reporting the same non-bug every time. A dismissed candidate returns only with evidence the refutation did not have.
+- One line per confirmed bug the author left unfixed, so the next hunt reports it as known rather than new.
+- The classes the coverage critique named. They are the first place the next hunt looks for its angles.
+
+## What NOT to do
+
+- Don't edit the code under test, and don't commit. The report is the deliverable.
+- Don't report a candidate without a concrete failing scenario, however plausible the reasoning reads.
+- Don't leave a probe in the tree.
+- Don't re-raise a dismissed candidate without new evidence.
+- Don't grow the hunt past three finders. The depth of this hunt comes from running it again, not from spending more on one wave.
+- Don't let the recurring-angle list stand in for the scout pass. Angles derived from the target find what a fixed menu cannot.
+- Don't add a `code-review` convention for a bug that a regression test pins better — the review skill is read in full by every aspect subagent, so its conventions are a shared budget.
+- Don't write a convention or a technique whose subject is one incident. Both sections are instructions to future agents that will meet different code; anything that only makes sense next to the bug at hand degrades them.
