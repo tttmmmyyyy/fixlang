@@ -23,6 +23,7 @@ mod test_hole_priority;
 mod test_import;
 mod test_index_syntax;
 mod test_lsp;
+mod test_match_result_alias;
 mod test_match_return_outer;
 mod test_memcheck;
 mod test_opaque_type;
