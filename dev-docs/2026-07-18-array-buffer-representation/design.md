@@ -603,7 +603,18 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
   instance を与えない。**ユーザー可視の破壊的変更**: Array へ直接 `array.borrow_boxed(...)` /
   `array.boxed_to_retained_ptr` していたコードは型エラーになり、下の `Array::borrow_elements` 等へ書き換え。許容。
 - **データポインタ**(生要素先頭): Array の FFI ヘルパ **`Array::borrow_elements`(+ `_io` / 可変版
-  `mutate_elements` / `_io`)** で取る。これらは **Array の InlineLLVM**で、codegen が buffer 先頭ポインタ(現行
+  `mutate_elements` / `_io`)** で取る。**InlineLLVM にするのは同期版 2 つと `ios` を引数に取る
+  `_mutate_elements_ios` の 3 つで、`_io` 版は Fix-source ラッパ**(既存の `borrow_boxed` / `_mutate_boxed_internal` /
+  `_mutate_boxed_ios_internal` と `borrow_boxed_io` / `mutate_boxed_io` の対応をそのまま写す)。**`_io` 版を
+  InlineLLVM にしてはならない** — `IO b` を返す op は「生ポインタを閉じ込めた IO アクションを構築して返す」だけで、
+  それが走るのは op が返った後 = borrow 窓の外であり、arr は既に release され得る。既存 2 関数は Fix ソース側で
+  これを避けている: `borrow_boxed_io` は内側 IO の `@runner` を **borrow callback の中で `ios` に適用**し、
+  `mutate_boxed_io` は `ios` を取る InlineLLVM へ **`ios` を渡し込む**。
+  なお **borrow 側に `_ios` 版が要らないのは、同期版のコールバックが純粋(`Ptr -> b`)だから** — `b` を
+  `(IOState, b')` に取れば IOState をただのデータとして同期版に通せる。`mutate_boxed` はコールバックが既に
+  `Ptr -> IO b` で、同期版が内部で IOState を捏造して走らせるため、本物の `ios` を渡す入口が別に要る。
+  同期版のコールバックを純粋に保つことが、入口を 1 つ減らす条件。
+  codegen が buffer 先頭ポインタ(現行
   `get_data_pointer_from_boxed_value` の `is_array` 分岐相当 = storage の buffer index)を callback へ渡す。
   `borrow_elements` は **arr を Borrow operand と宣言**するので、呼び出し側が callback 中も arr を生存させ、
   内部 retain なしで ptr が有効(§13.3-2。生 ptr が dangling する RC 問題は §8(2)(b))。返る番地は現状の要素領域と
@@ -891,9 +902,10 @@ hardcoded `Array a : Boxed` instance を **削除**、`Array` を不可分 unit 
 | 名前 | 契約 |
 | --- | --- |
 | `Array::borrow_elements : (Ptr -> b) -> Array a -> b` | 要素先頭 Ptr を callback に借用。**専用 InlineLLVM**: arr を Borrow operand と宣言し、buffer 先頭 ptr を `f` へ渡すだけ(内部 retain 不要 = 呼び出し側が f 中も arr を生存させる、clone なし、§13.3-2)。`array.borrow_boxed` の後継。ポインタは callback 中のみ有効・書き換え不可 |
-| `Array::borrow_elements_io` | IO 版(専用 InlineLLVM) |
+| `Array::borrow_elements_io` | **Fix-source ラッパ**(`borrow_boxed_io` と同型: 内側 IO の `@runner` を borrow callback の中で `ios` に適用)。InlineLLVM にすると生 ptr が borrow 窓の外へ漏れる(§7) |
 | `Array::mutate_elements` | Ptr 経由 in-place mutate。**専用 InlineLLVM**(`set` と同じくその場で COW -> data ptr -> act -> value rebuild、§13.3-2) |
-| `Array::mutate_elements_io` | IO 版(専用 InlineLLVM) |
+| `Array::_mutate_elements_ios` | `ios` を引数に取る **専用 InlineLLVM**(`_mutate_boxed_ios_internal` と同型。COW 内蔵) |
+| `Array::mutate_elements_io` | **Fix-source ラッパ**(`mutate_boxed_io` と同型: `_mutate_elements_ios` へ `ios` を渡し込む) |
 | Array 用 uniqueness assert(名前 TBD) | `_unsafe_is_storage_unique` ベース。`arr.assert_unique` の後継 |
 
 **変更:**
@@ -947,7 +959,7 @@ String の大半、PunchedArray 型(新レイアウトを継承、punch/plug/tra
    切り詰め経路も `truncate` を使う。boxed 要素の配列でも安全に使える。
 2. **`mutate_elements` / `borrow_elements` はいずれも Array の専用 InlineLLVM(決定)。** storage は Boxed 値でない
    (§2.2)ので、両者とも codegen が storage を直接扱う:
-   - **`borrow_elements` / `_io`**: **arr を Borrow operand と宣言**(base-level `borrows_operand=true`、
+   - **`borrow_elements`(同期版)**: **arr を Borrow operand と宣言**(base-level `borrows_operand=true`、
      `_unsafe_get_bounds_unchecked` と同型)。呼び出し側が call 全体(callback `f` を含む)の間 arr を生存させるので、
      codegen は **buffer 先頭 ptr を `f` へ渡すだけ(内部 retain 不要)**。**clone しない**。生 ptr は unboxed で RC が
      「arr の使用」と見なさないため、arr を Own にすると RC 挿入器が ptr 抽出時点で arr を release -> f 中に storage が
