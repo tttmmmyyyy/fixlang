@@ -5,10 +5,9 @@ import Std::{
     Iterator::{fold, range}, Monad::pure
 };
 
-// Fix-source equivalent of `Array::fill`: `from_map` is a Fix-level loop over
-// `_unsafe_set_bounds_uniqueness_unchecked_unreleased`. Same shape as fill, so
-// comparing it against the InlineLLVM `fill` benchmark measures whether the
-// optimizer makes a Fix-source fill as fast as the hand-written LLVM fill.
+// Fix-source equivalent of `Array::fill`: `from_map` builds the array with a Fix-level loop
+// rather than the InlineLLVM `fill`. Comparing it against the `fill` benchmark measures whether
+// the optimizer makes a Fix-source fill as fast as the hand-written LLVM fill.
 fill_bench : I64 -> I64 -> I64;
 fill_bench = |m, iters| (
     Iterator::range(0, iters).fold(0, |k, acc| acc + Array::from_map(m, |_| k).@(0))
