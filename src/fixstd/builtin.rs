@@ -1577,97 +1577,6 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeFill {
-    size_name: FullName,
-    value_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeFill {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
-        let value = gc.get_scoped_obj(&self.value_name);
-        let array = create_obj(
-            ty.clone(),
-            &vec![],
-            Some(size),
-            gc,
-            Some(format!("array@{}", self.name()).as_str()),
-        );
-        let array = array.insert_field(gc, ARRAY_LEN_IDX, size);
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
-        array
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "array_fill({}, {})",
-            self.size_name.to_string(),
-            self.value_name.to_string()
-        )
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.size_name, &mut self.value_name]
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-// Implementation of Array::fill built-in function.
-fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
-    let size_name = FullName::local(size);
-    let value_name = FullName::local(value);
-    expr_llvm(
-        Box::new(InlineLLVMArrayUnsafeFill {
-            size_name,
-            value_name,
-        }),
-        type_tyapp(make_array_ty(), type_tyvar_star(a)),
-        None,
-    )
-}
-
-// "Array::fill : I64 -> a -> Array a" built-in function.
-// Creates an array with same capacity.
-pub fn array_unsafe_fill() -> (Arc<ExprNode>, Arc<Scheme>) {
-    let expr = expr_abs(
-        vec![var_local("size")],
-        expr_abs(
-            vec![var_local("value")],
-            fill_array_body("a", "size", "value"),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            make_i64_ty(),
-            type_fun(
-                type_tyvar_star("a"),
-                type_tyapp(make_array_ty(), type_tyvar_star("a")),
-            ),
-        ),
-    );
-    (expr, scm)
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeEmpty {
     capacity_name: FullName,
 }
@@ -2148,6 +2057,135 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         vec![],
         type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
+    arr_name: FullName,
+    value_name: FullName,
+    count_name: FullName,
+    // When true, clone the array first if it is shared, so the appended slots land in a uniquely
+    // owned array. Set false only where the array is statically known to be unique.
+    pub(crate) force_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let value = gc.get_scoped_obj(&self.value_name);
+        let count = gc.get_scoped_obj_field(&self.count_name, 0).into_int_value();
+
+        // Force the array to be unique before appending in place.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
+
+        // Write `value` into the `count` uninitialized slots at the end and grow the length. The
+        // caller guarantees `count >= 0` and `size + count <= capacity`.
+        let size = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::append_value_into_array_buf(gc, buf, size, count, value);
+        let new_size = gc.builder().build_int_add(size, count, "new_size").unwrap();
+        array.insert_field(gc, ARRAY_LEN_IDX, new_size)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_append_value{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.value_name.to_string(),
+            self.count_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![
+            &mut self.arr_name,
+            &mut self.value_name,
+            &mut self.count_name,
+        ]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// Appends `count` copies of `value` to the end of an array, with an internal clone-if-shared and no
+// capacity check. The caller must ensure `count >= 0` and `size + count <= capacity`.
+// Type: a -> I64 -> Array a -> Array a
+pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VALUE_NAME: &str = "value";
+    const COUNT_NAME: &str = "count";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(VALUE_NAME)],
+        expr_abs(
+            vec![var_local(COUNT_NAME)],
+            expr_abs(
+                vec![var_local(ARR_NAME)],
+                expr_llvm(
+                    Box::new(InlineLLVMArrayAppendValueCapacityUnchecked {
+                        arr_name: FullName::local(ARR_NAME),
+                        value_name: FullName::local(VALUE_NAME),
+                        count_name: FullName::local(COUNT_NAME),
+                        force_unique: true,
+                    }),
+                    array_ty.clone(),
+                    None,
+                ),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            elem_tyvar.clone(),
+            type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        ),
     );
     (expr, scm)
 }

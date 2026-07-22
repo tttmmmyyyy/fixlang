@@ -150,7 +150,7 @@ namespace Array {
     fill : I64 -> a -> Array a;
     fill = |size, value| (
         let size = Array::_check_size(size);
-        Array::_unsafe_fill_size_unchecked(size, value)
+        Array::empty(size)._unsafe_append_value_capacity_unchecked(value, size)
     );
 
     // Updates an array by applying a function to the element at the specified index.
@@ -307,15 +307,7 @@ namespace Array {
     // * `map` - The mapping function. It takes an index and returns the value at that index.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
-        let arr = Array::empty(size)._unsafe_set_size(size);
-        loop((0, arr), |(idx, arr)|(
-            if idx == size {
-                break $ arr
-            } else {
-                let arr = arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, map(idx));
-                continue $ (idx + 1, arr)
-            }
-        ))
+        Iterator::range(0, size).fold(Array::empty(size), |i, arr| arr.push_back(map(i)))
     );
 
     // Gets the first element of an array. Returns none if the array is empty.
@@ -388,7 +380,7 @@ namespace Array {
         } else {
             arr
         };
-        arr._unsafe_force_unique._unsafe_set_size(len+1)._unsafe_set_bounds_uniqueness_unchecked_unreleased(len, e)
+        arr._unsafe_append_value_capacity_unchecked(e, 1)
     );
 
     // Reserves the memory region for an array.
@@ -675,8 +667,7 @@ namespace Array {
     resize = |n, x, xs| (
         if n <= xs.@size { xs.truncate(n) };
         let m = xs.@size;
-        let xs = xs.reserve(n)._unsafe_force_unique._unsafe_set_size(n);
-        range(m, n).fold(xs, |i, xs| xs._unsafe_set_bounds_uniqueness_unchecked_unreleased(i, x) )
+        xs.reserve(n)._unsafe_append_value_capacity_unchecked(x, n - m)
     );
 
     // `arr.search_partition_point(pred)` returns an index x such that `pred` is true on [0, x) and false on [x, n) by binary search.

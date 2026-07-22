@@ -563,6 +563,47 @@ impl ObjectFieldType {
         }
     }
 
+    // Store `value` into `[begin, begin + count)` of an array's buffer. Each slot is given its own
+    // reference through a single retain-by-`count` rather than one retain per slot, the slots are
+    // written without releasing their (uninitialized) old contents, and the caller's own reference
+    // to `value` is then consumed. The net change to `value`'s reference count is `count - 1`,
+    // correct at `count == 0`.
+    pub fn append_value_into_array_buf<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        buffer: PointerValue<'c>,
+        begin: IntValue<'c>,
+        count: IntValue<'c>,
+        value: Object<'c>,
+    ) {
+        // One reference per slot, in a single reference-count add.
+        gc.build_retain(value.clone(), count);
+
+        let value_ty = value.ty.get_embedded_type(gc, &vec![]);
+        let dst = unsafe {
+            gc.builder()
+                .build_gep(value_ty, buffer, &[begin], "array_append_begin")
+                .unwrap()
+        };
+        let val = value.value;
+        let loop_body = |gc: &mut Generator<'c, 'm>,
+                         idx: IntValue<'c>,
+                         _count: IntValue<'c>,
+                         buf_ptr: PointerValue<'c>| {
+            let slot = unsafe {
+                gc.builder()
+                    .build_gep(value_ty, buf_ptr, &[idx], "array_append_slot")
+                    .unwrap()
+            };
+            gc.builder().build_store(slot, val).unwrap();
+        };
+        let after_loop =
+            |_gc: &mut Generator<'c, 'm>, _count: IntValue<'c>, _buf: PointerValue<'c>| {};
+        Self::loop_over_array_buf(gc, count, dst, loop_body, after_loop);
+
+        // Hand off the op's own reference.
+        gc.release(value);
+    }
+
     // Panic if idx is out_of_range for the array.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,

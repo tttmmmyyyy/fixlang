@@ -12,7 +12,7 @@ use crate::{
     configuration::Configuration,
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-        ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+        ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
         ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
         ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
         F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
@@ -21,8 +21,9 @@ use crate::{
     error::Errors,
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
-        array_get_capacity, array_get_size, array_punch, array_truncate_bounds_unchecked,
-        array_unsafe_empty, array_unsafe_fill, array_unsafe_get_bounds_unchecked,
+        array_append_value_capacity_unchecked, array_get_capacity, array_get_size, array_punch,
+        array_truncate_bounds_unchecked,
+        array_unsafe_empty, array_unsafe_get_bounds_unchecked,
         array_unsafe_get_linear_bounds_unchecked_unretained,
         array_unsafe_set_bounds_uniqueness_unchecked_unreleased, bit_not_function,
         bitwise_operation_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
@@ -421,6 +422,18 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_unsafe_truncate_bounds_unchecked.md").to_string()),
     ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, ARRAY_NAME],
+            "_unsafe_append_value_capacity_unchecked",
+        ),
+        array_append_value_capacity_unchecked(),
+        None,
+        None,
+        Some(
+            include_str!("../docs/std_array_unsafe_append_value_capacity_unchecked.md").to_string(),
+        ),
+    ));
     errors.eat_err(
         fix_module.add_global_value(
             FullName::from_strs(
@@ -575,13 +588,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_array_unsafe_empty.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_FILL_NAME),
-        array_unsafe_fill(),
-        None,
-        None,
-        Some(include_str!("../docs/std_array_unsafe_fill.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "_undefined_internal"),

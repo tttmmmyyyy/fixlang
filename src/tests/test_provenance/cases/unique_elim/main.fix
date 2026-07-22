@@ -10,8 +10,9 @@ module Main;
 // - a boxed-struct field `set` on a fresh struct -> `set_0 [unique]`.
 // - a fresh array passed through `assert_unique`, whose guard aborts rather than producing a value,
 //   comes out fresh, so the `set` after it drops its check too.
-// - an array built by a fill loop, which writes into it through the primitives that leave the
-//   uniqueness check to their caller, comes out fresh as well.
+// - an array built by `Array::from_map` (a `push_back` loop) comes out fresh, and the
+//   `_unsafe_append_value_capacity_unchecked` core its `push_back` and `Array::fill` grow with folds
+//   its check on the fresh array to `array_append_value [unique]`.
 // - `Array::truncate` on a fresh array -> its `_unsafe_truncate_bounds_unchecked` core folds to
 //   `array_truncate [unique]`.
 type Rec = box struct { x : I64, y : I64 };

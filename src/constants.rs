@@ -71,7 +71,6 @@ pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecke
 pub const ARRAY_CHECK_RANGE: &str = "_check_range";
 pub const ARRAY_CHECK_SIZE: &str = "_check_size";
 pub const ARRAY_UNSAFE_EMPTY_NAME: &str = "_unsafe_empty_capacity_unchecked";
-pub const ARRAY_UNSAFE_FILL_NAME: &str = "_unsafe_fill_size_unchecked";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";

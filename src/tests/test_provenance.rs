@@ -384,6 +384,9 @@ mod integration_tests {
             "struct_set_0[unique]",
             // A `truncate`, whose `_unsafe_truncate_bounds_unchecked` core folds its check.
             "array_truncate[unique]",
+            // A `fill` / `from_map`, whose `_unsafe_append_value_capacity_unchecked` core folds its
+            // check when it appends into the fresh array the builder just allocated.
+            "array_append_value[unique]",
         ] {
             assert!(
                 dump.contains(elided),
