@@ -213,19 +213,19 @@ impl<'a> Validator<'a> {
                     self.use_var(&c.name);
                 }
             }
-            RcRhs::Llvm(gen, args) => {
+            RcRhs::Llvm(llvm_gen, args) => {
                 // The generator embeds its operand names — code generation resolves the operands from
                 // them — while the `args` list carries the same names, in the same order, for the
                 // reference-counting analyses. Lowering builds one from the other and renaming rewrites
                 // both, so the two stay identical; a rewrite that updated one and not the other would
                 // desync what code generation reads from what the analyses track.
-                let embedded = gen.free_vars();
+                let embedded_names = llvm_gen.free_vars();
                 let arg_names: Vec<FullName> = args.iter().map(|a| a.name.clone()).collect();
-                if embedded != arg_names {
+                if embedded_names != arg_names {
                     panic!(
                         "[RC IR validate] {}: LLVM operand names {:?} disagree with argument names {:?} in `{}`",
                         self.stage,
-                        embedded.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+                        embedded_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         self.location,
                     );
