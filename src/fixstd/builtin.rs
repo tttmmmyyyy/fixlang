@@ -22,7 +22,8 @@ use crate::constants::{
     ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
     BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
     DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
+    ARRAY_STORAGE_NAME, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME,
+    FUNPTR_ARGS_MAX, FUNPTR_NAME,
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
     PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STRING_NAME, STRUCT_GETTER_SYMBOL,
     STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
@@ -264,6 +265,24 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
 
+    // Array storage: the internal boxed object holding an array's elements.
+    ret.insert(
+        make_array_storage_tycon(),
+        TyConInfo {
+            kind: kind_arrow(kind_star(), kind_star()),
+            variant: TyConVariant::ArrayStorage,
+            is_unbox: false,
+            tyvars: vec![make_tyvar("a", &kind_star())],
+            fields: vec![Field::make(
+                "storage_elem".to_string(), // Unused
+                type_tyvar_star("a"),
+                None,
+            )],
+            source: None,
+            document: None,
+        },
+    );
+
     ret
 }
 
@@ -283,6 +302,24 @@ pub fn make_dynamic_object_name() -> FullName {
 
 pub fn make_dynamic_object_tycon() -> TyCon {
     TyCon::new(make_dynamic_object_name())
+}
+
+pub fn make_array_storage_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], ARRAY_STORAGE_NAME)
+}
+
+pub fn make_array_storage_tycon() -> TyCon {
+    TyCon::new(make_array_storage_name())
+}
+
+// The `#ArrayStorage a` type for an element type `a`.
+pub fn make_array_storage_ty(elem_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_tyapp(type_tycon(&tycon(make_array_storage_name())), elem_ty)
+}
+
+// Returns whether the given tycon is `#ArrayStorage`.
+pub fn is_array_storage_tycon(tc: &TyCon) -> bool {
+    tc.name == make_array_storage_name()
 }
 
 pub fn make_destructor_name() -> FullName {

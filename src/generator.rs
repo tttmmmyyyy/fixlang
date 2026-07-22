@@ -1051,6 +1051,10 @@ impl<'c, 'm> Generator<'c, 'm> {
                             self.build_retain(subobj, amount);
                         }
                     }
+                    // The storage buffer appears only inside the boxed `#ArrayStorage`, whose retain
+                    // bumps its control block rather than descending into fields, so it is never
+                    // reached here (like `Array`).
+                    ObjectFieldType::ArrayStorageBuf(_) => unreachable!(),
                     ObjectFieldType::UnionBuf(_) => {
                         ObjectFieldType::retain_union(self, obj.clone(), amount);
                     }

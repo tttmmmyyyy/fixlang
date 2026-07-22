@@ -82,6 +82,9 @@ pub const UNION_MOD_SYMBOL: &str = "mod_";
 // Names used by compiler.
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
+// The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
+// its `#` prefix makes it un-nameable in source, so it cannot leak out of `Array`'s interface.
+pub const ARRAY_STORAGE_NAME: &str = "#ArrayStorage";
 pub const PARAM_NAME: &str = "#param";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
@@ -106,6 +109,11 @@ pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+
+// Field layout of the internal `#ArrayStorage` object: a control block and the raw element buffer,
+// with no length or capacity (those live in the owning `Array` value).
+pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;
+pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
 
 // The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
 pub const BOOL_FALSE_TAG: usize = 0;

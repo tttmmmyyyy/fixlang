@@ -5,8 +5,9 @@ use crate::constants::{
     TraverserWorkType, ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
     CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
     DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
-    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX,
+    UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -49,6 +50,11 @@ pub enum ObjectFieldType {
     UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
     UnionTag,
     Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
+    // The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
+    // type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
+    // value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
+    // contributes its element sizing to the object layout.
+    ArrayStorageBuf(Arc<TypeNode>),
 }
 
 // The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
@@ -110,6 +116,9 @@ impl ObjectFieldType {
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
+            ObjectFieldType::ArrayStorageBuf(ty) => ty
+                .get_object_type(&vec![], gc.type_env())
+                .to_embedded_type(gc, unboxed_path.clone()),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
             ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, &unboxed_path),
         }
@@ -322,6 +331,25 @@ impl ObjectFieldType {
                         0,
                         None,
                         &name,
+                    )
+                    .as_type()
+            }
+            ObjectFieldType::ArrayStorageBuf(elem_ty) => {
+                // The storage buffer's debug type is an array of the elements, claiming
+                // `DEBUG_ARRAY_ASSUMED_LEN` of them like `Array` (see the array branch above). The
+                // full `#ArrayStorage` debug layout is authored where the debug info is built.
+                let element_ty =
+                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
+                let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
+                let element_size_in_bits = gc.target_data.get_bit_size(&element_ty);
+                let element_align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
+                let elements_size_in_bits = DEBUG_ARRAY_ASSUMED_LEN * element_size_in_bits;
+                gc.get_di_builder()
+                    .create_array_type(
+                        element_debug_ty,
+                        elements_size_in_bits,
+                        element_align_in_bits,
+                        &[0..DEBUG_ARRAY_ASSUMED_LEN as i64],
                     )
                     .as_type()
             }
@@ -1175,9 +1203,11 @@ impl ObjectType {
         if array_size.is_some() {
             // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
 
-            // Calculate sizeof(elem_ty) * size.
+            // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
+            // (with a preceding capacity slot) or of `#ArrayStorage` (right after the control block).
             let elem_ty = match self.field_types.last().unwrap() {
                 ObjectFieldType::Array(ty) => ty.clone(),
+                ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
                 _ => panic!(),
             };
             let elem_sizeof = elem_ty
@@ -1197,11 +1227,12 @@ impl ObjectType {
                 .build_int_mul(elem_sizeof, size, "elems_size")
                 .unwrap();
 
-            // Get pointer to the first element
+            // Get pointer to the first element (the buffer is the last struct field).
+            let buf_field_idx = struct_ty.count_fields() - 1;
             let null = gc.context.ptr_type(AddressSpace::from(0)).const_null();
             let first_elm_ptr = gc
                 .builder()
-                .build_struct_gep(struct_ty, null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
+                .build_struct_gep(struct_ty, null, buf_field_idx, "gep_first_elem_size_of")
                 .unwrap();
             let first_elm_ptr = gc
                 .builder()
@@ -1493,6 +1524,15 @@ pub fn ty_to_object_ty(
                         .push(ObjectFieldType::SubObject(cap.clone(), false));
                 }
             }
+            TyConVariant::ArrayStorage => {
+                assert!(capture.is_empty());
+                assert!(!ti.is_unbox);
+                ret.is_unbox = false;
+                ret.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(ret.field_types.len(), STORAGE_BUF_IDX as usize);
+                ret.field_types
+                    .push(ObjectFieldType::ArrayStorageBuf(ty.field_types(type_env)[0].clone()));
+            }
             TyConVariant::Arrow => {
                 unreachable!() // Covered by `if ty.is_closure()` above.
             }
@@ -1622,6 +1662,8 @@ pub fn create_obj<'c, 'm>(
                     .build_store(ptr_to_size, array_capacity.unwrap())
                     .unwrap();
             }
+            // The storage buffer is left uninitialized; there is no capacity field to set.
+            ObjectFieldType::ArrayStorageBuf(_) => {}
             ObjectFieldType::TraverseFunction => {
                 // Initialize the traverser function.
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
@@ -1841,6 +1883,9 @@ fn build_traverse<'c, 'm>(
                     None,
                 );
             }
+            // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
+            // traverser drives element lifetime. Traversing the storage itself touches no element.
+            ObjectFieldType::ArrayStorageBuf(_) => {}
             ObjectFieldType::UnionTag => {}
             ObjectFieldType::UnionBuf(_) => {
                 // The amount is unused on the release/mark path; pass a constant 1.
@@ -1963,6 +2008,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
                 ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),
                 ObjectFieldType::UnionTag => "<union tag>".to_string(),
                 ObjectFieldType::Array(_) => "<array>".to_string(),
+                ObjectFieldType::ArrayStorageBuf(_) => "<array elements>".to_string(),
             };
             if ty.is_array() && i as u32 == ARRAY_LEN_IDX {
                 member_name = "<array size>".to_string();

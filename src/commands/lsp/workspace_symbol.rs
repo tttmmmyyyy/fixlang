@@ -215,6 +215,7 @@ fn tycon_kind(tycon_info: &TyConInfo) -> SymbolKind {
         | TyConVariant::Arrow
         | TyConVariant::Array
         | TyConVariant::DynamicObject
+        | TyConVariant::ArrayStorage
         | TyConVariant::Opaque => SymbolKind::CLASS,
     }
 }

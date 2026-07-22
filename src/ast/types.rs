@@ -148,6 +148,10 @@ pub enum TyConVariant {
     Union,
     // Dynamic object is nullble and has the destructor as the first field.
     DynamicObject,
+    // The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
+    // array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
+    // its own traverser.
+    ArrayStorage,
     // Opaque type generated from opaque type variable `?it`.
     Opaque,
 }
