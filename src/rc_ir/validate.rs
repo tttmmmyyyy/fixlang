@@ -9,10 +9,12 @@
 //! It checks the structural invariants of the RC IR: within each function every bound name is
 //! unique (no shadowing), every variable use resolves to a binding in scope, or to a global — a
 //! function or a global value, both referenceable by name (a direct call's callee is a function
-//! name, not a local binding) — and every `Retain`/`Release` names one reference-counting unit of
-//! its variable. Reference-count balance, use-after-consume, and closure capture/projection order
-//! are follow-ups: they need the ownership and consume model, and must be validated against the
-//! whole test suite to stay free of false positives.
+//! name, not a local binding) — every `Retain`/`Release` names one reference-counting unit of its
+//! variable; a function carries a capture parameter exactly for the closure ABI; every match has at
+//! least one arm, with any catch-all arm last; and an `Llvm` operation's embedded operand names match
+//! its argument list. Reference-count balance, use-after-consume, and capture-projection order are
+//! follow-ups: they need the ownership and consume model, and must be validated against the whole
+//! test suite to stay free of false positives.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -45,6 +47,18 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
     let funcs: Set<FullName> = prog.funcs.keys().map(|f| f.name.clone()).collect();
 
     for func in prog.funcs.values() {
+        // A capture parameter is present exactly for the closure ABI: it is the trailing capture-
+        // pointer parameter a closure projects its captures from, and the funptr ABI has none. A clone
+        // that copies the arrow type but sets the wrong capture would mis-lower the ABI.
+        if func.capture.is_some() != func.fn_ty.is_closure() {
+            panic!(
+                "[RC IR validate] {}: `{}` capture-present={} disagrees with closure-ABI={}",
+                stage,
+                func.name.name.to_string(),
+                func.capture.is_some(),
+                func.fn_ty.is_closure(),
+            );
+        }
         let mut v = Validator::new(
             stage,
             &globals,
@@ -199,13 +213,47 @@ impl<'a> Validator<'a> {
                     self.use_var(&c.name);
                 }
             }
-            RcRhs::Llvm(_, args) => {
+            RcRhs::Llvm(gen, args) => {
+                // The generator embeds its operand names — code generation resolves the operands from
+                // them — while the `args` list carries the same names, in the same order, for the
+                // reference-counting analyses. Lowering builds one from the other and renaming rewrites
+                // both, so the two stay identical; a rewrite that updated one and not the other would
+                // desync what code generation reads from what the analyses track.
+                let embedded = gen.free_vars();
+                let arg_names: Vec<FullName> = args.iter().map(|a| a.name.clone()).collect();
+                if embedded != arg_names {
+                    panic!(
+                        "[RC IR validate] {}: LLVM operand names {:?} disagree with argument names {:?} in `{}`",
+                        self.stage,
+                        embedded.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+                        arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+                        self.location,
+                    );
+                }
                 for a in args {
                     self.use_var(&a.name);
                 }
             }
             RcRhs::Match(scrutinee, arms) => {
                 self.use_var(&scrutinee.name);
+                // A match has at least one arm, and a catch-all arm (`tag == None`) — which code
+                // generation compiles as the tag switch's default case — is the last arm, so every
+                // earlier arm names a variant. A rewrite that moved a catch-all before another arm
+                // would shadow the arms after it.
+                if arms.is_empty() {
+                    panic!(
+                        "[RC IR validate] {}: match with no arms in `{}`",
+                        self.stage, self.location,
+                    );
+                }
+                for arm in &arms[..arms.len() - 1] {
+                    if arm.tag.is_none() {
+                        panic!(
+                            "[RC IR validate] {}: a catch-all match arm precedes a later arm in `{}`",
+                            self.stage, self.location,
+                        );
+                    }
+                }
                 // Each arm's payload is in scope only within that arm's body, so bind it, check the
                 // body, and unbind it before the next sibling arm.
                 for arm in arms {
@@ -221,8 +269,10 @@ impl<'a> Validator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::types::type_fun;
     use crate::fixstd::builtin::make_i64_ty;
-    use crate::rc_ir::ast::{RcExpr, RcVar};
+    use crate::misc::Map;
+    use crate::rc_ir::ast::{FuncRef, MatchArm, RcExpr, RcFunc, RcVar};
 
     fn var(name: &str) -> RcVar {
         RcVar {
@@ -297,5 +347,68 @@ mod tests {
             node(RcExpr::Ret(var("r"))),
         ));
         v.check_expr(&body);
+    }
+
+    #[test]
+    #[should_panic(expected = "capture-present=false disagrees with closure-ABI=true")]
+    fn rejects_capture_missing_for_closure_abi() {
+        // A closure-typed function with no capture parameter: the closure ABI has a capture pointer.
+        let name = FuncRef {
+            name: FullName::local("f"),
+        };
+        let func = RcFunc {
+            name: name.clone(),
+            fn_ty: type_fun(make_i64_ty(), make_i64_ty()),
+            params: vec![var("p")],
+            capture: None,
+            ret_ty: make_i64_ty(),
+            body: node(RcExpr::Ret(var("p"))),
+            source: None,
+            borrowed_units: Set::default(),
+        };
+        let mut funcs = Map::default();
+        funcs.insert(name.clone(), func);
+        let prog = RcProgram {
+            funcs,
+            globals: vec![],
+            entry: name,
+        };
+        validate(&prog, &Set::default(), &TypeEnv::default(), "test");
+    }
+
+    #[test]
+    #[should_panic(expected = "match with no arms")]
+    fn rejects_empty_match_arms() {
+        // let m = match s {}; ret m   (s is a parameter; the match has no arms)
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(var("s"), vec![]),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["s"]);
+    }
+
+    #[test]
+    #[should_panic(expected = "catch-all match arm precedes a later arm")]
+    fn rejects_catch_all_before_a_later_arm() {
+        // let m = match s { _ -> c; 1 -> p }; ret m   (a catch-all arm before a tagged arm)
+        let arms = vec![
+            MatchArm {
+                tag: None,
+                payload: var("c"),
+                body: node(RcExpr::Ret(var("c"))),
+            },
+            MatchArm {
+                tag: Some(1),
+                payload: var("p"),
+                body: node(RcExpr::Ret(var("p"))),
+            },
+        ];
+        let body = node(RcExpr::Let(
+            var("m"),
+            RcRhs::Match(var("s"), arms),
+            node(RcExpr::Ret(var("m"))),
+        ));
+        check(&body, &["s"]);
     }
 }
