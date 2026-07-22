@@ -2,12 +2,18 @@ use std::{fs, path::PathBuf, process::Command};
 
 use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
+// Several projects are pinned to their `array-storage-migration` revision. The array/storage
+// redesign made `Array` unboxed and dropped its `Boxed` instance, so projects that used `Array`'s
+// FFI (`borrow_boxed` / `mutate_boxed` on an array), called `unsafe_is_unique` on their own unbox
+// structs, or used the removed unsafe primitives were migrated to the array-specific helpers on that
+// branch and are pinned to it here. Projects passing `None` build against their default branch.
+
 #[test]
 pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
-        None,
+        Some("e072aef74a55bbaae3f77924a06dfbc8ea42d984"),
     );
 }
 
@@ -40,12 +46,10 @@ pub fn test_external_project_random() {
 
 #[test]
 pub fn test_external_project_time() {
-    // Pin the fixlang-time revision migrated off `_unsafe_set_size` (renamed to `_unsafe_grow_size`
-    // by the array/storage redesign).
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
-        Some("13153357408336c9f470851db7db4b6c94efc6a7"),
+        Some("42b66a3b9d7a14521747ec11fe1700a5ec124cff"),
     );
 }
 
@@ -63,7 +67,7 @@ pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
-        None,
+        Some("eb24b00cc5e16dfed57f99f0b12d14a5cd396af1"),
     );
 }
 
@@ -85,7 +89,7 @@ pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
-        None,
+        Some("d659377220cf41d7ab82e7c882aebf49f11a9379"),
     );
 }
 
@@ -94,7 +98,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
-        None,
+        Some("3d1d7b4f73f589cd1f6b8e3f8f52e56cea618389"),
     );
 }
 
@@ -103,7 +107,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
-        None,
+        Some("7fab422d288cbd80b8bfc0147887d57cb335dcc1"),
     );
 }
 
@@ -112,7 +116,7 @@ pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
-        None,
+        Some("d426fc85bcaaa8b0d6f9bed2fe100d256c879a5d"),
     );
 }
 
@@ -131,12 +135,10 @@ pub fn test_external_project_cp_library() {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
-    // Pin the cp-library revision migrated off the array/storage redesign's deleted unsafe
-    // primitives (it builds against this compiler's `fix_version = 1.5.0` standard library).
     test_external_project(
         "https://github.com/tttmmmyyyy/cp-library",
         "cp-library",
-        Some("a5beeafad8ea747a8896fab0431acdbe56b7c7c0"),
+        Some("f538b64ae07cb225fcf497ca783fb303b315508a"),
     );
 }
 
