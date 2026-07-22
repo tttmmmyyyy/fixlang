@@ -13,4 +13,4 @@ path = "local_a"
 [[dependencies]]
 name = "math"
 version = "1.0"
-git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git" }
+git = { url = "https://github.com/tttmmmyyyy/fixlang-git-ref-test-dep.git" }
