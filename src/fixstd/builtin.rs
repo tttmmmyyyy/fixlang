@@ -2792,6 +2792,9 @@ pub struct InlineLLVMArraySetBody {
     // When true, clone the array first if it is shared, so the write lands in a uniquely owned
     // array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    // When true, panic if `idx` is out of range (unless `--no-runtime-check`). `set` sets this;
+    // `unsafe_set_bounds_unchecked` clears it. Fixed at registration, not folded.
+    bounds_checked: bool,
 }
 
 #[typetag::serde]
@@ -2809,8 +2812,9 @@ impl LLVMGen for InlineLLVMArraySetBody {
             array
         };
 
-        // Perform write and return. Bounds-check unless `--no-runtime-check` is set.
-        let len = if gc.config.runtime_check() {
+        // Perform write and return. `set` bounds-checks unless `--no-runtime-check` is set;
+        // `unsafe_set_bounds_unchecked` never bounds-checks.
+        let len = if self.bounds_checked && gc.config.runtime_check() {
             Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
         } else {
             None
@@ -2822,7 +2826,8 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
     fn name(&self) -> String {
         format!(
-            "array_set{}({}, {}, {})",
+            "array_set{}{}({}, {}, {})",
+            if self.bounds_checked { "" } else { "_unchecked" },
             if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.value_name.to_string(),
@@ -2869,8 +2874,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
     }
 }
 
-// `Array::set` built-in function.
-pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_llvm(
@@ -2879,6 +2883,7 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
             force_unique: true,
+            bounds_checked,
         }),
         array_ty.clone(),
         None,
@@ -2902,6 +2907,16 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
     (expr, scm)
+}
+
+// `Array::set` built-in function.
+pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    set_array_common(true)
+}
+
+// `Array::unsafe_set_bounds_unchecked` built-in function.
+pub fn unsafe_set_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    set_array_common(false)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

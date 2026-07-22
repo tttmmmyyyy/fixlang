@@ -46,6 +46,13 @@ main : IO () = (
     let p = Iterator::range(0, 100).fold(Array::empty(1), |i, arr| arr.push_back(i));
     assert_eq(|_|"push_back grow", p.@(99), 99);;
     assert_eq(|_|"push_back size", p.@size, 100);;
+
+    // `unsafe_set_bounds_unchecked` writes an element in place, cloning a shared array.
+    assert_eq(|_|"unsafe_set boxed", [[1], [2], [3]].unsafe_set_bounds_unchecked(1, [9]), [[1], [9], [3]]);;
+    let sh = [[1], [2]];
+    let s2 = sh.unsafe_set_bounds_unchecked(0, [9]);
+    assert_eq(|_|"unsafe_set shared original", sh, [[1], [2]]);;
+    assert_eq(|_|"unsafe_set shared result", s2, [[9], [2]]);;
     pure()
 );
 "#;
@@ -99,6 +106,14 @@ main : IO () = (
     let g = [[1], [2], [3], [4]];
     assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
     assert_eq(|_|"get_sub boxed src intact", g, [[1], [2], [3], [4]]);;
+
+    // `unsafe_set_bounds_unchecked` on a boxed array releases the overwritten element and, on a
+    // shared array, clones so the original keeps its element.
+    eval [[1], [2], [3]].unsafe_set_bounds_unchecked(1, [9]);
+    let base = [[1], [2], [3]];
+    let overwritten = base.unsafe_set_bounds_unchecked(0, [9]);
+    assert_eq(|_|"unsafe_set shared base intact", base, [[1], [2], [3]]);;
+    assert_eq(|_|"unsafe_set shared overwritten", overwritten, [[9], [2], [3]]);;
     pure()
 );
 "#;

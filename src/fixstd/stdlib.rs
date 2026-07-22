@@ -43,6 +43,7 @@ use crate::{
         not_trait_instance_bool, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
         set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
         swap_array, swap_bounds_unchecked_array, undefined_internal_function,
+        unsafe_set_bounds_unchecked_array,
         grow_size_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
@@ -533,6 +534,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_array_unsafe_swap_bounds_unchecked.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "unsafe_set_bounds_unchecked"),
+        unsafe_set_bounds_unchecked_array(),
+        None,
+        None,
+        Some(include_str!("../docs/std_array_unsafe_set_bounds_unchecked.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(

@@ -20,6 +20,7 @@ module Main;
 // - `Array::append` into a fresh array -> its `_unsafe_append_capacity_bounds_unchecked` core folds
 //   to `array_append_range [unique]`.
 // - `_unsafe_grow_size` on a fresh array -> `array_grow_size [unique]`.
+// - `unsafe_set_bounds_unchecked` on a fresh array -> `array_set_unchecked [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 main : IO ();
@@ -50,9 +51,11 @@ main = (
     // slots it exposes.
     let grown = (Array::empty(4)._unsafe_grow_size(4) : Array I64);
 
+    let uset = Array::fill(4, 0).unsafe_set_bounds_unchecked(1, 7);
+
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + grown.@size).to_string
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + grown.@size + uset.@(1)).to_string
 );

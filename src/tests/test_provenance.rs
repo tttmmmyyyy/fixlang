@@ -395,6 +395,8 @@ mod integration_tests {
             "array_append_range[unique]",
             // A `_unsafe_grow_size` on the fresh array folds its check.
             "array_grow_size[unique]",
+            // An `unsafe_set_bounds_unchecked` on the fresh array folds its check.
+            "array_set_unchecked[unique]",
         ] {
             assert!(
                 dump.contains(elided),
