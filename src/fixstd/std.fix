@@ -98,11 +98,7 @@ namespace Array {
         let n = if e > s { e - s } else { 0 };
         let res = Array::empty(n + additional_capacity);
         if n == 0 || len == 0 { res };
-        loop((s, res), |(i, res)| (
-            if i == e { break $ res };
-            let res = res.push_back(arr.@(i));
-            continue $ (i + 1, res)
-        ))
+        res._unsafe_append_capacity_bounds_unchecked(arr, s, e)
     );
 
     // Gets an element of an array at the specified index.
@@ -586,16 +582,11 @@ namespace Array {
         let former_pos = former_begin;
         let latter_pos = latter_begin;
         let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
-            if former_pos == former_end { // If former_pos reached to the end,
-                if latter_pos == latter_end { break $ buffer };
-                // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(vec.@(latter_pos));
-                continue $ (former_pos, latter_pos + 1, buffer)
+            if former_pos == former_end { // former exhausted: drain the rest of latter in one copy.
+                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, latter_pos, latter_end)
             };
-            if latter_pos == latter_end { // If latter_pos reached to the end,
-                // Copy elements in former to buffer.
-                let buffer = buffer.push_back(vec.@(former_pos));
-                continue $ (former_pos + 1, latter_pos, buffer)
+            if latter_pos == latter_end { // latter exhausted: drain the rest of former in one copy.
+                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, former_pos, former_end)
             };
             let former_elem = vec.@(former_pos);
             let latter_elem = vec.@(latter_pos);

@@ -88,6 +88,17 @@ main : IO () = (
 
     // Growing a boxed array by repeated `push_back` reallocates several times.
     eval Iterator::range(0, 50).fold(Array::empty(1), |i, arr| arr.push_back([i]));
+
+    // `sort_stable_by` merges runs into a working buffer, draining an exhausted run in one bulk
+    // copy; on boxed elements the copies and the copy-back must not leak or double-free.
+    assert_eq(|_|"sort_stable boxed",
+        [[3], [1], [2], [1], [4], [0]].sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
+        [[0], [1], [1], [2], [3], [4]]);;
+
+    // `get_sub` on a boxed array copies the range out; the source stays intact.
+    let g = [[1], [2], [3], [4]];
+    assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
+    assert_eq(|_|"get_sub boxed src intact", g, [[1], [2], [3], [4]]);;
     pure()
 );
 "#;
