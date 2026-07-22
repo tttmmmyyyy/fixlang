@@ -269,8 +269,8 @@ impl<'a> Validator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::types::type_fun;
-    use crate::fixstd::builtin::make_i64_ty;
+    use crate::ast::types::{type_fun, type_funptr};
+    use crate::fixstd::builtin::{make_i64_ty, InlineLLVMNullPtrLit};
     use crate::misc::Map;
     use crate::rc_ir::ast::{FuncRef, MatchArm, RcExpr, RcFunc, RcVar};
 
@@ -410,5 +410,45 @@ mod tests {
             node(RcExpr::Ret(var("m"))),
         ));
         check(&body, &["s"]);
+    }
+
+    #[test]
+    #[should_panic(expected = "capture-present=true disagrees with closure-ABI=false")]
+    fn rejects_capture_present_for_funptr_abi() {
+        // A funptr-typed function with a capture parameter: the funptr ABI has no capture pointer.
+        let name = FuncRef {
+            name: FullName::local("f"),
+        };
+        let func = RcFunc {
+            name: name.clone(),
+            fn_ty: type_funptr(vec![make_i64_ty()], make_i64_ty()),
+            params: vec![var("p")],
+            capture: Some(var("cap")),
+            ret_ty: make_i64_ty(),
+            body: node(RcExpr::Ret(var("p"))),
+            source: None,
+            borrowed_units: Set::default(),
+        };
+        let mut funcs = Map::default();
+        funcs.insert(name.clone(), func);
+        let prog = RcProgram {
+            funcs,
+            globals: vec![],
+            entry: name,
+        };
+        validate(&prog, &Set::default(), &TypeEnv::default(), "test");
+    }
+
+    #[test]
+    #[should_panic(expected = "disagree with argument names")]
+    fn rejects_llvm_operand_name_mismatch() {
+        // let r = <nullptr op with no embedded operands>(x); ret r
+        // The op's embedded operand names () disagree with the argument list (x).
+        let body = node(RcExpr::Let(
+            var("r"),
+            RcRhs::Llvm(Box::new(InlineLLVMNullPtrLit {}), vec![var("x")]),
+            node(RcExpr::Ret(var("r"))),
+        ));
+        check(&body, &["x"]);
     }
 }
