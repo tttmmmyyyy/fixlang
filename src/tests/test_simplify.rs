@@ -101,7 +101,10 @@ mod integration_tests {
         let run = std::process::Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
-        assert!(run.status.success(), "the built executable did not run cleanly");
+        assert!(
+            run.status.success(),
+            "the built executable did not run cleanly"
+        );
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4950");
     }
 }

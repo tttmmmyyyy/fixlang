@@ -17,11 +17,16 @@
 
 - Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
 - Added `Array::unsafe_set_bounds_unchecked`, which sets the element at a given index like `set` but omits the bounds check (the caller must ensure the index is in range). It is the counterpart of `unsafe_swap_bounds_unchecked`, for in-place write loops whose indices are already known to be in range.
+- Added `Array::borrow_elements` and `Array::mutate_elements` (with `_io` variants), which call a function with a pointer to the first element of an array's element buffer. `borrow_elements` borrows the array for read-only access; `mutate_elements` clones the array first if it is shared, for in-place writes. Use these for FFI that needs a raw pointer to an array's elements.
+- Added `Array::assert_unique`, which asserts that an array's storage is not shared (aborting otherwise) and returns the array, for verifying that operations such as `set` do not copy the array. It is the array counterpart of `Debug::assert_unique`.
+- Added `Array::_unsafe_is_storage_unique`, which reports whether an array's storage is uniquely referenced, paired with the array itself.
 
 ### Changed
 
 #### Std
 
+- `Array` no longer implements `Boxed`. An array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct, which preserves the array's size and capacity.
+- `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`. For arrays, use `Array::_unsafe_is_storage_unique` and `Array::assert_unique`, which check the array's storage.
 - The counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` now stop when the index reaches the bound (`>=` for an ascending range, `<=` for a descending `range_step`) instead of testing equality for the exact bound. Iterating any valid range yields the same elements as before; the change also makes an iterator whose index starts past its bound terminate immediately (previously such a hand-constructed iterator could overrun), and removes the end-clamping that `range`/`range_step` applied. Because the loop guard now coincides with the array bounds condition, the compiler can prove the per-element bounds check redundant, so read loops built on `range(0, arr.@size).fold` and `arr.to_iter.fold` are optimized to the same code as the equivalent hand-written index loop.
 - `String::_get_c_str` is now deprecated. It returns a raw pointer into the string's byte buffer that dangles once the string is released, so using it correctly requires keeping the string alive by hand. Use `borrow_c_str` or `borrow_c_str_io`, which scope the pointer to a callback and keep the string alive for the callback's duration.
 

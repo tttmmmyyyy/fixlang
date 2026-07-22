@@ -18,23 +18,24 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-    ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
+    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX,
+    ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
     BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
     DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-    ARRAY_STORAGE_NAME, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME,
-    FUNPTR_ARGS_MAX, FUNPTR_NAME,
+    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
-    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STRING_NAME, STRUCT_GETTER_SYMBOL,
+    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL,
     STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TraverserWorkType, TUPLE_NAME, TUPLE_UNBOX, U16_NAME,
-    U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
+    U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
-use crate::object::{create_obj, ObjectFieldType};
+use crate::object::{
+    alloc_array_storage, create_obj, get_array_storage, get_array_storage_buf, ObjectFieldType,
+};
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
@@ -204,7 +205,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
-            is_unbox: false,
+            is_unbox: true,
             tyvars: vec![make_tyvar("a", &kind_star())],
             fields: vec![Field::make(
                 "array_elem".to_string(), // Unused
@@ -212,7 +213,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
                 None,
             )],
             source: None,
-            document: Some("The type of variable length arrays. This is a boxed type.".to_string()),
+            document: Some("The type of variable length arrays.".to_string()),
         },
     );
 
@@ -818,15 +819,18 @@ pub fn make_byte_array_copy<'c, 'm>(
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let storage = alloc_array_storage(gc, make_u8_ty(), len);
     let array = create_obj(
         array_ty,
         &vec![],
-        Some(len),
+        None,
         gc,
         Some("array@make_byte_array_copy"),
     );
-    let array = array.insert_field(gc, ARRAY_LEN_IDX, len);
-    let dst = array.gep_boxed(gc, ARRAY_BUF_IDX);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+    let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
+    let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
+    let dst = get_array_storage_buf(gc, &array);
     let len = gc
         .builder()
         .build_int_cast(
@@ -1626,21 +1630,23 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
             .get_scoped_obj_field(&self.capacity_name, 0)
             .into_int_value();
 
-        // Allocate
+        // Allocate the storage with room for `cap` elements, then build the array value
+        // `{ storage, size = 0, cap }`.
+        let elem_ty = arr_ty.field_types(gc.type_env())[0].clone();
+        let storage = alloc_array_storage(gc, elem_ty, cap);
         let array = create_obj(
             arr_ty.clone(),
             &vec![],
-            Some(cap),
+            None,
             gc,
             Some(&format!(
                 "{ARRAY_NAME}::{ARRAY_UNSAFE_EMPTY_NAME}({})",
                 self.capacity_name.to_string()
             )),
         );
-
-        // Set size to zero.
-        let cap = gc.context.i64_type().const_zero();
-        array.insert_field(gc, ARRAY_LEN_IDX, cap)
+        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+        let array = array.insert_field(gc, ARRAY_SIZE_IDX, gc.context.i64_type().const_zero());
+        array.insert_field(gc, ARRAY_CAP_IDX, cap)
     }
 
     fn name(&self) -> String {
@@ -1701,8 +1707,8 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         // // let array = gc.get_var_retained_if_used_later(&self.arr_name);
         // let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
-        // let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        // let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        // let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        // let buf = get_array_storage_buf(gc, &array);
         // let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
         // let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
 
@@ -1716,7 +1722,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
 
         // Get array buffer
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let buf = get_array_storage_buf(gc, &array);
 
         // Get element
         let elem = ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx);
@@ -1805,8 +1811,8 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         // Release the dropped tail `[new_len, size)`, then lower the length to `new_len`. The caller
         // guarantees `0 <= new_len <= size`, so there is no size check.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        let size = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let buf = get_array_storage_buf(gc, &array);
         ObjectFieldType::release_or_mark_array_slice(
             gc,
             buf,
@@ -1815,7 +1821,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
             elem_ty,
             TraverserWorkType::release(),
         );
-        array.insert_field(gc, ARRAY_LEN_IDX, new_len)
+        array.insert_field(gc, ARRAY_SIZE_IDX, new_len)
     }
 
     fn name(&self) -> String {
@@ -1916,7 +1922,9 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let value = gc.get_scoped_obj(&self.value_name);
-        let count = gc.get_scoped_obj_field(&self.count_name, 0).into_int_value();
+        let count = gc
+            .get_scoped_obj_field(&self.count_name, 0)
+            .into_int_value();
 
         // Force the array to be unique before appending in place.
         let array = if self.force_unique {
@@ -1927,11 +1935,11 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
 
         // Write `value` into the `count` uninitialized slots at the end and grow the length. The
         // caller guarantees `count >= 0` and `size + count <= capacity`.
-        let size = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let buf = get_array_storage_buf(gc, &array);
         ObjectFieldType::append_value_into_array_buf(gc, buf, size, count, value);
         let new_size = gc.builder().build_int_add(size, count, "new_size").unwrap();
-        array.insert_field(gc, ARRAY_LEN_IDX, new_size)
+        array.insert_field(gc, ARRAY_SIZE_IDX, new_size)
     }
 
     fn name(&self) -> String {
@@ -2038,22 +2046,28 @@ fn realloc_array<'c, 'm>(
     array: Object<'c>,
     new_cap: IntValue<'c>,
 ) -> Object<'c> {
-    let arr_ptr = array.value.into_pointer_value();
-    let object_type = array.ty.get_object_type(&vec![], gc.type_env());
+    // Resize the storage block in place, then update the array value's storage pointer and capacity.
+    let storage = get_array_storage(gc, &array);
+    let storage_ptr = storage.value.into_pointer_value();
+    let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
     let sizeof = object_type.size_of(gc, Some(new_cap));
     let realloc_fn = gc
         .module
         .get_function(RUNTIME_REALLOC)
         .expect("realloc is not declared");
-    let new_ptr = gc
+    let new_storage_ptr = gc
         .builder()
-        .build_call(realloc_fn, &[arr_ptr.into(), sizeof.into()], "realloc_array")
+        .build_call(
+            realloc_fn,
+            &[storage_ptr.into(), sizeof.into()],
+            "realloc_storage",
+        )
         .unwrap()
         .try_as_basic_value()
         .left()
         .unwrap();
-    let new_array = Object::new(new_ptr, array.ty.clone(), gc);
-    new_array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, new_storage_ptr);
+    array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -2076,51 +2090,49 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
             return realloc_array(gc, array, new_cap);
         }
 
-        // Branch on whether the array is unique. `build_branch_by_is_unique` routes a GLOBAL array to
-        // the shared side, so `realloc` only ever runs on a genuinely uniquely owned block.
+        // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
+        // storage to the shared side, so `realloc` only ever runs on a genuinely uniquely owned block.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        let arr_ptr = array.value.into_pointer_value();
-        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(arr_ptr);
+        let storage = get_array_storage(gc, &array);
+        let storage_ptr = storage.value.into_pointer_value();
+        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
         let current_func = unique_bb.get_parent().unwrap();
-        let end_bb = gc.context.append_basic_block(current_func, "end_bb@set_capacity");
+        let end_bb = gc
+            .context
+            .append_basic_block(current_func, "end_bb@set_capacity");
 
-        // Unique: resize in place with `realloc`.
+        // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced_ptr = realloc_array(gc, array.clone(), new_cap)
-            .value
-            .into_pointer_value();
+        let realloced_val = realloc_array(gc, array.clone(), new_cap).value;
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
-        // Shared: allocate a new block of `new_cap` and retain-copy the live elements, then release
-        // the old array.
+        // Shared: allocate a new storage of `new_cap`, retain-copy the live elements, then drop the
+        // reference to the old shared storage.
         gc.builder().position_at_end(shared_bb);
-        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let cloned = create_obj(
-            array.ty.clone(),
-            &vec![],
-            Some(new_cap),
-            gc,
-            Some("array_for_set_capacity"),
-        );
-        let cloned = cloned.insert_field(gc, ARRAY_LEN_IDX, len);
-        let cloned_buf = cloned.gep_boxed(gc, ARRAY_BUF_IDX);
-        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        ObjectFieldType::clone_array_buf(gc, len, array_buf, cloned_buf, elem_ty, None);
-        gc.release(array.clone());
+        let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap);
+        let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        ObjectFieldType::clone_array_buf(gc, len, src_buf, dst_buf, elem_ty, None);
+        gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+        let cloned = array
+            .clone()
+            .insert_field(gc, ARRAY_STORAGE_IDX, new_storage.value);
+        let cloned = cloned.insert_field(gc, ARRAY_CAP_IDX, new_cap);
+        let cloned_val = cloned.value;
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-        let cloned_ptr = cloned.value.into_pointer_value();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
-        // Merge.
+        // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         let phi = gc
             .builder()
-            .build_phi(arr_ptr.get_type(), "array_phi@set_capacity")
+            .build_phi(array.value.get_type(), "array_phi@set_capacity")
             .unwrap();
         phi.add_incoming(&[
-            (&realloced_ptr, succ_of_unique_bb),
-            (&cloned_ptr, succ_of_shared_bb),
+            (&realloced_val, succ_of_unique_bb),
+            (&cloned_val, succ_of_shared_bb),
         ]);
         Object::new(phi.as_basic_value(), array.ty.clone(), gc)
     }
@@ -2224,7 +2236,9 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let dst = gc.get_scoped_obj(&self.dst_name);
         let src = gc.get_scoped_obj(&self.src_name);
-        let begin = gc.get_scoped_obj_field(&self.begin_name, 0).into_int_value();
+        let begin = gc
+            .get_scoped_obj_field(&self.begin_name, 0)
+            .into_int_value();
         let end = gc.get_scoped_obj_field(&self.end_name, 0).into_int_value();
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
         let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
@@ -2236,17 +2250,17 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         } else {
             dst
         };
-        let dst_len = dst.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let dst_buf = dst.gep_boxed(gc, ARRAY_BUF_IDX);
+        let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let dst_buf = get_array_storage_buf(gc, &dst);
         let dst_write = unsafe {
             gc.builder()
                 .build_gep(elem_value_ty, dst_buf, &[dst_len], "append_dst_write")
                 .unwrap()
         };
 
-        let src_ptr = src.value.into_pointer_value();
-        let src_buf = src.gep_boxed(gc, ARRAY_BUF_IDX);
-        let src_len = src.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let src_ptr = get_array_storage(gc, &src).value.into_pointer_value();
+        let src_buf = get_array_storage_buf(gc, &src);
+        let src_len = src.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
         // The elements can be moved out of `src` (with no reference counting) only when `src` is
         // uniquely owned and the whole of it is being appended: a partial move would leave the
@@ -2271,7 +2285,9 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .unwrap()
             .get_parent()
             .unwrap();
-        let maybe_move_bb = gc.context.append_basic_block(current_func, "append_maybe_move");
+        let maybe_move_bb = gc
+            .context
+            .append_basic_block(current_func, "append_maybe_move");
         let copy_bb = gc.context.append_basic_block(current_func, "append_copy");
         let end_bb = gc.context.append_basic_block(current_func, "append_end");
         gc.builder()
@@ -2303,7 +2319,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
             .ok()
             .unwrap();
-        let src_emptied = src.clone().insert_field(gc, ARRAY_LEN_IDX, zero);
+        let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
         gc.release(src_emptied);
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2328,7 +2344,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .builder()
             .build_int_add(dst_len, n, "append_new_dst_len")
             .unwrap();
-        dst.insert_field(gc, ARRAY_LEN_IDX, new_dst_len)
+        dst.insert_field(gc, ARRAY_SIZE_IDX, new_dst_len)
     }
 
     fn name(&self) -> String {
@@ -2464,7 +2480,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         } else {
             array
         };
-        array.insert_field(gc, ARRAY_LEN_IDX, length)
+        array.insert_field(gc, ARRAY_SIZE_IDX, length)
     }
 
     fn name(&self) -> String {
@@ -2570,56 +2586,45 @@ fn make_array_unique_with_hole<'c, 'm>(
     assert!(array.ty.is_array());
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let arr_ptr = array.value.into_pointer_value();
+    let storage = get_array_storage(gc, &array);
+    let storage_ptr = storage.value.into_pointer_value();
     let current_bb = gc.builder().get_insert_block().unwrap();
     let current_func = current_bb.get_parent().unwrap();
 
-    // Branch by whether the array is unique or not.
-    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(arr_ptr);
+    // Branch by whether the storage, which carries the reference count, is unique.
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
     let end_bb = gc.context.append_basic_block(current_func, "end_bb");
 
-    // Implement shared_bb.
-    // In this block, create new array and clone array field.
+    // Implement shared_bb: allocate a new storage, copy the elements into it, and drop the reference
+    // to the old shared storage.
     gc.builder().position_at_end(shared_bb);
-
-    // Allocate cloned array.
-    let array_cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
-    let cloned_array = create_obj(
-        array.ty.clone(),
-        &vec![],
-        Some(array_cap),
-        gc,
-        Some("cloned_array_for_uniqueness"),
-    );
-    // Set the length of the cloned array.
-    let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-    let cloned_array = cloned_array.insert_field(gc, ARRAY_LEN_IDX, array_len);
-    // Copy elements to the cloned array.
-    let cloned_array_buf = cloned_array.gep_boxed(gc, ARRAY_BUF_IDX);
-    let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-    ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty, hole);
-    gc.release(array.clone()); // Given array should be released here.
-
-    // Jump to the end_bb.
+    let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+    let cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
+    let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap);
+    let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+    let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
+    ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole);
+    gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+    let cloned_array = array
+        .clone()
+        .insert_field(gc, ARRAY_STORAGE_IDX, new_storage.value);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-    let cloned_array_ptr = cloned_array.value.into_pointer_value();
+    let cloned_array_val = cloned_array.value;
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
-    // Implement unique_bb
+    // Implement unique_bb: the array is already unique, so pass its value through.
     gc.builder().position_at_end(unique_bb);
-    // Jump to end_bb.
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
-    // Implement end_bb.
+    // Implement end_bb: phi over the array value.
     gc.builder().position_at_end(end_bb);
-    // Build phi value of array_ptr.
     let array_phi = gc
         .builder()
-        .build_phi(arr_ptr.get_type(), "array_phi")
+        .build_phi(array.value.get_type(), "array_phi")
         .unwrap();
     array_phi.add_incoming(&[
-        (&arr_ptr, unique_bb),
-        (&cloned_array_ptr, succ_of_shared_bb),
+        (&array.value, unique_bb),
+        (&cloned_array_val, succ_of_shared_bb),
     ]);
     Object::new(array_phi.as_basic_value(), array.ty.clone(), gc)
 }
@@ -2655,11 +2660,11 @@ impl LLVMGen for InlineLLVMArraySetBody {
         // Perform write and return. `set` bounds-checks unless `--no-runtime-check` is set;
         // `unsafe_set_bounds_unchecked` never bounds-checks.
         let len = if self.bounds_checked && gc.config.runtime_check() {
-            Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
+            Some(array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value())
         } else {
             None
         };
-        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let array_buf = get_array_storage_buf(gc, &array);
         ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true);
         array
     }
@@ -2667,7 +2672,11 @@ impl LLVMGen for InlineLLVMArraySetBody {
     fn name(&self) -> String {
         format!(
             "array_set{}{}({}, {}, {})",
-            if self.bounds_checked { "" } else { "_unchecked" },
+            if self.bounds_checked {
+                ""
+            } else {
+                "_unchecked"
+            },
             if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.value_name.to_string(),
@@ -2790,11 +2799,11 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         // `swap` bounds-checks unless `--no-runtime-check` is set; `unsafe_swap_bounds_unchecked`
         // never bounds-checks.
         let len = if self.bounds_checked && gc.config.runtime_check() {
-            Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
+            Some(array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value())
         } else {
             None
         };
-        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let array_buf = get_array_storage_buf(gc, &array);
 
         // Read both elements without retaining, then store them back into each other's slot
         // without releasing: the two elements only change places, so their reference counts
@@ -2925,7 +2934,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // length is unchanged.
         let punched_ty = ret_ty.collect_type_argments().get(0).unwrap().clone();
         let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let buf = get_array_storage_buf(gc, &array);
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, idx);
 
         // Build `(PunchedArray { _arr : array, _idx : idx }, elem)`.
@@ -3050,7 +3059,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         }
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let buf = get_array_storage_buf(gc, &array);
         ObjectFieldType::write_to_array_buf(gc, None, buf, idx, elem, false);
         array
     }
@@ -3248,7 +3257,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
         let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
         // Get pointer
-        let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let ptr = get_array_storage_buf(gc, &array);
 
         // Make returned object
         let obj = create_obj(
@@ -3316,7 +3325,7 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
-        let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let len = array_obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
         int_obj.insert_field(gc, 0, len)
@@ -3592,9 +3601,13 @@ impl LLVMGen for InlineLLVMArrayLitBody {
             .context
             .i64_type()
             .const_int(self.elem_names.len() as u64, false);
-        let array = create_obj(ty.clone(), &vec![], Some(len), gc, Some("array_literal"));
-        let buffer = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let array = array.insert_field(gc, ARRAY_LEN_IDX, len);
+        let elem_ty = ty.field_types(gc.type_env())[0].clone();
+        let storage = alloc_array_storage(gc, elem_ty, len);
+        let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
+        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+        let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
+        let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
+        let buffer = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);
             let idx = gc.context.i64_type().const_int(i as u64, false);
@@ -4304,37 +4317,46 @@ pub fn struct_act(
     )
     .set_app_order(AppSourceCodeOrderType::XDotF);
 
-    let expr = expr_abs(
-        vec![var_local("f")],
-        expr_abs(
-            vec![var_local("s")],
-            expr_let(
-                PatternNode::make_struct(
-                    tycon(make_tuple_name_abs(2)),
-                    vec![
-                        (
-                            "0".to_string(),
-                            PatternNode::make_var(var_local("unique"), None),
-                        ),
-                        ("1".to_string(), PatternNode::make_var(var_local("s"), None)),
-                    ],
-                ),
-                expr_app(
-                    expr_var(FullName::from_strs(&[STD_NAME], "unsafe_is_unique"), None),
-                    vec![expr_var(FullName::local("s"), None)],
-                    None,
-                )
-                .set_app_order(AppSourceCodeOrderType::XDotF),
-                expr_if(
-                    expr_var(FullName::local("unique"), None),
-                    expr_unique,
-                    expr_shared,
-                    None,
-                ),
+    // An unbox struct is always value-unique, so `unsafe_is_unique` on it is unconditionally `true`
+    // and the shared branch is dead: emit the unique branch directly. This also keeps the generated
+    // code off `unsafe_is_unique`, whose `[a : Boxed]` bound a struct value need not satisfy. A boxed
+    // struct keeps the runtime check that selects the branch.
+    let is_boxed_struct = match &definition.value {
+        TypeDeclValue::Struct(s) => s.is_boxed(),
+        _ => panic!("`struct_act` was given a non-struct type definition."),
+    };
+    let body = if is_boxed_struct {
+        expr_let(
+            PatternNode::make_struct(
+                tycon(make_tuple_name_abs(2)),
+                vec![
+                    (
+                        "0".to_string(),
+                        PatternNode::make_var(var_local("unique"), None),
+                    ),
+                    ("1".to_string(), PatternNode::make_var(var_local("s"), None)),
+                ],
+            ),
+            expr_app(
+                expr_var(FullName::from_strs(&[STD_NAME], "unsafe_is_unique"), None),
+                vec![expr_var(FullName::local("s"), None)],
+                None,
+            )
+            .set_app_order(AppSourceCodeOrderType::XDotF),
+            expr_if(
+                expr_var(FullName::local("unique"), None),
+                expr_unique,
+                expr_shared,
                 None,
             ),
             None,
-        ),
+        )
+    } else {
+        expr_unique
+    };
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(vec![var_local("s")], body, None),
         None,
     );
     (expr, scm)
@@ -5432,7 +5454,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
             let msg = gc.get_scoped_obj(&self.msg_name);
 
             // Get the pointer to the message.
-            let c_str = msg.gep_boxed(gc, ARRAY_BUF_IDX);
+            let c_str = get_array_storage_buf(gc, &msg);
 
             // Write it to stderr, and flush.
             gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
@@ -5705,8 +5727,9 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
-            // An unboxed object is always unique, and where the caller proved the argument unique the
-            // check is known to succeed; either way the flag is the constant `true`.
+            // Under the `[a : Boxed]` bound the argument is always boxed, so the check above runs
+            // unless the caller proved the argument unique, in which case the flag is the constant
+            // `true`.
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
@@ -5770,7 +5793,13 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     }
 }
 
-// Std::is_unique : a -> (Bool, a)
+// Std::unsafe_is_unique : [a : Boxed] a -> (Bool, a)
+//
+// The `Boxed` bound keeps this off unboxed types, whose answer is always the constant `true`. A
+// flipped `Array` is unboxed, so `arr.unsafe_is_unique` is rejected; array uniqueness goes through
+// `Array::_unsafe_is_storage_unique`, which reads the storage refcount. The generated field `act`
+// on an unbox struct emits its unique branch directly instead of this op, so it does not need the
+// bound (see `struct_act`).
 pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
@@ -5778,7 +5807,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let ret_type = make_tuple_ty(vec![make_bool_ty(), obj_type.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -5786,6 +5815,147 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMIsUniqueFunctionBody {
+                var_name: FullName::local(VAR_NAME),
+                assume_unique: false,
+            }),
+            ret_type,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Tests whether a flipped `Array`'s storage is uniquely referenced, reading the storage's reference
+/// count in place without retaining it, and hands the array back unchanged. This is the array
+/// counterpart of `InlineLLVMIsUniqueFunctionBody`: the generic op cannot serve, because an unboxed
+/// `Array` value would take its "unboxed is always unique" branch and report a shared array as
+/// unique. The attributes mirror the generic op so the borrow pass treats the array as consumed and
+/// reports sharing correctly. Provenance recognizes this op alongside the generic one (see
+/// `provenance.rs`).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayIsStorageUniqueBody {
+    var_name: FullName,
+    /// As in `InlineLLVMIsUniqueFunctionBody`: set where the caller proved the array statically
+    /// unique, so the runtime check is dropped and the flag is the constant `true`.
+    pub(crate) assume_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        let bool_ty = ObjectFieldType::I8
+            .to_basic_type(gc, vec![])
+            .into_int_type();
+
+        // Get argument.
+        let array = gc.get_scoped_obj(&self.var_name);
+        assert!(array.ty.is_array());
+
+        // Prepare returned object.
+        let ret = create_obj(
+            ret_ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some("ret@is_storage_unique"),
+        );
+
+        // Get whether the storage is uniquely referenced.
+        let is_unique = if !self.assume_unique {
+            let storage_ptr = array
+                .extract_field(gc, ARRAY_STORAGE_IDX)
+                .into_pointer_value();
+            let current_bb = gc.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
+
+            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+            let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
+
+            gc.builder().position_at_end(unique_bb);
+            let flag_unique_bb = bool_ty.const_int(1, false);
+            gc.builder().build_unconditional_branch(cont_bb).unwrap();
+
+            gc.builder().position_at_end(shared_bb);
+            let flag_shared_bb = bool_ty.const_int(0, false);
+            gc.builder().build_unconditional_branch(cont_bb).unwrap();
+
+            gc.builder().position_at_end(cont_bb);
+            let flag = gc
+                .builder()
+                .build_phi(bool_ty, "phi@is_storage_unique")
+                .unwrap();
+            flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
+            flag.as_basic_value().into_int_value()
+        } else {
+            // Where the caller proved the array unique, the check is known to succeed.
+            bool_ty.const_int(1, false)
+        };
+        let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
+        let bool_val = gc
+            .builder()
+            .build_insert_value(bool_val, is_unique, 0, "insert@is_storage_unique")
+            .unwrap();
+
+        // Store the result `(Bool, array)`.
+        let ret = ret.insert_field(gc, 0, bool_val);
+        ret.insert_field(gc, 1, array.value)
+    }
+
+    fn name(&self) -> String {
+        let mark = if self.assume_unique { "[unique]" } else { "" };
+        format!("is_storage_unique{}({})", mark, self.var_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if self.assume_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_unique = true;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // As in `InlineLLVMIsUniqueFunctionBody`: the array comes back unchanged as the second
+        // component, yet the result stays the conservative `Unknown` so the borrow pass treats the
+        // argument as consumed. That consuming treatment is what makes the op detect sharing.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// Std::Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)
+pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VAR_NAME: &str = "array";
+    let elem_ty = type_tyvar_star("a");
+    let array_ty = type_tyapp(make_array_ty(), elem_ty);
+    let ret_type = make_tuple_ty(vec![make_bool_ty(), array_ty.clone()]);
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty, ret_type.clone()));
+    let expr = expr_abs(
+        vec![var_local(VAR_NAME)],
+        expr_llvm(
+            Box::new(InlineLLVMArrayIsStorageUniqueBody {
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -6214,10 +6384,9 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
 ) -> PointerValue<'c> {
-    // Get the pointer to the data field.
-    let data_field_idx = if val.ty.is_array() {
-        ARRAY_BUF_IDX
-    } else if val.ty.is_struct(gc.type_env()) {
+    // Get the pointer to the data field. `Array` is not `Boxed`, so it never reaches this generic;
+    // its element pointer comes from `Array::borrow_elements` / `mutate_elements` instead.
+    let data_field_idx = if val.ty.is_struct(gc.type_env()) {
         BOXED_TYPE_DATA_IDX
     } else {
         assert!(val.ty.is_union(gc.type_env()));
@@ -6539,6 +6708,347 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             Box::new(InlineLLVMUnsafeMutateBoxedIOSInternalBody {
                 io_act_name: FullName::local(IO_ACT_NAME),
                 val_name: FullName::local(VAL_NAME),
+                iostate_name: FullName::local(IOSTATE_NAME),
+                force_unique: true,
+            }),
+            ret_ty,
+            None,
+        ),
+    );
+    (expr, scm)
+}
+
+// `Array` is not `Boxed`, so its element data pointer cannot come from the generic `Boxed` FFI
+// helpers. These three Array-specific ops compute the pointer to the first element (the storage's
+// element buffer) directly and hand it to a callback: `borrow_elements` for read-only access (the
+// array is borrowed, so no retain), and `_mutate_elements_internal` / `_mutate_elements_ios_internal`
+// for in-place writes (clone-if-shared first). `String` C-interop and the numeric `to_bytes` /
+// `from_bytes` routes go through these.
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayBorrowElementsBody {
+    arr_name: FullName,
+    borrower_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        // The array is borrowed: its pointer stays valid through the callback without a retain here.
+        let borrower = gc.get_scoped_obj(&self.borrower_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
+        assert!(array.ty.is_array());
+
+        // Pass a pointer to the first element to the callback.
+        let data_ptr = get_array_storage_buf(gc, &array);
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("elem_ptr"));
+        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
+        gc.apply_lambda(borrower, vec![data_ptr_obj], false)
+            .unwrap()
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_borrow_elements({}, {})",
+            self.borrower_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.borrower_name]
+    }
+
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
+        i == 0
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// borrow_elements : (Ptr -> b) -> Array a -> b
+pub fn array_borrow_elements() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const BORROWER_NAME: &str = "borrower";
+    const ARR_NAME: &str = "array";
+    let a_ty = type_tyvar_star("a");
+    let b_ty = type_tyvar_star("b");
+    let array_ty = type_tyapp(make_array_ty(), a_ty);
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_fun(make_ptr_ty(), b_ty.clone()),
+            type_fun(array_ty, b_ty.clone()),
+        ),
+    );
+    let expr = expr_abs(
+        vec![var_local(BORROWER_NAME)],
+        expr_abs(
+            vec![var_local(ARR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMArrayBorrowElementsBody {
+                    arr_name: FullName::local(ARR_NAME),
+                    borrower_name: FullName::local(BORROWER_NAME),
+                }),
+                b_ty,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayMutateElementsInternalBody {
+    arr_name: FullName,
+    io_act_name: FullName,
+    /// As in `InlineLLVMArrayTruncateBoundsUnchecked`: clone the array when shared so the write lands
+    /// in a uniquely owned one. Set false only where the array is statically known to be unique.
+    pub(crate) force_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        let io_act = gc.get_scoped_obj(&self.io_act_name);
+        let array = gc.get_scoped_obj(&self.arr_name);
+        assert!(array.ty.is_array());
+
+        // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
+
+        // Run the callback with a pointer to the first element.
+        let data_ptr = get_array_storage_buf(gc, &array);
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
+
+        // Construct the return value `(array, action result)`.
+        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &array);
+        ObjectFieldType::move_into_struct_field(gc, res, 1, &io_res)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_mutate_elements{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.io_act_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.io_act_name]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The array field comes back uniquely owned (cloned when shared, given unique otherwise); the
+        // action result comes out of an indirect call and stays `Unknown`.
+        Provenance::fresh_under(result_ty, type_env, &[0])
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// _mutate_elements_internal : (Ptr -> IOState -> (IOState, b)) -> Array a -> (Array a, b)
+pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IO_ACT_NAME: &str = "act";
+    const ARR_NAME: &str = "array";
+    let a_ty = type_tyvar_star("a");
+    let b_ty = type_tyvar_star("b");
+    let array_ty = type_tyapp(make_array_ty(), a_ty);
+    let ab_ty = make_tuple_ty(vec![array_ty.clone(), b_ty.clone()]);
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty)),
+            type_fun(array_ty, ab_ty.clone()),
+        ),
+    );
+    let expr = expr_abs(
+        vec![var_local(IO_ACT_NAME)],
+        expr_abs(
+            vec![var_local(ARR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMArrayMutateElementsInternalBody {
+                    arr_name: FullName::local(ARR_NAME),
+                    io_act_name: FullName::local(IO_ACT_NAME),
+                    force_unique: true,
+                }),
+                ab_ty,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayMutateElementsIosInternalBody {
+    arr_name: FullName,
+    io_act_name: FullName,
+    iostate_name: FullName,
+    /// As in `InlineLLVMArrayMutateElementsInternalBody`.
+    pub(crate) force_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        let io_act = gc.get_scoped_obj(&self.io_act_name);
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let ios = gc.get_scoped_obj(&self.iostate_name);
+        assert!(array.ty.is_array());
+
+        // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
+
+        // Run the callback with a pointer to the first element, threading the real `ios`.
+        let data_ptr = get_array_storage_buf(gc, &array);
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
+
+        // Construct the return value `(ios, (array, action result))`.
+        let pair_ab = create_obj(
+            make_tuple_ty(vec![array.ty.clone(), io_res.ty.clone()]),
+            &vec![],
+            None,
+            gc,
+            Some("pair_ab"),
+        );
+        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &array);
+        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
+        ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_mutate_elements_ios{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.io_act_name.to_string(),
+            self.arr_name.to_string(),
+            self.iostate_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![
+            &mut self.arr_name,
+            &mut self.io_act_name,
+            &mut self.iostate_name,
+        ]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // As in `InlineLLVMArrayMutateElementsInternalBody`, with the pair wrapped in the threaded
+        // `IOState`: result is `(ios, (array, action result))`.
+        Provenance::fresh_under(result_ty, type_env, &[1, 0])
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// _mutate_elements_ios_internal
+//   : (Ptr -> IOState -> (IOState, b)) -> Array a -> IOState -> (IOState, (Array a, b))
+pub fn array_mutate_elements_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IO_ACT_NAME: &str = "act";
+    const ARR_NAME: &str = "array";
+    const IOSTATE_NAME: &str = "ios";
+    let a_ty = type_tyvar_star("a");
+    let b_ty = type_tyvar_star("b");
+    let array_ty = type_tyapp(make_array_ty(), a_ty);
+    let ab_ty = make_tuple_ty(vec![array_ty.clone(), b_ty.clone()]);
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty)),
+            type_fun(array_ty, make_io_runner_ty(ab_ty.clone())),
+        ),
+    );
+    let ret_ty = make_tuple_ty(vec![make_iostate_ty(), ab_ty]);
+    let expr = expr_abs_many(
+        vec![
+            var_local(IO_ACT_NAME),
+            var_local(ARR_NAME),
+            var_local(IOSTATE_NAME),
+        ],
+        expr_llvm(
+            Box::new(InlineLLVMArrayMutateElementsIosInternalBody {
+                arr_name: FullName::local(ARR_NAME),
+                io_act_name: FullName::local(IO_ACT_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
                 force_unique: true,
             }),

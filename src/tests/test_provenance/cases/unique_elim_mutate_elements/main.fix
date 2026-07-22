@@ -1,0 +1,16 @@
+module Main;
+
+// Writing through an array's element pointer clones the array when something else holds it, and
+// hands back one nothing else holds. Both halves of that are declared: the check is dropped on an
+// array already proven unique (rendered `[unique]`), and the array each write returns is `fresh`, so
+// the next write has nothing left to check. The two variants declare the array at different
+// positions of their result, so both are exercised here. The program prints a literal rather than a
+// number because rendering one itself writes through a pointer, which would put a second, unrelated
+// element write in the dump.
+main : IO ();
+main = (
+    let (mutated, _) = Array::fill(2, 0_U8).mutate_elements(|_| pure());
+    let (mutated_io, _) = *mutated.mutate_elements_io(|_| pure());
+    eval mutated_io;
+    println("mutate_elements")
+);

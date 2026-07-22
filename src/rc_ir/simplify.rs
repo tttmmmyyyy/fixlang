@@ -319,8 +319,12 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
             RcExpr::Destructure(c.clone(), fields.clone(), replace_tail(k, f))
         }
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
-        RcExpr::Retain(v, p, st, k) => RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail(k, f)),
-        RcExpr::Release(v, p, st, k) => RcExpr::Release(v.clone(), p.clone(), *st, replace_tail(k, f)),
+        RcExpr::Retain(v, p, st, k) => {
+            RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail(k, f))
+        }
+        RcExpr::Release(v, p, st, k) => {
+            RcExpr::Release(v.clone(), p.clone(), *st, replace_tail(k, f))
+        }
     };
     node_of(expr, &node.source)
 }

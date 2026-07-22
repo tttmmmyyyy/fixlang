@@ -106,9 +106,11 @@ pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
-pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
-pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
-pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+// Field layout of the unbox `Array` value: a `SubObject` pointer to the `#ArrayStorage`, then the
+// register-resident size and capacity.
+pub const ARRAY_STORAGE_IDX: u32 = 0;
+pub const ARRAY_SIZE_IDX: u32 = ARRAY_STORAGE_IDX + 1;
+pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
 
 // Field layout of the internal `#ArrayStorage` object: a control block and the raw element buffer,
 // with no length or capacity (those live in the owning `Array` value).

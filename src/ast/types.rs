@@ -17,9 +17,10 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionT
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
-    is_funptr_tycon, is_punched_array_tycon, make_array_tycon, make_arrow_name_abs,
-    make_arrow_tycon, make_funptr_tycon, make_iostate_name, make_tuple_name_abs,
+    get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
+    is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
+    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_iostate_name,
+    make_tuple_name_abs,
 };
 use crate::generator::Generator;
 use crate::misc::collect_results;
@@ -1044,6 +1045,14 @@ impl TypeNode {
         return is_array_tycon(tc.as_ref());
     }
 
+    // Whether this is the internal `#ArrayStorage` type.
+    pub fn is_array_storage(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => is_array_storage_tycon(tc.as_ref()),
+            None => false,
+        }
+    }
+
     pub fn is_punched_array(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1114,6 +1123,12 @@ impl TypeNode {
         if self.is_closure() {
             return false;
         }
+        // `Array` is unboxed but holds its elements in a boxed storage, so it is never fully
+        // unboxed. `field_types` of an array returns its element type, not the storage, so this
+        // must be checked here rather than by recursing.
+        if self.is_array() {
+            return false;
+        }
         if self.is_funptr() {
             return true;
         }
@@ -1132,7 +1147,12 @@ impl TypeNode {
     /// The caller must have already handled a closure, whose capture is the unit: this asserts the type
     /// is not a closure (via `is_union`).
     pub fn is_rc_unit_root(&self, type_env: &TypeEnv) -> bool {
-        self.is_box(type_env) || self.is_union(type_env) || self.is_punched_array()
+        // `Array` is unboxed but is one indivisible unit: its own custom traverser drives element
+        // lifetime through the storage, so the reference-count machinery must not descend into it.
+        self.is_box(type_env)
+            || self.is_union(type_env)
+            || self.is_punched_array()
+            || self.is_array()
     }
 
     // Create new type node with default info.

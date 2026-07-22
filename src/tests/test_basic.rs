@@ -1851,8 +1851,8 @@ pub fn test53() {
     main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
-        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_0(|x| x + 3);
-        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_1(|arr| arr.assert_unique(|_|"The array is not unique!").set(0, 5));
+        let pair = pair.mod_0(|x| x + 3);
+        let pair = pair.mod_1(|arr| arr.assert_unique(|_|"The array is not unique!").set(0, 5));
         let x = pair.@0;
         let y = pair.@1.@(0);
         let ans = x + y;
@@ -2941,7 +2941,7 @@ pub fn test_ffi_call_io() {
 
             main : IO ();
             main = (
-                "Hello C function! Number = %d\n".@_data.borrow_boxed_io(|ptr|
+                "Hello C function! Number = %d\n".@_data.borrow_elements_io(|ptr|
                     FFI_CALL_IO[I32 printf(Ptr, ...), ptr, 42.i32]
                 );;
                 pure()
@@ -2952,37 +2952,44 @@ pub fn test_ffi_call_io() {
 
 #[test]
 pub fn test95() {
-    // Test Std::unsafe_is_unique, Debug::assert_unique
+    // Test Std::unsafe_is_unique, Array::_unsafe_is_storage_unique, Debug::assert_unique, Array::assert_unique
     let source = r#"
-            module Main; 
-                
+            module Main;
+
+            type Resource = box struct { id : I64 };
+
             main : IO ();
             main = (
-                // For unboxed value, it returns true even if the value is used later.
-                let int_val = 42;
-                let (unique, _) = int_val.unsafe_is_unique;
-                let use = int_val + 1;
+                // For a boxed value, it returns true if the value isn't used later.
+                let res = Resource { id : 42 };
+                let (unique, res) = res.unsafe_is_unique;
+                let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
                 eval use;
-                assert_eq(|_|"fail: int_val is shared", unique, true);;
+                assert_eq(|_|"fail: res is shared", unique, true);;
 
-                // For boxed value, it returns true if the value isn't used later.
+                // For a boxed value, it returns false if the value will be used later.
+                let res = Resource { id : 42 };
+                let (unique, _) = res.unsafe_is_unique;
+                let use = res.@id;
+                eval use;
+                assert_eq(|_|"fail: res is unique", unique, false);;
+
+                // For an array, its storage uniqueness is reported the same way.
                 let arr = Array::fill(10, 10);
-                let (unique, arr) = arr.unsafe_is_unique;
-                let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                let use = arr.@(0);
                 eval use;
                 assert_eq(|_|"fail: arr is shared", unique, true);;
 
-                // Fox boxed value, it returns false if the value will be used later.
                 let arr = Array::fill(10, 10);
-                let (unique, _) = arr.unsafe_is_unique;
+                let (unique, _) = arr._unsafe_is_storage_unique;
                 let use = arr.@(0);
                 eval use;
                 assert_eq(|_|"fail: arr is unique", unique, false);;
 
-                let int_val = 42;
-                eval int_val.assert_unique(|_|"fail: int_val is shared (2)");
-                let use = int_val + 1;
-                eval use;
+                // `assert_unique` for a boxed value and for an array.
+                let res = Resource { id : 42 };
+                eval res.assert_unique(|_|"fail: res is shared (2)");
 
                 let arr = Array::fill(10, 10);
                 let arr = arr.assert_unique(|_|"fail: arr is shared (2)");
@@ -3011,7 +3018,7 @@ pub fn test_is_unique_true_branch_invalidated_by_sharing() {
             main : IO ();
             main = (
                 let arr = Array::fill(3, 0);
-                let (unique, arr) = arr.unsafe_is_unique;
+                let (unique, arr) = arr._unsafe_is_storage_unique;
                 let keep = [arr];
                 let written = if unique { arr.set(0, 99) } else { arr.set(0, 99) };
                 assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
@@ -6948,16 +6955,13 @@ pub fn test_mutate_boxed_io() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that consecutive `mutate_boxed` writes to an unshared value accumulate in place.
+/// Verifies that updating a field of an unbox struct still clones a boxed field another holder shares.
 ///
-/// Writing through the data pointer of a value nothing else holds updates it in place, so a second
-/// write sees what the first one left — including where the check that clones a shared value has
-/// been dropped as provably unnecessary.
-/// Verifies that the `true` branch of an `unsafe_is_unique` on an unboxed value says nothing about
-/// the boxed values inside it: the flag is unconditionally true there, so a write to a field the
-/// branch reads must still clone what another holder shares.
+/// An unbox struct is always value-unique, so its field update takes the in-place branch with no
+/// uniqueness check; the force-unique plug in that branch is what clones a shared field, so a write
+/// to the field must not overwrite what the other holder sees.
 #[test]
-pub fn test_is_unique_on_unboxed_value_says_nothing_about_its_fields() {
+pub fn test_field_update_on_unbox_struct_clones_shared_field() {
     let source = r##"
             module Main;
 
@@ -6965,26 +6969,31 @@ pub fn test_is_unique_on_unboxed_value_says_nothing_about_its_fields() {
             main = (
                 let arr = Array::fill(3, 0);
                 let keep = [arr];
-                let (unique, pair) = (arr, 7).unsafe_is_unique;
-                let written = if unique { pair.@0.set(0, 99) } else { pair.@0.set(0, 99) };
+                let pair = (arr, 7);
+                let pair = pair.mod_0(|a| a.set(0, 99));
                 assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
-                assert_eq(|_|"fail: the write did not land", written.@(0), 99);;
+                assert_eq(|_|"fail: the write did not land", pair.@0.@(0), 99);;
                 pure()
             );
         "##;
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that consecutive `mutate_elements` writes to an unshared array accumulate in place.
+///
+/// Writing through the element pointer of an array nothing else holds updates it in place, so a
+/// second write sees what the first one left — including where the check that clones a shared array
+/// has been dropped as provably unnecessary.
 #[test]
-pub fn test_mutate_boxed_repeated() {
+pub fn test_mutate_elements_repeated() {
     let source = r##"
         module Main;
 
         main: IO ();
         main = (
             let x = Array::fill(4, 0_U8);
-            let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
-            let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            let (x, _) = x.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = x.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
             assert_eq(|_|"second write", x.@(0), 2_U8);;
             assert_eq(|_|"first write kept", x.@(3), 1_U8);;
             pure()
@@ -6994,17 +7003,17 @@ pub fn test_mutate_boxed_repeated() {
 }
 
 /// Verifies the same in-place write for the variant that threads the surrounding IO context, whose
-/// result carries the written value at a different position.
+/// result carries the written array at a different position.
 #[test]
-pub fn test_mutate_boxed_io_repeated() {
+pub fn test_mutate_elements_io_repeated() {
     let source = r##"
         module Main;
 
         main: IO ();
         main = (
             let x = Array::fill(4, 0_U8);
-            let (x, _) = *x.mutate_boxed_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
-            let (x, _) = *x.mutate_boxed_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            let (x, _) = *x.mutate_elements_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = *x.mutate_elements_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
             assert_eq(|_|"second write", x.@(0), 2_U8);;
             assert_eq(|_|"first write kept", x.@(3), 1_U8);;
             pure()
@@ -7174,7 +7183,7 @@ pub fn test_struct_act() {
         main = (
             pure();; // To make the `s` defined below not global and therefore unique.
 
-            let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| let x = x.Array::assert_unique(|_|""); if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // BB case 1
@@ -7574,10 +7583,10 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
         main: IO ();
         main = (
-            let release = get_release_func_of_codom(|_ : I64| [42]);
-            let retain = get_retain_func_of_dom(|_ : Array I64| 42);
-            let release_2 = get_release_func_of_codom_2(|_ : I64| [42]);
-            let retain_2 = get_retain_func_of_dom_2(|_ : Array I64| 42);
+            let release = get_release_func_of_codom(|_ : I64| Box::make(42));
+            let retain = get_retain_func_of_dom(|_ : Box I64| 42);
+            let release_2 = get_release_func_of_codom_2(|_ : I64| Box::make(42));
+            let retain_2 = get_retain_func_of_dom_2(|_ : Box I64| 42);
             pure()
         );
     "##;

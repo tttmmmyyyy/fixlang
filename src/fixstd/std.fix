@@ -226,7 +226,7 @@ namespace Array {
     // * `array` - The array.
     _unsafe_act_bounds_unchecked : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     _unsafe_act_bounds_unchecked = |idx, fun, arr| (
-        let (unique, arr) = arr.unsafe_is_unique;
+        let (unique, arr) = arr._unsafe_is_storage_unique;
         if unique {
             // The array is unique here, so this punch never clones; punching through the checking
             // version says so to the optimizer, which then knows the punched array is unique and drops
@@ -238,6 +238,72 @@ namespace Array {
             fun(arr._unsafe_get_bounds_unchecked(idx)).map(|elm| arr.set(idx, elm))
         }
     );
+
+    // Asserts that the given array is unique (its storage is not shared), and returns it.
+    // If the assertion failed, prints a message to the stderr and aborts the program.
+    //
+    // This function is used to verify that functions such as `Array::set` do not perform array copying.
+    // For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
+    // rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
+    // If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
+    //
+    // This function should be limited to temporary use for debugging purposes and should be removed from the final code.
+    //
+    // # Parameters
+    //
+    // * `lazy_msg`
+    // * `array`
+    assert_unique : Lazy String -> Array a -> Array a;
+    assert_unique = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array is not unique: " + msg()) };
+        arr
+    );
+
+    // `arr.mutate_elements(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+    // and then returns the mutated `arr` paired with the result of `io(ptr)`.
+    //
+    // The IO action `io(ptr)` is expected to modify the elements of `arr` through the obtained pointer.
+    // Do not perform any IO operations other than mutating the elements of `arr`.
+    //
+    // This function first clones the array if it is shared. The pointer is valid only while `io` runs.
+    //
+    // # Parameters
+    // * `act` - The action to perform on the pointer to the first element.
+    // * `array` - The array to mutate.
+    mutate_elements : (Ptr -> IO b) -> Array a -> (Array a, b);
+    mutate_elements = |act, arr| arr._mutate_elements_internal(|ptr| act(ptr).@runner);
+
+    // `arr.mutate_elements_io(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+    // and then returns the mutated `arr` paired with the result of `io(ptr)`.
+    //
+    // Similar to `mutate_elements`, but this function is used when you want to run the IO action in the existing IO context.
+    //
+    // # Parameters
+    // * `act` - The action to perform on the pointer to the first element.
+    // * `array` - The array to mutate.
+    mutate_elements_io : (Ptr -> IO b) -> Array a -> IO (Array a, b);
+    mutate_elements_io = |act, arr| IO::from_runner $ |ios| mutate_elements_ios(act, arr, ios);
+
+    // Internal implementation of the `mutate_elements_io` function.
+    //
+    // # Parameters
+    // * `act` - The action to perform on the pointer to the first element.
+    // * `array` - The array to mutate.
+    // * `ios` - The `IOState` to thread through the action.
+    mutate_elements_ios : (Ptr -> IO b) -> Array a -> IOState -> (IOState, (Array a, b));
+    mutate_elements_ios = |act, arr, ios| ios._mutate_elements_ios_internal(|ptr| act(ptr).@runner, arr);
+
+    // Calls an IO action with a pointer to the first element of the array.
+    //
+    // The array is borrowed for the duration of the action, so the pointer is valid only while it runs.
+    // It is not allowed to mutate the array through the borrowed pointer; to do that, use `mutate_elements`.
+    //
+    // # Parameters
+    // * `act` - The IO action to call with the pointer to the first element.
+    // * `array` - The array whose elements are borrowed.
+    borrow_elements_io : (Ptr -> IO b) -> Array a -> IO b;
+    borrow_elements_io = |act, arr| IO::from_runner $ |ios| arr.borrow_elements(|ptr| (act(ptr).@runner)(ios));
 
     // Appends an array to an array.
     // 
@@ -1105,7 +1171,7 @@ namespace IO {
             loop_m("", |str|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
-                let (buf, fgets_res) = *buf.mutate_boxed_io(|buf_ptr| (
+                let (buf, fgets_res) = *buf.mutate_elements_io(|buf_ptr| (
                     FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.i32, file_ptr]
                 ));
                 if fgets_res == nullptr {
@@ -1410,7 +1476,7 @@ namespace IO {
 
         // Read n bytes into a buffer.
         let buf = Array::empty(n);
-        let (buf, len) = buf.mutate_boxed(|buf| FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), buf, 1, n, file_ptr]);
+        let (buf, len) = buf.mutate_elements(|buf| FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), buf, 1, n, file_ptr]);
 
         // Check error.
         let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
@@ -1471,7 +1537,7 @@ namespace IO {
     write_bytes = |handle, array| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
         let arr_size = array.@size;
-        array.borrow_boxed_io(|array_buf|
+        array.borrow_elements_io(|array_buf|
             let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
             if written < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
             pure $ Result::ok()
@@ -2669,7 +2735,7 @@ namespace String {
     // This function is dangerous because it returns a dangling pointer if `_get_c_str` is the last use of `s`.
     // To avoid this problem, you should use `borrow_c_str` or `borrow_c_str_io` instead.
     _get_c_str : String -> Ptr;
-    _get_c_str = |s| s.@_data._get_boxed_ptr;
+    _get_c_str = |s| s.@_data.borrow_elements(|ptr| ptr);
     DEPRECATED[_get_c_str, "This function returns a dangling pointer if it is the last use of the string. Use `borrow_c_str` or `borrow_c_str_io` instead."];
 
     // Create a string from C string (i.e., null-terminated byte array).
@@ -2680,7 +2746,7 @@ namespace String {
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
         // Calculate length.
-        let len = buf.borrow_boxed(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
+        let len = buf.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
         let buf = buf._unsafe_grow_size(len + 1);
         String { _data : buf }
     );
@@ -2716,7 +2782,7 @@ namespace String {
         let len = FFI_CALL[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
-        let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        let (buf, _) = buf.mutate_elements(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }
     );
 
@@ -2734,7 +2800,7 @@ namespace String {
         let len = *FFI_CALL_IO[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
-        let (buf, _) = *buf.mutate_boxed_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        let (buf, _) = *buf.mutate_elements_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }.pure
     );
 
@@ -2745,7 +2811,7 @@ namespace String {
     // * `borrower` - The function to be called with the C string.
     // * `str` - The string.
     borrow_c_str : (Ptr -> a) -> String -> a;
-    borrow_c_str = |f, str| str.@_data.borrow_boxed(f);
+    borrow_c_str = |f, str| str.@_data.borrow_elements(f);
 
     // Call an IO action with a null-terminated C string.
     //
@@ -3665,14 +3731,14 @@ namespace Ptr {
 impl Ptr : ToString {
     to_string = |v| (
         let data = Array::empty(17);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_grow_size(1);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v]);
         data
     );
 }
@@ -3681,13 +3747,13 @@ impl U8 : FromBytes {
         if bs.@size != 1 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U8."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl U8 : ToString {
     to_string = |v| (
         let data = Array::empty(4); // len(255) + 1
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u8_to_str(Ptr, U8), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u8_to_str(Ptr, U8), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3698,7 +3764,7 @@ impl U8 : FromString {
 impl U16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_grow_size(2);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v]);
         data
     );
 }
@@ -3707,13 +3773,13 @@ impl U16 : FromBytes {
         if bs.@size != 2 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U16."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl U16 : ToString {
     to_string = |v| (
         let data = Array::empty(6); // len(65535) + 1
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u16_to_str(Ptr, U16), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u16_to_str(Ptr, U16), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3724,7 +3790,7 @@ impl U16 : FromString {
 impl U32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v]);
         data
     );
 }
@@ -3733,13 +3799,13 @@ impl U32 : FromBytes {
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U32."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl U32 : ToString {
     to_string = |v| (
         let data = Array::empty(11);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u32_to_str(Ptr, U32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_str(Ptr, U32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3750,7 +3816,7 @@ impl U32 : FromString {
 impl U64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v]);
         data
     );
 }
@@ -3759,13 +3825,13 @@ impl U64 : FromBytes {
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U64."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl U64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u64_to_str(Ptr, U64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_str(Ptr, U64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3785,7 +3851,7 @@ impl U64 : FromString {
 impl I8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_grow_size(1);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, I8), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, I8), ptr, v]);
         data
     );
 }
@@ -3794,13 +3860,13 @@ impl I8 : FromBytes {
         if bs.@size != 1 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I8."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl I8 : ToString {
     to_string = |v| (
         let data = Array::empty(5); // len(-128) + 1
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_i8_to_str(Ptr, I8), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i8_to_str(Ptr, I8), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3811,7 +3877,7 @@ impl I8 : FromString {
 impl I16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_grow_size(2);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, I16), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, I16), ptr, v]);
         data
     );
 }
@@ -3820,13 +3886,13 @@ impl I16 : FromBytes {
         if bs.@size != 2 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I16."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl I16 : ToString {
     to_string = |v| (
         let data = Array::empty(7); // len(-32768) + 1
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_i16_to_str(Ptr, I16), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i16_to_str(Ptr, I16), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3837,7 +3903,7 @@ impl I16 : FromString {
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v]);
         data
     );
 }
@@ -3846,13 +3912,13 @@ impl I32 : FromBytes {
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl I32 : ToString {
     to_string = |v| (
         let data = Array::empty(12);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_i32_to_str(Ptr, I32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i32_to_str(Ptr, I32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3863,7 +3929,7 @@ impl I32 : FromString {
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v]);
         data
     );
 }
@@ -3872,13 +3938,13 @@ impl I64 : FromBytes {
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl I64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_i64_to_str(Ptr, I64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i64_to_str(Ptr, I64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3898,7 +3964,7 @@ impl I64 : FromString {
 impl F32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v]);
         data
     );
 }
@@ -3907,13 +3973,13 @@ impl F32 : FromBytes {
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F32."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
 }
 impl F32 : ToString {
     to_string = |v| (
         let data = Array::empty(50);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str(Ptr, F32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str(Ptr, F32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3925,7 +3991,7 @@ namespace F32 {
     to_string_exp : F32 -> String;
     to_string_exp = |v| (
         let data = Array::empty(50);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp(Ptr, F32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp(Ptr, F32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -3937,7 +4003,7 @@ namespace F32 {
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.i64);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -3949,7 +4015,7 @@ namespace F32 {
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.i64);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3969,7 +4035,7 @@ impl F32 : FromString {
 impl F64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v]);
         data
     );
 }
@@ -3978,13 +4044,13 @@ impl F64 : FromBytes {
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F64."
         };
-        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
 }
 impl F64 : ToString {
     to_string = |v| (
         let data = Array::empty(500);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str(Ptr, F64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str(Ptr, F64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -3996,7 +4062,7 @@ namespace F64 {
     to_string_exp : F64 -> String;
     to_string_exp = |v| (
         let data = Array::empty(500);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp(Ptr, F64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp(Ptr, F64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -4008,7 +4074,7 @@ namespace F64 {
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.i64);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -4020,7 +4086,7 @@ namespace F64 {
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.i64);
-        let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -4073,21 +4139,18 @@ namespace Debug {
     assert_eq : [a: Eq] Lazy String -> a -> a -> IO ();
     assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
-    // Asserts that the given value is unique, and returns the given value.
+    // Asserts that the given boxed value is unique, and returns the given value.
     // If the assertion failed, prints a message to the stderr and aborts the program.
-    // 
-    // This function is used to verify that functions such as `Array::set` do not perform array copying.
-    // For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
-    // rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
-    // If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
-    // 
+    //
+    // For arrays, use `Array::assert_unique`, which checks the array's storage.
+    //
     // This function should be limited to temporary use for debugging purposes and should be removed from the final code.
     //
     // # Parameters
     //
     // * `lazy_msg`
     // * `value`
-    assert_unique : Lazy String -> a -> a;
+    assert_unique : [a : Boxed] Lazy String -> a -> a;
     assert_unique = |msg, x| (
         let (unique, x) = x.unsafe_is_unique;
         if !unique { undefined("Value is not unique: " + msg()) };

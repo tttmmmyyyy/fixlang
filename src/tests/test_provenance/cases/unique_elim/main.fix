@@ -6,7 +6,7 @@ module Main;
 // its check is kept and no marker appears.
 // - `Array::set` on a fresh array -> `Array::set [unique]`; on a boxed-container element -> `Array::set`.
 // - `Array::swap` on a fresh array -> `Array::swap [unique]`.
-// - a generic `Array::act` on a fresh array -> its `unsafe_is_unique` folds to `is_unique[unique]`.
+// - a generic `Array::act` on a fresh array -> its `_unsafe_is_storage_unique` folds to `is_storage_unique[unique]`.
 // - a boxed-struct field `set` on a fresh struct -> `set_0 [unique]`.
 // - a fresh array passed through `assert_unique`, whose guard aborts rather than producing a value,
 //   comes out fresh, so the `set` after it drops its check too.

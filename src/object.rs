@@ -2,17 +2,18 @@ use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
-    TraverserWorkType, ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
-    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
-    DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
-    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX,
-    UNION_TAG_IDX,
+    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME,
+    BOXED_TYPE_DATA_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN,
+    DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED,
+    DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty, make_i64_ty,
-    make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
+    make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
+    make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
+    make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
@@ -237,103 +238,9 @@ impl ObjectFieldType {
                 .create_basic_type("<union tag>", 8, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
-            ObjectFieldType::Array(elem_ty) => {
-                // struct_ty = [capacity, element0]
-                let struct_ty = ObjectType {
-                    field_types: vec![self.clone()],
-                    is_unbox: false,
-                    name: "N/A".to_string(),
-                }
-                .to_struct_type(gc, vec![]);
-
-                // Create element type for capacity field.
-                let capacity_ty = self.to_basic_type(gc, vec![]);
-                let capacity_debug_ty = ObjectFieldType::I64.to_debug_type(gc);
-                let capacity_size_in_bits = gc.target_data.get_bit_size(&capacity_ty);
-                let capacity_align_in_bits = gc.target_data.get_abi_alignment(&capacity_ty) * 8;
-                let capacity_offset_in_bits = gc
-                    .target_data
-                    .offset_of_element(&struct_ty, ARRAY_CAP_IDX - ARRAY_CAP_IDX)
-                    .unwrap()
-                    * 8;
-                let capacity_member_ty = gc
-                    .get_di_builder()
-                    .create_member_type(
-                        gc.get_di_compile_unit().as_debug_info_scope(),
-                        "<array capacity>",
-                        gc.create_di_file(None),
-                        0,
-                        capacity_size_in_bits,
-                        capacity_align_in_bits,
-                        capacity_offset_in_bits as u64,
-                        0,
-                        capacity_debug_ty,
-                    )
-                    .as_type();
-
-                // Create element type for buffer field.
-                let element_ty =
-                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
-                let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
-                let element_size_in_bits = gc.target_data.get_bit_size(&element_ty);
-                let element_align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
-                let element_offset_in_bits = gc
-                    .target_data
-                    .offset_of_element(&struct_ty, ARRAY_BUF_IDX - ARRAY_CAP_IDX)
-                    .unwrap()
-                    * 8;
-                // The number of valid elements is only known at runtime, so the debug info
-                // claims `DEBUG_ARRAY_ASSUMED_LEN` elements: debuggers display that many
-                // elements, of which the first `<array size>` ones are valid.
-                // The byte sizes of the array debug types cover the claimed elements.
-                // Debuggers read member values only within the declared byte size of a
-                // type, so the sizes have to be consistent with the claimed element count.
-                let elements_size_in_bits = DEBUG_ARRAY_ASSUMED_LEN * element_size_in_bits;
-                let element_array_ty = gc
-                    .get_di_builder()
-                    .create_array_type(
-                        element_debug_ty,
-                        elements_size_in_bits,
-                        element_align_in_bits,
-                        &[0..DEBUG_ARRAY_ASSUMED_LEN as i64],
-                    )
-                    .as_type();
-                let element_member_ty = gc
-                    .get_di_builder()
-                    .create_member_type(
-                        gc.get_di_compile_unit().as_debug_info_scope(),
-                        "<array elements>",
-                        gc.create_di_file(None),
-                        0,
-                        elements_size_in_bits,
-                        element_align_in_bits,
-                        element_offset_in_bits as u64,
-                        0,
-                        element_array_ty,
-                    )
-                    .as_type();
-
-                let size_in_bits = element_offset_in_bits + elements_size_in_bits;
-                let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
-                let name = format!("<array buffer of `{}`>", elem_ty.to_string());
-                // It seems that the second parameter of create_struct_type (`name`, not `unique_id`) should vary depending on the element type, at least for lldb.
-                gc.get_di_builder()
-                    .create_struct_type(
-                        gc.get_di_compile_unit().as_debug_info_scope(),
-                        &name,
-                        gc.create_di_file(None),
-                        0,
-                        size_in_bits,
-                        align_in_bits,
-                        0,
-                        None,
-                        &[capacity_member_ty, element_member_ty],
-                        0,
-                        None,
-                        &name,
-                    )
-                    .as_type()
-            }
+            // No object carries a bare `Array` field after the value-layout flip; an array's
+            // storage buffer uses `ArrayStorageBuf` below.
+            ObjectFieldType::Array(_) => unreachable!(),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => {
                 // The storage buffer's debug type is an array of the elements, claiming
                 // `DEBUG_ARRAY_ASSUMED_LEN` of them like `Array` (see the array branch above). The
@@ -1475,15 +1382,18 @@ pub fn ty_to_object_ty(
             }
             TyConVariant::Array => {
                 assert!(capture.is_empty());
-                let is_unbox = ti.is_unbox;
-                assert!(!is_unbox);
-                ret.is_unbox = is_unbox;
-                ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), ARRAY_LEN_IDX as usize);
-                ret.field_types.push(ObjectFieldType::I64); // length
-                assert_eq!(ret.field_types.len(), ARRAY_CAP_IDX as usize); // capacity
-                ret.field_types
-                    .push(ObjectFieldType::Array(ty.field_types(type_env)[0].clone()))
+                assert!(ti.is_unbox);
+                ret.is_unbox = true;
+                // A pointer to the `#ArrayStorage` holding the elements, then the size and capacity.
+                let elem_ty = ty.field_types(type_env)[0].clone();
+                ret.field_types.push(ObjectFieldType::SubObject(
+                    make_array_storage_ty(elem_ty),
+                    false,
+                ));
+                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
+                ret.field_types.push(ObjectFieldType::I64); // size
+                assert_eq!(ret.field_types.len(), ARRAY_CAP_IDX as usize);
+                ret.field_types.push(ObjectFieldType::I64); // capacity
             }
             TyConVariant::Struct => {
                 assert!(capture.is_empty());
@@ -1530,8 +1440,9 @@ pub fn ty_to_object_ty(
                 ret.is_unbox = false;
                 ret.field_types.push(ObjectFieldType::ControlBlock);
                 assert_eq!(ret.field_types.len(), STORAGE_BUF_IDX as usize);
-                ret.field_types
-                    .push(ObjectFieldType::ArrayStorageBuf(ty.field_types(type_env)[0].clone()));
+                ret.field_types.push(ObjectFieldType::ArrayStorageBuf(
+                    ty.field_types(type_env)[0].clone(),
+                ));
             }
             TyConVariant::Arrow => {
                 unreachable!() // Covered by `if ty.is_closure()` above.
@@ -1544,6 +1455,34 @@ pub fn ty_to_object_ty(
     ret
 }
 
+// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
+// type so the reference-count helpers and buffer GEPs operate on it directly.
+pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>) -> Object<'c> {
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+    let storage_ty = make_array_storage_ty(elem_ty);
+    let storage_ptr = array.extract_field(gc, ARRAY_STORAGE_IDX);
+    Object::new(storage_ptr, storage_ty, gc)
+}
+
+// A pointer to the first element of a flipped `Array`'s element buffer.
+pub fn get_array_storage_buf<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: &Object<'c>,
+) -> PointerValue<'c> {
+    get_array_storage(gc, array).gep_boxed(gc, STORAGE_BUF_IDX)
+}
+
+// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
+// its control block initialized to a reference count of one and its buffer left uninitialized.
+pub fn alloc_array_storage<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: Arc<TypeNode>,
+    cap: IntValue<'c>,
+) -> Object<'c> {
+    let storage_ty = make_array_storage_ty(elem_ty);
+    create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
+}
+
 // Create an object.
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
@@ -1554,10 +1493,11 @@ pub fn create_obj<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     _name: Option<&str>,
 ) -> Object<'c> {
-    // Validate arguments.
+    // Validate arguments. The capacity is for the `#ArrayStorage` object, which carries the element
+    // buffer; a flipped `Array` value itself is an unboxed aggregate created without one.
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
-    assert!(array_capacity.is_some() == ty.is_array());
+    assert!(array_capacity.is_some() == ty.is_array_storage());
     assert!(!ty.is_funptr()); // Funptr type is not supported, Currently, there is no need to create an object for funptr.
 
     let context = gc.context;
@@ -1589,10 +1529,10 @@ pub fn create_obj<'c, 'm>(
             .left()
             .unwrap()
     }
-    let obj = if ty.is_array() {
-        // When the object is array,
+    let obj = if ty.is_array_storage() {
+        // When the object is the array storage (a control block and a flexible element buffer),
         let sizeof = object_type.size_of(gc, array_capacity);
-        let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc_array@create_obj");
+        let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc_storage@create_obj");
         Object::new(ptr, ty.clone(), gc)
     } else {
         if object_type.is_unbox {
@@ -1819,8 +1759,24 @@ fn build_traverse<'c, 'm>(
     work: TraverserWorkType,
     gc: &mut Generator<'c, 'm>,
 ) {
+    // `Array a` = unbox { SubObject(#ArrayStorage a), size, cap }: the storage's own destructor is
+    // free-only, so the array value drives element release. Release / mark the storage through its
+    // refcount bookkeeping, and when that drops it to zero release its `[0, size)` elements. Doing
+    // the element release inside `traverse_refs` (called only at rc 1 -> 0) keeps a shared array's
+    // elements alive.
+    if obj.ty.is_array() {
+        let elem_ty = obj.ty.field_types(gc.type_env())[0].clone();
+        let size = obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let storage = get_array_storage(gc, &obj);
+        let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
+            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, None);
+        });
+        return;
+    }
+
     // `PunchedArray a` = unbox { Array a, I64 idx }: release / mark the inner array's elements
-    // while skipping the hole at `idx` (the moved-out element), reusing the array's refcount
+    // while skipping the hole at `idx` (the moved-out element), reusing the storage's refcount
     // bookkeeping.
     if obj.ty.is_punched_array() {
         let inner_array_ty = obj.ty.field_types(gc.type_env())[0].clone();
@@ -1830,10 +1786,11 @@ fn build_traverse<'c, 'm>(
             .extract_field(gc, 0)
             .into_int_value();
         let size = inner_array
-            .extract_field(gc, ARRAY_LEN_IDX)
+            .extract_field(gc, ARRAY_SIZE_IDX)
             .into_int_value();
-        let buffer = inner_array.ptr_to_field(gc, ARRAY_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&inner_array, work, |gc| {
+        let storage = get_array_storage(gc, &inner_array);
+        let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
             ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
         });
         return;
@@ -1870,19 +1827,9 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::U64 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
-            ObjectFieldType::Array(ty) => {
-                assert_eq!(i, ARRAY_CAP_IDX as usize);
-                let size = obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-                let buffer = obj.ptr_to_field(gc, ARRAY_BUF_IDX);
-                ObjectFieldType::release_or_mark_array_buf(
-                    gc,
-                    size,
-                    buffer,
-                    ty.clone(),
-                    work,
-                    None,
-                );
-            }
+            // No object carries a bare `Array` field: an array's elements live in its
+            // `#ArrayStorage`, released by the `is_array()` branch above.
+            ObjectFieldType::Array(_) => unreachable!(),
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
             // traverser drives element lifetime. Traversing the storage itself touches no element.
             ObjectFieldType::ArrayStorageBuf(_) => {}
@@ -2010,7 +1957,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
                 ObjectFieldType::Array(_) => "<array>".to_string(),
                 ObjectFieldType::ArrayStorageBuf(_) => "<array elements>".to_string(),
             };
-            if ty.is_array() && i as u32 == ARRAY_LEN_IDX {
+            if ty.is_array() && i as u32 == ARRAY_SIZE_IDX {
                 member_name = "<array size>".to_string();
             }
 

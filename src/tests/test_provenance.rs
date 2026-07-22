@@ -373,11 +373,11 @@ mod integration_tests {
             "array_set[unique]",
             // An array `swap`.
             "array_swap[unique]",
-            // A generic `act`, whose `unsafe_is_unique` folds to the constant `true`.
-            "is_unique[unique]",
+            // A generic `act`, whose `_unsafe_is_storage_unique` folds to the constant `true`.
+            "is_storage_unique[unique]",
             // The punch and the plug that `act` carries the update out with. Reaching the arm the
-            // `is_unique` guards means the array's reference count was one, so both drop their
-            // checks.
+            // storage-uniqueness check guards means the array's reference count was one, so both drop
+            // their checks.
             "array_punch[unique]",
             "array_plug[unique]",
             // A boxed-struct field `set` (field 0).
@@ -457,30 +457,33 @@ mod integration_tests {
         );
     }
 
-    /// Verifies both halves of what a write through a boxed value's data pointer declares — that its
-    /// own check is dropped on a value proven unique, and that the value it returns is `fresh` — for
-    /// the plain and the IO-context variant, which carry that value at different result positions.
+    /// Verifies both halves of what a write through an array's element pointer declares — that its
+    /// own check is dropped on an array proven unique, and that the array it returns is `fresh` — for
+    /// the plain and the IO-context variant, which carry that array at different result positions.
     #[test]
-    fn test_unique_check_elim_mutate_boxed() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_boxed");
+    fn test_unique_check_elim_mutate_elements() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_elements");
         let dump = emit_main_rc_ir(&project_dir);
 
-        // The value each write hands back is uniquely owned, which is what lets the write that
+        // The array each write hands back is uniquely owned, which is what lets the write that
         // follows drop its check. A wrong result position would leave these of unknown sharing.
         assert_binding_prov(&dump, "mutated", "[fresh]");
         assert_binding_prov(&dump, "mutated_io", "[fresh]");
 
-        // Both writes go to a value nothing else holds, so both drop their check. The case's own
+        // Both writes go to an array nothing else holds, so both drop their check. The case's own
         // writes are the only ones in the dump, so the checked form appearing at all is a failure.
-        for elided in ["mutate_boxed[unique]", "mutate_boxed_ios[unique]"] {
+        for elided in [
+            "array_mutate_elements[unique]",
+            "array_mutate_elements_ios[unique]",
+        ] {
             assert!(
                 dump.contains(elided),
-                "the write to a value proven unique should render `{}`:\n{}",
+                "the write to an array proven unique should render `{}`:\n{}",
                 elided,
                 dump
             );
         }
-        for checked in ["mutate_boxed(", "mutate_boxed_ios("] {
+        for checked in ["array_mutate_elements(", "array_mutate_elements_ios("] {
             assert!(
                 !dump.contains(checked),
                 "no write should keep its check, but `{}` is in the dump:\n{}",

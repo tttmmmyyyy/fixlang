@@ -1,31 +1,28 @@
-This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
+This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
+
+For arrays, use `Array::_unsafe_is_storage_unique`, which checks the array's storage.
 
 Example: 
 ```
 module Main;
 
+type Resource = box struct { id : I64 };
+
 main : IO ();
 main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.unsafe_is_unique;
-    let use = int_val + 1;
+    // For a boxed value, it returns true if the value isn't used later.
+    let res = Resource { id : 42 };
+    let (unique, res) = res.unsafe_is_unique;
+    let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: int_val is shared", unique, true);;
+    assert_eq(|_|"fail: res is shared", unique, true);;
 
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.unsafe_is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    // For a boxed value, it returns false if the value will be used later.
+    let res = Resource { id : 42 };
+    let (unique, _) = res.unsafe_is_unique;
+    let use = res.@id;
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is shared", unique, true);;
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.unsafe_is_unique;
-    let use = arr.@(0);
-    eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is unique", unique, false);;
+    assert_eq(|_|"fail: res is unique", unique, false);;
 
     pure()
 );

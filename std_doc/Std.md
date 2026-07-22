@@ -156,36 +156,33 @@ but if the program does reach `undefined`, it will result in undefined behavior.
 
 #### unsafe_is_unique
 
-Type: `a -> (Std::Bool, a)`
+Type: `[a : Std::Boxed] a -> (Std::Bool, a)`
 
-This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
+This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
+
+For arrays, use `Array::_unsafe_is_storage_unique`, which checks the array's storage.
 
 Example: 
 ```
 module Main;
 
+type Resource = box struct { id : I64 };
+
 main : IO ();
 main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.unsafe_is_unique;
-    let use = int_val + 1;
+    // For a boxed value, it returns true if the value isn't used later.
+    let res = Resource { id : 42 };
+    let (unique, res) = res.unsafe_is_unique;
+    let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: int_val is shared", unique, true);;
+    assert_eq(|_|"fail: res is shared", unique, true);;
 
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.unsafe_is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    // For a boxed value, it returns false if the value will be used later.
+    let res = Resource { id : 42 };
+    let (unique, _) = res.unsafe_is_unique;
+    let use = res.@id;
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is shared", unique, true);;
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.unsafe_is_unique;
-    let use = arr.@(0);
-    eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is unique", unique, false);;
+    assert_eq(|_|"fail: res is unique", unique, false);;
 
     pure()
 );
@@ -300,6 +297,52 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
+
+#### assert_unique
+
+Type: `Std::Lazy Std::String -> Std::Array a -> Std::Array a`
+
+Asserts that the given array is unique (its storage is not shared), and returns it.
+If the assertion failed, prints a message to the stderr and aborts the program.
+
+This function is used to verify that functions such as `Array::set` do not perform array copying.
+For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
+rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
+If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
+
+This function should be limited to temporary use for debugging purposes and should be removed from the final code.
+
+##### Parameters
+
+* `lazy_msg`
+* `array`
+
+#### borrow_elements
+
+Type: `(Std::Ptr -> b) -> Std::Array a -> b`
+
+Calls a function with a pointer to the first element of the array's element buffer.
+
+The array is borrowed for the duration of the call, so the pointer is valid only while `borrower` runs. The pointer must not be used to mutate the array; to do that, use `mutate_elements`.
+
+##### Parameters
+
+* `borrower` - The function to call with the pointer to the first element.
+* `array` - The array whose elements are borrowed.
+
+#### borrow_elements_io
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO b`
+
+Calls an IO action with a pointer to the first element of the array.
+
+The array is borrowed for the duration of the action, so the pointer is valid only while it runs.
+It is not allowed to mutate the array through the borrowed pointer; to do that, use `mutate_elements`.
+
+##### Parameters
+
+* `act` - The IO action to call with the pointer to the first element.
+* `array` - The array whose elements are borrowed.
 
 #### dedup
 
@@ -452,6 +495,49 @@ If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is 
 * `i` - The index of the element to modify.
 * `modifier` - The function to apply to the element.
 * `array` - The array to modify.
+
+#### mutate_elements
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> (Std::Array a, b)`
+
+`arr.mutate_elements(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+and then returns the mutated `arr` paired with the result of `io(ptr)`.
+
+The IO action `io(ptr)` is expected to modify the elements of `arr` through the obtained pointer.
+Do not perform any IO operations other than mutating the elements of `arr`.
+
+This function first clones the array if it is shared. The pointer is valid only while `io` runs.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+
+#### mutate_elements_io
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO (Std::Array a, b)`
+
+`arr.mutate_elements_io(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+and then returns the mutated `arr` paired with the result of `io(ptr)`.
+
+Similar to `mutate_elements`, but this function is used when you want to run the IO action in the existing IO context.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+
+#### mutate_elements_ios
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO::IOState -> (Std::IO::IOState, (Std::Array a, b))`
+
+Internal implementation of the `mutate_elements_io` function.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+* `ios` - The `IOState` to thread through the action.
 
 #### pop_back
 
@@ -691,15 +777,12 @@ If the assertion failed, prints a message to the stderr and aborts the program.
 
 #### assert_unique
 
-Type: `Std::Lazy Std::String -> a -> a`
+Type: `[a : Std::Boxed] Std::Lazy Std::String -> a -> a`
 
-Asserts that the given value is unique, and returns the given value.
+Asserts that the given boxed value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-This function is used to verify that functions such as `Array::set` do not perform array copying.
-For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
-rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
-If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
+For arrays, use `Array::assert_unique`, which checks the array's storage.
 
 This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 
@@ -5656,9 +5739,9 @@ Trait member of `Std::Zero`
 
 #### Array
 
-Defined as: `type Array a = box { built-in }`
+Defined as: `type Array a = unbox { built-in }`
 
-The type of variable length arrays. This is a boxed type.
+The type of variable length arrays.
 
 #### Arrow
 
@@ -6861,8 +6944,6 @@ Returns "()".
 ### impl `Std::Array a : Std::Add`
 
 Concatenates two arrays.
-
-### impl `Std::Array a : Std::Boxed`
 
 ### impl `[a : Std::Eq] Std::Array a : Std::Eq`
 

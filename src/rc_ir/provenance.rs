@@ -28,13 +28,16 @@
 //! shared object-identity (`root`) analysis, which the borrow-inference pass introduces; the demotion
 //! becomes root-based then.
 
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::{
     BOOL_TRUE_TAG, CLOSURE_CAPTURE_IDX, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD,
 };
-use crate::fixstd::builtin::{InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG};
+use crate::fixstd::builtin::{
+    InlineLLVMArrayIsStorageUniqueBody, InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG,
+};
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -83,6 +86,12 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             return;
         }
         if ty.is_box(type_env) {
+            out.push(path.clone());
+            return;
+        }
+        // `Array` is one indivisible boxed leaf at its own path: its `field_types` is the element
+        // type, not the storage, so descending would miss the leaf (like `is_box`, stop here).
+        if ty.is_array() {
             out.push(path.clone());
             return;
         }
@@ -583,13 +592,14 @@ impl<'a> Interpreter<'a> {
                     );
                     // `is_unique` is the one operation that answers a uniqueness question rather than
                     // acting on it, so its result is what makes a branch's condition readable as a
-                    // fact about a value (`interpret_match` refines the `true` arm with it).
-                    if llvm_gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                    // fact about a value (`interpret_match` refines the `true` arm with it). The
+                    // array-storage variant answers the same question for `Array`.
+                    if is_is_unique_op(llvm_gen.as_ref()) {
                         self.is_unique_tested_paths
                             .insert(result.name.clone(), check.path.clone());
                     }
                 }
-                if llvm_gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                if is_is_unique_op(llvm_gen.as_ref()) {
                     return is_unique_result(
                         &result.ty,
                         self.type_env,
@@ -773,6 +783,14 @@ impl<'a> Interpreter<'a> {
             joined_env.unwrap_or_else(|| unreachable!("a match has at least one arm")),
         )
     }
+}
+
+/// Whether an operation answers a uniqueness question about its operand — the generic
+/// `unsafe_is_unique` or its array-storage counterpart. Both return `(Bool, operand)` and are read
+/// through `is_unique_result` rather than their `result_prov`.
+fn is_is_unique_op(llvm_gen: &dyn LLVMGen) -> bool {
+    let any = llvm_gen.as_any();
+    any.is::<InlineLLVMIsUniqueFunctionBody>() || any.is::<InlineLLVMArrayIsStorageUniqueBody>()
 }
 
 /// The provenance of an `is_unique` result: the flag, plus the value it was asked about, whose leaves
