@@ -145,7 +145,7 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("48cab10"),
+            lock_content.contains("8dfe8df"),
             "Lock file should contain the pinned rev"
         );
         assert!(
@@ -174,7 +174,7 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("48cab10"),
+            lock_content.contains("8dfe8df"),
             "Lock file should contain the rev for tag 1.1.0"
         );
         assert!(
@@ -267,7 +267,7 @@ mod integration_tests {
 
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
-        assert!(lock_content.contains("48cab10"));
+        assert!(lock_content.contains("8dfe8df"));
         assert!(lock_content.contains("version = \"1.1.0\""));
 
         // Run fix deps update.
@@ -286,7 +286,7 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("48cab10"),
+            lock_content.contains("8dfe8df"),
             "Lock file should still contain the rev for tag 1.1.0 after deps update"
         );
         assert!(
@@ -315,7 +315,7 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("48cab10"),
+            lock_content.contains("8dfe8df"),
             "Lock file should contain rev for tag 1.1.0"
         );
         assert!(
@@ -398,7 +398,7 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("48cab10"),
+            lock_content.contains("8dfe8df"),
             "Lock file should contain rev for Root's tag 1.1.0"
         );
         assert!(
