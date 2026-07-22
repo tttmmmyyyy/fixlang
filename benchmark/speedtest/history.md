@@ -2,6 +2,24 @@
 
 Newer is above.
 
+## a77ad9dd29282fb48a29763115d27aedefd59a4b
+
+Scalarizing loop-carried unbox structs, measured against the flip row `4537cc17`. A loop-carried
+`Array` (or an iterator holding one) was threaded through a `fold` / `loop` as one LLVM aggregate,
+so `@size` hid inside an aggregate phi, the per-element bounds check survived, and the read loop
+did not vectorize. Passing unbox-struct function arguments as flat leaf scalars, and building
+codegen's value-merge phis one scalar phi per leaf, exposes `@size` again and the loops vectorize —
+with tail-call optimization intact (unlike the `reg2mem` alternative).
+
+Read / fold regressions are erased, most now below the pre-unboxing baseline: sum_by_loop_iter_cap
+-77.6%, sum_by_fold / sum_by_fold_cap / sum_by_range_fold -75.4%, array_mod -59.2%,
+fill_from_map -57.5%, sum_by_loop_arr -43.9%, sum_by_loop_iter -39.2%. Write wins are kept
+(arrayrw -94.0%, arrayrw_shared -95.3%) and other loops improve as their state goes scalar
+(option_plumbing -60.4%, nbody -31.3%, random_state -29.9%, nbody_fold -26.7%, push_back -8.0%).
+Three cases regress, all carrying a large aggregate re-formed past the change's reach:
+bounds_check_indexable +10.9% (the value is also returned, and returns stay aggregate),
+cp_lib_bipartite +6.9%, cp_lib_dijkstra +1.4%.
+
 ## 4537cc177baee6a72256f5c96a14f643795c9afc
 
 The Array value-layout flip to unboxed `{ storage, size, capacity }`, measured against the
