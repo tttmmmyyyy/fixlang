@@ -2126,15 +2126,14 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
-        let phi = gc
-            .builder()
-            .build_phi(array.value.get_type(), "array_phi@set_capacity")
-            .unwrap();
-        phi.add_incoming(&[
-            (&realloced_val, succ_of_unique_bb),
-            (&cloned_val, succ_of_shared_bb),
-        ]);
-        Object::new(phi.as_basic_value(), array.ty.clone(), gc)
+        let phi = gc.scalar_build_phi(
+            &[
+                (realloced_val, succ_of_unique_bb),
+                (cloned_val, succ_of_shared_bb),
+            ],
+            "array_phi@set_capacity",
+        );
+        Object::new(phi, array.ty.clone(), gc)
     }
 
     fn name(&self) -> String {
@@ -2618,15 +2617,14 @@ fn make_array_unique_with_hole<'c, 'm>(
 
     // Implement end_bb: phi over the array value.
     gc.builder().position_at_end(end_bb);
-    let array_phi = gc
-        .builder()
-        .build_phi(array.value.get_type(), "array_phi")
-        .unwrap();
-    array_phi.add_incoming(&[
-        (&array.value, unique_bb),
-        (&cloned_array_val, succ_of_shared_bb),
-    ]);
-    Object::new(array_phi.as_basic_value(), array.ty.clone(), gc)
+    let array_phi = gc.scalar_build_phi(
+        &[
+            (array.value, unique_bb),
+            (cloned_array_val, succ_of_shared_bb),
+        ],
+        "array_phi",
+    );
+    Object::new(array_phi, array.ty.clone(), gc)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5372,12 +5370,11 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
-        let phi = gc
-            .builder()
-            .build_phi(match_val.get_type(), "phi@union_mod_function")
-            .unwrap();
-        phi.add_incoming(&[(&match_val, match_bb), (&mismatch_val, mismatch_bb)]);
-        Object::new(phi.as_basic_value(), union_ty.clone(), gc)
+        let phi = gc.scalar_build_phi(
+            &[(match_val, match_bb), (mismatch_val, mismatch_bb)],
+            "phi@union_mod_function",
+        );
+        Object::new(phi, union_ty.clone(), gc)
     }
 
     fn name(&self) -> String {

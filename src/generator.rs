@@ -1016,6 +1016,57 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // Build a phi that carries a possibly-aggregate value as one scalar phi per leaf field rather
+    // than as a single aggregate phi. LLVM's value analyses see through the scalar phis where they
+    // cannot see through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed
+    // this way lets the bounds check fold and the loop vectorize. The reassembly is folded away by
+    // SROA/instcombine. For a non-aggregate value this is an ordinary phi. The current insert block
+    // is where the phi is placed; every predecessor block must already have its terminator.
+    pub fn scalar_build_phi(
+        &self,
+        incomings: &[(BasicValueEnum<'c>, BasicBlock<'c>)],
+        name: &str,
+    ) -> BasicValueEnum<'c> {
+        let ty = incomings[0].0.get_type();
+        if !matches!(ty, BasicTypeEnum::StructType(_)) {
+            let phi = self.builder().build_phi(ty, name).unwrap();
+            for (val, bb) in incomings {
+                phi.add_incoming(&[(val, *bb)]);
+            }
+            return phi.as_basic_value();
+        }
+        let phi_bb = self.builder().get_insert_block().unwrap();
+        // Explode each incoming value into its leaf scalars in its own predecessor block (before the
+        // terminator), so each phi operand is a value available on that edge.
+        let exploded: Vec<(Vec<BasicValueEnum<'c>>, BasicBlock<'c>)> = incomings
+            .iter()
+            .map(|(val, bb)| {
+                self.builder().position_before(
+                    &bb.get_terminator()
+                        .expect("a predecessor feeding a phi has its terminator"),
+                );
+                (self.explode_to_scalar_leaves(*val), *bb)
+            })
+            .collect();
+        // One scalar phi per leaf, all built before any reassembly so the block's phis stay
+        // contiguous at its top.
+        let leaf_tys = self.flatten_to_scalar_leaves(ty);
+        self.builder().position_at_end(phi_bb);
+        let leaf_phis: Vec<BasicValueEnum<'c>> = leaf_tys
+            .iter()
+            .enumerate()
+            .map(|(j, lty)| {
+                let phi = self.builder().build_phi(*lty, name).unwrap();
+                for (leaves, bb) in &exploded {
+                    phi.add_incoming(&[(&leaves[j], *bb)]);
+                }
+                phi.as_basic_value()
+            })
+            .collect();
+        let mut leaves = leaf_phis.into_iter();
+        self.assemble_from_scalar_leaves(ty, &mut leaves)
+    }
+
     // Retain an object.
     pub fn retain(&mut self, obj: Object<'c>) {
         // Get retain function.

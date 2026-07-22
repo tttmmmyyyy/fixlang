@@ -561,12 +561,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         if incomings.len() == 1 {
             return Some(Object::new(incomings[0].0, result.ty.clone(), self));
         }
-        let phi_ty = incomings[0].0.get_type();
-        let phi = self.builder().build_phi(phi_ty, "match_phi").unwrap();
-        for (val, bb) in &incomings {
-            phi.add_incoming(&[(val, *bb)]);
-        }
-        Some(Object::new(phi.as_basic_value(), result.ty.clone(), self))
+        let phi = self.scalar_build_phi(&incomings, "match_phi");
+        Some(Object::new(phi, result.ty.clone(), self))
     }
 
     /// Implement a global initializer: a lazily-initialized accessor that computes the value once
