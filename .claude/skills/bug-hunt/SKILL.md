@@ -111,7 +111,7 @@ Where the code absorbs a case the author believes cannot happen — a catch-all 
 
 ### Run the same program at every optimization level
 
-`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must agree. A difference is a miscompilation by definition, with no judgment call about intent, and it points straight at the pass that differs. This is the cheapest miscompile detector available, and it needs no expected output — the levels check each other.
+`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they skip tail-call optimization, so a deeply tail-recursive program overflows the stack there while `-O max` runs it, and they can let an `O(n)` program degrade to `O(n²)`. A stack overflow or a hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
 
 ### Compare against a baseline binary on a large real corpus
 
