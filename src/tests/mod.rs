@@ -42,5 +42,6 @@ mod test_unbox_destructure;
 mod test_undefined;
 mod test_union_catchall_match;
 mod test_union_layout;
+mod test_union_as_borrow;
 mod test_union_match;
 mod test_util;
