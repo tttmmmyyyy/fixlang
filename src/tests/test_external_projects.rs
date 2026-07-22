@@ -40,10 +40,12 @@ pub fn test_external_project_random() {
 
 #[test]
 pub fn test_external_project_time() {
+    // Pin the fixlang-time revision migrated off `_unsafe_set_size` (renamed to `_unsafe_grow_size`
+    // by the array/storage redesign).
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
-        None,
+        Some("13153357408336c9f470851db7db4b6c94efc6a7"),
     );
 }
 
