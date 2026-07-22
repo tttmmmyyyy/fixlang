@@ -4813,8 +4813,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
 
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
-        i == 0
-            && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
+        i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
     fn result_prov(
