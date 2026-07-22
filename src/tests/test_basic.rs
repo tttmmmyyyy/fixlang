@@ -6979,6 +6979,43 @@ pub fn test_field_update_on_unbox_struct_clones_shared_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that the uniqueness of a boxed field of an unbox struct can be tested by acting on the
+/// field with `unsafe_is_unique` (the `(Bool, _)` functor).
+///
+/// `unsafe_is_unique` cannot be called on the unbox struct itself (it is not `Boxed`), and an unbox
+/// value is trivially unique anyway. What a wrapper type like `Destructor`-holding `MPZ` needs is the
+/// sharing of the *boxed field*, which the field `act` recovers: the punch hands the boxed value to
+/// the action at the reference count the wrapper was held at, so the flag reads `true` only when the
+/// field is genuinely unshared.
+#[test]
+pub fn test_field_uniqueness_via_act() {
+    let source = r##"
+            module Main;
+
+            type Wrap = unbox struct { _0 : Box I64 };
+
+            main : IO ();
+            main = (
+                // The boxed field is unshared here, so the flag is true.
+                let w = Wrap { _0 : Box::make(42) };
+                let (unique, w) = w.act__0(|b| b.unsafe_is_unique);
+                eval w;
+                assert_eq(|_|"fail: the field should be unique", unique, true);;
+
+                // Another holder keeps the same boxed field alive across the check, so the flag is false.
+                let w = Wrap { _0 : Box::make(42) };
+                let keep = w;
+                let (unique, w) = w.act__0(|b| b.unsafe_is_unique);
+                assert_eq(|_|"fail: the field should be shared", unique, false);;
+                assert_eq(|_|"fail: the other holder was disturbed", keep.@_0.@value, 42);;
+                eval w;
+
+                pure()
+            );
+        "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Verifies that consecutive `mutate_elements` writes to an unshared array accumulate in place.
 ///
 /// Writing through the element pointer of an array nothing else holds updates it in place, so a
