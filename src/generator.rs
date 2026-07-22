@@ -659,7 +659,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
         if val.retain_on_read {
-            self.build_retain(obj.clone());
+            let one = self.context.i64_type().const_int(1, false);
+            self.build_retain(obj.clone(), one);
         }
         obj
     }
@@ -971,7 +972,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(bb);
             let obj_val = func.get_first_param().unwrap();
             let obj = Object::new(obj_val, obj.ty.clone(), self);
-            self.build_retain(obj);
+            let one = self.context.i64_type().const_int(1, false);
+            self.build_retain(obj, one);
             self.builder().build_return(None).unwrap();
             func
         };
@@ -982,8 +984,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
-    // Retain an object.
-    pub fn build_retain(&mut self, obj: Object<'c>) {
+    // Retain an object `amount` times: every boxed leaf reached has its reference count increased by
+    // `amount` (an i64 count). Passing a constant 1 reproduces an ordinary single retain exactly, so
+    // single-retain call sites stay byte-identical.
+    pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>) {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1010,7 +1014,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             };
 
             // Increment the reference count of the (now known non-null) boxed object.
-            self.retain_nonnull_boxed(&obj);
+            self.retain_nonnull_boxed(&obj, amount);
 
             if let Some(cont_bb) = cont_bb {
                 self.builder().build_unconditional_branch(cont_bb).unwrap();
@@ -1041,10 +1045,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                         }
                         let subval = obj.extract_field(self, i as u32);
                         let subobj = Object::new(subval, subty.clone(), self);
-                        self.retain(subobj);
+                        if is_const_one(amount) {
+                            self.retain(subobj);
+                        } else {
+                            self.build_retain(subobj, amount);
+                        }
                     }
                     ObjectFieldType::UnionBuf(_) => {
-                        ObjectFieldType::retain_union(self, obj.clone());
+                        ObjectFieldType::retain_union(self, obj.clone(), amount);
                     }
                     ObjectFieldType::UnionTag => {}
                     ObjectFieldType::Array(_) => unreachable!(),
@@ -1056,7 +1064,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Increment the reference count of a non-null boxed object, according to its refcount state,
     // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
     // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
-    pub(crate) fn retain_nonnull_boxed(&mut self, obj: &Object<'c>) {
+    pub(crate) fn retain_nonnull_boxed(&mut self, obj: &Object<'c>, amount: IntValue<'c>) {
         let current_func = self
             .builder()
             .get_insert_block()
@@ -1068,6 +1076,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             .append_basic_block(current_func, "cont_bb@retain_nonnull");
 
         let obj_ptr = obj.value.into_pointer_value();
+        // The refcount is narrower than the i64 count, so bring the amount to its width. A constant 1
+        // folds to a constant, leaving the single-retain code unchanged.
+        let amount = self
+            .builder()
+            .build_int_truncate(amount, refcnt_type(self.context), "retain_amount")
+            .unwrap();
         // Branch by refcnt_state.
         let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
@@ -1080,11 +1094,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .into_int_value();
         let new_refcnt = self
             .builder()
-            .build_int_nsw_add(
-                old_refcnt_local,
-                refcnt_type(self.context).const_int(1, false).into(),
-                "",
-            )
+            .build_int_nsw_add(old_refcnt_local, amount, "")
             .unwrap();
         self.builder().build_store(obj_ptr, new_refcnt).unwrap();
         self.builder().build_unconditional_branch(cont_bb).unwrap();
@@ -1098,7 +1108,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .build_atomicrmw(
                     inkwell::AtomicRMWBinOp::Add,
                     ptr_to_refcnt,
-                    refcnt_type(self.context).const_int(1, false),
+                    amount,
                     inkwell::AtomicOrdering::Monotonic,
                 )
                 .unwrap();
@@ -1146,7 +1156,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             let dtor =
                 ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
-            self.build_retain(dtor.clone());
+            let one = self.context.i64_type().const_int(1, false);
+            self.build_retain(dtor.clone(), one);
             let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
             let res = run_io_or_ios_runner(self, &io_act);
             ObjectFieldType::move_into_struct_field(
@@ -1796,7 +1807,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let cap_val =
             cap_obj.extract_field_as(self, cap_obj_str_ty, cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX);
         let obj = Object::new(cap_val, result_ty.clone(), self);
-        self.build_retain(obj.clone());
+        let one = self.context.i64_type().const_int(1, false);
+        self.build_retain(obj.clone(), one);
         obj
     }
 
@@ -1922,4 +1934,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             func = function.get_next_function();
         }
     }
+}
+
+// Whether `v` is the constant integer 1. Used where a retain-by-`amount` reproduces the ordinary
+// single retain when the amount is exactly 1, so that path stays byte-identical.
+pub(crate) fn is_const_one(v: IntValue) -> bool {
+    v.get_zero_extended_constant() == Some(1)
 }

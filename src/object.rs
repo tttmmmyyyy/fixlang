@@ -16,7 +16,7 @@ use crate::fixstd::builtin::{
 use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
-use crate::generator::{Generator, Object};
+use crate::generator::{is_const_one, Generator, Object};
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
@@ -782,7 +782,8 @@ impl ObjectFieldType {
         let dst = dst.insert_field(gc, value_field_idx, value);
 
         // Retain the value.
-        ObjectFieldType::retain_union(gc, dst.clone());
+        let one = gc.context.i64_type().const_int(1, false);
+        ObjectFieldType::retain_union(gc, dst.clone(), one);
 
         dst
     }
@@ -792,6 +793,7 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
+        amount: IntValue<'c>, // How many times to retain (retain path only); a constant 1 for release/mark.
     ) {
         let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
@@ -834,7 +836,11 @@ impl ObjectFieldType {
             let subobj =
                 ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
             if work_type.is_none() {
-                gc.retain(subobj);
+                if is_const_one(amount) {
+                    gc.retain(subobj);
+                } else {
+                    gc.build_retain(subobj, amount);
+                }
             } else {
                 gc.build_release_mark(subobj, work_type.unwrap());
             }
@@ -853,8 +859,12 @@ impl ObjectFieldType {
         gc.builder().position_at_end(end_bb);
     }
 
-    pub fn retain_union<'c, 'm>(gc: &mut Generator<'c, 'm>, union: Object<'c>) {
-        ObjectFieldType::retain_release_mark_union(gc, union, None);
+    pub fn retain_union<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        union: Object<'c>,
+        amount: IntValue<'c>,
+    ) {
+        ObjectFieldType::retain_release_mark_union(gc, union, None, amount);
     }
 
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
@@ -1770,7 +1780,9 @@ fn build_traverse<'c, 'm>(
             }
             ObjectFieldType::UnionTag => {}
             ObjectFieldType::UnionBuf(_) => {
-                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work));
+                // The amount is unused on the release/mark path; pass a constant 1.
+                let one = gc.context.i64_type().const_int(1, false);
+                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work), one);
             }
             ObjectFieldType::TraverseFunction => {}
         }

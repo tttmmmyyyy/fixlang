@@ -180,9 +180,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                     // skip therefore almost never lands on a hot path, unlike the symmetric
                     // release-side skip, which fires wherever a non-empty capture is released. It
                     // is kept for that symmetry and for the rare code that does retain a capture.
-                    self.retain_nonnull_boxed(&obj);
+                    let one = self.context.i64_type().const_int(1, false);
+                    self.retain_nonnull_boxed(&obj, one);
                 } else {
-                    self.build_retain(obj);
+                    let one = self.context.i64_type().const_int(1, false);
+                    self.build_retain(obj, one);
                 }
                 self.eval_rc_expr(k, tail, func_vals)
             }
@@ -509,7 +511,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                         &arm.payload.ty,
                     );
                     if scrut_is_boxed {
-                        self.build_retain(value.clone());
+                        let one = self.context.i64_type().const_int(1, false);
+                        self.build_retain(value.clone(), one);
                     }
                     value
                 }
