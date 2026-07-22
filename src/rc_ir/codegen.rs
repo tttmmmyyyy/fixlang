@@ -111,13 +111,23 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         let _scope_guard = self.push_scope();
 
-        for (i, param) in func.params.iter().enumerate() {
-            let val = fn_val.get_nth_param(i as u32).unwrap();
+        // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`); reassemble
+        // the (possibly aggregate) parameter value from them. The CAP pointer follows all of them.
+        let mut next_param = 0u32;
+        for param in func.params.iter() {
+            let embedded = param.ty.get_embedded_type(self, &vec![]);
+            let leaf_count = self.flatten_to_scalar_leaves(embedded).len() as u32;
+            let leaf_vals: Vec<_> = (0..leaf_count)
+                .map(|k| fn_val.get_nth_param(next_param + k).unwrap())
+                .collect();
+            next_param += leaf_count;
+            let mut leaves = leaf_vals.into_iter();
+            let val = self.assemble_from_scalar_leaves(embedded, &mut leaves);
             let obj = Object::new(val, param.ty.clone(), self);
             self.scope_push(&param.name, &obj);
         }
         if let Some(cap) = &func.capture {
-            let val = fn_val.get_nth_param(func.params.len() as u32).unwrap();
+            let val = fn_val.get_nth_param(next_param).unwrap();
             let obj = Object::new(val, cap.ty.clone(), self);
             self.scope_push(&cap.name, &obj);
         }

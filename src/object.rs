@@ -1285,11 +1285,18 @@ pub fn lambda_function_type<'c, 'm>(
     // In addition, if the lambda is closure (in other words, not a function pointer), it takes CAP, which is dynamic object consists of captured objects.
     // In the last, if ret_ty is unboxed, it takes parameter for pointer to store return value and returns void.
 
-    // Arguments.
+    // Arguments. An unbox-struct argument is passed as its flat leaf scalars rather than as one
+    // aggregate, so a loop-carried field stays visible to LLVM (see `flatten_to_scalar_leaves`).
     let mut arg_tys: Vec<BasicMetadataTypeEnum> = ty
         .get_lambda_srcs()
         .iter()
-        .map(|src| src.get_embedded_type(gc, &vec![]).into())
+        .flat_map(|src| {
+            let embedded = src.get_embedded_type(gc, &vec![]);
+            gc.flatten_to_scalar_leaves(embedded)
+                .into_iter()
+                .map(|t| t.into())
+                .collect::<Vec<BasicMetadataTypeEnum>>()
+        })
         .collect::<Vec<_>>();
 
     // The pointer to the CAP (a dynamic object which contains captured values), if the lambda is closure.
