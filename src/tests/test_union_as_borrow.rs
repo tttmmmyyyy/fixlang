@@ -1,9 +1,9 @@
 // Memory-safety tests for `as_<variant>` reading a fully-unboxed payload out of a union.
 // Such a read borrows the union: the payload holds no reference, so the value read out takes nothing
 // from the union, and reference-count insertion releases the union at its last use rather than at the
-// read. A boxed union is where this changes behavior — the read used to release the container there —
-// so an arm below reads a fully-unboxed variant of a boxed union, keeps the union shared, and reads
-// it again; a reference dropped twice or too early is a use-after-free, checked under valgrind.
+// read. The borrow matters most for a boxed union, whose container carries a reference count: an arm
+// below reads a fully-unboxed variant of a boxed union, keeps the union shared, and reads it again;
+// a reference dropped twice or too early is a use-after-free, checked under valgrind.
 
 #[cfg(test)]
 mod union_as_borrow_tests {
@@ -49,11 +49,13 @@ main : IO () = (
 type UnboxOpt = unbox union { pair : (I64, I64), buf : Array I64 };
 "#;
 
+    /// The borrowed reads compute the right values, so the borrow leaves the payload intact.
     #[test]
     pub fn test_union_as_borrow_correctness() {
         test_source(UNION_AS_BORROW_SOURCE, Configuration::develop_mode());
     }
 
+    /// The borrowed reads free the union exactly once and leak nothing, checked under Valgrind MemCheck.
     #[test]
     pub fn test_union_as_borrow_memory_safety() {
         if !platform_valgrind_supported() {
