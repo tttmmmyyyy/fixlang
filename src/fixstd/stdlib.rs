@@ -12,11 +12,8 @@ use crate::{
     configuration::Configuration,
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-        ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
-        ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-        ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
-        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-        WITH_RETAINED_NAME,
+        ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME,
+        IOSTATE_NAME, IO_NAME, PUNCHED_ARRAY_NAME, STD_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -24,15 +21,13 @@ use crate::{
         array_append_capacity_bounds_unchecked, array_append_value_capacity_unchecked,
         array_get_capacity, array_get_size, array_punch, array_set_capacity_bounds_unchecked,
         array_truncate_bounds_unchecked,
-        array_unsafe_empty, array_unsafe_get_bounds_unchecked,
-        array_unsafe_get_linear_bounds_unchecked_unretained,
-        array_unsafe_set_bounds_uniqueness_unchecked_unreleased, bit_not_function,
+        array_unsafe_empty, array_unsafe_get_bounds_unchecked, bit_not_function,
         bitwise_operation_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
         boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
         cast_float_to_int_function, cast_int_to_float_function, destructor_make,
         divide_trait_instance_float, divide_trait_instance_int, eq_trait_instance_float,
-        eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, force_unique_array,
-        get_get_boxed_ptr, get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
+        eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, get_get_boxed_ptr,
+        get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
         get_release_function_of_boxed_value, get_retain_function_of_boxed_value, hole_function,
         infinity_value, integral_types, is_unique_function,
         less_than_or_equal_to_trait_instance_float, less_than_or_equal_to_trait_instance_int,
@@ -393,23 +388,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_unsafe_grow_size.md").to_string()),
     ));
-    errors.eat_err(
-        fix_module.add_global_value(
-            FullName::from_strs(
-                &[STD_NAME, ARRAY_NAME],
-                ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
-            ),
-            array_unsafe_set_bounds_uniqueness_unchecked_unreleased(),
-            None,
-            None,
-            Some(
-                include_str!(
-                    "../docs/std_array_unsafe_set_bounds_uniqueness_unchecked_unreleased.md"
-                )
-                .to_string(),
-            ),
-        ),
-    );
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED),
         array_unsafe_get_bounds_unchecked(),
@@ -457,48 +435,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(
             include_str!("../docs/std_array_unsafe_append_capacity_bounds_unchecked.md").to_string(),
         ),
-    ));
-    errors.eat_err(
-        fix_module.add_global_value(
-            FullName::from_strs(
-                &[STD_NAME, ARRAY_NAME],
-                ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-            ),
-            array_unsafe_get_linear_bounds_unchecked_unretained(false),
-            None,
-            None,
-            Some(
-                include_str!("../docs/std_array_unsafe_get_linear_bounds_unchecked_unretained.md")
-                    .to_string(),
-            ),
-        ),
-    );
-    errors.eat_err(
-        fix_module.add_global_value(
-            FullName::from_strs(
-                &[STD_NAME, ARRAY_NAME],
-                &format!(
-                    "{}_forceunique",
-                    ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED
-                ),
-            ),
-            array_unsafe_get_linear_bounds_unchecked_unretained(true),
-            None,
-            None,
-            Some(
-                include_str!(
-                    "../docs/std_array_unsafe_get_linear_bounds_unchecked_unretained_fu.md"
-                )
-                .to_string(),
-            ),
-        ),
-    );
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_force_unique"),
-        force_unique_array(),
-        None,
-        None,
-        Some(include_str!("../docs/std_array_force_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_CHECK_RANGE),

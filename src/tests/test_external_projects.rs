@@ -129,12 +129,12 @@ pub fn test_external_project_cp_library() {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
-    // Pin the cp-library revision that builds against this compiler's standard library
-    // (`fix_version = 1.5.0`), matching the revision the in-repo speedtest cases use.
+    // Pin the cp-library revision migrated off the array/storage redesign's deleted unsafe
+    // primitives (it builds against this compiler's `fix_version = 1.5.0` standard library).
     test_external_project(
         "https://github.com/tttmmmyyyy/cp-library",
         "cp-library",
-        Some("7a3e4a22af2c630b6a2ee4cfff64a7e2c08b22b6"),
+        Some("a5beeafad8ea747a8896fab0431acdbe56b7c7c0"),
     );
 }
 

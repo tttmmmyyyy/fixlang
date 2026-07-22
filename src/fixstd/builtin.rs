@@ -19,7 +19,7 @@ use crate::ast::{
 };
 use crate::constants::{
     ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-    ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
+    ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
     BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
     DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
     DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
@@ -1652,106 +1652,6 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
-    arr_name: FullName,
-    idx_name: FullName,
-    value_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argments
-        let array = gc.get_scoped_obj(&self.arr_name);
-        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-        let value = gc.get_scoped_obj(&self.value_name);
-
-        // Get array cap and buffer.
-        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-
-        // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, value, false);
-        array
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "array_set_unreleased({}, {}, {})",
-            self.idx_name.to_string(),
-            self.value_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        // This op writes into the array in place, which the caller may ask for only where nothing else
-        // holds it: the name says the uniqueness is unchecked, not absent. So the array it returns is
-        // uniquely owned, exactly as it is out of a checked `set` — which is what lets the operation
-        // after a fill loop drop its check.
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-// Set an element to an array, with no uniqueness checking and without releasing the old value.
-pub fn array_unsafe_set_bounds_uniqueness_unchecked_unreleased() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const IDX_NAME: &str = "idx";
-    const ARR_NAME: &str = "array";
-    const VALUE_NAME: &str = "val";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-
-    let expr = expr_abs(
-        vec![var_local(IDX_NAME)],
-        expr_abs(
-            vec![var_local(VALUE_NAME)],
-            expr_abs(
-                vec![var_local(ARR_NAME)],
-                expr_llvm(
-                    Box::new(
-                        InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
-                            arr_name: FullName::local(ARR_NAME),
-                            idx_name: FullName::local(IDX_NAME),
-                            value_name: FullName::local(VALUE_NAME),
-                        },
-                    ),
-                    array_ty.clone(),
-                    None,
-                ),
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            make_i64_ty(),
-            type_fun(elem_tyvar.clone(), type_fun(array_ty.clone(), array_ty)),
-        ),
-    );
-    (expr, scm)
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
     arr_name: FullName,
     idx_name: FullName,
@@ -1839,103 +1739,6 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         vec![],
         type_fun(make_i64_ty(), type_fun(array_ty, elem_tyvar.clone())),
-    );
-    (expr, scm)
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
-    force_unique: bool,
-    arr_name: FullName,
-    idx_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argments
-        let mut array = gc.get_scoped_obj(&self.arr_name);
-        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-
-        // If force_unique is set, we need to force the array to be unique.
-        if self.force_unique {
-            array = make_array_unique(gc, array);
-        }
-
-        // Get array buffer
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-
-        // Get the element.
-        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
-        let elem =
-            ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty.clone(), idx);
-
-        // Create the return value.
-        let res = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
-            gc,
-            Some(&format!(
-                "alloca@{}",
-                ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED
-            )),
-        );
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &array);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
-
-        res
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "array_get_linear{}({}, {})",
-            if self.force_unique { "" } else { "[unique]" },
-            self.idx_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name]
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-// Gets a value from an array, without bounds checking and retaining the returned value.
-// Type: I64 -> Array a -> (Array a, a)
-pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
-    force_unique: bool,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
-    const IDX_NAME: &str = "idx";
-    const ARR_NAME: &str = "array";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-    let res_ty = make_tuple_ty(vec![array_ty.clone(), elem_tyvar.clone()]);
-
-    let expr = expr_abs_many(
-        vec![var_local(IDX_NAME), var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
-                force_unique,
-                arr_name: FullName::local(ARR_NAME),
-                idx_name: FullName::local(IDX_NAME),
-            }),
-            res_ty.clone(),
-            None,
-        ),
-    );
-
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty, res_ty.clone())),
     );
     (expr, scm)
 }
@@ -3288,67 +3091,6 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         type_fun(elem_tyvar, type_fun(punched_ty, array_ty)),
     );
-    (expr, scm)
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayForceUniqueBody {
-    arr_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayForceUniqueBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argments
-        let array = gc.get_scoped_obj(&self.arr_name);
-
-        // Make array unique
-        let array = make_array_unique(gc, array);
-
-        array
-    }
-
-    fn name(&self) -> String {
-        format!("array_force_unique({})", self.arr_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const ARR_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-
-    let expr = expr_abs(
-        vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayForceUniqueBody {
-                arr_name: FullName::local(ARR_NAME),
-            }),
-            array_ty.clone(),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty.clone(), array_ty));
     (expr, scm)
 }
 
