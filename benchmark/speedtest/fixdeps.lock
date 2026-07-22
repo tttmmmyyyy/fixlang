@@ -1,4 +1,4 @@
-proj_file_hash = "7521fe2aa800bc8fa7223d8771b88ad4"
+proj_file_hash = "dd4c31b54ea5f98bbce8ac38dfd8188c"
 
 [[dependencies]]
 name = "ez-scripting"
@@ -11,9 +11,9 @@ rev = "359d00f71771250e7e964d866f8f919edc8be79d"
 
 [[dependencies]]
 name = "subprocess"
-version = "1.0.7"
-path = ".fixlang/deps/subprocess_1.0.7"
+version = "1.1.2"
+path = ".fixlang/deps/subprocess_1.1.2"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-subprocess.git"
-rev = "68f84481b864abdbe01a5964e1f798dc44d9dfa5"
+rev = "f3bf2fe37c8c79547afea487be8822fef64f14b8"

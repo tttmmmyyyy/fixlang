@@ -12,3 +12,12 @@ files = ["main.fix"]
 name = "ez-scripting"
 version = "0.2.0"
 git = { url = "https://github.com/tttmmmyyyy/ez_scripting.git" }
+
+# `ez-scripting` pulls in `subprocess` (constraint `^1.0.5`). Pin it to the array-storage
+# migration revision: after the `Array` flip, `subprocess`'s pre-migration releases call
+# `borrow_boxed_io` on `Array String`, which no longer type-checks (`Array` is not `Boxed`). The
+# migration lives on a branch, not a tag, so it must be pinned by revision here.
+[[dependencies]]
+name = "subprocess"
+version = "1.1.2"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-subprocess.git", rev = "f3bf2fe37c8c79547afea487be8822fef64f14b8" }
