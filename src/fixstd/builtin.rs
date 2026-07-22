@@ -2593,24 +2593,44 @@ pub fn array_append_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) 
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeSetSizeBody {
+pub struct InlineLLVMArrayGrowSizeBody {
     arr_name: FullName,
     len_name: FullName,
+    // When true, clone the array first if it is shared, so the length grows on a uniquely owned
+    // array. Set false only where the array is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
+impl LLVMGen for InlineLLVMArrayGrowSizeBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
         let length = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
+        // Growing the length exposes uninitialized slots, which the array's traverser must never
+        // touch — so the element type must contain no boxed value the traverser would follow.
+        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+        assert!(
+            elem_ty.is_fully_unboxed(gc.type_env()),
+            "`_unsafe_grow_size` grows the length over uninitialized slots, so its element type must \
+             contain no boxed value, but it was instantiated at `{}`",
+            elem_ty.to_string()
+        );
+
+        // Force the array to be unique before growing it in place, so the length is written only on a
+        // uniquely owned array.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
         array.insert_field(gc, ARRAY_LEN_IDX, length)
     }
 
     fn name(&self) -> String {
         format!(
-            "array_set_size({}, {})",
+            "array_grow_size{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.len_name.to_string(),
             self.arr_name.to_string()
         )
@@ -2620,15 +2640,29 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
         vec![&mut self.arr_name, &mut self.len_name]
     }
 
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // Writing the length in place carries the same promise from the caller as writing an element
-        // does, so the array this returns is uniquely owned — see
-        // `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased::result_prov`.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
@@ -2637,8 +2671,11 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
     }
 }
 
-// Set the length of an array, with no uniqueness checking, no validation of size argument.
-pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+// Grow the length of an array over uninitialized slots, with an internal clone-if-shared and no
+// validation of the given length. The caller must ensure `new_len >= size` and `new_len <=
+// capacity`, and fills the new slots before they are read; the element type must contain no boxed
+// value.
+pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "array";
     const LENGTH_NAME: &str = "length";
     const ELEM_TYPE: &str = "a";
@@ -2654,7 +2691,11 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                Box::new(InlineLLVMArrayUnsafeSetSizeBody { arr_name, len_name }),
+                Box::new(InlineLLVMArrayGrowSizeBody {
+                    arr_name,
+                    len_name,
+                    force_unique: true,
+                }),
                 array_ty.clone(),
                 None,
             ),

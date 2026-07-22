@@ -43,7 +43,7 @@ use crate::{
         not_trait_instance_bool, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
         set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
         swap_array, swap_bounds_unchecked_array, undefined_internal_function,
-        unsafe_set_size_array, with_retained_function, BitOperationType,
+        grow_size_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
@@ -386,11 +386,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // Array
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
-        unsafe_set_size_array(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_grow_size"),
+        grow_size_array(),
         None,
         None,
-        Some(include_str!("../docs/std_array_unsafe_set_size.md").to_string()),
+        Some(include_str!("../docs/std_array_unsafe_grow_size.md").to_string()),
     ));
     errors.eat_err(
         fix_module.add_global_value(

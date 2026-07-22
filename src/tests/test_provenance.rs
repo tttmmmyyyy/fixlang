@@ -393,6 +393,8 @@ mod integration_tests {
             // An `append`, whose `_unsafe_append_capacity_bounds_unchecked` core folds the check on
             // the fresh destination it appends into.
             "array_append_range[unique]",
+            // A `_unsafe_grow_size` on the fresh array folds its check.
+            "array_grow_size[unique]",
         ] {
             assert!(
                 dump.contains(elided),

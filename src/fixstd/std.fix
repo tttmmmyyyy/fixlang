@@ -1427,7 +1427,7 @@ namespace IO {
         };
 
         // Return the result.
-        let buf = buf._unsafe_set_size(len);
+        let buf = buf._unsafe_grow_size(len);
         pure $ Result::ok(buf)
     };
 
@@ -2688,7 +2688,7 @@ namespace String {
     _unsafe_from_c_str = |buf| (
         // Calculate length.
         let len = buf.borrow_boxed(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
-        let buf = buf._unsafe_set_size(len + 1);
+        let buf = buf._unsafe_grow_size(len + 1);
         String { _data : buf }
     );
 
@@ -2722,7 +2722,7 @@ namespace String {
     unsafe_from_c_str_ptr = |ptr| (
         let len = FFI_CALL[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
-        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
+        let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
         let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }
     );
@@ -2740,7 +2740,7 @@ namespace String {
     unsafe_from_c_str_ptr_io = |ptr| (
         let len = *FFI_CALL_IO[I64 strlen(Ptr), ptr];
         let buf_len = len + 1;
-        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
+        let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
         let (buf, _) = *buf.mutate_boxed_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }.pure
     );
@@ -3678,7 +3678,7 @@ impl Ptr : ToString {
 }
 impl U8 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(1)._unsafe_set_size(1);
+        let data = Array::empty(1)._unsafe_grow_size(1);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v]);
         data
     );
@@ -3704,7 +3704,7 @@ impl U8 : FromString {
 
 impl U16 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(2)._unsafe_set_size(2);
+        let data = Array::empty(2)._unsafe_grow_size(2);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v]);
         data
     );
@@ -3730,7 +3730,7 @@ impl U16 : FromString {
 
 impl U32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_set_size(4);
+        let data = Array::empty(4)._unsafe_grow_size(4);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v]);
         data
     );
@@ -3756,7 +3756,7 @@ impl U32 : FromString {
 
 impl U64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_set_size(8);
+        let data = Array::empty(8)._unsafe_grow_size(8);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v]);
         data
     );
@@ -3791,7 +3791,7 @@ impl U64 : FromString {
 
 impl I8 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(1)._unsafe_set_size(1);
+        let data = Array::empty(1)._unsafe_grow_size(1);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, I8), ptr, v]);
         data
     );
@@ -3817,7 +3817,7 @@ impl I8 : FromString {
 
 impl I16 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(2)._unsafe_set_size(2);
+        let data = Array::empty(2)._unsafe_grow_size(2);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, I16), ptr, v]);
         data
     );
@@ -3843,7 +3843,7 @@ impl I16 : FromString {
 
 impl I32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_set_size(4);
+        let data = Array::empty(4)._unsafe_grow_size(4);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v]);
         data
     );
@@ -3869,7 +3869,7 @@ impl I32 : FromString {
 
 impl I64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_set_size(8);
+        let data = Array::empty(8)._unsafe_grow_size(8);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v]);
         data
     );
@@ -3904,7 +3904,7 @@ impl I64 : FromString {
 
 impl F32 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_set_size(4);
+        let data = Array::empty(4)._unsafe_grow_size(4);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v]);
         data
     );
@@ -3975,7 +3975,7 @@ impl F32 : FromString {
 
 impl F64 : ToBytes {
     to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_set_size(8);
+        let data = Array::empty(8)._unsafe_grow_size(8);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v]);
         data
     );
