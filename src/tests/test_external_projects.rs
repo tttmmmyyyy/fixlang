@@ -13,7 +13,7 @@ pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
-        Some("e072aef74a55bbaae3f77924a06dfbc8ea42d984"),
+        Some("c25c6a34fe3405ad6db6c704765de02b9b11efe4"),
     );
 }
 
@@ -49,7 +49,7 @@ pub fn test_external_project_time() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
-        Some("42b66a3b9d7a14521747ec11fe1700a5ec124cff"),
+        Some("776ded3f005be3102f898c5892873f41e085f0e2"),
     );
 }
 
@@ -67,7 +67,7 @@ pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
-        Some("eb24b00cc5e16dfed57f99f0b12d14a5cd396af1"),
+        Some("f3bf2fe37c8c79547afea487be8822fef64f14b8"),
     );
 }
 
@@ -89,7 +89,7 @@ pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
-        Some("d659377220cf41d7ab82e7c882aebf49f11a9379"),
+        Some("bd3fb3750e771ddf42aa37be722ab4ab5ba1092a"),
     );
 }
 
@@ -98,7 +98,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
-        Some("26d1848491dee2e0979b535e5ee158c66d6a2717"),
+        Some("002065bd9884066715f26858b79d787ef14cf380"),
     );
 }
 
@@ -107,7 +107,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
-        Some("5587b6337b4615cd844dbdafa6487562362cc335"),
+        Some("9e833af4cb1a129423b56e259066d0c304021f36"),
     );
 }
 
@@ -116,7 +116,7 @@ pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
-        Some("d426fc85bcaaa8b0d6f9bed2fe100d256c879a5d"),
+        Some("0ef6b5e75b78bc6c35392c48541a7d60edb73019"),
     );
 }
 
