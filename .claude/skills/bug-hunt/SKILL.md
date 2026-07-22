@@ -1,6 +1,6 @@
 ---
 name: bug-hunt
-description: "Hunt for latent bugs in a chosen target with three finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. Report-only: it never fixes code and never commits. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
+description: "Hunt for latent bugs in a chosen target with three finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. It never fixes the code under test and never commits to its working branch; a hypothesis test that passes is kept as a regression test on a dedicated branch. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
 argument-hint: "Target (a subsystem path, a branch's diff, the standard library, or the whole compiler) and optionally the angles to search from. If omitted, the skill asks."
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "Target (a subsystem path, a branch's diff, the standard library,
 
 Find bugs that are already in the code and that nobody is looking for. The deliverable is a report: for each bug, what it is, a test that reproduces it, a fix the author can weigh, and a barrier that stops the class from coming back.
 
-This skill **never edits the code under test and never commits**. A compiler fix needs the author's judgment and a test, and the hunt runs unattended often enough that silent fixes would be dangerous. Its only writes are its own *Techniques That Found Bugs* section and the hunt log in memory.
+This skill **never fixes the code under test and never commits to its working branch**. A compiler fix needs the author's judgment, and the hunt runs unattended often enough that silent fixes would be dangerous. A throwaway probe — a panicking arm, a temporary definition, a debug print — is reverted by whoever made it. A *test* is different: when the hunt suspects a bug, writes a test in the project's idiom to trigger it, and the test **passes** — the suspected bug is absent — that green test pins an invariant the wave just confirmed, so it is worth keeping rather than discarding. Those the orchestrator commits to a **dedicated branch** in its own worktree, so the working branch under test stays clean, and drops any that a test already in the suite covers. Its writes, then, are: passing hypothesis tests on that dedicated branch, its own *Techniques That Found Bugs* section, and the hunt log in memory.
 
 `code-review` is the complement: it applies conventions to a diff, in one pass, and it edits. A hunt is shaped differently — most of what a search turns up is wrong and has to be killed before it reaches the user, and bugs run out only when repeated search stops finding new ones. One hunt is one wave of that search, small enough to run often; the hunt log is what makes the waves add up.
 
@@ -68,12 +68,13 @@ A hunt is **three finder subagents and the orchestrator**. Keeping the fan-out a
 1. **Resolve the target and the angles.** Ask with `AskUserQuestion` when the invocation left either open. Confirm the working tree is clean (`git status --porcelain`) and note the current commit — the hunt reports against that state.
 2. **Read the hunt log** from memory: what previous hunts covered, which angles they used and what each returned, which candidates were dismissed and why, and which confirmed bugs are still unfixed. A dismissed candidate is re-raised only with evidence the refutation did not have.
 3. **Scout, inline.** Read enough of the target to split it into areas and to derive the angles (see *Target and Lens*). Then fix the three assignments: **two derived angles, and one unlensed finder**. Each gets the areas it owns, so that together they cover the target. Report the assignment before launching, so a mis-scoped hunt is caught in seconds rather than after three subagents finish.
-4. **Launch the three finders in parallel** with the `Agent` tool, in a single block, and wait for all three. Brief each with: the target and its areas, its angle (or, for the third, the instruction to ignore the hunt's angles and report whatever is actually wrong), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that every temporary probe is reverted before it finishes. Each returns candidates: file, symbol, claim, failing scenario, and whether the evidence is executed or traced.
+4. **Launch the three finders in parallel** with the `Agent` tool, in a single block, and wait for all three. Brief each with: the target and its areas, its angle (or, for the third, the instruction to ignore the hunt's angles and report whatever is actually wrong), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that a finder leaves its working tree clean — a throwaway probe is reverted, and a hypothesis test that passes is handed back in the finder's report (its full body, and where in the suite it belongs) before the finder reverts it, so the orchestrator can re-land it on the dedicated branch. Each returns candidates (file, symbol, claim, failing scenario, and whether the evidence is executed or traced) and, separately, the passing hypothesis tests it wrote.
 5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
 6. **Deepen each survivor, inline**: the four deliverables under *Report*.
 7. **Critique the coverage.** With all three reports in hand, name the classes of bug that these angles could not have surfaced, whatever their yield. That answer goes in the report and becomes the strongest candidate angle for the next hunt.
-8. **Report**, then **append** any technique that earns it, then **update the hunt log**.
-9. **Leave the tree as you found it.** Verify `git status --porcelain` is empty, and that every probe is reverted.
+8. **Commit the tests worth keeping.** Collect the passing hypothesis tests the finders handed back, drop any that a test already in the suite covers and any duplicated among the finders, and commit the survivors to a **dedicated branch** in its own worktree. That branch is a deliverable beside the report; name it there.
+9. **Report**, then **append** any technique that earns it, then **update the hunt log**.
+10. **Leave the working tree as you found it.** Verify `git status --porcelain` is empty on the branch under test, and that every probe is reverted. The kept tests live on the dedicated branch, not in the working tree.
 
 ## Report
 
@@ -85,6 +86,8 @@ Per bug, most severe first:
 - **Barrier** — see *Recurrence Barriers*.
 
 Close with what the hunt covered: the areas, the three angles and what each returned, how many candidates were examined and how many the refutation killed, and the classes of bug these angles could not have surfaced. A hunt that found nothing reports that plainly along with its coverage — a clean sweep of a well-worn subsystem is information, and so is an unlensed finder that out-yields both lenses.
+
+Name the dedicated branch that carries the passing hypothesis tests, and say in one line what each pins. A green test for an invariant the hunt suspected and confirmed is as much a product of the wave as a red one that found a bug — a hunt that fixed nothing can still leave the suite stronger than it found it.
 
 ## Recurrence Barriers
 
@@ -124,7 +127,7 @@ Leaks, double frees, and use-after-free produce correct output on a good day, so
 
 ## Hygiene
 
-- **The tree stays clean.** Probes — a panicking arm, a temporary definition added to `std.fix`, a debug print — are reverted by the agent that made them, and the orchestrator checks `git status --porcelain` before reporting.
+- **The working tree stays clean.** A probe — a panicking arm, a temporary definition added to `std.fix`, a debug print — is reverted by the agent that made it. A hypothesis test that passes is not a probe: the orchestrator lands it on the hunt's dedicated branch (deduped against the existing suite), never in the branch under test. The orchestrator checks `git status --porcelain` on the branch under test before reporting.
 - **Builds run in release.** `cargo test --release`, and only the optimization levels the target can affect.
 - **The machine is shared.** A sweep that builds a corpus at several optimization levels saturates the machine; run it when the machine is idle, and say in the report that the timing matters if any measurement is part of the evidence.
 
@@ -139,9 +142,10 @@ One hunt is one wave, so the log is what turns a schedule of small hunts into a 
 
 ## What NOT to do
 
-- Don't edit the code under test, and don't commit. The report is the deliverable.
+- Don't fix the code under test, and don't commit to its working branch. The report — and the dedicated branch of passing tests — is the deliverable.
 - Don't report a candidate without a concrete failing scenario, however plausible the reasoning reads.
 - Don't leave a probe in the tree.
+- Don't discard a passing hypothesis test that no existing test covers — it is a regression test the wave earned; land it on the dedicated branch.
 - Don't re-raise a dismissed candidate without new evidence.
 - Don't grow the hunt past three finders. The depth of this hunt comes from running it again, not from spending more on one wave.
 - Don't let the recurring-angle list stand in for the scout pass. Angles derived from the target find what a fixed menu cannot.
