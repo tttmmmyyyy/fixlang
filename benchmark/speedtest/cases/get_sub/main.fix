@@ -1,0 +1,30 @@
+module Main;
+
+import Std;
+
+// Repeated `String::get_sub`: slice a substring out of a long string many times
+// and sum its bytes, so the copied range is fully observed (neither dead-code
+// eliminated nor hoisted out of the loop). The slice length varies with `k`, so
+// the copy cannot be lifted out by LICM.
+//
+// `String::get_sub` copies the byte range through `Array U8`; today
+// `_get_sub_size_with_length_and_additional_capacity` copies element by element via
+// a `push_back(arr.@(i))` loop. After the array/storage redesign this range copy
+// becomes a single `memcpy` (unboxed `U8` elements, no per-element retain).
+slice_bench : String -> I64 -> I64;
+slice_bench = |base, iters| (
+    Iterator::range(0, iters).fold(0, |k, acc|
+        let m = 500 + k % 500;             // slice length 500..999, varies with k
+        let sub = base.get_sub(0, m);
+        acc + sub.get_bytes.to_iter.fold(0, |b, s| s + b.i64)
+    )
+);
+
+main : IO ();
+main = (
+    // A 1000-byte base string, all 'a' (0x61 = 97).
+    let base = String::_unsafe_from_c_str(Array::fill(1000, 'a').push_back('\0'));
+    let s = slice_bench(base, 100000);
+    assert_eq(|_|"get_sub", s, 7270150000);;
+    pure()
+);
