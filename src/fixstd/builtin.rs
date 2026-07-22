@@ -30,7 +30,7 @@ use crate::constants::{
     U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
-use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
+use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
@@ -2186,6 +2186,184 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             elem_tyvar.clone(),
             type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
         ),
+    );
+    (expr, scm)
+}
+
+// Resize a uniquely owned array's single malloc block to hold `new_cap` elements with `realloc`,
+// then update its capacity field. The elements are not touched: `realloc` preserves the block's
+// contents, often growing it in place. The caller must ensure the array is unique.
+fn realloc_array<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    new_cap: IntValue<'c>,
+) -> Object<'c> {
+    let arr_ptr = array.value.into_pointer_value();
+    let object_type = array.ty.get_object_type(&vec![], gc.type_env());
+    let sizeof = object_type.size_of(gc, Some(new_cap));
+    let realloc_fn = gc
+        .module
+        .get_function(RUNTIME_REALLOC)
+        .expect("realloc is not declared");
+    let new_ptr = gc
+        .builder()
+        .build_call(realloc_fn, &[arr_ptr.into(), sizeof.into()], "realloc_array")
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap();
+    let new_array = Object::new(new_ptr, array.ty.clone(), gc);
+    new_array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
+    arr_name: FullName,
+    cap_name: FullName,
+    // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
+    // retain-copy a shared array's elements. Set false only where the array is statically known to
+    // be unique, leaving just the `realloc`.
+    pub(crate) force_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
+
+        if !self.force_unique {
+            return realloc_array(gc, array, new_cap);
+        }
+
+        // Branch on whether the array is unique. `build_branch_by_is_unique` routes a GLOBAL array to
+        // the shared side, so `realloc` only ever runs on a genuinely uniquely owned block.
+        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+        let arr_ptr = array.value.into_pointer_value();
+        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(arr_ptr);
+        let current_func = unique_bb.get_parent().unwrap();
+        let end_bb = gc.context.append_basic_block(current_func, "end_bb@set_capacity");
+
+        // Unique: resize in place with `realloc`.
+        gc.builder().position_at_end(unique_bb);
+        let realloced_ptr = realloc_array(gc, array.clone(), new_cap)
+            .value
+            .into_pointer_value();
+        let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
+        gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+        // Shared: allocate a new block of `new_cap` and retain-copy the live elements, then release
+        // the old array.
+        gc.builder().position_at_end(shared_bb);
+        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let cloned = create_obj(
+            array.ty.clone(),
+            &vec![],
+            Some(new_cap),
+            gc,
+            Some("array_for_set_capacity"),
+        );
+        let cloned = cloned.insert_field(gc, ARRAY_LEN_IDX, len);
+        let cloned_buf = cloned.gep_boxed(gc, ARRAY_BUF_IDX);
+        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::clone_array_buf(gc, len, array_buf, cloned_buf, elem_ty, None);
+        gc.release(array.clone());
+        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+        let cloned_ptr = cloned.value.into_pointer_value();
+        gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+        // Merge.
+        gc.builder().position_at_end(end_bb);
+        let phi = gc
+            .builder()
+            .build_phi(arr_ptr.get_type(), "array_phi@set_capacity")
+            .unwrap();
+        phi.add_incoming(&[
+            (&realloced_ptr, succ_of_unique_bb),
+            (&cloned_ptr, succ_of_shared_bb),
+        ]);
+        Object::new(phi.as_basic_value(), array.ty.clone(), gc)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_set_capacity{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.cap_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.cap_name]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// Sets an array's capacity to `new_cap`, `realloc`ing a unique array in place or allocating and
+// copying a shared one, with no check that `new_cap` fits the elements. The caller must ensure
+// `new_cap >= size`; a smaller capacity causes undefined behavior.
+// Type: I64 -> Array a -> Array a
+pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const CAP_NAME: &str = "new_cap";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(CAP_NAME)],
+        expr_abs(
+            vec![var_local(ARR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMArraySetCapacityBoundsUnchecked {
+                    arr_name: FullName::local(ARR_NAME),
+                    cap_name: FullName::local(CAP_NAME),
+                    force_unique: true,
+                }),
+                array_ty.clone(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }

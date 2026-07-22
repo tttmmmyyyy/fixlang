@@ -387,6 +387,9 @@ mod integration_tests {
             // A `fill` / `from_map`, whose `_unsafe_append_value_capacity_unchecked` core folds its
             // check when it appends into the fresh array the builder just allocated.
             "array_append_value[unique]",
+            // A `reserve`, whose `_unsafe_set_capacity_bounds_unchecked` core folds its check and
+            // reallocs the fresh array in place.
+            "array_set_capacity[unique]",
         ] {
             assert!(
                 dump.contains(elided),

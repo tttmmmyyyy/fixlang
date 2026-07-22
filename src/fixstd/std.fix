@@ -392,16 +392,7 @@ namespace Array {
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.@capacity { arr };
-        let len = arr.@size;
-        let new = Array::empty(cap)._unsafe_set_size(len);
-        loop((0, new), |(idx, new)|(
-            if idx == len {
-                break $ new
-            } else {
-                let new = new._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, arr.@(idx));
-                continue $ (idx + 1, new)
-            }
-        ))
+        arr._unsafe_set_capacity_bounds_unchecked(cap)
     );
 
     // Sort by `LessThan` trait.

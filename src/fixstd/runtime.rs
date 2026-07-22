@@ -24,6 +24,11 @@ pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 /// before the call, breaking allocations >= 4 GiB.
 pub const RUNTIME_MALLOC: &str = "malloc";
 
+/// `realloc`, declared with an i64 size parameter for the same reason as
+/// `RUNTIME_MALLOC`: it resizes a single malloc block in place when it can, so
+/// growing a uniquely owned array's capacity avoids copying its elements.
+pub const RUNTIME_REALLOC: &str = "realloc";
+
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
@@ -39,6 +44,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
+    build_realloc_function(gc, mode);
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -420,6 +426,24 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock
     // (hyperfine, 30 runs each), with no benchmark in the speedtest suite
     // measurably benefiting from builtin recognition.
+    let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
+    let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
+    func.add_attribute(AttributeLoc::Function, nobuiltin);
+}
+
+fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_REALLOC) {
+        return;
+    }
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let i64_ty = gc.context.i64_type();
+    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+    let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
+    // As for `malloc`, keep LLVM from inferring the full allocator attribute set
+    // (see `build_malloc_function`).
     let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
     let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
     func.add_attribute(AttributeLoc::Function, nobuiltin);
