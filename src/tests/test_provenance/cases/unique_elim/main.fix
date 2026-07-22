@@ -12,6 +12,8 @@ module Main;
 //   comes out fresh, so the `set` after it drops its check too.
 // - an array built by a fill loop, which writes into it through the primitives that leave the
 //   uniqueness check to their caller, comes out fresh as well.
+// - `Array::truncate` on a fresh array -> its `_unsafe_truncate_bounds_unchecked` core folds to
+//   `array_truncate [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 main : IO ();
@@ -30,9 +32,11 @@ main = (
     let built = Array::from_map(3, |i| i);
     let built = built.set(0, 5);
 
+    let trunc = Array::fill(4, 0).truncate(2);
+
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0)).to_string
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0)).to_string
 );
