@@ -17,6 +17,8 @@ module Main;
 //   `array_truncate [unique]`.
 // - `Array::reserve` on a fresh array -> its `_unsafe_set_capacity_bounds_unchecked` core folds to
 //   `array_set_capacity [unique]` and reallocs in place.
+// - `Array::append` into a fresh array -> its `_unsafe_append_capacity_bounds_unchecked` core folds
+//   to `array_append_range [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 main : IO ();
@@ -40,9 +42,12 @@ main = (
     let reserved = Array::fill(2, 0).reserve(10);
     let reserved = reserved.set(0, 3);
 
+    let appended = Array::fill(2, 0).reserve(5).append([9, 9, 9]);
+    let appended = appended.set(0, 4);
+
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0)).to_string
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0)).to_string
 );

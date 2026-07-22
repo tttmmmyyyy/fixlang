@@ -21,8 +21,9 @@ use crate::{
     error::Errors,
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
-        array_append_value_capacity_unchecked, array_get_capacity, array_get_size, array_punch,
-        array_set_capacity_bounds_unchecked, array_truncate_bounds_unchecked,
+        array_append_capacity_bounds_unchecked, array_append_value_capacity_unchecked,
+        array_get_capacity, array_get_size, array_punch, array_set_capacity_bounds_unchecked,
+        array_truncate_bounds_unchecked,
         array_unsafe_empty, array_unsafe_get_bounds_unchecked,
         array_unsafe_get_linear_bounds_unchecked_unretained,
         array_unsafe_set_bounds_uniqueness_unchecked_unreleased, bit_not_function,
@@ -443,6 +444,18 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_array_unsafe_set_capacity_bounds_unchecked.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(
+            &[STD_NAME, ARRAY_NAME],
+            "_unsafe_append_capacity_bounds_unchecked",
+        ),
+        array_append_capacity_bounds_unchecked(),
+        None,
+        None,
+        Some(
+            include_str!("../docs/std_array_unsafe_append_capacity_bounds_unchecked.md").to_string(),
+        ),
     ));
     errors.eat_err(
         fix_module.add_global_value(

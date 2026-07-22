@@ -256,23 +256,17 @@ namespace Array {
         let v1_len = v1.@size;
         let v2_len = v2.@size;
 
-        // Reserve v1's buffer and force uniqueness.        
+        // Reserve v1's buffer for the appended elements.
         let len = v1_len + v2_len;
         let v1 = if v1.@capacity < len {
             v1.reserve(max(len, 2 * v1.@capacity))
         } else {
-            v1._unsafe_force_unique
+            v1
         };
-        
-        // Set length.
-        let v1 = v1._unsafe_set_size(len);
 
-        // Copy elements of v2 to v1.
-        loop((0, v1), |(idx, v1)|(
-            if idx >= v2_len { break $ v1 };
-            let v1 = v1._unsafe_set_bounds_uniqueness_unchecked_unreleased(v1_len + idx, v2.@(idx));
-            continue $ (idx+1, v1)
-        ))
+        // Append all of v2. The primitive clones v1 if it is shared and moves v2's elements when v2
+        // is unique.
+        v1._unsafe_append_capacity_bounds_unchecked(v2, 0, v2_len)
     );
 
     // Finds the first index at which the element satisfies a condition.

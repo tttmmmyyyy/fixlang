@@ -2369,6 +2369,230 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayAppendCapacityBoundsUnchecked {
+    dst_name: FullName,
+    src_name: FullName,
+    begin_name: FullName,
+    end_name: FullName,
+    // When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
+    // array. Set false only where `dst` is statically known to be unique. `src` is read either way.
+    pub(crate) force_unique: bool,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        let dst = gc.get_scoped_obj(&self.dst_name);
+        let src = gc.get_scoped_obj(&self.src_name);
+        let begin = gc.get_scoped_obj_field(&self.begin_name, 0).into_int_value();
+        let end = gc.get_scoped_obj_field(&self.end_name, 0).into_int_value();
+        let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
+        let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let n = gc.builder().build_int_sub(end, begin, "append_n").unwrap();
+
+        // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
+        let dst = if self.force_unique {
+            make_array_unique(gc, dst)
+        } else {
+            dst
+        };
+        let dst_len = dst.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let dst_buf = dst.gep_boxed(gc, ARRAY_BUF_IDX);
+        let dst_write = unsafe {
+            gc.builder()
+                .build_gep(elem_value_ty, dst_buf, &[dst_len], "append_dst_write")
+                .unwrap()
+        };
+
+        let src_ptr = src.value.into_pointer_value();
+        let src_buf = src.gep_boxed(gc, ARRAY_BUF_IDX);
+        let src_len = src.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+
+        // The elements can be moved out of `src` (with no reference counting) only when `src` is
+        // uniquely owned and the whole of it is being appended: a partial move would leave the
+        // elements outside the range with no one to release them.
+        let zero = gc.context.i64_type().const_zero();
+        let is_begin_zero = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, begin, zero, "append_begin_zero")
+            .unwrap();
+        let is_end_full = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, end, src_len, "append_end_full")
+            .unwrap();
+        let is_full_range = gc
+            .builder()
+            .build_and(is_begin_zero, is_end_full, "append_full_range")
+            .unwrap();
+
+        let current_func = gc
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let maybe_move_bb = gc.context.append_basic_block(current_func, "append_maybe_move");
+        let copy_bb = gc.context.append_basic_block(current_func, "append_copy");
+        let end_bb = gc.context.append_basic_block(current_func, "append_end");
+        gc.builder()
+            .build_conditional_branch(is_full_range, maybe_move_bb, copy_bb)
+            .unwrap();
+
+        // Full range: move the elements if `src` is unique, otherwise fall through to the copy.
+        gc.builder().position_at_end(maybe_move_bb);
+        let (src_unique_bb, src_shared_bb) = gc.build_branch_by_is_unique(src_ptr);
+
+        // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
+        // without touching the moved-out elements. No reference counting.
+        gc.builder().position_at_end(src_unique_bb);
+        let n_span = unsafe {
+            gc.builder()
+                .build_gep(
+                    elem_value_ty,
+                    gc.context.ptr_type(AddressSpace::from(0)).const_null(),
+                    &[n],
+                    "append_n_span",
+                )
+                .unwrap()
+        };
+        let n_bytes = gc
+            .builder()
+            .build_ptr_to_int(n_span, gc.context.i64_type(), "append_n_bytes")
+            .unwrap();
+        gc.builder()
+            .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
+            .ok()
+            .unwrap();
+        let src_emptied = src.clone().insert_field(gc, ARRAY_LEN_IDX, zero);
+        gc.release(src_emptied);
+        gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+        // Shared `src`: the elements stay in `src`, so join the copy path.
+        gc.builder().position_at_end(src_shared_bb);
+        gc.builder().build_unconditional_branch(copy_bb).unwrap();
+
+        // Copy: retain each element of `src[begin, end)` into `dst`'s tail, then release `src`.
+        gc.builder().position_at_end(copy_bb);
+        let src_copy_start = unsafe {
+            gc.builder()
+                .build_gep(elem_value_ty, src_buf, &[begin], "append_src_copy_start")
+                .unwrap()
+        };
+        ObjectFieldType::clone_array_buf(gc, n, src_copy_start, dst_write, elem_ty, None);
+        gc.release(src.clone());
+        gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+        // Grow `dst`'s length by the number of appended elements.
+        gc.builder().position_at_end(end_bb);
+        let new_dst_len = gc
+            .builder()
+            .build_int_add(dst_len, n, "append_new_dst_len")
+            .unwrap();
+        dst.insert_field(gc, ARRAY_LEN_IDX, new_dst_len)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "array_append_range{}({}, {}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.src_name.to_string(),
+            self.begin_name.to_string(),
+            self.end_name.to_string(),
+            self.dst_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![
+            &mut self.dst_name,
+            &mut self.src_name,
+            &mut self.begin_name,
+            &mut self.end_name,
+        ]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+// Appends `src[begin, end)` to the end of `dst`, moving the elements when `src` is uniquely owned
+// and the whole of it is appended, and copying them (with a retain each) otherwise, with no capacity
+// check. The caller must ensure `0 <= begin <= end <= src.size` and `dst.size + (end - begin) <=
+// dst.capacity`; violating either causes undefined behavior.
+// Type: Array a -> I64 -> I64 -> Array a -> Array a
+pub fn array_append_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const SRC_NAME: &str = "src";
+    const BEGIN_NAME: &str = "begin";
+    const END_NAME: &str = "end";
+    const DST_NAME: &str = "dst";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs_many(
+        vec![
+            var_local(SRC_NAME),
+            var_local(BEGIN_NAME),
+            var_local(END_NAME),
+            var_local(DST_NAME),
+        ],
+        expr_llvm(
+            Box::new(InlineLLVMArrayAppendCapacityBoundsUnchecked {
+                dst_name: FullName::local(DST_NAME),
+                src_name: FullName::local(SRC_NAME),
+                begin_name: FullName::local(BEGIN_NAME),
+                end_name: FullName::local(END_NAME),
+                force_unique: true,
+            }),
+            array_ty.clone(),
+            None,
+        ),
+    );
+
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            array_ty.clone(),
+            type_fun(
+                make_i64_ty(),
+                type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+            ),
+        ),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeSetSizeBody {
     arr_name: FullName,
     len_name: FullName,

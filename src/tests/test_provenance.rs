@@ -390,6 +390,9 @@ mod integration_tests {
             // A `reserve`, whose `_unsafe_set_capacity_bounds_unchecked` core folds its check and
             // reallocs the fresh array in place.
             "array_set_capacity[unique]",
+            // An `append`, whose `_unsafe_append_capacity_bounds_unchecked` core folds the check on
+            // the fresh destination it appends into.
+            "array_append_range[unique]",
         ] {
             assert!(
                 dump.contains(elided),
