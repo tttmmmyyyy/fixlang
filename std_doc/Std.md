@@ -626,6 +626,20 @@ Truncates an array, keeping the given number of first elements.
 * `new_length` - The number of elements to be kept.
 * `array` - The array to be truncated.
 
+#### unsafe_set_bounds_unchecked
+
+Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
+
+Sets an element of an array at the specified index, omitting the bounds check.
+
+This function clones the given array if it is shared, and releases the element previously at the index. The caller must ensure `idx` is in range `[0, size)`; an out-of-range index causes undefined behavior.
+
+##### Parameters
+
+* `idx` - The index of the element to set.
+* `value` - The value to set.
+* `array` - The array to modify.
+
 #### unsafe_swap_bounds_unchecked
 
 Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
