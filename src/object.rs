@@ -482,6 +482,28 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, buffer, loop_body, after_loop);
     }
 
+    // Release / mark the elements in `[begin, end)` of an array's buffer.
+    pub fn release_or_mark_array_slice<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        buffer: PointerValue<'c>,
+        begin: IntValue<'c>,
+        end: IntValue<'c>,
+        elem_ty: Arc<TypeNode>,
+        work_type: TraverserWorkType,
+    ) {
+        let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let slice_begin = unsafe {
+            gc.builder()
+                .build_gep(value_ty, buffer, &[begin], "array_buf_slice_begin")
+                .unwrap()
+        };
+        let count = gc
+            .builder()
+            .build_int_sub(end, begin, "array_slice_count")
+            .unwrap();
+        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type);
+    }
+
     // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
     // at `idx` is skipped (a slot whose element was moved out).
     pub fn release_or_mark_array_buf<'c, 'm>(

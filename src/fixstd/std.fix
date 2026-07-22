@@ -369,8 +369,9 @@ namespace Array {
     // * `array` - The array to be popped.
     pop_back : Array a -> Array a;
     pop_back = |arr| (
-        if arr.@size == 0 { arr };
-        arr._pop_back_nonempty
+        let size = arr.@size;
+        if size == 0 { arr };
+        arr._unsafe_truncate_bounds_unchecked(size - 1)
     );
 
     // Pushes an element to the back of an array.
@@ -659,10 +660,8 @@ namespace Array {
     truncate : I64 -> Array a -> Array a;
     truncate = |length, vec| (
         if length < 0 { undefined("[Std::Array::truncate] Negative size is not allowed.") };
-        loop(vec, |vec|(
-            if length >= vec.@size { break $ vec };
-            continue $ vec.pop_back
-        ))
+        if length >= vec.@size { vec };
+        vec._unsafe_truncate_bounds_unchecked(length)
     );
 
     // Resizes an array to the given size, filling with the given value if the new size is larger than the current size, 

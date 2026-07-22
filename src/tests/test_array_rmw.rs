@@ -1,7 +1,7 @@
 // Tests for the array read-modify-write operations `mod`, `act`, and `pop_back`. `mod` and `act`
 // are built on the PunchedArray punch/plug builtins; `pop_back` is built on the
-// `_pop_back_nonempty` builtin, which drops the last element in place. With boxed elements the
-// moved-out / dropped element must be neither leaked nor double-freed, which the memory-safety
+// `_unsafe_truncate_bounds_unchecked` builtin, which drops the tail in place. With boxed elements
+// the moved-out / dropped element must be neither leaked nor double-freed, which the memory-safety
 // test checks under valgrind. These operations force-unique the array, so applying them to a
 // shared array must clone it and leave the original intact.
 

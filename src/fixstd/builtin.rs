@@ -26,8 +26,8 @@ use crate::constants::{
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
     PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STRING_NAME, STRUCT_GETTER_SYMBOL,
     STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME, UNION_DATA_IDX,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TraverserWorkType, TUPLE_NAME, TUPLE_UNBOX, U16_NAME,
+    U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
@@ -2032,38 +2032,71 @@ pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayPopBackNonemptyBody {
+pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     arr_name: FullName,
+    len_name: FullName,
+    // When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
+    // array. Set false only where the array is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
+impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Force the array to be unique before shrinking it in place.
         let array = gc.get_scoped_obj(&self.arr_name);
-        let array = make_array_unique(gc, array);
+        let new_len = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
-        // The caller guarantees the array is non-empty, so the last index is `size - 1`.
+        // Force the array to be unique before shrinking it in place.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
+
+        // Release the dropped tail `[new_len, size)`, then lower the length to `new_len`. The caller
+        // guarantees `0 <= new_len <= size`, so there is no size check.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let last_idx = gc
-            .builder()
-            .build_int_sub(len, len.get_type().const_int(1, false), "last_idx")
-            .unwrap();
-
-        // Drop the last element, then shrink the length so the released slot falls out of bounds.
+        let size = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, last_idx);
-        gc.release(elem);
-        array.insert_field(gc, ARRAY_LEN_IDX, last_idx)
+        ObjectFieldType::release_or_mark_array_slice(
+            gc,
+            buf,
+            new_len,
+            size,
+            elem_ty,
+            TraverserWorkType::release(),
+        );
+        array.insert_field(gc, ARRAY_LEN_IDX, new_len)
     }
 
     fn name(&self) -> String {
-        format!("array_pop_back_nonempty({})", self.arr_name.to_string())
+        format!(
+            "array_truncate{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
+            self.len_name.to_string(),
+            self.arr_name.to_string(),
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
+        vec![&mut self.arr_name, &mut self.len_name]
+    }
+
+    fn unique_check_operand(
+        &self,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Option<UniqueCheckOperand> {
+        if !self.force_unique {
+            return None;
+        }
+        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
     }
 
     fn result_prov(
@@ -2080,10 +2113,12 @@ impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
     }
 }
 
-// Drops the last element of a non-empty array and shrinks its length by one.
-// The caller must ensure the array is non-empty.
-// Type: Array a -> Array a
-pub fn array_pop_back_nonempty() -> (Arc<ExprNode>, Arc<Scheme>) {
+// Truncates an array to `new_len` elements, releasing the dropped tail, with an internal
+// clone-if-shared and no size check.
+// The caller must ensure `0 <= new_len <= the array's size`.
+// Type: I64 -> Array a -> Array a
+pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const LEN_NAME: &str = "new_len";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
 
@@ -2091,18 +2126,29 @@ pub fn array_pop_back_nonempty() -> (Arc<ExprNode>, Arc<Scheme>) {
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
     let expr = expr_abs(
-        vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayPopBackNonemptyBody {
-                arr_name: FullName::local(ARR_NAME),
-            }),
-            array_ty.clone(),
+        vec![var_local(LEN_NAME)],
+        expr_abs(
+            vec![var_local(ARR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMArrayTruncateBoundsUnchecked {
+                    arr_name: FullName::local(ARR_NAME),
+                    len_name: FullName::local(LEN_NAME),
+                    force_unique: true,
+                }),
+                array_ty.clone(),
+                None,
+            ),
             None,
         ),
         None,
     );
 
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty.clone(), array_ty));
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+    );
     (expr, scm)
 }
 
