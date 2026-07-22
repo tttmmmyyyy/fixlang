@@ -547,29 +547,9 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(
             &[STD_NAME, PUNCHED_ARRAY_NAME],
-            "_unsafe_punch_bounds_uniqueness_unchecked",
-        ),
-        array_punch(false),
-        None,
-        None,
-        None,
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, PUNCHED_ARRAY_NAME],
             "_unsafe_plug_bounds_unchecked",
         ),
         punched_array_plug(true),
-        None,
-        None,
-        None,
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, PUNCHED_ARRAY_NAME],
-            "_unsafe_plug_bounds_uniqueness_unchecked",
-        ),
-        punched_array_plug(false),
         None,
         None,
         None,

@@ -1,9 +1,8 @@
-// Tests for the PunchedArray builtins `_unsafe_punch_bounds_unchecked` / `_unsafe_plug_bounds_unchecked`
-// (which force-unique) and their `..._bounds_uniqueness_unchecked` variants (which assume uniqueness).
-// `_unsafe_punch_bounds_unchecked` moves an element out of an array, leaving a hole;
-// `_unsafe_plug_bounds_unchecked` writes an element back into the hole. A PunchedArray's release / clone
-// skips the hole, so with boxed elements the moved-out element is neither leaked nor double-freed —
-// checked here under valgrind. None of these builtins bounds-check the index.
+// Tests for the PunchedArray builtins `_unsafe_punch_bounds_unchecked` / `_unsafe_plug_bounds_unchecked`,
+// which force-unique. `_unsafe_punch_bounds_unchecked` moves an element out of an array, leaving a
+// hole; `_unsafe_plug_bounds_unchecked` writes an element back into the hole. A PunchedArray's
+// release / clone skips the hole, so with boxed elements the moved-out element is neither leaked nor
+// double-freed — checked here under valgrind. Neither builtin bounds-checks the index.
 
 #[cfg(test)]
 mod punched_array_tests {
@@ -22,18 +21,18 @@ main : IO () = (
     // Unboxed round-trip: punch, then plug a new element into the hole.
     let (parr, elm) = PunchedArray::_unsafe_punch_bounds_unchecked(1, [10, 20, 30]);
     assert_eq(|_|"elem", elm, 20);;
-    assert_eq(|_|"plug", PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked(99, parr), [10, 99, 30]);;
+    assert_eq(|_|"plug", PunchedArray::_unsafe_plug_bounds_unchecked(99, parr), [10, 99, 30]);;
 
     // Boxed round-trip.
     let (parr, elm) = PunchedArray::_unsafe_punch_bounds_unchecked(1, [[1],[2],[3]]);
     assert_eq(|_|"elem boxed", elm, [2]);;
-    assert_eq(|_|"plug boxed", PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked([99], parr), [[1],[99],[3]]);;
+    assert_eq(|_|"plug boxed", PunchedArray::_unsafe_plug_bounds_unchecked([99], parr), [[1],[99],[3]]);;
 
     // Plug at the first and last index.
     let (parr, _) = PunchedArray::_unsafe_punch_bounds_unchecked(0, [1, 2, 3]);
-    assert_eq(|_|"plug first", PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked(9, parr), [9, 2, 3]);;
+    assert_eq(|_|"plug first", PunchedArray::_unsafe_plug_bounds_unchecked(9, parr), [9, 2, 3]);;
     let (parr, _) = PunchedArray::_unsafe_punch_bounds_unchecked(2, [1, 2, 3]);
-    assert_eq(|_|"plug last", PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked(9, parr), [1, 2, 9]);;
+    assert_eq(|_|"plug last", PunchedArray::_unsafe_plug_bounds_unchecked(9, parr), [1, 2, 9]);;
 
     // Multi-plug (shared punched array): the force-unique plug clones per call, so each
     // result is independent.
