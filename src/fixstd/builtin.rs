@@ -5299,15 +5299,28 @@ impl InlineLLVMUnionAsBody {
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
+
+    /// Whether reading a payload of type `payload_ty` only borrows the union. A fully unboxed payload
+    /// holds no reference, so the value read out of it takes nothing from the union.
+    ///
+    /// A payload that does hold one is read by taking ownership of the union instead: as a borrow the
+    /// result would alias the union's leaf, and reference-count insertion releases a *variable* at its
+    /// last use without following aliases.
+    fn borrows_union(payload_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+        payload_ty.is_fully_unboxed(type_env)
+    }
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionAsBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get union object.
-        let obj = gc.get_scoped_obj(&self.union_arg_name);
-
-        let elem_ty = ty.clone();
+        // The value of `as` is the variant payload, so `ty` is the payload's type.
+        let borrows = Self::borrows_union(ty, gc.type_env());
+        let obj = if borrows {
+            gc.get_scoped_obj_noretain(&self.union_arg_name)
+        } else {
+            gc.get_scoped_obj(&self.union_arg_name)
+        };
 
         if gc.config.runtime_check() {
             let expected_tag = ObjectFieldType::UnionTag
@@ -5319,8 +5332,13 @@ impl LLVMGen for InlineLLVMUnionAsBody {
             ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
         }
 
-        // If tag match, return the field value.
-        ObjectFieldType::get_union_value(gc, obj, &elem_ty)
+        // If tag match, return the field value. A borrowed read extracts the payload without touching
+        // the union's reference count; reference-count insertion releases the union at its last use.
+        if borrows {
+            ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty)
+        } else {
+            ObjectFieldType::get_union_value(gc, obj, ty)
+        }
     }
 
     fn name(&self) -> String {
@@ -5333,6 +5351,11 @@ impl LLVMGen for InlineLLVMUnionAsBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.union_arg_name]
+    }
+
+    fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
+        // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
+        i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
     fn result_prov(
