@@ -35,7 +35,7 @@ To test the uniqueness of a boxed value held in a field of an *unbox* struct (a 
 // sharing of the boxed field `_0`, recovered by acting on the field.
 type Wrap = unbox struct { _0 : SomeBoxedType };
 is_field_unique : Wrap -> (Bool, Wrap);
-is_field_unique = |w| w.act__0(|inner| inner.unsafe_is_unique);
+is_field_unique = |w| w.act__0(unsafe_is_unique);
 ```
 
 Extracting the field with `w.@_0` and calling `unsafe_is_unique` on it works only when `w` is not used afterwards (the extraction then moves the field out); if `w` is used later the extraction retains the field, and the answer is always `false`. Acting on the field is correct regardless.

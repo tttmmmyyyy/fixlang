@@ -6998,14 +6998,14 @@ pub fn test_field_uniqueness_via_act() {
             main = (
                 // The boxed field is unshared here, so the flag is true.
                 let w = Wrap { _0 : Box::make(42) };
-                let (unique, w) = w.act__0(|b| b.unsafe_is_unique);
+                let (unique, w) = w.act__0(unsafe_is_unique);
                 eval w;
                 assert_eq(|_|"fail: the field should be unique", unique, true);;
 
                 // Another holder keeps the same boxed field alive across the check, so the flag is false.
                 let w = Wrap { _0 : Box::make(42) };
                 let keep = w;
-                let (unique, w) = w.act__0(|b| b.unsafe_is_unique);
+                let (unique, w) = w.act__0(unsafe_is_unique);
                 assert_eq(|_|"fail: the field should be shared", unique, false);;
                 assert_eq(|_|"fail: the other holder was disturbed", keep.@_0.@value, 42);;
                 eval w;

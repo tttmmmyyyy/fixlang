@@ -98,7 +98,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
-        Some("3d1d7b4f73f589cd1f6b8e3f8f52e56cea618389"),
+        Some("26d1848491dee2e0979b535e5ee158c66d6a2717"),
     );
 }
 
@@ -107,7 +107,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
-        Some("7fab422d288cbd80b8bfc0147887d57cb335dcc1"),
+        Some("5587b6337b4615cd844dbdafa6487562362cc335"),
     );
 }
 
