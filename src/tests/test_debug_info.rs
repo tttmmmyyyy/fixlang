@@ -120,11 +120,11 @@ mod debug_info_tests {
     // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
     const LINE_VARS_BREAK: u32 = 10; // "    eval i;"
 
-    // Debug info drives correct variable inspection at a breakpoint. Unboxed values print their
+    // Debug info drives correct variable inspection at a breakpoint. Unboxed scalars print their
     // value — an `I64` as its number, a `Bool` as `true` / `false` (i.e. `Bool`'s debug type is
-    // `DW_ATE_boolean`, not a union struct). Boxed containers carry their Fix type (`Std::Array
-    // Std::I64`, `Std::String`), and an `Array` also exposes its size. `-g` forces `-O none`, so
-    // the locals are not optimized away.
+    // `DW_ATE_boolean`, not a union struct). An `Array` / `String` local carries its Fix type name
+    // (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
+    // `-g` forces `-O none`, so the locals are not optimized away.
     #[test]
     fn test_debug_info_variable_values() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -162,15 +162,15 @@ mod debug_info_tests {
                 "-ex",
                 "whatis arr",
                 "-ex",
-                "print *arr",
+                "print arr",
                 "-ex",
                 "whatis s",
-                // A String's characters are the bytes of its `_data` array, whose elements begin
-                // after the 24-byte array header (control block + size + capacity on a 64-bit
-                // target). The debug info cannot bound the flexible element array, so read them as a
-                // C string from that offset.
+                // A String's characters are the bytes of its `_data` array. After the flip those
+                // elements live in the `#ArrayStorage` behind `_data._storage`, beginning right
+                // after its 8-byte control block. The debug info cannot bound the flexible element
+                // array, so read them as a C string from that offset.
                 "-ex",
-                "x/s (char*)s._data + 24",
+                "x/s (char*)s._data._storage + 8",
                 "-ex",
                 "continue",
                 "./prog",
@@ -252,11 +252,11 @@ mod debug_info_tests {
                 "-ex",
                 "whatis arr",
                 "-ex",
-                "print *arr",
+                "print arr",
                 "-ex",
                 "whatis str",
                 "-ex",
-                "x/s (char*)str._data + 24",
+                "x/s (char*)str._data._storage + 8",
                 "-ex",
                 "continue",
                 "./prog",
@@ -329,12 +329,19 @@ mod debug_info_tests {
                 &breakpoint,
                 "-ex",
                 "run",
+                // A flipped `Array` value prints its size directly, but its elements live in the
+                // `#ArrayStorage` behind `_storage`, so the size and the elements come from two
+                // separate prints.
                 "-ex",
-                "print *arr3",
+                "print arr3",
                 "-ex",
-                "print *arr150",
+                "print *arr3._storage",
                 "-ex",
-                "print *msg._data",
+                "print arr150",
+                "-ex",
+                "print *arr150._storage",
+                "-ex",
+                "print *msg._data._storage",
                 "-ex",
                 "continue",
                 "./prog",

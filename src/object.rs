@@ -242,9 +242,9 @@ impl ObjectFieldType {
             // storage buffer uses `ArrayStorageBuf` below.
             ObjectFieldType::Array(_) => unreachable!(),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => {
-                // The storage buffer's debug type is an array of the elements, claiming
-                // `DEBUG_ARRAY_ASSUMED_LEN` of them like `Array` (see the array branch above). The
-                // full `#ArrayStorage` debug layout is authored where the debug info is built.
+                // The storage buffer's debug type is an array of `DEBUG_ARRAY_ASSUMED_LEN`
+                // elements. `#ArrayStorage`'s own declared size is stretched to cover them in
+                // `ty_to_debug_struct_ty`, which builds the enclosing struct's debug layout.
                 let element_ty =
                     ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
@@ -1957,8 +1957,17 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
                 ObjectFieldType::Array(_) => "<array>".to_string(),
                 ObjectFieldType::ArrayStorageBuf(_) => "<array elements>".to_string(),
             };
-            if ty.is_array() && i as u32 == ARRAY_SIZE_IDX {
-                member_name = "<array size>".to_string();
+            if ty.is_array() {
+                // Name the flipped `Array` value's three members so a debugger can reach the
+                // elements: `_storage` is bracket-free so gdb's expression parser accepts
+                // `arr._storage` (the pointer to the `#ArrayStorage` holding the elements), while
+                // the size and capacity are register-readable scalars.
+                member_name = match i as u32 {
+                    ARRAY_STORAGE_IDX => "_storage".to_string(),
+                    ARRAY_SIZE_IDX => "<array size>".to_string(),
+                    ARRAY_CAP_IDX => "<array capacity>".to_string(),
+                    _ => unreachable!("unexpected Array value member at index {}", i),
+                };
             }
 
             let element_di_ty = field.to_debug_type(gc);
@@ -1987,11 +1996,12 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
             elements.push(mem_ty);
         }
 
-        // The size of an array type covers the `DEBUG_ARRAY_ASSUMED_LEN` elements claimed
-        // by its last member (the `<array buffer>` struct). Debuggers read member values
-        // only within the declared byte size of a type, so the size has to cover the
-        // claimed elements for them to be displayed with values read from the target.
-        let size_in_bits = if ty.is_array() {
+        // `#ArrayStorage`'s declared size must cover the `DEBUG_ARRAY_ASSUMED_LEN` elements claimed
+        // by its `<array elements>` member: debuggers read member values only within a type's
+        // declared byte size, so without this the elements past the real (flexible, zero-length)
+        // buffer would not be displayed. The flipped `Array` value keeps its true 24-byte layout —
+        // only the storage it points to is inflated.
+        let size_in_bits = if ty.is_array_storage() {
             let buffer_member = elements.last().unwrap();
             buffer_member.get_offset_in_bits() + buffer_member.get_size_in_bits()
         } else {
