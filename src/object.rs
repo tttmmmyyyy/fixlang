@@ -23,7 +23,6 @@ use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{
-    attributes::AttributeLoc,
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
@@ -1695,8 +1694,6 @@ pub fn create_traverser<'c, 'm>(
     let func = gc
         .module
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
-    // Force this traverser to be inlined into its callers.
-    gc.add_enum_attribute(func, "alwaysinline", AttributeLoc::Function);
 
     let bb = gc.context.append_basic_block(func, "entry");
 
