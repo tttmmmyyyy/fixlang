@@ -28,6 +28,8 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
 
+/// Emits the runtime support functions into the module: their declarations when
+/// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
@@ -45,9 +47,18 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_realloc_function(gc, mode);
 }
 
+/// Which part of a runtime function a `build_*_function` call emits.
+///
+/// The runtime functions split into two groups: those provided externally (by
+/// the C runtime, e.g. `malloc`), which need only a declaration, and those
+/// implemented in this module (e.g. `fixruntime_ptr_add_offset`), which also
+/// need a body. Each build pass runs once in `Declare` mode and once in
+/// `Implement` mode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum BuildMode {
+    /// Add the function's declaration (signature) to the module.
     Declare,
+    /// Emit the body of a function that this module implements itself.
     Implement,
 }
 
