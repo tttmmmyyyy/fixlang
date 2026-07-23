@@ -1026,7 +1026,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // this way lets the bounds check fold and the loop vectorize. The reassembly is folded away by
     // SROA/instcombine. For a non-aggregate value this is an ordinary phi. The current insert block
     // is where the phi is placed; every predecessor block must already have its terminator.
-    pub fn scalar_build_phi(
+    pub fn build_scalar_phi(
         &self,
         incomings: &[(BasicValueEnum<'c>, BasicBlock<'c>)],
         name: &str,

@@ -2126,7 +2126,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
-        let phi = gc.scalar_build_phi(
+        let phi = gc.build_scalar_phi(
             &[
                 (realloced_val, succ_of_unique_bb),
                 (cloned_val, succ_of_shared_bb),
@@ -2617,7 +2617,7 @@ fn make_array_unique_with_hole<'c, 'm>(
 
     // Implement end_bb: phi over the array value.
     gc.builder().position_at_end(end_bb);
-    let array_phi = gc.scalar_build_phi(
+    let array_phi = gc.build_scalar_phi(
         &[
             (array.value, unique_bb),
             (cloned_array_val, succ_of_shared_bb),
@@ -5370,7 +5370,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
-        let phi = gc.scalar_build_phi(
+        let phi = gc.build_scalar_phi(
             &[(match_val, match_bb), (mismatch_val, mismatch_bb)],
             "phi@union_mod_function",
         );

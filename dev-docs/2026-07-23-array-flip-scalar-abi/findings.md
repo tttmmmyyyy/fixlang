@@ -27,7 +27,7 @@ A loop-carried unbox struct becomes an aggregate phi in one of two ways, so both
    the unique/shared merge in `Array::set` and `set_capacity`, the match-arm merge, the union-modify
    merge. These are aggregate phis the argument change does not reach, so a merge inside a hot loop
    (a `set` on a shared array, cloned once then written in place) keeps `@size` opaque.
-   `scalar_build_phi` merges each leaf field with its own scalar phi and reassembles the aggregate
+   `build_scalar_phi` merges each leaf field with its own scalar phi and reassembles the aggregate
    afterward, and replaces `build_phi` at those sites.
 
 In both cases the reassembly `insertvalue`/`extractvalue` is folded away by SROA/instcombine, leaving
@@ -48,7 +48,7 @@ the write wins are kept:
 | array_mod | -59% | -70% | read+write |
 | fill_from_map | -58% | -0% | back to pre-unboxing |
 | arrayrw / arrayrw_fn | -94% | -95% | write win kept |
-| arrayrw_shared | -95% | -95% | fixed by `scalar_build_phi` |
+| arrayrw_shared | -95% | -95% | fixed by `build_scalar_phi` |
 | nbody / nbody_fold | -31% / -27% | | |
 | option_plumbing | -60% | -60% | |
 | struct_field_mod | -0% | -95% | write win kept |
@@ -74,7 +74,7 @@ speedtest case, so the pattern stays visible.
   augmenting-path control flow with many exits. The entry reassembles it, and SimplifyCFG re-forms
   the aggregate as sink (`.pn`) phis faster than SROA removes it, so the scalarization overhead
   exceeds its benefit for this large state.
-- **cp_lib_dijkstra** (+1% vs flip). Small churn from `scalar_build_phi` on a merge that was not the
+- **cp_lib_dijkstra** (+1% vs flip). Small churn from `build_scalar_phi` on a merge that was not the
   bottleneck.
 
 Erasing these needs a deeper change than this one: carrying loop-state fields as scalars through the

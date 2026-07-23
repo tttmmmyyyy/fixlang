@@ -561,7 +561,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         if incomings.len() == 1 {
             return Some(Object::new(incomings[0].0, result.ty.clone(), self));
         }
-        let phi = self.scalar_build_phi(&incomings, "match_phi");
+        let phi = self.build_scalar_phi(&incomings, "match_phi");
         Some(Object::new(phi, result.ty.clone(), self))
     }
 
