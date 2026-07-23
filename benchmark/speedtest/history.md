@@ -2,6 +2,25 @@
 
 Newer is above.
 
+## 9e6c6f64eb4fdb73c48e46a2d766ee332d5eaec4
+
+Marking the runtime panic functions (`fixruntime_abort`, `fixruntime_index_out_of_range`,
+`fixruntime_negative_array_size`) as `noreturn`, measured against the previous row `a77ad9dd`. These
+functions never return, but their LLVM declarations lacked the attribute, so a bounds-check failure
+path called one and then flowed to a merge, feeding an `undef` into it. That forced an aggregate phi
+for the loop-carried value, which hid the array size and left the per-element bounds check standing.
+This had regressed when the direct libc `abort` (which LLVM recognizes as `noreturn`) was replaced by
+these custom functions to print richer messages and backtraces. The attribute lets LLVM prune the
+failure path, the aggregate collapses to scalars, and the check folds.
+
+Sixteen cases improve and none regress: get_sub -80.5%, cp_lib_segtree -20.4%, nbody_fold -16.5%,
+cp_lib_lsegtree -15.5%, fannkuch -14.3%, bounds_check_indexable -9.8%, gen_random_array -9.5%,
+nbody -9.2%, cp_lib_prime_list -8.6%, random_state -8.3%, sort -7.7%, cp_lib_unionfind -4.1%,
+cp_lib_scc -4.0%, cp_lib_dijkstra -3.6%, cp_lib_bipartite -3.2%, index_syntax -1.6%. Against the flip
+row `4537cc17`, every read/fold regression is now erased and the write wins are kept; the sole case
+still above that baseline is cp_lib_bipartite (+3.4%), which carries a genuine multi-exit
+control-flow aggregate that this change does not reach.
+
 ## a77ad9dd29282fb48a29763115d27aedefd59a4b
 
 Scalarizing loop-carried unbox structs, measured against the flip row `4537cc17`. A loop-carried
