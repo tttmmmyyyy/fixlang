@@ -183,29 +183,6 @@ impl<'c> Object<'c> {
         self.ty.is_destructor_object()
     }
 
-    // pub fn opaque_boxed_ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
-    //     assert!(self.is_box(gc.type_env()));
-    //     gc.builder().build_pointer_cast(
-    //         self.value.into_pointer_value(),
-    //         ptr_to_object_type(gc.context),
-    //         "cast_boxed_to_opaq_ptr",
-    //     )
-    // }
-
-    // pub fn opaque_funptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
-    //     assert!(self.is_funptr());
-    //     gc.builder().build_pointer_cast(
-    //         self.value.into_pointer_value(),
-    //         opaque_lambda_function_ptr_type(&gc.context),
-    //         "cast_funcptr_to_opaq_ptr",
-    //     )
-    // }
-
-    // pub fn unboxed_struct_value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
-    //     assert!(self.is_unbox(gc.type_env()));
-    //     self.value.into_struct_value()
-    // }
-
     pub fn debug_embedded_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         ty_to_debug_embedded_ty(self.ty.clone(), gc)
     }

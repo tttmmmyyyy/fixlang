@@ -1703,20 +1703,6 @@ pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        // // let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        // let array = gc.get_scoped_obj_noretain(&self.arr_name);
-
-        // let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-        // let buf = get_array_storage_buf(gc, &array);
-        // let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-        // let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
-
-        // if !gc.is_var_used_later(&self.arr_name) {
-        //     gc.release(array);
-        // }
-        // elem
-
         // Get argments
         let array = gc.get_scoped_obj_noretain(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();

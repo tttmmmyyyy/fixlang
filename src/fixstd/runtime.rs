@@ -8,7 +8,6 @@ use inkwell::AddressSpace;
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
 pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
-// pub const RUNTIME_UNION_VARIANT_MISMATCH: &str = "fixruntime_union_variant_mismatch";
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
@@ -33,7 +32,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
     build_negative_array_size_function(gc, mode);
-    // build_union_variant_mismatch_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -53,14 +51,24 @@ pub enum BuildMode {
     Implement,
 }
 
+// Attach the valueless LLVM enum attribute `name` to `func` at `loc`.
+fn set_enum_attribute<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    func: FunctionValue<'c>,
+    name: &str,
+    loc: AttributeLoc,
+) {
+    let kind = Attribute::get_named_enum_kind_id(name);
+    let attribute = gc.context.create_enum_attribute(kind, 0);
+    func.add_attribute(loc, attribute);
+}
+
 // Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
 // Without this, a bounds-check failure path (which calls the function and then flows to a merge)
 // keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
 // size and defeats bounds-check elimination.
 fn set_noreturn<'c, 'm>(gc: &Generator<'c, 'm>, func: FunctionValue<'c>) {
-    let noreturn_kind = Attribute::get_named_enum_kind_id("noreturn");
-    let noreturn = gc.context.create_enum_attribute(noreturn_kind, 0);
-    func.add_attribute(AttributeLoc::Function, noreturn);
+    set_enum_attribute(gc, func, "noreturn", AttributeLoc::Function);
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
@@ -114,29 +122,6 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: 
     set_noreturn(gc, func);
     return;
 }
-
-// fn build_union_variant_mismatch_function<'c, 'm, 'b>(
-//     gc: &GenerationContext<'c, 'm>,
-//     mode: BuildMode,
-// ) {
-//     if mode != BuildMode::Declare {
-//         return;
-//     }
-//     if let Some(_func) = gc.module.get_function(RUNTIME_UNION_VARIANT_MISMATCH) {
-//         return;
-//     }
-//
-//     let fn_ty = gc.context.void_type().fn_type(
-//         &[
-//             union_tag_type(gc.context).into(),
-//             union_tag_type(gc.context).into(),
-//         ],
-//         false,
-//     );
-//     gc.module
-//         .add_function(RUNTIME_UNION_VARIANT_MISMATCH, fn_ty, None);
-//     return;
-// }
 
 fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
@@ -429,9 +414,7 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let func = gc.module.add_function(RUNTIME_MALLOC, fn_ty, None);
     // The returned pointer does not alias any other pointer visible to the
     // caller, so mark it `noalias`.
-    let noalias_kind = Attribute::get_named_enum_kind_id("noalias");
-    let noalias = gc.context.create_enum_attribute(noalias_kind, 0);
-    func.add_attribute(AttributeLoc::Return, noalias);
+    set_enum_attribute(gc, func, "noalias", AttributeLoc::Return);
     // Mark the function as `nobuiltin` so LLVM does NOT auto-infer the full
     // set of allocator attributes (`allockind`, `allocsize`,
     // `memory(inaccessiblemem: readwrite)`, ...) via TargetLibraryInfo. Those
@@ -441,9 +424,7 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock
     // (hyperfine, 30 runs each), with no benchmark in the speedtest suite
     // measurably benefiting from builtin recognition.
-    let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
-    let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
-    func.add_attribute(AttributeLoc::Function, nobuiltin);
+    set_enum_attribute(gc, func, "nobuiltin", AttributeLoc::Function);
 }
 
 fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
@@ -459,7 +440,5 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
-    let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
-    let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
-    func.add_attribute(AttributeLoc::Function, nobuiltin);
+    set_enum_attribute(gc, func, "nobuiltin", AttributeLoc::Function);
 }
