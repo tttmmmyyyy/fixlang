@@ -69,7 +69,7 @@ A hunt is **three finder subagents and the orchestrator**. Keeping the fan-out a
 2. **Read the hunt log** from memory: what previous hunts covered, which angles they used and what each returned, which candidates were dismissed and why, and which confirmed bugs are still unfixed. A dismissed candidate is re-raised only with evidence the refutation did not have.
 3. **Scout, inline.** Read enough of the target to split it into areas and to derive the angles (see *Target and Lens*). Then fix the three assignments: **two derived angles, and one unlensed finder**. Each gets the areas it owns, so that together they cover the target. Report the assignment before launching, so a mis-scoped hunt is caught in seconds rather than after three subagents finish.
 4. **Launch the three finders in parallel** with the `Agent` tool, in a single block, and wait for all three. Brief each with: the target and its areas, its angle (or, for the third, the instruction to ignore the hunt's angles and report whatever is actually wrong), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that a finder leaves its working tree clean — a throwaway probe is reverted, and a hypothesis test that passes is handed back in the finder's report (its full body, and where in the suite it belongs) before the finder reverts it, so the orchestrator can re-land it on the dedicated branch. Each returns candidates (file, symbol, claim, failing scenario, and whether the evidence is executed or traced) and, separately, the passing hypothesis tests it wrote.
-5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
+5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it — on the commit under test *and* on the merge-base or unmodified upstream, since a pre-existing failure, environment noise, or a third-party defect looks identical to a fresh bug until that one run? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
 6. **Deepen each survivor, inline**: the four deliverables under *Report*.
 7. **Critique the coverage.** With all three reports in hand, name the classes of bug that these angles could not have surfaced, whatever their yield. That answer goes in the report and becomes the strongest candidate angle for the next hunt.
 8. **Commit the tests worth keeping.** Collect the passing hypothesis tests the finders handed back, drop any that a test already in the suite covers and any duplicated among the finders, and commit the survivors to a **dedicated branch** in its own worktree. That branch is a deliverable beside the report; name it there.
@@ -101,29 +101,41 @@ Propose exactly one, and say why the other two are weaker for this bug. Adding a
 
 ## Techniques That Found Bugs
 
-How to hunt, learned from hunts that worked. A finder reads this section before starting.
+How to hunt. A finder reads this section before starting. Two kinds of entry: a **smell** — a pattern you spot by reading the code, together with the probe that turns it into a reproduced bug — and a **detector** — the tool that shows whether a probe's result is wrong. A hunt reads for smells and confirms with detectors.
 
-**The bar for adding one.** Write an entry when the technique would help a future hunt on **a different subsystem and a different bug**. The test to apply before writing: strip out the bug you just found — does the entry still tell a finder what to do? A technique tied to one function, one type, or one pass fails it and belongs in the bug report instead; it teaches a future finder nothing and costs it attention. Name the mechanism and the class of bug it exposes, and let the bug you found be an illustration rather than the content. When an existing entry already covers the ground, extend that entry rather than adding a neighbor. When an entry stops paying, delete it. This section is worth reading only while it stays short.
+**The bar for adding one.** An entry earns its place when it would help a future hunt on **a different subsystem and a different bug**: it names a mechanism and the class of bug it exposes, with any concrete case serving as illustration rather than content. A smell need not have caught a bug yet — a well-grounded one, naming a real pattern and a concrete probe, is worth writing down before a hunt proves it. But an entry that stops paying is deleted: a smell repeated hunts never exploit, a detector that never fires, or one tied to a single function, type, or pass, which teaches a future finder nothing and costs it attention. When an existing entry already covers the ground, extend it. This section is worth reading only while it stays short.
 
-### Make the impossible case fail loud, then run the suite
+### Smells
 
-Where the code absorbs a case the author believes cannot happen — a catch-all `_ =>`, an `unwrap_or`, a `map_or`, a silent clamp — replace it with a panic and run the tests. When the arm fires, the swallowed case was reachable and something upstream is already broken. Swallowed cases are where latent bugs live, because the wrong value keeps flowing and the failure appears somewhere else entirely. Revert the probe afterwards.
+#### Make an unenforced invariant fail loud, then run the suite
 
-### Run the same program at every optimization level
+The code leans on a condition it never checks — a catch-all `_ =>`, an `unwrap_or`, a `map_or`, or a silent clamp that absorbs a case the author calls impossible, or a comment asserting "same length" / "never empty" / "always last" with no assertion behind it. Turn the assumption into a loud failure — replace the fallback with a `panic!`, or add the `assert!` the comment implies — and run the suite. When it fires, the case was reachable and something upstream is already broken; the swallowed value was flowing on and would have surfaced somewhere else entirely. Revert the probe afterward.
 
-`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must agree. A difference is a miscompilation by definition, with no judgment call about intent, and it points straight at the pass that differs. This is the cheapest miscompile detector available, and it needs no expected output — the levels check each other.
+#### Exploit a fact stored in two places
 
-### Compare against a baseline binary on a large real corpus
+The same information lives in two representations kept in sync by convention rather than construction — a length beside the data it measures, an operand name embedded in an operation and repeated in its separate argument list, a cached field derivable from its source, a tag order that a switch's default silently assumes. Force or find a state where the two disagree: trace whether any pass updates one without the other, or add an assertion that the two are equal and run the suite. Then check whether a consumer reads the stale copy — a desync a consumer trusts is a use-after-free, a miscompile, or a wrong answer waiting for the first pass that breaks the convention.
 
-Build the compiler at a known-good commit, build it again at the commit under test, and run both over a body of real Fix code — a multi-project library, a bank of solved problems, an external project. Output differences and new build failures surface what small tests miss, because real code combines features in ways a test author never writes down.
+#### Exploit a declaration divorced from the code that must honor it
 
-### Reproduce on the baseline before blaming the change
+A hand-written declaration binds a separate code path with no compiler link between them — an ownership or borrow annotation a pass must match, an arity or field count, the order a match's arms must keep. Derive both the declaration and the code from the same monomorphized source and assert they agree, or inject a deliberate mismatch and see whether anything catches it before code generation. Where the two can drift, the drift is the bug.
 
-Every failure a hunt finds gets run against the merge base or the unmodified upstream first. Pre-existing failures, environment noise, and third-party library defects all look exactly like a fresh bug until this step. This is the single highest-yield false-positive filter, and it costs one run.
+#### Exploit a path no test reaches
 
-### Run the emitted programs under valgrind memcheck
+Untested code is where a latent bug survives, because a tested path carrying a bug would already have failed — so a gap in the suite is a map to where the bugs are. Enumerate the cases the target handles — the match arms, the error branches, the boundaries (empty, one element, the degenerate shape), the opt-level and config combinations — and cross off the ones a test exercises; a coverage tool (`cargo-llvm-cov`) mechanizes the same census. Craft the input that drives execution into what is left, run it, and read the result with a detector. This is the `test-sufficiency` review lens turned offensive: that aspect flags the gap for the author, a hunt shoots into it.
 
-Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret the report against the same baseline: a glibc thread-local pattern or a third-party library's internal allocation will show up identically on unmodified code.
+### Detectors
+
+#### Run the same program at every optimization level
+
+`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they skip tail-call optimization, so a deeply tail-recursive program overflows the stack there while `-O max` runs it, and they can let an `O(n)` program degrade to `O(n²)`. A stack overflow or a hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
+
+#### Run the emitted programs under valgrind memcheck
+
+Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
+
+#### Run threaded programs under a data-race detector
+
+Output comparison and memcheck both run single-threaded and miss data races — two threads racing on a refcount or on shared state produce the right answer on a good day. A data-race detector (ThreadSanitizer, or valgrind's helgrind / DRD) is the one sanitizer routine runs skip, because its false-positive rate is high; that cost is why the concurrency class stays unhunted, and paying it is how a hunt reaches races nothing else does. Triage against a baseline exactly as with memcheck: a glibc or library-internal race pattern shows identically on unmodified code.
 
 ## Hygiene
 
