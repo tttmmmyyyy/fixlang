@@ -949,6 +949,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.build_tail(obj, tail)
     }
 
+    // Build an `undef` constant of the given basic type.
     pub fn get_undef(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
         match ty {
             BasicTypeEnum::IntType(ty) => ty.get_undef().as_basic_value_enum(),
