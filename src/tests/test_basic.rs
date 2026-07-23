@@ -10206,7 +10206,7 @@ pub fn test_unbox_struct_arg_abi() {
             let thunk : () -> I64 = |_| captured;
             assert_eq(|_|"zero-leaf arg preceding capture", thunk(), 42);;
 
-            let empty_sum = Iterator::empty.fold(7, |acc, x| acc + x);
+            let empty_sum = Iterator::empty.fold(7, |x, acc| acc + x);
             assert_eq(|_|"empty-struct iterator state", empty_sum, 7);;
 
             let n = Nested { outer : (1, 2), inner : 3 };
