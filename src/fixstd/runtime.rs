@@ -51,7 +51,7 @@ pub enum BuildMode {
     Implement,
 }
 
-// Attach the valueless LLVM enum attribute `name` to `func` at `loc`.
+/// Attach the valueless LLVM enum attribute `name` to `func` at `loc`.
 fn set_enum_attribute<'c, 'm>(
     gc: &Generator<'c, 'm>,
     func: FunctionValue<'c>,
@@ -63,10 +63,10 @@ fn set_enum_attribute<'c, 'm>(
     func.add_attribute(loc, attribute);
 }
 
-// Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
-// Without this, a bounds-check failure path (which calls the function and then flows to a merge)
-// keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
-// size and defeats bounds-check elimination.
+/// Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
+/// Without this, a bounds-check failure path (which calls the function and then flows to a merge)
+/// keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
+/// size and defeats bounds-check elimination.
 fn set_noreturn<'c, 'm>(gc: &Generator<'c, 'm>, func: FunctionValue<'c>) {
     set_enum_attribute(gc, func, "noreturn", AttributeLoc::Function);
 }
