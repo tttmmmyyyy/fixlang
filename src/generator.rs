@@ -31,7 +31,6 @@ use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
-use crate::object;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
@@ -59,14 +58,18 @@ use inkwell::values::GlobalValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 use inkwell::AddressSpace;
+use inkwell::AtomicOrdering;
+use inkwell::AtomicRMWBinOp;
 use inkwell::IntPredicate;
 use inkwell::{
+    attributes::AttributeLoc,
     basic_block::BasicBlock,
     debug_info::{
-        AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DebugInfoBuilder,
+        AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DWARFEmissionKind,
+        DWARFSourceLanguage, DebugInfoBuilder,
     },
     intrinsics::Intrinsic,
-    module::Linkage,
+    module::{FlagBehavior, Linkage},
     targets::{TargetData, TargetMachine},
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
@@ -547,7 +550,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let debug_metadata_version = self.context.i32_type().const_int(3, false);
         self.module.add_basic_value_flag(
             "Debug Info Version",
-            inkwell::module::FlagBehavior::Warning,
+            FlagBehavior::Warning,
             debug_metadata_version,
         );
         let cur_dir = match env::current_dir() {
@@ -556,7 +559,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         };
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
-            inkwell::debug_info::DWARFSourceLanguage::C,
+            DWARFSourceLanguage::C,
             "NA",
             cur_dir.to_str().unwrap(),
             "fix",
@@ -564,7 +567,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             "",
             0,
             "",
-            inkwell::debug_info::DWARFEmissionKind::Full,
+            DWARFEmissionKind::Full,
             0,
             false,
             false,
@@ -754,7 +757,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             refcnt
                 .as_instruction_value()
                 .unwrap()
-                .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
+                .set_atomic_ordering(AtomicOrdering::Monotonic)
                 .expect("Set atomic ordering failed");
             // Jump to shared_bb if refcnt > 1.
             let is_unique = self
@@ -771,7 +774,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // - write / modify operations which will follow in this thread and
             // - read operations done before another thread releases this object.
             self.builder()
-                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "")
+                .build_fence(AtomicOrdering::Acquire, 0, "")
                 .unwrap();
             // Mark the object as non_threaded.
             self.mark_local_one(obj_ptr);
@@ -823,7 +826,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_state_local = self
                 .builder()
                 .build_int_compare(
-                    inkwell::IntPredicate::EQ,
+                    IntPredicate::EQ,
                     refcnt_state,
                     refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
                     "is_refcnt_state_local",
@@ -843,7 +846,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_state_local = self
                 .builder()
                 .build_int_compare(
-                    inkwell::IntPredicate::EQ,
+                    IntPredicate::EQ,
                     refcnt_state,
                     refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
                     "is_refcnt_state_local",
@@ -858,7 +861,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_state_threaded = self
                 .builder()
                 .build_int_compare(
-                    inkwell::IntPredicate::EQ,
+                    IntPredicate::EQ,
                     refcnt_state,
                     refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
                     "is_refcnt_state_threaded",
@@ -1224,10 +1227,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             let _old_refcnt_threaded = self
                 .builder()
                 .build_atomicrmw(
-                    inkwell::AtomicRMWBinOp::Add,
+                    AtomicRMWBinOp::Add,
                     ptr_to_refcnt,
                     amount,
-                    inkwell::AtomicOrdering::Monotonic,
+                    AtomicOrdering::Monotonic,
                 )
                 .unwrap();
             self.builder().build_unconditional_branch(cont_bb).unwrap();
@@ -1375,7 +1378,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 )
                 .unwrap();
         } else {
-            let trav = object::create_traverser(&obj.ty, &vec![], self, Some(work));
+            let trav = create_traverser(&obj.ty, &vec![], self, Some(work));
             if let Some(trav) = trav {
                 self.builder()
                     .build_call(trav, &[obj_ptr.into()], "call_trav")
@@ -1435,7 +1438,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let is_refcnt_one = self
             .builder()
             .build_int_compare(
-                inkwell::IntPredicate::EQ,
+                IntPredicate::EQ,
                 old_refcnt,
                 refcnt_type(self.context).const_int(1, false),
                 "is_refcnt_zero",
@@ -1455,10 +1458,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             let old_refcnt = self
                 .builder()
                 .build_atomicrmw(
-                    inkwell::AtomicRMWBinOp::Sub,
+                    AtomicRMWBinOp::Sub,
                     ptr_to_refcnt,
                     refcnt_type(self.context).const_int(1, false),
-                    inkwell::AtomicOrdering::Release,
+                    AtomicOrdering::Release,
                 )
                 .unwrap();
 
@@ -1469,7 +1472,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_one = self
                 .builder()
                 .build_int_compare(
-                    inkwell::IntPredicate::EQ,
+                    IntPredicate::EQ,
                     old_refcnt,
                     refcnt_type(self.context).const_int(1, false),
                     "is_refcnt_one",
@@ -1482,7 +1485,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // Implement `threaded_destruction_bb`.
             self.builder().position_at_end(threaded_destruction_bb);
             self.builder()
-                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "")
+                .build_fence(AtomicOrdering::Acquire, 0, "")
                 .unwrap();
             self.builder()
                 .build_unconditional_branch(destruction_bb)
@@ -1661,7 +1664,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let is_refcnt_state_local = self
             .builder()
             .build_int_compare(
-                inkwell::IntPredicate::EQ,
+                IntPredicate::EQ,
                 refcnt_state,
                 refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
                 "is_refcnt_state_local",
@@ -2046,7 +2049,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         while let Some(function) = func {
             // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept
             function.add_attribute(
-                inkwell::attributes::AttributeLoc::Function,
+                AttributeLoc::Function,
                 self.context.create_string_attribute("frame-pointer", "all"),
             );
             func = function.get_next_function();

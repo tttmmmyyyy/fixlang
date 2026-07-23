@@ -23,6 +23,7 @@ use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{
+    attributes::AttributeLoc,
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
@@ -1696,7 +1697,7 @@ pub fn create_traverser<'c, 'm>(
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
     // Set the function "always inline".
     func.add_attribute(
-        inkwell::attributes::AttributeLoc::Function,
+        AttributeLoc::Function,
         gc.context.create_string_attribute("alwaysinline", "1"),
     );
 
