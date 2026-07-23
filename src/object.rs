@@ -1695,11 +1695,8 @@ pub fn create_traverser<'c, 'm>(
     let func = gc
         .module
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
-    // Set the function "always inline".
-    func.add_attribute(
-        AttributeLoc::Function,
-        gc.context.create_string_attribute("alwaysinline", "1"),
-    );
+    // Force this traverser to be inlined into its callers.
+    gc.add_enum_attribute(func, "alwaysinline", AttributeLoc::Function);
 
     let bb = gc.context.append_basic_block(func, "entry");
 
