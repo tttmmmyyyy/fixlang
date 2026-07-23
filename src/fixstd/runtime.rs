@@ -134,7 +134,7 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
 
-    let ptr_ty = context.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_ty = context.ptr_type(AddressSpace::from(0));
 
     let fn_ty = context.void_type().fn_type(&[ptr_ty.into()], true);
     module.add_function(RUNTIME_EPRINTLN, fn_ty, None);
@@ -154,7 +154,7 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let module = gc.module;
 
     let i32_ty = context.i32_type();
-    let ptr_ty = context.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_ty = context.ptr_type(AddressSpace::from(0));
 
     let fn_ty = i32_ty.fn_type(
         &[
