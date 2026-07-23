@@ -134,10 +134,10 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
 
-    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_ty = context.ptr_type(inkwell::AddressSpace::from(0));
 
-    let fn_type = context.void_type().fn_type(&[ptr_type.into()], true);
-    module.add_function(RUNTIME_EPRINTLN, fn_type, None);
+    let fn_ty = context.void_type().fn_type(&[ptr_ty.into()], true);
+    module.add_function(RUNTIME_EPRINTLN, fn_ty, None);
 
     return;
 }
@@ -153,17 +153,17 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
 
-    let i32_type = context.i32_type();
-    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
+    let i32_ty = context.i32_type();
+    let ptr_ty = context.ptr_type(inkwell::AddressSpace::from(0));
 
-    let fn_type = i32_type.fn_type(
+    let fn_ty = i32_ty.fn_type(
         &[
-            ptr_type.into(), /* output buffer */
-            ptr_type.into(), /* format */
+            ptr_ty.into(), /* output buffer */
+            ptr_ty.into(), /* format */
         ],
         true,
     );
-    module.add_function(RUNTIME_SPRINTF, fn_type, None);
+    module.add_function(RUNTIME_SPRINTF, fn_ty, None);
 
     return;
 }
@@ -242,20 +242,20 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
 
     gc.builder().position_at_end(bb);
     let ptr = func.get_first_param().unwrap().into_pointer_value();
-    let off = func.get_nth_param(1).unwrap().into_int_value();
-    let ptr = gc
+    let offset = func.get_nth_param(1).unwrap().into_int_value();
+    let ptr_int = gc
         .builder()
         .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset")
         .unwrap();
-    let ptr = gc
+    let sum_int = gc
         .builder()
-        .build_int_add(ptr, off, "add@fixruntime_ptr_add_offset")
+        .build_int_add(ptr_int, offset, "add@fixruntime_ptr_add_offset")
         .unwrap();
-    let ptr = gc
+    let sum_ptr = gc
         .builder()
-        .build_int_to_ptr(ptr, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
+        .build_int_to_ptr(sum_int, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
         .unwrap();
-    gc.builder().build_return(Some(&ptr)).unwrap();
+    gc.builder().build_return(Some(&sum_ptr)).unwrap();
     return;
 }
 
@@ -357,24 +357,24 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
     let idx = func.get_first_param().unwrap().into_int_value();
-    let argv = gc
+    let argv_gv_ptr = gc
         .module
         .get_global(GLOBAL_VAR_NAME_ARGV)
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argv = gc
+    let argv_ptr = gc
         .builder()
-        .build_load(ptr_ty, argv, "argv")
+        .build_load(ptr_ty, argv_gv_ptr, "argv")
         .unwrap()
         .into_pointer_value();
 
     // Get argv[idx].
     // First, offset argv by idx * size_of_pointer.
     let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let argv = gc
+    let argv_int = gc
         .builder()
-        .build_ptr_to_int(argv, ptr_int_ty, "argv")
+        .build_ptr_to_int(argv_ptr, ptr_int_ty, "argv_int")
         .unwrap();
     let idx = gc
         .builder()
@@ -385,16 +385,22 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
         .builder()
         .build_int_mul(idx, ptr_int_ty.const_int(ptr_size, false), "offset")
         .unwrap();
-    let argv = gc.builder().build_int_add(argv, offset, "argv").unwrap();
-    let argv = gc.builder().build_int_to_ptr(argv, ptr_ty, "argv").unwrap();
+    let elem_int = gc
+        .builder()
+        .build_int_add(argv_int, offset, "elem_int")
+        .unwrap();
+    let elem_ptr = gc
+        .builder()
+        .build_int_to_ptr(elem_int, ptr_ty, "elem_ptr")
+        .unwrap();
 
     // Then, load argv[idx] to get the pointer to the argument string.
-    let argv = gc
+    let arg_ptr = gc
         .builder()
-        .build_load(ptr_ty, argv, "argv")
+        .build_load(ptr_ty, elem_ptr, "arg_ptr")
         .unwrap()
         .into_pointer_value();
-    gc.builder().build_return(Some(&argv)).unwrap();
+    gc.builder().build_return(Some(&arg_ptr)).unwrap();
 
     return;
 }

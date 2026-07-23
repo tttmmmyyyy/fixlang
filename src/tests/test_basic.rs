@@ -2434,9 +2434,9 @@ pub fn test82() {
         let x = w.@(3) $ x; // += 2
         assert_eq(|_|"", x, 3);;
 
-        let res = Array::empty(3);
-        let v = [[1], [2], [3]].to_iter.fold(res, |v, res| (
-            res.assert_unique(|_|"the array is not unique!").append(v)
+        let acc = Array::empty(3);
+        let v = [[1], [2], [3]].to_iter.fold(acc, |elem, acc| (
+            acc.assert_unique(|_|"the array is not unique!").append(elem)
         ));
         assert_eq(|_|"", v, [1, 2, 3]);;
 
@@ -3888,10 +3888,10 @@ pub fn test118() {
         module Main; 
         main : IO ();
         main = (
-            count_up(0).take(10).fold_m(0, |s, i| (
-                let s = s + i;
-                print("Sum upto " + i.to_string + " is " + s.to_string + ". ");;
-                pure $ s
+            count_up(0).take(10).fold_m(0, |i, sum| (
+                let new_sum = sum + i;
+                print("Sum upto " + sum.to_string + " is " + new_sum.to_string + ". ");;
+                pure $ new_sum
             ));;
             println("");;
             pure()
@@ -5107,7 +5107,7 @@ pub fn test_iterator_fold() {
     main = (
         let n = 100;
         let ans = n * (n - 1) / 2;
-        let res = Iterator::range(0, n).fold(0, |sum, i| sum + i);
+        let res = Iterator::range(0, n).fold(0, |i, sum| sum + i);
         assert_eq(|_|"", res, ans);;
         pure()
     );

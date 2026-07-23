@@ -207,7 +207,7 @@ namespace Array {
     // # Parameters
     //
     // * `i` - The index of the element to be acted on.
-    // * `action` - The functorial action to be performed on the element at index `idx`.
+    // * `action` - The functorial action to be performed on the element at index `i`.
     // * `array` - The array.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
@@ -222,7 +222,7 @@ namespace Array {
     // # Parameters
     //
     // * `i` - The index of the element to be acted on.
-    // * `action` - The functorial action to be performed on the element at index `idx`.
+    // * `action` - The functorial action to be performed on the element at index `i`.
     // * `array` - The array.
     _unsafe_act_bounds_unchecked : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     _unsafe_act_bounds_unchecked = |idx, fun, arr| (
@@ -293,21 +293,21 @@ namespace Array {
     // * `second` - The array to be appended.
     // * `first` - The array to which `second` is appended.
     append : Array a -> Array a -> Array a;
-    append = |v2, v1| (
-        let v1_len = v1.@size;
-        let v2_len = v2.@size;
+    append = |second, first| (
+        let first_len = first.@size;
+        let second_len = second.@size;
 
-        // Reserve v1's buffer for the appended elements.
-        let len = v1_len + v2_len;
-        let v1 = if v1.@capacity < len {
-            v1.reserve(max(len, 2 * v1.@capacity))
+        // Reserve the buffer of `first` for the appended elements.
+        let len = first_len + second_len;
+        let first = if first.@capacity < len {
+            first.reserve(max(len, 2 * first.@capacity))
         } else {
-            v1
+            first
         };
 
-        // Append all of v2. The primitive clones v1 if it is shared and moves v2's elements when v2
-        // is unique.
-        v1._unsafe_append_capacity_bounds_unchecked(v2, 0, v2_len)
+        // Append all of `second`. The primitive clones `first` if it is shared and moves the
+        // elements of `second` when `second` is unique.
+        first._unsafe_append_capacity_bounds_unchecked(second, 0, second_len)
     );
 
     // Finds the first index at which the element satisfies a condition.

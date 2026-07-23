@@ -538,8 +538,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds
             // the phi an undef value from its unreachable block.
             if let Some(arm_val) = arm_val {
-                let end_bb = self.builder().get_insert_block().unwrap();
-                incomings.push((arm_val.value, end_bb));
+                let arm_end_bb = self.builder().get_insert_block().unwrap();
+                incomings.push((arm_val.value, arm_end_bb));
                 self.builder()
                     .build_unconditional_branch(
                         cont_bb.expect("a non-tail match has a merge block"),

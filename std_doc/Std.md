@@ -292,7 +292,7 @@ This means that you don't need to pay cloning cost when your action failed, as e
 ##### Parameters
 
 * `i` - The index of the element to be acted on.
-* `action` - The functorial action to be performed on the element at index `idx`.
+* `action` - The functorial action to be performed on the element at index `i`.
 * `array` - The array.
 
 #### append
