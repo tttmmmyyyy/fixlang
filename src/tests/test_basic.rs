@@ -10160,3 +10160,41 @@ main: IO () = (
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_unbox_struct_arg_abi() {
+    // Verifies that an unbox-struct function argument survives being passed as its flat leaf
+    // scalars: a zero-leaf `()` argument that precedes a capture must not shift the capture read
+    // (a wrong offset would silently return the wrong captured value), folding the zero-field
+    // empty-iterator state must stay correct, and a nested unbox struct must round-trip through
+    // the explode-at-call / reassemble-at-entry path unchanged.
+    let source = r#"
+        module Main;
+
+        type Nested = unbox struct { outer : (I64, I64), inner : I64 };
+
+        bump : Nested -> Nested;
+        bump = |n| (
+            let (o0, o1) = n.@outer;
+            Nested { outer : (o0 + 1, o1), inner : n.@inner + 10 }
+        );
+
+        main : IO ();
+        main = (
+            let captured = 42;
+            let thunk : () -> I64 = |_| captured;
+            assert_eq(|_|"zero-leaf arg preceding capture", thunk(), 42);;
+
+            let empty_sum = Iterator::empty.fold(7, |acc, x| acc + x);
+            assert_eq(|_|"empty-struct iterator state", empty_sum, 7);;
+
+            let n = Nested { outer : (1, 2), inner : 3 };
+            let m = bump(n);
+            let (m0, m1) = m.@outer;
+            assert_eq(|_|"nested struct round trip", m0 + m1 * 10 + m.@inner, 35);;
+
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
