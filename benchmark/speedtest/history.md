@@ -2,6 +2,16 @@
 
 Newer is above.
 
+## 0adf6ebaa6a8eb33360e6d7044ebcd54389e198d
+
+Attaching `alwaysinline` to the object traversers as a real enum attribute (it had been a string
+attribute, which LLVM ignores), measured against the previous row `9e6c6f64`. The effect is nil:
+every case is within +0.5%, the whole suite totals +0.00%, and the tiny non-zero deltas are a fixed
+per-program increment (a little more inlined traverser code on the startup path), not a per-workload
+change. Forcing the traversers to inline buys nothing — most RC traversal goes through a function
+pointer stored in the control block, where the hint cannot apply, and the direct calls LLVM already
+inlines on its own.
+
 ## 9e6c6f64eb4fdb73c48e46a2d766ee332d5eaec4
 
 Marking the runtime panic functions (`fixruntime_abort`, `fixruntime_index_out_of_range`,
