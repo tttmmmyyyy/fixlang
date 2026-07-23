@@ -1,7 +1,5 @@
 This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
 
-For arrays, use `Array::_unsafe_is_storage_unique`, which checks the array's storage.
-
 Example: 
 ```
 module Main;

@@ -239,27 +239,6 @@ namespace Array {
         }
     );
 
-    // Asserts that the given array is unique (its storage is not shared), and returns it.
-    // If the assertion failed, prints a message to the stderr and aborts the program.
-    //
-    // This function is used to verify that functions such as `Array::set` do not perform array copying.
-    // For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
-    // rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
-    // If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
-    //
-    // This function should be limited to temporary use for debugging purposes and should be removed from the final code.
-    //
-    // # Parameters
-    //
-    // * `lazy_msg`
-    // * `array`
-    assert_unique : Lazy String -> Array a -> Array a;
-    assert_unique = |msg, arr| (
-        let (unique, arr) = arr._unsafe_is_storage_unique;
-        if !unique { undefined("Array is not unique: " + msg()) };
-        arr
-    );
-
     // `arr.mutate_elements(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
     // and then returns the mutated `arr` paired with the result of `io(ptr)`.
     //
@@ -4141,8 +4120,6 @@ namespace Debug {
 
     // Asserts that the given boxed value is unique, and returns the given value.
     // If the assertion failed, prints a message to the stderr and aborts the program.
-    //
-    // For arrays, use `Array::assert_unique`, which checks the array's storage.
     //
     // This function should be limited to temporary use for debugging purposes and should be removed from the final code.
     //

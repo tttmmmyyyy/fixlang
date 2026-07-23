@@ -23,6 +23,15 @@ module Main;
 // - `unsafe_set_bounds_unchecked` on a fresh array -> `array_set_unchecked [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
+namespace Array {
+    assert_unique : Lazy String -> Array a -> Array a;
+    assert_unique = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array is not unique: " + msg()) };
+        arr
+    );
+}
+
 main : IO ();
 main = (
     let fresh = Array::fill(4, 0);

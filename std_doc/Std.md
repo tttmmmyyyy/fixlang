@@ -160,8 +160,6 @@ Type: `[a : Std::Boxed] a -> (Std::Bool, a)`
 
 This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
 
-For arrays, use `Array::_unsafe_is_storage_unique`, which checks the array's storage.
-
 Example: 
 ```
 module Main;
@@ -309,25 +307,6 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
-
-#### assert_unique
-
-Type: `Std::Lazy Std::String -> Std::Array a -> Std::Array a`
-
-Asserts that the given array is unique (its storage is not shared), and returns it.
-If the assertion failed, prints a message to the stderr and aborts the program.
-
-This function is used to verify that functions such as `Array::set` do not perform array copying.
-For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
-rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
-If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
-
-This function should be limited to temporary use for debugging purposes and should be removed from the final code.
-
-##### Parameters
-
-* `lazy_msg`
-* `array`
 
 #### borrow_elements
 
@@ -793,8 +772,6 @@ Type: `[a : Std::Boxed] Std::Lazy Std::String -> a -> a`
 
 Asserts that the given boxed value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
-
-For arrays, use `Array::assert_unique`, which checks the array's storage.
 
 This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 

@@ -1008,8 +1008,18 @@ pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r#"
         module Main;
+
+        namespace Array {
+            assert_unique : Lazy String -> Array a -> Array a;
+            assert_unique = |msg, arr| (
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                if !unique { undefined("Array is not unique: " + msg()) };
+                arr
+            );
+        }
+
         main : IO ();
-        
+
         main = (
             let arr = Array::fill(31, 0);
             let arr = arr.assert_unique(|_|"The array is not unique!").set(0, 0);
@@ -1792,6 +1802,15 @@ pub fn test52() {
     // Test loop with boxed state / break.
     let source = r#"
     module Main; 
+
+    namespace Array {
+        assert_unique : Lazy String -> Array a -> Array a;
+        assert_unique = |msg, arr| (
+            let (unique, arr) = arr._unsafe_is_storage_unique;
+            if !unique { undefined("Array is not unique: " + msg()) };
+            arr
+        );
+    }
     type SieveState = box struct {i: I64, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
@@ -1848,6 +1867,15 @@ pub fn test53() {
     // Test mutation of unique unboxed struct (e.g., tuple).
     let source = r#"
     module Main;     
+
+    namespace Array {
+        assert_unique : Lazy String -> Array a -> Array a;
+        assert_unique = |msg, arr| (
+            let (unique, arr) = arr._unsafe_is_storage_unique;
+            if !unique { undefined("Array is not unique: " + msg()) };
+            arr
+        );
+    }
     main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
@@ -2275,6 +2303,15 @@ pub fn test76() {
     // Test array modifier.
     let source = r#"
     module Main; 
+
+    namespace Array {
+        assert_unique : Lazy String -> Array a -> Array a;
+        assert_unique = |msg, arr| (
+            let (unique, arr) = arr._unsafe_is_storage_unique;
+            if !unique { undefined("Array is not unique: " + msg()) };
+            arr
+        );
+    }
     main : IO ();
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
@@ -2365,6 +2402,15 @@ pub fn test82() {
     // Test Array::append.
     let source = r#"
     module Main; 
+
+    namespace Array {
+        assert_unique : Lazy String -> Array a -> Array a;
+        assert_unique = |msg, arr| (
+            let (unique, arr) = arr._unsafe_is_storage_unique;
+            if !unique { undefined("Array is not unique: " + msg()) };
+            arr
+        );
+    }
     main : IO ();
     main = (
 
@@ -2952,9 +2998,18 @@ pub fn test_ffi_call_io() {
 
 #[test]
 pub fn test95() {
-    // Test Std::unsafe_is_unique, Array::_unsafe_is_storage_unique, Debug::assert_unique, Array::assert_unique
+    // Test Std::unsafe_is_unique, Array::_unsafe_is_storage_unique, Debug::assert_unique
     let source = r#"
             module Main;
+
+            namespace Array {
+                assert_unique : Lazy String -> Array a -> Array a;
+                assert_unique = |msg, arr| (
+                    let (unique, arr) = arr._unsafe_is_storage_unique;
+                    if !unique { undefined("Array is not unique: " + msg()) };
+                    arr
+                );
+            }
 
             type Resource = box struct { id : I64 };
 
@@ -4027,6 +4082,15 @@ pub fn test_array_act_0() {
     // Test Array::act
     let source = r#"
         module Main; 
+
+        namespace Array {
+            assert_unique : Lazy String -> Array a -> Array a;
+            assert_unique = |msg, arr| (
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                if !unique { undefined("Array is not unique: " + msg()) };
+                arr
+            );
+        }
         
         main : IO ();
         main = (
@@ -7185,6 +7249,15 @@ pub fn test_monadic_bind_and_function_application_ordering() {
 pub fn test_struct_act() {
     let source = r##"
         module Main;
+
+        namespace Array {
+            assert_unique : Lazy String -> Array a -> Array a;
+            assert_unique = |msg, arr| (
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                if !unique { undefined("Array is not unique: " + msg()) };
+                arr
+            );
+        }
                 
         // Boxed struct with a boxed field.
         type BB = box struct { x : Array Bool, y : Array I64, z : I64 };
@@ -9870,6 +9943,15 @@ pub fn test_regression_issue_66() {
     let source = r##"
 module Main;
 
+namespace Array {
+    assert_unique : Lazy String -> Array a -> Array a;
+    assert_unique = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array is not unique: " + msg()) };
+        arr
+    );
+}
+
 type Obj = unbox struct {
     arr: Array I64,
     f: I64 -> I64,
@@ -9894,6 +9976,15 @@ main: IO () = (
 pub fn test_regression_issue_67() {
     let source = r##"
 module Main;
+
+namespace Array {
+    assert_unique : Lazy String -> Array a -> Array a;
+    assert_unique = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array is not unique: " + msg()) };
+        arr
+    );
+}
 
 type Obj = unbox struct {
     arr: Array I64,
