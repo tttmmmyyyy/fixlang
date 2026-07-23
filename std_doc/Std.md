@@ -160,6 +160,8 @@ Type: `[a : Std::Boxed] a -> (Std::Bool, a)`
 
 This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
 
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
+
 Example: 
 ```
 module Main;
@@ -772,6 +774,9 @@ Type: `[a : Std::Boxed] Std::Lazy Std::String -> a -> a`
 
 Asserts that the given boxed value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
+
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent
+and this treated any unboxed value as unique, so it never aborted for an unboxed argument.
 
 This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 

@@ -1,5 +1,7 @@
 This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
 
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
+
 Example: 
 ```
 module Main;
