@@ -2795,6 +2795,7 @@ cases = [
     case_1,
     case_2,
     case_stability_0,
+    case_random_0,
     case_random_1,
     case_random_2,
     case_random_3,
@@ -6268,6 +6269,8 @@ pub fn test_extra_comma() {
             )
         };;
 
+        assert_eq(|_|"", x.get_fst, 0);;
+
         assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);;
         assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);;
         assert_eq(|_|"", [,], [] : Array Bool);;
@@ -8017,7 +8020,7 @@ pub fn test_type_variable_in_type_annotated_pattern() {
 
         main: IO ();
         main = (
-            assert_eq(|_|"", [] : Array I64, [])
+            assert_eq(|_|"", empty_array : Array I64, [])
         );
     "##;
     test_source(&source, Configuration::develop_mode());
@@ -9509,6 +9512,7 @@ test = (
 
 main : IO ();
 main = (
+    eval test;
     pure()
 );
     "##;
