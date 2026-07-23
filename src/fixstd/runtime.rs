@@ -53,6 +53,17 @@ pub enum BuildMode {
     Implement,
 }
 
+// Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
+// Without this, a bounds-check failure path (which calls the function and then flows to a merge)
+// keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
+// size and defeats bounds-check elimination.
+fn set_noreturn<'c, 'm>(gc: &Generator<'c, 'm>, func_name: &str) {
+    let func = gc.module.get_function(func_name).unwrap();
+    let noreturn_kind = Attribute::get_named_enum_kind_id("noreturn");
+    let noreturn = gc.context.create_enum_attribute(noreturn_kind, 0);
+    func.add_attribute(AttributeLoc::Function, noreturn);
+}
+
 fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -63,6 +74,7 @@ fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 
     let fn_ty = gc.context.void_type().fn_type(&[], false);
     gc.module.add_function(RUNTIME_ABORT, fn_ty, None);
+    set_noreturn(gc, RUNTIME_ABORT);
     return;
 }
 
@@ -80,6 +92,7 @@ fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: B
     );
     gc.module
         .add_function(RUNTIME_INDEX_OUT_OF_RANGE, fn_ty, None);
+    set_noreturn(gc, RUNTIME_INDEX_OUT_OF_RANGE);
     return;
 }
 
@@ -97,6 +110,7 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: 
         .fn_type(&[gc.context.i64_type().into()], false);
     gc.module
         .add_function(RUNTIME_NEGATIVE_ARRAY_SIZE, fn_ty, None);
+    set_noreturn(gc, RUNTIME_NEGATIVE_ARRAY_SIZE);
     return;
 }
 
