@@ -1293,10 +1293,8 @@ pub fn lambda_function_type<'c, 'm>(
         .flat_map(|src| {
             let embedded = src.get_embedded_type(gc, &vec![]);
             gc.flatten_to_scalar_leaves(embedded)
-                .into_iter()
-                .map(|t| t.into())
-                .collect::<Vec<BasicMetadataTypeEnum>>()
         })
+        .map(|t| t.into())
         .collect::<Vec<_>>();
 
     // The pointer to the CAP (a dynamic object which contains captured values), if the lambda is closure.
