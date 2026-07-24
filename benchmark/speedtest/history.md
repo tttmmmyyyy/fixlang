@@ -2,6 +2,28 @@
 
 Newer is above.
 
+## 96f680496768b92145e8d577c26356091e0104d9
+
+Moving the eight `cp_lib_*` cases from cp-library 0.7.4 to 0.13.0, measured against the previous
+baseline row `d29b6c3c` on the same compiler. The six cases that generate input with `Random` gained a
+direct random 1.1.2 dependency (0.13.0 dropped random from its build deps), the same version 0.7.4
+supplied transitively, so the workloads are unchanged. The 32 non-cp_lib cases confirm this: every one
+is identical to the baseline to within 0.0000%.
+
+Seven of the eight cp_lib cases are likewise unchanged — their algorithms compile identically across
+the two cp-library versions. The exception is **unionfind, which regresses +29.8% in instructions
+(111.2M -> 144.4M) and +31.2% in memory accesses (179.1M -> 235.0M)**: cp-library 0.13.0's UnionFind
+is meaningfully heavier than 0.7.4's. Compiler and input are held fixed, so this is a cp-library-side
+change to weigh, not a compiler regression.
+
+## d29b6c3ccfdd8c92f3999aaec0c7c78778b238c2
+
+Baseline of `main` after the bce merge (#80) and the external-test change (#83), taken before bumping
+the `cp_lib_*` cases from cp-library 0.7.4 to 0.13.0. It matches the previous bce row `f0a60009` to
+within noise — the intervening commits (the `Arc<RcExpr>` change, the `grow_stack` helper, and the
+test-only #83) do not touch code generation — so the merged main reproduces the last bce measurement
+and gives a clean reference for the cp-library version change measured next.
+
 ## f0a600092158e34fccbe3ac6c44d64b6db8782d5
 
 Removing the traverser `alwaysinline` attribute, measured against the row that added it as an enum
