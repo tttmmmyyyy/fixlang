@@ -2050,9 +2050,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
 
-    // Add frame-pointer attribute to all functions in the module
-    // This is especially important on macOS where backtrace() relies on frame pointers
-    // Add a named enum attribute (e.g. `noreturn`, `alwaysinline`) to a function. Enum attributes
+    // Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
     // must be created through their kind id; a string attribute of the same name is silently
     // ignored by LLVM.
     pub fn add_enum_attribute(&self, func: FunctionValue<'c>, name: &str, loc: AttributeLoc) {
@@ -2060,6 +2058,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
+    // Add frame-pointer attribute to all functions in the module
+    // This is especially important on macOS where backtrace() relies on frame pointers
     pub fn add_frame_pointer_attribute_to_all_functions(&self) {
         let mut func = self.module.get_first_function();
         while let Some(function) = func {
