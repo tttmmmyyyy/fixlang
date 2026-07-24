@@ -149,18 +149,21 @@ fn rewrite_budget(node: &RcExprNode) -> u64 {
 
 /// The number of expression nodes in `node`.
 fn node_count(node: &RcExprNode) -> u64 {
-    let cont = match node.expr.as_ref() {
-        RcExpr::Ret(_) => return 1,
-        RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
-            return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
-        }
-        RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, k)
-        | RcExpr::Eval(_, k)
-        | RcExpr::Retain(_, _, _, k)
-        | RcExpr::Release(_, _, _, k) => k,
-    };
-    1 + node_count(cont)
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        let cont = match node.expr.as_ref() {
+            RcExpr::Ret(_) => return 1,
+            RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
+                return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
+            }
+            RcExpr::Let(_, _, k)
+            | RcExpr::Destructure(_, _, k)
+            | RcExpr::Eval(_, k)
+            | RcExpr::Retain(_, _, _, k)
+            | RcExpr::Release(_, _, _, k) => k,
+        };
+        1 + node_count(cont)
+    })
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
@@ -334,14 +337,17 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
 /// the returned variable. Binders do not count. `Retain`/`Release` name a variable only for reference
 /// counting, so they are transparent (and do not occur before `insert_rc` anyway).
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
-    let hit = |v: &RcVar| (v.name == *name) as usize;
-    match node.expr.as_ref() {
-        RcExpr::Ret(v) => hit(v),
-        RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-        RcExpr::Destructure(c, _, k) => hit(c) + count_value_uses(name, k),
-        RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
-    }
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        let hit = |v: &RcVar| (v.name == *name) as usize;
+        match node.expr.as_ref() {
+            RcExpr::Ret(v) => hit(v),
+            RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
+            RcExpr::Destructure(c, _, k) => hit(c) + count_value_uses(name, k),
+            RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
+            RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
+        }
+    })
 }
 
 fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {

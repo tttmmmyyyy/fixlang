@@ -76,10 +76,21 @@ pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable rather than stored here.
-#[derive(Clone)]
 pub struct RcExprNode {
     pub expr: Box<RcExpr>,
     pub source: Option<Span>,
+}
+
+impl Clone for RcExprNode {
+    fn clone(&self) -> Self {
+        // The continuation chain is owned (`Box<RcExpr>`) and can be thousands of nodes deep, so a
+        // plain recursive clone overflows the stack. Grow it on demand at each node, as every RC IR
+        // traversal does (see `rewrite`, `eval_rc_expr`, `lower`).
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || RcExprNode {
+            expr: Box::new((*self.expr).clone()),
+            source: self.source.clone(),
+        })
+    }
 }
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
@@ -203,4 +214,43 @@ pub struct RcGlobalInit {
     pub symbol: FullName,
     pub ty: Arc<TypeNode>,
     pub init: RcExprNode,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::types::type_tyvar_star;
+
+    // `RcExprNode` owns its continuation chain, so cloning a body recurses to the chain's depth. A
+    // real function body can be thousands of nodes deep, and the simplifier clones whole bodies, so
+    // the clone must grow the stack on demand rather than overflow it. Build a chain far deeper than
+    // an unguarded recursive clone could hold on any thread stack, and confirm the clone returns.
+    #[test]
+    fn rc_expr_node_clone_is_stack_safe() {
+        let var = RcVar {
+            name: FullName::local("a"),
+            ty: type_tyvar_star("a"),
+            source: None,
+            debug_name: None,
+            skip_null_check: false,
+        };
+        let mut node = RcExprNode {
+            expr: Box::new(RcExpr::Ret(var.clone())),
+            source: None,
+        };
+        for _ in 0..100_000 {
+            node = RcExprNode {
+                expr: Box::new(RcExpr::Eval(var.clone(), node)),
+                source: None,
+            };
+        }
+
+        let clone = node.clone();
+
+        // The recursive `Drop` of a chain this deep would itself overflow the stack; that is a
+        // separate case this test does not exercise, so leak both chains and let the process reclaim
+        // them flat at exit.
+        std::mem::forget(node);
+        std::mem::forget(clone);
+    }
 }
