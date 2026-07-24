@@ -1009,6 +1009,17 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &str,
     ) -> BasicValueEnum<'c> {
         let ty = incomings[0].0.get_type();
+        // Every incoming merges a value of the same type; a differing type would make the per-leaf
+        // phis ill-formed. Checked under develop mode (the unit tests).
+        if self.config.develop_mode {
+            for (val, _) in incomings {
+                assert_eq!(
+                    val.get_type(),
+                    ty,
+                    "build_scalar_phi incomings must share one type"
+                );
+            }
+        }
         if !matches!(ty, BasicTypeEnum::StructType(_)) {
             let phi = self.builder().build_phi(ty, name).unwrap();
             for (val, bb) in incomings {
@@ -1032,6 +1043,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         // One scalar phi per leaf, all built before any reassembly so the block's phis stay
         // contiguous at its top.
         let leaf_tys = self.flatten_to_scalar_leaves(ty);
+        // `explode_to_scalar_leaves` on each incoming and `flatten_to_scalar_leaves` on their shared
+        // type must agree on leaf count and per-leaf type, so `leaves[j]` feeds a phi of type
+        // `leaf_tys[j]`. Checked under develop mode (the unit tests).
+        if self.config.develop_mode {
+            for (leaves, _) in &exploded {
+                assert_eq!(
+                    leaves.len(),
+                    leaf_tys.len(),
+                    "scalar-phi leaf count disagrees with flatten_to_scalar_leaves"
+                );
+                for (leaf, leaf_ty) in leaves.iter().zip(leaf_tys.iter()) {
+                    assert_eq!(
+                        leaf.get_type(),
+                        *leaf_ty,
+                        "scalar-phi leaf type disagrees with flatten_to_scalar_leaves"
+                    );
+                }
+            }
+        }
         self.builder().position_at_end(phi_bb);
         let leaf_phis: Vec<BasicValueEnum<'c>> = leaf_tys
             .iter()
