@@ -542,8 +542,10 @@ fn type_entries(
             continue;
         }
 
-        // Skip dynamic object type
-        if ty_info.variant == TyConVariant::DynamicObject {
+        // Skip the internal dynamic object and array storage types.
+        if ty_info.variant == TyConVariant::DynamicObject
+            || ty_info.variant == TyConVariant::ArrayStorage
+        {
             continue;
         }
 
@@ -554,6 +556,9 @@ fn type_entries(
             TyConVariant::Struct => "struct { ...fields... }",
             TyConVariant::Union => "union { ...variants... }",
             TyConVariant::DynamicObject => {
+                unreachable!()
+            }
+            TyConVariant::ArrayStorage => {
                 unreachable!()
             }
             TyConVariant::Opaque => {

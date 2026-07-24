@@ -9,4 +9,4 @@ files = ["main.fix"]
 [[dependencies]]
 name = "math"
 version = "0.1"
-git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git", rev = "7602fba" }
+git = { url = "https://github.com/tttmmmyyyy/fixlang-git-ref-test-dep.git", rev = "8dfe8df" }

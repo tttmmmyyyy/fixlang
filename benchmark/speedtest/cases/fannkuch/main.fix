@@ -1,0 +1,82 @@
+module Main;
+
+import Std::{
+    loop, Array, I64, IO, Array::{fill, from_map, set, @}, Debug::assert_eq,
+    LessThan::max, LoopState::{break, continue}, Monad::pure
+};
+
+// fannkuch-redux: heavy in-place integer-array mutation. `Array::set` and the
+// struct field modifiers update in place while the reference is unique, so this
+// exercises Fix's unique-reference O(1) array update over every permutation.
+
+// Count prefix-reversal flips on `perm` (mutated locally) until perm[0] == 0.
+count_flips : Array I64 -> I64;
+count_flips = |perm| (
+    loop((0, perm), |(flips, perm)|
+        let k = perm.@(0);
+        if k == 0 { break $ flips };
+        let perm = loop((0, k, perm), |(i, j, perm)|
+            if i >= j { break $ perm };
+            let vi = perm.@(i);
+            let vj = perm.@(j);
+            continue $ (i + 1, j - 1, perm.set(i, vj).set(j, vi))
+        );
+        continue $ (flips + 1, perm)
+    )
+);
+
+type St = struct {
+    perm1 : Array I64,
+    count : Array I64,
+    r : I64,
+    maxflips : I64,
+    checksum : I64,
+    permcount : I64
+};
+
+fannkuch : I64 -> (I64, I64);
+fannkuch = |n| (
+    let st0 = St {
+        perm1 : Array::from_map(n, |i| i),
+        count : Array::fill(n, 0),
+        r : n, maxflips : 0, checksum : 0, permcount : 0
+    };
+    loop(st0, |st|
+        // while r != 1 { count[r-1] = r; r-- }
+        let st = loop(st, |st|
+            if st.@r == 1 { break $ st };
+            let r = st.@r;
+            continue $ st.mod_count(|c| c.set(r - 1, r)).mod_r(|x| x - 1)
+        );
+        // flips on a (copied) perm1
+        let flips = count_flips(st.@perm1);
+        let pc = st.@permcount;
+        let st = st.mod_maxflips(|m| max(m, flips))
+                   .mod_checksum(|c| c + (if pc % 2 == 0 { flips } else { -flips }));
+        // next permutation -> (st, done)
+        let (st, done) = loop(st, |st|
+            if st.@r == n { break $ (st, true) };
+            let r = st.@r;
+            let st = st.mod_perm1(|perm1|
+                let perm0 = perm1.@(0);
+                let perm1 = loop((0, perm1), |(i, p)|
+                    if i == r { break $ p };
+                    continue $ (i + 1, p.set(i, p.@(i + 1)))
+                );
+                perm1.set(r, perm0)
+            ).mod_count(|c| c.set(r, c.@(r) - 1));
+            if st.@count.@(r) > 0 { break $ (st, false) };
+            continue $ st.mod_r(|x| x + 1)
+        );
+        if done { break $ (st.@checksum, st.@maxflips) };
+        continue $ st.mod_permcount(|x| x + 1)
+    )
+);
+
+main : IO ();
+main = (
+    let (checksum, maxflips) = fannkuch(10);
+    assert_eq(|_|"fannkuch: checksum", checksum, 73196);;
+    assert_eq(|_|"fannkuch: maxflips", maxflips, 38);;
+    pure()
+);

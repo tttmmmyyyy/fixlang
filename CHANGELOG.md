@@ -13,6 +13,20 @@
 
 - LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
 
+#### Std
+
+- Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
+- Added `Array::unsafe_set_bounds_unchecked`, which sets the element at a given index like `set` but omits the bounds check (the caller must ensure the index is in range). It is the counterpart of `unsafe_swap_bounds_unchecked`, for in-place write loops whose indices are already known to be in range.
+- Added `Array::borrow_elements` and `Array::mutate_elements` (with `_io` variants), which call a function with a pointer to the first element of an array's element buffer. `borrow_elements` borrows the array for read-only access; `mutate_elements` clones the array first if it is shared, for in-place writes. Use these for FFI that needs a raw pointer to an array's elements.
+
+### Changed
+
+#### Std
+
+- `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
+- `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`.
+- The internal implementation of the counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` changed. As long as you iterate them the yielded elements are unchanged; only code that reads these iterators' fields directly is affected. See their definitions in the standard library for the details.
+
 ### Fixed
 
 #### Std
@@ -21,10 +35,12 @@
 
 #### Tool
 
+- Debug information (`-g`) records every `Array` as having 100 elements, since the actual element count is only determined at run time. The byte sizes recorded for the array debug types covered only a single element, contradicting that element count: gdb refused to display the elements with an "access outside bounds of object" error, and recent lldb displayed wrong values for all elements after the first. The byte sizes now cover the 100 elements, so debuggers display them, the first `<array size>` of which are the valid values. This also applies to the byte array inside a `String`.
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).
 - `fix run` and `fix test` no longer crash on startup in debug builds of `fix` (released builds were unaffected).
 - `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
+- The type-checking cache is now invalidated when the compiler itself changes, not only when the source changes. Its key previously depended only on the source code, so a cache written by an earlier `fix` whose internal serialization format differed could be read back and misinterpreted by a newer `fix` — for example, hanging the build after an upgrade. Such caches are now regenerated instead.
 
 ## [1.4.0] - 2026-06-22
 

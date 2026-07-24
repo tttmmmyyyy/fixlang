@@ -1,8 +1,12 @@
 module Main;
 
-import Random;
-import CPLib.Trait;
-import CPLib.LSegtree;
+import CPLib.LSegtree::{act_range, fold, init, set, LSegtree};
+import CPLib.Trait::{Action, Monoid};
+import Random::{generate_I64_nonneg, init_by_seed};
+import Std::{
+    I64, IO, Debug::{assert_eq, consumed_time_while_lazy}, I64::minimum, IO::println, 
+    Iterator::{fold, range}, LessThan::max, Monad::pure, String::populate, ToString::to_string
+};
 
 main : IO ();
 main = (

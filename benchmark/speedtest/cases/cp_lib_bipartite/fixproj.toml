@@ -93,5 +93,5 @@ files = ["test.fix"]
 
 [[dependencies]]
 name = "cp-library"
-version = "0.7.0"
-git = { url = "https://github.com/tttmmmyyyy/cp-library.git" }
+version = "0.7.4"
+git = { url = "https://github.com/tttmmmyyyy/cp-library.git", rev = "f538b64ae07cb225fcf497ca783fb303b315508a" }

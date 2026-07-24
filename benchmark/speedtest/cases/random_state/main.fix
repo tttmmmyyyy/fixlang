@@ -1,6 +1,7 @@
 module Main;
 
-import Random::{Random, generate_U64, init_by_seed};
+import Random::{generate_U64, init_by_seed, Random};
+import Std::{IO, Monad, U64, IO::println, Iterator::{fold_m, range}, Monad::pure, ToString::to_string};
 
 type State s a = unbox struct { run : s -> (s, a) };
 

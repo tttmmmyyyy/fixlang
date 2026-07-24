@@ -1,0 +1,21 @@
+module Main;
+
+import Std::{
+    Array, I64, IO, Array::{from_map, @}, Debug::assert_eq,
+    Iterator::{fold, range}, Monad::pure
+};
+
+// Fix-source equivalent of `Array::fill`: `from_map` builds the array with a Fix-level loop
+// rather than the InlineLLVM `fill`. Comparing it against the `fill` benchmark measures whether
+// the optimizer makes a Fix-source fill as fast as the hand-written LLVM fill.
+fill_bench : I64 -> I64 -> I64;
+fill_bench = |m, iters| (
+    Iterator::range(0, iters).fold(0, |k, acc| acc + Array::from_map(m, |_| k).@(0))
+);
+
+main : IO ();
+main = (
+    let s = fill_bench(1000, 10000);
+    assert_eq(|_|"fill_from_map", s, 49995000);;
+    pure()
+);

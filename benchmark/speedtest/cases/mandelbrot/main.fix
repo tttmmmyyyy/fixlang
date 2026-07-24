@@ -1,0 +1,39 @@
+module Main;
+
+import Std::{
+    loop, I64, IO, F64, Debug::assert_eq, LoopState::{break, continue}, Monad::pure
+};
+
+// Float-heavy nested loops with no arrays: escape-time iteration over an n*n grid.
+// Coordinates are F64 accumulators (avoids an I64->F64 cast per pixel). Guards the
+// scalar float codegen path. The escape count saturates for n above ~1000, so the
+// asserted result is stable while larger n only adds outside-the-set work.
+in_set : F64 -> F64 -> I64;
+in_set = |cr, ci| (
+    loop((0, 0.0, 0.0), |(iter, zr, zi)|
+        if iter == 50 { break $ 1 };
+        if zr * zr + zi * zi > 4.0 { break $ 0 };
+        let zr2 = zr * zr - zi * zi + cr;
+        let zi2 = 2.0 * zr * zi + ci;
+        continue $ (iter + 1, zr2, zi2)
+    )
+);
+
+mandel : I64 -> I64;
+mandel = |n| (
+    let step = 0.0025;
+    loop((0, 0, -1.0), |(py, count, ci)|
+        if py == n { break $ count };
+        let row = loop((0, 0, -2.0), |(px, c, cr)|
+            if px == n { break $ c };
+            continue $ (px + 1, c + in_set(cr, ci), cr + step)
+        );
+        continue $ (py + 1, count + row, ci + step)
+    )
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"mandelbrot", mandel(1500), 254662);;
+    pure()
+);

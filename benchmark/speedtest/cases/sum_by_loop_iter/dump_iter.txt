@@ -1,0 +1,87 @@
+entry #entry
+
+fn Main::main#0(#v0#42 : Std::#CapList<#param:Std::I64>, #v1#43 : (Std::I64, Std::Array Std::I64)) -> Std::LoopState (Std::I64, Std::Array Std::I64) (Std::Array Std::I64):
+    destructure #v0#42 { .0 -> #param#44 : Std::I64 (as #param) }
+    destructure #v1#43 { .0 -> idx#45 : Std::I64 (as idx), .1 -> arr#46 : Std::Array Std::I64 (as arr) }
+    let v#47 : Std::Bool = LLVM<int_eq(#param#44, idx#45)>(#param#44, idx#45)
+    let if#56 : Std::LoopState (Std::I64, Std::Array Std::I64) (Std::Array Std::I64) = match v#47 {
+        case 1(unit#48 : ()):
+            let v#49 : Std::LoopState (Std::I64, Std::Array Std::I64) (Std::Array Std::I64) = LLVM<union_1(arr#46)>(arr#46)
+            ret v#49
+        case 0(unit#50 : ()):
+            let v#51 : Std::Array Std::I64 (as #v1) = LLVM<Array::_unsafe_set_bounds_uniqueness_unchecked_unreleased(idx#45, idx#45, arr#46)>(arr#46, idx#45, idx#45)
+            let v#52 : Std::I64 (as #v2) = LLVM<int(1)>()
+            let v#53 : Std::I64 = LLVM<int_add(idx#45, v#52)>(idx#45, v#52)
+            let struct#54 : (Std::I64, Std::Array Std::I64) (as continue) = LLVM<make_struct(v#53, v#51)>(v#53, v#51)
+            let v#55 : Std::LoopState (Std::I64, Std::Array Std::I64) (Std::Array Std::I64) = LLVM<union_0(struct#54)>(struct#54)
+            ret v#55
+    }
+    ret if#56
+
+fn Main::main#1(#v0#57 : Std::#CapList<#v6:Std::Array Std::I64>, #v1#58 : Std::I64, #v2#59 : Std::I64) -> Std::LoopState Std::I64 Std::I64:
+    destructure #v0#57 { .0 -> #v6#60 : Std::Array Std::I64 (as #v6) }
+    let v#61 : Std::I64 (as lhs) = LLVM<#v6#60.Array::get_size>(#v6#60)
+    release #v6#60
+    let v#62 : Std::Bool = LLVM<int_eq(v#61, #v1#58)>(v#61, #v1#58)
+    let if#68 : Std::LoopState Std::I64 Std::I64 = match v#62 {
+        case 1(unit#63 : ()):
+            let v#64 : Std::LoopState Std::I64 Std::I64 = LLVM<union_1(#v2#59)>(#v2#59)
+            ret v#64
+        case 0(unit#65 : ()):
+            let v#66 : Std::I64 (as #v11) = LLVM<int_add(#v1#58, #v2#59)>(#v1#58, #v2#59)
+            let v#67 : Std::LoopState Std::I64 Std::I64 = LLVM<union_0(v#66)>(v#66)
+            ret v#67
+    }
+    ret if#68
+
+fn Main::main#2(#v0#1 : Std::#CapList<#v15:Std::Bool>, #v1#2 : Std::IO::IOState) -> (Std::IO::IOState, ()):
+    destructure #v0#1 { .0 -> #v15#3 : Std::Bool (as #v15) }
+    let if#19 : (Std::IO::IOState, ()) = match #v15#3 {
+        case 1(unit#4 : ()):
+            let struct#5 : () = LLVM<make_struct()>()
+            let struct#6 : (Std::IO::IOState, ()) = LLVM<make_struct(#v1#2, struct#5)>(#v1#2, struct#5)
+            ret struct#6
+        case 0(unit#7 : ()):
+            let v#8 : Std::Array Std::U8 (as #v17) = LLVM<string_buf("Assertion failed!: ")>()
+            let v#9 : Std::Array Std::U8 = LLVM<string_buf("sum_by_loop_iter")>()
+            let v#10 : Std::I64 (as #v18) = LLVM<v#8.Array::get_size>(v#8)
+            let v#11 : Std::I64 (as #v19) = LLVM<int(0)>()
+            let v#12 : Std::Bool = LLVM<int_eq(v#11, v#10)>(v#11, v#10)
+            let if#16 : Std::Array Std::U8 = match v#12 {
+                case 1(unit#13 : ()):
+                    ret v#8
+                case 0(unit#14 : ()):
+                    let v#15 : Std::Array Std::U8 = LLVM<Array::_pop_back_nonempty(v#8)>(v#8)
+                    ret v#15
+            }
+            let app#17 : Std::Array Std::U8 (as #v22) = Std::Array::append#2(v#9, if#16)
+            let v#18 : (Std::IO::IOState, ()) = LLVM<_undefined_internal(app#17)>(app#17)
+            ret v#18
+    }
+    ret if#19
+
+fn Main::main#3(#v0#20 : Std::IO::IOState) -> (Std::IO::IOState, ()):
+    let v#21 : Std::I64 (as #param) = LLVM<int(100000)>()
+    let struct#22 : Std::#CapList<#param:Std::I64> (as #v3) = LLVM<make_struct(v#21)>(v#21)
+    let v#23 : Std::I64 = LLVM<int(0)>()
+    let v#24 : Std::I64 (as cap) = LLVM<Array::_check_size(v#21)>(v#21)
+    let v#25 : Std::Array Std::I64 (as #v4) = LLVM<Array::_unsafe_empty_capacity_unchecked(v#24)>(v#24)
+    let v#26 : Std::Array Std::I64 = LLVM<v#25.Array::unsafe_set_size(v#21)>(v#25, v#21)
+    let struct#27 : (Std::I64, Std::Array Std::I64) = LLVM<make_struct(v#23, v#26)>(v#23, v#26)
+    let app#28 : Std::Array Std::I64 (as #v6) = Std::loop#0(struct#27, struct#22)
+    let v#29 : Std::I64 (as #v7) = LLVM<int(4999950000)>()
+    let v#30 : Std::I64 = LLVM<int(0)>()
+    retain app#28
+    let struct#31 : Std::Iterator::ArrayIterator Std::I64 (as #v8) = LLVM<make_struct(app#28, v#30)>(app#28, v#30)
+    let v#32 : Std::I64 = LLVM<int(0)>()
+    let struct#33 : Std::#CapList<#v6:Std::Array Std::I64> = LLVM<make_struct(app#28)>(app#28)
+    let app#34 : Std::I64 (as #v14) = Std::Iterator::loop_iter#0(v#32, struct#33, struct#31)
+    let v#35 : Std::Bool = LLVM<int_eq(v#29, app#34)>(v#29, app#34)
+    let struct#36 : Std::#CapList<#v15:Std::Bool> = LLVM<make_struct(v#35)>(v#35)
+    let app#37 : (Std::IO::IOState, ()) = Main::main#2(struct#36, #v0#20)
+    destructure app#37 { .0 -> iostate#38 : Std::IO::IOState (as iostate), .1 -> a#39 : () (as a) }
+    let struct#40 : () (as #v25) = LLVM<make_struct()>()
+    let struct#41 : (Std::IO::IOState, ()) = LLVM<make_struct(iostate#38, struct#40)>(iostate#38, struct#40)
+    ret struct#41
+
+

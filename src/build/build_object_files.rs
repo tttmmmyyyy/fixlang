@@ -1,35 +1,48 @@
-use std::{
-    fs::{self, create_dir_all},
-    panic::panic_any,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
-use inkwell::{
-    context::Context,
-    module::Module,
-    passes::PassBuilderOptions,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    values::BasicValue,
-    AddressSpace, OptimizationLevel,
-};
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-
 use crate::{
-    ast::{export_statement::ExportStatement, expr::ExprNode, program::Program},
+    ast::{
+        export_statement::ExportStatement,
+        expr::ExprNode,
+        name::FullName,
+        program::{Program, Symbol, TypeEnv},
+    },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
-    constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
+    constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     error::{panic_with_msg, Errors},
     fixstd::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, warn_msg},
+    misc::{info_msg, warn_msg, Set},
     optimization,
+    rc_ir::{
+        ast::RcProgram,
+        borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        lower::lower_program,
+        print::{program_to_string_annotated, Annotations},
+        provenance::analyze_program,
+        rc_insert::insert_rc,
+        simplify::simplify,
+        unique_check_elim::specialize,
+    },
     tool::stopwatch::StopWatch,
+};
+use inkwell::{
+    context::Context,
+    module::Module,
+    passes::PassBuilderOptions,
+    targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
+    values::BasicValue,
+    AddressSpace, OptimizationLevel,
+};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::{self, create_dir_all},
+    panic::panic_any,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 // The result of `build_object_files` function.
@@ -38,6 +51,156 @@ pub struct BuildObjFilesResult {
     // Paths of object files generated.
     // If the function is running for language server, this will be empty.
     pub obj_paths: Vec<PathBuf>,
+}
+
+// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
+// code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
+//
+// The two symbol sets play different roles. `symbols` is the set to lower and generate code for — one
+// compilation unit, or the whole program. `all_symbols` is every symbol in the program; lowering
+// consults it only to type a global that a lowered function references as an LLVM operand, which under
+// separated compilation may be defined in another unit. So `all_symbols` must cover every symbol
+// anything in `symbols` can reference (`symbols` is a subset of it), while only `symbols` becomes code.
+fn lower_and_insert_rc(
+    type_env: &TypeEnv,
+    symbols: &[Symbol],
+    all_symbols: &[Symbol],
+    config: &Configuration,
+) -> RcProgram {
+    let mut prog = lower_program(type_env, symbols, all_symbols);
+    // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
+    // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
+    if config.enable_simplify() {
+        simplify(&mut prog);
+    }
+    insert_rc(&mut prog, type_env);
+    prog
+}
+
+// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
+// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
+// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
+// borrowed parameters on the functions (`RcFunc::borrowed_units`); read the owned complement back
+// with `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
+fn optimize_rc_program(
+    mut prog: RcProgram,
+    type_env: &TypeEnv,
+    all_symbols: &[Symbol],
+    config: &Configuration,
+) -> RcProgram {
+    // The whole program's symbol names, for the debug-only validator to recognize global references
+    // (a unit may reference a symbol another unit defines). Built only when the validator runs.
+    let symbol_names: Set<FullName> = if config.develop_mode {
+        all_symbols.iter().map(|s| s.name.clone()).collect()
+    } else {
+        Set::default()
+    };
+    let validate = |prog: &RcProgram, stage: &str| {
+        if config.develop_mode {
+            crate::rc_ir::validate::validate(prog, &symbol_names, type_env, stage);
+        }
+    };
+
+    validate(&prog, "after insert_rc");
+    split_rc_units(&mut prog, type_env);
+    validate(&prog, "after split_rc_units");
+    if config.enable_borrow_optimization() {
+        prog = borrow_ify(&prog, type_env);
+        validate(&prog, "after borrow_ify");
+        prog = cancel(&prog, type_env);
+        validate(&prog, "after cancel");
+        prog = specialize(&prog, type_env);
+        validate(&prog, "after specialize");
+    }
+    prog
+}
+
+// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a file
+// under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
+// `--emit-rc-ir`, for compiler development. `rc_program` is the whole program at that stage; the module
+// filter is applied here, on the RC IR, so the dumped functions carry the whole-program context that
+// code generation actually compiles.
+fn dump_rc_ir(
+    rc_program: &RcProgram,
+    type_env: &TypeEnv,
+    filter: &str,
+    stage: &str,
+    config: &Configuration,
+) {
+    // Provenance and ownership are optimization-analysis outputs, so only the post-optimization dump
+    // carries them; the pre-optimization dump shows the plain lowered RC IR.
+    let post = stage == "post";
+    let provs = post.then(|| analyze_program(rc_program, type_env).bindings);
+    let param_ownerships = (post && config.enable_borrow_optimization())
+        .then(|| param_ownership_shapes(rc_program, type_env));
+    let ann = Annotations {
+        provs: provs.as_ref(),
+        param_ownerships: param_ownerships.as_ref(),
+    };
+
+    // Keep the functions and globals of the selected module. Every function name carries its source
+    // module in its top namespace component — a top-level name, a `<function>::closure{N}` lambda, or a
+    // clone of either. Annotations stay computed over the whole program, so a kept function's
+    // provenance and ownership still resolve.
+    let in_module = |name: &FullName| {
+        filter == "all" || name.namespace.names.first().map(String::as_str) == Some(filter)
+    };
+    let selected = RcProgram {
+        funcs: rc_program
+            .funcs
+            .iter()
+            .filter(|(r, _)| in_module(&r.name))
+            .map(|(r, f)| (r.clone(), f.clone()))
+            .collect(),
+        globals: rc_program
+            .globals
+            .iter()
+            .filter(|g| in_module(&g.symbol))
+            .cloned()
+            .collect(),
+        entry: rc_program.entry.clone(),
+    };
+
+    // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
+    let file_name = if filter == "all" {
+        format!("rc_ir.{}.txt", stage)
+    } else {
+        let module: String = filter
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        format!("rc_ir.{}.{}.txt", module, stage)
+    };
+    let path = PathBuf::from(DOT_FIXLANG).join(file_name);
+    if let Err(e) = fs::write(&path, program_to_string_annotated(&selected, ann)) {
+        panic_with_msg(&format!(
+            "Failed to write RC IR to `{}`: {}",
+            path.display(),
+            e
+        ));
+    }
+    info_msg(&format!("RC IR written to {}.", path.display()));
+}
+
+// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
+// generation does at `Max`), then write it before and after the optimizations, filtered to the
+// requested module in each dump.
+fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
+    let Some(filter) = &config.emit_rc_ir else {
+        return;
+    };
+    let type_env = program.type_env();
+    let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
+    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms, config);
+    dump_rc_ir(&base, &type_env, filter, "pre", config);
+    let optimized = optimize_rc_program(base, &type_env, &all_syms, config);
+    dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
 // Compile the program, and returns the path of object files to be linked.
@@ -58,6 +221,8 @@ pub fn build_object_files<'c>(
 
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
+
+    dump_rc_ir_stages(&program, config);
 
     // Determine compilation units.
     let mut units = vec![];
@@ -157,10 +322,13 @@ pub fn build_object_files<'c>(
                 gc.declare_symbol(symbol);
             }
 
-            // Implement all symbols in this unit.
-            for symbol in unit.symbols() {
-                gc.implement_symbol(symbol);
-            }
+            // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
+            // LLVM. Every symbol is already declared above (prototypes + global registration, in
+            // every unit), so only this unit's symbols are implemented and none is defined twice.
+            let unit_symbols = unit.symbols().to_vec();
+            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols, &config);
+            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &all_symbols, &config);
+            gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
                 // Implement runtime functions.
@@ -232,7 +400,7 @@ fn load_build_object_files_cache(
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = std::fs::File::open(&cache_path);
+    let file = fs::File::open(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to open object files cache \"{}\": {}.",
@@ -282,7 +450,7 @@ fn save_build_object_files_cache(
         return;
     }
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = std::fs::File::create(&cache_path);
+    let file = fs::File::create(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to create object files cache \"{}\": {}.",
@@ -318,7 +486,10 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
-fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> TargetMachine {
+pub(crate) fn get_target_machine(
+    opt_level: OptimizationLevel,
+    config: &Configuration,
+) -> TargetMachine {
     let _native = Target::initialize_native(&InitializationConfig::default())
         .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
         .unwrap();
@@ -367,7 +538,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     let tmp_file_path =
         obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
     target_machine
-        .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
+        .write_to_file(&module, FileType::Object, &tmp_file_path)
         .map_err(|e| {
             panic_with_msg(&format!(
                 "Failed to write to file \"{}\": {}",
@@ -419,7 +590,7 @@ fn optimize_and_verify<'c>(
     // Get passes.
     let passes = match &config.llvm_passes_file {
         None => include_str!("llvm_passes.txt").to_string(),
-        Some(file) => std::fs::read_to_string(file).unwrap(),
+        Some(file) => fs::read_to_string(file).unwrap(),
     };
     let passes = passes
         .lines()
@@ -483,8 +654,11 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
         gc.builder().build_store(gv_ptr, arg_val).unwrap();
     }
 
-    // Run main object.
-    let main_obj = gc.eval_expr(main_expr, false).unwrap(); // A value of type `IO ()`.
+    // Run the main IO action. `main_expr` is a reference to the instantiated `main` symbol (see
+    // `instantiate_exported_value`), which the RC-IR back end has already implemented; materialize
+    // that symbol's object here.
+    let main_name = main_expr.get_var().name.clone();
+    let main_obj = gc.get_scoped_obj(&main_name); // A value of type `IO ()`.
     run_io_or_ios_runner(gc, &main_obj);
 
     // Return main function.

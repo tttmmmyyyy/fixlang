@@ -308,13 +308,13 @@ void fixruntime_clear_errno()
     errno = 0;
 }
 
-void fixruntime_index_out_of_range(int64_t idx, int64_t size)
+__attribute__((noreturn)) void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
     fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
     fixruntime_abort();
 }
 
-void fixruntime_negative_array_size(int64_t size)
+__attribute__((noreturn)) void fixruntime_negative_array_size(int64_t size)
 {
     fprintf(stderr, "Negative array size or capacity: %" PRId64 "\n", size);
     fixruntime_abort();

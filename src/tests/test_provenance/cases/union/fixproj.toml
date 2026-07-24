@@ -1,0 +1,6 @@
+[general]
+name = "union-borrow"
+version = "0.1.0"
+
+[build]
+files = ["src/main.fix"]

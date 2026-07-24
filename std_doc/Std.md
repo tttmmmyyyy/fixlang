@@ -156,40 +156,49 @@ but if the program does reach `undefined`, it will result in undefined behavior.
 
 #### unsafe_is_unique
 
-Type: `a -> (Std::Bool, a)`
+Type: `[a : Std::Boxed] a -> (Std::Bool, a)`
 
-This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
+This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
+
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
 
 Example: 
 ```
 module Main;
 
+type Resource = box struct { id : I64 };
+
 main : IO ();
 main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.unsafe_is_unique;
-    let use = int_val + 1;
+    // For a boxed value, it returns true if the value isn't used later.
+    let res = Resource { id : 42 };
+    let (unique, res) = res.unsafe_is_unique;
+    let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: int_val is shared", unique, true);;
+    assert_eq(|_|"fail: res is shared", unique, true);;
 
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.unsafe_is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    // For a boxed value, it returns false if the value will be used later.
+    let res = Resource { id : 42 };
+    let (unique, _) = res.unsafe_is_unique;
+    let use = res.@id;
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is shared", unique, true);;
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.unsafe_is_unique;
-    let use = arr.@(0);
-    eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is unique", unique, false);;
+    assert_eq(|_|"fail: res is unique", unique, false);;
 
     pure()
 );
 ```
+
+To test the uniqueness of a boxed value held in a field of an *unbox* struct (a common wrapper shape, e.g. an unbox struct holding a `Destructor`), act on that field with `unsafe_is_unique` as the `(Bool, _)`-functor action:
+
+```
+// `Wrap` is unboxed, so `unsafe_is_unique` cannot be called on it directly; what matters is the
+// sharing of the boxed field `_0`, recovered by acting on the field.
+type Wrap = unbox struct { _0 : SomeBoxedType };
+is_field_unique : Wrap -> (Bool, Wrap);
+is_field_unique = |w| w.act__0(unsafe_is_unique);
+```
+
+Extracting the field with `w.@_0` and calling `unsafe_is_unique` on it works only when `w` is not used afterwards (the extraction then moves the field out); if `w` is used later the extraction retains the field, and the answer is always `false`. Acting on the field is correct regardless.
 
 NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
 
@@ -285,7 +294,7 @@ This means that you don't need to pay cloning cost when your action failed, as e
 ##### Parameters
 
 * `i` - The index of the element to be acted on.
-* `action` - The functorial action to be performed on the element at index `idx`.
+* `action` - The functorial action to be performed on the element at index `i`.
 * `array` - The array.
 
 #### append
@@ -300,6 +309,33 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
+
+#### borrow_elements
+
+Type: `(Std::Ptr -> b) -> Std::Array a -> b`
+
+Calls a function with a pointer to the first element of the array's element buffer.
+
+The array is borrowed for the duration of the call, so the pointer is valid only while `borrower` runs. The pointer must not be used to mutate the array; to do that, use `mutate_elements`.
+
+##### Parameters
+
+* `borrower` - The function to call with the pointer to the first element.
+* `array` - The array whose elements are borrowed.
+
+#### borrow_elements_io
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO b`
+
+Calls an IO action with a pointer to the first element of the array.
+
+The array is borrowed for the duration of the action, so the pointer is valid only while it runs.
+It is not allowed to mutate the array through the borrowed pointer; to do that, use `mutate_elements`.
+
+##### Parameters
+
+* `act` - The IO action to call with the pointer to the first element.
+* `array` - The array whose elements are borrowed.
 
 #### dedup
 
@@ -453,6 +489,49 @@ If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is 
 * `modifier` - The function to apply to the element.
 * `array` - The array to modify.
 
+#### mutate_elements
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> (Std::Array a, b)`
+
+`arr.mutate_elements(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+and then returns the mutated `arr` paired with the result of `io(ptr)`.
+
+The IO action `io(ptr)` is expected to modify the elements of `arr` through the obtained pointer.
+Do not perform any IO operations other than mutating the elements of `arr`.
+
+This function first clones the array if it is shared. The pointer is valid only while `io` runs.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+
+#### mutate_elements_io
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO (Std::Array a, b)`
+
+`arr.mutate_elements_io(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
+and then returns the mutated `arr` paired with the result of `io(ptr)`.
+
+Similar to `mutate_elements`, but this function is used when you want to run the IO action in the existing IO context.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+
+#### mutate_elements_ios
+
+Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO::IOState -> (Std::IO::IOState, (Std::Array a, b))`
+
+Internal implementation of the `mutate_elements_io` function.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the first element.
+* `array` - The array to mutate.
+* `ios` - The `IOState` to thread through the action.
+
 #### pop_back
 
 Type: `Std::Array a -> Std::Array a`
@@ -589,6 +668,20 @@ Note: Currently this is implemented by merge sort, which is not in-place.
 * `less_than` - The comparator function.
 * `array` - The array to be sorted.
 
+#### swap
+
+Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+
+Swaps the two elements of an array at indices `i` and `j`.
+
+This function clones the given array if it is shared.
+
+##### Parameters
+
+* `i` - The index of the first element.
+* `j` - The index of the second element.
+* `array` - The array to modify.
+
 #### to_iter
 
 Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] Std::Array a -> ?it`
@@ -611,6 +704,34 @@ Truncates an array, keeping the given number of first elements.
 
 * `new_length` - The number of elements to be kept.
 * `array` - The array to be truncated.
+
+#### unsafe_set_bounds_unchecked
+
+Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
+
+Sets an element of an array at the specified index, omitting the bounds check.
+
+This function clones the given array if it is shared, and releases the element previously at the index. The caller must ensure `idx` is in range `[0, size)`; an out-of-range index causes undefined behavior.
+
+##### Parameters
+
+* `idx` - The index of the element to set.
+* `value` - The value to set.
+* `array` - The array to modify.
+
+#### unsafe_swap_bounds_unchecked
+
+Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+
+Swaps the two elements of an array at indices `i` and `j`, omitting the bounds check.
+
+This function clones the given array if it is shared. The caller must ensure `i` and `j` are in range `[0, size)`; an out-of-range index causes undefined behavior.
+
+##### Parameters
+
+* `i` - The index of the first element.
+* `j` - The index of the second element.
+* `array` - The array to modify.
 
 ### namespace Std::Box
 
@@ -649,15 +770,13 @@ If the assertion failed, prints a message to the stderr and aborts the program.
 
 #### assert_unique
 
-Type: `Std::Lazy Std::String -> a -> a`
+Type: `[a : Std::Boxed] Std::Lazy Std::String -> a -> a`
 
-Asserts that the given value is unique, and returns the given value.
+Asserts that the given boxed value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-This function is used to verify that functions such as `Array::set` do not perform array copying.
-For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
-rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
-If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent
+and this treated any unboxed value as unique, so it never aborted for an unboxed argument.
 
 This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 
@@ -3582,6 +3701,10 @@ Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::I64 -> Std
 
 Create an iterator that generates a range of numbers with a step.
 
+`range_step(a, b, s)` yields `a, a + s, a + 2*s, ...`, stopping before it would pass `b`:
+values stay below `b` when `s > 0` and above `b` when `s < 0`. It is empty when `s` points
+away from `b`. `s` must not be 0.
+
 ##### Parameters
 
 * `start` - The start of the range.
@@ -5610,9 +5733,9 @@ Trait member of `Std::Zero`
 
 #### Array
 
-Defined as: `type Array a = box { built-in }`
+Defined as: `type Array a = unbox { built-in }`
 
-The type of variable length arrays. This is a boxed type.
+The type of variable length arrays.
 
 #### Arrow
 
@@ -5622,9 +5745,10 @@ Defined as: `type Arrow a b = unbox { built-in }`
 
 #### Bool
 
-Defined as: `type Bool = unbox { built-in }`
+Defined as: `type Bool = unbox union { ...variants... }`
 
-The type of boolean values.
+The type of boolean values. The `true` / `false` keywords desugar to the constructors
+`_true()` / `_false()`.
 
 #### Box
 
@@ -5761,10 +5885,7 @@ The type of pointers.
 
 Defined as: `type PunchedArray a = unbox struct { ...fields... }`
 
-The type of punched arrays.
-
-A punched array is an array from which a certain element has been removed.
-This is used in the implementation of `Array::act`.
+The type of punched arrays: an array with one element moved out. Used internally by `Array::act`.
 
 #### Result
 
@@ -6817,8 +6938,6 @@ Returns "()".
 ### impl `Std::Array a : Std::Add`
 
 Concatenates two arrays.
-
-### impl `Std::Array a : Std::Boxed`
 
 ### impl `[a : Std::Eq] Std::Array a : Std::Eq`
 

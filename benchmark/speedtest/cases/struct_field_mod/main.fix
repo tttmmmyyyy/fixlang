@@ -1,0 +1,31 @@
+module Main;
+
+import Std::{
+    loop, Array, I64, IO, Array::{fill, set, @}, Debug::assert_eq,
+    LoopState::{break, continue}, Monad::pure
+};
+
+// The same in-place read+write hot loop as `arrayrw_fn`, with the array living in a field of an
+// unboxed struct that the loop threads. `mod_arr` punches the field out and plugs it back, so the
+// element writes are check-free only if what is known about the array survives that round trip.
+type State = unbox struct { arr : Array I64, tag : I64 };
+
+sweep : State -> State;
+sweep = |s| (
+    loop((0, s), |(i, s)|
+        if i == 1000 { break $ s };
+        continue $ (i + 1, s.mod_arr(|a| a.set(i, a.@(i) + 1)))
+    )
+);
+
+main : IO ();
+main = (
+    let iters = 200000;
+    let s = State { arr : Array::fill(1000, 0), tag : 0 };
+    let s = loop((0, s), |(k, s)|
+        if k == iters { break $ s };
+        continue $ (k + 1, sweep(s))
+    );
+    assert_eq(|_|"struct_field_mod", s.@arr.@(0), 200000);;
+    pure()
+);

@@ -20,6 +20,22 @@ use std::{
     process::Command,
 };
 
+/// The head of a test source: the `Main` module declaration followed by `Array::assert_unique`,
+/// which aborts unless the array's storage is uniquely referenced. Tests that check that an array
+/// operation mutates in place instead of copying prepend this to their source.
+const MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE: &str = r#"
+module Main;
+
+namespace Array {
+    assert_unique : Lazy String -> Array a -> Array a;
+    assert_unique = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array is not unique: " + msg()) };
+        arr
+    );
+}
+"#;
+
 #[test]
 pub fn test0() {
     let source = r#"    
@@ -28,6 +44,441 @@ pub fn test0() {
             main : IO ();
             main = (
                 assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_loop_m_array_state_no_leak() {
+    // A monadic loop whose state carries a boxed array: `continue_m`/`break_m` wrap the state tuple
+    // in a `LoopState` union and pass it to `pure` at an owning position. Borrow-ification must treat
+    // that union as owned — its payload is an owned tuple — rather than borrowed, or it brackets the
+    // call with a retain that has no matching release and leaks the array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = *loop_m((Array::empty(10), 0), |(arr, i)|
+                    if i == 5 { break_m $ arr }
+                    else { continue_m $ (arr.push_back(i * i), i + 1) }
+                );
+                assert_eq(|_|"size", arr.@size, 5);;
+                assert_eq(|_|"elems", arr, [0, 1, 4, 9, 16]);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unboxed_destructure_field_borrow() {
+    // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
+    // it again. Cancellation lets the field's move through the destructure keep its retain pending
+    // and cancel across the borrow call; this checks that keeping it pending — rather than consuming
+    // it at the destructure — stays memory-safe. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            tally : Array I64 -> I64 -> I64;
+            tally = |arr, i| if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) };
+
+            process : (Array I64, I64) -> I64;
+            process = |pair| (
+                let (arr, n) = pair;
+                let s = tally(arr, 0);
+                s + arr.@size + n
+            );
+
+            main : IO ();
+            main = (
+                let r = process((Array::fill(4, 7), 100));
+                assert_eq(|_|"process", r, 28 + 4 + 100);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_union_borrow_no_double_free() {
+    // A function builds `some(p)` around a borrowed array `p` and passes it to a borrowing position,
+    // then the caller reads the array again afterward. Building the union lays the borrowed payload
+    // in place rather than owning it, so borrow-ification must not release `p` through that union;
+    // otherwise the caller's later read is a use-after-free of its own array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            peek_opt : Option (Array I64) -> I64 -> I64;
+            peek_opt = |o, n| if n == 0 { o.map(|a| a.@size).as_some_or(0) } else { peek_opt(o, n - 1) };
+
+            via_union : Array I64 -> I64 -> I64;
+            via_union = |p, n| if n == 0 { p.@size } else { peek_opt(some(p), 3) + via_union(p, n - 1) };
+
+            main : IO ();
+            main = (
+                let a = Array::fill(5, 7);
+                let r = via_union(a, 2);
+                assert_eq(|_|"via_union", r + a.@size + a.@(0), 15 + 5 + 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_cancel_match_arm_array_fate() {
+    // A borrowing call reads the array, then a match consumes it on one arm (`push_back`) and drops
+    // it on the other (returning a fresh array). Cancellation must respect the array's per-arm fate,
+    // keeping the release its lowering placed rather than over-cancelling it. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            tally : Array I64 -> I64 -> I64;
+            tally = |arr, i| if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) };
+
+            choose : Array I64 -> Bool -> Array I64;
+            choose = |arr, keep| (
+                let n = tally(arr, 0);
+                if keep { arr.push_back(n) } else { Array::fill(1, n) }
+            );
+
+            main : IO ();
+            main = (
+                let r1 = choose(Array::fill(3, 2), true);
+                let r2 = choose(Array::fill(3, 5), false);
+                assert_eq(|_|"choose", r1.@size + r2.@size, 4 + 1);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_fresh_and_shared() {
+    // Unique-check elimination drops the force-unique clone from a `set` whose array is proven
+    // unique. The elided sets here run in place on a locally fresh array and must still compute the
+    // right values; a `set` reached through a boxed container is of unknown sharing, so its check
+    // stays and clones, leaving the array's other holder untouched. Run under memcheck so a wrongly
+    // dropped clone (an in-place write into a shared array) shows up as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.set(0, 10);
+                let a = a.set(1, 20);
+                let a = a.set(2, 30);
+                assert_eq(|_|"fresh sets", a.@(0) + a.@(1) + a.@(2), 60);;
+
+                let shared = Array::fill(2, 7);
+                let outer = [shared, shared];
+                let mutated = outer.@(0).set(0, 99);
+                let sibling = outer.@(1);
+                assert_eq(|_|"mutated", mutated.@(0), 99);;
+                assert_eq(|_|"sibling untouched", sibling.@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_branch_shared() {
+    // A fresh array is shared on only one branch of an `if` (stored into `keep`), then `set` after
+    // the branches merge. Because the provenance analysis joins the branches' exit environments, the
+    // array is possibly-shared at the `set`, so its force-unique check must stay: the `set` clones,
+    // leaving `keep`'s copy at its original value. Run for both branches under memcheck; eliding the
+    // check on the shared branch would corrupt `keep` (and double-free its array).
+    let source = r#"
+            module Main;
+
+            run : Bool -> I64;
+            run = |flag| (
+                let a = Array::fill(3, 0);
+                let keep = if flag { [a] } else { [] };
+                let a2 = a.set(0, 99);
+                let kept = if keep.get_size == 0 { 0 } else { keep.@(0).@(0) };
+                a2.@(0) + kept
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(|_|"flag true", run(true), 99);;
+                assert_eq(|_|"flag false", run(false), 99);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_chained_array_mod() {
+    // Chained `mod` on an array: `mod` completes through a `plug` that returns a uniquely owned
+    // array, so the second `mod`'s force-unique is dropped. A shared array keeps its check and
+    // clones, leaving its other holder untouched. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.mod(0, |x| x + 1).mod(1, |x| x + 2);
+                assert_eq(|_|"chained mod", a.@(0) + a.@(1), 3);;
+
+                let s = Array::fill(2, 5);
+                let keep = [s];
+                let s2 = s.mod(0, |x| x + 90);
+                assert_eq(|_|"shared mod mutated", s2.@(0), 95);;
+                assert_eq(|_|"shared mod original intact", keep.@(0).@(0), 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_chained_struct_fields() {
+    // Chained field updates on a boxed struct: once the first update leaves the struct unique, the
+    // rest write in place with the check dropped (a struct `set`/`mod` returns a uniquely owned
+    // struct, so the result feeds the next update as unique). A shared struct keeps its check and
+    // clones, so its other holder is untouched. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            type Rec = box struct { x : I64, y : I64 };
+
+            main : IO ();
+            main = (
+                let r = Rec { x : 1, y : 2 };
+                let r = r.set_x(10).mod_y(|v| v + 20);
+                assert_eq(|_|"chained fresh", r.@x + r.@y, 32);;
+
+                let s = Rec { x : 5, y : 6 };
+                let keep = [s];
+                let s2 = s.set_x(99);
+                assert_eq(|_|"shared mutated", s2.@x, 99);;
+                assert_eq(|_|"shared original intact", keep.@(0).@x, 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_destructured_boxed_field_shared() {
+    // Destructuring a shared boxed struct reads its fields out of the shared allocation, so a
+    // destructured boxed field is itself shared: mutating it must keep its force-unique check and
+    // clone, leaving the struct's other holder untouched. A field read out of a boxed container has
+    // `Dyn` provenance (like a boxed union's payload), not the box's own provenance; eliding the
+    // check here would corrupt `keep` and double-free its array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            type S = box struct { data : Array I64 };
+
+            main : IO ();
+            main = (
+                let s = S { data : Array::fill(3, 0) };
+                let keep = [s];
+                let S { data : data } = s;
+                let data = data.set(0, 99);
+                assert_eq(|_|"extracted mutated", data.@(0), 99);;
+                assert_eq(|_|"shared holder intact", keep.@(0).@data.@(0), 0);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_fieldless_value_merged_across_branch_compiles() {
+    // A function returning a fieldless value (`()`) whose branches merge a unit-typed call result
+    // with a `()` literal. The two sides once carried different provenance shapes — one seeded from
+    // the type, one built by a constructor — and merging them aborted the provenance analysis' branch
+    // join at Max ("mismatched shapes: Unboxed vs UnboxedAgg([])"). Compiling and running this at Max
+    // guards that a fieldless value has a single provenance representation.
+    let source = r#"
+            module Main;
+
+            dbg : Bool -> String -> ();
+            dbg = |cond, msg| if cond { debug_eprintln(msg) } else { () };
+
+            main : IO ();
+            main = (
+                eval dbg(false, "x");
+                eval dbg(true, "y");
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_reprojected_alias_shared() {
+    // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
+    // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so
+    // the mutation must keep its check. Because reference counting retains the shared field on the
+    // container before projecting it, both projections read a shared value and the check stays; this
+    // guards that the container-level retain keeps re-projected aliases sound. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let t = (a, 7);
+                let keep = t.@0;
+                let held = (keep, keep);
+                let m = t.@0;
+                let m2 = m.set(0, 99);
+                assert_eq(|_|"mutated", m2.@(0), 99);;
+                assert_eq(|_|"held.0 intact", held.@0.@(0), 0);;
+                assert_eq(|_|"held.1 intact", held.@1.@(0), 0);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_reprojected_alias_live_across_mutation() {
+    // An unboxed tuple's boxed field is projected into `y` and again into `a`; `a` is mutated while
+    // `y` is read only afterwards. Both name the same array, so the mutation must keep its check.
+    // Unlike the sibling test that shares the first projection by storing it in a tuple, here the
+    // sharing comes purely from `y` staying live across the mutation. Run under memcheck so a wrongly
+    // elided check (an in-place write into the array `y` also holds) shows as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let t = (Array::fill(3, 7), 0);
+                let y = t.@0;
+                let a = t.@0;
+                let a = a.set(0, 99);
+                assert_eq(|_|"mutated", a.@(0), 99);;
+                assert_eq(|_|"held intact", y.@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_specialized_shared_and_unique() {
+    // A function that mutates its array argument in place is specialized per caller: a unique caller
+    // gets a clone with the check dropped (writing in place), a shared caller keeps the checked
+    // version (which clones). Specialization must not corrupt the shared caller's other holder. Run
+    // under memcheck so a wrongly dropped check shows as corruption.
+    let source = r#"
+            module Main;
+
+            bump : Array I64 -> Array I64;
+            bump = |arr| arr.set(0, arr.@(0) + 100);
+
+            main : IO ();
+            main = (
+                let u = Array::fill(2, 1);
+                let u = bump(u);
+                assert_eq(|_|"unique caller", u.@(0), 101);;
+
+                let s = Array::fill(2, 5);
+                let keep = [s];
+                let s2 = bump(s);
+                assert_eq(|_|"shared caller mutated", s2.@(0), 105);;
+                assert_eq(|_|"shared caller original intact", keep.@(0).@(0), 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_specialized_loop_shared_entry() {
+    // An array threaded through a loop that increments each element. Entered unique, every iteration's
+    // set writes in place; entered shared, the first set clones (the loop's shared version) and the
+    // rest run in place on that fresh clone. Either way the loop's other holder stays untouched. Run
+    // under memcheck.
+    let source = r#"
+            module Main;
+
+            inc_all : Array I64 -> Array I64;
+            inc_all = |arr| loop((0, arr), |(i, a)|
+                if i == a.@size { break $ a }
+                else { continue $ (i + 1, a.set(i, a.@(i) + 1)) }
+            );
+
+            main : IO ();
+            main = (
+                let u = inc_all(Array::fill(3, 0));
+                assert_eq(|_|"unique loop", u.@(0) + u.@(1) + u.@(2), 3);;
+
+                let s = Array::fill(3, 10);
+                let keep = [s];
+                let r = inc_all(s);
+                assert_eq(|_|"shared loop result", r.@(0), 11);;
+                assert_eq(|_|"shared loop original intact", keep.@(0).@(0), 10);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_generic_act() {
+    // A generic `act` (here with the `Option` functor, which has no functor-specialized variant)
+    // decides at run time whether its array is unique and takes an in-place arm when it is. Where the
+    // array is proven unique, that runtime check folds away and the in-place arm always runs — it must
+    // still compute the right values. Where the array is shared (a second holder retained across the
+    // call), the check stays and the shared arm clones, leaving the other holder untouched. Run under
+    // memcheck so a wrongly dropped check (an in-place write into a shared array) shows as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.set(0, 10).set(1, 20).set(2, 30);
+                let a = a.act(1, |x| Option::some(x + 5)).as_some;
+                assert_eq(|_|"unique act", a.@(0) + a.@(1) + a.@(2), 65);;
+
+                let s = Array::fill(2, 7);
+                let keep = [s];
+                let s2 = s.act(0, |x| Option::some(x + 90)).as_some;
+                assert_eq(|_|"shared act mutated", s2.@(0), 97);;
+                assert_eq(|_|"shared act original intact", keep.@(0).@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_swap_fresh_and_shared() {
+    // Unique-check elimination drops the force-unique clone from `Array::swap` whose array is proven
+    // unique: the swap exchanges the two elements in place. A shared array keeps its check and clones,
+    // so its other holder keeps the original order. Run under memcheck so a wrongly dropped clone (an
+    // in-place swap into a shared array) shows up as corruption of the other holder.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(4, 0);
+                let a = a.set(0, 10).set(1, 20).set(2, 30).set(3, 40);
+                let a = a.swap(0, 3);
+                assert_eq(|_|"fresh swap", a.@(0) * 1000 + a.@(3), 40010);;
+
+                let s = Array::fill(2, 0);
+                let s = s.set(0, 7).set(1, 9);
+                let keep = [s];
+                let s2 = s.swap(0, 1);
+                assert_eq(|_|"shared swap mutated", s2.@(0) * 10 + s2.@(1), 97);;
+                assert_eq(|_|"shared swap original intact", keep.@(0).@(0) * 10 + keep.@(0).@(1), 79);;
                 pure()
             );
         "#;
@@ -571,10 +1022,11 @@ pub fn test27_5() {
 #[test]
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
-    let source = r#"
-        module Main;
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
+
         main : IO ();
-        
+
         main = (
             let arr = Array::fill(31, 0);
             let arr = arr.assert_unique(|_|"The array is not unique!").set(0, 0);
@@ -594,7 +1046,7 @@ pub fn test28() {
             pure()
         );
         "#;
-    test_source(source, Configuration::develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -1355,8 +1807,8 @@ pub fn test51() {
 #[test]
 pub fn test52() {
     // Test loop with boxed state / break.
-    let source = r#"
-    module Main; 
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
     type SieveState = box struct {i: I64, arr: Array Bool};
     
     // Calculate a Bool array whose element is true iff idx is prime.
@@ -1405,19 +1857,19 @@ pub fn test52() {
         pure()
     );
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
 pub fn test53() {
     // Test mutation of unique unboxed struct (e.g., tuple).
-    let source = r#"
-    module Main;     
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
     main : IO ();
     main = (
         let pair = (13, Array::fill(1, 0));
-        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_0(|x| x + 3);
-        let pair = pair.assert_unique(|_|"The pair is not unique!").mod_1(|arr| arr.assert_unique(|_|"The array is not unique!").set(0, 5));
+        let pair = pair.mod_0(|x| x + 3);
+        let pair = pair.mod_1(|arr| arr.assert_unique(|_|"The array is not unique!").set(0, 5));
         let x = pair.@0;
         let y = pair.@1.@(0);
         let ans = x + y;
@@ -1425,7 +1877,7 @@ pub fn test53() {
         pure()
     );
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -1838,8 +2290,8 @@ pub fn test75() {
 #[test]
 pub fn test76() {
     // Test array modifier.
-    let source = r#"
-    module Main; 
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
     main : IO ();
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
@@ -1848,7 +2300,7 @@ pub fn test76() {
         pure()
     );
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -1928,8 +2380,8 @@ pub fn test81() {
 #[test]
 pub fn test82() {
     // Test Array::append.
-    let source = r#"
-    module Main; 
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
     main : IO ();
     main = (
 
@@ -1982,16 +2434,16 @@ pub fn test82() {
         let x = w.@(3) $ x; // += 2
         assert_eq(|_|"", x, 3);;
 
-        let res = Array::empty(3);
-        let v = [[1], [2], [3]].to_iter.fold(res, |v, res| (
-            res.assert_unique(|_|"the array is not unique!").append(v)
+        let acc = Array::empty(3);
+        let v = [[1], [2], [3]].to_iter.fold(acc, |elem, acc| (
+            acc.assert_unique(|_|"the array is not unique!").append(elem)
         ));
         assert_eq(|_|"", v, [1, 2, 3]);;
 
         pure()
     );
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -2314,6 +2766,7 @@ cases = [
     case_1,
     case_2,
     case_stability_0,
+    case_random_0,
     case_random_1,
     case_random_2,
     case_random_3,
@@ -2506,7 +2959,7 @@ pub fn test_ffi_call_io() {
 
             main : IO ();
             main = (
-                "Hello C function! Number = %d\n".@_data.borrow_boxed_io(|ptr|
+                "Hello C function! Number = %d\n".@_data.borrow_elements_io(|ptr|
                     FFI_CALL_IO[I32 printf(Ptr, ...), ptr, 42.i32]
                 );;
                 pure()
@@ -2517,43 +2970,77 @@ pub fn test_ffi_call_io() {
 
 #[test]
 pub fn test95() {
-    // Test Std::unsafe_is_unique, Debug::assert_unique
-    let source = r#"
-            module Main; 
-                
+    // Test Std::unsafe_is_unique, Array::_unsafe_is_storage_unique, Debug::assert_unique
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
+
+            type Resource = box struct { id : I64 };
+
             main : IO ();
             main = (
-                // For unboxed value, it returns true even if the value is used later.
-                let int_val = 42;
-                let (unique, _) = int_val.unsafe_is_unique;
-                let use = int_val + 1;
+                // For a boxed value, it returns true if the value isn't used later.
+                let res = Resource { id : 42 };
+                let (unique, res) = res.unsafe_is_unique;
+                let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
                 eval use;
-                assert_eq(|_|"fail: int_val is shared", unique, true);;
+                assert_eq(|_|"fail: res is shared", unique, true);;
 
-                // For boxed value, it returns true if the value isn't used later.
+                // For a boxed value, it returns false if the value will be used later.
+                let res = Resource { id : 42 };
+                let (unique, _) = res.unsafe_is_unique;
+                let use = res.@id;
+                eval use;
+                assert_eq(|_|"fail: res is unique", unique, false);;
+
+                // For an array, its storage uniqueness is reported the same way.
                 let arr = Array::fill(10, 10);
-                let (unique, arr) = arr.unsafe_is_unique;
-                let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                let use = arr.@(0);
                 eval use;
                 assert_eq(|_|"fail: arr is shared", unique, true);;
 
-                // Fox boxed value, it returns false if the value will be used later.
                 let arr = Array::fill(10, 10);
-                let (unique, _) = arr.unsafe_is_unique;
+                let (unique, _) = arr._unsafe_is_storage_unique;
                 let use = arr.@(0);
                 eval use;
                 assert_eq(|_|"fail: arr is unique", unique, false);;
 
-                let int_val = 42;
-                eval int_val.assert_unique(|_|"fail: int_val is shared (2)");
-                let use = int_val + 1;
-                eval use;
+                // `assert_unique` for a boxed value and for an array.
+                let res = Resource { id : 42 };
+                eval res.assert_unique(|_|"fail: res is shared (2)");
 
                 let arr = Array::fill(10, 10);
                 let arr = arr.assert_unique(|_|"fail: arr is shared (2)");
                 let use = arr.@(0);
                 eval use;
 
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that a write in the `true` branch of an `unsafe_is_unique` still clones when the value
+/// is shared between the check and the branch.
+///
+/// Reaching that branch means the value's reference count was one, which lets the operations in it
+/// drop their uniqueness checks. Sharing the value in between ends that: here the array is put into
+/// another array first, so the write in the branch has to clone instead of overwriting what the
+/// other holder sees. Both branches write, so the test fails on the wrong answer rather than on
+/// taking the other branch.
+#[test]
+pub fn test_is_unique_true_branch_invalidated_by_sharing() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(3, 0);
+                let (unique, arr) = arr._unsafe_is_storage_unique;
+                let keep = [arr];
+                let written = if unique { arr.set(0, 99) } else { arr.set(0, 99) };
+                assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
+                assert_eq(|_|"fail: the write did not land", written.@(0), 99);;
                 pure()
             );
         "#;
@@ -3401,10 +3888,10 @@ pub fn test118() {
         module Main; 
         main : IO ();
         main = (
-            count_up(0).take(10).fold_m(0, |s, i| (
-                let s = s + i;
-                print("Sum upto " + i.to_string + " is " + s.to_string + ". ");;
-                pure $ s
+            count_up(0).take(10).fold_m(0, |i, sum| (
+                let new_sum = sum + i;
+                print("Sum upto " + sum.to_string + " is " + new_sum.to_string + ". ");;
+                pure $ new_sum
             ));;
             println("");;
             pure()
@@ -3452,59 +3939,59 @@ pub fn test_punched_array_0() {
         main = (
             // Case 1-1: Punch an array of two boxed values and release parray.
             let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 1-1", five.@x, 5);;
 
             // Case 1-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 1-2-a", five.@x, 5);;
-            let arr = parr._plug_in(five);
+            let arr = parr._unsafe_plug_bounds_unchecked(five);
             assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);;
 
             // Case 1-3: Punch an array of two boxed values and plug-in the other element.
             let seven = MyBox { x : 7 };
             let arr = [MyBox { x : 5 }, seven];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 1-3-a", five.@x, 5);;
-            let arr = parr._plug_in(seven);
+            let arr = parr._unsafe_plug_bounds_unchecked(seven);
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);;
 
             // Case 1-4: Punch an array of two boxed values and plug-in another value.
             let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 1-3-a", five.@x, 5);;
-            let arr = parr._plug_in(MyBox { x : 11 });
+            let arr = parr._unsafe_plug_bounds_unchecked(MyBox { x : 11 });
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);;
 
             // Case 2-1: Punch an array of two shared boxed values and release parray.
             let five = MyBox { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 2-1", five.@x, 5);;
 
             // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
             let five = MyBox { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 2-2-a", five.@x, 5);;
-            let arr = parr._plug_in(five);
+            let arr = parr._unsafe_plug_bounds_unchecked(five);
             assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);;
 
             // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
             let five = MyBox { x : 5 };
             let arr = [five, five];
-            let (parr, five1) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five1) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 2-3-a", five1.@x, 5);;
-            let arr = parr._plug_in(five);
+            let arr = parr._unsafe_plug_bounds_unchecked(five);
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);;
 
             // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
             let five = MyBox { x : 5 };
             let arr = [five, five];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 2-3-a", five.@x, 5);;
-            let arr = parr._plug_in(MyBox { x : 7 });
+            let arr = parr._unsafe_plug_bounds_unchecked(MyBox { x : 7 });
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);;
 
             pure()
@@ -3525,26 +4012,26 @@ pub fn test_punched_array_1() {
         main = (
             // Case 3-1: Punch an array of one boxed values and release parray.
             let arr = [MyBox { x : 5 }];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 3-1", five.@x, 5);;
 
             // Case 3-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBox { x : 5 }];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 3-2-a", five.@x, 5);;
-            let arr = parr._plug_in(five);
+            let arr = parr._unsafe_plug_bounds_unchecked(five);
             assert_eq(|_|"case 3-2-b", arr.@(0).@x, 5);;
 
             // Case 4-1: Punch an array of two unboxed values and release parray.
             let arr = [5, 7];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 1-1", five, 5);;
 
             // Case 4-2: Punch an array of two boxed values and plug-in a value.
             let arr = [5, 7];
-            let (parr, five) = arr._unsafe_punch_bounds_uniqueness_unchecked(0);
+            let (parr, five) = arr._unsafe_punch_bounds_unchecked(0);
             assert_eq(|_|"case 4-2-a", five, 5);;
-            let arr = parr._plug_in(13);
+            let arr = parr._unsafe_plug_bounds_unchecked(13);
             assert_eq(|_|"case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);;
 
             pure()
@@ -3556,8 +4043,8 @@ pub fn test_punched_array_1() {
 #[test]
 pub fn test_array_act_0() {
     // Test Array::act
-    let source = r#"
-        module Main; 
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r#"
         
         main : IO ();
         main = (
@@ -4620,7 +5107,7 @@ pub fn test_iterator_fold() {
     main = (
         let n = 100;
         let ans = n * (n - 1) / 2;
-        let res = Iterator::range(0, n).fold(0, |sum, i| sum + i);
+        let res = Iterator::range(0, n).fold(0, |i, sum| sum + i);
         assert_eq(|_|"", res, ans);;
         pure()
     );
@@ -5735,6 +6222,8 @@ pub fn test_extra_comma() {
             )
         };;
 
+        assert_eq(|_|"", x.get_fst, 0);;
+
         assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);;
         assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);;
         assert_eq(|_|"", [,], [] : Array Bool);;
@@ -6486,6 +6975,110 @@ pub fn test_mutate_boxed_io() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that updating a field of an unbox struct still clones a boxed field another holder shares.
+///
+/// An unbox struct is always value-unique, so its field update takes the in-place branch with no
+/// uniqueness check; the force-unique plug in that branch is what clones a shared field, so a write
+/// to the field must not overwrite what the other holder sees.
+#[test]
+pub fn test_field_update_on_unbox_struct_clones_shared_field() {
+    let source = r##"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(3, 0);
+                let keep = [arr];
+                let pair = (arr, 7);
+                let pair = pair.mod_0(|a| a.set(0, 99));
+                assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
+                assert_eq(|_|"fail: the write did not land", pair.@0.@(0), 99);;
+                pure()
+            );
+        "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that the uniqueness of a boxed field of an unbox struct can be tested by acting on the
+/// field with `unsafe_is_unique` (the `(Bool, _)` functor).
+///
+/// `unsafe_is_unique` cannot be called on the unbox struct itself (it is not `Boxed`), and an unbox
+/// value is trivially unique anyway. What a wrapper type like `Destructor`-holding `MPZ` needs is the
+/// sharing of the *boxed field*, which the field `act` recovers: the punch hands the boxed value to
+/// the action at the reference count the wrapper was held at, so the flag reads `true` only when the
+/// field is genuinely unshared.
+#[test]
+pub fn test_field_uniqueness_via_act() {
+    let source = r##"
+            module Main;
+
+            type Wrap = unbox struct { _0 : Box I64 };
+
+            main : IO ();
+            main = (
+                // The boxed field is unshared here, so the flag is true.
+                let w = Wrap { _0 : Box::make(42) };
+                let (unique, w) = w.act__0(unsafe_is_unique);
+                eval w;
+                assert_eq(|_|"fail: the field should be unique", unique, true);;
+
+                // Another holder keeps the same boxed field alive across the check, so the flag is false.
+                let w = Wrap { _0 : Box::make(42) };
+                let keep = w;
+                let (unique, w) = w.act__0(unsafe_is_unique);
+                assert_eq(|_|"fail: the field should be shared", unique, false);;
+                assert_eq(|_|"fail: the other holder was disturbed", keep.@_0.@value, 42);;
+                eval w;
+
+                pure()
+            );
+        "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that consecutive `mutate_elements` writes to an unshared array accumulate in place.
+///
+/// Writing through the element pointer of an array nothing else holds updates it in place, so a
+/// second write sees what the first one left — including where the check that clones a shared array
+/// has been dropped as provably unnecessary.
+#[test]
+pub fn test_mutate_elements_repeated() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let x = Array::fill(4, 0_U8);
+            let (x, _) = x.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = x.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            assert_eq(|_|"second write", x.@(0), 2_U8);;
+            assert_eq(|_|"first write kept", x.@(3), 1_U8);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies the same in-place write for the variant that threads the surrounding IO context, whose
+/// result carries the written array at a different position.
+#[test]
+pub fn test_mutate_elements_io_repeated() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let x = Array::fill(4, 0_U8);
+            let (x, _) = *x.mutate_elements_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = *x.mutate_elements_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            assert_eq(|_|"second write", x.@(0), 2_U8);;
+            assert_eq(|_|"first write kept", x.@(3), 1_U8);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_mutate_boxed_shared() {
     let source = r##"
@@ -6610,8 +7203,8 @@ pub fn test_monadic_bind_and_function_application_ordering() {
 
 #[test]
 pub fn test_struct_act() {
-    let source = r##"
-        module Main;
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r##"
                 
         // Boxed struct with a boxed field.
         type BB = box struct { x : Array Bool, y : Array I64, z : I64 };
@@ -6647,7 +7240,7 @@ pub fn test_struct_act() {
         main = (
             pure();; // To make the `s` defined below not global and therefore unique.
 
-            let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| let x = x.Array::assert_unique(|_|""); if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // BB case 1
@@ -7047,10 +7640,10 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
         main: IO ();
         main = (
-            let release = get_release_func_of_codom(|_ : I64| [42]);
-            let retain = get_retain_func_of_dom(|_ : Array I64| 42);
-            let release_2 = get_release_func_of_codom_2(|_ : I64| [42]);
-            let retain_2 = get_retain_func_of_dom_2(|_ : Array I64| 42);
+            let release = get_release_func_of_codom(|_ : I64| Box::make(42));
+            let retain = get_retain_func_of_dom(|_ : Box I64| 42);
+            let release_2 = get_release_func_of_codom_2(|_ : I64| Box::make(42));
+            let retain_2 = get_retain_func_of_dom_2(|_ : Box I64| 42);
             pure()
         );
     "##;
@@ -7371,7 +7964,7 @@ pub fn test_type_variable_in_type_annotated_pattern() {
 
         main: IO ();
         main = (
-            assert_eq(|_|"", [] : Array I64, [])
+            assert_eq(|_|"", empty_array : Array I64, [])
         );
     "##;
     test_source(&source, Configuration::develop_mode());
@@ -8863,6 +9456,7 @@ test = (
 
 main : IO ();
 main = (
+    eval test;
     pure()
 );
     "##;
@@ -9294,8 +9888,8 @@ main : IO () = (
 
 #[test]
 pub fn test_regression_issue_66() {
-    let source = r##"
-module Main;
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r##"
 
 type Obj = unbox struct {
     arr: Array I64,
@@ -9319,8 +9913,8 @@ main: IO () = (
 
 #[test]
 pub fn test_regression_issue_67() {
-    let source = r##"
-module Main;
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r##"
 
 type Obj = unbox struct {
     arr: Array I64,
@@ -9586,4 +10180,141 @@ main: IO () = (
 );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unbox_struct_arg_abi() {
+    // Verifies that an unbox-struct function argument survives being passed as its flat leaf
+    // scalars: a zero-leaf `()` argument that precedes a capture must not shift the capture read
+    // (a wrong offset would silently return the wrong captured value), folding the zero-field
+    // empty-iterator state must stay correct, and a nested unbox struct must round-trip through
+    // the explode-at-call / reassemble-at-entry path unchanged.
+    let source = r#"
+        module Main;
+
+        type Nested = unbox struct { outer : (I64, I64), inner : I64 };
+
+        bump : Nested -> Nested;
+        bump = |n| (
+            let (o0, o1) = n.@outer;
+            Nested { outer : (o0 + 1, o1), inner : n.@inner + 10 }
+        );
+
+        main : IO ();
+        main = (
+            let captured = 42;
+            let thunk : () -> I64 = |_| captured;
+            assert_eq(|_|"zero-leaf arg preceding capture", thunk(), 42);;
+
+            let empty_sum = Iterator::empty.fold(7, |x, acc| acc + x);
+            assert_eq(|_|"empty-struct iterator state", empty_sum, 7);;
+
+            let n = Nested { outer : (1, 2), inner : 3 };
+            let m = bump(n);
+            let (m0, m1) = m.@outer;
+            assert_eq(|_|"nested struct round trip", m0 + m1 * 10 + m.@inner, 35);;
+
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_scalar_phi_value_roundtrip() {
+    // A non-tail match, a union field modifier, and a diverging arm all merge their result through
+    // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
+    // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
+    // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
+    // tag-match-vs-passthrough union modification, and an arm that diverges via `undefined`.
+    let source = r#"
+        module Main;
+
+        type Wrap = unbox struct { arr : Array I64, tag : I64 };
+        type U = union { w : Wrap, other : I64 };
+        type C = union { p : (I64, I64), q : I64 };
+
+        nested : Option I64 -> ((I64, I64), (I64, I64));
+        nested = |x| match x {
+            some(v) => ((v, v + 1), (v + 2, v + 3)),
+            none(_) => ((100, 200), (300, 400))
+        };
+
+        wrap : U -> Wrap;
+        wrap = |u| match u {
+            w(x) => x,
+            other(n) => Wrap { arr : Array::fill(n, n * 2), tag : 0 - n }
+        };
+
+        pick : Option I64 -> (I64, I64);
+        pick = |x| match x {
+            some(v) => (v, v * 2),
+            none(_) => undefined("unreachable at runtime")
+        };
+
+        main : IO ();
+        main = (
+            let ((a, b), (c, d)) = nested(Option::some(7));
+            assert_eq(|_|"nested some", [a, b, c, d], [7, 8, 9, 10]);;
+            let ((e, f), (g, h)) = nested(Option::none());
+            assert_eq(|_|"nested none", [e, f, g, h], [100, 200, 300, 400]);;
+
+            let a = wrap(U::w(Wrap { arr : Array::fill(3, 7), tag : 100 }));
+            assert_eq(|_|"wrap w", [a.@arr.@size, a.@arr.@(0), a.@tag], [3, 7, 100]);;
+            let b = wrap(U::other(5));
+            assert_eq(|_|"wrap other", [b.@arr.@size, b.@arr.@(0), b.@tag], [5, 10, -5]);;
+
+            let c1 = C::p((10, 20)).mod_p(|t| (t.@0 + 1, t.@1 + 2));
+            let r1 = match c1 { p(t) => t.@0 * 1000 + t.@1, q(n) => 0 - n };
+            assert_eq(|_|"union_mod match", r1, 11022);;
+            let c2 = C::q(99).mod_p(|t| (t.@0 + 1, t.@1 + 2));
+            let r2 = match c2 { p(_) => -1, q(n) => n };
+            assert_eq(|_|"union_mod passthrough", r2, 99);;
+
+            let (pa, pb) = pick(Option::some(21));
+            assert_eq(|_|"diverging arm taken", pa + pb, 63);;
+
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_export_unbox_struct_arg() {
+    // An exported Fix function whose argument is an unbox struct (a tuple) receives it correctly: the
+    // C caller passes the struct by value, and the export wrapper reassembles it before applying the
+    // Fix value. Complements `test_export`, which exercises only scalar `CInt` arguments.
+    let source = r##"
+        module Main;
+
+        sum_pair : (I64, I64) -> I64;
+        sum_pair = |p| p.@0 + p.@1;
+        FFI_EXPORT[sum_pair, c_sum_pair];
+
+        pick : (I64, I64) -> I64 -> (I64, I64) -> I64;
+        pick = |p, k, q| p.@0 + p.@1 * 10 + k * 100 + q.@0 * 1000 + q.@1 * 10000;
+        FFI_EXPORT[pick, c_pick];
+
+        main : IO ();
+        main = (
+            let res = FFI_CALL[CInt run_c()];
+            assert_eq(|_|"C reported failure", res, 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        struct pair { long a; long b; };
+        long c_sum_pair(struct pair p);
+        long c_pick(struct pair p, long k, struct pair q);
+
+        int run_c() {
+            struct pair p = {10, 20};
+            if (c_sum_pair(p) != 30) { return 1; }
+            struct pair q = {100, 200};
+            if (c_pick(p, 5, q) != 10 + 20 * 10 + 5 * 100 + 100 * 1000 + 200 * 10000) { return 1; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
 }

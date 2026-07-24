@@ -1,14 +1,13 @@
 use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
-use inkwell::attributes::{Attribute, AttributeLoc};
+use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
-use inkwell::values::BasicValue;
+use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::AddressSpace;
 
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
 pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
-// pub const RUNTIME_UNION_VARIANT_MISMATCH: &str = "fixruntime_union_variant_mismatch";
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
@@ -24,11 +23,17 @@ pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 /// before the call, breaking allocations >= 4 GiB.
 pub const RUNTIME_MALLOC: &str = "malloc";
 
+/// `realloc`, declared with an i64 size parameter for the same reason as
+/// `RUNTIME_MALLOC`: it resizes a single malloc block in place when it can, so
+/// growing a uniquely owned array's capacity avoids copying its elements.
+pub const RUNTIME_REALLOC: &str = "realloc";
+
+/// Emits the runtime support functions into the module: their declarations when
+/// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
     build_negative_array_size_function(gc, mode);
-    // build_union_variant_mismatch_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -39,12 +44,30 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
+    build_realloc_function(gc, mode);
 }
 
+/// Which part of a runtime function a `build_*_function` call emits.
+///
+/// The runtime functions split into two groups: those provided externally (by
+/// the C runtime, e.g. `malloc`), which need only a declaration, and those
+/// implemented in this module (e.g. `fixruntime_ptr_add_offset`), which also
+/// need a body. Each build pass runs once in `Declare` mode and once in
+/// `Implement` mode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum BuildMode {
+    /// Add the function's declaration (signature) to the module.
     Declare,
+    /// Emit the body of a function that this module implements itself.
     Implement,
+}
+
+/// Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
+/// Without this, a bounds-check failure path (which calls the function and then flows to a merge)
+/// keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
+/// size and defeats bounds-check elimination.
+fn set_noreturn<'c, 'm>(gc: &Generator<'c, 'm>, func: FunctionValue<'c>) {
+    gc.add_enum_attribute(func, "noreturn", AttributeLoc::Function);
 }
 
 fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
@@ -56,7 +79,8 @@ fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     }
 
     let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module.add_function(RUNTIME_ABORT, fn_ty, None);
+    let func = gc.module.add_function(RUNTIME_ABORT, fn_ty, None);
+    set_noreturn(gc, func);
     return;
 }
 
@@ -72,8 +96,10 @@ fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: B
         &[gc.context.i64_type().into(), gc.context.i64_type().into()],
         false,
     );
-    gc.module
+    let func = gc
+        .module
         .add_function(RUNTIME_INDEX_OUT_OF_RANGE, fn_ty, None);
+    set_noreturn(gc, func);
     return;
 }
 
@@ -89,33 +115,12 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: 
         .context
         .void_type()
         .fn_type(&[gc.context.i64_type().into()], false);
-    gc.module
+    let func = gc
+        .module
         .add_function(RUNTIME_NEGATIVE_ARRAY_SIZE, fn_ty, None);
+    set_noreturn(gc, func);
     return;
 }
-
-// fn build_union_variant_mismatch_function<'c, 'm, 'b>(
-//     gc: &GenerationContext<'c, 'm>,
-//     mode: BuildMode,
-// ) {
-//     if mode != BuildMode::Declare {
-//         return;
-//     }
-//     if let Some(_func) = gc.module.get_function(RUNTIME_UNION_VARIANT_MISMATCH) {
-//         return;
-//     }
-//
-//     let fn_ty = gc.context.void_type().fn_type(
-//         &[
-//             union_tag_type(gc.context).into(),
-//             union_tag_type(gc.context).into(),
-//         ],
-//         false,
-//     );
-//     gc.module
-//         .add_function(RUNTIME_UNION_VARIANT_MISMATCH, fn_ty, None);
-//     return;
-// }
 
 fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
@@ -128,10 +133,10 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
 
-    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_ty = context.ptr_type(AddressSpace::from(0));
 
-    let fn_type = context.void_type().fn_type(&[ptr_type.into()], true);
-    module.add_function(RUNTIME_EPRINTLN, fn_type, None);
+    let fn_ty = context.void_type().fn_type(&[ptr_ty.into()], true);
+    module.add_function(RUNTIME_EPRINTLN, fn_ty, None);
 
     return;
 }
@@ -147,17 +152,17 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
 
-    let i32_type = context.i32_type();
-    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
+    let i32_ty = context.i32_type();
+    let ptr_ty = context.ptr_type(AddressSpace::from(0));
 
-    let fn_type = i32_type.fn_type(
+    let fn_ty = i32_ty.fn_type(
         &[
-            ptr_type.into(), /* output buffer */
-            ptr_type.into(), /* format */
+            ptr_ty.into(), /* output buffer */
+            ptr_ty.into(), /* format */
         ],
         true,
     );
-    module.add_function(RUNTIME_SPRINTF, fn_type, None);
+    module.add_function(RUNTIME_SPRINTF, fn_ty, None);
 
     return;
 }
@@ -236,20 +241,20 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
 
     gc.builder().position_at_end(bb);
     let ptr = func.get_first_param().unwrap().into_pointer_value();
-    let off = func.get_nth_param(1).unwrap().into_int_value();
-    let ptr = gc
+    let offset = func.get_nth_param(1).unwrap().into_int_value();
+    let ptr_int = gc
         .builder()
         .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset")
         .unwrap();
-    let ptr = gc
+    let sum_int = gc
         .builder()
-        .build_int_add(ptr, off, "add@fixruntime_ptr_add_offset")
+        .build_int_add(ptr_int, offset, "add@fixruntime_ptr_add_offset")
         .unwrap();
-    let ptr = gc
+    let sum_ptr = gc
         .builder()
-        .build_int_to_ptr(ptr, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
+        .build_int_to_ptr(sum_int, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
         .unwrap();
-    gc.builder().build_return(Some(&ptr)).unwrap();
+    gc.builder().build_return(Some(&sum_ptr)).unwrap();
     return;
 }
 
@@ -351,24 +356,24 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
     let idx = func.get_first_param().unwrap().into_int_value();
-    let argv = gc
+    let argv_gv_ptr = gc
         .module
         .get_global(GLOBAL_VAR_NAME_ARGV)
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argv = gc
+    let argv_ptr = gc
         .builder()
-        .build_load(ptr_ty, argv, "argv")
+        .build_load(ptr_ty, argv_gv_ptr, "argv")
         .unwrap()
         .into_pointer_value();
 
     // Get argv[idx].
     // First, offset argv by idx * size_of_pointer.
     let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let argv = gc
+    let argv_int = gc
         .builder()
-        .build_ptr_to_int(argv, ptr_int_ty, "argv")
+        .build_ptr_to_int(argv_ptr, ptr_int_ty, "argv_int")
         .unwrap();
     let idx = gc
         .builder()
@@ -379,16 +384,22 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
         .builder()
         .build_int_mul(idx, ptr_int_ty.const_int(ptr_size, false), "offset")
         .unwrap();
-    let argv = gc.builder().build_int_add(argv, offset, "argv").unwrap();
-    let argv = gc.builder().build_int_to_ptr(argv, ptr_ty, "argv").unwrap();
+    let elem_int = gc
+        .builder()
+        .build_int_add(argv_int, offset, "elem_int")
+        .unwrap();
+    let elem_ptr = gc
+        .builder()
+        .build_int_to_ptr(elem_int, ptr_ty, "elem_ptr")
+        .unwrap();
 
     // Then, load argv[idx] to get the pointer to the argument string.
-    let argv = gc
+    let arg_ptr = gc
         .builder()
-        .build_load(ptr_ty, argv, "argv")
+        .build_load(ptr_ty, elem_ptr, "arg_ptr")
         .unwrap()
         .into_pointer_value();
-    gc.builder().build_return(Some(&argv)).unwrap();
+    gc.builder().build_return(Some(&arg_ptr)).unwrap();
 
     return;
 }
@@ -408,9 +419,7 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let func = gc.module.add_function(RUNTIME_MALLOC, fn_ty, None);
     // The returned pointer does not alias any other pointer visible to the
     // caller, so mark it `noalias`.
-    let noalias_kind = Attribute::get_named_enum_kind_id("noalias");
-    let noalias = gc.context.create_enum_attribute(noalias_kind, 0);
-    func.add_attribute(AttributeLoc::Return, noalias);
+    gc.add_enum_attribute(func, "noalias", AttributeLoc::Return);
     // Mark the function as `nobuiltin` so LLVM does NOT auto-infer the full
     // set of allocator attributes (`allockind`, `allocsize`,
     // `memory(inaccessiblemem: readwrite)`, ...) via TargetLibraryInfo. Those
@@ -420,7 +429,21 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock
     // (hyperfine, 30 runs each), with no benchmark in the speedtest suite
     // measurably benefiting from builtin recognition.
-    let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
-    let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
-    func.add_attribute(AttributeLoc::Function, nobuiltin);
+    gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
+}
+
+fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_REALLOC) {
+        return;
+    }
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let i64_ty = gc.context.i64_type();
+    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+    let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
+    // As for `malloc`, keep LLVM from inferring the full allocator attribute set
+    // (see `build_malloc_function`).
+    gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
 }

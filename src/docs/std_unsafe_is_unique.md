@@ -1,35 +1,44 @@
-This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
+This function checks if a boxed value is uniquely referenced by a name, and returns the result paired with the given value itself.
+
+The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
 
 Example: 
 ```
 module Main;
 
+type Resource = box struct { id : I64 };
+
 main : IO ();
 main = (
-    // For unboxed value, it returns true even if the value is used later.
-    let int_val = 42;
-    let (unique, _) = int_val.unsafe_is_unique;
-    let use = int_val + 1;
+    // For a boxed value, it returns true if the value isn't used later.
+    let res = Resource { id : 42 };
+    let (unique, res) = res.unsafe_is_unique;
+    let use = res.@id; // This `res` is the one returned by `unsafe_is_unique`, not the one passed to it.
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: int_val is shared", unique, true);;
+    assert_eq(|_|"fail: res is shared", unique, true);;
 
-    // For boxed value, it returns true if the value isn't used later.
-    let arr = Array::fill(10, 10);
-    let (unique, arr) = arr.unsafe_is_unique;
-    let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+    // For a boxed value, it returns false if the value will be used later.
+    let res = Resource { id : 42 };
+    let (unique, _) = res.unsafe_is_unique;
+    let use = res.@id;
     eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is shared", unique, true);;
-
-    // Fox boxed value, it returns false if the value will be used later.
-    let arr = Array::fill(10, 10);
-    let (unique, _) = arr.unsafe_is_unique;
-    let use = arr.@(0);
-    eval use; // `eval` ensures that the computation of `use` is not optimized away
-    assert_eq(|_|"fail: arr is unique", unique, false);;
+    assert_eq(|_|"fail: res is unique", unique, false);;
 
     pure()
 );
 ```
+
+To test the uniqueness of a boxed value held in a field of an *unbox* struct (a common wrapper shape, e.g. an unbox struct holding a `Destructor`), act on that field with `unsafe_is_unique` as the `(Bool, _)`-functor action:
+
+```
+// `Wrap` is unboxed, so `unsafe_is_unique` cannot be called on it directly; what matters is the
+// sharing of the boxed field `_0`, recovered by acting on the field.
+type Wrap = unbox struct { _0 : SomeBoxedType };
+is_field_unique : Wrap -> (Bool, Wrap);
+is_field_unique = |w| w.act__0(unsafe_is_unique);
+```
+
+Extracting the field with `w.@_0` and calling `unsafe_is_unique` on it works only when `w` is not used afterwards (the extraction then moves the field out); if `w` is used later the extraction retains the field, and the answer is always `false`. Acting on the field is correct regardless.
 
 NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function. If you want to assert that a value is unique, consider using `Debug::assert_unique` instead.
 

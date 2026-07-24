@@ -2,11 +2,18 @@ use std::{fs, path::PathBuf, process::Command};
 
 use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
+// Several projects are pinned to their `array-storage-migration` revision. The array/storage
+// redesign made `Array` unboxed and dropped its `Boxed` instance, so projects that used `Array`'s
+// FFI (`borrow_boxed` / `mutate_boxed` on an array), called `unsafe_is_unique` on their own unbox
+// structs, or used the removed unsafe primitives were migrated to the array-specific helpers on that
+// branch and are pinned to it here. Projects passing `None` build against their default branch.
+
 #[test]
 pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
+        Some("c25c6a34fe3405ad6db6c704765de02b9b11efe4"),
     );
 }
 
@@ -15,6 +22,7 @@ pub fn test_external_project_hashmap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashmap.git",
         "fixlang-hashmap",
+        None,
     );
 }
 
@@ -23,6 +31,7 @@ pub fn test_external_project_hashset() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashset.git",
         "fixlang-hashset",
+        None,
     );
 }
 
@@ -31,6 +40,7 @@ pub fn test_external_project_random() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-random.git",
         "fixlang-random",
+        None,
     );
 }
 
@@ -39,6 +49,7 @@ pub fn test_external_project_time() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
+        Some("776ded3f005be3102f898c5892873f41e085f0e2"),
     );
 }
 
@@ -47,6 +58,7 @@ pub fn test_external_project_character() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-character.git",
         "fixlang-character",
+        None,
     );
 }
 
@@ -55,6 +67,7 @@ pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
+        Some("f3bf2fe37c8c79547afea487be8822fef64f14b8"),
     );
 }
 
@@ -63,6 +76,7 @@ pub fn test_external_project_regexp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-regexp.git",
         "fixlang-regexp",
+        None,
     );
 }
 
@@ -75,6 +89,7 @@ pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
+        Some("bd3fb3750e771ddf42aa37be722ab4ab5ba1092a"),
     );
 }
 
@@ -83,6 +98,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
+        Some("002065bd9884066715f26858b79d787ef14cf380"),
     );
 }
 
@@ -91,6 +107,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
+        Some("9e833af4cb1a129423b56e259066d0c304021f36"),
     );
 }
 
@@ -99,6 +116,7 @@ pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
+        Some("0ef6b5e75b78bc6c35392c48541a7d60edb73019"),
     );
 }
 
@@ -107,6 +125,7 @@ pub fn test_external_project_binary_heap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-binary-heap.git",
         "fixlang-binary-heap",
+        None,
     );
 }
 
@@ -116,10 +135,15 @@ pub fn test_external_project_cp_library() {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
-    test_external_project("https://github.com/tttmmmyyyy/cp-library", "cp-library");
+    test_external_project(
+        "https://github.com/tttmmmyyyy/cp-library",
+        "cp-library",
+        Some("f538b64ae07cb225fcf497ca783fb303b315508a"),
+    );
 }
 
-pub fn test_external_project(url: &str, test_name: &str) {
+/// Clone `url`, check out `git_ref` (the default branch when `None`), and run `fix test`.
+pub fn test_external_project(url: &str, test_name: &str, git_ref: Option<&str>) {
     println!("Testing external project: {}", url);
 
     // Recreate working directory for this test.
@@ -142,6 +166,24 @@ pub fn test_external_project(url: &str, test_name: &str) {
         .unwrap()
         .to_string()
         .replace(".git", "");
+    let repo_dir = work_dir.join(dir_name);
+
+    // Check out the requested revision.
+    if let Some(git_ref) = git_ref {
+        let output = Command::new("git")
+            .arg("checkout")
+            .arg(git_ref)
+            .current_dir(&repo_dir)
+            .output()
+            .expect("Failed to run git checkout.");
+        assert!(
+            output.status.success(),
+            "Failed to check out \"{}\" of \"{}\":\n{}",
+            git_ref,
+            url,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     // Run `fix test`. `--allow-preliminary-commands` is supplied because this test is
     // non-interactive and some external projects legitimately ship `preliminary_commands`
@@ -149,7 +191,7 @@ pub fn test_external_project(url: &str, test_name: &str) {
     let mut cmd = fix_command();
     cmd.arg("test")
         .arg("--allow-preliminary-commands")
-        .current_dir(work_dir.join(dir_name));
+        .current_dir(&repo_dir);
 
     let output = cmd.output().expect("Failed to run fix test.");
 

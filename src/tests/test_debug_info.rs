@@ -1,0 +1,403 @@
+// Debug-information end-to-end test.
+//
+// Builds a small Fix program with `-g` and drives `gdb -batch` to confirm that
+// DWARF line information is emitted correctly: a source breakpoint resolves to
+// `main.fix:<line>`, execution stops there, and the backtrace carries per-frame
+// line info up the Fix call chain. Assertions are mangle-name-independent (they
+// check `file:line`, not the mangled/closure frame names), so they stay valid
+// across name-mangling changes.
+//
+// The AST and RC IR back ends must emit identical debug information; this test
+// guards that it stays correct under both.
+
+#[cfg(test)]
+mod debug_info_tests {
+    use crate::tests::test_util::fix_command;
+    use std::{fs, path::PathBuf, process::Command};
+    use tempfile::TempDir;
+
+    fn sample_main_fix() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_baseline/main.fix");
+        p
+    }
+
+    fn array_main_fix() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_array/main.fix");
+        p
+    }
+
+    // Line numbers in cases/debug_baseline/main.fix. If that file changes, update these.
+    const LINE_COMPUTE_BODY: u32 = 5; // "    let y = x + 1;"           (inside `compute`)
+    const LINE_WRAP_DEF: u32 = 10; //    "wrap = |x| compute(x + 10);"  (call site of `compute`)
+    const LINE_MAIN_CALL: u32 = 14; //   "    let r = wrap(5);"         (call site of `wrap`)
+
+    #[test]
+    fn test_debug_info_baseline() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(sample_main_fix(), dir.join("main.fix")).expect("Failed to copy main.fix");
+
+        // Build with debug information (`-g` also forces `-O none`).
+        let build = fix_command()
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+        assert!(
+            dir.join("prog").exists(),
+            "output binary `prog` was not produced by `fix build -g`"
+        );
+
+        // Drive gdb: break inside `compute`, run to the breakpoint, print a backtrace.
+        let breakpoint = format!("break main.fix:{}", LINE_COMPUTE_BODY);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                "-ex",
+                "backtrace",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb` (is /usr/bin/gdb installed?)");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        // (1) The source breakpoint resolves to `main.fix` at the requested line.
+        assert!(
+            out.contains(&format!("file main.fix, line {}", LINE_COMPUTE_BODY)),
+            "breakpoint did not resolve to main.fix:{}.\ngdb output:\n{}",
+            LINE_COMPUTE_BODY,
+            out
+        );
+
+        // (2) Execution actually stopped at that breakpoint.
+        assert!(
+            out.contains("Breakpoint 1, ")
+                && out.contains(&format!("main.fix:{}", LINE_COMPUTE_BODY)),
+            "execution did not stop at main.fix:{}.\ngdb output:\n{}",
+            LINE_COMPUTE_BODY,
+            out
+        );
+
+        // (3) The backtrace carries per-frame line info up the Fix call chain
+        //     (wrap's call site and main's call site), independent of frame names.
+        for line in [LINE_WRAP_DEF, LINE_MAIN_CALL] {
+            assert!(
+                out.contains(&format!("main.fix:{}", line)),
+                "backtrace is missing frame line info main.fix:{}.\ngdb output:\n{}",
+                line,
+                out
+            );
+        }
+    }
+
+    fn sample_debug_vars() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_vars/main.fix");
+        p
+    }
+
+    // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
+    const LINE_VARS_BREAK: u32 = 10; // "    eval i;"
+
+    // Debug info drives correct variable inspection at a breakpoint. Unboxed scalars print their
+    // value — an `I64` as its number, a `Bool` as `true` / `false` (i.e. `Bool`'s debug type is
+    // `DW_ATE_boolean`, not a union struct). An `Array` / `String` local carries its Fix type name
+    // (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
+    // `-g` forces `-O none`, so the locals are not optimized away.
+    #[test]
+    fn test_debug_info_variable_values() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(sample_debug_vars(), dir.join("main.fix")).expect("Failed to copy main.fix");
+
+        let build = fix_command()
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+
+        let breakpoint = format!("break main.fix:{}", LINE_VARS_BREAK);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                "-ex",
+                "print i",
+                "-ex",
+                "print bt",
+                "-ex",
+                "print bf",
+                "-ex",
+                "whatis arr",
+                "-ex",
+                "print arr",
+                "-ex",
+                "whatis s",
+                // A String's characters are the bytes of its `_data` array. After the flip those
+                // elements live in the `#ArrayStorage` behind `_data._storage`, beginning right
+                // after its 8-byte control block. The debug info cannot bound the flexible element
+                // array, so read them as a C string from that offset.
+                "-ex",
+                "x/s (char*)s._data._storage + 8",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb`");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        for (needle, what) in [
+            ("= 42", "I64 value"),
+            ("= true", "Bool `true`"),
+            ("= false", "Bool `false`"),
+            ("Std::Array Std::I64", "Array type"),
+            ("<array size> = 3", "Array size"),
+            ("Std::String", "String type"),
+            ("\"hello\"", "String contents (raw bytes)"),
+        ] {
+            assert!(
+                out.contains(needle),
+                "gdb did not show {} (expected `{}`).\ngdb output:\n{}",
+                what,
+                needle,
+                out
+            );
+        }
+    }
+
+    fn sample_debug_destructure() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_destructure/main.fix");
+        p
+    }
+
+    // Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
+    // are live.
+    const LINE_DESTRUCTURE_BREAK: u32 = 9; // "    eval a;"
+
+    // A `let`-pattern that destructures a tuple binds each field to a source variable; debug info
+    // must let a debugger inspect every one by its source name. `a` and `n` are the unboxed `I64`
+    // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
+    #[test]
+    fn test_debug_info_destructure() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(sample_debug_destructure(), dir.join("main.fix"))
+            .expect("Failed to copy main.fix");
+
+        let build = fix_command()
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+
+        let breakpoint = format!("break main.fix:{}", LINE_DESTRUCTURE_BREAK);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                "-ex",
+                "print a",
+                "-ex",
+                "print n",
+                "-ex",
+                "whatis arr",
+                "-ex",
+                "print arr",
+                "-ex",
+                "whatis str",
+                "-ex",
+                "x/s (char*)str._data._storage + 8",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb`");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        for (needle, what) in [
+            ("= 7", "destructured I64 field `a`"),
+            ("= 5", "destructured I64 field `n`"),
+            ("Std::Array Std::I64", "destructured Array field `arr` type"),
+            ("<array size> = 3", "destructured Array field `arr` size"),
+            ("Std::String", "destructured String field `str` type"),
+            ("\"hello\"", "destructured String field `str` contents"),
+        ] {
+            assert!(
+                out.contains(needle),
+                "gdb did not show {} (expected `{}`).\ngdb output:\n{}",
+                what,
+                needle,
+                out
+            );
+        }
+    }
+
+    // Line number in cases/debug_array/main.fix. If that file changes, update this.
+    const LINE_ARRAY_BREAK: u32 = 8; // "    let sum = arr3.@(0) + arr150.@(0);"
+
+    // Checks that gdb displays the elements of `Array` / `String` values.
+    // The debug info claims a fixed number of elements (`DEBUG_ARRAY_ASSUMED_LEN`,
+    // 100) with byte sizes covering all of them, so gdb shows 100 elements whose
+    // first `<array size>` ones are the valid values, without "access outside
+    // bounds" errors.
+    #[test]
+    fn test_debug_info_array_elements() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(array_main_fix(), dir.join("main.fix")).expect("Failed to copy main.fix");
+
+        // Build with debug information (`-g` also forces `-O none`).
+        let build = fix_command()
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+
+        // Drive gdb: break while the arrays are still alive (they are used after the
+        // breakpoint line; Fix releases locals at their last use), then print them.
+        let breakpoint = format!("break main.fix:{}", LINE_ARRAY_BREAK);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                "set print elements unlimited",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                // A flipped `Array` value prints its size directly, but its elements live in the
+                // `#ArrayStorage` behind `_storage`, so the size and the elements come from two
+                // separate prints.
+                "-ex",
+                "print arr3",
+                "-ex",
+                "print *arr3._storage",
+                "-ex",
+                "print arr150",
+                "-ex",
+                "print *arr150._storage",
+                "-ex",
+                "print *msg._data._storage",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb` (is /usr/bin/gdb installed?)");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        // (1) Execution stopped at the breakpoint.
+        assert!(
+            out.contains("Breakpoint 1, ")
+                && out.contains(&format!("main.fix:{}", LINE_ARRAY_BREAK)),
+            "execution did not stop at main.fix:{}.\ngdb output:\n{}",
+            LINE_ARRAY_BREAK,
+            out
+        );
+
+        // (2) A 3-element array prints its size and its valid elements first.
+        //     (Elements after the valid ones are unspecified memory, so only the
+        //     prefix is asserted.)
+        assert!(
+            out.contains("<array size> = 3") && out.contains("<array elements> = {10, 20, 30"),
+            "3-element array was not printed with its valid elements first.\ngdb output:\n{}",
+            out
+        );
+
+        // (3) A 150-element array prints its size and the first 100 elements; the
+        //     100th displayed element (value 1000) is directly followed by the closing
+        //     brace.
+        assert!(
+            out.contains("<array size> = 150") && out.contains("980, 990, 1000}"),
+            "150-element array was not printed up to its 100th element.\ngdb output:\n{}",
+            out
+        );
+
+        // (4) A string prints its bytes as a readable string. (Bytes after the
+        //     terminating NUL are unspecified memory, so only the prefix is asserted.)
+        assert!(
+            out.contains("<array elements> = \"hello"),
+            "string bytes were not printed as \"hello...\".\ngdb output:\n{}",
+            out
+        );
+
+        // (5) No out-of-bounds read errors anywhere in the output.
+        for err in ["access outside bounds of object", "error reading variable"] {
+            assert!(
+                !out.contains(err),
+                "gdb reported `{}`.\ngdb output:\n{}",
+                err,
+                out
+            );
+        }
+    }
+}

@@ -1,0 +1,11 @@
+[general]
+name = "myproject"
+version = "0.1.0"
+fix_version = "1.1.0"
+
+[build]
+files = ["main.fix"]
+dynamic_links = ["m"]
+
+[build.test]
+files = ["test.fix"]

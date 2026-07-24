@@ -1,0 +1,29 @@
+module Main;
+
+import Std::{
+    loop, Array, I64, U8, IO, Ptr, Array::{fill, @, mutate_elements}, Debug::assert_eq,
+    LoopState::{break, continue}, Monad::pure
+};
+
+// A hot loop of writes through an array's element pointer. Each `mutate_elements` clones the array
+// when it is shared, so the loop pays a uniqueness check per write unless the array it threads is
+// known to be uniquely owned.
+sweep : Array U8 -> Array U8;
+sweep = |arr| (
+    loop((0, arr), |(i, arr)|
+        if i == 100 { break $ arr };
+        let (arr, _) = arr.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 8]);
+        continue $ (i + 1, arr)
+    )
+);
+
+main : IO ();
+main = (
+    let arr = Array::fill(64, 0_U8);
+    let arr = loop((0, arr), |(k, arr)|
+        if k == 20000 { break $ arr };
+        continue $ (k + 1, sweep(arr))
+    );
+    assert_eq(|_|"mutate_boxed_loop", arr.@(0), 1_U8);;
+    pure()
+);

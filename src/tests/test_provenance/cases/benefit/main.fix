@@ -1,0 +1,24 @@
+module Main;
+
+// Read-only recursion: `arr` is only read, so it is inferred Borrow and `tally` gets a borrow
+// version. Two call sites in `main` differ only in whether the argument outlives the call, which is
+// what routing weighs.
+tally : Array I64 -> I64 -> I64;
+tally = |arr, i| (
+    if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) }
+);
+
+main : IO ();
+main = (
+    pure();;
+    // `arr` is owned (fresh) and read again after the call, so it is a non-last use: routing to the
+    // borrow version cancels the retain that use would otherwise need.
+    let arr = Array::fill(4, 1);
+    let a = tally(arr, 0);
+    let a2 = arr.@size;
+    // `brr` is owned (fresh) and never used after the call, so it is a last use: the own version
+    // moves it in and frees it, whereas borrowing it would only delay its release.
+    let brr = Array::fill(5, 2);
+    let b = tally(brr, 0);
+    println $ (a + a2 + b).to_string
+);

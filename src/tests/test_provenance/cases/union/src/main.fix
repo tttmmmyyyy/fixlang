@@ -1,0 +1,25 @@
+module Main;
+
+// Reads its Option argument only, so the Option parameter is inferred Borrow. Recursive so it stays
+// a top-level function (not inlined away) and its borrow version is visible in the dump.
+peek_opt : Option (Array I64) -> I64 -> I64;
+peek_opt = |o, n| (
+    if n == 0 { o.map(|a| a.get_size).as_some_or(0) }
+    else { peek_opt(o, n - 1) }
+);
+
+// The array `p` flows through `some(p)` — an unboxed-union construction, which lays the payload in
+// place rather than consuming it — into peek_opt's borrowing position, and is also read directly, so
+// `p` is Borrow. The borrow version must not release `p` via the union it builds around it.
+via_union : Array I64 -> I64 -> I64;
+via_union = |p, n| (
+    if n == 0 { p.get_size }
+    else { peek_opt(some(p), 3) + via_union(p, n - 1) }
+);
+
+main : IO ();
+main = (
+    let a = Array::fill(5, 7);
+    let r = via_union(a, 2);
+    println $ r.to_string
+);

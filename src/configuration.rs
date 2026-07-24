@@ -11,7 +11,7 @@ use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{platform_valgrind_supported, warn_msg, Finally, Map};
-use crate::preliminary_command::PreliminaryCommand;
+use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
@@ -260,6 +260,9 @@ pub struct Configuration {
     // Emit symbols at each step of optimization.
     // Used only for compiler development.
     pub emit_symbols: bool,
+    // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
+    // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
+    pub emit_rc_ir: Option<String>,
     // Is in compiler development mode?
     pub develop_mode: bool,
     // Enable backtrace support (keep frame pointers and add backtrace library).
@@ -349,6 +352,7 @@ impl Configuration {
             llvm_passes_file: None,
             run_program_args: vec![],
             emit_symbols: false,
+            emit_rc_ir: None,
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
@@ -565,6 +569,21 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function
+    /// only reads, then cancels the reference counting the borrow makes net-zero. Its full benefit
+    /// relies on decapturing and inlining (which are also `Max`-only), and it adds compile-time
+    /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
+    pub fn enable_borrow_optimization(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+    }
+
+    /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
+    /// It composes with the same decapturing that borrow-ification needs — a specialized loop's body
+    /// is a known function whose union it can cancel — so it shares that opt-level threshold.
+    pub fn enable_simplify(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+    }
+
     pub fn enable_simplify_symbol_names(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
@@ -657,7 +676,7 @@ impl Configuration {
     }
 
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
-        crate::preliminary_command::approve_and_run(self)
+        approve_and_run(self)
     }
 
     #[allow(dead_code)]

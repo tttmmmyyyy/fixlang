@@ -122,9 +122,12 @@ impl ExportStatement {
             })
             .collect::<Vec<_>>();
 
-        // Get the Fix value to be exported.
+        // Get the Fix value to be exported. `value_expr` is a reference to the instantiated symbol
+        // (see `instantiate_exported_value`), which the RC-IR back end has already implemented;
+        // materialize that symbol's object here.
         let fix_expr = self.value_expr.clone().unwrap();
-        let mut fix_value = gc.eval_expr(fix_expr, false).unwrap();
+        let fix_name = fix_expr.get_var().name.clone();
+        let mut fix_value = gc.get_scoped_obj(&fix_name);
 
         // Pass the arguments to the Fix value.
         match io_type {

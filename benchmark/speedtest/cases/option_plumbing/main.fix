@@ -1,0 +1,31 @@
+module Main;
+
+import Std::{
+    I64, IO, Debug::assert_eq, Iterator::{fold, range}, Monad::pure,
+    Option::{some, none, map_or}
+};
+
+// General plumbing-removal case, independent of arrays and bounds checks. Each
+// iteration builds an `Option` in one of two branches and immediately consumes it
+// with `map_or`. Because the scrutinee is `some` in one branch and `none` in the
+// other, case-of-known-constructor cannot fire on the join directly; case-of-case
+// must first float the `map_or` match into both branches, where each freshly
+// built constructor is then cancelled. What remains is a plain
+// `if i % 2 == 0 { acc + i } else { acc }` with no union built or matched.
+//
+// Measures the simplifier's broad "unwrap the Option/Result/tuple plumbing" win
+// with no loop-state scalarization involved, and doubles as a check on whether
+// LLVM already collapses small unboxed unions on its own.
+sum_evens : I64 -> I64;
+sum_evens = |n| (
+    Iterator::range(0, n).fold(0, |i, acc|
+        let o = if i % 2 == 0 { some(i) } else { none() };
+        acc + o.map_or(0, |x| x)
+    )
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"option_plumbing", sum_evens(100000), 2499950000);;
+    pure()
+);

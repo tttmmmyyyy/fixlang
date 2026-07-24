@@ -1,7 +1,7 @@
 use super::check_holes;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
-use crate::misc::{collect_results, insert_to_map_vec, Map, Set};
+use crate::misc::{collect_results, grow_stack, insert_to_map_vec, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
@@ -1008,7 +1008,7 @@ impl TypeCheckContext {
         ei: &Arc<ExprNode>,
         ty: Arc<TypeNode>,
     ) -> Result<Arc<ExprNode>, Errors> {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        grow_stack(|| {
             let ty_for_fallback = ty.clone();
             match self.unify_type_of_expr_inner(ei, ty) {
                 Ok(e) => Ok(e),

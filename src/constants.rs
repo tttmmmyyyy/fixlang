@@ -37,6 +37,7 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
+pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";
 pub const TUPLE_NAME: &str = "Tuple";
@@ -62,16 +63,10 @@ pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
-pub const ARRAY_GET_SIZE_NAME: &str = "get_size";
-pub const ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED: &str =
-    "_unsafe_set_bounds_uniqueness_unchecked_unreleased";
-pub const ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED: &str =
-    "_unsafe_get_linear_bounds_unchecked_unretained";
 pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecked";
 pub const ARRAY_CHECK_RANGE: &str = "_check_range";
 pub const ARRAY_CHECK_SIZE: &str = "_check_size";
 pub const ARRAY_UNSAFE_EMPTY_NAME: &str = "_unsafe_empty_capacity_unchecked";
-pub const ARRAY_UNSAFE_FILL_NAME: &str = "_unsafe_fill_size_unchecked";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
@@ -87,6 +82,9 @@ pub const UNION_MOD_SYMBOL: &str = "mod_";
 // Names used by compiler.
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
+// The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
+// its `#` prefix makes it un-nameable in source, so it cannot leak out of `Array`'s interface.
+pub const ARRAY_STORAGE_NAME: &str = "#ArrayStorage";
 pub const PARAM_NAME: &str = "#param";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
@@ -108,9 +106,31 @@ pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
-pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
-pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
-pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+// Field layout of the unbox `Array` value: a `SubObject` pointer to the `#ArrayStorage`, then the
+// register-resident size and capacity.
+pub const ARRAY_STORAGE_IDX: u32 = 0;
+pub const ARRAY_SIZE_IDX: u32 = ARRAY_STORAGE_IDX + 1;
+pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
+
+// Field layout of the internal `#ArrayStorage` object: a control block and the raw element buffer,
+// with no length or capacity (those live in the owning `Array` value).
+pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;
+pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
+
+// The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
+pub const BOOL_FALSE_TAG: usize = 0;
+pub const BOOL_TRUE_TAG: usize = 1;
+// The fields of the result of `Std::unsafe_is_unique : a -> (Bool, a)`.
+pub const IS_UNIQUE_FLAG_FIELD: usize = 0;
+pub const IS_UNIQUE_VALUE_FIELD: usize = 1;
+
+// Number of array elements claimed by array debug info. The element count of an array
+// is only known at run time, which debug info cannot express here, so array debug types
+// claim this fixed number of elements, and their byte sizes cover the claimed elements
+// so that debuggers display them with values read from the target. See the array branch
+// of `ObjectFieldType::to_debug_type` in object.rs and the debugging section of
+// Document.md.
+pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 

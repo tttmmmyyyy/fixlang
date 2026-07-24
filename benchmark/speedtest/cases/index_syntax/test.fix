@@ -1,5 +1,7 @@
 module Test;
 
+import Std::{IO, Debug::assert_eq, Monad::pure};
+
 test : IO ();
 test = (
     assert_eq(|_|"case 1", 42, 6*7);;

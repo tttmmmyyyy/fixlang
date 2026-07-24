@@ -1,4 +1,4 @@
-use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
+use crate::ast::inline_llvm::{InlineLLVM, LLVMGen};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
@@ -1084,12 +1084,6 @@ impl ExprNode {
         }
     }
 
-    pub fn free_vars_shadowed_by(&self, shadowed_vars: &Set<FullName>) -> Set<FullName> {
-        let mut free_vars = self.free_vars().clone();
-        free_vars.retain(|v| !shadowed_vars.contains(v));
-        free_vars
-    }
-
     /// Visit every `Expr::Var` occurrence in this expression tree, calling
     /// `f` with the `Var` and the source span of the containing `ExprNode`.
     ///
@@ -1279,13 +1273,6 @@ impl ExprNode {
             *lock = Some(self.calc_free_vars());
         }
         lock.as_ref().unwrap().clone()
-    }
-
-    // Get sorted free vars
-    pub fn free_vars_sorted(&self) -> Vec<FullName> {
-        let mut free_vars = self.free_vars().into_iter().collect::<Vec<_>>();
-        free_vars.sort();
-        free_vars
     }
 
     // Convert all global FullNames to absolute paths.
@@ -1593,7 +1580,11 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
-pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
+pub fn expr_llvm(
+    generator: Box<dyn LLVMGen>,
+    ty: Arc<TypeNode>,
+    src: Option<Span>,
+) -> Arc<ExprNode> {
     Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
         generator,
         generic_ty: ty,

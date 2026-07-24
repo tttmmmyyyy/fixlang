@@ -1,0 +1,30 @@
+module Main;
+
+import Std::{
+    Array, I64, IO, Array::{fill, set, @, @size}, Debug::assert_eq, Iterator::{fold, range},
+    Monad::pure
+};
+
+// Pure write loop: `arr.set(i, i)` for every index, with the array threaded
+// through the fold accumulator (a boxed pointer in the loop-carried state).
+// There is no cross-iteration data dependency (unlike `array_mod`, whose
+// `arr.@(i-1)` chains element i to element i-1 and blocks vectorization), so once
+// the per-element bounds check and uniqueness check are removed the write is
+// vectorizable. Isolates two effects the simplifier targets: the boxed-pointer
+// state must be scalar-replaced so the array is a borrowed leaf the RC passes do
+// not churn each iteration, and the bound inside `set` (`_check_range(i, @size)`
+// recomputed on the changing array pointer) must be normalized to the original
+// array's size so it is loop-invariant.
+fill_indices : Array I64 -> Array I64;
+fill_indices = |arr| (
+    let n = arr.@size;
+    Iterator::range(0, n).fold(arr, |i, arr| arr.set(i, i))
+);
+
+main : IO ();
+main = (
+    let arr = Array::fill(100000, 0);
+    let arr = fill_indices(arr);
+    assert_eq(|_|"write_by_range_fold", arr.@(99999), 99999);;
+    pure()
+);

@@ -17,9 +17,10 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionT
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
-    is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
-    make_iostate_name, make_tuple_name_abs,
+    get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
+    is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
+    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_iostate_name,
+    make_tuple_name_abs,
 };
 use crate::generator::Generator;
 use crate::misc::collect_results;
@@ -148,6 +149,10 @@ pub enum TyConVariant {
     Union,
     // Dynamic object is nullble and has the destructor as the first field.
     DynamicObject,
+    // The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
+    // array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
+    // its own traverser.
+    ArrayStorage,
     // Opaque type generated from opaque type variable `?it`.
     Opaque,
 }
@@ -820,6 +825,14 @@ impl TypeNode {
         ti.fields
     }
 
+    // The index of the struct/union field named `field_name`.
+    pub fn field_index(&self, type_env: &TypeEnv, field_name: &str) -> Option<usize> {
+        self.toplevel_tycon_info(type_env)
+            .fields
+            .iter()
+            .position(|f| f.name == field_name)
+    }
+
     // Flatten type application.
     // ex. If given `f a b`, returns `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
@@ -1032,6 +1045,23 @@ impl TypeNode {
         return is_array_tycon(tc.as_ref());
     }
 
+    // Whether this is the internal `#ArrayStorage` type.
+    pub fn is_array_storage(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => is_array_storage_tycon(tc.as_ref()),
+            None => false,
+        }
+    }
+
+    pub fn is_punched_array(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        return is_punched_array_tycon(tc.as_ref());
+    }
+
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1093,6 +1123,12 @@ impl TypeNode {
         if self.is_closure() {
             return false;
         }
+        // `Array` is unboxed but holds its elements in a boxed storage, so it is never fully
+        // unboxed. `field_types` of an array returns its element type, not the storage, so this
+        // must be checked here rather than by recursing.
+        if self.is_array() {
+            return false;
+        }
         if self.is_funptr() {
             return true;
         }
@@ -1100,6 +1136,23 @@ impl TypeNode {
         field_types
             .iter()
             .all(|field_ty| field_ty.is_fully_unboxed(type_env))
+    }
+
+    /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by
+    /// a custom traverser rather than by descending into its fields. This holds for a boxed value, an
+    /// unboxed union (only its active variant is live, so a refcount operation must dispatch on the tag
+    /// rather than name a variant's leaf), and a punched array (its traversal skips the moved-out hole
+    /// at a run-time index). A type whose reference counting is a whole-value operation belongs here.
+    ///
+    /// The caller must have already handled a closure, whose capture is the unit: this asserts the type
+    /// is not a closure (via `is_union`).
+    pub fn is_rc_unit_root(&self, type_env: &TypeEnv) -> bool {
+        // `Array` is unboxed but is one indivisible unit: its own custom traverser drives element
+        // lifetime through the storage, so the reference-count machinery must not descend into it.
+        self.is_box(type_env)
+            || self.is_union(type_env)
+            || self.is_punched_array()
+            || self.is_array()
     }
 
     // Create new type node with default info.

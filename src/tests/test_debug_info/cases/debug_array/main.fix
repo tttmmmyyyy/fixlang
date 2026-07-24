@@ -1,0 +1,13 @@
+module Main;
+
+main : IO ();
+main = (
+    let arr3 = [10, 20, 30];
+    let arr150 = Array::from_map(150, |i| (i + 1) * 10);
+    let msg = "hello";
+    let sum = arr3.@(0) + arr150.@(0);
+    println(sum.to_string);;
+    println(arr3.@(2).to_string);;
+    println(arr150.@(149).to_string);;
+    println(msg)
+);

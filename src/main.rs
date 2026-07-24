@@ -41,6 +41,7 @@ mod optimization;
 mod parse;
 mod preliminary_command;
 mod printer;
+mod rc_ir;
 #[cfg(test)]
 mod tests;
 mod tool;
@@ -192,6 +193,11 @@ fn main() {
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
         .help("Output symbols of the Fix program (intended for compiler development).");
+    let emit_rc_ir = Arg::new("emit-rc-ir")
+        .long("emit-rc-ir")
+        .takes_value(true)
+        .value_name("MODULE")
+        .help("Write the RC IR of a module's symbols to `.fixlang/rc_ir.<module>.txt`, or `all` for every module to `.fixlang/rc_ir.txt` (intended for compiler development).");
     let program_args = Arg::new("program-args")
         .last(true)
         .takes_value(true)
@@ -250,6 +256,7 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
+        .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
         .arg(allow_preliminary_commands.clone())
@@ -276,6 +283,7 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
+        .arg(emit_rc_ir.clone())
         .arg(program_args.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
@@ -303,6 +311,7 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
+        .arg(emit_rc_ir.clone())
         .arg(program_args.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
@@ -632,6 +641,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         if args.contains_id("emit-symbols") {
             config.emit_symbols = true;
         }
+
+        // Set `emit_rc_ir`.
+        config.emit_rc_ir = args.get_one::<String>("emit-rc-ir").cloned();
 
         // Set `backtrace`.
         if args.contains_id("backtrace") {
