@@ -15,7 +15,7 @@ use crate::constants::{
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{Generator, Object};
-use crate::misc::Map;
+use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_function_type, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
@@ -160,9 +160,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.push_debug_location(node.source.clone());
         // A deeply nested continuation recurses deeply here (as lowering and RC insertion do); grow
         // the stack on demand so a large program does not overflow it.
-        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.eval_rc_expr_inner(node, tail, func_vals)
-        });
+        let result = grow_stack(|| self.eval_rc_expr_inner(node, tail, func_vals));
         self.pop_debug_location();
         result
     }

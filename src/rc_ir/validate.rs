@@ -18,7 +18,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
-use crate::misc::Set;
+use crate::misc::{grow_stack, Set};
 use crate::rc_ir::ast::{FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::borrow::rc_units;
 
@@ -153,7 +153,7 @@ impl<'a> Validator<'a> {
     }
 
     fn check_expr(&mut self, node: &RcExprNode) {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.check_expr_inner(node));
+        grow_stack(|| self.check_expr_inner(node));
     }
 
     fn check_expr_inner(&mut self, node: &RcExprNode) {

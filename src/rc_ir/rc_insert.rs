@@ -18,7 +18,7 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     MatchArm, Ownership, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
@@ -124,9 +124,7 @@ impl<'a> RcInserter<'a> {
     ) -> (RcExprNode, Set<FullName>) {
         // The continuation chain recurses deeply for a large function (as lowering and code
         // generation do); grow the stack on demand so it does not overflow.
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.insert_into_expr_inner(node, live_after)
-        })
+        grow_stack(|| self.insert_into_expr_inner(node, live_after))
     }
 
     fn insert_into_expr_inner(

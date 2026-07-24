@@ -26,7 +26,7 @@
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
@@ -210,9 +210,7 @@ impl<'a> Specializer<'a> {
     /// Rewrite a function body under `inputs` (the uniqueness of the enclosing clone's inputs),
     /// growing the stack for deeply nested bodies.
     fn rewrite_expr(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.rewrite_expr_inner(node, inputs)
-        })
+        grow_stack(|| self.rewrite_expr_inner(node, inputs))
     }
 
     /// Rewrite one expression node under `inputs`: route its direct calls to specialized clones and
@@ -412,7 +410,7 @@ fn collect_callees_and_unique_check(
     callees: &mut Vec<FuncRef>,
     has_unique_check: &mut bool,
 ) {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+    grow_stack(|| match node.expr.as_ref() {
         RcExpr::Let(_, rhs, k) => {
             match rhs {
                 RcRhs::Llvm(llvm_gen, args) => {

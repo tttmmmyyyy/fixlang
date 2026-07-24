@@ -29,6 +29,14 @@ pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     set
 }
 
+/// Run `f` on a stack grown on demand, so a deeply recursive traversal — the RC IR passes over a
+/// continuation chain, type checking over a nested expression — does not overflow the stack on a
+/// deeply nested input.
+pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
+    // Allocate another 1 MiB of stack whenever less than 64 KiB of it remains.
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
+}
+
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }

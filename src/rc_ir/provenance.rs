@@ -38,7 +38,7 @@ use crate::constants::{
 use crate::fixstd::builtin::{
     InlineLLVMArrayIsStorageUniqueBody, InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG,
 };
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
 };
@@ -500,7 +500,7 @@ impl<'a> Interpreter<'a> {
         node: &RcExprNode,
         env: Map<FullName, Provenance>,
     ) -> (Provenance, Map<FullName, Provenance>) {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.interpret_inner(node, env))
+        grow_stack(|| self.interpret_inner(node, env))
     }
 
     fn interpret_inner(

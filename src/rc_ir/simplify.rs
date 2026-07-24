@@ -29,7 +29,7 @@
 
 use crate::ast::name::FullName;
 use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
-use crate::misc::Map;
+use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::rename::{clone_fresh, substitute_expr};
@@ -76,7 +76,7 @@ fn simplify_to_fixpoint(node: &RcExprNode, ctx: &mut Ctx) -> RcExprNode {
 
 fn rewrite(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+    grow_stack(|| {
         let node = rewrite_children(node, ctx, changed);
         try_local(&node, ctx, changed)
     })
@@ -151,7 +151,7 @@ fn rewrite_budget(node: &RcExprNode) -> u64 {
 /// The number of expression nodes in `node`.
 fn node_count(node: &RcExprNode) -> u64 {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+    grow_stack(|| {
         let cont = match node.expr.as_ref() {
             RcExpr::Ret(_) => return 1,
             RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
@@ -339,7 +339,7 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
 /// counting, so they are transparent (and do not occur before `insert_rc` anyway).
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+    grow_stack(|| {
         let hit = |v: &RcVar| (v.name == *name) as usize;
         match node.expr.as_ref() {
             RcExpr::Ret(v) => hit(v),

@@ -18,7 +18,7 @@ use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
     InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
 };
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
@@ -323,9 +323,7 @@ impl<'a> Lowerer<'a> {
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.lower_to_var_inner(expr, bindings)
-        })
+        grow_stack(|| self.lower_to_var_inner(expr, bindings))
     }
 
     fn lower_to_var_inner(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {

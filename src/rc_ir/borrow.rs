@@ -40,7 +40,7 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
@@ -208,7 +208,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
 /// IR has a single continuation, so a body has exactly one such `Ret` (a match's arms each have their
 /// own, which return the arm's value to the match binding).
 fn returned_var(node: &RcExprNode) -> &RcVar {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+    grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
         RcExpr::Let(_, _, k)
         | RcExpr::Destructure(_, _, k)
@@ -269,9 +269,7 @@ impl Origin {
 /// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
 /// values to one binding.
 fn origin(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        origin_inner(vars, type_env, var, path)
-    })
+    grow_stack(|| origin_inner(vars, type_env, var, path))
 }
 
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
@@ -985,7 +983,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.rewrite_inner(node))
+        grow_stack(|| self.rewrite_inner(node))
     }
 
     fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
@@ -1214,7 +1212,7 @@ fn prepend_rc(items: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -
 /// variable only for reference counting, not as a use, so those are transparent — which lets a call
 /// be recognized as an argument's last use even when the lowering brackets it with reference counts.
 fn used_later(name: &FullName, node: &RcExprNode) -> bool {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+    grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v.name == *name,
         RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
@@ -1293,7 +1291,7 @@ pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
 }
 
 fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || split_body_inner(node, type_env))
+    grow_stack(|| split_body_inner(node, type_env))
 }
 
 fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
@@ -1488,9 +1486,7 @@ impl<'a> CancelAnalysis<'a> {
         pending: PendingRetains,
         returns_from_func: bool,
     ) -> PendingRetains {
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.walk_inner(node, pending, returns_from_func)
-        })
+        grow_stack(|| self.walk_inner(node, pending, returns_from_func))
     }
 
     fn walk_inner(
@@ -1673,7 +1669,7 @@ impl<'a> CancelAnalysis<'a> {
 
 /// Rebuild a body with the analysis's cancelled retain and release nodes spliced out.
 fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || drop_nodes_inner(node, to_delete))
+    grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {

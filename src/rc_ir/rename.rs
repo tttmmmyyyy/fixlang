@@ -5,7 +5,7 @@
 //! distinguishes each cloning pass's fresh names from the others'.
 
 use crate::ast::name::FullName;
-use crate::misc::Map;
+use crate::misc::{grow_stack, Map};
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
 use std::sync::Arc;
 
@@ -64,9 +64,7 @@ fn assign_fresh_names_to_binders(
     renaming: &mut Map<FullName, FullName>,
     counter: &mut u64,
 ) {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter)
-    })
+    grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))
 }
 
 fn assign_fresh_names_to_binders_inner(
@@ -117,7 +115,7 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || rename_expr_inner(node, renaming))
+    grow_stack(|| rename_expr_inner(node, renaming))
 }
 
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
