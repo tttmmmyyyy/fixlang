@@ -10219,3 +10219,102 @@ pub fn test_unbox_struct_arg_abi() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_scalar_phi_value_roundtrip() {
+    // A non-tail match, a union field modifier, and a diverging arm all merge their result through
+    // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
+    // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
+    // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
+    // tag-match-vs-passthrough union modification, and an arm that diverges via `undefined`.
+    let source = r#"
+        module Main;
+
+        type Wrap = unbox struct { arr : Array I64, tag : I64 };
+        type U = union { w : Wrap, other : I64 };
+        type C = union { p : (I64, I64), q : I64 };
+
+        nested : Option I64 -> ((I64, I64), (I64, I64));
+        nested = |x| match x {
+            some(v) => ((v, v + 1), (v + 2, v + 3)),
+            none(_) => ((100, 200), (300, 400))
+        };
+
+        wrap : U -> Wrap;
+        wrap = |u| match u {
+            w(x) => x,
+            other(n) => Wrap { arr : Array::fill(n, n * 2), tag : 0 - n }
+        };
+
+        pick : Option I64 -> (I64, I64);
+        pick = |x| match x {
+            some(v) => (v, v * 2),
+            none(_) => undefined("unreachable at runtime")
+        };
+
+        main : IO ();
+        main = (
+            let ((a, b), (c, d)) = nested(Option::some(7));
+            assert_eq(|_|"nested some", [a, b, c, d], [7, 8, 9, 10]);;
+            let ((e, f), (g, h)) = nested(Option::none());
+            assert_eq(|_|"nested none", [e, f, g, h], [100, 200, 300, 400]);;
+
+            let a = wrap(U::w(Wrap { arr : Array::fill(3, 7), tag : 100 }));
+            assert_eq(|_|"wrap w", [a.@arr.@size, a.@arr.@(0), a.@tag], [3, 7, 100]);;
+            let b = wrap(U::other(5));
+            assert_eq(|_|"wrap other", [b.@arr.@size, b.@arr.@(0), b.@tag], [5, 10, -5]);;
+
+            let c1 = C::p((10, 20)).mod_p(|t| (t.@0 + 1, t.@1 + 2));
+            let r1 = match c1 { p(t) => t.@0 * 1000 + t.@1, q(n) => 0 - n };
+            assert_eq(|_|"union_mod match", r1, 11022);;
+            let c2 = C::q(99).mod_p(|t| (t.@0 + 1, t.@1 + 2));
+            let r2 = match c2 { p(_) => -1, q(n) => n };
+            assert_eq(|_|"union_mod passthrough", r2, 99);;
+
+            let (pa, pb) = pick(Option::some(21));
+            assert_eq(|_|"diverging arm taken", pa + pb, 63);;
+
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_export_unbox_struct_arg() {
+    // An exported Fix function whose argument is an unbox struct (a tuple) receives it correctly: the
+    // C caller passes the struct by value, and the export wrapper reassembles it before applying the
+    // Fix value. Complements `test_export`, which exercises only scalar `CInt` arguments.
+    let source = r##"
+        module Main;
+
+        sum_pair : (I64, I64) -> I64;
+        sum_pair = |p| p.@0 + p.@1;
+        FFI_EXPORT[sum_pair, c_sum_pair];
+
+        pick : (I64, I64) -> I64 -> (I64, I64) -> I64;
+        pick = |p, k, q| p.@0 + p.@1 * 10 + k * 100 + q.@0 * 1000 + q.@1 * 10000;
+        FFI_EXPORT[pick, c_pick];
+
+        main : IO ();
+        main = (
+            let res = FFI_CALL[CInt run_c()];
+            assert_eq(|_|"C reported failure", res, 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        struct pair { long a; long b; };
+        long c_sum_pair(struct pair p);
+        long c_pick(struct pair p, long k, struct pair q);
+
+        int run_c() {
+            struct pair p = {10, 20};
+            if (c_sum_pair(p) != 30) { return 1; }
+            struct pair q = {100, 200};
+            if (c_pick(p, 5, q) != 10 + 20 * 10 + 5 * 100 + 100 * 1000 + 200 * 10000) { return 1; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
