@@ -2,18 +2,15 @@ use std::{fs, path::PathBuf, process::Command};
 
 use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
-// Several projects are pinned to their `array-storage-migration` revision. The array/storage
-// redesign made `Array` unboxed and dropped its `Boxed` instance, so projects that used `Array`'s
-// FFI (`borrow_boxed` / `mutate_boxed` on an array), called `unsafe_is_unique` on their own unbox
-// structs, or used the removed unsafe primitives were migrated to the array-specific helpers on that
-// branch and are pinned to it here. Projects passing `None` build against their default branch.
+// Every project is tested at its default branch. Pass a revision as `test_external_project`'s third
+// argument to pin one to a specific commit instead.
 
 #[test]
 pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
-        Some("c25c6a34fe3405ad6db6c704765de02b9b11efe4"),
+        None,
     );
 }
 
@@ -49,7 +46,7 @@ pub fn test_external_project_time() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
-        Some("776ded3f005be3102f898c5892873f41e085f0e2"),
+        None,
     );
 }
 
@@ -67,7 +64,7 @@ pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
-        Some("f3bf2fe37c8c79547afea487be8822fef64f14b8"),
+        None,
     );
 }
 
@@ -89,7 +86,7 @@ pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
-        Some("bd3fb3750e771ddf42aa37be722ab4ab5ba1092a"),
+        None,
     );
 }
 
@@ -98,7 +95,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
-        Some("002065bd9884066715f26858b79d787ef14cf380"),
+        None,
     );
 }
 
@@ -107,7 +104,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
-        Some("9e833af4cb1a129423b56e259066d0c304021f36"),
+        None,
     );
 }
 
@@ -116,7 +113,7 @@ pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
-        Some("0ef6b5e75b78bc6c35392c48541a7d60edb73019"),
+        None,
     );
 }
 
@@ -138,7 +135,7 @@ pub fn test_external_project_cp_library() {
     test_external_project(
         "https://github.com/tttmmmyyyy/cp-library",
         "cp-library",
-        Some("f538b64ae07cb225fcf497ca783fb303b315508a"),
+        None,
     );
 }
 
