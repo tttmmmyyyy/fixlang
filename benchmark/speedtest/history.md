@@ -2,6 +2,15 @@
 
 Newer is above.
 
+## f0a600092158e34fccbe3ac6c44d64b6db8782d5
+
+Removing the traverser `alwaysinline` attribute, measured against the row that added it as an enum
+attribute (`0adf6eba`). The two are identical to within noise (total +0.000%, per-case median
+diff 0), so the attribute did nothing in any form — an enum `alwaysinline` on the traversers is as
+inert as the string one was. The small fixed offset seen against the older `9e6c6f64` row is present
+with the attribute and without it alike, so it belongs to other commits or run-to-run startup, not
+to this attribute.
+
 ## 0adf6ebaa6a8eb33360e6d7044ebcd54389e198d
 
 Attaching `alwaysinline` to the object traversers as a real enum attribute (it had been a string
