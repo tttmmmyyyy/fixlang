@@ -2,6 +2,14 @@
 
 Newer is above.
 
+## d29b6c3ccfdd8c92f3999aaec0c7c78778b238c2
+
+Baseline of `main` after the bce merge (#80) and the external-test change (#83), taken before bumping
+the `cp_lib_*` cases from cp-library 0.7.4 to 0.13.0. It matches the previous bce row `f0a60009` to
+within noise — the intervening commits (the `Arc<RcExpr>` change, the `grow_stack` helper, and the
+test-only #83) do not touch code generation — so the merged main reproduces the last bce measurement
+and gives a clean reference for the cp-library version change measured next.
+
 ## f0a600092158e34fccbe3ac6c44d64b6db8782d5
 
 Removing the traverser `alwaysinline` attribute, measured against the row that added it as an enum
