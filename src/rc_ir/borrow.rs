@@ -1737,6 +1737,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fixstd::builtin::make_i64_ty;
     use crate::rc_ir::provenance::Provenance;
 
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
@@ -1786,7 +1787,7 @@ mod tests {
     fn var(name: &str) -> RcVar {
         RcVar {
             name: FullName::local(name),
-            ty: crate::fixstd::builtin::make_i64_ty(),
+            ty: make_i64_ty(),
             source: None,
             debug_name: None,
             skip_null_check: false,
