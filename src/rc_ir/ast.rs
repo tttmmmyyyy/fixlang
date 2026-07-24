@@ -76,21 +76,14 @@ pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable rather than stored here.
+///
+/// The expression is shared through an `Arc`, so cloning a node is O(1). The continuation chain is
+/// thousands of nodes deep for a large body, and the simplifier clones whole bodies, so a
+/// deep-copying clone would overflow the stack.
+#[derive(Clone)]
 pub struct RcExprNode {
-    pub expr: Box<RcExpr>,
+    pub expr: Arc<RcExpr>,
     pub source: Option<Span>,
-}
-
-impl Clone for RcExprNode {
-    fn clone(&self) -> Self {
-        // The continuation chain is owned (`Box<RcExpr>`) and can be thousands of nodes deep, so a
-        // plain recursive clone overflows the stack. Grow it on demand at each node, as every RC IR
-        // traversal does (see `rewrite`, `eval_rc_expr`, `lower`).
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || RcExprNode {
-            expr: Box::new((*self.expr).clone()),
-            source: self.source.clone(),
-        })
-    }
 }
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
@@ -221,10 +214,10 @@ mod tests {
     use super::*;
     use crate::ast::types::type_tyvar_star;
 
-    // `RcExprNode` owns its continuation chain, so cloning a body recurses to the chain's depth. A
-    // real function body can be thousands of nodes deep, and the simplifier clones whole bodies, so
-    // the clone must grow the stack on demand rather than overflow it. Build a chain far deeper than
-    // an unguarded recursive clone could hold on any thread stack, and confirm the clone returns.
+    // Cloning a node is O(1) because the expression is shared through an `Arc` rather than deep-copied
+    // (the simplifier clones whole bodies, which can be thousands of nodes deep). Build a chain far
+    // deeper than a deep-copying clone could hold on any thread stack, clone it, and confirm the clone
+    // returns — a guard against a regression to a recursive clone.
     #[test]
     fn rc_expr_node_clone_is_stack_safe() {
         let var = RcVar {
@@ -235,12 +228,12 @@ mod tests {
             skip_null_check: false,
         };
         let mut node = RcExprNode {
-            expr: Box::new(RcExpr::Ret(var.clone())),
+            expr: Arc::new(RcExpr::Ret(var.clone())),
             source: None,
         };
         for _ in 0..100_000 {
             node = RcExprNode {
-                expr: Box::new(RcExpr::Eval(var.clone(), node)),
+                expr: Arc::new(RcExpr::Eval(var.clone(), node)),
                 source: None,
             };
         }

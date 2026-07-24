@@ -278,7 +278,7 @@ impl<'a> Specializer<'a> {
             RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         };
         RcExprNode {
-            expr: Box::new(expr),
+            expr: Arc::new(expr),
             source: node.source.clone(),
         }
     }

@@ -135,7 +135,9 @@ impl<'a> RcInserter<'a> {
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
         let source = node.source.clone();
-        match *node.expr {
+        // Take ownership of the expression to destructure it into owned parts. The node is uniquely
+        // owned here, so this moves out of the `Arc` without copying.
+        match Arc::unwrap_or_clone(node.expr) {
             RcExpr::Ret(x) => {
                 let mut live = live_after.clone();
                 insert_if_local(&mut live, &x.name);
@@ -143,7 +145,7 @@ impl<'a> RcInserter<'a> {
                 // arm returns a variable that is used again after the match — it is consumed twice, so
                 // retain it here to provide the extra reference.
                 let ret = RcExprNode {
-                    expr: Box::new(RcExpr::Ret(x.clone())),
+                    expr: Arc::new(RcExpr::Ret(x.clone())),
                     source,
                 };
                 let node = self.retain_if_live(&x, live_after, ret);
@@ -182,7 +184,7 @@ impl<'a> RcInserter<'a> {
             cont
         };
         let node = RcExprNode {
-            expr: Box::new(RcExpr::Eval(x.clone(), cont)),
+            expr: Arc::new(RcExpr::Eval(x.clone(), cont)),
             source,
         };
         let mut live_before = live_cont;
@@ -234,7 +236,7 @@ impl<'a> RcInserter<'a> {
         let cont = build_releases(after, cont);
 
         let node = RcExprNode {
-            expr: Box::new(RcExpr::Let(x.clone(), rhs, cont)),
+            expr: Arc::new(RcExpr::Let(x.clone(), rhs, cont)),
             source,
         };
         let node = build_retains(retains_before, node);
@@ -274,7 +276,7 @@ impl<'a> RcInserter<'a> {
         let cont = build_releases(dead, cont);
 
         let node = RcExprNode {
-            expr: Box::new(RcExpr::Destructure(container.clone(), fields.clone(), cont)),
+            expr: Arc::new(RcExpr::Destructure(container.clone(), fields.clone(), cont)),
             source,
         };
         // Retain the container before the destructure iff it is used afterward, so both the extracted
@@ -378,7 +380,7 @@ impl<'a> RcInserter<'a> {
         };
 
         let node = RcExprNode {
-            expr: Box::new(RcExpr::Let(
+            expr: Arc::new(RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(scrut.clone(), new_arms),
                 cont,
@@ -463,7 +465,7 @@ fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
         RcExprNode {
-            expr: Box::new(RcExpr::Retain(v, vec![], RcState::Unknown, c)),
+            expr: Arc::new(RcExpr::Retain(v, vec![], RcState::Unknown, c)),
             source,
         }
     })
@@ -474,7 +476,7 @@ fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
         RcExprNode {
-            expr: Box::new(RcExpr::Release(v, vec![], RcState::Unknown, c)),
+            expr: Arc::new(RcExpr::Release(v, vec![], RcState::Unknown, c)),
             source,
         }
     })

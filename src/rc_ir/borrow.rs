@@ -1179,7 +1179,7 @@ impl<'a> RewriteCtx<'a> {
 /// An expression node with the given source span.
 fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
-        expr: Box::new(expr),
+        expr: Arc::new(expr),
         source: source.clone(),
     }
 }

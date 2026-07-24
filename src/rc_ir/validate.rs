@@ -273,6 +273,7 @@ mod tests {
     use crate::fixstd::builtin::{make_i64_ty, InlineLLVMNullPtrLit};
     use crate::misc::Map;
     use crate::rc_ir::ast::{FuncRef, MatchArm, RcExpr, RcFunc, RcVar};
+    use std::sync::Arc;
 
     fn var(name: &str) -> RcVar {
         RcVar {
@@ -286,7 +287,7 @@ mod tests {
 
     fn node(expr: RcExpr) -> RcExprNode {
         RcExprNode {
-            expr: Box::new(expr),
+            expr: Arc::new(expr),
             source: None,
         }
     }

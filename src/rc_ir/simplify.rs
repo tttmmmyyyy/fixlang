@@ -33,6 +33,7 @@ use crate::misc::Map;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::rename::{clone_fresh, substitute_expr};
+use std::sync::Arc;
 
 /// The marker for fresh names the case-of-case clone mints, keeping them distinct from other passes'.
 const MARKER: &str = "cc";
@@ -384,7 +385,7 @@ fn single(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
 
 fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
-        expr: Box::new(expr),
+        expr: Arc::new(expr),
         source: source.clone(),
     }
 }

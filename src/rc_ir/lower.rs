@@ -187,15 +187,15 @@ impl<'a> Lowerer<'a> {
             .rev()
             .fold(terminal, |cont, binding| match binding {
                 PendingBinding::Let(var, rhs, source) => RcExprNode {
-                    expr: Box::new(RcExpr::Let(var, rhs, cont)),
+                    expr: Arc::new(RcExpr::Let(var, rhs, cont)),
                     source,
                 },
                 PendingBinding::Destructure(container, fields, source) => RcExprNode {
-                    expr: Box::new(RcExpr::Destructure(container, fields, cont)),
+                    expr: Arc::new(RcExpr::Destructure(container, fields, cont)),
                     source,
                 },
                 PendingBinding::Eval(var, source) => RcExprNode {
-                    expr: Box::new(RcExpr::Eval(var, cont)),
+                    expr: Arc::new(RcExpr::Eval(var, cont)),
                     source,
                 },
             })
@@ -204,7 +204,7 @@ impl<'a> Lowerer<'a> {
     fn ret_node(var: RcVar) -> RcExprNode {
         let source = var.source.clone();
         RcExprNode {
-            expr: Box::new(RcExpr::Ret(var)),
+            expr: Arc::new(RcExpr::Ret(var)),
             source,
         }
     }

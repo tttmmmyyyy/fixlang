@@ -7,6 +7,7 @@
 use crate::ast::name::FullName;
 use crate::misc::Map;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
+use std::sync::Arc;
 
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) a fresh globally-unique name and
@@ -150,7 +151,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
         RcExpr::Ret(v) => RcExpr::Ret(rename_var(v, renaming)),
     };
     RcExprNode {
-        expr: Box::new(expr),
+        expr: Arc::new(expr),
         source: node.source.clone(),
     }
 }
