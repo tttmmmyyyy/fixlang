@@ -111,8 +111,9 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         let _scope_guard = self.push_scope();
 
-        // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`); reassemble
-        // the (possibly aggregate) parameter value from them. The CAP pointer follows all of them.
+        // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`), which are
+        // exactly an object's leaves, so it becomes an `Object` with no aggregate reformed. The CAP
+        // pointer follows all of them.
         let mut next_param = 0u32;
         for param in func.params.iter() {
             let embedded = param.ty.get_embedded_type(self, &vec![]);
@@ -121,9 +122,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .map(|k| fn_val.get_nth_param(next_param + k).unwrap())
                 .collect();
             next_param += leaf_count;
-            let mut leaves = leaf_vals.into_iter();
-            let val = self.assemble_from_scalar_leaves(embedded, &mut leaves);
-            let obj = Object::new(val, param.ty.clone(), self);
+            let obj = Object::from_leaves(leaf_vals, param.ty.clone(), self);
             self.scope_push(&param.name, &obj);
         }
         if let Some(cap) = &func.capture {
@@ -440,7 +439,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .get_object_type(&capture_tys, self.type_env())
                 .to_struct_type(self, vec![]);
             for (i, cap) in captures.iter().enumerate() {
-                let val = self.get_scoped_obj(&cap.name).value;
+                let cap_obj = self.get_scoped_obj(&cap.name);
+                let val = cap_obj.value(self);
                 capture_obj.insert_field_as(
                     self,
                     capture_struct_ty,
@@ -448,7 +448,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     val,
                 );
             }
-            capture_obj.value
+            capture_obj.value(self)
         };
         closure = closure.insert_field(self, CLOSURE_CAPTURE_IDX, capture_ptr);
         closure
@@ -518,7 +518,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
 
         // Implement each arm.
-        let mut incomings: Vec<(BasicValueEnum<'c>, BasicBlock<'c>)> = vec![];
+        let mut incomings: Vec<(Object<'c>, BasicBlock<'c>)> = vec![];
         for (i, arm) in arms.iter().enumerate() {
             self.builder().position_at_end(arm_bbs[i]);
 
@@ -551,7 +551,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // the phi an undef value from its unreachable block.
             if let Some(arm_val) = arm_val {
                 let arm_end_bb = self.builder().get_insert_block().unwrap();
-                incomings.push((arm_val.value, arm_end_bb));
+                incomings.push((arm_val, arm_end_bb));
                 self.builder()
                     .build_unconditional_branch(
                         cont_bb.expect("a non-tail match has a merge block"),
@@ -570,11 +570,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             !incomings.is_empty(),
             "a non-tail match has no arm that reaches its merge block"
         );
-        if incomings.len() == 1 {
-            return Some(Object::new(incomings[0].0, result.ty.clone(), self));
+        let merged = if incomings.len() == 1 {
+            incomings.into_iter().next().unwrap().0
+        } else {
+            self.build_object_phi(&incomings, "match_phi")
+        };
+        // Every arm produces a value of the match's declared result type, so the merge does too.
+        // Checked under develop mode (the unit tests).
+        if self.config.develop_mode {
+            assert_eq!(merged.ty, result.ty, "a match's merged value has its result type");
         }
-        let phi = self.build_scalar_phi(&incomings, "match_phi");
-        Some(Object::new(phi, result.ty.clone(), self))
+        Some(merged)
     }
 
     /// Implement a global initializer: a lazily-initialized accessor that computes the value once
@@ -701,8 +707,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .eval_rc_expr(&global_init.init, false, func_vals)
                 .expect("an expression evaluated outside tail position yields a value");
             self.mark_global(obj.clone());
+            let obj_val = obj.value(self);
             self.builder()
-                .build_store(global_var_ptr, obj.value)
+                .build_store(global_var_ptr, obj_val)
                 .unwrap();
         }
 

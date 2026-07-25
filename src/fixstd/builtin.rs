@@ -827,7 +827,8 @@ pub fn make_byte_array_copy<'c, 'm>(
         gc,
         Some("array@make_byte_array_copy"),
     );
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+    let storage_val = storage.value(gc);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
     let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
     let dst = get_array_storage_buf(gc, &array);
@@ -944,7 +945,7 @@ impl LLVMGen for InlineLLVMFixBody {
             .as_pointer_value();
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_scoped_obj(&self.cap_name);
-        let cap_obj_ptr = cap_obj.value;
+        let cap_obj_ptr = cap_obj.value(gc);
         let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
         let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();
@@ -1644,7 +1645,8 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
                 self.capacity_name.to_string()
             )),
         );
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+        let storage_val = storage.value(gc);
+        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
         let array = array.insert_field(gc, ARRAY_SIZE_IDX, gc.context.i64_type().const_zero());
         array.insert_field(gc, ARRAY_CAP_IDX, cap)
     }
@@ -2034,7 +2036,7 @@ fn realloc_array<'c, 'm>(
 ) -> Object<'c> {
     // Resize the storage block in place, then update the array value's storage pointer and capacity.
     let storage = get_array_storage(gc, &array);
-    let storage_ptr = storage.value.into_pointer_value();
+    let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
     let sizeof = object_type.size_of(gc, Some(new_cap));
     let realloc_fn = gc
@@ -2080,7 +2082,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // storage to the shared side, so `realloc` only ever runs on a genuinely uniquely owned block.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
-        let storage_ptr = storage.value.into_pointer_value();
+        let storage_ptr = storage.value(gc).into_pointer_value();
         let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
         let current_func = unique_bb.get_parent().unwrap();
         let end_bb = gc
@@ -2089,7 +2091,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced_val = realloc_array(gc, array.clone(), new_cap).value;
+        let realloced = realloc_array(gc, array.clone(), new_cap);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2102,24 +2104,23 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
         ObjectFieldType::clone_array_buf(gc, len, src_buf, dst_buf, elem_ty, None);
         gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+        let new_storage_val = new_storage.value(gc);
         let cloned = array
             .clone()
-            .insert_field(gc, ARRAY_STORAGE_IDX, new_storage.value);
+            .insert_field(gc, ARRAY_STORAGE_IDX, new_storage_val);
         let cloned = cloned.insert_field(gc, ARRAY_CAP_IDX, new_cap);
-        let cloned_val = cloned.value;
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
-        let phi = gc.build_scalar_phi(
+        gc.build_object_phi(
             &[
-                (realloced_val, succ_of_unique_bb),
-                (cloned_val, succ_of_shared_bb),
+                (realloced, succ_of_unique_bb),
+                (cloned, succ_of_shared_bb),
             ],
             "array_phi@set_capacity",
-        );
-        Object::new(phi, array.ty.clone(), gc)
+        )
     }
 
     fn name(&self) -> String {
@@ -2243,7 +2244,8 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
                 .unwrap()
         };
 
-        let src_ptr = get_array_storage(gc, &src).value.into_pointer_value();
+        let src_storage = get_array_storage(gc, &src);
+        let src_ptr = src_storage.value(gc).into_pointer_value();
         let src_buf = get_array_storage_buf(gc, &src);
         let src_len = src.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
@@ -2572,7 +2574,7 @@ fn make_array_unique_with_hole<'c, 'm>(
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage = get_array_storage(gc, &array);
-    let storage_ptr = storage.value.into_pointer_value();
+    let storage_ptr = storage.value(gc).into_pointer_value();
     let current_bb = gc.builder().get_insert_block().unwrap();
     let current_func = current_bb.get_parent().unwrap();
 
@@ -2590,11 +2592,11 @@ fn make_array_unique_with_hole<'c, 'm>(
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
     ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole);
     gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+    let new_storage_val = new_storage.value(gc);
     let cloned_array = array
         .clone()
-        .insert_field(gc, ARRAY_STORAGE_IDX, new_storage.value);
+        .insert_field(gc, ARRAY_STORAGE_IDX, new_storage_val);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-    let cloned_array_val = cloned_array.value;
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     // Implement unique_bb: the array is already unique, so pass its value through.
@@ -2603,14 +2605,10 @@ fn make_array_unique_with_hole<'c, 'm>(
 
     // Implement end_bb: phi over the array value.
     gc.builder().position_at_end(end_bb);
-    let array_phi = gc.build_scalar_phi(
-        &[
-            (array.value, unique_bb),
-            (cloned_array_val, succ_of_shared_bb),
-        ],
+    gc.build_object_phi(
+        &[(array, unique_bb), (cloned_array, succ_of_shared_bb)],
         "array_phi",
-    );
-    Object::new(array_phi, array.ty.clone(), gc)
+    )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -3530,7 +3528,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
         for (i, name) in self.field_names.iter().enumerate() {
             let field_obj = gc.get_scoped_obj_noretain(name);
-            str_obj = str_obj.insert_field(gc, i as u32 + offset, field_obj.value);
+            str_obj = str_obj.insert_field_object(gc, i as u32 + offset, &field_obj);
         }
         str_obj
     }
@@ -3588,7 +3586,8 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
         let storage = alloc_array_storage(gc, elem_ty, len);
         let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage.value);
+        let storage_val = storage.value(gc);
+        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
         let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
         let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
         let buffer = get_array_storage_buf(gc, &array);
@@ -3752,8 +3751,8 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
         // Create the return value.
         let pair = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"));
-        let pair = pair.insert_field(gc, 0, field.value);
-        let pair = pair.insert_field(gc, 1, str.value);
+        let pair = pair.insert_field_object(gc, 0, &field);
+        let pair = pair.insert_field_object(gc, 1, &str);
 
         pair
     }
@@ -3911,7 +3910,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         }
 
         // Convert type of punched_str into the struct type.
-        let punched_value = punched_str.value;
+        let punched_value = punched_str.value(gc);
         let str = Object::new(punched_value, struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
@@ -4755,7 +4754,7 @@ fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<
     // In boxed case, `obj` should be replaced to cloned object if it is shared.
 
     // Branch by if refcnt is one.
-    let obj_ptr = obj.value.into_pointer_value();
+    let obj_ptr = obj.value(gc).into_pointer_value();
     let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
     let end_bb = gc
         .context
@@ -4777,7 +4776,7 @@ fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<
     // Release the old object.
     gc.release(obj.clone());
 
-    let cloned_obj_ptr = cloned_obj.value;
+    let cloned_obj_ptr = cloned_obj.value(gc);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -5343,24 +5342,21 @@ impl LLVMGen for InlineLLVMUnionModBody {
         // Set values of returned union object.
         let ret_obj = ObjectFieldType::set_union_tag(gc, ret_obj, specified_tag_value);
         let ret_obj = ObjectFieldType::set_union_value(gc, ret_obj, value);
-        let match_val = ret_obj.value;
         match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Implement mismatch_bb
         gc.builder().position_at_end(mismatch_bb);
         gc.release(modifier);
-        let mismatch_val = obj.value;
         mismatch_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
-        let phi = gc.build_scalar_phi(
-            &[(match_val, match_bb), (mismatch_val, mismatch_bb)],
+        gc.build_object_phi(
+            &[(ret_obj, match_bb), (obj, mismatch_bb)],
             "phi@union_mod_function",
-        );
-        Object::new(phi, union_ty.clone(), gc)
+        )
     }
 
     fn name(&self) -> String {
@@ -5684,7 +5680,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 
         // Get whether argument is unique.
         let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
-            let obj_ptr = obj.value.into_pointer_value();
+            let obj_ptr = obj.value(gc).into_pointer_value();
             let current_bb = gc.builder().get_insert_block().unwrap();
             let current_func = current_bb.get_parent().unwrap();
 
@@ -5723,8 +5719,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 
         // Store the result
         let ret = ret.insert_field(gc, 0, bool_val);
-        let obj_val = obj.value;
-        let ret = ret.insert_field(gc, 1, obj_val);
+        let ret = ret.insert_field_object(gc, 1, &obj);
 
         ret
     }
@@ -5882,7 +5877,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 
         // Store the result `(Bool, array)`.
         let ret = ret.insert_field(gc, 0, bool_val);
-        ret.insert_field(gc, 1, array.value)
+        ret.insert_field_object(gc, 1, &array)
     }
 
     fn name(&self) -> String {
@@ -5972,7 +5967,7 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
             gc,
             Some("ptr@boxed_to_retained_ptr_ios"),
         );
-        let ptr = ptr.insert_field(gc, 0, obj.value);
+        let ptr = ptr.insert_field_object(gc, 0, &obj);
 
         // Prepare returned object.
         let ret = create_obj(
@@ -5984,8 +5979,8 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
         );
 
         // Insert fields into returned object.
-        let ret = ret.insert_field(gc, 0, ios.value);
-        let ret = ret.insert_field(gc, 1, ptr.value);
+        let ret = ret.insert_field_object(gc, 0, &ios);
+        let ret = ret.insert_field_object(gc, 1, &ptr);
 
         ret
 
@@ -6063,7 +6058,7 @@ impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
         );
 
         // Insert fields into returned object.
-        let ret = ret.insert_field(gc, 0, ios.value);
+        let ret = ret.insert_field_object(gc, 0, &ios);
         let ret = ret.insert_field(gc, 1, ptr);
 
         ret

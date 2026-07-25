@@ -482,7 +482,7 @@ impl ObjectFieldType {
                         .build_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
                 }
                 .unwrap();
-                gc.builder().build_store(elm_ptr, value.value).unwrap();
+                gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
             };
 
             // After loop, release value.
@@ -519,7 +519,7 @@ impl ObjectFieldType {
                 .build_gep(value_ty, buffer, &[begin], "array_append_begin")
                 .unwrap()
         };
-        let val = value.value;
+        let val = value.value(gc);
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _count: IntValue<'c>,
@@ -665,7 +665,7 @@ impl ObjectFieldType {
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(elm_ptr, value.value).unwrap();
+        gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
     }
 
     // Clone (retain + copy) `count` consecutive elements from `src_buffer` into `dst_buffer`,
@@ -947,7 +947,8 @@ impl ObjectFieldType {
         let union_data_ty = union_struct_ty
             .get_field_type_at_index(union_buf_idx)
             .unwrap();
-        let value = gc.bit_cast(value.value, union_data_ty);
+        let value_val = value.value(gc);
+        let value = gc.bit_cast(value_val, union_data_ty);
         union.insert_field(gc, union_buf_idx, value)
     }
 
@@ -994,8 +995,7 @@ impl ObjectFieldType {
     ) -> Object<'c> {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
         let field_ty = str.ty.field_types(gc.type_env())[field_idx as usize].clone();
-        let field = str.extract_field(gc, field_idx + field_offset);
-        Object::new(field, field_ty, gc)
+        str.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
 
     // Set an `Object` into the field of a struct `Object`.
@@ -1007,8 +1007,7 @@ impl ObjectFieldType {
         field: &Object<'c>,
     ) -> Object<'c> {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        let field_val = field.value;
-        str.insert_field(gc, field_offset + field_idx, field_val)
+        str.insert_field_object(gc, field_offset + field_idx, field)
     }
 
     // Get field of struct as Objects (with refcnt managed).
@@ -1021,12 +1020,8 @@ impl ObjectFieldType {
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
         let mut ret = vec![];
         for field_idx in field_indices {
-            // Get ptr to field.
+            // Move the field out as an object; it carries its own leaves, so it outlives the struct.
             let field = ObjectFieldType::move_out_struct_field(gc, str, *field_idx);
-
-            // Clone the field.
-            let field_val = field.value;
-            let field = Object::new(field_val, field.ty, gc);
             ret.push(field);
         }
 
@@ -1197,9 +1192,16 @@ pub fn traverser_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     is_dynamic: bool,
 ) -> FunctionType<'c> {
-    let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = vec![];
-    let arg_ty = ty.get_embedded_type(gc, &vec![]);
-    arg_tys.push(arg_ty.into());
+    // The object is passed as its flat leaf scalars rather than as one aggregate, mirroring
+    // `lambda_function_type`: a boxed object is a single pointer leaf, an unbox struct is its leaf
+    // fields spread out. This keeps the "materialize the aggregate only at memory / foreign-ABI
+    // boundaries" invariant intact across the release / mark path.
+    let embedded = ty.get_embedded_type(gc, &vec![]);
+    let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = gc
+        .flatten_to_scalar_leaves(embedded)
+        .into_iter()
+        .map(|t| t.into())
+        .collect();
     if is_dynamic {
         // Add argument for work type.
         arg_tys.push(gc.context.i8_type().into());
@@ -1302,18 +1304,22 @@ pub fn lambda_function_type<'c, 'm>(
         arg_tys.push(gc.context.ptr_type(AddressSpace::from(0)).into());
     }
 
+    // The result is returned as its flat leaf scalars, mirroring how the arguments are passed (see
+    // `flatten_to_scalar_leaves`): no leaves returns `void`, a single leaf is returned bare, and
+    // several leaves are returned as a flat struct `{ leaf, ... }` rather than the nested aggregate.
+    // A later pass that decomposes the return value at a control-flow merge then yields one scalar phi
+    // per leaf instead of an aggregate phi, keeping a loop-carried field visible to LLVM.
     let ret_ty = ty.get_lambda_dst();
-    let ret_ty = if ret_ty.is_box(gc.type_env()) {
-        gc.context.ptr_type(AddressSpace::from(0)).into()
+    let ret_leaf_tys: Vec<BasicTypeEnum> = if ret_ty.is_box(gc.type_env()) {
+        vec![gc.context.ptr_type(AddressSpace::from(0)).into()]
     } else {
-        ret_ty.get_embedded_type(gc, &vec![])
+        let embedded = ret_ty.get_embedded_type(gc, &vec![]);
+        gc.flatten_to_scalar_leaves(embedded)
     };
-    if gc.sizeof(&ret_ty) == 0 {
-        // Avoid returning empty type.
-        // This is because such code cases an SEGV in LLVM. To reproduce this, use commit 9c75cd3a566950ab3781fe5eb45f80ec02e45dbd with function inlining optimization enabled.
-        gc.context.void_type().fn_type(&arg_tys, false)
-    } else {
-        ret_ty.fn_type(&arg_tys, false)
+    match ret_leaf_tys.as_slice() {
+        [] => gc.context.void_type().fn_type(&arg_tys, false),
+        [single] => single.fn_type(&arg_tys, false),
+        many => gc.context.struct_type(many, false).fn_type(&arg_tys, false),
     }
 }
 
@@ -1701,9 +1707,15 @@ pub fn create_traverser<'c, 'm>(
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Create the object.
-    let obj_val = func.get_first_param().unwrap();
-    let obj = Object::new(obj_val, ty.clone(), gc);
+    // Reassemble the object from its leaf parameters (see `traverser_type`).
+    let leaf_count = {
+        let embedded = ty.get_embedded_type(gc, &vec![]);
+        gc.flatten_to_scalar_leaves(embedded).len()
+    };
+    let leaves = (0..leaf_count)
+        .map(|i| func.get_nth_param(i as u32).unwrap())
+        .collect::<Vec<_>>();
+    let obj = Object::from_leaves(leaves, ty.clone(), gc);
 
     match work {
         Some(work) => {
@@ -1714,8 +1726,11 @@ pub fn create_traverser<'c, 'm>(
         None => {
             // Dynamic traverser case.
 
-            // The second argument is the work type.
-            let work = func.get_nth_param(1).unwrap().into_int_value();
+            // The work-type argument follows the object's leaf parameters.
+            let work = func
+                .get_nth_param(leaf_count as u32)
+                .unwrap()
+                .into_int_value();
 
             // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");

@@ -121,11 +121,13 @@ impl<'c> ValueAccessor<'c> {
 
 #[derive(Clone)]
 pub struct Object<'c> {
-    // The value of the object.
-    // For boxed type, this is a pointer to the object allocated on the heap.
-    // For funcptr type, this is the function pointer.
-    // For unboxed type, this is a value on the (virtual) register.
-    pub value: BasicValueEnum<'c>,
+    // The object's value, held as the flat list of leaf (non-struct) scalars it decomposes into,
+    // in `flatten_to_scalar_leaves` order. A boxed object is the single heap pointer, a funcptr the
+    // single function pointer, an unboxed scalar the value itself; an unbox struct is its leaf
+    // fields spread out here rather than kept as one aggregate, so a loop-carried field (an
+    // `Array`'s `@size`) stays visible to LLVM instead of hiding inside an aggregate phi. The
+    // aggregate is reassembled on demand by `value`, only at memory and ABI boundaries.
+    data: Vec<BasicValueEnum<'c>>,
     pub ty: Arc<TypeNode>,
 }
 
@@ -136,17 +138,57 @@ impl<'c> Object<'c> {
         gc: &mut Generator<'c, 'm>,
     ) -> Self {
         assert!(ty.free_vars().is_empty());
-        let value = if ty.is_box(gc.type_env()) {
-            value
-        } else if ty.is_funptr() {
-            value
-        } else {
-            // Unboxed case
+        if gc.config.develop_mode && ty.is_unbox(gc.type_env()) && !ty.is_funptr() {
             let embed_ty = ty.get_embedded_type(gc, &vec![]);
             assert_eq!(embed_ty, value.get_type());
-            value
-        };
-        Object { value, ty }
+        }
+        let data = gc.explode_to_scalar_leaves(value);
+        Object { data, ty }
+    }
+
+    // Construct an object directly from its leaf scalars, in `flatten_to_scalar_leaves` order. This
+    // is the fast path at ABI and phi boundaries, where the leaves are already in hand and reforming
+    // the aggregate only to explode it again in `new` would be wasted work.
+    pub fn from_leaves<'m>(
+        data: Vec<BasicValueEnum<'c>>,
+        ty: Arc<TypeNode>,
+        gc: &mut Generator<'c, 'm>,
+    ) -> Self {
+        assert!(ty.free_vars().is_empty());
+        if gc.config.develop_mode {
+            let embed_ty = ty.get_embedded_type(gc, &vec![]);
+            let leaf_tys = gc.flatten_to_scalar_leaves(embed_ty);
+            assert_eq!(
+                data.len(),
+                leaf_tys.len(),
+                "Object::from_leaves leaf count disagrees with flatten_to_scalar_leaves"
+            );
+            for (leaf, leaf_ty) in data.iter().zip(leaf_tys.iter()) {
+                assert_eq!(leaf.get_type(), *leaf_ty);
+                assert!(
+                    !matches!(leaf, BasicValueEnum::StructValue(_)),
+                    "an Object leaf must be a non-struct scalar"
+                );
+            }
+        }
+        Object { data, ty }
+    }
+
+    // The leaf scalars of this object, in `flatten_to_scalar_leaves` order.
+    pub fn leaves(&self) -> &[BasicValueEnum<'c>] {
+        &self.data
+    }
+
+    // Reassemble the object's value from its leaves. Free for a boxed object, a funcptr, or an
+    // unboxed scalar (the single leaf is returned as is); an unbox struct is rebuilt with one
+    // `insertvalue` per field, which SROA folds away wherever the aggregate is not truly needed.
+    pub fn value<'m>(&self, gc: &mut Generator<'c, 'm>) -> BasicValueEnum<'c> {
+        if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
+            return self.data[0];
+        }
+        let embedded = self.ty.get_embedded_type(gc, &vec![]);
+        let mut leaves = self.data.iter().copied();
+        gc.assemble_from_scalar_leaves(embedded, &mut leaves)
     }
 
     pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
@@ -196,7 +238,7 @@ impl<'c> Object<'c> {
     pub fn gep_boxed<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
         assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
-        let ptr = self.value.into_pointer_value();
+        let ptr = self.value(gc).into_pointer_value();
         gc.builder()
             .build_struct_gep(struct_ty, ptr, field_idx, "ptr_to_field_nocap")
             .unwrap()
@@ -212,14 +254,14 @@ impl<'c> Object<'c> {
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            // When the object is unboxed,
-            gc.builder()
-                .build_extract_value(
-                    self.value.into_struct_value(),
-                    field_idx,
-                    format!("field_{}", field_idx).as_str(),
-                )
-                .unwrap()
+            // The object's leaves already hold the field, spread across a contiguous range; slice
+            // that range and reassemble the field's value, emitting no `extractvalue` on an
+            // aggregate (there is none) so the leaves stay independent for LLVM.
+            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
+            let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
+            let mut leaves = self.data[off..off + cnt].iter().copied();
+            gc.assemble_from_scalar_leaves(field_ty, &mut leaves)
         } else {
             // When the object is boxed,
             let struct_ty = self.struct_ty(gc);
@@ -244,6 +286,30 @@ impl<'c> Object<'c> {
             .unwrap()
     }
 
+    // Extract a field of an object as an `Object`, keeping its value in the leaf domain: for an
+    // unbox object the field's leaves are sliced straight out with no aggregate formed, so a struct
+    // field never round-trips through an `insertvalue`/`extractvalue` that a later pass could sink
+    // into an aggregate phi. `field_ty` is the field's Fix type; for a boxed object the field is
+    // loaded from the heap and its (materialized) value exploded back into leaves. The field is
+    // moved out, not retained.
+    pub fn extract_field_object<'m>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        field_idx: u32,
+        field_ty: Arc<TypeNode>,
+    ) -> Object<'c> {
+        assert!(!self.is_funptr());
+        if self.is_unbox(&gc.type_env) {
+            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
+            Object::from_leaves(self.data[off..off + cnt].to_vec(), field_ty, gc)
+        } else {
+            let struct_ty = self.struct_ty(gc);
+            let field_val = self.extract_field_as(gc, struct_ty, field_idx);
+            Object::new(field_val, field_ty, gc)
+        }
+    }
+
     // Insert a field value into an object.
     // This cannot be used to set field of dynamic objects. Use `store_field_dynamic` instead.
     // This function does not support funptr type since in that case the `value` is not a struct.
@@ -258,16 +324,40 @@ impl<'c> Object<'c> {
     {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            // When the object is unboxed,
-            let struct_val = self.value.into_struct_value();
-            let struct_val = gc
-                .builder()
-                .build_insert_value(struct_val, val, field_idx, "insert_field")
-                .unwrap()
-                .as_basic_value_enum();
-            self.value = struct_val;
+            // Swap the field's leaves in place: explode the new field value into its own leaves and
+            // splice them over the range this field occupies, leaving every other field's leaves
+            // untouched and never materializing an aggregate.
+            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
+            let new_leaves = gc.explode_to_scalar_leaves(val.as_basic_value_enum());
+            assert_eq!(new_leaves.len(), cnt);
+            self.data.splice(off..off + cnt, new_leaves);
         } else {
             // When the object is boxed,
+            let struct_ty = self.struct_ty(gc);
+            self.insert_field_as(gc, struct_ty, field_idx, val);
+        }
+        self
+    }
+
+    // Insert an `Object` into a field, keeping the value in the leaf domain: for an unbox object the
+    // source object's leaves are spliced straight into the field's range with no aggregate formed on
+    // either side. For a boxed object the field is stored to the heap, where the value must be
+    // materialized. The counterpart of `extract_field_object`.
+    pub fn insert_field_object<'m>(
+        mut self,
+        gc: &mut Generator<'c, 'm>,
+        field_idx: u32,
+        val: &Object<'c>,
+    ) -> Object<'c> {
+        assert!(!self.is_funptr());
+        if self.is_unbox(&gc.type_env) {
+            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
+            assert_eq!(val.leaves().len(), cnt);
+            self.data.splice(off..off + cnt, val.leaves().iter().copied());
+        } else {
+            let val = val.value(gc);
             let struct_ty = self.struct_ty(gc);
             self.insert_field_as(gc, struct_ty, field_idx, val);
         }
@@ -302,9 +392,8 @@ impl<'c> Object<'c> {
     // Can be used for boxed objects.
     pub fn is_null<'m>(&self, gc: &mut Generator<'c, 'm>) -> IntValue<'c> {
         assert!(self.is_box(gc.type_env()));
-        gc.builder()
-            .build_is_null(self.value.into_pointer_value(), "is_null")
-            .unwrap()
+        let ptr = self.value(gc).into_pointer_value();
+        gc.builder().build_is_null(ptr, "is_null").unwrap()
     }
 
     // Get the pointer to the field of an boxed object.
@@ -325,7 +414,7 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
-        let ptr = self.value.into_pointer_value();
+        let ptr = self.value(gc).into_pointer_value();
         gc.builder()
             .build_struct_gep(ty, ptr, field_idx, "gep2field")
             .unwrap()
@@ -870,7 +959,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             obj.extract_field(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
         } else if obj.ty.is_funptr() {
-            obj.value.into_pointer_value()
+            obj.value(self).into_pointer_value()
         } else {
             panic!()
         }
@@ -902,8 +991,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         // `lambda_function_type`); the CAP pointer follows all argument scalars.
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
         for arg in args {
-            for leaf in self.explode_to_scalar_leaves(arg.value) {
-                call_args.push(leaf.into());
+            for leaf in arg.leaves() {
+                call_args.push((*leaf).into());
             }
         }
         if fun.ty.is_closure() {
@@ -915,15 +1004,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
         ret.set_tail_call(!self.has_di());
-        let ret = match ret.try_as_basic_value() {
-            Left(ret) => ret,
-            Right(_) => {
-                let ty = ret_ty.get_embedded_type(self, &vec![]);
-                Generator::get_undef(&ty)
-            }
-        };
-        let obj = Object::new(ret, ret_ty, self);
-        self.build_tail(obj, tail)
+        let call_result = ret.try_as_basic_value().left();
+        if tail {
+            // The callee's flat return value already has this function's return type (a tail call
+            // returns what its caller returns), so forward it verbatim without unpacking and repacking.
+            match call_result {
+                Some(v) => self.builder().build_return(Some(&v)).unwrap(),
+                None => self.builder().build_return(None).unwrap(),
+            };
+            return None;
+        }
+        Some(self.unpack_return(call_result, ret_ty))
     }
 
     // Build an `undef` constant of the given basic type.
@@ -951,6 +1042,22 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .collect(),
             _ => vec![ty],
         }
+    }
+
+    // The half-open range `[offset, offset + count)` of leaves that field `field_idx` of `struct_ty`
+    // occupies within the struct's flattened leaf list, so a leaf-held value can address one field
+    // without materializing the aggregate. `offset` is the leaf count of the preceding fields.
+    pub fn field_leaf_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
+        let offset: usize = (0..field_idx)
+            .map(|i| {
+                self.flatten_to_scalar_leaves(struct_ty.get_field_type_at_index(i).unwrap())
+                    .len()
+            })
+            .sum();
+        let count = self
+            .flatten_to_scalar_leaves(struct_ty.get_field_type_at_index(field_idx).unwrap())
+            .len();
+        (offset, count)
     }
 
     // Decompose a value into its leaf scalars in the order of `flatten_to_scalar_leaves` on its
@@ -997,116 +1104,97 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Build a phi that carries a possibly-aggregate value as one scalar phi per leaf field rather
-    // than as a single aggregate phi. LLVM's value analyses see through the scalar phis where they
-    // cannot see through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed
-    // this way lets the bounds check fold and the loop vectorize. The reassembly is folded away by
-    // SROA/instcombine. For a non-aggregate value this is an ordinary phi. The current insert block
-    // is where the phi is placed; every predecessor block must already have its terminator.
-    pub fn build_scalar_phi(
-        &self,
-        incomings: &[(BasicValueEnum<'c>, BasicBlock<'c>)],
+    // Merge objects of one type across predecessor edges as one scalar phi per leaf, rather than as a
+    // single aggregate phi. LLVM's value analyses see through the scalar phis where they cannot see
+    // through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed this way lets
+    // the bounds check fold and the loop vectorize. Each incoming object holds its leaves directly, so
+    // no aggregate is ever formed here. Every incoming's leaves must be available on its edge (defined
+    // in, or dominating, its predecessor block), and every predecessor must already have its
+    // terminator; the phis are placed at the current insert block.
+    pub fn build_object_phi(
+        &mut self,
+        incomings: &[(Object<'c>, BasicBlock<'c>)],
         name: &str,
-    ) -> BasicValueEnum<'c> {
-        let ty = incomings[0].0.get_type();
-        // Every incoming merges a value of the same type; a differing type would make the per-leaf
-        // phis ill-formed. Checked under develop mode (the unit tests).
+    ) -> Object<'c> {
+        let ty = incomings[0].0.ty.clone();
+        let leaf_count = incomings[0].0.leaves().len();
+        // Every incoming merges an object of the same type, so their leaves line up one-to-one.
+        // Checked under develop mode (the unit tests).
         if self.config.develop_mode {
-            for (val, _) in incomings {
+            for (obj, _) in incomings {
+                assert_eq!(obj.ty, ty, "build_object_phi incomings must share one type");
                 assert_eq!(
-                    val.get_type(),
-                    ty,
-                    "build_scalar_phi incomings must share one type"
+                    obj.leaves().len(),
+                    leaf_count,
+                    "build_object_phi incomings must share one leaf count"
                 );
             }
         }
-        if !matches!(ty, BasicTypeEnum::StructType(_)) {
-            let phi = self.builder().build_phi(ty, name).unwrap();
-            for (val, bb) in incomings {
-                phi.add_incoming(&[(val, *bb)]);
-            }
-            return phi.as_basic_value();
-        }
-        let phi_bb = self.builder().get_insert_block().unwrap();
-        // Explode each incoming value into its leaf scalars in its own predecessor block (before the
-        // terminator), so each phi operand is a value available on that edge.
-        let exploded: Vec<(Vec<BasicValueEnum<'c>>, BasicBlock<'c>)> = incomings
-            .iter()
-            .map(|(val, bb)| {
-                self.builder().position_before(
-                    &bb.get_terminator()
-                        .expect("a predecessor feeding a phi has its terminator"),
-                );
-                (self.explode_to_scalar_leaves(*val), *bb)
-            })
-            .collect();
-        // One scalar phi per leaf, all built before any reassembly so the block's phis stay
-        // contiguous at its top.
-        let leaf_tys = self.flatten_to_scalar_leaves(ty);
-        // `explode_to_scalar_leaves` on each incoming and `flatten_to_scalar_leaves` on their shared
-        // type must agree on leaf count and per-leaf type, so `leaves[j]` feeds a phi of type
-        // `leaf_tys[j]`. Checked under develop mode (the unit tests).
-        if self.config.develop_mode {
-            for (leaves, _) in &exploded {
-                assert_eq!(
-                    leaves.len(),
-                    leaf_tys.len(),
-                    "scalar-phi leaf count disagrees with flatten_to_scalar_leaves"
-                );
-                for (leaf, leaf_ty) in leaves.iter().zip(leaf_tys.iter()) {
-                    assert_eq!(
-                        leaf.get_type(),
-                        *leaf_ty,
-                        "scalar-phi leaf type disagrees with flatten_to_scalar_leaves"
-                    );
-                }
-            }
-        }
-        self.builder().position_at_end(phi_bb);
-        let leaf_phis: Vec<BasicValueEnum<'c>> = leaf_tys
-            .iter()
-            .enumerate()
-            .map(|(j, lty)| {
-                let phi = self.builder().build_phi(*lty, name).unwrap();
-                for (leaves, bb) in &exploded {
-                    phi.add_incoming(&[(&leaves[j], *bb)]);
+        // One scalar phi per leaf, built consecutively so the block's phis stay contiguous at its top.
+        let leaf_phis: Vec<BasicValueEnum<'c>> = (0..leaf_count)
+            .map(|j| {
+                let lty = incomings[0].0.leaves()[j].get_type();
+                let phi = self.builder().build_phi(lty, name).unwrap();
+                for (obj, bb) in incomings {
+                    phi.add_incoming(&[(&obj.leaves()[j], *bb)]);
                 }
                 phi.as_basic_value()
             })
             .collect();
-        let mut leaves = leaf_phis.into_iter();
-        self.assemble_from_scalar_leaves(ty, &mut leaves)
+        Object::from_leaves(leaf_phis, ty, self)
     }
 
-    // Retain an object.
-    pub fn retain(&mut self, obj: Object<'c>) {
-        // Get retain function.
-        let func_name = "retain_".to_string() + &obj.ty.hash();
+    // Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
+    // object is passed as its flat leaf scalars rather than as one aggregate (see
+    // `lambda_function_type`), so no aggregate is materialized across the call; `build_body` emits
+    // the retain / release / mark work on the object reassembled from those leaves inside the helper.
+    fn emit_rc_helper_call(
+        &mut self,
+        obj: Object<'c>,
+        prefix: &str,
+        call_name: &str,
+        build_body: impl FnOnce(&mut Self, Object<'c>),
+    ) {
+        let func_name = format!("{}_{}", prefix, obj.ty.hash());
         let func = if let Some(func) = self.module.get_function(&func_name) {
             func
         } else {
+            let embedded = obj.ty.get_embedded_type(self, &vec![]);
+            let leaf_tys = self.flatten_to_scalar_leaves(embedded);
+            let param_tys = leaf_tys
+                .iter()
+                .map(|t| (*t).into())
+                .collect::<Vec<BasicMetadataTypeEnum>>();
             let func = self.module.add_function(
                 &func_name,
-                self.context
-                    .void_type()
-                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
+                self.context.void_type().fn_type(&param_tys, false),
                 Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let obj_val = func.get_first_param().unwrap();
-            let obj = Object::new(obj_val, obj.ty.clone(), self);
-            let one = self.context.i64_type().const_int(1, false);
-            self.build_retain(obj, one);
+            let leaves = (0..leaf_tys.len())
+                .map(|i| func.get_nth_param(i as u32).unwrap())
+                .collect::<Vec<_>>();
+            let obj = Object::from_leaves(leaves, obj.ty.clone(), self);
+            build_body(self, obj);
             self.builder().build_return(None).unwrap();
             func
         };
 
-        // Call retain function.
-        self.builder()
-            .build_call(func, &[obj.value.into()], "call_retain")
-            .unwrap();
+        let args = obj
+            .leaves()
+            .iter()
+            .map(|v| (*v).into())
+            .collect::<Vec<BasicMetadataValueEnum>>();
+        self.builder().build_call(func, &args, call_name).unwrap();
+    }
+
+    pub fn retain(&mut self, obj: Object<'c>) {
+        let one = self.context.i64_type().const_int(1, false);
+        self.emit_rc_helper_call(obj, "retain", "call_retain", move |gc, obj| {
+            gc.build_retain(obj, one);
+        });
     }
 
     // Retain an object `amount` times: every boxed leaf reached has its reference count increased by
@@ -1204,7 +1292,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .context
             .append_basic_block(current_func, "cont_bb@retain_nonnull");
 
-        let obj_ptr = obj.value.into_pointer_value();
+        let obj_ptr = obj.value(self).into_pointer_value();
         // The refcount is narrower than the i64 count, so bring the amount to its width. A constant 1
         // folds to a constant, leaving the single-retain code unchanged.
         let amount = self
@@ -1273,7 +1361,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
-            let obj_ptr = obj.value.into_pointer_value();
+            let obj_ptr = obj.value(self).into_pointer_value();
             let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
 
             // If reference counter is one, call destructor.
@@ -1355,8 +1443,14 @@ impl<'c, 'm> Generator<'c, 'm> {
             // Unboxed case (inlude lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work)) {
                 Some(trav) => {
+                    // Pass the object as its flat leaf scalars, matching `traverser_type`.
+                    let args = obj
+                        .leaves()
+                        .iter()
+                        .map(|v| (*v).into())
+                        .collect::<Vec<BasicMetadataValueEnum>>();
                     self.builder()
-                        .build_call(trav, &[obj.value.into()], "call_traverser_of_unboxed")
+                        .build_call(trav, &args, "call_traverser_of_unboxed")
                         .unwrap();
                 }
                 None => {}
@@ -1368,7 +1462,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // (release / mark). Dynamic objects carry their traverser and are called indirectly;
     // others use the statically generated one.
     fn traverse_boxed_refs(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
-        let obj_ptr = obj.value.into_pointer_value();
+        let obj_ptr = obj.value(self).into_pointer_value();
         if obj.is_dynamic_object() {
             let trav = obj.extract_trav_from_dynamic(self);
             let trav_ty = traverser_type(self, &obj.ty, true);
@@ -1403,7 +1497,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         traverse_refs: impl FnOnce(&mut Self),
     ) {
         // Get pointer to the object.
-        let obj_ptr = obj.value.into_pointer_value();
+        let obj_ptr = obj.value(self).into_pointer_value();
 
         // Branch by refcnt_state.
         let current_func = self
@@ -1528,7 +1622,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
 
         // Get pointer to the object.
-        let obj_ptr = obj.value.into_pointer_value();
+        let obj_ptr = obj.value(self).into_pointer_value();
 
         // Mark the object's owned references.
         traverse_refs(self);
@@ -1543,32 +1637,9 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
-        // Get release function.
-        let func_name = "release_".to_string() + &obj.ty.hash();
-        let func = if let Some(func) = self.module.get_function(&func_name) {
-            func
-        } else {
-            let func = self.module.add_function(
-                &func_name,
-                self.context
-                    .void_type()
-                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
-                Some(Linkage::Internal),
-            );
-            let bb = self.context.append_basic_block(func, "entry");
-            let _builder_guard = self.push_builder();
-            self.builder().position_at_end(bb);
-            let obj_val = func.get_first_param().unwrap();
-            let obj = Object::new(obj_val, obj.ty.clone(), self);
-            self.build_release_mark(obj, TraverserWorkType::release());
-            self.builder().build_return(None).unwrap();
-            func
-        };
-
-        // Call release function.
-        self.builder()
-            .build_call(func, &[obj.value.into()], "call_release")
-            .unwrap();
+        self.emit_rc_helper_call(obj, "release", "call_release", |gc, obj| {
+            gc.build_release_mark(obj, TraverserWorkType::release());
+        });
     }
 
     // Release nonnull boxed object.
@@ -1578,61 +1649,15 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Mark all objects reachable from `obj` as global.
     pub fn mark_global(&mut self, obj: Object<'c>) {
-        // Get `mark_global` function.
-        let func_name = "mark_global_".to_string() + &obj.ty.hash();
-        let func = if let Some(func) = self.module.get_function(&func_name) {
-            func
-        } else {
-            let func = self.module.add_function(
-                &func_name,
-                self.context
-                    .void_type()
-                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
-                Some(Linkage::Internal),
-            );
-            let bb = self.context.append_basic_block(func, "entry");
-            let _builder_guard = self.push_builder();
-            self.builder().position_at_end(bb);
-            let obj_val = func.get_first_param().unwrap();
-            let obj = Object::new(obj_val, obj.ty.clone(), self);
-            self.build_release_mark(obj, TraverserWorkType::mark_global());
-            self.builder().build_return(None).unwrap();
-            func
-        };
-
-        // Call `mark_global` function.
-        self.builder()
-            .build_call(func, &[obj.value.into()], "call_mark_global")
-            .unwrap();
+        self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
+            gc.build_release_mark(obj, TraverserWorkType::mark_global());
+        });
     }
 
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
-        // Get `mark_threaded` function.
-        let func_name = "mark_threaded_".to_string() + &obj.ty.hash();
-        let func = if let Some(func) = self.module.get_function(&func_name) {
-            func
-        } else {
-            let func = self.module.add_function(
-                &func_name,
-                self.context
-                    .void_type()
-                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
-                Some(Linkage::Internal),
-            );
-            let bb = self.context.append_basic_block(func, "entry");
-            let _builder_guard = self.push_builder();
-            self.builder().position_at_end(bb);
-            let obj_val = func.get_first_param().unwrap();
-            let obj = Object::new(obj_val, obj.ty.clone(), self);
-            self.build_release_mark(obj, TraverserWorkType::mark_threaded());
-            self.builder().build_return(None).unwrap();
-            func
-        };
-
-        // Call `mark_threaded` function.
-        self.builder()
-            .build_call(func, &[obj.value.into()], "call_mark_threaded")
-            .unwrap();
+        self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
+            gc.build_release_mark(obj, TraverserWorkType::mark_threaded());
+        });
     }
 
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
@@ -1740,16 +1765,62 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Build return instruction if `tail` is true.
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
-            let ret = obj.value;
-            if self.sizeof(&ret.get_type()) != 0 {
-                self.builder().build_return(Some(&ret)).unwrap();
-            } else {
-                self.builder().build_return(None).unwrap();
-            }
+            self.build_return_object(obj);
             None
         } else {
             Some(obj)
         }
+    }
+
+    // Return `obj` from the current function under the scalarized return ABI (see
+    // `lambda_function_type`): its leaves are packed into the flat return value — `void` for none, the
+    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several.
+    pub fn build_return_object(&mut self, obj: Object<'c>) {
+        let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
+        match leaves.len() {
+            0 => {
+                self.builder().build_return(None).unwrap();
+            }
+            1 => {
+                self.builder().build_return(Some(&leaves[0])).unwrap();
+            }
+            _ => {
+                let leaf_tys: Vec<BasicTypeEnum<'c>> =
+                    leaves.iter().map(|l| l.get_type()).collect();
+                let struct_ty = self.context.struct_type(&leaf_tys, false);
+                let mut val = struct_ty.get_undef();
+                for (i, leaf) in leaves.iter().enumerate() {
+                    val = self
+                        .builder()
+                        .build_insert_value(val, *leaf, i as u32, "pack_return")
+                        .unwrap()
+                        .into_struct_value();
+                }
+                self.builder().build_return(Some(&val)).unwrap();
+            }
+        }
+    }
+
+    // Reconstruct the object a call returns under the scalarized return ABI: a `void` result carries
+    // no leaves, a scalar result one leaf, a flat struct its fields. The inverse of
+    // `build_return_object`.
+    pub fn unpack_return(
+        &mut self,
+        call_result: Option<BasicValueEnum<'c>>,
+        ret_ty: Arc<TypeNode>,
+    ) -> Object<'c> {
+        let leaves: Vec<BasicValueEnum<'c>> = match call_result {
+            None => vec![],
+            Some(BasicValueEnum::StructValue(sv)) => (0..sv.get_type().count_fields())
+                .map(|i| {
+                    self.builder()
+                        .build_extract_value(sv, i, "unpack_return")
+                        .unwrap()
+                })
+                .collect(),
+            Some(v) => vec![v],
+        };
+        Object::from_leaves(leaves, ret_ty, self)
     }
 
     // Declare function of lambda expression
@@ -1973,7 +2044,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
         // Push the value on the stack.
-        let obj_val = obj.value;
+        let obj_val = obj.value(self);
         let storage =
             self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
         self.builder().build_store(storage, obj_val).unwrap();
