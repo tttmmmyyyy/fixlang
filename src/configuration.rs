@@ -550,8 +550,12 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
 
+    /// Removing type annotations only unwraps annotation nodes — the annotated type is already
+    /// carried by the inner expression — so it is semantically neutral and every later stage and
+    /// code generation accept the result. It therefore runs at all optimization levels, which lets a
+    /// later pass work on a bare AST without seeing through annotations.
     pub fn enable_remove_tyanno_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        true
     }
 
     pub fn enable_remove_hktvs_transformation(&self) -> bool {
