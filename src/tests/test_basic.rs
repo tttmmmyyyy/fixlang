@@ -1,5 +1,5 @@
 use crate::{
-    configuration::{Configuration, FixOptimizationLevel, SubCommand},
+    configuration::{Configuration, FixOptimizationLevel, SubCommand, ValgrindTool},
     constants::{
         COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME,
         U64_NAME, U8_NAME,
@@ -8,8 +8,8 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        fix_command, test_files_in_directory, test_source, test_source_fail,
-        test_source_fail_excludes, test_source_with_c,
+        assert_grammar_accepts, fix_command, run_source_capture, test_files_in_directory,
+        test_source, test_source_fail, test_source_fail_excludes, test_source_with_c,
     },
 };
 use rand::Rng;
@@ -9433,24 +9433,29 @@ main = (
 
 #[test]
 pub fn test_regression_issue_62() {
+    // Every C numeric type name must parse inside an `FFI_CALL` signature. Issue #62 was a
+    // grammar-ordering bug where a longer type name was shadowed by a shorter one it starts with
+    // (e.g. `CLongLong` matched the prefix `CLong` and left `Long` dangling), so the source
+    // failed to parse. This is a parser regression test, so it only checks that the source
+    // parses; it does not compile or run.
     let source = r##"
 module Main;
 
 test : IO ();
 test = (
-    let x = FFI_CALL[CUnsignedShort f(CUnsignedShort), undefined("")];
-    let x = FFI_CALL[CUnsignedLongLong f(CUnsignedLongLong), undefined("")];
-    let x = FFI_CALL[CUnsignedLong f(CUnsignedLong), undefined("")];
-    let x = FFI_CALL[CUnsignedInt f(CUnsignedInt), undefined("")];
-    let x = FFI_CALL[CUnsignedChar f(CUnsignedChar), undefined("")];
-    let x = FFI_CALL[CSizeT f(CSizeT), undefined("")];
-    let x = FFI_CALL[CShort f(CShort), undefined("")];
-    let x = FFI_CALL[CLongLong f(CLongLong), undefined("")];
-    let x = FFI_CALL[CLong f(CLong), undefined("")];
-    let x = FFI_CALL[CInt f(CInt), undefined("")];
-    let x = FFI_CALL[CFloat f(CFloat), undefined("")];
-    let x = FFI_CALL[CDouble f(CDouble), undefined("")];
-    let x = FFI_CALL[CChar f(CChar), undefined("")];
+    eval FFI_CALL[CUnsignedShort f_ushort(CUnsignedShort), undefined("")];
+    eval FFI_CALL[CUnsignedLongLong f_ullong(CUnsignedLongLong), undefined("")];
+    eval FFI_CALL[CUnsignedLong f_ulong(CUnsignedLong), undefined("")];
+    eval FFI_CALL[CUnsignedInt f_uint(CUnsignedInt), undefined("")];
+    eval FFI_CALL[CUnsignedChar f_uchar(CUnsignedChar), undefined("")];
+    eval FFI_CALL[CSizeT f_sizet(CSizeT), undefined("")];
+    eval FFI_CALL[CShort f_short(CShort), undefined("")];
+    eval FFI_CALL[CLongLong f_llong(CLongLong), undefined("")];
+    eval FFI_CALL[CLong f_long(CLong), undefined("")];
+    eval FFI_CALL[CInt f_int(CInt), undefined("")];
+    eval FFI_CALL[CFloat f_float(CFloat), undefined("")];
+    eval FFI_CALL[CDouble f_double(CDouble), undefined("")];
+    eval FFI_CALL[CChar f_char(CChar), undefined("")];
     pure()
 );
 
@@ -9460,7 +9465,42 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::develop_mode());
+    assert_grammar_accepts(&source);
+}
+
+#[test]
+pub fn test_eval_debug_println_is_not_eliminated() {
+    // `eval debug_println(...)` and `debug_eprintln(...)` evaluate their argument for its side
+    // effect at every optimization level; the print must not be dropped as a discarded pure
+    // value even when optimization is on.
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    eval debug_print("STDOUT_PRINT_a1b2c3;");
+    eval debug_println("STDOUT_PRINTLN_a1b2c3");
+    eval debug_eprint("STDERR_PRINT_d4e5f6;");
+    eval debug_eprintln("STDERR_PRINTLN_d4e5f6");
+    pure()
+);
+    "##;
+    // Run without valgrind so the program's own stderr is not mixed with the valgrind report.
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::None);
+    let output = run_source_capture(&source, config);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("STDOUT_PRINT_a1b2c3;STDOUT_PRINTLN_a1b2c3\n"),
+        "debug_print / debug_println output missing from stdout.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        stderr.contains("STDERR_PRINT_d4e5f6;STDERR_PRINTLN_d4e5f6\n"),
+        "debug_eprint / debug_eprintln output missing from stderr.\nstderr:\n{}",
+        stderr
+    );
 }
 
 #[test]
