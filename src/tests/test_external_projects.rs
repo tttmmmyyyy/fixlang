@@ -1,6 +1,8 @@
+use crate::{
+    constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command,
+    FixOptimizationLevel,
+};
 use std::{fs, path::PathBuf, process::Command};
-
-use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
 // Every project is tested at its default branch. Pass a revision as `test_external_project`'s third
 // argument to pin one to a specific commit instead.
@@ -85,7 +87,7 @@ pub fn test_external_project_regexp() {
 
 #[test]
 pub fn test_external_project_asynctask() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
@@ -134,7 +136,7 @@ pub fn test_external_project_binary_heap() {
 
 #[test]
 pub fn test_external_project_cp_library() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
@@ -149,7 +151,7 @@ pub fn test_external_project_cp_library() {
 /// recurses deep enough to overflow the stack. Tests with such folds return early when this holds;
 /// they pass once TCO is applied.
 fn tco_disabled() -> bool {
-    env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None
+    env_vars::get_max_opt_level() <= FixOptimizationLevel::None
 }
 
 /// Clone `url`, check out `git_ref` (the default branch when `None`), and run `fix test`.
