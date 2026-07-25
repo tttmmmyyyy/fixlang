@@ -25,9 +25,6 @@
 // it enables — while a global is lifted once and shared, which also makes a global that fixes itself
 // terminate.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::{
@@ -51,6 +48,9 @@ use crate::{
     },
     tool::stopwatch::StopWatch,
 };
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
 
 // A global function's name paired with its defining lambda, for resolving `fix(GlobalName)`.
 type GlobalLambdas = Rc<Map<FullName, Arc<ExprNode>>>;
