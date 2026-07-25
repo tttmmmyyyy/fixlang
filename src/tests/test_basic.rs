@@ -9433,34 +9433,35 @@ main = (
 
 #[test]
 pub fn test_regression_issue_62() {
+    // A single C symbol `f` is reached at several different C signatures. Each call must
+    // code-generate to a valid module at every optimization level: the compiler declares the C
+    // function once, under the first signature it sees, and a call at another signature must use
+    // its own type rather than that declaration — otherwise it emits an ill-typed call and a
+    // broken module.
+    //
+    // `f` returns its argument, so `base` is 0; the opaque FFI boundary hides that from the
+    // optimizer, so each mismatched call stays code-generated (its result is a live branch value)
+    // while the branch that would run it is never taken.
     let source = r##"
 module Main;
 
-test : IO ();
-test = (
-    let x = FFI_CALL[CUnsignedShort f(CUnsignedShort), undefined("")];
-    let x = FFI_CALL[CUnsignedLongLong f(CUnsignedLongLong), undefined("")];
-    let x = FFI_CALL[CUnsignedLong f(CUnsignedLong), undefined("")];
-    let x = FFI_CALL[CUnsignedInt f(CUnsignedInt), undefined("")];
-    let x = FFI_CALL[CUnsignedChar f(CUnsignedChar), undefined("")];
-    let x = FFI_CALL[CSizeT f(CSizeT), undefined("")];
-    let x = FFI_CALL[CShort f(CShort), undefined("")];
-    let x = FFI_CALL[CLongLong f(CLongLong), undefined("")];
-    let x = FFI_CALL[CLong f(CLong), undefined("")];
-    let x = FFI_CALL[CInt f(CInt), undefined("")];
-    let x = FFI_CALL[CFloat f(CFloat), undefined("")];
-    let x = FFI_CALL[CDouble f(CDouble), undefined("")];
-    let x = FFI_CALL[CChar f(CChar), undefined("")];
-    pure()
-);
-
 main : IO ();
 main = (
-    eval test;
+    let base = FFI_CALL[CLongLong f(CLongLong), 0.c_long_long];
+    eval (if base != 0.c_long_long { FFI_CALL[CChar f(CChar), 0.c_char] } else { 0.c_char });
+    eval (if base != 0.c_long_long { FFI_CALL[CShort f(CShort), 0.c_short] } else { 0.c_short });
+    eval (if base != 0.c_long_long { FFI_CALL[CInt f(CInt), 0.c_int] } else { 0.c_int });
+    eval (if base != 0.c_long_long { FFI_CALL[CFloat f(CFloat), 0.c_float] } else { 0.c_float });
+    eval (if base != 0.c_long_long { FFI_CALL[CDouble f(CDouble), 0.c_double] } else { 0.c_double });
     pure()
 );
     "##;
-    test_source(&source, Configuration::develop_mode());
+    let c_source = r##"
+        long long f(long long x) {
+            return x;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
 }
 
 #[test]
