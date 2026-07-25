@@ -182,3 +182,87 @@ fn test_fix_resolution_variants_compute_correctly() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// An inner `fix` that calls the outer `fix`'s self-reference. Lifting the outer `fix` names its
+// capture parameter `#fixcap..`; the inner `fix` closes over that parameter, so the inner capture
+// struct carries a field of the same name. The inner lifted function's own capture parameter must
+// stay distinct from that field, or destructuring the capture shadows the parameter and the inner
+// self-call forwards the outer capture struct in its place.
+#[test]
+fn test_nested_fix_inner_calls_outer_self() {
+    let source = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        let f = fix(|outer, m|
+            if m == 0 { 1 } else {
+                let inner = fix(|inn, k| if k == 0 { outer(m - 1) } else { inn(k - 1) + 1 });
+                inner(3)
+            }
+        );
+        assert_eq(|_|"nested fix inner-calls-outer", f(2), 7);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// A captured boxed value crosses the direct self-call: the capture struct owns a reference, so the
+// rewrite must keep retain/release balanced or the value leaks or is freed early. Under
+// `develop_mode` the program runs under valgrind, which surfaces such an imbalance. Each function
+// captures a boxed value read across the recursion and still live after the `fix` returns: an
+// `Array` read every iteration, `self` escaping as a closure over the capture, one `let`-bound
+// lambda fixed at two sites (each rebuilding its own capture of the shared array), and a nested
+// `Array` of `Array`. It runs at every optimization level, none included.
+#[test]
+fn test_fix_boxed_capture_is_memory_safe() {
+    let source = r#"
+    module Main;
+
+    sum_table : I64 -> Array I64 -> I64;
+    sum_table = |depth, tbl| (
+        let go = fix(|go, i, acc| (
+            if i >= depth { acc };
+            go(i + 1, acc + tbl.@(i % tbl.@size))
+        ));
+        go(0, 0)
+    );
+
+    applyit : (I64 -> I64) -> I64 -> I64;
+    applyit = |h, x| h(x);
+    escape_boxed : Array I64 -> I64;
+    escape_boxed = |tbl| (
+        (fix(|self, x| if x <= 0 { tbl.@(0) } else { applyit(self, x - 1) + tbl.@(x % tbl.@size) }))(4)
+    );
+
+    two_site_boxed : Array I64 -> I64;
+    two_site_boxed = |tbl| (
+        let step : (I64 -> I64) -> I64 -> I64
+            = |go, i| ( if i >= 5 { 0 }; tbl.@(i % tbl.@size) + go(i + 1) );
+        (fix(step))(0) + (fix(step))(0)
+    );
+
+    nested_boxed : Array (Array I64) -> I64;
+    nested_boxed = |grid| (
+        let go = fix(|go, i, acc| (
+            if i >= 6 { acc + grid.@(0).@(0) };
+            let row = grid.@(i % grid.@size);
+            go(i + 1, acc + row.@(i % row.@size))
+        ));
+        go(0, 0)
+    );
+
+    main : IO ();
+    main = (
+        let tbl = Array::from_map(4, |i| i + 1);
+        assert_eq(|_|"sum_table", sum_table(8, tbl) + tbl.@(0), 21);;
+        assert_eq(|_|"escape_boxed", escape_boxed(tbl), 11);;
+        assert_eq(|_|"two_site_boxed", two_site_boxed(tbl), 22);;
+        let grid = Array::from_map(3, |i| Array::from_map(3, |j| i * 3 + j));
+        assert_eq(|_|"nested_boxed", nested_boxed(grid) + grid.@(2).@(2), 32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}

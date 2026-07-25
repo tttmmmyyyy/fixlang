@@ -264,8 +264,17 @@ impl FixDefunctionalizer {
         let cap = CaptureStruct::new(&cap_fields);
 
         let func_name = self.fresh_global_name();
-        let cap_param = format!("#fixcap{}", self.counter);
-        self.counter += 1;
+        // The capture parameter must not clash with a captured field name. A captured field can
+        // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
+        // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
+        // would forward the captured struct in place of this one.
+        let cap_param = loop {
+            let name = format!("#fixcap{}", self.counter);
+            self.counter += 1;
+            if !cap_fields.iter().any(|(n, _)| n.to_string() == name) {
+                break name;
+            }
+        };
         let cap_param_name = FullName::local(&cap_param);
 
         // The recursive value `G(cap)`, of type `a -> b`.
