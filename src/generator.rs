@@ -76,6 +76,7 @@ use inkwell::{
 };
 use std::{cell::RefCell, env, sync::Arc};
 
+// A value bound to a name in the current scope.
 #[derive(Clone)]
 pub struct ScopedValue<'c> {
     accessor: ValueAccessor<'c>,
@@ -85,6 +86,8 @@ pub struct ScopedValue<'c> {
     retain_on_read: bool,
 }
 
+// How a scoped value's `Object` is obtained: an in-register local object, or a global read through
+// its getter function.
 #[derive(Clone)]
 pub enum ValueAccessor<'c> {
     Local(Object<'c>),
@@ -1659,6 +1662,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
+    // Mark all objects reachable from `obj` as threaded.
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
             gc.build_release_mark(obj, TraverserWorkType::mark_threaded());
