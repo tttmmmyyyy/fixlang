@@ -1844,6 +1844,8 @@ fn build_traverse<'c, 'm>(
     }
 }
 
+// Returns the debug type for how `ty` is embedded in a field: a pointer to the boxed layout when
+// `ty` is boxed, and the layout itself when it is unboxed.
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -1867,6 +1869,8 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
+// Returns the debug type describing `ty`'s in-memory layout, caching each type by name so recursive
+// types terminate.
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let key = ty.to_string();
     gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
