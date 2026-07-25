@@ -38,7 +38,7 @@ mod debug_info_tests {
         // Whether the debugger can be launched on this host. A scenario skips when its debugger is
         // absent: macOS ships no working gdb, and a Linux host without lldb installed skips the lldb
         // variants.
-        fn available(self) -> bool {
+        fn is_available(self) -> bool {
             Command::new(self.program())
                 .arg("--version")
                 .output()
@@ -174,7 +174,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_baseline_gdb() {
-        if !Debugger::Gdb.available() {
+        if !Debugger::Gdb.is_available() {
             eprintln!("skipping test_debug_info_baseline_gdb: gdb is not available");
             return;
         }
@@ -183,7 +183,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_baseline_lldb() {
-        if !Debugger::Lldb.available() {
+        if !Debugger::Lldb.is_available() {
             eprintln!("skipping test_debug_info_baseline_lldb: lldb is not available");
             return;
         }
@@ -263,7 +263,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_variable_values_gdb() {
-        if !Debugger::Gdb.available() {
+        if !Debugger::Gdb.is_available() {
             eprintln!("skipping test_debug_info_variable_values_gdb: gdb is not available");
             return;
         }
@@ -272,7 +272,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_variable_values_lldb() {
-        if !Debugger::Lldb.available() {
+        if !Debugger::Lldb.is_available() {
             eprintln!("skipping test_debug_info_variable_values_lldb: lldb is not available");
             return;
         }
@@ -347,7 +347,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_destructure_gdb() {
-        if !Debugger::Gdb.available() {
+        if !Debugger::Gdb.is_available() {
             eprintln!("skipping test_debug_info_destructure_gdb: gdb is not available");
             return;
         }
@@ -356,7 +356,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_destructure_lldb() {
-        if !Debugger::Lldb.available() {
+        if !Debugger::Lldb.is_available() {
             eprintln!("skipping test_debug_info_destructure_lldb: lldb is not available");
             return;
         }
@@ -456,7 +456,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_array_elements_gdb() {
-        if !Debugger::Gdb.available() {
+        if !Debugger::Gdb.is_available() {
             eprintln!("skipping test_debug_info_array_elements_gdb: gdb is not available");
             return;
         }
@@ -465,7 +465,7 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_array_elements_lldb() {
-        if !Debugger::Lldb.available() {
+        if !Debugger::Lldb.is_available() {
             eprintln!("skipping test_debug_info_array_elements_lldb: lldb is not available");
             return;
         }
