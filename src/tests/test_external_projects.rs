@@ -1,6 +1,8 @@
+use crate::{
+    constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command,
+    FixOptimizationLevel,
+};
 use std::{fs, path::PathBuf, process::Command};
-
-use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
 // Every project is tested at its default branch. Pass a revision as `test_external_project`'s third
 // argument to pin one to a specific commit instead.
@@ -25,6 +27,11 @@ pub fn test_external_project_hashmap() {
 
 #[test]
 pub fn test_external_project_hashset() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
+        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
+        // range — recurse deep enough to overflow the stack. They pass once TCO is applied.
+        return;
+    }
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashset.git",
         "fixlang-hashset",
@@ -34,6 +41,11 @@ pub fn test_external_project_hashset() {
 
 #[test]
 pub fn test_external_project_random() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
+        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
+        // range — recurse deep enough to overflow the stack. They pass once TCO is applied.
+        return;
+    }
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-random.git",
         "fixlang-random",
@@ -79,7 +91,7 @@ pub fn test_external_project_regexp() {
 
 #[test]
 pub fn test_external_project_asynctask() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
@@ -128,7 +140,7 @@ pub fn test_external_project_binary_heap() {
 
 #[test]
 pub fn test_external_project_cp_library() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }

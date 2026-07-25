@@ -10266,7 +10266,9 @@ pub fn test_scalar_phi_value_roundtrip() {
     // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
     // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
     // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
-    // tag-match-vs-passthrough union modification, and an arm that diverges via `undefined`.
+    // tag-match-vs-passthrough union modification, an arm that diverges via `undefined`, a struct
+    // whose zero-sized `Bool` field sits between two `I64` fields (that payload leaf is dropped, so a
+    // miscount would scramble the neighbors), and a `()` value whose whole type is zero-sized.
     let source = r#"
         module Main;
 
@@ -10292,6 +10294,20 @@ pub fn test_scalar_phi_value_roundtrip() {
             none(_) => undefined("unreachable at runtime")
         };
 
+        type Mixed = unbox struct { lo : I64, flag : Bool, hi : I64 };
+
+        mixed : U -> Mixed;
+        mixed = |u| match u {
+            w(_) => Mixed { lo : 11, flag : true, hi : 22 },
+            other(n) => Mixed { lo : 0 - n, flag : false, hi : n + 5 }
+        };
+
+        unit_of : U -> ();
+        unit_of = |u| match u {
+            w(_) => (),
+            other(_) => ()
+        };
+
         main : IO ();
         main = (
             let ((a, b), (c, d)) = nested(Option::some(7));
@@ -10314,10 +10330,87 @@ pub fn test_scalar_phi_value_roundtrip() {
             let (pa, pb) = pick(Option::some(21));
             assert_eq(|_|"diverging arm taken", pa + pb, 63);;
 
+            let m0 = mixed(U::other(5));
+            assert_eq(|_|"mixed other fields", [m0.@lo, m0.@hi], [-5, 10]);;
+            assert_eq(|_|"mixed other flag", m0.@flag, false);;
+            let m1 = mixed(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
+            assert_eq(|_|"mixed w fields", [m1.@lo, m1.@hi], [11, 22]);;
+            assert_eq(|_|"mixed w flag", m1.@flag, true);;
+            eval unit_of(U::other(9));
+            eval unit_of(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
+
             pure()
         );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_empty_union_emits_no_zero_sized_phi() {
+    // An empty-payload union value — `Bool` is `{ i8 tag, [0 x i8] payload }` — merged through
+    // `build_scalar_phi` must not yield a phi of its zero-sized payload. LLVM's AArch64 GlobalISel
+    // (the `-O0` default on Apple Silicon) crashes on a phi of a zero-sized aggregate, a failure
+    // invisible on an x86_64 host and at `-O max`. This pins the fix by emitting the unoptimized IR
+    // and asserting it carries no such phi.
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `||` materializes a `Bool`, whose arm values merge through `build_scalar_phi`.
+            let b = (1 == 1) || (1 == 2);
+            eval b;
+            pure()
+        );
+    "#;
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    File::create(work_dir.join("main.fix"))
+        .unwrap()
+        .write_all(source.as_bytes())
+        .unwrap();
+
+    let output = fix_command()
+        .args([
+            "build",
+            "-O",
+            "none",
+            "--emit-llvm",
+            "--file",
+            "main.fix",
+            "--output",
+            "prog",
+        ])
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`fix build --emit-llvm` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
+    // the fix, omits) the zero-sized phi.
+    let ir_path = fs::read_dir(&work_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            let name = p.file_name().unwrap().to_string_lossy();
+            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
+        })
+        .expect("emitted LLVM IR file");
+    let ir = fs::read_to_string(&ir_path).unwrap();
+    assert!(
+        !ir.contains("phi [0 x"),
+        "emitted IR contains a zero-sized-aggregate phi (crashes AArch64 GlobalISel):\n{}",
+        ir
+    );
 }
 
 #[test]
