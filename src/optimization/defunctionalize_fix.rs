@@ -478,13 +478,13 @@ struct CaptureStruct {
 
 impl CaptureStruct {
     fn new(fields: &[(FullName, Arc<TypeNode>)]) -> Self {
-        let hash = fields
+        let signature = fields
             .iter()
             .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
             .collect::<Vec<_>>()
             .join(",");
         let tycon = Arc::new(TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("#FixCap<{}>", hash)),
+            name: FullName::from_strs(&[STD_NAME], &format!("#FixCap<{}>", signature)),
         });
         let tycon_info = TyConInfo {
             kind: kind_star(),
