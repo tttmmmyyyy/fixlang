@@ -10362,7 +10362,11 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
             pure()
         );
     "#;
-    let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, function_name!()));
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
     let _ = fs::remove_dir_all(&work_dir);
     fs::create_dir_all(&work_dir).unwrap();
     File::create(work_dir.join("main.fix"))
@@ -10372,7 +10376,14 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
 
     let output = fix_command()
         .args([
-            "build", "-O", "none", "--emit-llvm", "--file", "main.fix", "--output", "prog",
+            "build",
+            "-O",
+            "none",
+            "--emit-llvm",
+            "--file",
+            "main.fix",
+            "--output",
+            "prog",
         ])
         .current_dir(&work_dir)
         .output()

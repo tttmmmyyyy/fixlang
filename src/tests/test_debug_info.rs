@@ -150,7 +150,10 @@ mod debug_info_tests {
                 "continue".to_string(),
             ],
             Debugger::Lldb => vec![
-                format!("breakpoint set --file main.fix --line {}", LINE_COMPUTE_BODY),
+                format!(
+                    "breakpoint set --file main.fix --line {}",
+                    LINE_COMPUTE_BODY
+                ),
                 "run".to_string(),
                 "thread backtrace".to_string(),
                 "continue".to_string(),
@@ -436,13 +439,21 @@ mod debug_info_tests {
                     "150-element array was not printed up to its 100th element.\ndebugger output:\n{}",
                     out
                 );
-                assert_contains(&out, "<array elements> = \"hello", "string bytes as \"hello...\"");
+                assert_contains(
+                    &out,
+                    "<array elements> = \"hello",
+                    "string bytes as \"hello...\"",
+                );
             }
             Debugger::Lldb => {
                 assert_contains(&out, "<array size> = 3", "3-element array size");
                 assert_contains(&out, "10, 20, 30", "3-element array valid elements");
                 assert_contains(&out, "<array size> = 150", "150-element array size");
-                assert_contains(&out, "980, 990, 1000", "150-element array up to its 100th element");
+                assert_contains(
+                    &out,
+                    "980, 990, 1000",
+                    "150-element array up to its 100th element",
+                );
                 assert_contains(&out, "hello", "string bytes");
             }
         }
