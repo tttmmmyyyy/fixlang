@@ -105,9 +105,11 @@ fn test_global_function_fix_runs_in_constant_stack() {
 // Shape variety that the resolution and lifting must all compute correctly: a `fix` nested inside a
 // `fix`, two distinct `fix` lambdas of the same type, a global fixed at two sites (deduplicated to one
 // lifted function), a global that fixes itself and a pair that fix each other (deduplication must make
-// compilation terminate), and a `fix` argument that is a `let`-bound value but not a bare lambda (left
-// as a closure `fix`, so a heavy initializer would not be duplicated). It runs at every optimization
-// level, none included.
+// compilation terminate), a `fix` argument that is a `let`-bound value but not a bare lambda, and a
+// `fix` applied to a function parameter — both left as a closure `fix`, the first so a heavy
+// initializer is not duplicated, the second because the argument is only known at run time — and a
+// recursion functional that passes `self` by value, exercising the partial-application closure the
+// substitution leaves for a non-tail use. It runs at every optimization level, none included.
 #[test]
 fn test_fix_resolution_variants_compute_correctly() {
     let source = r#"
@@ -154,6 +156,16 @@ fn test_fix_resolution_variants_compute_correctly() {
         (fix(f))(n)
     );
 
+    apply_fix : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
+    apply_fix = |g, n| (fix(g))(n);
+    fix_of_parameter : I64;
+    fix_of_parameter = apply_fix(|self, x| if x <= 0 { 0 } else { x + self(x - 1) }, 5);
+
+    applyit : (I64 -> I64) -> I64 -> I64;
+    applyit = |h, x| h(x);
+    self_escapes : I64;
+    self_escapes = (fix(|self, x| if x <= 0 { 0 } else { applyit(self, x - 1) + 1 }))(5);
+
     main : IO ();
     main = (
         assert_eq(|_|"nested", nested, 18);;
@@ -163,6 +175,8 @@ fn test_fix_resolution_variants_compute_correctly() {
         assert_eq(|_|"self_res", self_res, 15);;
         assert_eq(|_|"mutual_res", mutual_res, 6);;
         assert_eq(|_|"not_a_bare_lambda", not_a_bare_lambda(1000), 42);;
+        assert_eq(|_|"fix_of_parameter", fix_of_parameter, 15);;
+        assert_eq(|_|"self_escapes", self_escapes, 5);;
         pure()
     );
     "#;
