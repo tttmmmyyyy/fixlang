@@ -77,7 +77,7 @@ fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The `fix` argument is a global function rather than an inline lambda.
+// The `fix` argument is a global function.
 #[test]
 fn test_global_function_fix_runs_in_constant_stack() {
     if skip_at_none() {

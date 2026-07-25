@@ -63,7 +63,7 @@ type GlobalFixRefs = Rc<RefCell<Map<FullName, Arc<ExprNode>>>>;
 // Run the pass to a fixpoint, so a `fix` nested inside a lifted function is defunctionalized too.
 pub fn run(prg: &mut Program, show_build_times: bool) {
     // Global functions whose definition is a bare lambda, so `fix(GlobalName)` can resolve to it. The
-    // definition is preprocessed only when a `fix` actually resolves to it (see `prepare_for_lift`),
+    // definition is preprocessed only when a `fix` actually resolves to it (see `normalize_for_lift`),
     // so a program that never fixes a global pays nothing here.
     let global_lambdas: GlobalLambdas = Rc::new(
         prg.symbols
