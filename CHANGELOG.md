@@ -29,10 +29,6 @@
 
 ### Fixed
 
-#### Language
-
-- Fixed a compiler abort (`Broken module found`) when the same C function name was reached through `FFI_CALL` at two different signatures within one module — for example the same name called at both `CInt` and `CDouble`. Such a program aborted compilation at `-O none` and `-O basic`, where the calls are not optimized away; a call at a second signature now uses its own signature instead of reusing the first call's declaration.
-
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
