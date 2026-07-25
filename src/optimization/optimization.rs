@@ -4,7 +4,6 @@ use crate::{
     optimization::{inline_local, optimize_act, remove_hktvs},
     tool::stopwatch::StopWatch,
 };
-
 use super::{
     dead_symbol_elimination, decapturing, defunctionalize_fix, inline, remove_tyanno,
     simplify_symbol_names, uncurry, unwrap_newtype,
