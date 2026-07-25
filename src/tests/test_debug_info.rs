@@ -446,14 +446,15 @@ mod debug_info_tests {
                 );
             }
             Debugger::Lldb => {
+                // lldb lists array elements as `[i] = value`, one per line, so match a few by index.
                 assert_contains(&out, "<array size> = 3", "3-element array size");
-                assert_contains(&out, "10, 20, 30", "3-element array valid elements");
+                for elem in ["[0] = 10", "[1] = 20", "[2] = 30"] {
+                    assert_contains(&out, elem, "3-element array valid elements");
+                }
                 assert_contains(&out, "<array size> = 150", "150-element array size");
-                assert_contains(
-                    &out,
-                    "980, 990, 1000",
-                    "150-element array up to its 100th element",
-                );
+                for elem in ["[97] = 980", "[98] = 990", "[99] = 1000"] {
+                    assert_contains(&out, elem, "150-element array up to its 100th element");
+                }
                 assert_contains(&out, "hello", "string bytes");
             }
         }
