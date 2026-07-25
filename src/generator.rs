@@ -48,6 +48,7 @@ use either::Either::Left;
 use either::Either::Right;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
+use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::types::StructType;
@@ -65,8 +66,8 @@ use inkwell::{
     attributes::{Attribute, AttributeLoc},
     basic_block::BasicBlock,
     debug_info::{
-        AsDIScope, DICompileUnit, DIFile, DIScope, DISubprogram, DIType, DWARFEmissionKind,
-        DWARFSourceLanguage, DebugInfoBuilder,
+        AsDIScope, DICompileUnit, DIDerivedType, DIFile, DIScope, DISubprogram, DIType,
+        DWARFEmissionKind, DWARFSourceLanguage, DebugInfoBuilder,
     },
     intrinsics::Intrinsic,
     module::{FlagBehavior, Linkage},
@@ -375,6 +376,14 @@ pub struct Generator<'c, 'm> {
     pub target_data: TargetData,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
+    // Debug type built for each Fix type, keyed by the type's canonical string, so a type is
+    // described once and shared across every reference to it.
+    di_type_cache: Map<String, DIType<'c>>,
+    // Placeholder node for each Fix type whose debug type is mid-construction. A reference to the
+    // type reached while building it (as a recursive type refers to itself) resolves to the
+    // placeholder, which is replaced by the finished type once construction completes. Without it,
+    // describing a recursive type would recurse forever.
+    di_type_placeholders: Map<String, DIDerivedType<'c>>,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -518,6 +527,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             target_data: target_data,
             config,
             global_strings: Map::default(),
+            di_type_cache: Map::default(),
+            di_type_placeholders: Map::default(),
         };
         ret
     }
@@ -1994,6 +2005,39 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             self.get_di_builder().create_file("<unknown source>", "")
         }
+    }
+
+    // Return the debug type identified by `key`, building it with `build` only on the first request
+    // and caching the result. A recursive type refers to itself, so `build` may ask for the same
+    // `key` again before it returns; that inner request resolves to a placeholder node which this
+    // method replaces with the finished type once `build` completes, breaking what would otherwise
+    // be unbounded recursion.
+    pub fn get_or_build_di_type(
+        &mut self,
+        key: String,
+        build: impl FnOnce(&mut Self) -> DIType<'c>,
+    ) -> DIType<'c> {
+        if let Some(cached) = self.di_type_cache.get(&key) {
+            return *cached;
+        }
+        if let Some(placeholder) = self.di_type_placeholders.get(&key) {
+            return placeholder.as_type();
+        }
+        let placeholder = unsafe {
+            self.get_di_builder()
+                .create_placeholder_derived_type(self.context)
+        };
+        self.di_type_placeholders.insert(key.clone(), placeholder);
+        let real = build(self);
+        // inkwell's safe `replace_placeholder_derived_type` only accepts a derived type as the
+        // replacement, but a struct's debug type is a composite type, so replace through the C API
+        // that inkwell itself wraps.
+        unsafe {
+            LLVMMetadataReplaceAllUsesWith(placeholder.as_mut_ptr(), real.as_mut_ptr());
+        }
+        self.di_type_placeholders.remove(&key);
+        self.di_type_cache.insert(key, real);
+        real
     }
 
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
