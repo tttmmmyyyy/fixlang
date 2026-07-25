@@ -25,10 +25,7 @@ pub fn test_external_project_hashmap() {
 
 #[test]
 pub fn test_external_project_hashset() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
-        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
-        // range — recurse deep enough to overflow the stack. They pass once TCO is applied; skip
-        // them where it is off.
+    if tco_disabled() {
         return;
     }
     test_external_project(
@@ -40,10 +37,7 @@ pub fn test_external_project_hashset() {
 
 #[test]
 pub fn test_external_project_random() {
-    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
-        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
-        // range — recurse deep enough to overflow the stack. They pass once TCO is applied; skip
-        // them where it is off.
+    if tco_disabled() {
         return;
     }
     test_external_project(
@@ -149,6 +143,13 @@ pub fn test_external_project_cp_library() {
         "cp-library",
         None,
     );
+}
+
+/// True at `-O none`, where tail-call optimization is off, so a test that folds over a large range
+/// recurses deep enough to overflow the stack. Tests with such folds return early when this holds;
+/// they pass once TCO is applied.
+fn tco_disabled() -> bool {
+    env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None
 }
 
 /// Clone `url`, check out `git_ref` (the default branch when `None`), and run `fix test`.
