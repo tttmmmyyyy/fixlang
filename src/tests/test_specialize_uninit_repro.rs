@@ -1,11 +1,12 @@
 use crate::{configuration::Configuration, tests::test_util::test_source};
 
-// A fold over a nested `flat_map` iterator into a growing array reads an uninitialised stack value
-// at `-O max` / `experimental`. The `specialize` pass clones the fold on input uniqueness and the
-// specialized clone leaves the value undef in a `MapIterator::advance`, so valgrind reports a
-// "Conditional jump or move depends on uninitialised value(s)". The computed result is correct, so
-// this is a memory-safety (undefined-behavior) defect rather than a miscompilation. Runs under
-// `develop_mode`'s memcheck; it fails until the `specialize` pass no longer emits the undef.
+// Constructing a union whose active variant is smaller than the union's payload buffer must leave no
+// uninitialised bytes in the buffer. A nested `flat_map` folded into a growing array builds such
+// unions and passes them across a function boundary as scalar leaves; at `-O max` / `experimental`
+// the consumer (`Iterator::advance`) speculatively reads the payload before checking its tag, so an
+// undef tail byte surfaces as a valgrind "Conditional jump or move depends on uninitialised
+// value(s)". The computed result is correct either way, so this guards against a memory-safety
+// (undefined-behavior) regression rather than a miscompilation. Runs under `develop_mode`'s memcheck.
 #[test]
 pub fn test_specialize_nested_flat_map_uninitialised_value() {
     let source = r#"

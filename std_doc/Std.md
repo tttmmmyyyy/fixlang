@@ -775,6 +775,8 @@ Type: `[a : Std::Boxed] Std::Lazy Std::String -> a -> a`
 Asserts that the given boxed value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
 
+To assert the same for an `Array`, use `assert_unique_array`.
+
 The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent
 and this treated any unboxed value as unique, so it never aborted for an unboxed argument.
 
@@ -784,6 +786,24 @@ This function should be limited to temporary use for debugging purposes and shou
 
 * `lazy_msg`
 * `value`
+
+#### assert_unique_array
+
+Type: `Std::Lazy Std::String -> Std::Array a -> Std::Array a`
+
+Asserts that the storage buffer of the given array is uniquely referenced (not shared),
+and returns the array. If the assertion failed, prints a message to the stderr and aborts
+the program.
+
+Use this for an `Array`, whose value holds the reference count in its storage buffer;
+`assert_unique` requires `Boxed` and so covers boxed values instead.
+
+This function should be limited to temporary use for debugging purposes and should be removed from the final code.
+
+##### Parameters
+
+* `lazy_msg`
+* `array`
 
 #### consumed_time_while_io
 

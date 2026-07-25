@@ -2115,6 +2115,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
+        if to_bits > from_bits {
+            // `to_ty` is wider than `val`, so loading it back reads bytes `val` never wrote. Zero the
+            // buffer first, leaving those bytes defined (zero) rather than undef. Reinterpreting a
+            // union's payload into its buffer takes this path when the variant is smaller than the
+            // buffer; the buffer later crosses a function boundary as scalar leaves, so an undef byte
+            // there would be a read of an uninitialised value.
+            self.builder()
+                .build_store(ptr, larger_ty.const_zero())
+                .unwrap();
+        }
         self.builder().build_store(ptr, val).unwrap();
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
