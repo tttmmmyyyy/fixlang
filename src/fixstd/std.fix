@@ -4137,6 +4137,26 @@ namespace Debug {
         x
     );
 
+    // Asserts that the storage buffer of the given array is uniquely referenced (not shared),
+    // and returns the array. If the assertion failed, prints a message to the stderr and aborts
+    // the program.
+    //
+    // Use this for an `Array`, whose value holds the reference count in its storage buffer;
+    // `assert_unique` requires `Boxed` and so covers boxed values instead.
+    //
+    // This function should be limited to temporary use for debugging purposes and should be removed from the final code.
+    //
+    // # Parameters
+    //
+    // * `lazy_msg`
+    // * `array`
+    assert_unique_array : Lazy String -> Array a -> Array a;
+    assert_unique_array = |msg, arr| (
+        let (unique, arr) = arr._unsafe_is_storage_unique;
+        if !unique { undefined("Array storage is not unique: " + msg()) };
+        arr
+    );
+
     // Get clocks (cpu time) elapsed while executing an I/O action.
     //
     // # Parameters
