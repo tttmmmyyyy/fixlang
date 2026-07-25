@@ -1192,10 +1192,10 @@ pub fn traverser_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     is_dynamic: bool,
 ) -> FunctionType<'c> {
-    // The object is passed as its flat leaf scalars rather than as one aggregate, mirroring
-    // `lambda_function_type`: a boxed object is a single pointer leaf, an unbox struct is its leaf
-    // fields spread out. This keeps the "materialize the aggregate only at memory / foreign-ABI
-    // boundaries" invariant intact across the release / mark path.
+    // The object is passed as its flat leaf scalars, mirroring `lambda_function_type`: a boxed
+    // object is a single pointer leaf, an unbox struct is its leaf fields spread out. This keeps the
+    // "materialize the aggregate only at memory / foreign-ABI boundaries" invariant intact across
+    // the release / mark path.
     let embedded = ty.get_embedded_type(gc, &vec![]);
     let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = gc
         .flatten_to_scalar_leaves(embedded)
@@ -1306,9 +1306,9 @@ pub fn lambda_function_type<'c, 'm>(
 
     // The result is returned as its flat leaf scalars, mirroring how the arguments are passed (see
     // `flatten_to_scalar_leaves`): no leaves returns `void`, a single leaf is returned bare, and
-    // several leaves are returned as a flat struct `{ leaf, ... }` rather than the nested aggregate.
-    // A later pass that decomposes the return value at a control-flow merge then yields one scalar phi
-    // per leaf instead of an aggregate phi, keeping a loop-carried field visible to LLVM.
+    // several leaves are returned as a flat struct `{ leaf, ... }`. A later pass that decomposes the
+    // return value at a control-flow merge then yields one scalar phi per leaf instead of an
+    // aggregate phi, keeping a loop-carried field visible to LLVM.
     let ret_ty = ty.get_lambda_dst();
     let ret_leaf_tys: Vec<BasicTypeEnum> = if ret_ty.is_box(gc.type_env()) {
         vec![gc.context.ptr_type(AddressSpace::from(0)).into()]

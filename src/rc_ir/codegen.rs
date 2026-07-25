@@ -112,8 +112,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let _scope_guard = self.push_scope();
 
         // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`), which are
-        // exactly an object's leaves, so it becomes an `Object` with no aggregate reformed. The CAP
-        // pointer follows all of them.
+        // exactly an object's leaves and become its `Object` directly. The CAP pointer follows all
+        // of them.
         let mut next_param = 0u32;
         for param in func.params.iter() {
             let embedded = param.ty.get_embedded_type(self, &vec![]);

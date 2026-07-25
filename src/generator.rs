@@ -180,7 +180,7 @@ impl<'c> Object<'c> {
     }
 
     // The object's leaves as call arguments, for a callee that takes the object flattened into its
-    // leaf scalars (an RC helper or a traverser).
+    // leaf scalars.
     pub fn leaf_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
         self.data.iter().map(|v| (*v).into()).collect()
     }
@@ -261,8 +261,8 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             // The object's leaves already hold the field, spread across a contiguous range; slice
-            // that range and reassemble the field's value, emitting no `extractvalue` on an
-            // aggregate (there is none) so the leaves stay independent for LLVM.
+            // that range and reassemble the field's value. The field lives directly in the leaves,
+            // so they stay independent for LLVM.
             let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
@@ -1198,6 +1198,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_call(func, &args, call_name).unwrap();
     }
 
+    // Retain `obj`: increment the reference count of every boxed object it owns, once.
     pub fn retain(&mut self, obj: Object<'c>) {
         let one = self.context.i64_type().const_int(1, false);
         self.emit_rc_helper_call(obj, "retain", "call_retain", move |gc, obj| {
