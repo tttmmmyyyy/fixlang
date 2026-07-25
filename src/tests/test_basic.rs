@@ -10321,6 +10321,63 @@ pub fn test_scalar_phi_value_roundtrip() {
 }
 
 #[test]
+pub fn test_empty_union_emits_no_zero_sized_phi() {
+    // An empty-payload union value — `Bool` is `{ i8 tag, [0 x i8] payload }` — merged through
+    // `build_scalar_phi` must not yield a phi of its zero-sized payload. LLVM's AArch64 GlobalISel
+    // (the `-O0` default on Apple Silicon) crashes on a phi of a zero-sized aggregate, a failure
+    // invisible on an x86_64 host and at `-O max`. This pins the fix by emitting the unoptimized IR
+    // and asserting it carries no such phi.
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `||` materializes a `Bool`, whose arm values merge through `build_scalar_phi`.
+            let b = (1 == 1) || (1 == 2);
+            eval b;
+            pure()
+        );
+    "#;
+    let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, function_name!()));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    File::create(work_dir.join("main.fix"))
+        .unwrap()
+        .write_all(source.as_bytes())
+        .unwrap();
+
+    let output = fix_command()
+        .args([
+            "build", "-O", "none", "--emit-llvm", "--file", "main.fix", "--output", "prog",
+        ])
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`fix build --emit-llvm` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
+    // the fix, omits) the zero-sized phi.
+    let ir_path = fs::read_dir(&work_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            let name = p.file_name().unwrap().to_string_lossy();
+            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
+        })
+        .expect("emitted LLVM IR file");
+    let ir = fs::read_to_string(&ir_path).unwrap();
+    assert!(
+        !ir.contains("phi [0 x"),
+        "emitted IR contains a zero-sized-aggregate phi (crashes AArch64 GlobalISel):\n{}",
+        ir
+    );
+}
+
+#[test]
 pub fn test_export_unbox_struct_arg() {
     // An exported Fix function whose argument is an unbox struct (a tuple) receives it correctly: the
     // C caller passes the struct by value, and the export wrapper reassembles it before applying the
