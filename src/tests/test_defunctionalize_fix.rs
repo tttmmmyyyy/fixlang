@@ -14,14 +14,14 @@ use crate::{
 // `None` deliberately keeps even tail calls, so the constant-stack tests skip it; the correctness
 // test below runs at every level, since the defunctionalization must preserve results everywhere.
 
-fn skip_at_none() -> bool {
+fn should_skip_at_none() -> bool {
     env_vars::get_max_opt_level() <= FixOptimizationLevel::None
 }
 
 // The `fix` argument written inline, the common idiom.
 #[test]
 fn test_deep_fix_sret_return_runs_in_constant_stack() {
-    if skip_at_none() {
+    if should_skip_at_none() {
         return;
     }
     let source = r#"
@@ -50,7 +50,7 @@ fn test_deep_fix_sret_return_runs_in_constant_stack() {
 // into either call; the pass resolves the binding and lifts each site.
 #[test]
 fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
-    if skip_at_none() {
+    if should_skip_at_none() {
         return;
     }
     let source = r#"
@@ -80,7 +80,7 @@ fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
 // The `fix` argument is a global function.
 #[test]
 fn test_global_function_fix_runs_in_constant_stack() {
-    if skip_at_none() {
+    if should_skip_at_none() {
         return;
     }
     let source = r#"
