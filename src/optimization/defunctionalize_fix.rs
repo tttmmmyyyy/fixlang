@@ -1,0 +1,428 @@
+// Defunctionalize `Std::fix` into a directly self-recursive global function.
+//
+// The `fix` combinator builds a self-referential closure whose recursive self-call dispatches
+// through a function pointer. LLVM's tail-call elimination folds only *direct* self-recursion into a
+// loop, so an indirect self-call whose return value is passed via `sret` (a value of four or more
+// scalar leaves) keeps a real `call` and grows the stack by one frame per iteration.
+//
+// This pass rewrites `fix(|self| body)` into a call to a fresh global function `G`:
+//
+//     G : FixCap -> a -> b
+//     G = |cap| let FixCap { .. } = cap; body[self := G(cap)]
+//
+// After uncurrying, each `self(args)` in the body is a saturated application of the global `G`, i.e.
+// a direct self-call, which LLVM turns into a loop regardless of the return-value ABI. The captured
+// environment is threaded as one struct value `cap`, so a self-call never re-mentions an individual
+// captured name and the rewrite is insensitive to shadowing of those names. `self` used as a bare
+// value becomes the partial application `G(cap)`, i.e. a closure, preserving non-tail uses.
+
+use std::sync::Arc;
+
+use crate::{
+    ast::{
+        expr::{
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
+            var_var, Expr, ExprNode,
+        },
+        name::FullName,
+        pattern::PatternNode,
+        program::{Program, Symbol},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        typedecl::Field,
+        types::{kind_star, type_fun, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
+    },
+    constants::STD_NAME,
+    misc::{Map, Set},
+    optimization::{
+        let_elimination,
+        rename::substitute_free_name,
+        uncurry::{internalize_let_to_var_at_head, is_std_fix},
+        unique_local_names,
+    },
+    tool::stopwatch::StopWatch,
+};
+
+// Run the pass to a fixpoint, so a `fix` nested inside a lifted function is defunctionalized too.
+pub fn run(prg: &mut Program, show_build_times: bool) {
+    let mut stable = Set::default();
+    while run_one(prg, &mut stable, show_build_times) {}
+}
+
+// Run one pass over all symbols. Returns whether any symbol changed.
+//
+// `stable` holds symbols already known to contain no further `fix` to defunctionalize; they are
+// carried over untouched.
+fn run_one(prg: &mut Program, stable: &mut Set<FullName>, show_build_times: bool) -> bool {
+    let _sw = StopWatch::new("defunctionalize_fix::run_one", show_build_times);
+
+    let mut changed = false;
+    // Elaboration aliases the self-parameter of `fix` behind a `let` (`let go = #self`); collapsing
+    // trivial variable-aliasing lets makes every self-reference name the parameter directly, so the
+    // single substitution below reaches them all.
+    let arity_map = let_elimination::create_global_lambda_to_arity_map(prg);
+    let symbols = std::mem::take(&mut prg.symbols);
+    let mut global_names: Set<FullName> = symbols.keys().cloned().collect();
+    let mut new_symbols: Map<FullName, Symbol> = Map::default();
+    let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
+
+    for (name, mut sym) in symbols {
+        if stable.contains(&name) {
+            new_symbols.insert(name, sym);
+            continue;
+        }
+
+        // Only a symbol that applies `fix` needs any work.
+        if !sym
+            .expr
+            .as_ref()
+            .unwrap()
+            .free_vars()
+            .iter()
+            .any(is_std_fix)
+        {
+            stable.insert(name.clone());
+            new_symbols.insert(name, sym);
+            continue;
+        }
+
+        // Preconditions: make all local names unique so the capture destructuring
+        // `let FixCap { .. } = cap` introduces no name collision, then collapse variable-aliasing
+        // lets so self-references name the `fix` parameter directly.
+        let mut expr = unique_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default());
+        while let_elimination::run_on_expr_once(&mut expr, &arity_map) {}
+
+        let mut visitor = FixDefunctionalizer::new(name.clone(), global_names.clone());
+        let res = visitor.traverse(&expr);
+
+        if !res.changed {
+            // No `fix` was applied to a literal lambda here; keep the original symbol and drop the
+            // preprocessing, matching the untouched symbols above.
+            stable.insert(name.clone());
+            new_symbols.insert(name, sym);
+            continue;
+        }
+
+        changed = true;
+        sym.expr = Some(res.expr);
+        for lifted in visitor.lifted {
+            global_names.insert(lifted.func_name.clone());
+            new_tycons.insert(
+                lifted.cap.tycon.as_ref().clone(),
+                lifted.cap.tycon_info.clone(),
+            );
+            new_symbols.insert(lifted.func_name.clone(), lifted.into_symbol());
+        }
+        new_symbols.insert(name, sym);
+    }
+
+    prg.type_env.add_tycons(new_tycons);
+    prg.symbols = new_symbols;
+    changed
+}
+
+// A global function lifted out of one `fix` application.
+struct LiftedFix {
+    func_name: FullName,
+    // `G = |cap| let FixCap { .. } = cap; body[self := G(cap)]`, typed `FixCap -> a -> b`.
+    func_expr: Arc<ExprNode>,
+    cap: CaptureStruct,
+}
+
+impl LiftedFix {
+    fn into_symbol(self) -> Symbol {
+        Symbol {
+            name: self.func_name.clone(),
+            generic_name: self.func_name,
+            ty: self.func_expr.type_.as_ref().unwrap().clone(),
+            expr: Some(self.func_expr),
+        }
+    }
+}
+
+struct FixDefunctionalizer {
+    // The symbol being processed; lifted-function names are derived from it.
+    current_symbol: FullName,
+    // Global names in use, to keep generated names collision-free.
+    global_names: Set<FullName>,
+    // Counter feeding the generated names.
+    counter: u32,
+    // Functions lifted out during this traversal.
+    lifted: Vec<LiftedFix>,
+}
+
+impl FixDefunctionalizer {
+    fn new(current_symbol: FullName, global_names: Set<FullName>) -> Self {
+        Self {
+            current_symbol,
+            global_names,
+            counter: 0,
+            lifted: vec![],
+        }
+    }
+
+    // A fresh global name for a lifted function, derived from the current symbol.
+    fn fresh_global_name(&mut self) -> FullName {
+        loop {
+            let mut name = self.current_symbol.clone();
+            *name.name_as_mut() += &format!("#fix_defunct{}", self.counter);
+            self.counter += 1;
+            if !self.global_names.contains(&name) {
+                self.global_names.insert(name.clone());
+                return name;
+            }
+        }
+    }
+
+    // Build the lifted global `G` for `fix(f)`, and return a reference to `G` (typed
+    // `FixCap -> a -> b`) together with the capture-struct expression built from the current scope.
+    // `G(cap)` then reconstructs the recursive value `fix(f) : a -> b`.
+    fn lift(&mut self, f: &Arc<ExprNode>, state: &VisitState) -> (Arc<ExprNode>, Arc<ExprNode>) {
+        // `f = |self| f_body`, single-parameter before uncurrying.
+        let (self_params, f_body) = f.destructure_lam();
+        assert_eq!(
+            self_params.len(),
+            1,
+            "the argument of `fix` is a single-parameter lambda before uncurrying"
+        );
+        let self_name = self_params[0].name.clone();
+        let ab_ty = f_body.type_.as_ref().unwrap().clone(); // a -> b
+
+        // Capture = free local variables of `f`, with their types read from the current scope.
+        let cap_fields: Vec<(FullName, Arc<TypeNode>)> = f
+            .lambda_cap_names()
+            .iter()
+            .map(|n| {
+                let ty = state.scope.get_local(&n.name).unwrap().unwrap();
+                (n.clone(), ty)
+            })
+            .collect();
+        let cap = CaptureStruct::new(&cap_fields);
+
+        let func_name = self.fresh_global_name();
+        let cap_param = format!("#fixcap{}", self.counter);
+        self.counter += 1;
+        let cap_param_name = FullName::local(&cap_param);
+
+        // The recursive value `G(cap)`, of type `a -> b`.
+        let g_ref =
+            expr_var(func_name.clone(), None).set_type(type_fun(cap.ty.clone(), ab_ty.clone()));
+        let self_replacement = expr_app_typed(
+            g_ref.clone(),
+            vec![expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone())],
+        );
+
+        // `body[self := G(cap)]`: capture-avoiding, and it leaves shadowed occurrences of `self`
+        // untouched.
+        let body = substitute_free_name(&f_body, &self_name, &self_replacement);
+
+        // `G = |cap| let FixCap { .. } = cap; body`.
+        let g_body = expr_let_typed(
+            cap.pattern(),
+            expr_var(cap_param_name, None).set_type(cap.ty.clone()),
+            body,
+        );
+        let g_expr = internalize_let_to_var_at_head(&expr_abs_typed(
+            var_local(&cap_param),
+            cap.ty.clone(),
+            g_body,
+        ));
+
+        let cap_expr = cap.struct_expr();
+        self.lifted.push(LiftedFix {
+            func_name,
+            func_expr: g_expr,
+            cap,
+        });
+        (g_ref, cap_expr)
+    }
+}
+
+impl ExprVisitor for FixDefunctionalizer {
+    fn start_visit_app(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        state: &mut VisitState,
+    ) -> StartVisitResult {
+        let (func, args) = expr.destructure_app();
+        // Type annotations survive until `Max`, so see through them at the callee.
+        let func = strip_tyanno(&func);
+        if !func.is_var() || !is_std_fix(&func.get_var().name) || args.is_empty() {
+            return StartVisitResult::VisitChildren;
+        }
+        // `f` must be a literal lambda for its captures and self-parameter to be visible here; a
+        // `fix` applied to anything else keeps the closure-based lowering.
+        let f = strip_tyanno(&args[0]);
+        if !f.is_lam() {
+            return StartVisitResult::VisitChildren;
+        }
+
+        let (g_ref, cap_expr) = self.lift(&f, state);
+
+        // `fix(f)(rest..)` becomes `G(cap)(rest..)`.
+        let mut new_expr = expr_app_typed(g_ref, vec![cap_expr]);
+        for arg in &args[1..] {
+            new_expr = expr_app_typed(new_expr, vec![arg.clone()]);
+        }
+        StartVisitResult::ReplaceAndRevisit(new_expr)
+    }
+
+    fn start_visit_var(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_var(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_llvm(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_llvm(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn end_visit_app(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_lam(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_lam(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_let(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_if(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_if(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_match(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_match(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_tyanno(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_tyanno(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_make_struct(
+        &mut self,
+        _e: &Arc<ExprNode>,
+        _s: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_make_struct(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_array_lit(
+        &mut self,
+        _e: &Arc<ExprNode>,
+        _s: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_array_lit(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_ffi_call(
+        &mut self,
+        _e: &Arc<ExprNode>,
+        _s: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_ffi_call(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+    fn start_visit_eval(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_eval(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(e)
+    }
+}
+
+// Peel any leading type annotations off an expression. `remove_tyanno` runs only at `Max`, so at
+// `Basic` the argument of `fix` is still wrapped in one.
+fn strip_tyanno(e: &Arc<ExprNode>) -> Arc<ExprNode> {
+    let mut cur = e.clone();
+    while let Expr::TyAnno(inner, _) = &*cur.expr {
+        cur = inner.clone();
+    }
+    cur
+}
+
+// The unboxed struct that carries a `fix` closure's captured environment across the direct self-call.
+struct CaptureStruct {
+    tycon: Arc<TyCon>,
+    tycon_info: TyConInfo,
+    ty: Arc<TypeNode>,
+    // Captured names paired with their types, in a stable order (the order `lambda_cap_names` gives).
+    fields: Vec<(FullName, Arc<TypeNode>)>,
+}
+
+impl CaptureStruct {
+    fn new(fields: &[(FullName, Arc<TypeNode>)]) -> Self {
+        let hash = fields
+            .iter()
+            .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
+            .collect::<Vec<_>>()
+            .join(",");
+        let tycon = Arc::new(TyCon {
+            name: FullName::from_strs(&[STD_NAME], &format!("#FixCap<{}>", hash)),
+        });
+        let tycon_info = TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: fields
+                .iter()
+                .map(|(n, t)| Field::make(n.name.clone(), t.clone(), None))
+                .collect(),
+            source: None,
+            document: None,
+        };
+        let ty = type_tycon(&tycon);
+        Self {
+            tycon,
+            tycon_info,
+            ty,
+            fields: fields.to_vec(),
+        }
+    }
+
+    // Expression building the capture struct from the variables currently in scope.
+    fn struct_expr(&self) -> Arc<ExprNode> {
+        expr_make_struct(
+            self.tycon.clone(),
+            self.fields
+                .iter()
+                .map(|(n, t)| (n.to_string(), expr_var(n.clone(), None).set_type(t.clone())))
+                .collect(),
+        )
+        .set_type(self.ty.clone())
+    }
+
+    // Pattern destructuring the capture struct back into its original field names.
+    fn pattern(&self) -> Arc<PatternNode> {
+        let field_pats = self
+            .fields
+            .iter()
+            .map(|(n, t)| {
+                (
+                    n.to_string(),
+                    PatternNode::make_var(var_var(n.clone()), None).set_type(t.clone()),
+                )
+            })
+            .collect();
+        PatternNode::make_struct(self.tycon.clone(), field_pats).set_type(self.ty.clone())
+    }
+}
