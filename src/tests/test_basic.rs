@@ -1,5 +1,5 @@
 use crate::{
-    configuration::{Configuration, FixOptimizationLevel, SubCommand},
+    configuration::{Configuration, FixOptimizationLevel, SubCommand, ValgrindTool},
     constants::{
         COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME,
         U64_NAME, U8_NAME,
@@ -8,8 +8,8 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        fix_command, test_files_in_directory, test_source, test_source_fail,
-        test_source_fail_excludes, test_source_with_c,
+        assert_grammar_accepts, fix_command, run_source_capture, test_files_in_directory,
+        test_source, test_source_fail, test_source_fail_excludes, test_source_with_c,
     },
 };
 use rand::Rng;
@@ -9433,24 +9433,29 @@ main = (
 
 #[test]
 pub fn test_regression_issue_62() {
+    // Every C numeric type name must parse inside an `FFI_CALL` signature. Issue #62 was a
+    // grammar-ordering bug where a longer type name was shadowed by a shorter one it starts with
+    // (e.g. `CLongLong` matched the prefix `CLong` and left `Long` dangling), so the source
+    // failed to parse. This is a parser regression test, so it only checks that the source
+    // parses; it does not compile or run.
     let source = r##"
 module Main;
 
 test : IO ();
 test = (
-    let x = FFI_CALL[CUnsignedShort f(CUnsignedShort), undefined("")];
-    let x = FFI_CALL[CUnsignedLongLong f(CUnsignedLongLong), undefined("")];
-    let x = FFI_CALL[CUnsignedLong f(CUnsignedLong), undefined("")];
-    let x = FFI_CALL[CUnsignedInt f(CUnsignedInt), undefined("")];
-    let x = FFI_CALL[CUnsignedChar f(CUnsignedChar), undefined("")];
-    let x = FFI_CALL[CSizeT f(CSizeT), undefined("")];
-    let x = FFI_CALL[CShort f(CShort), undefined("")];
-    let x = FFI_CALL[CLongLong f(CLongLong), undefined("")];
-    let x = FFI_CALL[CLong f(CLong), undefined("")];
-    let x = FFI_CALL[CInt f(CInt), undefined("")];
-    let x = FFI_CALL[CFloat f(CFloat), undefined("")];
-    let x = FFI_CALL[CDouble f(CDouble), undefined("")];
-    let x = FFI_CALL[CChar f(CChar), undefined("")];
+    eval FFI_CALL[CUnsignedShort f_ushort(CUnsignedShort), undefined("")];
+    eval FFI_CALL[CUnsignedLongLong f_ullong(CUnsignedLongLong), undefined("")];
+    eval FFI_CALL[CUnsignedLong f_ulong(CUnsignedLong), undefined("")];
+    eval FFI_CALL[CUnsignedInt f_uint(CUnsignedInt), undefined("")];
+    eval FFI_CALL[CUnsignedChar f_uchar(CUnsignedChar), undefined("")];
+    eval FFI_CALL[CSizeT f_sizet(CSizeT), undefined("")];
+    eval FFI_CALL[CShort f_short(CShort), undefined("")];
+    eval FFI_CALL[CLongLong f_llong(CLongLong), undefined("")];
+    eval FFI_CALL[CLong f_long(CLong), undefined("")];
+    eval FFI_CALL[CInt f_int(CInt), undefined("")];
+    eval FFI_CALL[CFloat f_float(CFloat), undefined("")];
+    eval FFI_CALL[CDouble f_double(CDouble), undefined("")];
+    eval FFI_CALL[CChar f_char(CChar), undefined("")];
     pure()
 );
 
@@ -9460,7 +9465,42 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::develop_mode());
+    assert_grammar_accepts(&source);
+}
+
+#[test]
+pub fn test_eval_debug_println_is_not_eliminated() {
+    // `eval debug_println(...)` and `debug_eprintln(...)` evaluate their argument for its side
+    // effect at every optimization level; the print must not be dropped as a discarded pure
+    // value even when optimization is on.
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    eval debug_print("STDOUT_PRINT_a1b2c3;");
+    eval debug_println("STDOUT_PRINTLN_a1b2c3");
+    eval debug_eprint("STDERR_PRINT_d4e5f6;");
+    eval debug_eprintln("STDERR_PRINTLN_d4e5f6");
+    pure()
+);
+    "##;
+    // Run without valgrind so the program's own stderr is not mixed with the valgrind report.
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::None);
+    let output = run_source_capture(&source, config);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("STDOUT_PRINT_a1b2c3;STDOUT_PRINTLN_a1b2c3\n"),
+        "debug_print / debug_println output missing from stdout.\nstdout:\n{}",
+        stdout
+    );
+    assert!(
+        stderr.contains("STDERR_PRINT_d4e5f6;STDERR_PRINTLN_d4e5f6\n"),
+        "debug_eprint / debug_eprintln output missing from stderr.\nstderr:\n{}",
+        stderr
+    );
 }
 
 #[test]
@@ -10226,7 +10266,9 @@ pub fn test_scalar_phi_value_roundtrip() {
     // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
     // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
     // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
-    // tag-match-vs-passthrough union modification, and an arm that diverges via `undefined`.
+    // tag-match-vs-passthrough union modification, an arm that diverges via `undefined`, a struct
+    // whose zero-sized `Bool` field sits between two `I64` fields (that payload leaf is dropped, so a
+    // miscount would scramble the neighbors), and a `()` value whose whole type is zero-sized.
     let source = r#"
         module Main;
 
@@ -10252,6 +10294,20 @@ pub fn test_scalar_phi_value_roundtrip() {
             none(_) => undefined("unreachable at runtime")
         };
 
+        type Mixed = unbox struct { lo : I64, flag : Bool, hi : I64 };
+
+        mixed : U -> Mixed;
+        mixed = |u| match u {
+            w(_) => Mixed { lo : 11, flag : true, hi : 22 },
+            other(n) => Mixed { lo : 0 - n, flag : false, hi : n + 5 }
+        };
+
+        unit_of : U -> ();
+        unit_of = |u| match u {
+            w(_) => (),
+            other(_) => ()
+        };
+
         main : IO ();
         main = (
             let ((a, b), (c, d)) = nested(Option::some(7));
@@ -10274,10 +10330,87 @@ pub fn test_scalar_phi_value_roundtrip() {
             let (pa, pb) = pick(Option::some(21));
             assert_eq(|_|"diverging arm taken", pa + pb, 63);;
 
+            let m0 = mixed(U::other(5));
+            assert_eq(|_|"mixed other fields", [m0.@lo, m0.@hi], [-5, 10]);;
+            assert_eq(|_|"mixed other flag", m0.@flag, false);;
+            let m1 = mixed(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
+            assert_eq(|_|"mixed w fields", [m1.@lo, m1.@hi], [11, 22]);;
+            assert_eq(|_|"mixed w flag", m1.@flag, true);;
+            eval unit_of(U::other(9));
+            eval unit_of(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
+
             pure()
         );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_empty_union_emits_no_zero_sized_phi() {
+    // An empty-payload union value — `Bool` is `{ i8 tag, [0 x i8] payload }` — merged through
+    // `build_scalar_phi` must not yield a phi of its zero-sized payload. LLVM's AArch64 GlobalISel
+    // (the `-O0` default on Apple Silicon) crashes on a phi of a zero-sized aggregate, a failure
+    // invisible on an x86_64 host and at `-O max`. This pins the fix by emitting the unoptimized IR
+    // and asserting it carries no such phi.
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `||` materializes a `Bool`, whose arm values merge through `build_scalar_phi`.
+            let b = (1 == 1) || (1 == 2);
+            eval b;
+            pure()
+        );
+    "#;
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    File::create(work_dir.join("main.fix"))
+        .unwrap()
+        .write_all(source.as_bytes())
+        .unwrap();
+
+    let output = fix_command()
+        .args([
+            "build",
+            "-O",
+            "none",
+            "--emit-llvm",
+            "--file",
+            "main.fix",
+            "--output",
+            "prog",
+        ])
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`fix build --emit-llvm` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
+    // the fix, omits) the zero-sized phi.
+    let ir_path = fs::read_dir(&work_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            let name = p.file_name().unwrap().to_string_lossy();
+            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
+        })
+        .expect("emitted LLVM IR file");
+    let ir = fs::read_to_string(&ir_path).unwrap();
+    assert!(
+        !ir.contains("phi [0 x"),
+        "emitted IR contains a zero-sized-aggregate phi (crashes AArch64 GlobalISel):\n{}",
+        ir
+    );
 }
 
 #[test]

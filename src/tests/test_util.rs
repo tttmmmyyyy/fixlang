@@ -110,6 +110,12 @@ pub fn test_source(source: &str, config: Configuration) {
     }
 }
 
+/// Compile and run `source`, returning the process output. Panics if compilation fails or the
+/// program cannot be spawned. Use this to assert on the program's stdout / stderr.
+pub fn run_source_capture(source: &str, config: Configuration) -> Output {
+    panic_if_err(run_source(source, config)).unwrap()
+}
+
 /// Verify that the pest grammar rejects `source` (parse-level
 /// rejection). Use this for negative tests that want to assert "the
 /// parser rejects this construct" without going through later
@@ -119,6 +125,17 @@ pub fn assert_grammar_rejects(source: &str) {
         panic_with_msg(&format!(
             "Grammar was expected to reject the source but accepted it.\nSource:\n{}",
             source
+        ));
+    }
+}
+
+/// Verify that the pest grammar accepts `source`. Use this for a positive parser regression
+/// test that only needs the source to parse, without compiling or running it.
+pub fn assert_grammar_accepts(source: &str) {
+    if let Err(e) = check_grammar_accepts(source) {
+        panic_with_msg(&format!(
+            "Grammar was expected to accept the source but rejected it: {}\nSource:\n{}",
+            e, source
         ));
     }
 }

@@ -1039,13 +1039,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
+    // value carries no information, so the scalar-leaf helpers drop it: it yields no leaf (no phi, no
+    // ABI slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
+    // AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
+    fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
+        self.target_data.get_bit_size(&ty) == 0
+    }
+
     // Expand an embedded type into the flat list of leaf (non-struct) scalar types it holds,
-    // descending through nested structs; a non-struct type is a leaf on its own. Passing an unbox
-    // struct across a function boundary as these scalars, rather than as one aggregate, keeps a
-    // loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
-    // recursive `fold`/`loop` tail call then carries scalar phis instead of an opaque aggregate
-    // phi, so the per-element bounds check folds away and the loop vectorizes.
+    // descending through nested structs; a non-struct type is a leaf on its own, and a zero-sized
+    // type yields no leaf. Passing an unbox struct across a function boundary as these scalars,
+    // rather than as one aggregate, keeps a loop-carried field (such as an `Array`'s `@size`)
+    // visible to LLVM's value analyses: the recursive `fold`/`loop` tail call then carries scalar
+    // phis instead of an opaque aggregate phi, so the per-element bounds check folds away and the
+    // loop vectorizes.
     pub fn flatten_to_scalar_leaves(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
+        if self.is_zero_sized(ty) {
+            return vec![];
+        }
         match ty {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
                 .flat_map(|i| self.flatten_to_scalar_leaves(st.get_field_type_at_index(i).unwrap()))
@@ -1057,6 +1069,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     // The number of leaf scalars `ty` decomposes into under `flatten_to_scalar_leaves`, without
     // allocating the list of their types.
     pub fn scalar_leaf_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+        if self.is_zero_sized(ty) {
+            return 0;
+        }
         match ty {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
                 .map(|i| self.scalar_leaf_count(st.get_field_type_at_index(i).unwrap()))
@@ -1077,8 +1092,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Decompose a value into its leaf scalars in the order of `flatten_to_scalar_leaves` on its
-    // type, emitting an `extractvalue` per struct field at the current insert position.
+    // type, emitting an `extractvalue` per struct field at the current insert position. A zero-sized
+    // value yields no leaf.
     pub fn explode_to_scalar_leaves(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
+        if self.is_zero_sized(val.get_type()) {
+            return vec![];
+        }
         match val {
             BasicValueEnum::StructValue(sv) => (0..sv.get_type().count_fields())
                 .flat_map(|i| {
@@ -1095,11 +1114,15 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Reassemble a value of `ty` from a leaf-scalar iterator produced in `flatten_to_scalar_leaves`
     // order, emitting an `insertvalue` per struct field. The inverse of `explode_to_scalar_leaves`.
+    // A zero-sized type consumes no leaf and is rebuilt as `undef`.
     pub fn assemble_from_scalar_leaves(
         &self,
         ty: BasicTypeEnum<'c>,
         leaves: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
+        if self.is_zero_sized(ty) {
+            return Self::get_undef(&ty);
+        }
         match ty {
             BasicTypeEnum::StructType(st) => {
                 let mut val = st.get_undef();
@@ -1127,6 +1150,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     // no aggregate is ever formed here. Every incoming's leaves must be available on its edge (defined
     // in, or dominating, its predecessor block), and every predecessor must already have its
     // terminator; the phis are placed at the current insert block.
+    //
+    // A zero-sized leaf (an empty union's `[0 x i8]` payload) never reaches here: `leaves()` excludes
+    // it, since `explode_to_scalar_leaves` drops it. So no per-leaf phi is ever a zero-sized one
+    // (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no leaves and merges
+    // to an empty object with no phi at all — the zero-sized part is rebuilt on materialization.
     pub fn build_object_phi(
         &mut self,
         incomings: &[(Object<'c>, BasicBlock<'c>)],
