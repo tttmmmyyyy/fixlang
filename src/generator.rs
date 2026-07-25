@@ -354,16 +354,16 @@ impl<'c> Object<'c> {
         mut self,
         gc: &mut Generator<'c, 'm>,
         field_idx: u32,
-        val: &Object<'c>,
+        field: &Object<'c>,
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
-            assert_eq!(val.leaves().len(), cnt);
-            self.data.splice(off..off + cnt, val.leaves().iter().copied());
+            assert_eq!(field.leaves().len(), cnt);
+            self.data.splice(off..off + cnt, field.leaves().iter().copied());
         } else {
-            let val = val.value(gc);
+            let val = field.value(gc);
             let struct_ty = self.struct_ty(gc);
             self.insert_field_as(gc, struct_ty, field_idx, val);
         }
