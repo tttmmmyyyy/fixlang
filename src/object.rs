@@ -1872,6 +1872,9 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
     gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
 }
 
+// Builds the debug type describing `ty`'s in-memory layout by expanding its fields. The caching and
+// recursion-breaking that keep this finite on recursive types live in the wrapper
+// `ty_to_debug_struct_ty`.
 fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
