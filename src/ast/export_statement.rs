@@ -158,7 +158,8 @@ impl ExportStatement {
         if codom.to_string() == make_unit_ty().to_string() {
             gc.builder().build_return(None).unwrap();
         } else {
-            gc.builder().build_return(Some(&fix_value.value)).unwrap();
+            let ret_val = fix_value.value(gc);
+            gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
 }

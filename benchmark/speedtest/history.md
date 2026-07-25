@@ -2,6 +2,23 @@
 
 Newer is above.
 
+## eec295f846d6110826a74e823fde8a6ae02859d4
+
+The object-scalarization branch merged with `main`, measured against the previous row `96f68049` (the
+cp-library 0.13.0 bump). The branch makes the codegen `Object` hold leaf scalars and materialize an
+aggregate only at memory and foreign-ABI boundaries: the body, the return ABI, and the per-type RC
+helpers (retain / release / mark / traverser) all pass leaf scalars. The array-loop win it targets was
+already banked by the shipped scalar-argument ABI and `build_scalar_phi`, so what remains is code
+unification, and the measurement bears that out: most cases are byte-identical (binary_trees, arrayrw,
+nbody, mandelbrot, struct_field_mod all to 0.00%), with sub-1% movement each way on the rest (sort
+-3.7%, cp_lib_lsegtree -0.8%, fannkuch -0.8%; get_sub +0.5%).
+
+This baseline predates two `main` commits the merge also brings in — the per-signature FFI typing
+(#85) and the zero-sized-phi-to-undef change (#86) — so the delta folds those in as well. The only
+movement above 1% is confined to the two heaviest cp_lib cases, cp_lib_conv_zp +2.1% and
+cp_lib_prime_list +1.9%; with the scalarization confirmed byte-neutral on every non-cp_lib case, that
+residue tracks the folded-in #85/#86 codegen changes rather than the scalarization.
+
 ## 96f680496768b92145e8d577c26356091e0104d9
 
 Moving the eight `cp_lib_*` cases from cp-library 0.7.4 to 0.13.0, measured against the previous
