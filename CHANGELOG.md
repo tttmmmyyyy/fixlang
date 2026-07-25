@@ -36,6 +36,7 @@
 
 #### Tool
 
+- Programs compiled with `-O max` or `-O experimental` no longer read an uninitialised value while running certain iterator pipelines, such as a nested `flat_map` folded into an array. The computed result was already correct, but the read was undefined behavior (reported by valgrind).
 - Building with debug information (`-g`) no longer crashes on a program that uses a recursive type, such as `type Tree = box union { leaf : (), node : (Tree, Tree) };`.
 - Debug information (`-g`) records every `Array` as having 100 elements, since the actual element count is only determined at run time. The byte sizes recorded for the array debug types covered only a single element, contradicting that element count: gdb refused to display the elements with an "access outside bounds of object" error, and recent lldb displayed wrong values for all elements after the first. The byte sizes now cover the 100 elements, so debuggers display them, the first `<array size>` of which are the valid values. This also applies to the byte array inside a `String`.
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
