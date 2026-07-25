@@ -1710,7 +1710,7 @@ pub fn create_traverser<'c, 'm>(
     // Reassemble the object from its leaf parameters (see `traverser_type`).
     let leaf_count = {
         let embedded = ty.get_embedded_type(gc, &vec![]);
-        gc.flatten_to_scalar_leaves(embedded).len()
+        gc.scalar_leaf_count(embedded)
     };
     let leaves = (0..leaf_count)
         .map(|i| func.get_nth_param(i as u32).unwrap())

@@ -179,6 +179,12 @@ impl<'c> Object<'c> {
         &self.data
     }
 
+    // The object's leaves as call arguments, for a callee that takes the object flattened into its
+    // leaf scalars (an RC helper or a traverser).
+    pub fn leaf_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
+        self.data.iter().map(|v| (*v).into()).collect()
+    }
+
     // Reassemble the object's value from its leaves. Free for a boxed object, a funcptr, or an
     // unboxed scalar (the single leaf is returned as is); an unbox struct is rebuilt with one
     // `insertvalue` per field, which SROA folds away wherever the aggregate is not truly needed.
@@ -1044,19 +1050,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // The number of leaf scalars `ty` decomposes into under `flatten_to_scalar_leaves`, without
+    // allocating the list of their types.
+    pub fn scalar_leaf_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+        match ty {
+            BasicTypeEnum::StructType(st) => (0..st.count_fields())
+                .map(|i| self.scalar_leaf_count(st.get_field_type_at_index(i).unwrap()))
+                .sum(),
+            _ => 1,
+        }
+    }
+
     // The half-open range `[offset, offset + count)` of leaves that field `field_idx` of `struct_ty`
     // occupies within the struct's flattened leaf list, so a leaf-held value can address one field
     // without materializing the aggregate. `offset` is the leaf count of the preceding fields.
     pub fn field_leaf_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
         let offset: usize = (0..field_idx)
-            .map(|i| {
-                self.flatten_to_scalar_leaves(struct_ty.get_field_type_at_index(i).unwrap())
-                    .len()
-            })
+            .map(|i| self.scalar_leaf_count(struct_ty.get_field_type_at_index(i).unwrap()))
             .sum();
-        let count = self
-            .flatten_to_scalar_leaves(struct_ty.get_field_type_at_index(field_idx).unwrap())
-            .len();
+        let count = self.scalar_leaf_count(struct_ty.get_field_type_at_index(field_idx).unwrap());
         (offset, count)
     }
 
@@ -1182,11 +1194,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             func
         };
 
-        let args = obj
-            .leaves()
-            .iter()
-            .map(|v| (*v).into())
-            .collect::<Vec<BasicMetadataValueEnum>>();
+        let args = obj.leaf_call_args();
         self.builder().build_call(func, &args, call_name).unwrap();
     }
 
@@ -1444,11 +1452,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             match create_traverser(&obj.ty, &vec![], self, Some(work)) {
                 Some(trav) => {
                     // Pass the object as its flat leaf scalars, matching `traverser_type`.
-                    let args = obj
-                        .leaves()
-                        .iter()
-                        .map(|v| (*v).into())
-                        .collect::<Vec<BasicMetadataValueEnum>>();
+                    let args = obj.leaf_call_args();
                     self.builder()
                         .build_call(trav, &args, "call_traverser_of_unboxed")
                         .unwrap();
