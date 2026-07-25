@@ -10266,7 +10266,9 @@ pub fn test_scalar_phi_value_roundtrip() {
     // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
     // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
     // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
-    // tag-match-vs-passthrough union modification, and an arm that diverges via `undefined`.
+    // tag-match-vs-passthrough union modification, an arm that diverges via `undefined`, a struct
+    // whose zero-sized `Bool` field sits between two `I64` fields (that payload leaf is dropped, so a
+    // miscount would scramble the neighbors), and a `()` value whose whole type is zero-sized.
     let source = r#"
         module Main;
 
@@ -10292,6 +10294,20 @@ pub fn test_scalar_phi_value_roundtrip() {
             none(_) => undefined("unreachable at runtime")
         };
 
+        type Mixed = unbox struct { lo : I64, flag : Bool, hi : I64 };
+
+        mixed : U -> Mixed;
+        mixed = |u| match u {
+            w(_) => Mixed { lo : 11, flag : true, hi : 22 },
+            other(n) => Mixed { lo : 0 - n, flag : false, hi : n + 5 }
+        };
+
+        unit_of : U -> ();
+        unit_of = |u| match u {
+            w(_) => (),
+            other(_) => ()
+        };
+
         main : IO ();
         main = (
             let ((a, b), (c, d)) = nested(Option::some(7));
@@ -10313,6 +10329,15 @@ pub fn test_scalar_phi_value_roundtrip() {
 
             let (pa, pb) = pick(Option::some(21));
             assert_eq(|_|"diverging arm taken", pa + pb, 63);;
+
+            let m0 = mixed(U::other(5));
+            assert_eq(|_|"mixed other fields", [m0.@lo, m0.@hi], [-5, 10]);;
+            assert_eq(|_|"mixed other flag", m0.@flag, false);;
+            let m1 = mixed(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
+            assert_eq(|_|"mixed w fields", [m1.@lo, m1.@hi], [11, 22]);;
+            assert_eq(|_|"mixed w flag", m1.@flag, true);;
+            eval unit_of(U::other(9));
+            eval unit_of(U::w(Wrap { arr : Array::fill(1, 0), tag : 0 }));
 
             pure()
         );
