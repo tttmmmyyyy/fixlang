@@ -1776,6 +1776,16 @@ impl Program {
     }
 
     // Validate and update export statements.
+    // Reject any C function name that is reached, across the instantiated program, through more
+    // than one signature — a clash the C ABI cannot represent and code generation would abort on.
+    pub fn validate_ffi_signatures(
+        &self,
+        c_sizes: &crate::configuration::CTypeSizes,
+    ) -> Result<(), Errors> {
+        let exprs = self.symbols.values().filter_map(|sym| sym.expr.as_ref());
+        crate::ast::ffi_signature_check::check(exprs, c_sizes)
+    }
+
     pub fn validate_export_statements(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 

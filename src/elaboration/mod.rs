@@ -130,6 +130,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
+    // Reject calling one C function name through more than one signature.
+    program.validate_ffi_signatures(&config.c_type_sizes)?;
+
     Ok(program)
 }
 

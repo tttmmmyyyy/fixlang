@@ -1860,10 +1860,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         arg_objs: Vec<Object<'c>>,
         is_io: bool,
     ) -> Object<'c> {
-        // The C function type this call site demands. A C name carries no type on the Fix
-        // side, so the same name can reach several call sites with different signatures; each
-        // site uses its own type. Reusing another site's declaration for the call would emit
-        // an ill-typed call that fails module verification.
+        // The C function type this call site demands. A C name carries no type on the Fix side,
+        // so the same name could reach several call sites; `Program::validate_ffi_signatures`
+        // rejects a program that reaches one name at more than one signature, so by here every
+        // call to a name agrees and the single declaration below fits them all.
         let ret_c_ty = ret_tycon.get_c_type(self.context);
         let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
             .iter()
@@ -1881,10 +1881,18 @@ impl<'c, 'm> Generator<'c, 'm> {
             Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
         };
 
-        // Declare the C function once; the first signature seen owns the module-level
-        // declaration.
+        // Declare the C function once; the first call to a name owns its declaration.
         let c_fun = match self.module.get_function(&fun_name) {
-            Some(fun) => fun,
+            Some(fun) => {
+                if self.config.develop_mode {
+                    assert!(
+                        fun.get_type() == fn_ty,
+                        "FFI function `{}` reused at a different signature; `validate_ffi_signatures` should have rejected this program",
+                        fun_name
+                    );
+                }
+                fun
+            }
             None => self.module.add_function(&fun_name, fn_ty, None),
         };
 
@@ -1894,23 +1902,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             .map(|obj| obj.extract_field(self, 0).into())
             .collect::<Vec<_>>();
 
-        // Call the C function directly when the declaration's type matches this site, and
-        // through its pointer at this site's type when they differ.
-        let call_name = format!("FFI_CALL({})", fun_name);
-        let ret_c_val = if c_fun.get_type() == fn_ty {
-            self.builder()
-                .build_call(c_fun, &args_vals, &call_name)
-                .unwrap()
-        } else {
-            self.builder()
-                .build_indirect_call(
-                    fn_ty,
-                    c_fun.as_global_value().as_pointer_value(),
-                    &args_vals,
-                    &call_name,
-                )
-                .unwrap()
-        };
+        // Call c function
+        let ret_c_val = self
+            .builder()
+            .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name))
+            .unwrap();
         match ret_c_val.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
