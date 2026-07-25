@@ -21,6 +21,7 @@ mod debug_info_tests {
     };
     use tempfile::TempDir;
 
+    // A source-level debugger a scenario can be driven under: gdb or lldb.
     #[derive(Clone, Copy)]
     enum Debugger {
         Gdb,
@@ -28,6 +29,7 @@ mod debug_info_tests {
     }
 
     impl Debugger {
+        // The debugger's executable name, as passed to `Command::new`.
         fn program(self) -> &'static str {
             match self {
                 Debugger::Gdb => "gdb",
@@ -107,6 +109,7 @@ mod debug_info_tests {
         )
     }
 
+    // Assert `out` contains `needle`; on failure, report the miss as a missing `what`.
     fn assert_contains(out: &str, needle: &str, what: &str) {
         assert!(
             out.contains(needle),
