@@ -132,11 +132,9 @@ fn run_one(
             continue;
         }
 
-        // Preconditions: make all local names unique so the capture destructuring
-        // `let FixCap { .. } = cap` introduces no name collision, then collapse variable-aliasing
-        // lets so self-references name the `fix` parameter directly.
-        let mut expr = unique_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default());
-        while let_elimination::run_on_expr_once(&mut expr, &arity_map) {}
+        // Normalize before lifting: uniquify locals for a collision-free capture destructure and
+        // collapse self-aliases; the arity map also inlines saturated global-lambda applications.
+        let expr = normalize_for_lift(sym.expr.as_ref().unwrap(), &arity_map);
 
         let mut visitor = FixDefunctionalizer::new(
             name.clone(),
@@ -339,7 +337,7 @@ impl ExprVisitor for FixDefunctionalizer {
                     None => {
                         // A global definition is raw here (unlike a local binding, recorded from the
                         // already-preprocessed enclosing symbol), so collapse its self-alias first.
-                        let lam = prepare_for_lift(&raw);
+                        let lam = normalize_for_lift(&raw, &Map::default());
                         let (g_ref, cap) = self.lift(&lam, state);
                         let shared = expr_app_typed(g_ref, vec![cap]);
                         self.global_fix_refs
@@ -457,14 +455,16 @@ impl ExprVisitor for FixDefunctionalizer {
     }
 }
 
-// Preprocess a lambda before lifting: make its local names unique, then collapse the
-// `let user_name = #param` aliases the elaborator inserts, so lifting can substitute the
-// self-parameter by name. A local binding is already in this form (it comes from the preprocessed
-// enclosing symbol); a raw global definition needs it.
-fn prepare_for_lift(lam: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let mut lam = unique_local_names::run_on_expr(lam, Set::default());
-    while let_elimination::run_on_expr_once(&mut lam, &Map::default()) {}
-    lam
+// Normalize an expression before its `fix` lambdas are lifted: make all local names unique, then run
+// let-elimination to a fixpoint. Uniquifying keeps the capture destructuring `let FixCap { .. } = cap`
+// collision-free; let-elimination collapses the `let user_name = #param` aliases the elaborator
+// inserts so each self-reference names the `fix` parameter directly, letting one substitution reach
+// them all. `arity_map` additionally lets let-elimination inline saturated global-lambda
+// applications; pass an empty map to collapse aliases only.
+fn normalize_for_lift(expr: &Arc<ExprNode>, arity_map: &Map<FullName, usize>) -> Arc<ExprNode> {
+    let mut expr = unique_local_names::run_on_expr(expr, Set::default());
+    while let_elimination::run_on_expr_once(&mut expr, arity_map) {}
+    expr
 }
 
 // The unboxed struct that carries a `fix` closure's captured environment across the direct self-call.
