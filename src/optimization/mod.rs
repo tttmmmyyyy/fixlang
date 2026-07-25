@@ -1,4 +1,5 @@
 mod application_inlining;
+mod capture_struct;
 mod dead_symbol_elimination;
 mod decapturing;
 mod defunctionalize_fix;

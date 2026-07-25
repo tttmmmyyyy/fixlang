@@ -28,19 +28,16 @@
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            var_var, Expr, ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local, Expr, ExprNode,
         },
         name::FullName,
-        pattern::PatternNode,
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        typedecl::Field,
-        types::{kind_star, type_fun, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
+        types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
-    constants::STD_NAME,
     misc::{Map, Set},
     optimization::{
+        capture_struct::{fresh_global_name, CaptureStruct},
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
@@ -225,19 +222,6 @@ impl FixDefunctionalizer {
         }
     }
 
-    // A fresh global name for a lifted function, derived from the current symbol.
-    fn fresh_global_name(&mut self) -> FullName {
-        loop {
-            let mut name = self.current_symbol.clone();
-            *name.name_as_mut() += &format!("#fix_defunct{}", self.counter);
-            self.counter += 1;
-            if !self.global_names.contains(&name) {
-                self.global_names.insert(name.clone());
-                return name;
-            }
-        }
-    }
-
     // Build the lifted global `G` for `fix(f)`, and return a reference to `G` (typed
     // `FixCap -> a -> b`) together with the capture-struct expression built from the current scope.
     // `G(cap)` then reconstructs the recursive value `fix(f) : a -> b`.
@@ -261,9 +245,14 @@ impl FixDefunctionalizer {
                 (n.clone(), ty)
             })
             .collect();
-        let cap = CaptureStruct::new(&cap_fields);
+        let cap = CaptureStruct::new("#FixCap", &cap_fields);
 
-        let func_name = self.fresh_global_name();
+        let func_name = fresh_global_name(
+            &self.current_symbol,
+            "#fix_defunct",
+            &mut self.counter,
+            &mut self.global_names,
+        );
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
@@ -473,72 +462,4 @@ fn normalize_for_lift(expr: &Arc<ExprNode>, arity_map: &Map<FullName, usize>) ->
     let mut expr = unique_local_names::run_on_expr(expr, Set::default());
     while let_elimination::run_on_expr_once(&mut expr, arity_map) {}
     expr
-}
-
-// The unboxed struct that carries a `fix` closure's captured environment across the direct self-call.
-struct CaptureStruct {
-    tycon: Arc<TyCon>,
-    tycon_info: TyConInfo,
-    ty: Arc<TypeNode>,
-    // Captured names paired with their types, in a stable order (the order `lambda_cap_names` gives).
-    fields: Vec<(FullName, Arc<TypeNode>)>,
-}
-
-impl CaptureStruct {
-    fn new(fields: &[(FullName, Arc<TypeNode>)]) -> Self {
-        let signature = fields
-            .iter()
-            .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
-            .collect::<Vec<_>>()
-            .join(",");
-        let tycon = Arc::new(TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("#FixCap<{}>", signature)),
-        });
-        let tycon_info = TyConInfo {
-            kind: kind_star(),
-            variant: TyConVariant::Struct,
-            is_unbox: true,
-            tyvars: vec![],
-            fields: fields
-                .iter()
-                .map(|(n, t)| Field::make(n.name.clone(), t.clone(), None))
-                .collect(),
-            source: None,
-            document: None,
-        };
-        let ty = type_tycon(&tycon);
-        Self {
-            tycon,
-            tycon_info,
-            ty,
-            fields: fields.to_vec(),
-        }
-    }
-
-    // Expression building the capture struct from the variables currently in scope.
-    fn struct_expr(&self) -> Arc<ExprNode> {
-        expr_make_struct(
-            self.tycon.clone(),
-            self.fields
-                .iter()
-                .map(|(n, t)| (n.to_string(), expr_var(n.clone(), None).set_type(t.clone())))
-                .collect(),
-        )
-        .set_type(self.ty.clone())
-    }
-
-    // Pattern destructuring the capture struct back into its original field names.
-    fn pattern(&self) -> Arc<PatternNode> {
-        let field_pats = self
-            .fields
-            .iter()
-            .map(|(n, t)| {
-                (
-                    n.to_string(),
-                    PatternNode::make_var(var_var(n.clone()), None).set_type(t.clone()),
-                )
-            })
-            .collect();
-        PatternNode::make_struct(self.tycon.clone(), field_pats).set_type(self.ty.clone())
-    }
 }
