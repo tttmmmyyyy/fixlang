@@ -2115,10 +2115,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         gc.build_object_phi(
-            &[
-                (realloced, succ_of_unique_bb),
-                (cloned, succ_of_shared_bb),
-            ],
+            &[(realloced, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
             "array_phi@set_capacity",
         )
     }

@@ -364,7 +364,8 @@ impl<'c> Object<'c> {
             let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             assert_eq!(field.leaves().len(), cnt);
-            self.data.splice(off..off + cnt, field.leaves().iter().copied());
+            self.data
+                .splice(off..off + cnt, field.leaves().iter().copied());
         } else {
             let val = field.value(gc);
             let struct_ty = self.struct_ty(gc);

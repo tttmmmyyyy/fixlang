@@ -578,7 +578,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Every arm produces a value of the match's declared result type, so the merge does too.
         // Checked under develop mode (the unit tests).
         if self.config.develop_mode {
-            assert_eq!(merged.ty, result.ty, "a match's merged value has its result type");
+            assert_eq!(
+                merged.ty, result.ty,
+                "a match's merged value has its result type"
+            );
         }
         Some(merged)
     }
@@ -708,9 +711,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .expect("an expression evaluated outside tail position yields a value");
             self.mark_global(obj.clone());
             let obj_val = obj.value(self);
-            self.builder()
-                .build_store(global_var_ptr, obj_val)
-                .unwrap();
+            self.builder().build_store(global_var_ptr, obj_val).unwrap();
         }
 
         if !self.config.threaded {
