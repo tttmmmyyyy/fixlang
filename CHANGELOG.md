@@ -18,6 +18,7 @@
 - Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
 - Added `Array::unsafe_set_bounds_unchecked`, which sets the element at a given index like `set` but omits the bounds check (the caller must ensure the index is in range). It is the counterpart of `unsafe_swap_bounds_unchecked`, for in-place write loops whose indices are already known to be in range.
 - Added `Array::borrow_elements` and `Array::mutate_elements` (with `_io` variants), which call a function with a pointer to the first element of an array's element buffer. `borrow_elements` borrows the array for read-only access; `mutate_elements` clones the array first if it is shared, for in-place writes. Use these for FFI that needs a raw pointer to an array's elements.
+- Added `Debug::assert_unique_array`, the `Array` counterpart of `Debug::assert_unique`: it asserts that an array's storage buffer is uniquely referenced (not shared), returns the array, and aborts otherwise. Use it for arrays, whose value holds the reference count in the storage buffer; `assert_unique` covers `Boxed` values.
 
 ### Changed
 
@@ -35,6 +36,7 @@
 
 #### Tool
 
+- Building with debug information (`-g`) no longer crashes on a program that uses a recursive type, such as `type Tree = box union { leaf : (), node : (Tree, Tree) };`.
 - Debug information (`-g`) records every `Array` as having 100 elements, since the actual element count is only determined at run time. The byte sizes recorded for the array debug types covered only a single element, contradicting that element count: gdb refused to display the elements with an "access outside bounds of object" error, and recent lldb displayed wrong values for all elements after the first. The byte sizes now cover the 100 elements, so debuggers display them, the first `<array size>` of which are the valid values. This also applies to the byte array inside a `String`.
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).

@@ -3020,6 +3020,48 @@ pub fn test95() {
     test_source(&source, Configuration::develop_mode());
 }
 
+#[test]
+pub fn test_assert_unique_array() {
+    // A fresh array's storage is uniquely referenced, so `Debug::assert_unique_array` returns it and
+    // the following in-place writes see a unique array.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(4, 0);
+                let arr = arr.assert_unique_array(|_| "should be unique").set(0, 10);
+                let arr = arr.assert_unique_array(|_| "should be unique").set(1, 20);
+                assert_eq(|_| "sum", arr.to_iter.sum, 30);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_assert_unique_array_aborts_when_shared() {
+    // Another live binding keeps a reference to the same storage, so `Debug::assert_unique_array`
+    // finds the array shared and aborts with its message.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(4, 7);
+                let shared = arr;
+                let arr = arr.assert_unique_array(|_| "arr must be unique");
+                assert_eq(|_| "unreachable", arr.@(0) + shared.@(0), 14);;
+                pure()
+            );
+        "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Array storage is not unique",
+    );
+}
+
 /// Verifies that a write in the `true` branch of an `unsafe_is_unique` still clones when the value
 /// is shared between the check and the branch.
 ///
