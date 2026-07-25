@@ -25,6 +25,12 @@ pub fn test_external_project_hashmap() {
 
 #[test]
 pub fn test_external_project_hashset() {
+    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
+        // range — recurse deep enough to overflow the stack. They pass once TCO is applied; skip
+        // them where it is off.
+        return;
+    }
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashset.git",
         "fixlang-hashset",
@@ -34,6 +40,12 @@ pub fn test_external_project_hashset() {
 
 #[test]
 pub fn test_external_project_random() {
+    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+        // `-O none` omits tail-call optimization, so this project's tests — which fold over a large
+        // range — recurse deep enough to overflow the stack. They pass once TCO is applied; skip
+        // them where it is off.
+        return;
+    }
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-random.git",
         "fixlang-random",
