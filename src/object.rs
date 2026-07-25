@@ -1844,6 +1844,8 @@ fn build_traverse<'c, 'm>(
     }
 }
 
+// Returns the debug type for how `ty` is embedded in a field: a pointer to the boxed layout when
+// `ty` is boxed, and the layout itself when it is unboxed.
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -1867,7 +1869,17 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
+// Returns the debug type describing `ty`'s in-memory layout, caching each type by name so recursive
+// types terminate.
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
+    let key = ty.to_string();
+    gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
+}
+
+// Builds the debug type describing `ty`'s in-memory layout by expanding its fields. The caching and
+// recursion-breaking that keep this finite on recursive types live in the wrapper
+// `ty_to_debug_struct_ty`.
+fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
     // Bool is a union type bit-identical to i8, but its debug type is `DW_ATE_BOOLEAN`. It is
