@@ -3,7 +3,6 @@ pub mod deprecation;
 pub mod equality;
 pub mod export_statement;
 pub mod expr;
-pub mod ffi_signature_check;
 pub mod import;
 pub mod inline_llvm;
 pub mod kind_scope;

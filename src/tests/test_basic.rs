@@ -9469,47 +9469,6 @@ main = (
 }
 
 #[test]
-pub fn test_ffi_conflicting_signatures_rejected() {
-    // One C function name reached through two incompatible signatures (a 32-bit integer versus a
-    // 64-bit float) cannot be represented by a single C declaration, so the compiler rejects it.
-    let source = r##"
-module Main;
-
-main : IO ();
-main = (
-    let a = FFI_CALL[CInt f(CInt), 0.c_int];
-    let b = FFI_CALL[CDouble f(CDouble), 0.c_double];
-    pure()
-);
-    "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "is called through more than one signature",
-    );
-}
-
-#[test]
-pub fn test_ffi_same_signature_up_to_signedness_is_accepted() {
-    // Reaching one C function name through Fix types that share a machine representation is
-    // allowed: `CInt` and `CUnsignedInt` are both a 32-bit integer to the C ABI, so a single
-    // declaration serves both.
-    let source = r##"
-module Main;
-
-main : IO ();
-main = (
-    let a = FFI_CALL[CInt abs(CInt), (0 - 3).c_int];
-    let b = FFI_CALL[CUnsignedInt abs(CUnsignedInt), 5.c_unsigned_int];
-    eval a;
-    eval b;
-    pure()
-);
-    "##;
-    test_source(&source, Configuration::develop_mode());
-}
-
-#[test]
 pub fn test_eval_debug_println_is_not_eliminated() {
     // `eval debug_println(...)` and `debug_eprintln(...)` evaluate their argument for its side
     // effect at every optimization level; the print must not be dropped as a discarded pure

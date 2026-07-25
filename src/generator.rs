@@ -1860,40 +1860,33 @@ impl<'c, 'm> Generator<'c, 'm> {
         arg_objs: Vec<Object<'c>>,
         is_io: bool,
     ) -> Object<'c> {
-        // The C function type this call site demands. A C name carries no type on the Fix side,
-        // so the same name could reach several call sites; `Program::validate_ffi_signatures`
-        // rejects a program that reaches one name at more than one signature, so by here every
-        // call to a name agrees and the single declaration below fits them all.
-        let ret_c_ty = ret_tycon.get_c_type(self.context);
-        let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
-            .iter()
-            .map(|param_ty| {
-                let c_type = param_ty.get_c_type(self.context);
-                if c_type.is_none() {
-                    panic_with_msg_src("Cannot use `()` as a parameter type of C function.", source)
-                }
-                c_type.unwrap().into()
-            })
-            .collect::<Vec<_>>();
-        let fn_ty = match ret_c_ty {
-            // Void case.
-            None => self.context.void_type().fn_type(&parm_c_tys, is_var_args),
-            Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
-        };
-
-        // Declare the C function once; the first call to a name owns its declaration.
+        // Get c function
         let c_fun = match self.module.get_function(&fun_name) {
-            Some(fun) => {
-                if self.config.develop_mode {
-                    assert!(
-                        fun.get_type() == fn_ty,
-                        "FFI function `{}` reused at a different signature; `validate_ffi_signatures` should have rejected this program",
-                        fun_name
-                    );
-                }
-                fun
+            Some(fun) => fun,
+            None => {
+                let ret_c_ty = ret_tycon.get_c_type(self.context);
+                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
+                    .iter()
+                    .map(|param_ty| {
+                        let c_type = param_ty.get_c_type(self.context);
+                        if c_type.is_none() {
+                            panic_with_msg_src(
+                                "Cannot use `()` as a parameter type of C function.",
+                                source,
+                            )
+                        }
+                        c_type.unwrap().into()
+                    })
+                    .collect::<Vec<_>>();
+                let fn_ty = match ret_c_ty {
+                    None => {
+                        // Void case.
+                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
+                    }
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
+                };
+                self.module.add_function(&fun_name, fn_ty, None)
             }
-            None => self.module.add_function(&fun_name, fn_ty, None),
         };
 
         // Get argment values
