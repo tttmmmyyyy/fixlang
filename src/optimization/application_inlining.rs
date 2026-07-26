@@ -72,8 +72,8 @@ pub fn run_on_expr(mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
 }
 
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
-    let mut optimizer = AppInliner {};
-    let res = optimizer.traverse(expr);
+    let mut inliner = AppInliner {};
+    let res = inliner.traverse(expr);
     *expr = res.expr;
     res.changed
 }
