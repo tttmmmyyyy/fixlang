@@ -1,8 +1,8 @@
 //! The ownership and consume model of the RC IR: which construct consumes which reference, which
 //! binding merely aliases one, and how a value's references are grouped into reference-counting
-//! units. Reference-count insertion, borrow-ification, cancellation, and the RC IR validator all
-//! read their answers here, so they agree on one model; `dev-docs/2026-06-28-unique-check-elim/
-//! rc-ownership-model.md` is its written specification.
+//! units. Every pass that reasons about reference counting reads its answers here, so they all work
+//! from one model; `dev-docs/2026-06-28-unique-check-elim/rc-ownership-model.md` is its written
+//! specification.
 //!
 //! Three vocabularies meet here. A **boxed leaf** is one reference a value holds
 //! (`boxed_leaf_paths`); consumption and provenance are stated over leaves. A **reference-counting
@@ -611,6 +611,8 @@ pub(crate) fn acted_unit_keys(
         .collect()
 }
 
+/// The unit key of an object identity: the root it names, with its path truncated to the
+/// reference-counting unit that holds it.
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
     let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.

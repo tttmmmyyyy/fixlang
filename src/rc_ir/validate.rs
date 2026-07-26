@@ -194,7 +194,10 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
 struct Validator<'a> {
     stage: &'a str,
     globals: &'a Set<FullName>,
+    /// The program being checked, in which a closure's target function must be defined.
     prog: &'a RcProgram,
+    /// The capture layout each function's projections read (`capture_layouts`), which a closure
+    /// value targeting that function must store.
     capture_layouts: &'a Map<FuncRef, Vec<Arc<TypeNode>>>,
     type_env: &'a TypeEnv,
     location: String,
@@ -203,6 +206,8 @@ struct Validator<'a> {
 }
 
 impl<'a> Validator<'a> {
+    /// A validator of one function body or global initializer, which `location` names in a failure
+    /// message.
     fn new(
         stage: &'a str,
         globals: &'a Set<FullName>,
@@ -449,11 +454,18 @@ fn union_keys(vars: &VarTable, type_env: &TypeEnv) -> Set<VarPath> {
 
 /// The reference-count walk of one function body or global initializer.
 struct BalanceWalk<'a> {
+    /// The pass whose output is being walked, named in a failure message.
     stage: &'a str,
+    /// The function or global whose body is being walked, named in a failure message.
     location: String,
+    /// How each variable of this body is bound, which resolves a leaf to the object it belongs to.
     vars: &'a VarTable,
+    /// The program being checked, in which a call's callee is looked up for its parameters.
     prog: &'a RcProgram,
+    /// The parameter/capture units every function of the program owns, which decides both what this
+    /// body starts holding and which argument positions its calls consume.
     owned_units: &'a Set<VarPath>,
+    /// The type definitions, which decide where a value's units and boxed leaves sit.
     type_env: &'a TypeEnv,
     /// The parameter/capture units this version borrows: their references belong to the caller, so
     /// they are not counted here and driving one to zero does not end a value's life.
@@ -465,8 +477,8 @@ struct BalanceWalk<'a> {
 }
 
 /// The reference count of each object unit at a point of the walk. The key is the unit of the object
-/// a reference belongs to (`unit_key`), not the binding that names it: `cancel` pairs a retain with a
-/// release across bindings, so per-binding counting breaks after it.
+/// a reference belongs to (`unit_key`): `cancel` pairs a retain with a release across bindings, so
+/// per-binding counting breaks after it.
 #[derive(Clone, Default)]
 struct Balance {
     /// The live count of each unit. A unit at zero is absent, so two states compare equal exactly
@@ -498,6 +510,8 @@ enum Terminal<'a> {
 }
 
 impl<'a> BalanceWalk<'a> {
+    /// A walk of one body, with the unboxed-union keys it leaves out of the balance collected up
+    /// front.
     fn new(
         stage: &'a str,
         location: String,
@@ -537,10 +551,15 @@ impl<'a> BalanceWalk<'a> {
         entry
     }
 
+    /// Walk a node forward from the counts `bal` holds at its entry, and return the counts at its
+    /// exit. `terminal` says what the `Ret` closing this node does with its value, so a match arm's
+    /// exit can be compared against its siblings'.
     fn walk(&mut self, node: &RcExprNode, bal: Balance, terminal: Terminal) -> Balance {
         grow_stack(|| self.walk_inner(node, bal, terminal))
     }
 
+    /// One node of the walk: apply what the node itself holds and disposes of, then continue into
+    /// its successor.
     fn walk_inner(&mut self, node: &RcExprNode, mut bal: Balance, terminal: Terminal) -> Balance {
         if node.source.is_some() {
             self.source = node.source.clone();
@@ -714,6 +733,7 @@ impl<'a> BalanceWalk<'a> {
         }
     }
 
+    /// Count one more reference held of a unit. A unit outside the balance (`is_counted`) is ignored.
     fn inc(&self, bal: &mut Balance, key: VarPath) {
         if !self.is_counted(&key) {
             return;
@@ -721,6 +741,8 @@ impl<'a> BalanceWalk<'a> {
         *bal.counts.entry(key).or_default() += 1;
     }
 
+    /// Count one reference of a unit disposed of, failing if the body holds none. Its last reference
+    /// ends the value's life, so what follows may no longer read it.
     fn dec(&self, bal: &mut Balance, key: VarPath) {
         if !self.is_counted(&key) {
             return;
@@ -746,6 +768,7 @@ impl<'a> BalanceWalk<'a> {
         }
     }
 
+    /// The key the reference a leaf of this body names is counted under.
     fn unit_key(&self, var: &FullName, path: &FieldPath) -> VarPath {
         unit_key(self.vars, self.type_env, var, path)
     }
@@ -807,6 +830,8 @@ impl<'a> BalanceWalk<'a> {
     }
 }
 
+/// A unit key, rendered for a failure message: the variable its object roots at, and the path of the
+/// unit within it.
 fn render_key((root, unit): &VarPath) -> String {
     format!("`{}`{:?}", root.to_string(), unit)
 }
@@ -842,6 +867,7 @@ mod tests {
         var_of(name, make_i64_ty())
     }
 
+    /// A local variable of the given type, carrying no source location or debug name.
     fn var_of(name: &str, ty: Arc<TypeNode>) -> RcVar {
         RcVar {
             name: FullName::local(name),
@@ -914,7 +940,8 @@ mod tests {
         check_with_globals(body, params, &[]);
     }
 
-    /// Check `body` as `check` does, with `globals` as the program's global names.
+    /// Check `body` as a function whose only bindings in scope on entry are `params`, with `globals`
+    /// as the program's global names.
     fn check_with_globals(body: &RcExprNode, params: &[&str], globals: &[&str]) {
         let globals: Set<FullName> = globals.iter().map(|g| FullName::local(g)).collect();
         let type_env = type_env();
@@ -1101,6 +1128,8 @@ mod tests {
         )
     }
 
+    /// A closure value storing exactly what its target function projects passes: the two records of
+    /// the one capture layout agree.
     #[test]
     fn accepts_a_closure_whose_captures_match_the_projected_layout() {
         let capture = var_of("cap", make_dynamic_object_ty());
@@ -1110,6 +1139,8 @@ mod tests {
         ]);
     }
 
+    /// A capture stored at a type the target does not project is caught, so a rewrite that changes
+    /// the layout at one end alone cannot escape.
     #[test]
     #[should_panic(expected = "closure stores captures")]
     fn rejects_a_closure_whose_captures_differ_from_the_projected_layout() {
@@ -1121,6 +1152,8 @@ mod tests {
         ]);
     }
 
+    /// A projection reading a variable that is not its function's capture parameter is caught: it
+    /// would read a capture object the function was never handed.
     #[test]
     #[should_panic(expected = "is not the capture parameter")]
     fn rejects_a_capture_projection_of_another_variable() {
@@ -1128,6 +1161,8 @@ mod tests {
         validate_prog(vec![projecting_func(&var("p"), 0, vec![make_i64_ty()])]);
     }
 
+    /// A projection naming a slot one past the layout it carries is caught, so a capture object is
+    /// never read out of range.
     #[test]
     #[should_panic(expected = "of a 1-slot capture")]
     fn rejects_a_capture_projection_past_the_layout() {
@@ -1160,6 +1195,7 @@ mod tests {
         node(RcExpr::Release(boxed_var("b"), vec![], RcState::Unknown, k))
     }
 
+    /// A body that disposes of the one reference its owned parameter arrives with balances.
     #[test]
     fn accepts_a_disposed_parameter() {
         // release b; ret p
@@ -1167,6 +1203,8 @@ mod tests {
         validate_prog(vec![boxed_param_func(body, Set::default())]);
     }
 
+    /// A second disposal of a parameter that arrived holding one reference is caught at the release
+    /// that drives its count below zero.
     #[test]
     #[should_panic(expected = "more often than it holds it")]
     fn rejects_a_reference_disposed_of_twice() {
@@ -1175,6 +1213,8 @@ mod tests {
         validate_prog(vec![boxed_param_func(body, Set::default())]);
     }
 
+    /// A body that returns while an owned parameter's reference is still counted leaks it, which the
+    /// exit check catches.
     #[test]
     #[should_panic(expected = "returns holding references it never disposes of")]
     fn rejects_a_return_leaving_a_reference_undisposed() {
@@ -1185,6 +1225,8 @@ mod tests {
         )]);
     }
 
+    /// A borrowed parameter arrives holding nothing, so a body that reads it and returns balances.
+    /// The `borrowed_units` annotation is what separates this from a leak.
     #[test]
     fn accepts_a_borrowed_parameter_left_undisposed() {
         // let x = b; ret p   (a borrowed parameter's reference belongs to the caller)
@@ -1197,6 +1239,8 @@ mod tests {
         validate_prog(vec![boxed_param_func(body, borrowed)]);
     }
 
+    /// Reading a value whose last reference is already disposed of is caught at the read, even
+    /// though the counting itself balances.
     #[test]
     #[should_panic(expected = "was already consumed")]
     fn rejects_a_read_after_the_last_reference_is_disposed() {
@@ -1209,6 +1253,8 @@ mod tests {
         validate_prog(vec![boxed_param_func(body, Set::default())]);
     }
 
+    /// Arms that leave different counts are caught at the match, where the disagreement is: the code
+    /// after it leaks on one path and frees twice on the other.
     #[test]
     #[should_panic(expected = "match arms leave different reference counts")]
     fn rejects_match_arms_leaving_different_reference_counts() {

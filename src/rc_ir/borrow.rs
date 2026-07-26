@@ -848,10 +848,14 @@ struct CancelAnalysis<'a> {
 }
 
 impl<'a> CancelAnalysis<'a> {
+    /// The unit key a leaf of this function is counted under, which a retain and a release pair on
+    /// (`ownership::unit_key`).
     fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
         unit_key(self.vars, self.type_env, var, path)
     }
 
+    /// Every unit an operation on a leaf of this function acts on: a pending retain on any of them
+    /// is load-bearing across the operation (`ownership::acted_unit_keys`).
     fn acted_unit_keys(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
         acted_unit_keys(self.vars, self.type_env, var, path)
     }

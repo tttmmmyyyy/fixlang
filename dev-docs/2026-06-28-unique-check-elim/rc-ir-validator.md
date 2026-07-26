@@ -34,7 +34,7 @@ insert_rc / split_rc_units / borrow_ify / cancel / specialize。
 グローバル値）に解決されること。match アームの payload はそのアームの本体でだけスコープに入る
 （兄弟アームの間では外れる）。
 
-さらに、型が表しているだけで誰も強制していなかった構造の不変条件:
+さらに、型が示すだけで型検査では強制されない構造の不変条件:
 
 - `Retain`/`Release` の path が `rc_units` の要素の上（またはちょうどその位置）で止まること。
 - capture パラメータが closure ABI のときちょうど存在すること。
@@ -62,7 +62,7 @@ retain/release を対消滅させるため成立しない。
   コンテナ全消費、unbox は名前の付かないフィールドのみ）で数える。同じ unit に属する複数の leaf
   （unbox union の各 variant）は 1 回だけ数える。
 - **`Match`**: 各アームを分岐前状態のコピーから走査し、**全アームの出口カウントが一致**すること。
-  アームの `Ret` は消費ではなく match binding への**移動**（キーが同じなら何もしない）。
+  アームの `Ret` は match binding への**移動**として数える（キーが同じなら増減なし）。
 - **use-after-consume**: カウンタが 1 -> 0 に落ちたキーを dead とし、以降の値としての読み出し
   （`Ret` / オペランド / match の scrutinee / `Destructure` のコンテナ / `Eval`。`Retain`/`Release`
   ノードへの出現は読み出しではない）を検出する。borrowed キーは dead にならない。
