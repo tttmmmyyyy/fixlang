@@ -6,8 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::configuration::{Configuration, FixOptimizationLevel};
-    use crate::env_vars;
+    use crate::configuration::Configuration;
     use crate::tests::test_util::{fix_command, test_source};
     use std::fs::{self, File};
     use std::process::{Command, Stdio};
@@ -63,14 +62,12 @@ mod tests {
     /// Builds and runs a global function of `ARITY` parameters, failing if the build does not
     /// finish within `TIMEOUT`. The body weights each parameter by its position, so the result also
     /// pins the order the arguments arrive in.
+    ///
+    /// The time bound catches the doubling at `Basic` and above, where uncurrying eta-expands a
+    /// global into a function pointer per arity. At `None` uncurrying is off and the bound is slack,
+    /// while building and running a function of this many parameters is a check of its own.
     #[test]
     fn test_many_parameter_function_compiles_in_reasonable_time() {
-        if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
-            // Uncurrying, which eta-expands a global into a function pointer per arity, runs at
-            // `Basic` and above; at `None` the program compiles without reaching this code path.
-            return;
-        }
-
         let params = (0..ARITY)
             .map(|i| format!("x{}", i))
             .collect::<Vec<_>>()
