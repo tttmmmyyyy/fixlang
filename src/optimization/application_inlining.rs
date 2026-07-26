@@ -36,7 +36,6 @@ let x = {expr1} in {expr0}
 */
 
 use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{
@@ -50,7 +49,6 @@ use crate::{
     },
     misc::Set,
 };
-
 use super::rename::generate_new_names;
 
 #[allow(dead_code)]
