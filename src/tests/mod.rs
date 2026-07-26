@@ -1,4 +1,5 @@
 mod test_abs_path_dep_hash;
+mod test_application_inlining;
 mod test_array_bounds_check;
 mod test_array_builder;
 mod test_array_rmw;
@@ -26,7 +27,6 @@ mod test_hole_priority;
 mod test_import;
 mod test_index_syntax;
 mod test_lsp;
-mod test_many_arguments;
 mod test_match_result_alias;
 mod test_match_return_outer;
 mod test_memcheck;
