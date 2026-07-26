@@ -9,6 +9,7 @@ mod test_basic;
 mod test_bool_union;
 mod test_check;
 mod test_debug_info;
+mod test_defunctionalize_fix;
 mod test_dependencies;
 mod test_deprecation;
 mod test_docs;

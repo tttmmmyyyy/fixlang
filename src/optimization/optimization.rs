@@ -1,13 +1,12 @@
+use super::{
+    dead_symbol_elimination, decapturing, defunctionalize_fix, inline, remove_tyanno,
+    simplify_symbol_names, uncurry, unwrap_newtype,
+};
 use crate::{
     ast::program::Program,
     configuration::Configuration,
     optimization::{inline_local, optimize_act, remove_hktvs},
     tool::stopwatch::StopWatch,
-};
-
-use super::{
-    dead_symbol_elimination, decapturing, inline, remove_tyanno, simplify_symbol_names, uncurry,
-    unwrap_newtype,
 };
 
 pub fn run(prg: &mut Program, config: &Configuration) {
@@ -64,6 +63,19 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         unwrap_newtype::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.unwrap_newtype", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
+    }
+
+    // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
+    // inlining and decapturing, which would otherwise rewrite the `fix` argument out of the literal
+    // lambda form this pass matches; uncurrying (later) then turns each self-call into a direct call
+    // that LLVM folds into a loop.
+    if config.enable_defunctionalize_fix() {
+        let _sw = StopWatch::new("defunctionalize_fix::run", config.show_build_times);
+        defunctionalize_fix::run(prg, config.show_build_times);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.defunctionalize_fix", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }
