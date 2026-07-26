@@ -8,6 +8,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::fix_command;
+    use std::fs;
     use tempfile::TempDir;
 
     // Deep enough to need the enlarged compiler-thread stack, shallow enough to
@@ -25,7 +26,7 @@ mod integration_tests {
 
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let src_path = temp_dir.path().join("deep.fix");
-        std::fs::write(&src_path, source).expect("Failed to write source file");
+        fs::write(&src_path, source).expect("Failed to write source file");
 
         let output = fix_command()
             .arg("build")
