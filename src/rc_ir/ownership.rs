@@ -211,6 +211,9 @@ pub(crate) fn origin(
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
+        // A name the table does not bind is a global — a function a direct call names, or a global
+        // value read as an atom — which this function's variables alias nothing of. So it is its own
+        // origin, as a parameter and a producer are.
         None | Some(Binding::Param) | Some(Binding::Producer) => here(),
         Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
         Some(Binding::Join(arm_results)) => {

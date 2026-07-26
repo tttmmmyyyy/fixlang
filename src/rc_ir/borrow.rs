@@ -555,6 +555,9 @@ impl<'a> RewriteCtx<'a> {
                 self.owned_units
                     .contains(&(r.clone(), truncate_to_unit(rty, u, self.type_env)))
             }),
+            // A root this version takes no parameter for is a producer, or a global — whose reachable
+            // graph is refcount-exempt. Either way the caller lent no reference of it, so the value
+            // here is this version's.
             None => true,
         }
     }
@@ -893,6 +896,9 @@ impl<'a> CancelAnalysis<'a> {
                         self.consume_unit(&mut pending, other);
                     }
                 }
+                // A release with nothing pending for `o` disposes of a reference this walk did not
+                // add — an owned parameter, or a value produced here — so it un-bumps no retain and
+                // pairs with nothing.
                 if let Some(stack) = pending.get_mut(&o) {
                     // A stack kept in `pending` is never empty (emptied stacks are removed below), so a
                     // pending retain to pair with is always present.
