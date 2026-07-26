@@ -77,6 +77,7 @@
         - [Managing External Resources in Fix](#managing-external-resources-in-fix)
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
+        - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2248,18 +2249,20 @@ By converting a boxed type value to a pointer, you can pass Fix values to a fore
 Then, by exporting a Fix function that applies `boxed_from_retained_ptr` to the passed pointer and uses the resulting value to perform some processing,
 you can enable the foreign language to use Fix values.
 
+`Array` is an unboxed type, so wrap an array in a boxed struct such as `Std::Box` to hand it over as a retained pointer.
+
 ```
 create_fix_array : IO Ptr;
 create_fix_array = (
-    let arr = [1,2,3,4,5];
+    let arr = Box::make([1,2,3,4,5]);
     arr.boxed_to_retained_ptr
 );
 FFI_EXPORT[create_fix_array, create_fix_array]; // void* create_fix_array(void); can be called from C.
 
 get_fix_array_element : Ptr -> I64 -> IO I64;
 get_fix_array_element = |ptr, idx| (
-    let arr : Array I64 = *boxed_from_retained_ptr(ptr);
-    pure $ arr.@(idx)
+    let arr : Box (Array I64) = *boxed_from_retained_ptr(ptr);
+    pure $ arr.@value.@(idx)
 );
 FFI_EXPORT[get_fix_array_element, get_fix_array_element]; // int64_t get_fix_array_element(void* ptr, int64_t idx); can be called from C.
 ```
@@ -2342,6 +2345,38 @@ If you want to access to the fields `x` and `y` of Fix's object `vec` from C sid
 NOTE: 
 At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 
 In a future version, the situation may be changed. I may introduce a specifier (suppose it is written as `expr_c`) for a programmer to assure that the layout is equivalent to C, and the struct layout with no `expr_c` specifier may be optimized (e.g., reorder field ordering).
+
+### Accessing elements of Fix's array from C
+
+An array keeps its elements in a heap buffer, and the following functions hand a pointer to the first element of that buffer to a callback.
+
+- `Std::Array::borrow_elements : (Ptr -> b) -> Array a -> b` borrows the array for read-only access.
+- `Std::Array::mutate_elements : (Ptr -> IO b) -> Array a -> (Array a, b)` clones the array first if it is shared, so the callback may write through the pointer. It returns the mutated array paired with the callback's result.
+- `Std::Array::mutate_elements_io` is the variant to use when you are already in an `IO` context.
+
+The pointer is valid only while the callback runs, so do not store it.
+
+```
+// Overwrite the elements of a byte array with `c`, using C's `memset`.
+fill_bytes : U8 -> Array U8 -> Array U8;
+fill_bytes = |c, arr| (
+    let n = arr.@size.c_size_t;
+    let (arr, _) = arr.mutate_elements(|p|
+        pure $ FFI_CALL[Ptr memset(Ptr, CInt, CSizeT), p, c.c_int, n]
+    );
+    arr
+);
+
+// Tell whether a byte array contains `c`, using C's `memchr` on a read-only borrow.
+contains_byte : U8 -> Array U8 -> Bool;
+contains_byte = |c, arr| (
+    let n = arr.@size.c_size_t;
+    let found = arr.borrow_elements(|p|
+        FFI_CALL[Ptr memchr(Ptr, CInt, CSizeT), p, c.c_int, n]
+    );
+    found != nullptr
+);
+```
 
 ## `eval` syntax
 

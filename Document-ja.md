@@ -77,6 +77,7 @@
         - [Fixで外部リソースを管理する](#fixで外部リソースを管理する)
         - [外部言語でFixのボックス型の値を管理する](#外部言語でfixのボックス型の値を管理する)
         - [CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)
+        - [CからFixの配列の要素にアクセスする](#cからfixの配列の要素にアクセスする)
     - [`eval`構文](#eval構文)
     - [身代わりパターン](#身代わりパターン)
     - [演算子と構文の優先度](#演算子と構文の優先度)
@@ -2361,18 +2362,20 @@ Fixコンパイラは、`Destructor a`をヒープメモリから解放する際
 そして、渡されたポインタに`boxed_from_retained_ptr`を適用し、得た値を使って何らかの処理をするようなFixの関数を外部言語にエクスポートすることで、
 外部言語からFixの値を利用することができるようになります。
 
+`Array`はアンボックス型なので、配列をretainedポインタとして渡すには、`Std::Box`のようなボックス構造体に包みます。
+
 ```
 create_fix_array : IO Ptr;
 create_fix_array = (
-    let arr = [1,2,3,4,5];
+    let arr = Box::make([1,2,3,4,5]);
     arr.boxed_to_retained_ptr
 );
 FFI_EXPORT[create_fix_array, create_fix_array]; // void* create_fix_array(void); がC言語から呼び出せるようになります。
 
 get_fix_array_element : Ptr -> I64 -> IO I64;
 get_fix_array_element = |ptr, idx| (
-    let arr : Array I64 = *boxed_from_retained_ptr(ptr);
-    pure $ arr.@(idx)
+    let arr : Box (Array I64) = *boxed_from_retained_ptr(ptr);
+    pure $ arr.@value.@(idx)
 );
 FFI_EXPORT[get_fix_array_element, get_fix_array_element]; // int64_t get_fix_array_element(void* ptr, int64_t idx); がC言語から呼び出せるようになります。
 ```
@@ -2455,6 +2458,38 @@ Fixのオブジェクト`vec`のフィールド`x`および`y`にC側からア�
 注意：
 少なくとも現在のFixのバージョンでは、Fixの構造体のメモリレイアウトはLLVMのデフォルトの動作によって決定されており、私の知る限りではCの構造体のメモリレイアウトと同等です。
 将来のバージョンでは状況が変わる可能性があります。プログラマーがレイアウトがCと同等であることを保証するための指定子（仮に`expr_c`と記述されるとします）を導入し、`expr_c`指定子のない構造体レイアウトは最適化される（例：フィールド順序の再配置）可能性があります。
+
+### CからFixの配列の要素にアクセスする
+
+配列は要素をヒープ上のバッファに保持しており、以下の関数がそのバッファの先頭要素へのポインタをコールバックに渡します。
+
+- `Std::Array::borrow_elements : (Ptr -> b) -> Array a -> b`は、配列を読み取り専用で借用します。
+- `Std::Array::mutate_elements : (Ptr -> IO b) -> Array a -> (Array a, b)`は、配列が共有されていれば先に複製するので、コールバックはポインタを通じて書き込めます。変更後の配列とコールバックの結果の組を返します。
+- `Std::Array::mutate_elements_io`は、既に`IO`コンテキストにいる場合に使う版です。
+
+ポインタが有効なのはコールバックの実行中だけなので、保存してはいけません。
+
+```
+// C言語の`memset`を使って、バイト配列の要素を`c`で埋めます。
+fill_bytes : U8 -> Array U8 -> Array U8;
+fill_bytes = |c, arr| (
+    let n = arr.@size.c_size_t;
+    let (arr, _) = arr.mutate_elements(|p|
+        pure $ FFI_CALL[Ptr memset(Ptr, CInt, CSizeT), p, c.c_int, n]
+    );
+    arr
+);
+
+// C言語の`memchr`を読み取り専用の借用に対して使い、バイト配列が`c`を含むかを判定します。
+contains_byte : U8 -> Array U8 -> Bool;
+contains_byte = |c, arr| (
+    let n = arr.@size.c_size_t;
+    let found = arr.borrow_elements(|p|
+        FFI_CALL[Ptr memchr(Ptr, CInt, CSizeT), p, c.c_int, n]
+    );
+    found != nullptr
+);
+```
 
 ## `eval`構文
 
