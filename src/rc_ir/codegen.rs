@@ -16,9 +16,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{
-    create_obj, lambda_function_type, lambda_return_leaf_types, ObjectFieldType,
-};
+use crate::object::{create_obj, lambda_function_type, lambda_return_leaf_types, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
