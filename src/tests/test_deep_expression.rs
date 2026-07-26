@@ -11,8 +11,9 @@ mod integration_tests {
     use std::fs;
     use tempfile::TempDir;
 
-    // Deep enough to need the enlarged compiler-thread stack, shallow enough to
-    // keep the `-O max` build time modest.
+    // 300 exceeds the few-hundred nesting depth at which the compiler overflows a
+    // worker thread without the enlarged stack, so this build fails if the fix
+    // regresses; it stays shallow enough to keep the `-O max` build time modest.
     const DEPTH: usize = 300;
 
     #[test]
