@@ -43,11 +43,12 @@ guarantees-tail-calls convention account for all of it on x86-64:
   tail call may.
 
 Restricting `tailcc` to the functions whose arguments exceed the argument registers would spare
-everything else the first two costs, but a tail call between two different conventions becomes an
-ordinary call in **both** directions (measured with `llc -O2`; `IsEligibleForTailCallOptimization`
-requires the conventions to match once either side guarantees tail calls). A narrow function
-tail-calling a wide one, which is what a monadic chain is made of, would stop being a jump. The
-convention has to be uniform across everything reachable by a tail call.
+everything else the callee-popped argument area and the prologue copies of incoming stack arguments,
+but a tail call between two different conventions becomes an ordinary call in **both** directions
+(measured with `llc -O2`; `IsEligibleForTailCallOptimization` requires the conventions to match once
+either side guarantees tail calls). A narrow function tail-calling a wide one, which is what a
+monadic chain is made of, would stop being a jump. The convention has to be uniform across
+everything reachable by a tail call.
 
 ## 476f40aa1ef55bf5f0880495bd2000860ad13e13
 

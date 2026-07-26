@@ -547,8 +547,8 @@ impl Configuration {
     /// `return_abi`): it also removes the closure the `fix` combinator builds on every iteration,
     /// with its heap allocation and reference-count updates. The `sum_by_fix` benchmark at `Basic`
     /// measures 47M instructions with the pass against 686M without, at equal compile time, which is
-    /// why it runs from `Basic` up rather than at `Max` alone. Uncurrying, which flattens the
-    /// produced self-call, shares that threshold.
+    /// why it runs from `Basic` up. Uncurrying, which flattens the produced self-call, shares that
+    /// threshold.
     pub fn enable_defunctionalize_fix(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }

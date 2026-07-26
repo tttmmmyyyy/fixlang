@@ -10,8 +10,8 @@ use crate::{configuration::Configuration, tests::test_util::test_source};
 // Each test below drives one such loop a million iterations deep and checks only that it finishes.
 // The outcome is binary — completes or overflows the stack — so machine load does not affect it.
 // They run at every optimization level: whether a tail call becomes a jump is decided by the
-// backend, which does it at `-O0` too, and by the `tail` marker, which code generation attaches
-// unless debug information is being generated.
+// backend, which does it at `-O0` too, and by the `tail` marker, which code generation attaches to
+// every call in tail position.
 //
 // AArch64 returns up to eight leaves in registers, which covers the four-leaf shapes; the shape that
 // exercises the return rule on every target is

@@ -37,12 +37,11 @@ const CCC: u32 = 0;
 
 /// The convention Fix lambdas are defined and called with on `triple`.
 ///
-/// Every Fix lambda is defined with it (`declare_lambda_function`, `declare_rc_function`) and called
-/// with it (`apply_lambda`), and nothing else uses it: `main`, the exported wrappers, the runtime,
-/// the FFI declarations, the traversers, the reference-counting helpers and the global accessors all
-/// keep the C convention. A pointer type carries no convention, so a definition and a call that
-/// disagree corrupt silently instead of failing to verify — which is why this reads the module's
-/// target rather than anything that could differ between separately compiled units.
+/// It applies to Fix lambdas alone: `main`, the exported wrappers, the runtime, the FFI
+/// declarations, the traversers, the reference-counting helpers and the global accessors all keep
+/// the C convention. A pointer type carries no convention, so a definition and a call that disagree
+/// pass the verifier and corrupt silently, which is why the decision follows the module's target
+/// alone: separately compiled units then agree on it.
 ///
 /// x86-64 needs `tailcc` for the argument limit described above. AArch64 keeps the C convention: its
 /// eight argument registers hold more, and its sibcall rewrites the stack arguments it reuses, so a
@@ -66,7 +65,9 @@ fn architecture_of_target(triple: &str) -> &str {
 /// How many registers of each class a target returns a value in.
 #[derive(Clone, Copy)]
 pub struct ReturnRegisters {
+    /// Registers holding the integer and pointer leaves of a return value.
     integer: usize,
+    /// Registers holding the floating-point leaves of a return value.
     float: usize,
 }
 
@@ -103,7 +104,9 @@ pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
 /// The registers of each class that returning a value costs.
 #[derive(Clone, Copy, Default)]
 struct RegisterDemand {
+    /// Integer and pointer leaves, one register each.
     integer: usize,
+    /// Floating-point leaves, one register each.
     float: usize,
     /// Leaves whose register class this module does not model. Any of them sends the value through
     /// the out-pointer, since the alternative is to guess.
@@ -111,6 +114,7 @@ struct RegisterDemand {
 }
 
 impl RegisterDemand {
+    /// The demand of returning both values side by side, class by class.
     fn plus(self, other: RegisterDemand) -> RegisterDemand {
         RegisterDemand {
             integer: self.integer + other.integer,
@@ -119,6 +123,7 @@ impl RegisterDemand {
         }
     }
 
+    /// The demand of returning `n` values of this shape, as an array of them does.
     fn times(self, n: usize) -> RegisterDemand {
         RegisterDemand {
             integer: self.integer * n,
