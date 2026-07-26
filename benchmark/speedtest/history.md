@@ -2,6 +2,47 @@
 
 Newer is above.
 
+## 12165c4494bf4cc806f72ec6475cc146b2b36532
+
+The `wide-return-tail-call` branch (PR #109), which keeps a Fix tail call compiled as a jump in the
+two cases where the backend used to give up on one: a return value wider than the return registers
+(the value now travels through an out-pointer parameter) and a tail call carrying more arguments than
+the argument registers (every Fix lambda is now `tailcc`). Measured against the previous row
+`476f40aa`.
+
+**mandelbrot and mandelbrot_fold drop 53.94%**, index_syntax 3.33% and cp_lib_conv_zp 1.99%. The 41
+cases together go from 16,386,181,734 to 15,866,111,410 instructions, **-3.17%**. Every win comes from
+the out-pointer half: passing the pointer as an ordinary parameter from the start of the IR lets SROA
+delete the buffer wherever the callee inlines, where LLVM's own return demotion used to introduce the
+pointer at instruction selection, after every IR pass had already run.
+
+Every regression comes from `tailcc`: fannkuch +1.51%, cp_lib_bipartite +1.10%, sort +0.73%,
+cp_lib_unionfind +0.68%, cp_lib_lsegtree +0.56%, binary_trees +0.40%, cp_lib_scc +0.39%, get_sub
++0.09%. The cases that compile to one inlined loop are unchanged. Three properties of a
+guarantees-tail-calls convention account for all of it on x86-64:
+
+- The callee pops the argument area, and `GetAlignedArgumentStackSize` rounds that area up so that it
+  plus the return address is 16-byte aligned. A function with no stack arguments at all therefore
+  ends in `ret $8`, and every **non-tail** call site pays one `sub $0x8, %rsp` to restore its own
+  frame. get_sub calls `slice_bench` 100,000 times and grows by exactly 100,000 instructions.
+- Incoming stack arguments become mutable frame objects, since a tail call may overwrite them
+  (`X86TargetLowering::LowerMemArgument` marks them so whenever the convention guarantees tail calls).
+  A callee can no longer reload one from the caller's slot on demand, so it copies them into its own
+  frame in the prologue. fannkuch's `Std::loop#2` grows its frame from 0x28 to 0x48 bytes and its
+  prologue by about ten instructions per call; over its 3,628,800 calls that is 38.9M of its
+  45.1M-instruction increase, the remainder being the `sub` at its two inner call sites.
+- A tail call under such a convention never takes the sibcall path (`IsSibcall` is set only when the
+  callee's convention does not guarantee tail calls), so it rewrites the outgoing argument area even
+  when the values are unchanged, where a sibcall recognizes matching stack offsets and leaves them
+  alone. This is also what buys the fix: a sibcall may not grow the argument area, and a guaranteed
+  tail call may.
+
+Restricting `tailcc` to the functions whose arguments exceed the argument registers would spare
+everything else the first two costs, but LLVM refuses a tail call whose callee is `tailcc` and whose
+caller is not — `IsEligibleForTailCallOptimization` returns false unless the conventions match — so a
+narrow function tail-calling a wide one would stop being a jump. The convention has to be uniform
+across everything reachable by a tail call.
+
 ## 476f40aa1ef55bf5f0880495bd2000860ad13e13
 
 The `defunctionalize-fix-tco` branch (PR #95), which rewrites `Std::fix` into a directly
