@@ -60,7 +60,7 @@ pub fn lambda_calling_convention_of_target(triple: &str) -> u32 {
 
 /// The architecture a target triple names.
 fn architecture_of_target(triple: &str) -> &str {
-    triple.split('-').next().unwrap_or("")
+    triple.split('-').next().unwrap()
 }
 
 /// How many registers of each class a target returns a value in.

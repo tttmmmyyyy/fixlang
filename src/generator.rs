@@ -1081,19 +1081,26 @@ impl<'c, 'm> Generator<'c, 'm> {
         tail: bool,
     ) -> PointerValue<'c> {
         if tail {
-            let func = self.current_function();
-            // A function whose result goes through an out-pointer returns `void` and takes the
-            // pointer first. Checked under develop mode (the unit tests).
-            if self.config.develop_mode {
-                assert!(
-                    func.get_type().get_return_type().is_none() && func.count_params() >= 1,
-                    "a tail call forwards the out-pointer of a function that has one"
-                );
-            }
-            return func.get_nth_param(0).unwrap().into_pointer_value();
+            return self.own_out_pointer();
         }
         let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
         self.build_alloca_at_entry(buf_ty, "out@call_lambda")
+    }
+
+    // The out-pointer parameter of the function being generated, the buffer its result is written
+    // through. A function whose result goes through an out-pointer returns `void` and takes the
+    // pointer before every other parameter (see `lambda_function_type`). Checked under develop mode
+    // (the unit tests).
+    fn own_out_pointer(&self) -> PointerValue<'c> {
+        let func = self.current_function();
+        if self.config.develop_mode {
+            assert!(
+                func.get_type().get_return_type().is_none() && func.count_params() >= 1,
+                "`{}` returns through an out-pointer: it must return `void` and take it first",
+                func.get_name().to_str().unwrap()
+            );
+        }
+        func.get_nth_param(0).unwrap().into_pointer_value()
     }
 
     // Read back the leaves a callee wrote through the out-pointer, as the object of type `ret_ty`
@@ -1919,11 +1926,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
         let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
         if self.returns_through_out_pointer(&leaf_tys) {
-            let out_ptr = self
-                .current_function()
-                .get_nth_param(0)
-                .unwrap()
-                .into_pointer_value();
+            let out_ptr = self.own_out_pointer();
             let buf_ty = out_pointer_buffer_type(&leaf_tys, self);
             for (i, leaf) in leaves.iter().enumerate() {
                 let field = self
@@ -1943,8 +1946,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.builder().build_return(Some(&leaves[0])).unwrap();
             }
             _ => {
-                let leaf_tys: Vec<BasicTypeEnum<'c>> =
-                    leaves.iter().map(|l| l.get_type()).collect();
                 let struct_ty = self.context.struct_type(&leaf_tys, false);
                 let mut val = struct_ty.get_undef();
                 for (i, leaf) in leaves.iter().enumerate() {
