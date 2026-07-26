@@ -26,11 +26,11 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin};
 use std::sync::Arc;
 
-/// What binds a variable, enough to trace a leaf back to the object that produced it (its `root`).
+/// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
-    /// `let x = y`: a move-bind, transparent to `root`.
+    /// `let x = y`: a move-bind, transparent to `origin`.
     Move(RcVar),
     /// `let x = op(args)`: an alias when the result leaf is a pure projection of one argument,
     /// otherwise a producer. Carries the result type to consult `result_prov`.
@@ -278,8 +278,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             None => origin(vars, type_env, &scrut.name, path),
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
             // payload is read out (retained) — a producer.
-            Some(k) if !scrut.ty.is_box(type_env) => {
-                let mut p = vec![*k];
+            Some(tag) if !scrut.ty.is_box(type_env) => {
+                let mut p = vec![*tag];
                 p.extend_from_slice(path);
                 origin(vars, type_env, &scrut.name, &p)
             }
@@ -289,11 +289,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-fn as_arg_projection(ls: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
-    if ls.len() != 1 {
+fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
+    if sources.len() != 1 {
         return None;
     }
-    match ls.iter().next() {
+    match sources.iter().next() {
         Some(LeafOrigin::Arg(j, p)) => Some((*j, p.clone())),
         _ => None,
     }
@@ -302,7 +302,7 @@ fn as_arg_projection(ls: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
 /// Collect the leaves consumed in a function body, given `own` as the owned parameter leaves that
 /// decide which argument positions consume: an owning argument position, a captured value, or a
 /// returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
-/// `root`. Explicit `Release` nodes are own-then-release drops, not consumes.
+/// `origin`. Explicit `Release` nodes are own-then-release drops, not consumes.
 pub(crate) fn collect_consumes(
     node: &RcExprNode,
     vars: &VarTable,
@@ -311,7 +311,7 @@ pub(crate) fn collect_consumes(
     type_env: &TypeEnv,
     out: &mut Vec<VarPath>,
 ) {
-    let owns = |p: &RcVar, pi: &FieldPath| own.contains(&(p.name.clone(), pi.clone()));
+    let owns = |p: &RcVar, leaf: &FieldPath| own.contains(&(p.name.clone(), leaf.clone()));
     collect_consumes_go(node, vars, prog, type_env, &owns, out);
 }
 
@@ -337,8 +337,8 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }
         RcExpr::Destructure(container, fields, k) => {
-            for pi in destructure_consumes(container, fields, type_env) {
-                out.push((container.name.clone(), pi));
+            for leaf in destructure_consumes(container, fields, type_env) {
+                out.push((container.name.clone(), leaf));
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out)
         }
@@ -365,9 +365,9 @@ pub(crate) fn destructure_consumes(
     let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
     leaves
         .into_iter()
-        .filter(|pi| {
+        .filter(|leaf| {
             // A boxed leaf of an unboxed container starts with a field index, so its path is non-empty.
-            let field = pi
+            let field = leaf
                 .first()
                 .expect("a boxed leaf of an unboxed container has a non-empty path");
             !named.contains(field)
@@ -402,15 +402,15 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
             // callee owns every position.
             let callee_params = resolve_callee_params(callee, vars, prog);
             for (i, a) in args.iter().enumerate() {
-                for pi in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaves(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
                     let owns_pos = match &callee_params {
-                        Some(params) => owns(&params[i], &pi),
+                        Some(params) => owns(&params[i], &leaf),
                         None => true,
                     };
                     if owns_pos {
-                        out.push((a.name.clone(), pi));
+                        out.push((a.name.clone(), leaf));
                     }
                 }
             }
@@ -422,11 +422,11 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
-                for pi in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaves(&a.ty, type_env) {
                     // An argument leaf that the op passes through to its result is not consumed;
                     // anything else at an owning position is moved into the op.
-                    if !passthrough.contains(&(i, pi.clone())) {
-                        out.push((a.name.clone(), pi));
+                    if !passthrough.contains(&(i, leaf.clone())) {
+                        out.push((a.name.clone(), leaf));
                     }
                 }
             }
@@ -467,7 +467,7 @@ fn resolve_callee_params<'a>(
 /// projections `as_arg_projection` reads out of `result_prov`.
 ///
 /// Dropping an argument leaf's consume is sound exactly when the result aliases it, so this shares
-/// `as_arg_projection` with `root`: a leaf that joins an argument with another source aliases nothing and
+/// `as_arg_projection` with `origin`: a leaf that joins an argument with another source aliases nothing and
 /// keeps its consume, and one whose sole source is `Arg` does both.
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn an_arg_joined_with_another_source_is_not_a_projection() {
         // The result is the argument or a new value, so it aliases neither: the op consumes the
-        // argument, and `root` stops at the op. Reading such a leaf as a projection would drop the
+        // argument, and `origin` stops at the op. Reading such a leaf as a projection would drop the
         // consume without the alias, releasing one object twice.
         let ls = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
         assert_eq!(as_arg_projection(&ls), None);

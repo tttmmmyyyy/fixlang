@@ -540,20 +540,20 @@ impl<'a> RewriteCtx<'a> {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
             .iter()
-            .all(|(r, rp)| self.owns_object(r, rp))
+            .all(|(root, path)| self.owns_object(root, path))
     }
 
     /// Whether this version owns the object a leaf comes from.
-    fn owns_object(&self, r: &FullName, rp: &FieldPath) -> bool {
-        match self.vars.param_tys.get(r) {
+    fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
+        match self.vars.param_tys.get(root) {
             // The path may name a subtree that spans several reference-counting units rather than
             // one — a union built from an unboxed tuple roots to the tuple at the empty path, whose
             // units are its fields. The value is owned only when every unit it covers is owned. Each
             // covered path is clamped to its unit key, so a path that descends into a union variant
             // keys to the union root the owned set records.
-            Some(rty) => units_under(rty, rp, self.type_env).iter().all(|u| {
+            Some(root_ty) => units_under(root_ty, path, self.type_env).iter().all(|unit| {
                 self.owned_units
-                    .contains(&(r.clone(), truncate_to_unit(rty, u, self.type_env)))
+                    .contains(&(root.clone(), truncate_to_unit(root_ty, unit, self.type_env)))
             }),
             // A root this version takes no parameter for is a producer, or a global — whose reachable
             // graph is refcount-exempt. Either way the caller lent no reference of it, so the value
@@ -877,38 +877,38 @@ impl<'a> CancelAnalysis<'a> {
     ) -> PendingRetains {
         match node.expr.as_ref() {
             RcExpr::Retain(v, path, _, k) => {
-                let r = node_id(node);
-                self.all_retains.push(r);
-                self.unbump_releases.entry(r).or_default();
+                let retain = node_id(node);
+                self.all_retains.push(retain);
+                self.unbump_releases.entry(retain).or_default();
                 pending
                     .entry(self.unit_key(&v.name, path))
                     .or_default()
-                    .push(r);
+                    .push(retain);
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Release(v, path, _, k) => {
-                let o = self.unit_key(&v.name, path);
+                let key = self.unit_key(&v.name, path);
                 // A release of a value whose object is path-dependent un-bumps a retain of that same
                 // value, so it pairs on the identity; on the other objects it may be, it is a drop
                 // that no pending retain of theirs may be cancelled across.
                 for other in self.acted_unit_keys(&v.name, path) {
-                    if other != o {
+                    if other != key {
                         self.consume_unit(&mut pending, other);
                     }
                 }
-                // A release with nothing pending for `o` disposes of a reference this walk did not
+                // A release with nothing pending for `key` disposes of a reference this walk did not
                 // add — an owned parameter, or a value produced here — so it un-bumps no retain and
                 // pairs with nothing.
-                if let Some(stack) = pending.get_mut(&o) {
+                if let Some(stack) = pending.get_mut(&key) {
                     // A stack kept in `pending` is never empty (emptied stacks are removed below), so a
                     // pending retain to pair with is always present.
-                    let r = stack.pop().expect("a stack kept in `pending` is non-empty");
+                    let retain = stack.pop().expect("a stack kept in `pending` is non-empty");
                     self.unbump_releases
-                        .entry(r)
+                        .entry(retain)
                         .or_default()
                         .push(node_id(node));
                     if stack.is_empty() {
-                        pending.remove(&o);
+                        pending.remove(&key);
                     }
                 }
                 self.walk(k, pending, returns_from_func)
@@ -926,8 +926,8 @@ impl<'a> CancelAnalysis<'a> {
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Destructure(container, fields, k) => {
-                for pi in destructure_consumes(container, fields, self.type_env) {
-                    self.consume(&mut pending, &container.name, &pi);
+                for leaf in destructure_consumes(container, fields, self.type_env) {
+                    self.consume(&mut pending, &container.name, &leaf);
                 }
                 self.walk(k, pending, returns_from_func)
             }
@@ -938,8 +938,8 @@ impl<'a> CancelAnalysis<'a> {
                 if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
                     for stack in pending.values() {
-                        for &r in stack {
-                            self.needed_retains.insert(r);
+                        for &retain in stack {
+                            self.needed_retains.insert(retain);
                         }
                     }
                 }
@@ -955,9 +955,9 @@ impl<'a> CancelAnalysis<'a> {
         rhs: &RcRhs,
         result_ty: &Arc<TypeNode>,
     ) {
-        let owns = |p: &RcVar, pi: &FieldPath| {
+        let owns = |p: &RcVar, leaf: &FieldPath| {
             self.owned_units
-                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, pi, self.type_env)))
+                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
         };
         let mut consumed = vec![];
         rhs_consumes(
@@ -969,23 +969,23 @@ impl<'a> CancelAnalysis<'a> {
             &owns,
             &mut consumed,
         );
-        for (var, path) in consumed {
-            self.consume(pending, &var, &path);
+        for (var, leaf) in consumed {
+            self.consume(pending, &var, &leaf);
         }
     }
 
     /// A consume of a leaf: every retain pending for a unit it may belong to is load-bearing here.
     fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
-        for o in self.acted_unit_keys(var, path) {
-            self.consume_unit(pending, o);
+        for key in self.acted_unit_keys(var, path) {
+            self.consume_unit(pending, key);
         }
     }
 
     /// A consume of one unit: every retain pending for it is load-bearing here.
-    fn consume_unit(&mut self, pending: &mut PendingRetains, o: VarPath) {
-        if let Some(stack) = pending.remove(&o) {
-            for r in stack {
-                self.needed_retains.insert(r);
+    fn consume_unit(&mut self, pending: &mut PendingRetains, key: VarPath) {
+        if let Some(stack) = pending.remove(&key) {
+            for retain in stack {
+                self.needed_retains.insert(retain);
             }
         }
     }
@@ -993,35 +993,39 @@ impl<'a> CancelAnalysis<'a> {
     /// Merge match arms into their continuation: a retain pending in every arm's exit continues (a
     /// single downstream release un-bumps it on all paths); a retain pending in some but not all arms
     /// has a non-uniform fate and cannot be cleanly cancelled, so it is disqualified.
-    fn merge(&mut self, pend_in: &PendingRetains, arm_exits: &[PendingRetains]) -> PendingRetains {
+    fn merge(
+        &mut self,
+        pending_in: &PendingRetains,
+        arm_exits: &[PendingRetains],
+    ) -> PendingRetains {
         let n = arm_exits.len();
         let mut arms_pending: Map<NodeId, usize> = Map::default();
         for exit in arm_exits {
             let mut seen: Set<NodeId> = Set::default();
             for stack in exit.values() {
-                for &r in stack {
-                    if seen.insert(r) {
-                        *arms_pending.entry(r).or_default() += 1;
+                for &retain in stack {
+                    if seen.insert(retain) {
+                        *arms_pending.entry(retain).or_default() += 1;
                     }
                 }
             }
         }
-        for (&r, &count) in &arms_pending {
+        for (&retain, &count) in &arms_pending {
             if count != n {
-                self.needed_retains.insert(r);
+                self.needed_retains.insert(retain);
             }
         }
         // Keep the retains pending in all arms, in the pre-match order so release pairing stays
         // innermost-first.
         let mut merged = PendingRetains::default();
-        for (o, stack) in pend_in {
+        for (key, stack) in pending_in {
             let kept: Vec<NodeId> = stack
                 .iter()
                 .copied()
-                .filter(|r| arms_pending.get(r) == Some(&n))
+                .filter(|retain| arms_pending.get(retain) == Some(&n))
                 .collect();
             if !kept.is_empty() {
-                merged.insert(o.clone(), kept);
+                merged.insert(key.clone(), kept);
             }
         }
         merged
@@ -1031,18 +1035,18 @@ impl<'a> CancelAnalysis<'a> {
     /// one release) together with the releases it pairs with.
     fn cancelled(&self) -> Set<NodeId> {
         let mut out = Set::default();
-        for &r in &self.all_retains {
-            if self.needed_retains.contains(&r) {
+        for &retain in &self.all_retains {
+            if self.needed_retains.contains(&retain) {
                 continue;
             }
             // The walk records an entry for every retain it meets, and only retains it met are here.
             let releases = self
                 .unbump_releases
-                .get(&r)
-                .unwrap_or_else(|| unreachable!("retain {:?} was never seen by the walk", r));
+                .get(&retain)
+                .unwrap_or_else(|| unreachable!("retain {:?} was never seen by the walk", retain));
             // A retain with no un-bump release is left in place to keep the counting balanced.
             if !releases.is_empty() {
-                out.insert(r);
+                out.insert(retain);
                 out.extend(releases.iter().copied());
             }
         }

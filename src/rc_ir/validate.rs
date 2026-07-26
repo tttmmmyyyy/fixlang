@@ -657,9 +657,9 @@ impl<'a> BalanceWalk<'a> {
 
     /// Consume what a right-hand side consumes, by the shared consume model.
     fn consume_rhs(&self, bal: &mut Balance, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
-        let owns = |p: &RcVar, pi: &FieldPath| {
+        let owns = |p: &RcVar, leaf: &FieldPath| {
             self.owned_units
-                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, pi, self.type_env)))
+                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
         };
         let mut consumed = vec![];
         rhs_consumes(
