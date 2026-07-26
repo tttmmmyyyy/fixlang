@@ -138,7 +138,8 @@ fn run_cli() {
         .short('g')
         .takes_value(false)
         .help("Generate debugging information. \n\
-              This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level.");
+              This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level. \n\
+              Every call keeps a stack frame so a debugger sees the whole chain, including calls in tail position, so a deeply tail-recursive program may overflow the stack.");
     let backtrace = Arg::new("backtrace")
         .long("backtrace")
         .takes_value(false)
@@ -147,7 +148,7 @@ fn run_cli() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations (tail recursion may lead to stack overflow); suitable for debugging."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations; the shortest compile time. Suitable for debugging."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))

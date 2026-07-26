@@ -1,24 +1,18 @@
-use crate::{
-    configuration::Configuration,
-    tests::test_util::{tail_call_optimization_enabled, test_source},
-};
+use crate::{configuration::Configuration, tests::test_util::test_source};
 
-// A `fix` self-call dispatches through a function pointer, which LLVM's tail-call elimination cannot
-// fold into a loop when the return value uses the `sret` ABI (four or more scalar leaves). Rewriting
-// `fix` into a direct self-recursive global makes the self-call direct, so a deeply tail-recursive
-// `fix` returning such a value runs in constant stack. Each `*_runs_in_constant_stack` test drives
-// that with a return of `(I64, Array I64)` — four leaves once an array is three (pointer, size,
-// capacity) — recursing a million deep, which overflows the stack unless the self-call is direct.
+// A `fix` self-call dispatches through a function pointer. Rewriting `fix` into a direct
+// self-recursive global makes that call direct, which lets LLVM's tail-recursion elimination fold it
+// into a loop and drop the closure the combinator would otherwise build each iteration. The pass
+// runs from `Basic` up (`enable_defunctionalize_fix`).
 //
-// `None` deliberately keeps even tail calls, so the constant-stack tests skip it; the correctness
-// test below runs at every level, since the defunctionalization must preserve results everywhere.
+// Every test here runs at every optimization level. The `*_runs_in_constant_stack` ones recurse a
+// million deep returning `(I64, Array I64)`, so at `None` they hold on the tail jumps the return ABI
+// gives an indirect call (see `return_abi`), and above it on the loop this pass forms. The rest
+// check that the rewrite computes what the closure form computes.
 
 // The `fix` argument written inline, the common idiom.
 #[test]
 fn test_deep_fix_sret_return_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -45,9 +39,6 @@ fn test_deep_fix_sret_return_runs_in_constant_stack() {
 // into either call; the pass resolves the binding and lifts each site.
 #[test]
 fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -75,9 +66,6 @@ fn test_multi_use_let_bound_fix_runs_in_constant_stack() {
 // The `fix` argument is a global function.
 #[test]
 fn test_global_function_fix_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -104,7 +92,7 @@ fn test_global_function_fix_runs_in_constant_stack() {
 // `fix` applied to a function parameter — both left as a closure `fix`, the first so a heavy
 // initializer is not duplicated, the second because the argument is only known at run time — and a
 // recursion functional that passes `self` by value, exercising the partial-application closure the
-// substitution leaves for a non-tail use. It runs at every optimization level, none included.
+// substitution leaves for a non-tail use.
 #[test]
 fn test_fix_resolution_variants_compute_correctly() {
     let source = r#"
@@ -209,7 +197,7 @@ fn test_nested_fix_inner_calls_outer_self() {
 // captures a boxed value read across the recursion and still live after the `fix` returns: an
 // `Array` read every iteration, `self` escaping as a closure over the capture, one `let`-bound
 // lambda fixed at two sites (each rebuilding its own capture of the shared array), and a nested
-// `Array` of `Array`. It runs at every optimization level, none included.
+// `Array` of `Array`.
 #[test]
 fn test_fix_boxed_capture_is_memory_safe() {
     let source = r#"
@@ -266,7 +254,7 @@ fn test_fix_boxed_capture_is_memory_safe() {
 // variable, a tuple destructure, and a struct destructure. Each captured name must appear in the
 // lifted capture struct with the type it has in scope, so lifting must compute the same value as the
 // closure form. A boxed array captured from a `match` arm and read across the recursion also checks
-// reference-count balance under valgrind. It runs at every optimization level, none included.
+// reference-count balance under valgrind.
 #[test]
 fn test_fix_captures_from_nontrivial_binders_compute_correctly() {
     let source = r#"
@@ -360,9 +348,6 @@ fn test_mutual_global_fix_cycle_terminates() {
 // self-call, so it runs in constant stack.
 #[test]
 fn test_deep_tail_position_fix_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -396,9 +381,6 @@ fn test_deep_tail_position_fix_runs_in_constant_stack() {
 // to a direct call, so it runs in constant stack.
 #[test]
 fn test_three_arg_fix_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -425,9 +407,6 @@ fn test_three_arg_fix_runs_in_constant_stack() {
 // inner and the inner self-call stays direct, so it runs in constant stack.
 #[test]
 fn test_nested_fix_inner_deep_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -455,7 +434,7 @@ fn test_nested_fix_inner_deep_runs_in_constant_stack() {
 
 // Captures of exotic value types, an empty capture, `self` used both as a tail self-call and as a
 // bare value, a polymorphic `fix` instantiated at two types, and a `fix` inside an iterator fold.
-// Each must compute the same value the closure form does. It runs at every optimization level.
+// Each must compute the same value the closure form does.
 #[test]
 fn test_fix_exotic_captures_and_dual_use_self_compute_correctly() {
     let source = r#"

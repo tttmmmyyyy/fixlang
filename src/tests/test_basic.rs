@@ -8,9 +8,8 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, fix_command, run_source_capture, tail_call_optimization_enabled,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c,
+        assert_grammar_accepts, fix_command, run_source_capture, test_files_in_directory,
+        test_source, test_source_fail, test_source_fail_excludes, test_source_with_c,
     },
 };
 use rand::Rng;
@@ -9912,9 +9911,6 @@ main = (
 // call rewrite the arguments that do not fit in registers.
 #[test]
 pub fn test_regression_issue_63() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r##"
 module Main;
 

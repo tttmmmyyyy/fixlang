@@ -1,7 +1,4 @@
-use crate::{
-    configuration::Configuration,
-    tests::test_util::{tail_call_optimization_enabled, test_source},
-};
+use crate::{configuration::Configuration, tests::test_util::test_source};
 
 // `Std::IO`'s `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain
 // of indirect tail calls and runs in constant stack only while the backend compiles them as jumps.
@@ -12,6 +9,9 @@ use crate::{
 //
 // Each test below drives one such loop a million iterations deep and checks only that it finishes.
 // The outcome is binary — completes or overflows the stack — so machine load does not affect it.
+// They run at every optimization level: whether a tail call becomes a jump is decided by the
+// backend, which does it at `-O0` too, and by the `tail` marker, which code generation attaches
+// unless debug information is being generated.
 //
 // AArch64 returns up to eight leaves in registers, which covers the four-leaf shapes; the shape that
 // exercises the return rule on every target is
@@ -21,9 +21,6 @@ use crate::{
 // plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
 #[test]
 fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -48,9 +45,6 @@ fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
 // every element type. A loop in `IOFail` therefore needs the rule even when it threads no array.
 #[test]
 fn test_iofail_loop_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -75,9 +69,6 @@ fn test_iofail_loop_runs_in_constant_stack() {
 // decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
 #[test]
 fn test_loop_m_with_wide_break_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -99,9 +90,6 @@ fn test_loop_m_with_wide_break_runs_in_constant_stack() {
 // the value — decides the stack behavior of a loop written in it.
 #[test]
 fn test_state_transformer_over_io_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -144,9 +132,6 @@ fn test_state_transformer_over_io_runs_in_constant_stack() {
 // registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
 #[test]
 fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -190,9 +175,6 @@ fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
 // only turning the tail call into a jump keeps the stack flat.
 #[test]
 fn test_dispatch_through_array_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
@@ -229,9 +211,6 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
 // so this loop needs the out-pointer on AArch64 as well as on x86-64.
 #[test]
 fn test_return_wider_than_any_target_runs_in_constant_stack() {
-    if !tail_call_optimization_enabled() {
-        return;
-    }
     let source = r#"
     module Main;
 
