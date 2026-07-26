@@ -24,11 +24,12 @@ on the ~250K-instruction micro-benchmarks but +0.00% on every case above a few m
 code change. Built head-to-head today at a fixed path, the previous row's compiler (`eec295f8`) and
 this branch's compiler produce the same instruction count within noise (within +/-60 on the ~250K
 micro-benchmarks; identical on sum_by_loop), so neither the intervening `main` commits (#88-#91) nor
-this branch regressed anything. The +44K is measurement-environment drift between the two rows'
-measurement dates, weeks apart: the harness's real-project build — its resolved `.fixlang` state, the
-deep worktree path, and the system libraries the emitted program starts against — shifts every
-program's fixed startup count by a constant that had grown between the two runs. Read a pure code
-delta by measuring two commits back-to-back in one environment, not against a historical row.
+this branch regressed anything. The two rows were measured ~18 hours apart (`eec295f8` on 2026-07-25
+16:01, this row 2026-07-26 10:05) across overnight system-package activity — a kernel and `libc-bin`
+update landed at 16:51, minutes after the `eec295f8` run. The +44K is a shift in the emitted
+program's fixed per-program startup, an environment effect on the harness's real-project build, not
+the compiler. Read a pure code delta by measuring two commits back-to-back in one environment, not
+against a historical row.
 
 ## eec295f846d6110826a74e823fde8a6ae02859d4
 
