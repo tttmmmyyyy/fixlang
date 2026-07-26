@@ -53,7 +53,7 @@ const CCC: u32 = 0;
 /// uniform, since a tail call between two conventions becomes an ordinary call in both directions.
 pub fn lambda_calling_convention_of_target(triple: &str) -> u32 {
     match architecture_of_target(triple) {
-        "x86_64" => TAILCC,
+        "x86_64" | "aarch64" | "arm64" => TAILCC,
         _ => CCC,
     }
 }

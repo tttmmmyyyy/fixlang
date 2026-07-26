@@ -522,7 +522,7 @@ impl Configuration {
 
     pub fn get_llvm_opt_level(&self) -> OptimizationLevel {
         match self.fix_opt_level {
-            FixOptimizationLevel::None => OptimizationLevel::None,
+            FixOptimizationLevel::None => OptimizationLevel::Less,
             FixOptimizationLevel::Basic => OptimizationLevel::Default,
             FixOptimizationLevel::Max => OptimizationLevel::Default,
             FixOptimizationLevel::Experimental => OptimizationLevel::Default,
