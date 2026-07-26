@@ -631,15 +631,12 @@ pub(crate) fn is_unboxed_union_unit(
     unit: &FieldPath,
     type_env: &TypeEnv,
 ) -> bool {
-    let mut cur = ty.clone();
-    for &idx in unit {
-        // The only path into a closure names its capture, a boxed object.
-        if cur.is_closure() {
-            return false;
-        }
-        cur = cur.field_types(type_env)[idx].clone();
+    // A unit path stops at its unit root, so the subtree it names is the unit itself. The only path
+    // with no subtree is one into a closure, which names its capture, a boxed object.
+    match subtree_type(ty, unit, type_env) {
+        Some(unit_ty) => unit_ty.is_union(type_env) && !unit_ty.is_box(type_env),
+        None => false,
     }
-    cur.is_union(type_env) && !cur.is_box(type_env)
 }
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it

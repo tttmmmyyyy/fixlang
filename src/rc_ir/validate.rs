@@ -476,6 +476,19 @@ struct Balance {
     dead: Set<VarPath>,
 }
 
+impl Balance {
+    /// The live counts, rendered for a failure message.
+    fn render(&self) -> String {
+        let mut units: Vec<String> = self
+            .counts
+            .iter()
+            .map(|(key, count)| format!("{} x{}", render_key(key), count))
+            .collect();
+        units.sort();
+        format!("{{{}}}", units.join(", "))
+    }
+}
+
 /// What the `Ret` closing an expression does with its value.
 enum Terminal<'a> {
     /// Returns it from the function, consuming it.
@@ -557,8 +570,8 @@ impl<'a> BalanceWalk<'a> {
                             "[RC IR validate] {}: match arms leave different reference counts in `{}`: {} and {}{}",
                             self.stage,
                             self.location,
-                            self.render(&merged),
-                            self.render(exit),
+                            merged.render(),
+                            exit.render(),
                             self.at(),
                         );
                     }
@@ -617,7 +630,7 @@ impl<'a> BalanceWalk<'a> {
                                 "[RC IR validate] {}: `{}` returns holding references it never disposes of: {}{}",
                                 self.stage,
                                 self.location,
-                                self.render(&bal),
+                                bal.render(),
                                 self.at(),
                             );
                         }
@@ -643,7 +656,7 @@ impl<'a> BalanceWalk<'a> {
     }
 
     /// Consume what a right-hand side consumes, by the shared consume model.
-    fn consume_rhs(&mut self, bal: &mut Balance, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
+    fn consume_rhs(&self, bal: &mut Balance, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
         let owns = |p: &RcVar, pi: &FieldPath| {
             self.owned_units
                 .contains(&(p.name.clone(), truncate_to_unit(&p.ty, pi, self.type_env)))
@@ -668,21 +681,16 @@ impl<'a> BalanceWalk<'a> {
     /// the variants of an unboxed union — are one reference. Two units that key to the same object are
     /// two references of it, so this counts units rather than keys: a value laid into two fields of an
     /// aggregate is held twice by it.
-    fn consume_leaves(&mut self, bal: &mut Balance, var: &RcVar, leaves: Vec<FieldPath>) {
-        let mut units: Set<FieldPath> = Set::default();
-        for leaf in leaves {
-            let unit = truncate_to_unit(&var.ty, &leaf, self.type_env);
-            if units.insert(unit) {
-                let key = self.unit_key(&var.name, &leaf);
-                self.dec(bal, key);
-            }
+    fn consume_leaves(&self, bal: &mut Balance, var: &RcVar, leaves: Vec<FieldPath>) {
+        for (_, key) in self.unit_keys(&var.name, &var.ty, leaves) {
+            self.dec(bal, key);
         }
     }
 
     /// Count the references a binding produces: those of its units whose object is the binding
     /// itself. A unit that keys elsewhere is an alias — a move-bind, a projection out of an unboxed
     /// aggregate, a pure `Llvm` projection — and holds a reference already counted there.
-    fn produce(&mut self, bal: &mut Balance, x: &RcVar) {
+    fn produce(&self, bal: &mut Balance, x: &RcVar) {
         for (unit, key) in self.value_keys(&x.name, &x.ty) {
             if key == (x.name.clone(), unit) {
                 self.inc(bal, key);
@@ -756,9 +764,20 @@ impl<'a> BalanceWalk<'a> {
     /// the unit path itself names no leaf when the unit is a punched value or an unboxed union, and
     /// `origin` would answer for it as if the value were produced there.
     fn value_keys(&self, var: &FullName, ty: &Arc<TypeNode>) -> Vec<(FieldPath, VarPath)> {
+        self.unit_keys(var, ty, boxed_leaves(ty, self.type_env))
+    }
+
+    /// The units a value's leaves reach, each named once: the unit path and the key its reference is
+    /// counted under, taken from the first leaf that reaches the unit.
+    fn unit_keys(
+        &self,
+        var: &FullName,
+        ty: &Arc<TypeNode>,
+        leaves: Vec<FieldPath>,
+    ) -> Vec<(FieldPath, VarPath)> {
         let mut units: Set<FieldPath> = Set::default();
         let mut out = vec![];
-        for leaf in boxed_leaves(ty, self.type_env) {
+        for leaf in leaves {
             let unit = truncate_to_unit(ty, &leaf, self.type_env);
             if units.insert(unit.clone()) {
                 out.push((unit, self.unit_key(var, &leaf)));
@@ -785,16 +804,6 @@ impl<'a> BalanceWalk<'a> {
             Some(span) => format!("\n{}", span.to_string(Color::Red)),
             None => String::new(),
         }
-    }
-
-    fn render(&self, bal: &Balance) -> String {
-        let mut units: Vec<String> = bal
-            .counts
-            .iter()
-            .map(|(key, count)| format!("{} x{}", render_key(key), count))
-            .collect();
-        units.sort();
-        format!("{{{}}}", units.join(", "))
     }
 }
 
