@@ -563,10 +563,12 @@ impl<'a> RewriteCtx<'a> {
             // units are its fields. The value is owned only when every unit it covers is owned. Each
             // covered path is clamped to its unit key, so a path that descends into a union variant
             // keys to the union root the owned set records.
-            Some(root_ty) => units_under(root_ty, path, self.type_env).iter().all(|unit| {
-                self.owned_units
-                    .contains(&(root.clone(), truncate_to_unit(root_ty, unit, self.type_env)))
-            }),
+            Some(root_ty) => units_under(root_ty, path, self.type_env)
+                .iter()
+                .all(|unit| {
+                    self.owned_units
+                        .contains(&(root.clone(), truncate_to_unit(root_ty, unit, self.type_env)))
+                }),
             // A root this version takes no parameter for is a producer, or a global — whose reachable
             // graph is refcount-exempt. Either way the caller lent no reference of it, so the value
             // here is this version's.
