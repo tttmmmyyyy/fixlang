@@ -78,28 +78,34 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
 
 struct AppInliner {}
 
-// The value that the subexpressions of a function receive when an application is pushed into them,
-// together with the binding, if any, that the rewritten expression must be wrapped in.
-//
-// A variable argument is handed over as it is: a variable reference has nothing to evaluate, so
-// mentioning it once per branch keeps both the work done and the order it is done in. Any other
-// argument is bound to a fresh name first, so it is evaluated exactly once, before the function's
-// own body.
-//
-// Handing a variable over unchanged is what keeps this transformation linear. Binding every argument
-// would add one binding for each `let` an application is pushed through, so pushing `n` arguments
-// into a chain of `let`s — what uncurrying's eta expansion does to a function of `n` parameters —
-// would grow the chain as `2^n`.
+/// The value that the subexpressions of a function receive when an application is pushed into them,
+/// together with the binding, if any, that the rewritten expression must be wrapped in.
+///
+/// A variable argument is handed over as it is: a variable reference has nothing to evaluate, so
+/// mentioning it once per branch keeps both the work done and the order it is done in. Any other
+/// argument is bound to a fresh name first, so it is evaluated exactly once, before the function's
+/// own body.
+///
+/// Handing a variable over unchanged is what keeps this transformation linear. Binding every
+/// argument would add one binding for each `let` an application is pushed through, so pushing `n`
+/// arguments into a chain of `let`s — what uncurrying's eta expansion does to a function of `n`
+/// parameters — would grow the chain as `2^n`.
 struct PushedArg {
+    /// The expression that stands for the argument in each subexpression of the function.
     value: Arc<ExprNode>,
+    /// The pattern and bound expression of the `let` that evaluates the argument, present for an
+    /// argument that was given a fresh name.
     binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
 }
 
 impl PushedArg {
-    // `func` is the function the application is pushed into, and `shadowed` are the names its
-    // subexpressions are reached under; a variable argument among the latter would be captured
-    // there, so it gets a binding of its own. A fresh binding avoids every name `func` mentions,
-    // free or shadowing.
+    /// Prepares an argument for being pushed into the subexpressions of a function.
+    ///
+    /// # Arguments
+    /// * `func` — the function the application is pushed into. A fresh name avoids every name
+    ///   `func` mentions, free or shadowing.
+    /// * `shadowed` — the names the subexpressions of `func` are reached under. A variable argument
+    ///   among them would be captured there, so it gets a binding of its own.
     fn new(arg: &Arc<ExprNode>, func: &Arc<ExprNode>, shadowed: &Set<FullName>) -> Self {
         if arg.is_var() && !shadowed.contains(&arg.get_var().name) {
             return PushedArg {
@@ -118,7 +124,7 @@ impl PushedArg {
         }
     }
 
-    // Wrap the rewritten expression in the argument's binding, for an argument that needed one.
+    /// Wraps the rewritten expression in the argument's binding, for an argument that has one.
     fn wrap(self, expr: Arc<ExprNode>) -> Arc<ExprNode> {
         match self.binding {
             Some((pat, bound)) => expr_let_typed(pat, bound, expr),

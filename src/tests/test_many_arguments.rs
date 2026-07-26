@@ -23,6 +23,9 @@ mod integration_tests {
     // a regression as a failure instead of occupying the machine.
     const TIMEOUT: Duration = Duration::from_secs(180);
 
+    /// Builds a global function of `ARITY` parameters and fails if the build does not finish
+    /// within `TIMEOUT`, catching a compilation cost that grows with the parameter count faster
+    /// than linearly.
     #[test]
     fn test_many_argument_function_compiles_in_reasonable_time() {
         let params = (0..ARITY)
