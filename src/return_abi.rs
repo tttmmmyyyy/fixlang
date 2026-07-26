@@ -21,24 +21,47 @@
 //! travel on the stack, and an x86-64 sibcall may only reuse a stack slot that already holds the
 //! value being passed — six changing integer arguments is the limit there. Fix passes an unbox
 //! struct as its leaf scalars, so a loop carrying its state in arguments reaches that quickly: an
-//! out-pointer, a four-leaf state and a capture pointer already fill it. `LAMBDA_CALLING_CONVENTION`
-//! lifts this limit for every Fix lambda.
+//! out-pointer, a four-leaf state and a capture pointer already fill it. On that target
+//! `lambda_calling_convention_of_target` lifts the limit for every Fix lambda.
 
 use inkwell::types::BasicTypeEnum;
 
-/// `tailcc`, the convention Fix lambdas are defined and called with. It lets the backend rewrite the
-/// stack arguments of a tail call rather than requiring them to already hold the values being
-/// passed, so a tail call carrying more arguments than the argument registers hold still becomes a
-/// jump. It leaves the return-register budget alone, so a wide result still needs its out-pointer.
+/// `llvm::CallingConv::Tail`, which inkwell exposes only as a number. The backend may rewrite — and
+/// grow — the outgoing argument area of a tail call made with it, rather than requiring the stack
+/// arguments to already hold the values being passed. It leaves the return-register budget alone, so
+/// a wide result still needs its out-pointer.
+const TAILCC: u32 = 18;
+
+/// `llvm::CallingConv::C`.
+const CCC: u32 = 0;
+
+/// The convention Fix lambdas are defined and called with on `triple`.
 ///
 /// Every Fix lambda is defined with it (`declare_lambda_function`, `declare_rc_function`) and called
 /// with it (`apply_lambda`), and nothing else uses it: `main`, the exported wrappers, the runtime,
 /// the FFI declarations, the traversers, the reference-counting helpers and the global accessors all
 /// keep the C convention. A pointer type carries no convention, so a definition and a call that
-/// disagree corrupt silently instead of failing to verify.
+/// disagree corrupt silently instead of failing to verify — which is why this reads the module's
+/// target rather than anything that could differ between separately compiled units.
 ///
-/// The value is `llvm::CallingConv::Tail`, which inkwell exposes only as a number.
-pub const LAMBDA_CALLING_CONVENTION: u32 = 18;
+/// x86-64 needs `tailcc` for the argument limit described above. AArch64 keeps the C convention: its
+/// eight argument registers hold more, and its sibcall rewrites the stack arguments it reuses, so a
+/// tail call stays a jump whenever the callee's stack-argument area fits in the caller's own. Two
+/// properties make `tailcc` the wrong choice there. A callee under it pops its own argument area,
+/// and a call to such a function at `CodeGenOpt::None` reloads the caller's frame before restoring
+/// the stack pointer, reading the wrong addresses (LLVM 17 through 22). And the convention has to be
+/// uniform, since a tail call between two conventions becomes an ordinary call in both directions.
+pub fn lambda_calling_convention_of_target(triple: &str) -> u32 {
+    match architecture_of_target(triple) {
+        "x86_64" => TAILCC,
+        _ => CCC,
+    }
+}
+
+/// The architecture a target triple names.
+fn architecture_of_target(triple: &str) -> &str {
+    triple.split('-').next().unwrap_or("")
+}
 
 /// How many registers of each class a target returns a value in.
 #[derive(Clone, Copy)]
@@ -70,7 +93,7 @@ const AARCH64: ReturnRegisters = ReturnRegisters {
 /// is optimization headroom, while the cost of guessing a budget too large is O(n) stack with
 /// nothing to signal it.
 pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
-    match triple.split('-').next().unwrap_or("") {
+    match architecture_of_target(triple) {
         "x86_64" => X86_64,
         "aarch64" | "arm64" => AARCH64,
         _ => X86_64,

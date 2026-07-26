@@ -46,8 +46,8 @@ use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
 use crate::return_abi::{
-    return_registers_of_target, returns_through_out_pointer, ReturnRegisters,
-    LAMBDA_CALLING_CONVENTION,
+    lambda_calling_convention_of_target, return_registers_of_target, returns_through_out_pointer,
+    ReturnRegisters,
 };
 use either::Either;
 use either::Either::Left;
@@ -482,6 +482,9 @@ pub struct Generator<'c, 'm> {
     // How many registers of each class the target returns a value in, read once from the module's
     // triple. `returns_through_out_pointer` needs it for every function type built.
     return_registers: ReturnRegisters,
+    // The convention every Fix lambda in this module is defined and called with, read once from the
+    // module's triple.
+    lambda_calling_convention: u32,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
     // Debug type built for each Fix type, keyed by the type's canonical string, so a type is
@@ -621,6 +624,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         config: Configuration,
         type_env: TypeEnv,
     ) -> Self {
+        let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let ret = Self {
             context: ctx,
             module,
@@ -632,9 +636,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             global: Default::default(),
             type_env,
             target_data: target_data,
-            return_registers: return_registers_of_target(
-                &module.get_triple().as_str().to_string_lossy(),
-            ),
+            return_registers: return_registers_of_target(&triple),
+            lambda_calling_convention: lambda_calling_convention_of_target(&triple),
             config,
             global_strings: Map::default(),
             di_type_cache: Map::default(),
@@ -1043,7 +1046,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .builder()
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
-        ret.set_call_convention(LAMBDA_CALLING_CONVENTION);
+        ret.set_call_convention(self.lambda_calling_convention());
         // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
         // buffer allocated here does. In tail position the pointer is this function's own parameter,
         // naming an ancestor's buffer, so the assertion holds there.
@@ -1122,6 +1125,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     // target (see `return_abi`).
     pub fn returns_through_out_pointer(&self, leaf_tys: &[BasicTypeEnum<'c>]) -> bool {
         returns_through_out_pointer(leaf_tys, self.return_registers)
+    }
+
+    // The convention every Fix lambda in this module is defined and called with (see `return_abi`).
+    pub fn lambda_calling_convention(&self) -> u32 {
+        self.lambda_calling_convention
     }
 
     // The function currently being generated.
@@ -1992,7 +2000,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
         };
         let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
-        lam_fn.set_call_conventions(LAMBDA_CALLING_CONVENTION);
+        lam_fn.set_call_conventions(self.lambda_calling_convention());
         // Create and set debug info subprogram.
         if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();

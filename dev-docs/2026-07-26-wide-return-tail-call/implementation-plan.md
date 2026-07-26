@@ -69,9 +69,33 @@ out-pointer 1 本 + 4 leaf の状態 + capture ポインタで、もう埋まる
 掛からない。
 
 **採否はユーザの判断による設計変更である。** 実装は `return_abi.rs` の
-`LAMBDA_CALLING_CONVENTION` と、それを設定する 3 箇所 (`declare_lambda_function`、
+`lambda_calling_convention_of_target` と、それを設定する 3 箇所 (`declare_lambda_function`、
 `declare_rc_function`、`apply_lambda`) だけなので、コミット単位で戻せる。`main`、export した
 ラッパ、`fixruntime_*`、FFI 宣言、traverser、RC ヘルパ、`Get#<symbol>` は C の規約のままである。
+
+### 呼び出し規約はターゲットごとに決める
+
+`tailcc` を使うのは x86-64 だけである。判定はモジュールの triple から
+`lambda_calling_convention_of_target` が行う。戻り値の予算表と同じく、分割コンパイルでも両側が
+同じ結論に達する。
+
+AArch64 は C の規約で足りる。引数レジスタが 8 本あり、sibcall は再利用するスタック引数を
+書き換えるので、**呼び先のスタック引数域が呼び出し元自身の引数域に収まる限り末尾ジャンプになる**
+(`llc -O2` 実測。12 引数でスタック引数が全て変わっても `b`、呼び出し元にスタック引数が無く
+呼び先が 4 本必要な形は `bl`)。x86-64 の sibcall が要求する「同じスロットに同じ値」よりずっと緩い。
+
+そして AArch64 で `tailcc` を使うと壊れる。この規約では callee が自分の引数域を pop するが、
+`CodeGenOpt::None` では**呼び出し側がスタックポインタを戻す前に自分のフレームを読む**コードが出る
+(LLVM 17 / 20 / 21 / 22 で同じ。GlobalISel でも SelectionDAG でも同じ):
+
+```
+        bl      _callee_t
+        ldr     x8, [sp, #40]      ; callee が 32 バイト pop した後の sp から読んでいる
+        sub     sp, sp, #32        ; スタックポインタを戻すのはこの後
+```
+
+読み先は呼び出し元のフレームの外になり、`-O none` の実行は各所で落ちる。`-O2` では `sub` が `bl`
+の直後に出て正しい。x86-64 は `-O0` でも正しい順序で出る。
 
 ### 同じ限界に由来する別件
 
