@@ -1,7 +1,7 @@
 # RC IR の所有権・消費モデル
 
-RC IR 上で「どの構文がどの参照を消費するか」の仕様。RC 挿入・borrow 化・相殺・特殊化がすべてこのモデルを共有し、
-RC IR validator の参照収支検査（`validate.rs` の follow-up）もこれを実装する。
+RC IR 上で「どの構文がどの参照を消費するか」の仕様。実装は `src/rc_ir/ownership.rs`。RC 挿入・borrow 化・
+相殺・特殊化・RC IR validator の参照収支検査がすべてこのモデルを共有する。
 
 ## 1. 単位
 
@@ -9,12 +9,15 @@ RC IR validator の参照収支検査（`validate.rs` の follow-up）もこれ�
   punched フィールドはスキップする。
 - **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched フィールドも
   スキップしない。
-- 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは `clamp_unit`
-  （leaf path を unit path に切り詰める）と `units_under`。
+- 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
+  `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
+- `origin` は **leaf の上でしか定義されていない**。unit path は leaf とは限らない（punched array の unit は
+  `[i]`、その leaf は `[i, 0]`）ので、unit のオブジェクト identity を求めるときは必ずその unit に属する leaf を
+  `unit_key` に渡す。leaf でない path を渡すと `result_prov` に該当する leaf が無く producer と誤判定される。
 
 ## 2. 消費する構文と読むだけの構文
 
-権威は `borrow.rs` の `collect_consumes_go` / `rhs_consumes` / `destructure_consumes`。
+権威は `ownership.rs` の `collect_consumes_go` / `rhs_consumes` / `destructure_consumes`。
 
 **消費する（leaf 粒度）**
 
@@ -68,11 +71,12 @@ may-alias ではない。辺は次のとおり:
 `specialize` は RC ノードを素通しコピーし、`assuming_unique` は `LLVMGen` を差し替えるだけなので、消費モデルは
 特殊化の前後で不変（`result_prov` を force-unique 有無で変える op は存在しない）。
 
-## 5. 参照収支検査を書くときの注意
+## 5. 参照収支検査の注意
 
 関数本体は木（分岐は `Match` のアームのみ、ループは呼び出しでしか作れない）なので、不動点計算は不要で
-1 パスの木走査＋アーム出口の一致検査で全パスを尽くせる。キーは `cancel` の `key()` と同じ
-`root` + `clamp_unit` を使う。**per-binding のトークン照合は `cancel` 後に必ず破綻する**。
+1 パスの木走査＋アーム出口の一致検査で全パスを尽くせる。キーは `cancel` と同じ `unit_key`
+（`origin` の identity を `truncate_to_unit` で切り詰めたもの）を使う。**per-binding のトークン照合は
+`cancel` 後に必ず破綻する**。
 
 偽陽性を避けるために除外・特別扱いが要るもの:
 
@@ -80,8 +84,9 @@ may-alias ではない。辺は次のとおり:
   no-op）。丸ごとスキップする。
 - **punched フィールドの下の leaf**: `rc_units` はスキップするが `boxed_leaf_paths` はしない。leaf 側でも
   ミラーして除外する。
-- **unbox union の unit**: `root` が leaf 粒度でしか定義されていないため、unbox コンテナから射影された unbox union
-  の whole-value path は producer と誤判定される。`root` を unit 粒度に拡張するまでは検査対象外にする。
+- **unbox union が参照を数えるキー**: union の参照は生きている variant の参照で、どのオブジェクトに属するかは
+  タグで決まるのに、`origin` は構築時に置かれたオブジェクトを答える。union の unit path と各 variant leaf が
+  解決するキーをまとめて検査対象外にする（別名の先も同じキーなので一緒に外れる）。
 - **fully-unboxed 値**（`needs_rc` が偽）には RC ノードが無い。funptr 型もここに入る。
 - **1 変数が複数 unit を持ち、unit ごとに所有権が違う**（`split_rc_units` 以降）。
 - **他コンパイル単位のシンボル**: `prog.funcs` に無い callee は全 `Own` とみなす（borrow 最適化が走るのは

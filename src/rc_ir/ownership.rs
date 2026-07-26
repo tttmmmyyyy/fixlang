@@ -575,6 +575,73 @@ pub(crate) fn truncate_to_unit(
     out
 }
 
+/// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
+/// clamped to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
+/// retain and a payload consume land in the same bucket (without which a payload consume could not
+/// keep the union retain needed, and a later union release would wrongly cancel it).
+///
+/// This is the key a retain and a release are paired on, and the key a reference count is kept
+/// under, so it must name one object: a leaf whose object is path-dependent keys to the match
+/// binding that joins the paths, which every alias chain through it agrees on. The units an
+/// operation on it really touches are `acted_unit_keys`.
+pub(crate) fn unit_key(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    var: &FullName,
+    path: &[usize],
+) -> VarPath {
+    unit_of(vars, type_env, origin(vars, type_env, var, path).identity())
+}
+
+/// Every reference-counting unit an operation on a leaf acts on: the one its reference is counted
+/// under, and the ones the object it belongs to may be counted under.
+pub(crate) fn acted_unit_keys(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    var: &FullName,
+    path: &[usize],
+) -> Vec<VarPath> {
+    origin(vars, type_env, var, path)
+        .acted_on()
+        .into_iter()
+        .map(|p| unit_of(vars, type_env, p))
+        .collect()
+}
+
+fn unit_of(vars: &VarTable, type_env: &TypeEnv, (r, rp): &VarPath) -> VarPath {
+    let Some(ty) = vars.var_tys.get(r) else {
+        // A root with no type here is a global: the table holds the function's own variables.
+        // Reference counting is inserted for locals only and a global's reachable graph is
+        // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
+        assert!(
+            !r.is_local(),
+            "local `{}` has no recorded type",
+            r.to_string()
+        );
+        return (r.clone(), rp.clone());
+    };
+    (r.clone(), truncate_to_unit(ty, rp, type_env))
+}
+
+/// Whether the reference-counting unit a unit path names is an unboxed union. Such a unit is one
+/// refcount operation over whichever variant is live, so its whole-value path names no boxed leaf,
+/// and `origin` — defined over leaves — cannot tell an alias of one from a producer of it.
+pub(crate) fn is_unboxed_union_unit(
+    ty: &Arc<TypeNode>,
+    unit: &FieldPath,
+    type_env: &TypeEnv,
+) -> bool {
+    let mut cur = ty.clone();
+    for &idx in unit {
+        // The only path into a closure names its capture, a boxed object.
+        if cur.is_closure() {
+            return false;
+        }
+        cur = cur.field_types(type_env)[idx].clone();
+    }
+    cur.is_union(type_env) && !cur.is_box(type_env)
+}
+
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {

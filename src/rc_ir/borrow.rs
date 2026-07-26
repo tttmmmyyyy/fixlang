@@ -46,8 +46,8 @@ use crate::rc_ir::ast::{
     RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::ownership::{
-    all_owned_units, boxed_leaves, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, units_under, VarTable,
+    acted_unit_keys, all_owned_units, boxed_leaves, collect_consumes, destructure_consumes, origin,
+    rc_units, rhs_consumes, truncate_to_unit, unit_key, units_under, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
@@ -845,42 +845,12 @@ struct CancelAnalysis<'a> {
 }
 
 impl<'a> CancelAnalysis<'a> {
-    /// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
-    /// clamped to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
-    /// retain and a payload consume land in the same bucket (without which a payload consume could
-    /// not keep the union retain needed, and a later union release would wrongly cancel it).
-    ///
-    /// This is the key a retain and a release are paired on, so it must name one object: a leaf whose
-    /// object is path-dependent keys to the match binding that joins the paths, which every alias
-    /// chain through it agrees on. The units an operation on it really touches are `acted_unit_keys`.
     fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
-        self.unit_of(origin(self.vars, self.type_env, var, path).identity())
+        unit_key(self.vars, self.type_env, var, path)
     }
 
-    /// Every reference-counting unit an operation on a leaf acts on: the one its reference is counted
-    /// under, and the ones the object it belongs to may be counted under. A pending retain on any of
-    /// them is load-bearing across the operation.
     fn acted_unit_keys(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
-        origin(self.vars, self.type_env, var, path)
-            .acted_on()
-            .into_iter()
-            .map(|p| self.unit_of(p))
-            .collect()
-    }
-
-    fn unit_of(&self, (r, rp): &VarPath) -> VarPath {
-        let Some(ty) = self.vars.var_tys.get(r) else {
-            // A root with no type here is a global: the table holds the function's own variables.
-            // Reference counting is inserted for locals only and a global's reachable graph is
-            // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
-            assert!(
-                !r.is_local(),
-                "local `{}` has no recorded type",
-                r.to_string()
-            );
-            return (r.clone(), rp.clone());
-        };
-        (r.clone(), truncate_to_unit(ty, rp, self.type_env))
+        acted_unit_keys(self.vars, self.type_env, var, path)
     }
 
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
