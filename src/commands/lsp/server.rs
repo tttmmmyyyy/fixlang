@@ -17,7 +17,7 @@ use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
 use crate::error::{any_to_string, Error, Errors, Severity, WARN_DEPRECATED};
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{to_absolute_path, Map, Set};
+use crate::misc::{spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::write_log;
 use lsp_types::{
@@ -859,8 +859,10 @@ fn handle_initialized(
     typecheck_cache: SharedTypeCheckCache,
     debounce_ms: Arc<AtomicU64>,
 ) {
-    // Launch the diagnostics thread.
-    std::thread::spawn(move || {
+    // Launch the diagnostics thread. It type-checks the user's program, recursing over an
+    // expression tree of unbounded depth, so it gets the same deep-recursion stack as the batch
+    // compiler's threads.
+    spawn_compiler_thread(move || {
         let res = std::panic::catch_unwind(move || {
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
