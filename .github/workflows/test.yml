@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest]
-        opt-level: [basic]
+        opt-level: [basic, max, none]
     env:
       FIX_MAX_OPT_LEVEL: ${{ matrix.opt-level }}
     steps:
@@ -60,14 +60,63 @@ jobs:
         run: |
           sudo apt-get install -y valgrind=1:3.22.*
 
-      - name: Run tests
-        run: cargo test --release test_external_project_regexp -- --nocapture
-
-      - name: Show crash reports
-        if: always()
+      - name: Narrow the regexp failure
+        shell: bash
         run: |
-          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || true
-          for f in ~/Library/Logs/DiagnosticReports/*.ips; do
-            echo "===== $f"
-            cat "$f" | head -200
-          done 2>/dev/null || true
+          cargo build --release
+          FIX="$GITHUB_WORKSPACE/target/release/fix"
+          git clone --depth 1 https://github.com/tttmmmyyyy/fixlang-regexp.git "$RUNNER_TEMP/regexp"
+          cd "$RUNNER_TEMP/regexp"
+          cat > p1.fix <<'EOF'
+          module Main;
+          import RegExp::RegExp::{compile, match_one};
+          import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
+          main : IO ();
+          main = (
+              println("p1: compile");;
+              let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
+              println("p1: match_one");;
+              let groups = regexp.match_one("abc012 def345").as_ok;
+              assert_eq(|_|"p1", groups, ["abc012", "012"]);;
+              println("p1: ok");;
+              pure()
+          );
+          EOF
+          cat > p2.fix <<'EOF'
+          module Main;
+          import RegExp::RegExp::{compile, match_one};
+          import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
+          main : IO ();
+          main = (
+              println("p2: compile");;
+              let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
+              println("p2: match_one");;
+              let groups = regexp.match_one("abc012 def345").as_ok;
+              assert_eq(|_|"p2", groups, ["abc012", "def345"]);;
+              println("p2: ok");;
+              pure()
+          );
+          EOF
+          cat > p3.fix <<'EOF'
+          module Main;
+          import RegExp::RegExp::{compile, replace_all};
+          import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
+          main : IO ();
+          main = (
+              println("p3: compile");;
+              let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
+              println("p3: replace_all");;
+              let result = regexp.replace_all("abc def ijk", "$2$1");
+              assert_eq(|_|"p3", result, "cab fde kij");;
+              println("p3: ok");;
+              pure()
+          );
+          EOF
+          for p in p1 p2 p3; do
+            echo "##### $p at -O ${{ matrix.opt-level }}"
+            "$FIX" run -f $p.fix -O ${{ matrix.opt-level }} --allow-preliminary-commands --allow-deprecated --backtrace && echo "##### $p PASSED" || echo "##### $p FAILED with $?"
+          done
+
+      - name: Run the regexp project test
+        if: always()
+        run: cargo test --release test_external_project_regexp -- --nocapture
