@@ -20,10 +20,15 @@ is byte-identical between this branch and its fork point `6dd8c629`, and the two
 executed-instruction count when built at the same path.
 
 The remaining movement the graph shows on the small cases — roughly +44,000 instructions, up to +18%
-on the ~250K-instruction micro-benchmarks but +0.00% on every case above a few million — is not from
-this branch. It is a fixed per-program startup cost added by the `main` commits between `eec295f8`
-and the branch's fork point (#88's merge resolution plus #89/#90/#91); the branch sits on top of
-those and inherits the cost while adding none of its own, as the byte-identical IR confirms.
+on the ~250K-instruction micro-benchmarks but +0.00% on every case above a few million — is not a
+code change. Built head-to-head today at a fixed path, the previous row's compiler (`eec295f8`) and
+this branch's compiler produce the same instruction count within noise (within +/-60 on the ~250K
+micro-benchmarks; identical on sum_by_loop), so neither the intervening `main` commits (#88-#91) nor
+this branch regressed anything. The +44K is measurement-environment drift between the two rows'
+measurement dates, weeks apart: the harness's real-project build — its resolved `.fixlang` state, the
+deep worktree path, and the system libraries the emitted program starts against — shifts every
+program's fixed startup count by a constant that had grown between the two runs. Read a pure code
+delta by measuring two commits back-to-back in one environment, not against a historical row.
 
 ## eec295f846d6110826a74e823fde8a6ae02859d4
 
