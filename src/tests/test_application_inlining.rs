@@ -7,11 +7,10 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::{fix_command, test_source};
+    use crate::tests::test_util::{fix_build_source_command, test_source, wait_within};
     use std::fs::{self, File};
     use std::process::{Command, Stdio};
-    use std::thread::sleep;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     /// The argument `x` of `(let x = ..; ..)(x)` denotes the outer `x` after the application is
@@ -93,63 +92,36 @@ mod tests {
         );
 
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let src_path = temp_dir.path().join("many_params.fix");
-        fs::write(&src_path, source).expect("Failed to write source file");
         let program_path = temp_dir.path().join("many_params");
 
-        // The compiler writes its diagnostics to a file rather than a pipe, which the polling loop
-        // below would leave unread until the child exits — long enough to fill a pipe's buffer and
-        // block the very build being timed.
+        // The compiler writes its diagnostics to a file rather than a pipe, which nothing reads
+        // until the child exits — long enough to fill a pipe's buffer and block the very build
+        // being timed.
         let log_path = temp_dir.path().join("build.log");
         let log = File::create(&log_path).expect("Failed to create the build log");
         let log_for_stderr = log
             .try_clone()
             .expect("Failed to clone the build log handle");
-        let read_log = || fs::read_to_string(&log_path).unwrap_or_default();
 
-        // `fix_command` builds the compiler itself on first use, so it is called before the clock
-        // starts.
-        let mut command = fix_command();
+        let mut command = fix_build_source_command(temp_dir.path(), &source, "basic");
         command
-            .arg("build")
-            .arg("--file")
-            .arg(&src_path)
             .arg("-o")
             .arg(&program_path)
-            .arg("-O")
-            .arg("basic")
-            .current_dir(temp_dir.path())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(log_for_stderr));
-
-        let start = Instant::now();
         let mut child = command.spawn().expect("Failed to execute fix build");
-        loop {
-            match child.try_wait().expect("Failed to wait for fix build") {
-                Some(status) => {
-                    assert!(
-                        status.success(),
-                        "compiling a {}-parameter function failed: {}\n{}",
-                        ARITY,
-                        status,
-                        read_log()
-                    );
-                    break;
-                }
-                None => {
-                    if start.elapsed() > TIMEOUT {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        panic!(
-                            "compiling a {}-parameter function did not finish within {} seconds",
-                            ARITY,
-                            TIMEOUT.as_secs()
-                        );
-                    }
-                    sleep(Duration::from_millis(100));
-                }
-            }
-        }
+        let status = wait_within(
+            &mut child,
+            TIMEOUT,
+            &format!("compiling a {}-parameter function", ARITY),
+        );
+        assert!(
+            status.success(),
+            "compiling a {}-parameter function failed: {}\n{}",
+            ARITY,
+            status,
+            fs::read_to_string(&log_path).unwrap_or_default()
+        );
 
         let output = Command::new(&program_path)
             .output()

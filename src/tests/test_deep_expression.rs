@@ -7,8 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::fix_command;
-    use std::fs;
+    use crate::tests::test_util::fix_build_source_command;
     use tempfile::TempDir;
 
     // 300 exceeds the few-hundred nesting depth at which the compiler overflows a
@@ -26,16 +25,7 @@ mod integration_tests {
         source.push_str("    pure()\n);\n");
 
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let src_path = temp_dir.path().join("deep.fix");
-        fs::write(&src_path, source).expect("Failed to write source file");
-
-        let output = fix_command()
-            .arg("build")
-            .arg("--file")
-            .arg(&src_path)
-            .arg("-O")
-            .arg("max")
-            .current_dir(temp_dir.path())
+        let output = fix_build_source_command(temp_dir.path(), &source, "max")
             .output()
             .expect("Failed to execute fix build");
 

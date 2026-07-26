@@ -10,12 +10,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{
-        path::PathBuf,
-        process::Stdio,
-        time::{Duration, Instant},
-    };
+    use crate::tests::test_util::{copy_dir_recursive, fix_command, wait_within};
+    use std::{path::PathBuf, process::Stdio, time::Duration};
     use tempfile::TempDir;
 
     /// Absolute path to the LSP `cases/` directory.
@@ -71,21 +67,10 @@ mod tests {
 
         // The server must terminate promptly. Before the fix it would
         // spin on `read_line` returning `Ok(0)` forever and never exit.
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match child.try_wait().expect("Failed to poll server status") {
-                Some(_status) => break, // exited as expected
-                None => {
-                    if Instant::now() >= deadline {
-                        let _ = child.kill();
-                        panic!(
-                            "LSP server did not exit after stdin reached EOF \
-                             (busy-loop bug); it was killed by the test"
-                        );
-                    }
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-        }
+        wait_within(
+            &mut child,
+            Duration::from_secs(10),
+            "the LSP server after stdin reached EOF",
+        );
     }
 }
