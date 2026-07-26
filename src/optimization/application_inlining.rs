@@ -35,29 +35,19 @@ let x = {expr1} in {expr0}
 ```
 */
 
-use super::rename::generate_new_names;
-use crate::{
-    ast::{
-        expr::{
-            expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed,
-            expr_var, var_var, Expr, ExprNode,
-        },
-        name::FullName,
-        pattern::PatternNode,
-        program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+use super::rename::{
+    generate_new_names, rename_let_pattern_avoiding, rename_match_pattern_avoiding,
+};
+use crate::ast::{
+    expr::{
+        expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var,
+        var_var, Expr, ExprNode,
     },
-    misc::Set,
+    pattern::PatternNode,
+    program::Symbol,
+    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 use std::sync::Arc;
-
-/// Optimizes the expression of every symbol of the program.
-#[allow(dead_code)]
-pub fn run(prg: &mut Program) {
-    for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym);
-    }
-}
 
 /// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
 /// expression.
@@ -112,17 +102,14 @@ impl PushedArg {
     /// # Arguments
     /// * `func` — the function the application is pushed into. A fresh name avoids every name
     ///   `func` mentions, free or shadowing.
-    /// * `shadowed` — the names the subexpressions of `func` are reached under. A variable argument
-    ///   among them would be captured there, so it gets a binding of its own.
-    fn new(arg: &Arc<ExprNode>, func: &Arc<ExprNode>, shadowed: &Set<FullName>) -> Self {
-        if arg.is_var() && !shadowed.contains(&arg.get_var().name) {
+    fn new(arg: &Arc<ExprNode>, func: &Arc<ExprNode>) -> Self {
+        if arg.is_var() {
             return PushedArg {
                 value: arg.clone(),
                 binding: None,
             };
         }
-        let mut black_list = func.free_vars();
-        black_list.extend(shadowed.iter().cloned());
+        let black_list = func.free_vars();
         let ty = arg.type_.as_ref().unwrap().clone();
         let name = generate_new_names(&black_list, 1)[0].clone();
         let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
@@ -143,12 +130,16 @@ impl PushedArg {
 
 impl ExprVisitor for AppInliner {
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // Get the argument of the application.
+        // Get the argument of the application. An application carries one argument until uncurrying
+        // rewrites call sites onto function pointers, which happens after every pass that runs this
+        // one.
         let args = expr.get_app_args();
-        if args.len() > 1 {
-            // This optimiza does not support multiple arguments.
-            return EndVisitResult::unchanged(expr);
-        }
+        assert_eq!(
+            args.len(),
+            1,
+            "an application of {} arguments reached application inlining",
+            args.len()
+        );
         let arg = args[0].clone();
 
         // Get the function applied to the argument.
@@ -167,21 +158,27 @@ impl ExprVisitor for AppInliner {
                 let expr = expr_let_typed(pat, arg, body.clone());
                 return EndVisitResult::changed(expr).revisit();
             }
-            Expr::Let(pattern, bound, value) => {
+            Expr::Let(_pattern, _bound, _value) => {
                 // The expression is of the form `(let {pat} = {bound} in {value})({a})`.
                 // Replace it with `let x = {a} in let {pat} = {bound} in {value}(x)`.
-                let shadowed = pattern.pattern.vars();
-                let pushed = PushedArg::new(&arg, &func, &shadowed);
+                let pushed = PushedArg::new(&arg, &func);
+                // `{a}` lands under `{pat}`, so a name `{pat}` binds and `{a}` mentions is renamed
+                // away first, leaving that name denoting in `{a}` what it denoted outside.
+                let func = rename_let_pattern_avoiding(&pushed.value.free_vars(), func.clone());
 
-                let expr = expr_app_typed(value.clone(), vec![pushed.value.clone()]); // {value}(x)
-                let expr = expr_let_typed(pattern.clone(), bound.clone(), expr); // let {pat} = {bound} in {value}(x)
+                let expr = expr_app_typed(func.get_let_value().clone(), vec![pushed.value.clone()]); // {value}(x)
+                let expr = expr_let_typed(
+                    func.get_let_pat().clone(),
+                    func.get_let_bound().clone(),
+                    expr,
+                ); // let {pat} = {bound} in {value}(x)
                 let expr = pushed.wrap(expr); // let x = {a} in let {pat} = {bound} in {value}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::If(cond, then, else_) => {
                 // The expression is of the form `(if {cond} then {then} else {else})({a})`.
                 // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
-                let pushed = PushedArg::new(&arg, &func, &Set::default());
+                let pushed = PushedArg::new(&arg, &func);
 
                 let then = expr_app_typed(then.clone(), vec![pushed.value.clone()]); // {then}(x)
                 let else_ = expr_app_typed(else_.clone(), vec![pushed.value.clone()]); // {else}(x)
@@ -189,28 +186,25 @@ impl ExprVisitor for AppInliner {
                 let expr = pushed.wrap(expr); // let x = {a} in if {cond} then {then}(x) else {else}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
-            Expr::Match(cond, pats_vals) => {
-                // Similar to `if` and `let` cases. The argument is pushed under the patterns of the
-                // arms, so the names they bind are what it must not be captured by.
-                let mut shadowed = Set::default();
-                for (pat, _val) in pats_vals {
-                    shadowed.extend(pat.pattern.vars());
-                }
-                let pushed = PushedArg::new(&arg, &func, &shadowed);
+            Expr::Match(_cond, _pats_vals) => {
+                // Similar to `if` and `let` cases. The argument lands under the patterns of the
+                // arms, so the names they bind are renamed away from it as in the `let` case.
+                let pushed = PushedArg::new(&arg, &func);
+                let func = rename_match_pattern_avoiding(&pushed.value.free_vars(), func.clone());
 
-                let mut pats_vals = pats_vals.clone();
+                let mut pats_vals = func.get_match_pat_vals();
                 for (_pat, val) in &mut pats_vals {
                     let new_val = expr_app_typed(val.clone(), vec![pushed.value.clone()]);
                     *val = new_val;
                 }
-                let expr = expr_match_typed(cond.clone(), pats_vals);
+                let expr = expr_match_typed(func.get_match_cond().clone(), pats_vals);
                 let expr = pushed.wrap(expr);
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::Eval(side, main) => {
                 // The expression is of the form `(eval {side} in {main})({a})`.
                 // Replace it with `let x = {a} in eval {side} in {main}(x)`.
-                let pushed = PushedArg::new(&arg, &func, &Set::default());
+                let pushed = PushedArg::new(&arg, &func);
 
                 let main_x = expr_app_typed(main.clone(), vec![pushed.value.clone()]); // {main}(x)
                 let eval_expr = expr_eval_typed(side.clone(), main_x); // eval {side} in {main}(x)

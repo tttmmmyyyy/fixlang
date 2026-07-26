@@ -505,7 +505,6 @@ pub fn rename_pattern_value_avoiding(
     (pattern, value)
 }
 
-#[allow(dead_code)]
 pub fn rename_let_pattern_avoiding(
     black_list: &Set<FullName>,
     let_expr: Arc<ExprNode>,
@@ -516,7 +515,6 @@ pub fn rename_let_pattern_avoiding(
     let_expr.set_let_pat(pattern).set_let_value(value)
 }
 
-#[allow(dead_code)]
 pub fn rename_match_pattern_avoiding(
     black_list: &Set<FullName>,
     match_expr: Arc<ExprNode>,
