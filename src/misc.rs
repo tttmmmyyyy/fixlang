@@ -42,10 +42,8 @@ pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
 }
 
 /// Spawn a thread whose stack (`COMPILER_WORKER_THREAD_STACK_SIZE`) is large enough for the
-/// compiler's recursion over deeply nested user expressions. The parallel type checker, the
-/// per-unit code generator, and the top-level compilation all descend the program's expression
-/// tree, whose depth is unbounded, so a thread spawned with the default stack overflows on deep
-/// inputs.
+/// compiler's recursion over deeply nested user expressions. The program's expression tree has
+/// unbounded depth, so a thread spawned with the default stack overflows on deep inputs.
 pub fn spawn_compiler_worker<F, T>(f: F) -> JoinHandle<T>
 where
     F: FnOnce() -> T + Send + 'static,

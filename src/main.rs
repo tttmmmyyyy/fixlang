@@ -86,6 +86,7 @@ fn main() {
     }
 }
 
+/// Build the command-line interface, parse the invocation, and run the selected subcommand.
 fn run_cli() {
     disable_colored_no_tty();
 
