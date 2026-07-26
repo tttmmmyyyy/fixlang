@@ -137,7 +137,7 @@ fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNo
 fn check_capture_projection(
     func: &RcFunc,
     proj: &InlineLLVMCaptureProjectBody,
-    layout: Option<&Vec<Arc<TypeNode>>>,
+    prev_layout: Option<&Vec<Arc<TypeNode>>>,
     stage: &str,
 ) {
     let location = func.name.name.to_string();
@@ -159,11 +159,11 @@ fn check_capture_projection(
             location,
         );
     }
-    if let Some(layout) = layout {
-        if *layout != proj.cap_tys {
+    if let Some(prev_layout) = prev_layout {
+        if *prev_layout != proj.cap_tys {
             panic!(
                 "[RC IR validate] {}: capture projections of `{}` disagree on the capture layout: {:?} and {:?}",
-                stage, location, layout, proj.cap_tys,
+                stage, location, prev_layout, proj.cap_tys,
             );
         }
     }
@@ -407,16 +407,16 @@ fn check_reference_counting(prog: &RcProgram, type_env: &TypeEnv, stage: &str) {
     let owned_units = all_owned_units(prog, type_env);
     for func in prog.funcs.values() {
         let vars = VarTable::of(func);
-        let name = func.name.name.to_string();
-        let mut walk = BalanceWalk::new(stage, name, &vars, prog, &owned_units, type_env);
+        let location = func.name.name.to_string();
+        let mut walk = BalanceWalk::new(stage, location, &vars, prog, &owned_units, type_env);
         let entry = walk.entry_balance(func);
         walk.walk(&func.body, entry, Terminal::Return);
     }
     // A global initializer takes no input, so it starts holding nothing.
     for g in &prog.globals {
         let vars = VarTable::body_only(&g.init);
-        let name = g.symbol.to_string();
-        let mut walk = BalanceWalk::new(stage, name, &vars, prog, &owned_units, type_env);
+        let location = g.symbol.to_string();
+        let mut walk = BalanceWalk::new(stage, location, &vars, prog, &owned_units, type_env);
         walk.walk(&g.init, Balance::default(), Terminal::Return);
     }
 }
@@ -1052,18 +1052,18 @@ mod tests {
     }
 
     /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
-    /// `cap_tys`, out of `reads` — its capture parameter, in a well-formed function. It disposes of
+    /// `cap_tys`, out of `read_var` — its capture parameter, in a well-formed function. It disposes of
     /// the capture it owns, so its reference counting balances.
-    fn projecting_func(reads: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
+    fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
         let proj = Box::new(InlineLLVMCaptureProjectBody {
-            cap_name: reads.name.clone(),
+            cap_name: read_var.name.clone(),
             cap_idx,
             cap_tys,
         });
         let body = node(RcExpr::Let(
             var("c"),
-            RcRhs::Llvm(proj, vec![reads.clone()]),
+            RcRhs::Llvm(proj, vec![read_var.clone()]),
             node(RcExpr::Release(
                 capture.clone(),
                 vec![],

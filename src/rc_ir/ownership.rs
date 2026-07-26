@@ -611,19 +611,19 @@ pub(crate) fn acted_unit_keys(
         .collect()
 }
 
-fn unit_of(vars: &VarTable, type_env: &TypeEnv, (r, rp): &VarPath) -> VarPath {
-    let Some(ty) = vars.var_tys.get(r) else {
+fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
+    let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.
         // Reference counting is inserted for locals only and a global's reachable graph is
         // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
         assert!(
-            !r.is_local(),
+            !root.is_local(),
             "local `{}` has no recorded type",
-            r.to_string()
+            root.to_string()
         );
-        return (r.clone(), rp.clone());
+        return (root.clone(), path.clone());
     };
-    (r.clone(), truncate_to_unit(ty, rp, type_env))
+    (root.clone(), truncate_to_unit(ty, path, type_env))
 }
 
 /// Whether the reference-counting unit a unit path names is an unboxed union. Such a unit is one
