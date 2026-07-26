@@ -98,22 +98,21 @@ struct PushedArg {
 }
 
 impl PushedArg {
-    // `shadowed` are the names bound where the argument is pushed to; a variable argument among them
-    // would be captured there, so it gets a binding of its own. `black_list` gives the names a fresh
-    // binding must avoid, and is evaluated only when one is needed.
-    fn new(
-        arg: &Arc<ExprNode>,
-        shadowed: &Set<FullName>,
-        black_list: impl FnOnce() -> Set<FullName>,
-    ) -> Self {
+    // `func` is the function the application is pushed into, and `shadowed` are the names its
+    // subexpressions are reached under; a variable argument among the latter would be captured
+    // there, so it gets a binding of its own. A fresh binding avoids every name `func` mentions,
+    // free or shadowing.
+    fn new(arg: &Arc<ExprNode>, func: &Arc<ExprNode>, shadowed: &Set<FullName>) -> Self {
         if arg.is_var() && !shadowed.contains(&arg.get_var().name) {
             return PushedArg {
                 value: arg.clone(),
                 binding: None,
             };
         }
+        let mut black_list = func.free_vars();
+        black_list.extend(shadowed.iter().cloned());
         let ty = arg.type_.as_ref().unwrap().clone();
-        let name = generate_new_names(&black_list(), 1)[0].clone();
+        let name = generate_new_names(&black_list, 1)[0].clone();
         let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
         PushedArg {
             value: expr_var(name, None).set_type(ty),
@@ -160,12 +159,7 @@ impl ExprVisitor for AppInliner {
                 // The expression is of the form `(let {pat} = {bound} in {value})({a})`.
                 // Replace it with `let x = {a} in let {pat} = {bound} in {value}(x)`.
                 let shadowed = pattern.pattern.vars();
-                let pushed = PushedArg::new(&arg, &shadowed, || {
-                    let mut black_list = shadowed.clone();
-                    black_list.extend(bound.free_vars().into_iter());
-                    black_list.extend(value.free_vars().into_iter());
-                    black_list
-                });
+                let pushed = PushedArg::new(&arg, &func, &shadowed);
 
                 let expr = expr_app_typed(value.clone(), vec![pushed.value.clone()]); // {value}(x)
                 let expr = expr_let_typed(pattern.clone(), bound.clone(), expr); // let {pat} = {bound} in {value}(x)
@@ -175,12 +169,7 @@ impl ExprVisitor for AppInliner {
             Expr::If(cond, then, else_) => {
                 // The expression is of the form `(if {cond} then {then} else {else})({a})`.
                 // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
-                let pushed = PushedArg::new(&arg, &Set::default(), || {
-                    let mut black_list = cond.free_vars();
-                    black_list.extend(then.free_vars().into_iter());
-                    black_list.extend(else_.free_vars().into_iter());
-                    black_list
-                });
+                let pushed = PushedArg::new(&arg, &func, &Set::default());
 
                 let then = expr_app_typed(then.clone(), vec![pushed.value.clone()]); // {then}(x)
                 let else_ = expr_app_typed(else_.clone(), vec![pushed.value.clone()]); // {else}(x)
@@ -195,14 +184,7 @@ impl ExprVisitor for AppInliner {
                 for (pat, _val) in pats_vals {
                     shadowed.extend(pat.pattern.vars());
                 }
-                let pushed = PushedArg::new(&arg, &shadowed, || {
-                    let mut black_list = cond.free_vars();
-                    black_list.extend(shadowed.iter().cloned());
-                    for (_pat, val) in pats_vals {
-                        black_list.extend(val.free_vars().into_iter());
-                    }
-                    black_list
-                });
+                let pushed = PushedArg::new(&arg, &func, &shadowed);
 
                 let mut pats_vals = pats_vals.clone();
                 for (_pat, val) in &mut pats_vals {
@@ -216,11 +198,7 @@ impl ExprVisitor for AppInliner {
             Expr::Eval(side, main) => {
                 // The expression is of the form `(eval {side} in {main})({a})`.
                 // Replace it with `let x = {a} in eval {side} in {main}(x)`.
-                let pushed = PushedArg::new(&arg, &Set::default(), || {
-                    let mut black_list = side.free_vars();
-                    black_list.extend(main.free_vars().into_iter());
-                    black_list
-                });
+                let pushed = PushedArg::new(&arg, &func, &Set::default());
 
                 let main_x = expr_app_typed(main.clone(), vec![pushed.value.clone()]); // {main}(x)
                 let eval_expr = expr_eval_typed(side.clone(), main_x); // eval {side} in {main}(x)
