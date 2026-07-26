@@ -16,7 +16,12 @@ the out-pointer half: passing the pointer as an ordinary parameter from the star
 delete the buffer wherever the callee inlines, where LLVM's own return demotion used to introduce the
 pointer at instruction selection, after every IR pass had already run.
 
-Every regression comes from `tailcc`: fannkuch +1.51%, cp_lib_bipartite +1.10%, sort +0.73%,
+The out-pointer half regresses one case on its own, sort by 0.06%, and that is instruction-selection
+churn rather than a cost of the buffer: the strength-reduced remainder in the input-generation loop
+comes out two instructions longer per iteration, against which the case's insertion-sort phase gets
+cheaper.
+
+The rest of the regressions come from `tailcc`: fannkuch +1.51%, cp_lib_bipartite +1.10%, sort +0.73%,
 cp_lib_unionfind +0.68%, cp_lib_lsegtree +0.56%, binary_trees +0.40%, cp_lib_scc +0.39%, get_sub
 +0.09%. The cases that compile to one inlined loop are unchanged. Three properties of a
 guarantees-tail-calls convention account for all of it on x86-64:
@@ -24,7 +29,7 @@ guarantees-tail-calls convention account for all of it on x86-64:
 - The callee pops the argument area, and `GetAlignedArgumentStackSize` rounds that area up so that it
   plus the return address is 16-byte aligned. A function with no stack arguments at all therefore
   ends in `ret $8`, and every **non-tail** call site pays one `sub $0x8, %rsp` to restore its own
-  frame. get_sub calls `slice_bench` 100,000 times and grows by exactly 100,000 instructions.
+  frame. get_sub calls `slice_bench` 100,000 times and grows by 100,000 instructions.
 - Incoming stack arguments become mutable frame objects, since a tail call may overwrite them
   (`X86TargetLowering::LowerMemArgument` marks them so whenever the convention guarantees tail calls).
   A callee can no longer reload one from the caller's slot on demand, so it copies them into its own
@@ -38,10 +43,11 @@ guarantees-tail-calls convention account for all of it on x86-64:
   tail call may.
 
 Restricting `tailcc` to the functions whose arguments exceed the argument registers would spare
-everything else the first two costs, but LLVM refuses a tail call whose callee is `tailcc` and whose
-caller is not — `IsEligibleForTailCallOptimization` returns false unless the conventions match — so a
-narrow function tail-calling a wide one would stop being a jump. The convention has to be uniform
-across everything reachable by a tail call.
+everything else the first two costs, but a tail call between two different conventions becomes an
+ordinary call in **both** directions (measured with `llc -O2`; `IsEligibleForTailCallOptimization`
+requires the conventions to match once either side guarantees tail calls). A narrow function
+tail-calling a wide one, which is what a monadic chain is made of, would stop being a jump. The
+convention has to be uniform across everything reachable by a tail call.
 
 ## 476f40aa1ef55bf5f0880495bd2000860ad13e13
 
