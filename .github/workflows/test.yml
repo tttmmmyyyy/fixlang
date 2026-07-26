@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest]
-        opt-level: [basic, max, none]
+        opt-level: [basic]
     env:
       FIX_MAX_OPT_LEVEL: ${{ matrix.opt-level }}
     steps:
@@ -60,7 +60,7 @@ jobs:
         run: |
           sudo apt-get install -y valgrind=1:3.22.*
 
-      - name: Narrow the regexp failure
+      - name: Fault site of the arm64 tailcc crash
         shell: bash
         run: |
           cargo build --release
@@ -73,50 +73,12 @@ jobs:
           import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
           main : IO ();
           main = (
-              println("p1: compile");;
               let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
-              println("p1: match_one");;
               let groups = regexp.match_one("abc012 def345").as_ok;
               assert_eq(|_|"p1", groups, ["abc012", "012"]);;
-              println("p1: ok");;
               pure()
           );
           EOF
-          cat > p2.fix <<'EOF'
-          module Main;
-          import RegExp::RegExp::{compile, match_one};
-          import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
-          main : IO ();
-          main = (
-              println("p2: compile");;
-              let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
-              println("p2: match_one");;
-              let groups = regexp.match_one("abc012 def345").as_ok;
-              assert_eq(|_|"p2", groups, ["abc012", "def345"]);;
-              println("p2: ok");;
-              pure()
-          );
-          EOF
-          cat > p3.fix <<'EOF'
-          module Main;
-          import RegExp::RegExp::{compile, replace_all};
-          import Std::{IO, Debug::assert_eq, Monad::pure, Result::as_ok, IO::println};
-          main : IO ();
-          main = (
-              println("p3: compile");;
-              let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
-              println("p3: replace_all");;
-              let result = regexp.replace_all("abc def ijk", "$2$1");
-              assert_eq(|_|"p3", result, "cab fde kij");;
-              println("p3: ok");;
-              pure()
-          );
-          EOF
-          for p in p1 p2 p3; do
-            echo "##### $p at -O ${{ matrix.opt-level }}"
-            "$FIX" run -f $p.fix -O ${{ matrix.opt-level }} --allow-preliminary-commands --allow-deprecated --backtrace && echo "##### $p PASSED" || echo "##### $p FAILED with $?"
-          done
-
-      - name: Run the regexp project test
-        if: always()
-        run: cargo test --release test_external_project_regexp -- --nocapture
+          "$FIX" build -f p1.fix -O basic --allow-preliminary-commands --allow-deprecated --emit-symbols
+          ls -la a.out
+          lldb -b -o run -o "bt all" -o "register read sp x29 x30 pc" -o "disassemble --frame --count 40" -o quit ./a.out 2>&1 | tail -120
