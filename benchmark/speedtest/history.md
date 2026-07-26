@@ -2,6 +2,52 @@
 
 Newer is above.
 
+## 476f40aa1ef55bf5f0880495bd2000860ad13e13
+
+The `defunctionalize-fix-tco` branch (PR #95), which rewrites `Std::fix` into a directly
+self-recursive global so LLVM's tail-call elimination can fold it into a loop. Measured against the
+previous row `eec295f8` on the same speedtest path.
+
+The one benchmark that uses the `fix` combinator, **sum_by_fix, drops from 655.2M to 0.21M
+instructions — -99.97%, a 3175x reduction**. Defunctionalization turns the indirect `fix` self-call
+into a direct one; LLVM loop-ifies it and SCEV then closes the accumulation into a constant-time
+form. This is the win the branch exists for.
+
+The branch changes nothing else. Its passes only touch `fix`-using symbols, and the standard library
+uses no `fix`, so every other program's code is untouched. Confirmed directly: the emitted LLVM IR of
+a representative non-`fix` case (sum_by_loop), both before and after LLVM's own optimization passes,
+is byte-identical between this branch and its fork point `6dd8c629`, and the two produce the same
+executed-instruction count when built at the same path.
+
+The remaining movement the graph shows on the small cases — roughly +44,000 instructions, up to +18%
+on the ~250K-instruction micro-benchmarks but +0.00% on every case above a few million — is not a
+code change. Built head-to-head today at a fixed path, the previous row's compiler (`eec295f8`) and
+this branch's compiler produce the same instruction count within noise (within +/-60 on the ~250K
+micro-benchmarks; identical on sum_by_loop), so neither the intervening `main` commits (#88-#91) nor
+this branch regressed anything. The two rows were measured ~18 hours apart (`eec295f8` on 2026-07-25
+16:01, this row 2026-07-26 10:05) across overnight system-package activity — a kernel and `libc-bin`
+update landed at 16:51, minutes after the `eec295f8` run. The +44K is a shift in the emitted
+program's fixed per-program startup, an environment effect on the harness's real-project build, not
+the compiler. Read a pure code delta by measuring two commits back-to-back in one environment, not
+against a historical row.
+
+## eec295f846d6110826a74e823fde8a6ae02859d4
+
+The object-scalarization branch merged with `main`, measured against the previous row `96f68049` (the
+cp-library 0.13.0 bump). The branch makes the codegen `Object` hold leaf scalars and materialize an
+aggregate only at memory and foreign-ABI boundaries: the body, the return ABI, and the per-type RC
+helpers (retain / release / mark / traverser) all pass leaf scalars. The array-loop win it targets was
+already banked by the shipped scalar-argument ABI and `build_scalar_phi`, so what remains is code
+unification, and the measurement bears that out: most cases are byte-identical (binary_trees, arrayrw,
+nbody, mandelbrot, struct_field_mod all to 0.00%), with sub-1% movement each way on the rest (sort
+-3.7%, cp_lib_lsegtree -0.8%, fannkuch -0.8%; get_sub +0.5%).
+
+This baseline predates two `main` commits the merge also brings in — the per-signature FFI typing
+(#85) and the zero-sized-phi-to-undef change (#86) — so the delta folds those in as well. The only
+movement above 1% is confined to the two heaviest cp_lib cases, cp_lib_conv_zp +2.1% and
+cp_lib_prime_list +1.9%; with the scalarization confirmed byte-neutral on every non-cp_lib case, that
+residue tracks the folded-in #85/#86 codegen changes rather than the scalarization.
+
 ## 96f680496768b92145e8d577c26356091e0104d9
 
 Moving the eight `cp_lib_*` cases from cp-library 0.7.4 to 0.13.0, measured against the previous

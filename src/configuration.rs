@@ -541,8 +541,21 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
 
+    /// Defunctionalize `Std::fix` into a directly self-recursive global function. The self-call it
+    /// produces is direct, so LLVM's tail-call elimination folds it into a loop even when the return
+    /// value uses the `sret` ABI, which an indirect `fix` self-call cannot get. It runs at `Basic`
+    /// and above alongside uncurrying, which flattens the produced self-call; `None` deliberately
+    /// keeps even tail calls, so it stays off there.
+    pub fn enable_defunctionalize_fix(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
+    }
+
+    /// Removing type annotations only unwraps annotation nodes — the annotated type is already
+    /// carried by the inner expression — so it is semantically neutral and every later stage and
+    /// code generation accept the result. It therefore runs at all optimization levels, which lets a
+    /// later pass work on a bare AST without seeing through annotations.
     pub fn enable_remove_tyanno_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        true
     }
 
     pub fn enable_remove_hktvs_transformation(&self) -> bool {

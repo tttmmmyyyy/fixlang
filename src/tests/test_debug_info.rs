@@ -1,15 +1,18 @@
-// Debug-information end-to-end test.
+// Debug-information tests.
 //
-// Builds a small Fix program with `-g` and drives a source-level debugger to confirm that DWARF
-// line information is emitted correctly: a source breakpoint resolves to `main.fix:<line>`,
-// execution stops there, and the backtrace carries per-frame line info up the Fix call chain.
-// Assertions are mangle-name-independent (they check `file:line`, not the mangled/closure frame
-// names), so they stay valid across name-mangling changes.
+// Most scenarios build a small Fix program with `-g` and drive a source-level debugger to confirm
+// that DWARF line information is emitted correctly: a source breakpoint resolves to
+// `main.fix:<line>`, execution stops there, and the backtrace carries per-frame line info up the
+// Fix call chain. Assertions are mangle-name-independent (they check `file:line`, not the
+// mangled/closure frame names), so they stay valid across name-mangling changes.
 //
-// Each scenario runs under whichever debugger the host provides: gdb on Linux and lldb on macOS
-// (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux host
-// that has lldb installed. A scenario skips when its debugger is absent. The AST and RC IR back
-// ends must emit identical debug information; these tests guard that it stays correct under both.
+// Two scenarios instead check only that `-g` builds a recursive type at all, needing no debugger.
+//
+// Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
+// macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
+// host that has lldb installed. A scenario skips when its debugger is absent. The AST and RC IR
+// back ends must emit identical debug information; these tests guard that it stays correct under
+// both.
 
 #[cfg(test)]
 mod debug_info_tests {
@@ -20,6 +23,80 @@ mod debug_info_tests {
         process::Command,
     };
     use tempfile::TempDir;
+
+    // Build an inline Fix `source` with `-g` and assert the build succeeds. The recursive-type
+    // checks below need only that debug-information emission terminates, so they assert the build
+    // rather than drive a debugger.
+    fn assert_build_g_succeeds(source: &str) {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
+        let build = fix_command()
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr),
+        );
+    }
+
+    // Building with `-g` must succeed for a recursive type. A type's debug information is emitted by
+    // following its field references, and a recursive type refers back to itself; describing it once
+    // and sharing that record keeps the emission finite, where expanding it afresh at every
+    // reference would recurse forever and overflow the compiler's stack. `-g` is required to reach
+    // the debug-information path — without it the same program builds.
+    #[test]
+    fn test_build_g_recursive_type_succeeds() {
+        assert_build_g_succeeds(
+            r#"
+            module Main;
+
+            type Tree = box union { leaf : (), node : (Tree, Tree) };
+
+            size : Tree -> I64;
+            size = |t| match t {
+                leaf(_) => 1,
+                node(lr) => size(lr.@0) + size(lr.@1)
+            };
+
+            main : IO ();
+            main = println(size(Tree::node $ (Tree::leaf(), Tree::leaf())).to_string);
+        "#,
+        );
+    }
+
+    // Building with `-g` must succeed for mutually recursive types. Their debug types close the
+    // reference cycle across two distinct type keys, so several types are mid-construction at once
+    // and more than one placeholder node is live while the cycle is broken — a path a single
+    // self-recursive type does not exercise.
+    #[test]
+    fn test_build_g_mutually_recursive_types_succeeds() {
+        assert_build_g_succeeds(
+            r#"
+            module Main;
+
+            type Forest = box union { empty : (), tree : Tree };
+            type Tree = box union { leaf : I64, branch : Forest };
+
+            count : Tree -> I64;
+            count = |t| match t {
+                leaf(n) => n,
+                branch(f) => count_forest(f)
+            };
+            count_forest : Forest -> I64;
+            count_forest = |f| match f {
+                empty(_) => 0,
+                tree(t) => count(t)
+            };
+
+            main : IO ();
+            main = println(count(Tree::branch $ Forest::tree $ Tree::leaf(7)).to_string);
+        "#,
+        );
+    }
 
     // A source-level debugger a scenario can be driven under: gdb or lldb.
     #[derive(Clone, Copy)]

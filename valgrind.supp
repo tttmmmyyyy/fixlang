@@ -7,3 +7,22 @@
    fun:_IO_file_xsputn@@GLIBC_2.2.5
    fun:fputs
 }
+
+# Iterator::advance reads uninitialised union padding speculatively at -O max /
+# -O experimental. An iterator whose state holds a union (such as a nested
+# flat_map's inner iterator) is passed to `advance` by value; when the active
+# variant is smaller than the union's payload buffer, the unused tail of the
+# buffer is uninitialised — Fix leaves union padding uninitialised, as C and Rust
+# do. LLVM hoists the payload read above the tag check and inserts a `freeze`, so
+# the branch is well-defined and the computed result is correct; valgrind still
+# reports it because `freeze` lowers to reading that uninitialised stack slot, so
+# the read is benign. (This also hides a genuine uninitialised read that lands in
+# an `advance` funptr, so drop it when auditing the iterator runtime itself.)
+#
+# Copy this entry into the `valgrind.supp` at the root of any project you check
+# under memcheck; fix auto-loads that file (see `Configuration::valgrind_command`).
+{
+   fix-iterator-advance-uninitialised-union-padding
+   Memcheck:Cond
+   fun:Std::Iterator::advance#*
+}

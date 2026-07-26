@@ -3,23 +3,22 @@ use std::{rc::Rc, sync::Arc};
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            var_var, ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local, var_var, ExprNode,
         },
         name::FullName,
         pattern::PatternNode,
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
-        typedecl::Field,
-        types::{kind_star, type_fun, type_tycon, TyCon, TyConInfo, TypeNode},
+        types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
-    constants::{CAP_NAME, DECAP_NAME, STD_NAME},
+    constants::{CAP_NAME, DECAP_NAME},
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
 
 use super::{
+    capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
     inline::{self},
     uncurry::internalize_let_to_var_at_head,
@@ -507,20 +506,6 @@ impl DecapturingVisitor {
         }
     }
 
-    // Generate a new lambda function name.
-    fn new_lambda_func_name(&mut self) -> FullName {
-        loop {
-            let mut full_name = self.current_symbol.clone();
-            *full_name.name_as_mut() += &format!("#decap_lam{}", self.lam_func_counter);
-            self.lam_func_counter += 1;
-            if self.global_names.contains(&full_name) {
-                continue;
-            }
-            self.global_names.insert(full_name.clone());
-            return full_name;
-        }
-    }
-
     // Is the `decapture_lambda` function applicable?
     fn decapturable(expr: &Arc<ExprNode>) -> bool {
         // If the expression is a not lambda expression, it is not decapturable.
@@ -565,70 +550,31 @@ impl DecapturingVisitor {
             })
             .collect::<Vec<_>>();
 
-        // Create the type for the capture list struct.
-        let tycon_hash_data = cap_names_types
-            .iter()
-            .map(|(name, ty)| format!("{}:{}", name.to_string(), ty.to_string()))
-            .collect::<Vec<_>>()
-            .join(",");
-        // let tycon_hash = format!("{:x}", md5::compute(tycon_hash_data));
-        let tycon_hash = tycon_hash_data;
-        let tycon_name = TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("#CapList<{}>", tycon_hash)),
-        };
-        let tycon = Arc::new(tycon_name);
-        let tycon_info = TyConInfo {
-            kind: kind_star(),
-            variant: crate::ast::types::TyConVariant::Struct,
-            is_unbox: true,
-            tyvars: vec![],
-            fields: cap_names_types
-                .iter()
-                .map(|(name, ty)| Field::make(name.name.clone(), ty.clone(), None))
-                .collect(),
-            source: None,
-            document: None,
-        };
-        let cap_list_ty = type_tycon(&tycon);
+        // Build the capture list struct that threads the captured environment into the lifted
+        // function.
+        let cap = CaptureStruct::new("#CapList", &cap_names_types);
+        let cap_list_expr = cap.struct_expr();
 
-        // Create the capture list expression.
-        let cap_list_expr = expr_make_struct(
-            tycon.clone(),
-            cap_names_types
-                .iter()
-                .map(|(name, ty)| {
-                    let var = expr_var(name.clone(), None).set_type(ty.clone());
-                    (name.to_string(), var)
-                })
-                .collect(),
-        )
-        .set_type(cap_list_ty.clone());
-
-        // Create the lambda function.
-        // To do this, add an argument to lam to receive the capture list, and insert a let expression at the beginning of the body to destructure the capture list.
-        let cap_pats = cap_names_types
-            .iter()
-            .map(|(name, ty)| {
-                let var = var_var(name.clone());
-                let pat = PatternNode::make_var(var, None).set_type(ty.clone());
-                (name.to_string(), pat)
-            })
-            .collect::<Vec<_>>();
-        let cap_pat =
-            PatternNode::make_struct(tycon.clone(), cap_pats).set_type(cap_list_ty.clone());
+        // Create the lambda function: add an argument receiving the capture list and destructure it
+        // at the head of the body.
         let new_body = expr_let_typed(
-            cap_pat,
-            expr_var(FullName::local(DECAP_NAME), None).set_type(cap_list_ty.clone()),
+            cap.pattern(),
+            expr_var(FullName::local(DECAP_NAME), None).set_type(cap.ty.clone()),
             lam.clone(),
         );
         let new_arg = var_local(DECAP_NAME);
-        let new_lam = expr_abs_typed(new_arg, cap_list_ty.clone(), new_body);
+        let new_lam = expr_abs_typed(new_arg, cap.ty.clone(), new_body);
         let new_lam = internalize_let_to_var_at_head(&new_lam);
-        let lambda_func_name = self.new_lambda_func_name();
+        let lambda_func_name = fresh_global_name(
+            &self.current_symbol,
+            "#decap_lam",
+            &mut self.lam_func_counter,
+            &mut self.global_names,
+        );
         let decap_lam = DecapturedLambdaInfo {
-            tycon: tycon.as_ref().clone(),
-            tycon_info,
-            cap_list_ty,
+            tycon: cap.tycon.as_ref().clone(),
+            tycon_info: cap.tycon_info,
+            cap_list_ty: cap.ty,
             lambda_func: new_lam,
             lambda_func_name,
         };

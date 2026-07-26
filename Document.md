@@ -819,7 +819,7 @@ To summarize:
 - Since Fix values are immutable, the `set : I64 -> a -> Array a -> Array a` function can fundamentally be interpreted as returning a new array.
 - However, if the array is not used later, the copy is omitted, and the given array is updated in place.
 
-Fix determines whether a value may be used later by its **reference count**. Fix assigns a reference counter to all boxed values (values that are always allocated on the heap and referenced by a pointer from a name or a struct field). Fix uses the reference counter to track the number of references to a boxed value. When the reference counter is 1, the value is called "unique"; otherwise, it is called "shared." For convenience, an unboxed value is always considered unique.
+Fix determines whether a value may be used later by its **reference count**. Fix assigns a reference counter to all boxed values (values that are always allocated on the heap and referenced by a pointer from a name or a struct field). Fix uses the reference counter to track the number of references to a boxed value. When the reference counter is 1, the value is called "unique"; otherwise, it is called "shared." For convenience, an unboxed value is always considered unique. An `Array` value is itself unboxed, but its elements are held in a reference-counted heap buffer; for an array, "unique" and "shared" refer to that element buffer.
 
 Using these terms, the `set` function modifies the array directly if it is unique but copies it before modifying it if it is shared.
 
@@ -854,7 +854,7 @@ Fix types are divided into **boxed** and **unboxed** types, which are similar to
 * **Boxed** type values are allocated on the heap. A local variable or a field in a struct/union with a boxed type is compiled as a pointer to the value.
 * **Unboxed** type values are directly embedded in stack memory, structs, or unions.
 
-In general, it's recommended that types containing a large amount of data (e.g., `Array a`) be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
+In general, it's recommended that types containing a large amount of data be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
 
 ### Functions
 
@@ -869,7 +869,7 @@ Since the unit type is a tuple type of length 0, the unit type is also unboxed.
 
 ### Array
 
-`Std::Array` is a boxed type.
+`Std::Array` is an unboxed type. Its value holds the size, the capacity, and a pointer to a separate heap buffer that stores the elements, so its embedded representation is `{Ptr, I64, I64}`. That element buffer is reference-counted, which is what lets an array behave like a value while still avoiding copies: an array is mutated in place while its element buffer is uniquely referenced, and copied only when the buffer is shared.
 
 ### Structs
 
