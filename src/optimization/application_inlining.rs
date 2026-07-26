@@ -232,7 +232,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -244,7 +244,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -256,7 +256,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -264,7 +264,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -276,7 +276,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -288,7 +288,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -300,7 +300,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -312,7 +312,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -328,7 +328,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -344,7 +344,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -360,7 +360,7 @@ impl ExprVisitor for AppInliner {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
