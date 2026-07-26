@@ -33,7 +33,7 @@ use crate::fixstd::builtin::{
     union_new,
 };
 use crate::graph::Graph;
-use crate::misc::{collect_results, to_absolute_path, Map, Set};
+use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,6 @@ use std::io::Write;
 use std::mem::replace;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::vec;
 
 #[derive(Clone)]
@@ -1353,7 +1352,7 @@ impl Program {
             let mut threads = vec![];
             for _ in 0..tc.num_worker_threads {
                 let queue = queue.clone();
-                let thread = thread::spawn(move || {
+                let thread = spawn_compiler_thread(move || {
                     let mut results = vec![];
                     loop {
                         let task = match queue.lock().unwrap().pop() {

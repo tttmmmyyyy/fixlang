@@ -251,6 +251,14 @@ pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
 
+/// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
+/// generation recurse over the user program's expression tree, whose nesting depth (deeply nested
+/// `let` or `;;` chains) is unbounded, so a worker needs far more stack than the default thread
+/// stack gives. The stack is reserved as virtual address space and backed by physical memory only
+/// for the pages a thread actually touches, so this large reservation costs real memory only in
+/// proportion to the recursion depth reached.
+pub const COMPILER_THREAD_STACK_SIZE: usize = 256 * 1024 * 1024;
+
 pub fn chars_allowed_in_identifiers() -> String {
     // If you add a new character, please also update `name_char` in `grammar.pest`.
     let mut chars = String::new();

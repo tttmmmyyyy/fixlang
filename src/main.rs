@@ -47,7 +47,7 @@ mod tests;
 mod tool;
 
 use crate::error::Errors;
-use crate::misc::disable_colored_no_tty;
+use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
@@ -76,6 +76,18 @@ static GLOBAL: MiMalloc = MiMalloc;
 const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
 
 fn main() {
+    // The compiler recurses over the user program's expression tree, whose nesting depth is
+    // unbounded, so it runs on a thread with a stack sized for that recursion — the size its
+    // type-checking and code-generation workers already use — instead of the smaller default
+    // main-thread stack. `run_cli` reports any failure through the panic hook before unwinding, so
+    // a panicked join only needs to become a non-zero exit here.
+    if spawn_compiler_thread(run_cli).join().is_err() {
+        process::exit(1);
+    }
+}
+
+/// Build the command-line interface, parse the invocation, and run the selected subcommand.
+fn run_cli() {
     disable_colored_no_tty();
 
     // Options
