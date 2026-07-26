@@ -6,8 +6,13 @@ compute = |x| (
     y * 2
 );
 
+// `compute` is called outside tail position on purpose: a call in tail position becomes a jump, so
+// `wrap` would leave no stack frame for the backtrace to carry line info for.
 wrap : I64 -> I64;
-wrap = |x| compute(x + 10);
+wrap = |x| (
+    let y = compute(x + 10);
+    y - 1
+);
 
 main : IO ();
 main = (

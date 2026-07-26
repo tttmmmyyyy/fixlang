@@ -1042,7 +1042,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // buffer allocated here does. In tail position the pointer is this function's own parameter,
         // naming an ancestor's buffer, so the assertion holds there.
         let passes_own_buffer = out_ptr.is_some() && !tail;
-        ret.set_tail_call(!self.has_di() && !passes_own_buffer);
+        ret.set_tail_call(!passes_own_buffer);
         let call_result = ret.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call

@@ -210,9 +210,9 @@ mod debug_info_tests {
     }
 
     // Line numbers in cases/debug_baseline/main.fix. If that file changes, update these.
-    const LINE_COMPUTE_BODY: u32 = 5; // "    let y = x + 1;"           (inside `compute`)
-    const LINE_WRAP_DEF: u32 = 10; //    "wrap = |x| compute(x + 10);"  (call site of `compute`)
-    const LINE_MAIN_CALL: u32 = 14; //   "    let r = wrap(5);"         (call site of `wrap`)
+    const LINE_COMPUTE_BODY: u32 = 5; // "    let y = x + 1;"              (inside `compute`)
+    const LINE_WRAP_DEF: u32 = 13; //    "    let y = compute(x + 10);"    (call site of `compute`)
+    const LINE_MAIN_CALL: u32 = 19; //   "    let r = wrap(5);"            (call site of `wrap`)
 
     // A source breakpoint resolves to `main.fix:<line>`, execution stops there, and the backtrace
     // carries per-frame line info up the Fix call chain (wrap's call site and main's call site),

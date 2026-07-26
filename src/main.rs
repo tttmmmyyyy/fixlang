@@ -138,8 +138,7 @@ fn run_cli() {
         .short('g')
         .takes_value(false)
         .help("Generate debugging information. \n\
-              This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level. \n\
-              Every call keeps a stack frame so a debugger sees the whole chain, including calls in tail position, so a deeply tail-recursive program may overflow the stack.");
+              This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level.");
     let backtrace = Arg::new("backtrace")
         .long("backtrace")
         .takes_value(false)
