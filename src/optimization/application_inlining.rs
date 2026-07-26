@@ -17,6 +17,9 @@ is transformed into
 let v = {expr2} in if c {{expr0}(v)} else {{expr1}(v)}
 ```
 
+An argument that is already a variable is pushed in as it is, so the `let` above appears only for an
+argument that has something to evaluate. See `PushedArg`.
+
 2. Replaces application of lambda expression to an expression with let binding.
 
 The expression
@@ -34,14 +37,18 @@ let x = {expr1} in {expr0}
 
 use std::sync::Arc;
 
-use crate::ast::{
-    expr::{
-        expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var,
-        var_var, Expr, ExprNode,
+use crate::{
+    ast::{
+        expr::{
+            expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed,
+            expr_var, var_var, Expr, ExprNode,
+        },
+        name::FullName,
+        pattern::PatternNode,
+        program::{Program, Symbol},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    pattern::PatternNode,
-    program::{Program, Symbol},
-    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+    misc::Set,
 };
 
 use super::rename::generate_new_names;
@@ -73,6 +80,56 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
 
 struct AppInliner {}
 
+// The value that the subexpressions of a function receive when an application is pushed into them,
+// together with the binding, if any, that the rewritten expression must be wrapped in.
+//
+// A variable argument is handed over as it is: a variable reference has nothing to evaluate, so
+// mentioning it once per branch keeps both the work done and the order it is done in. Any other
+// argument is bound to a fresh name first, so it is evaluated exactly once, before the function's
+// own body.
+//
+// Handing a variable over unchanged is what keeps this transformation linear. Binding every argument
+// would add one binding for each `let` an application is pushed through, so pushing `n` arguments
+// into a chain of `let`s — what uncurrying's eta expansion does to a function of `n` parameters —
+// would grow the chain as `2^n`.
+struct PushedArg {
+    value: Arc<ExprNode>,
+    binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
+}
+
+impl PushedArg {
+    // `shadowed` are the names bound where the argument is pushed to; a variable argument among them
+    // would be captured there, so it gets a binding of its own. `black_list` gives the names a fresh
+    // binding must avoid, and is evaluated only when one is needed.
+    fn new(
+        arg: &Arc<ExprNode>,
+        shadowed: &Set<FullName>,
+        black_list: impl FnOnce() -> Set<FullName>,
+    ) -> Self {
+        if arg.is_var() && !shadowed.contains(&arg.get_var().name) {
+            return PushedArg {
+                value: arg.clone(),
+                binding: None,
+            };
+        }
+        let ty = arg.type_.as_ref().unwrap().clone();
+        let name = generate_new_names(&black_list(), 1)[0].clone();
+        let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
+        PushedArg {
+            value: expr_var(name, None).set_type(ty),
+            binding: Some((pat, arg.clone())),
+        }
+    }
+
+    // Wrap the rewritten expression in the argument's binding, for an argument that needed one.
+    fn wrap(self, expr: Arc<ExprNode>) -> Arc<ExprNode> {
+        match self.binding {
+            Some((pat, bound)) => expr_let_typed(pat, bound, expr),
+            None => expr,
+        }
+    }
+}
+
 impl ExprVisitor for AppInliner {
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application.
@@ -102,73 +159,72 @@ impl ExprVisitor for AppInliner {
             Expr::Let(pattern, bound, value) => {
                 // The expression is of the form `(let {pat} = {bound} in {value})({a})`.
                 // Replace it with `let x = {a} in let {pat} = {bound} in {value}(x)`.
+                let shadowed = pattern.pattern.vars();
+                let pushed = PushedArg::new(&arg, &shadowed, || {
+                    let mut black_list = shadowed.clone();
+                    black_list.extend(bound.free_vars().into_iter());
+                    black_list.extend(value.free_vars().into_iter());
+                    black_list
+                });
 
-                let mut black_list = pattern.pattern.vars();
-                black_list.extend(bound.free_vars().into_iter());
-                black_list.extend(value.free_vars().into_iter());
-
-                let x_name = generate_new_names(&black_list, 1)[0].clone();
-                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.type_.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
-
-                let expr = expr_app_typed(value.clone(), vec![x]); // {value}(x)
+                let expr = expr_app_typed(value.clone(), vec![pushed.value.clone()]); // {value}(x)
                 let expr = expr_let_typed(pattern.clone(), bound.clone(), expr); // let {pat} = {bound} in {value}(x)
-                let expr = expr_let_typed(x_pat, arg.clone(), expr); // let x = {a} in let {pat} = {bound} in {value}(x)
+                let expr = pushed.wrap(expr); // let x = {a} in let {pat} = {bound} in {value}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::If(cond, then, else_) => {
                 // The expression is of the form `(if {cond} then {then} else {else})({a})`.
                 // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
-                let mut black_list = cond.free_vars().clone();
-                black_list.extend(then.free_vars().into_iter());
-                black_list.extend(else_.free_vars().into_iter());
+                let pushed = PushedArg::new(&arg, &Set::default(), || {
+                    let mut black_list = cond.free_vars();
+                    black_list.extend(then.free_vars().into_iter());
+                    black_list.extend(else_.free_vars().into_iter());
+                    black_list
+                });
 
-                let x_name = generate_new_names(&black_list, 1)[0].clone();
-                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.type_.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
-
-                let then = expr_app_typed(then.clone(), vec![x.clone()]); // {then}(x)
-                let else_ = expr_app_typed(else_.clone(), vec![x.clone()]); // {else}(x)
+                let then = expr_app_typed(then.clone(), vec![pushed.value.clone()]); // {then}(x)
+                let else_ = expr_app_typed(else_.clone(), vec![pushed.value.clone()]); // {else}(x)
                 let expr = expr_if_typed(cond.clone(), then, else_); // if {cond} then {then}(x) else {else}(x)
-                let expr = expr_let_typed(x_pat, arg.clone(), expr); // let x = {a} in if {cond} then {then}(x) else {else}(x)
+                let expr = pushed.wrap(expr); // let x = {a} in if {cond} then {then}(x) else {else}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::Match(cond, pats_vals) => {
-                // Similar to `if` and `let` cases.
-                let mut black_list = cond.free_vars().clone();
-                for (pat, val) in pats_vals {
-                    black_list.extend(pat.pattern.vars());
-                    black_list.extend(val.free_vars().into_iter());
+                // Similar to `if` and `let` cases. The argument is pushed under the patterns of the
+                // arms, so the names they bind are what it must not be captured by.
+                let mut shadowed = Set::default();
+                for (pat, _val) in pats_vals {
+                    shadowed.extend(pat.pattern.vars());
                 }
-
-                let x_name = generate_new_names(&black_list, 1)[0].clone();
-                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.type_.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
+                let pushed = PushedArg::new(&arg, &shadowed, || {
+                    let mut black_list = cond.free_vars();
+                    black_list.extend(shadowed.iter().cloned());
+                    for (_pat, val) in pats_vals {
+                        black_list.extend(val.free_vars().into_iter());
+                    }
+                    black_list
+                });
 
                 let mut pats_vals = pats_vals.clone();
                 for (_pat, val) in &mut pats_vals {
-                    let new_val = expr_app_typed(val.clone(), vec![x.clone()]);
+                    let new_val = expr_app_typed(val.clone(), vec![pushed.value.clone()]);
                     *val = new_val;
                 }
                 let expr = expr_match_typed(cond.clone(), pats_vals);
-                let expr = expr_let_typed(x_pat, arg.clone(), expr);
+                let expr = pushed.wrap(expr);
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::Eval(side, main) => {
                 // The expression is of the form `(eval {side} in {main})({a})`.
                 // Replace it with `let x = {a} in eval {side} in {main}(x)`.
-                let mut black_list = side.free_vars().clone();
-                black_list.extend(main.free_vars().into_iter());
-                let x_name = generate_new_names(&black_list, 1)[0].clone();
-                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.type_.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
-                let main_x = expr_app_typed(main.clone(), vec![x]); // {main}(x)
+                let pushed = PushedArg::new(&arg, &Set::default(), || {
+                    let mut black_list = side.free_vars();
+                    black_list.extend(main.free_vars().into_iter());
+                    black_list
+                });
+
+                let main_x = expr_app_typed(main.clone(), vec![pushed.value.clone()]); // {main}(x)
                 let eval_expr = expr_eval_typed(side.clone(), main_x); // eval {side} in {main}(x)
-                let expr = expr_let_typed(x_pat, arg.clone(), eval_expr); // let x = {a} in eval {side} in {main}(x)
+                let expr = pushed.wrap(eval_expr); // let x = {a} in eval {side} in {main}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::App(_, _) => {
