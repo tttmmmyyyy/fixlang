@@ -7,7 +7,7 @@ Newer is above.
 The `wide-return-tail-call` branch (PR #109), which keeps a Fix tail call compiled as a jump in the
 two cases where the backend used to give up on one: a return value wider than the return registers
 (the value now travels through an out-pointer parameter) and a tail call carrying more arguments than
-the argument registers (every Fix lambda is now `tailcc`). Measured against the previous row
+the argument registers (every Fix lambda on x86-64 is `tailcc`). Measured against the previous row
 `476f40aa`.
 
 **mandelbrot and mandelbrot_fold drop 53.94%**, index_syntax 3.33% and cp_lib_conv_zp 1.99%. The 41
