@@ -49,3 +49,4 @@ mod test_union_layout;
 mod test_union_match;
 mod test_util;
 mod test_valgrind_suppression;
+mod test_wide_return_tail_call;

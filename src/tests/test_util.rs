@@ -1,7 +1,8 @@
 use crate::{
     commands::run::run,
-    configuration::Configuration,
+    configuration::{Configuration, FixOptimizationLevel},
     constants::COMPILER_TEST_WORKING_PATH,
+    env_vars,
     error::{panic_if_err, panic_with_msg, Errors},
     misc::save_temporary_source,
     parse::parser::check_grammar_accepts,
@@ -108,6 +109,13 @@ pub fn test_source(source: &str, config: Configuration) {
     if code != 0 {
         panic_with_msg(&format!("The program exited with non-zero code: {}", code));
     }
+}
+
+/// Whether the optimization level under test turns tail calls into jumps. `None` keeps every call
+/// as a stack frame, so a test that a deep tail recursion runs in constant stack returns early
+/// there.
+pub fn tail_call_optimization_enabled() -> bool {
+    env_vars::get_max_opt_level() > FixOptimizationLevel::None
 }
 
 /// Compile and run `source`, returning the process output. Panics if compilation fails or the

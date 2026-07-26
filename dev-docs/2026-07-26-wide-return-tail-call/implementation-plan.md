@@ -3,7 +3,7 @@
 戻り値がターゲットの戻り値レジスタに収まらない末尾呼び出しは、通常の呼び出しとして生成される。
 このためモナドループが O(n) のスタックを消費する。本計画は、そのような戻り値を out-pointer
 引数で返すことで末尾呼び出しを取り戻し、続いて、同じ限界を回避するために `Basic` が抱えている
-`Std::fix` の defunctionalization を外す。未着手。
+`Std::fix` の defunctionalization を外す。Phase 1 まで完了。
 
 ## 問題
 
@@ -128,11 +128,11 @@ aggregate のまま残る事例」として記録している形がこれにあ�
 
 ## フェーズ
 
-### Phase 1 — 定数スタックのテスト
+### Phase 1 — 定数スタックのテスト (完了)
 
-`test_defunctionalize_fix.rs` と同じ形のテストを追加する。モナドループを深く再帰させ、完走する
-ことだけを確かめる。完走するかスタックが溢れるかの二値の結果なので、マシンの負荷に影響されず、
-混んでいる CI でも走らせられる。
+`src/tests/test_wide_return_tail_call.rs`。モナドループを 100 万段深く再帰させ、完走することだけを
+確かめる。完走するかスタックが溢れるかの二値の結果なので、マシンの負荷に影響されず、混んでいる
+CI でも走らせられる。
 
 機構の異なる形を網羅する:
 
@@ -141,16 +141,25 @@ aggregate のまま残る事例」として記録している形がこれにあ�
 - `break_m` の結果が広い `loop_m`
 - ユーザ定義の `StateT` 形式のモナド変換子を `IO` の上に重ねたもの
 - 次に呼ぶ関数を配列から取り出すループ (どの最適化レベルでも末尾呼び出しが間接のまま残る)
+- 3 つの `Array` = 9 leaf を返すループ。全ターゲットの予算を超えるので AArch64 でも意味を持つ
 
-`Basic` と `Max` で走らせる。`None` は意図的に末尾呼び出しも行わないので `should_skip_at_none`
-で飛ばす。**これらは x86-64 の CI セルで走らせる必要がある。** AArch64 は予算が 8 あるので
-ほとんどを隠してしまう。
+`Basic` と `Max` で走らせる。`None` は意図的に末尾呼び出しも行わないので、`test_util` の
+`tail_call_optimization_enabled` で飛ばす (`test_defunctionalize_fix.rs` の `should_skip_at_none`
+をここへ移した)。4 leaf の形は AArch64 の予算 8 に収まるので、それらが働くのは x86-64 の CI
+セルである。
 
 再帰の深さは、1 フレームあたりの消費が形によって変わることを見込んで余裕をとる。実測では
 最小の形で 112 バイト/フレーム、minilib の Free モナドで 800-1600 バイト/反復だった。
 
-Phase 2 が入るまでこれらのテストは `Basic` で失敗する。配列越しの間接ディスパッチのものは
-`Max` でも失敗する。
+実測 (`ulimit -s 8192`): `Basic` は 6 本すべてがスタックオーバーフローで落ち、`Max` は配列越しの
+間接ディスパッチのものだけが落ちる。所要は `Basic` 24 秒、`Max` 11 秒。
+
+#### 既存テストのガードを外す (Phase 2 で行う)
+
+`test_basic.rs` の `test_regression_issue_63` は、`U64` 12 個を状態に持つユーザ定義 State モナドを
+1000 万回回すもので、同じ限界により `Basic` 以下を飛ばしている。実測でも `-O basic` は SIGSEGV、
+`-O max` は完走である。ABI が直ったら、この分岐を `tail_call_optimization_enabled` に置き換えて
+`Basic` でも走らせる。状態は `(s, a)` で 13 leaf あるので、AArch64 の予算 8 も超える。
 
 ### Phase 2 — codegen で out-pointer にする (オラクル)
 
@@ -170,8 +179,10 @@ Phase 2 が入るまでこれらのテストは `Basic` で失敗する。配列
 - `InlineLLVMFixBody::generate_tail` (`fixstd/builtin.rs`) — 実際の末尾呼び出しを出しており、
   同じ転送が必要。
 
-検証: Phase 1 のテストが通ること。`Basic` と `Max` での `cargo test --release`。RC-IR テストの
-memcheck。speedtest 一式と project_euler でプログラムの出力が変わらないこと。
+検証: Phase 1 のテストが通ること。`test_regression_issue_63` のガードを
+`tail_call_optimization_enabled` に置き換えて `Basic` で通ること。`Basic` と `Max` での
+`cargo test --release`。RC-IR テストの memcheck。speedtest 一式と project_euler でプログラムの
+出力が変わらないこと。
 
 この実装は Phase 3 の**正しさの基準**として使う。Phase 3 は最適化済み IR を書き換えるため、
 取りこぼしが静かな miscompile になる。同じプログラムが Phase 2 版と Phase 3 版で同じ出力・同じ
