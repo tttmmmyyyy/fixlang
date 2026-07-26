@@ -542,10 +542,13 @@ impl Configuration {
     }
 
     /// Defunctionalize `Std::fix` into a directly self-recursive global function. The self-call it
-    /// produces is direct, so LLVM's tail-call elimination folds it into a loop even when the return
-    /// value uses the `sret` ABI, which an indirect `fix` self-call cannot get. It runs at `Basic`
-    /// and above alongside uncurrying, which flattens the produced self-call; `None` deliberately
-    /// keeps even tail calls, so it stays off there.
+    /// produces is direct, so LLVM's tail-recursion elimination folds it into a loop. The loop is
+    /// much stronger than the tail jumps an indirect self-call already gets from the return ABI (see
+    /// `return_abi`): it also removes the closure the `fix` combinator builds on every iteration,
+    /// with its heap allocation and reference-count updates. The `sum_by_fix` benchmark at `Basic`
+    /// measures 47M instructions with the pass against 686M without, at equal compile time, which is
+    /// why it runs from `Basic` up rather than at `Max` alone. Uncurrying, which flattens the
+    /// produced self-call, shares that threshold.
     pub fn enable_defunctionalize_fix(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
