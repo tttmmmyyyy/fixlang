@@ -1,23 +1,46 @@
-//! Whether a function's return value fits in the target's return registers.
+//! The ABI choices that keep a Fix function's tail calls compiled as jumps.
 //!
-//! A value that does not fit is returned through a pointer. LLVM does that on its own, at
-//! instruction selection, and the backend then declines to turn the function's tail calls into
-//! jumps (`X86TargetLowering::IsEligibleForTailCallOptimization` rejects a caller or callee that
-//! returns through a hidden pointer). A monadic loop is a chain of indirect tail calls — `Std::IO`'s
-//! `bind` ends with `(f(a).@runner)(iostate)` — so losing those jumps costs it O(n) stack.
+//! A monadic loop is a chain of indirect tail calls — `Std::IO`'s `bind` ends with
+//! `(f(a).@runner)(iostate)` — so it runs in constant stack only while the backend turns those calls
+//! into jumps. Two independent properties of the signature decide whether it does.
 //!
-//! Emitting the pointer as an ordinary parameter instead keeps the jumps: the tail call forwards the
-//! caller's own out-pointer, and the backend turns it into `jmp` (direct) or `jmpq *%rdx`
-//! (indirect). `lambda_function_type` uses this module to decide which functions get one.
+//! **The return value must fit in the return registers.** A value that does not fit is returned
+//! through a pointer, which LLVM introduces on its own at instruction selection, and
+//! `X86TargetLowering::IsEligibleForTailCallOptimization` then rejects a caller or callee that
+//! returns that way. Emitting the pointer as an ordinary parameter instead keeps the jumps: the tail
+//! call forwards the caller's own out-pointer, and the backend produces `jmp` (direct) or
+//! `jmpq *%rdx` (indirect). `lambda_function_type` calls `returns_through_out_pointer` to decide
+//! which functions get one.
 //!
 //! The predicate LLVM itself uses is `TargetLowering::CanLowerReturn`, which neither the C API nor
 //! inkwell exposes, so the budget lives here as a table keyed by target architecture. Adding a
 //! target, or raising the LLVM version, means revisiting the table; the constant-stack tests in
 //! `test_wide_return_tail_call.rs` are what make a stale entry visible.
+//!
+//! **The arguments whose values change must fit in the argument registers.** Beyond them arguments
+//! travel on the stack, and an x86-64 sibcall may only reuse a stack slot that already holds the
+//! value being passed — six changing integer arguments is the limit there. Fix passes an unbox
+//! struct as its leaf scalars, so a loop carrying its state in arguments reaches that quickly: an
+//! out-pointer, a four-leaf state and a capture pointer already fill it. `LAMBDA_CALLING_CONVENTION`
+//! lifts this limit for every Fix lambda.
 
 use std::sync::OnceLock;
 
 use inkwell::{targets::TargetMachine, types::BasicTypeEnum};
+
+/// `tailcc`, the convention Fix lambdas are defined and called with. It lets the backend rewrite the
+/// stack arguments of a tail call rather than requiring them to already hold the values being
+/// passed, so a tail call carrying more arguments than the argument registers hold still becomes a
+/// jump. It leaves the return-register budget alone, so a wide result still needs its out-pointer.
+///
+/// Every Fix lambda is defined with it (`declare_lambda_function`, `declare_rc_function`) and called
+/// with it (`apply_lambda`), and nothing else uses it: `main`, the exported wrappers, the runtime,
+/// the FFI declarations, the traversers, the reference-counting helpers and the global accessors all
+/// keep the C convention. A pointer type carries no convention, so a definition and a call that
+/// disagree corrupt silently instead of failing to verify.
+///
+/// The value is `llvm::CallingConv::Tail`, which inkwell exposes only as a number.
+pub const LAMBDA_CALLING_CONVENTION: u32 = 18;
 
 /// How many registers of each class a target returns a value in.
 #[derive(Clone, Copy)]

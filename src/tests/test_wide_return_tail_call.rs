@@ -3,18 +3,19 @@ use crate::{
     tests::test_util::{tail_call_optimization_enabled, test_source},
 };
 
-// A function whose return value exceeds the target's return registers returns it through a hidden
-// pointer, and the backend then declines to turn its tail calls into jumps. `Std::IO`'s
-// `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain of indirect
-// tail calls and needs those jumps to run in constant stack. An `Array` occupies three scalar leaves
-// (storage, size, capacity), so an ordinary monadic result crosses the x86-64 budget of three
-// integer registers.
+// `Std::IO`'s `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain
+// of indirect tail calls and runs in constant stack only while the backend compiles them as jumps.
+// Two properties of the signature decide whether it does, and `return_abi` handles both: the result
+// must fit in the return registers, and the arguments whose values change must fit in the argument
+// registers. An `Array` occupies three scalar leaves (storage, size, capacity), so an ordinary
+// monadic result crosses the x86-64 budget of three integer registers.
 //
 // Each test below drives one such loop a million iterations deep and checks only that it finishes.
 // The outcome is binary — completes or overflows the stack — so machine load does not affect it.
 //
 // AArch64 returns up to eight leaves in registers, which covers the four-leaf shapes; the shape that
-// exercises the rule on every target is `test_return_wider_than_any_target_runs_in_constant_stack`.
+// exercises the return rule on every target is
+// `test_return_wider_than_any_target_runs_in_constant_stack`.
 
 // The recursive call sits in tail position of a bind's continuation, and the result is an `Array`
 // plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
@@ -132,6 +133,52 @@ fn test_state_transformer_over_io_runs_in_constant_stack() {
     main = (
         let (st, _) = *(walk(1000000).@run)((Array::fill(4, "x"), 0));
         assert_eq(|_|"unexpected result", st.@1 + st.@0.@size, 1000004);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// A state monad with no inner monad: its `run` carries the state in the tail call's arguments rather
+// than in a capture, so seven state leaves put the call at nine arguments — past both the return
+// registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
+#[test]
+fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
+    if !tail_call_optimization_enabled() {
+        return;
+    }
+    let source = r#"
+    module Main;
+
+    type State s a = unbox struct { run : s -> (s, a) };
+
+    impl State s : Monad {
+        pure = |v| State { run : |s| (s, v) };
+        bind = |f, x| State { run : |s|
+            let (s, a) = (x.@run)(s);
+            ((f(a)).@run)(s)
+        };
+    }
+
+    get_state : State s s;
+    get_state = State { run : |s| (s, s) };
+
+    put_state : s -> State s ();
+    put_state = |s| State { run : |_| (s, ()) };
+
+    walk : I64 -> State (Array String, Array String, I64) ();
+    walk = |i| (
+        if i == 0 { pure() };
+        let (xs, ys, acc) = *get_state;
+        put_state((xs, ys, acc + 1));;
+        walk(i - 1)
+    );
+
+    main : IO ();
+    main = (
+        let init = (Array::fill(4, "x"), Array::fill(5, "y"), 0);
+        let ((xs, ys, acc), _) = (walk(1000000).@run)(init);
+        assert_eq(|_|"unexpected result", acc + xs.@size + ys.@size, 1000009);;
         pure()
     );
     "#;

@@ -22,7 +22,7 @@ use crate::object::{
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
-use crate::return_abi::returns_through_out_pointer;
+use crate::return_abi::{returns_through_out_pointer, LAMBDA_CALLING_CONVENTION};
 use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
@@ -79,6 +79,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Linkage::Internal
         };
         let fn_val = self.module.add_function(&name, fn_ty, Some(linkage));
+        fn_val.set_call_conventions(LAMBDA_CALLING_CONVENTION);
         if self.has_di() {
             let fn_name = fn_val.get_name().to_str().unwrap().to_string();
             fn_val.set_subprogram(self.create_debug_subprogram(&fn_name, func.source.clone()));

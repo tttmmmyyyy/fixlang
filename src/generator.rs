@@ -45,7 +45,7 @@ use crate::object::ty_to_object_ty;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
-use crate::return_abi::returns_through_out_pointer;
+use crate::return_abi::{returns_through_out_pointer, LAMBDA_CALLING_CONVENTION};
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
@@ -1037,6 +1037,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .builder()
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
+        ret.set_call_convention(LAMBDA_CALLING_CONVENTION);
         // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
         // buffer allocated here does. In tail position the pointer is this function's own parameter,
         // naming an ancestor's buffer, so the assertion holds there.
@@ -1992,6 +1993,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
         };
         let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
+        lam_fn.set_call_conventions(LAMBDA_CALLING_CONVENTION);
         // Create and set debug info subprogram.
         if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();

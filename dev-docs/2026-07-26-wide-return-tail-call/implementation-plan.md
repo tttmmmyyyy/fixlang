@@ -60,6 +60,16 @@ AArch64 は 14 本まで通る。
 解消しない** (`tailcc` でも 4 leaf で `callq`、`swifttailcc` は 3 から 4 に上げるだけ)。
 つまり 2 つの限界は独立で、out-pointer は `tailcc` を採っても必要である。
 
+Fix は unbox struct を leaf に展開して渡すので、状態を引数で運ぶループはこの 6 本をすぐ使い切る。
+out-pointer 1 本 + 4 leaf の状態 + capture ポインタで、もう埋まる。`m` を挟まない State モナド
+(`run : s -> (s, a)`) がこの形である。`IO` の上に重ねた `StateT` は状態が capture に載るので
+掛からない。
+
+**採否はユーザの判断による設計変更である。** 実装は `return_abi.rs` の
+`LAMBDA_CALLING_CONVENTION` と、それを設定する 3 箇所 (`declare_lambda_function`、
+`declare_rc_function`、`apply_lambda`) だけなので、コミット単位で戻せる。`main`、export した
+ラッパ、`fixruntime_*`、FFI 宣言、traverser、RC ヘルパ、`Get#<symbol>` は C の規約のままである。
+
 ### 同じ限界に由来する別件
 
 `defunctionalize_fix` が `self` の multi-use 部分適用を direct self-call に畳めず、`-O basic` で
@@ -173,10 +183,9 @@ CI でも走らせられる。
 #### 既存テストのガード: `test_regression_issue_63`
 
 `test_basic.rs` の `test_regression_issue_63` は、`U64` 12 個を状態に持つユーザ定義 State モナドを
-1000 万回回すもので、`Basic` 以下を飛ばしている。out-pointer を入れても `-O basic` では依然
-スタックが溢れる。`run : s -> (s, a)` は引数 13 本・戻り値 14 leaf で、**引数の側の限界**
-(x86-64 で 6 本) に掛かっているためである。`tailcc` を採るならこのテストのガードを
-`tail_call_optimization_enabled` に変えて `Basic` でも走らせる。
+1000 万回回すもので、`Basic` 以下を飛ばしていた。`run : s -> (s, a)` は引数 13 本・戻り値 14 leaf
+なので、out-pointer と `tailcc` の両方が要る。両方入れた状態で `-O basic`・スタック 8 MiB・
+1000 万段が完走することを確認したので、ガードを `tail_call_optimization_enabled` に変えた。
 
 ### Phase 2 — codegen で out-pointer にする (オラクル)
 

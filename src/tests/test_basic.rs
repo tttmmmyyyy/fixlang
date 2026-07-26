@@ -8,8 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, fix_command, run_source_capture, test_files_in_directory,
-        test_source, test_source_fail, test_source_fail_excludes, test_source_with_c,
+        assert_grammar_accepts, fix_command, run_source_capture, tail_call_optimization_enabled,
+        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
+        test_source_with_c,
     },
 };
 use rand::Rng;
@@ -9906,12 +9907,12 @@ main = (
 }
 
 // A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
-// fourteen, so the recursion is a tail call that both returns more than the return registers hold
-// and changes more arguments than the six an x86-64 sibcall can rewrite. `Max` folds the chain into
-// a loop by inlining, which is where this runs in constant stack.
+// fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
+// hold: the wide result travels through an out-pointer, and the calling convention lets the tail
+// call rewrite the arguments that do not fit in registers.
 #[test]
 pub fn test_regression_issue_63() {
-    if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
+    if !tail_call_optimization_enabled() {
         return;
     }
     let source = r##"
