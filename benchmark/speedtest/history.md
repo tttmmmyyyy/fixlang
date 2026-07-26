@@ -2,6 +2,29 @@
 
 Newer is above.
 
+## 476f40aa1ef55bf5f0880495bd2000860ad13e13
+
+The `defunctionalize-fix-tco` branch (PR #95), which rewrites `Std::fix` into a directly
+self-recursive global so LLVM's tail-call elimination can fold it into a loop. Measured against the
+previous row `eec295f8` on the same speedtest path.
+
+The one benchmark that uses the `fix` combinator, **sum_by_fix, drops from 655.2M to 0.21M
+instructions — -99.97%, a 3175x reduction**. Defunctionalization turns the indirect `fix` self-call
+into a direct one; LLVM loop-ifies it and SCEV then closes the accumulation into a constant-time
+form. This is the win the branch exists for.
+
+The branch changes nothing else. Its passes only touch `fix`-using symbols, and the standard library
+uses no `fix`, so every other program's code is untouched. Confirmed directly: the emitted LLVM IR of
+a representative non-`fix` case (sum_by_loop), both before and after LLVM's own optimization passes,
+is byte-identical between this branch and its fork point `6dd8c629`, and the two produce the same
+executed-instruction count when built at the same path.
+
+The remaining movement the graph shows on the small cases — roughly +44,000 instructions, up to +18%
+on the ~250K-instruction micro-benchmarks but +0.00% on every case above a few million — is not from
+this branch. It is a fixed per-program startup cost added by the `main` commits between `eec295f8`
+and the branch's fork point (#88's merge resolution plus #89/#90/#91); the branch sits on top of
+those and inherits the cost while adding none of its own, as the byte-identical IR confirms.
+
 ## eec295f846d6110826a74e823fde8a6ae02859d4
 
 The object-scalarization branch merged with `main`, measured against the previous row `96f68049` (the
