@@ -34,6 +34,8 @@ use crate::misc::Map;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
+use crate::object::lambda_return_leaf_types;
+use crate::object::out_pointer_buffer_type;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -43,6 +45,7 @@ use crate::object::ty_to_object_ty;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
+use crate::return_abi::returns_through_out_pointer;
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
@@ -1007,10 +1010,20 @@ impl<'c, 'm> Generator<'c, 'm> {
         let func_ptr = self.get_lambda_func_ptr(fun.clone());
         let func_ty = lambda_function_type(&fun.ty, self);
 
-        // Call function pointer with arguments, CAP if closure. Each unbox-struct argument is
+        // Call function pointer with the out-pointer if the result is too wide for the return
+        // registers, then the arguments, then CAP if closure. Each unbox-struct argument is
         // decomposed into its leaf scalars to match the flattened signature (see
-        // `lambda_function_type`); the CAP pointer follows all argument scalars.
+        // `lambda_function_type`).
+        let ret_leaf_tys = lambda_return_leaf_types(&fun.ty, self);
+        let out_ptr = if returns_through_out_pointer(&ret_leaf_tys) {
+            Some(self.build_out_pointer_argument(&ret_leaf_tys, tail))
+        } else {
+            None
+        };
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+        if let Some(out_ptr) = out_ptr {
+            call_args.push(out_ptr.into());
+        }
         for arg in args {
             for leaf in arg.leaves() {
                 call_args.push((*leaf).into());
@@ -1024,18 +1037,87 @@ impl<'c, 'm> Generator<'c, 'm> {
             .builder()
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
-        ret.set_tail_call(!self.has_di());
+        // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
+        // buffer allocated here does. In tail position the pointer is this function's own parameter,
+        // naming an ancestor's buffer, so the assertion holds there.
+        let passes_own_buffer = out_ptr.is_some() && !tail;
+        ret.set_tail_call(!self.has_di() && !passes_own_buffer);
         let call_result = ret.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
             // returns what its caller returns), so forward it verbatim without unpacking and repacking.
+            // A callee writing through the out-pointer returned `void` and has already filled this
+            // function's own buffer, which the forwarded pointer named.
             match call_result {
                 Some(v) => self.builder().build_return(Some(&v)).unwrap(),
                 None => self.builder().build_return(None).unwrap(),
             };
             return None;
         }
+        if let Some(out_ptr) = out_ptr {
+            return Some(self.load_out_pointer_buffer(out_ptr, &ret_leaf_tys, ret_ty));
+        }
         Some(self.unpack_return(call_result, ret_ty))
+    }
+
+    // The pointer to pass as a call's out-pointer argument. In tail position it is this function's
+    // own out-pointer: a tail call returns what its caller returns, so the two share a return type
+    // and hence this ABI, and the buffer belongs to an ancestor frame that outlives the frame being
+    // replaced. Elsewhere it is a fresh buffer in this function's entry block, which the caller
+    // reads back with `load_out_pointer_buffer`.
+    fn build_out_pointer_argument(
+        &mut self,
+        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        tail: bool,
+    ) -> PointerValue<'c> {
+        if tail {
+            let func = self.current_function();
+            // A function whose result goes through an out-pointer returns `void` and takes the
+            // pointer first. Checked under develop mode (the unit tests).
+            if self.config.develop_mode {
+                assert!(
+                    func.get_type().get_return_type().is_none() && func.count_params() >= 1,
+                    "a tail call forwards the out-pointer of a function that has one"
+                );
+            }
+            return func.get_nth_param(0).unwrap().into_pointer_value();
+        }
+        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        self.build_alloca_at_entry(buf_ty, "out@call_lambda")
+    }
+
+    // Read back the leaves a callee wrote through the out-pointer, as the object of type `ret_ty`
+    // it returned.
+    fn load_out_pointer_buffer(
+        &mut self,
+        out_ptr: PointerValue<'c>,
+        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        ret_ty: Arc<TypeNode>,
+    ) -> Object<'c> {
+        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        let leaves: Vec<BasicValueEnum<'c>> = ret_leaf_tys
+            .iter()
+            .enumerate()
+            .map(|(i, leaf_ty)| {
+                let field = self
+                    .builder()
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .unwrap();
+                self.builder()
+                    .build_load(*leaf_ty, field, "load_out_leaf")
+                    .unwrap()
+            })
+            .collect();
+        Object::from_leaves(leaves, ret_ty, self)
+    }
+
+    // The function currently being generated.
+    pub fn current_function(&self) -> FunctionValue<'c> {
+        self.builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap()
     }
 
     // Build an `undef` constant of the given basic type.
@@ -1823,9 +1905,28 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Return `obj` from the current function under the scalarized return ABI (see
     // `lambda_function_type`): its leaves are packed into the flat return value — `void` for none, the
-    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several.
+    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several. Leaves
+    // too wide for the return registers are stored through the function's out-pointer instead.
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
+        let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
+        if returns_through_out_pointer(&leaf_tys) {
+            let out_ptr = self
+                .current_function()
+                .get_nth_param(0)
+                .unwrap()
+                .into_pointer_value();
+            let buf_ty = out_pointer_buffer_type(&leaf_tys, self);
+            for (i, leaf) in leaves.iter().enumerate() {
+                let field = self
+                    .builder()
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .unwrap();
+                self.builder().build_store(field, *leaf).unwrap();
+            }
+            self.builder().build_return(None).unwrap();
+            return;
+        }
         match leaves.len() {
             0 => {
                 self.builder().build_return(None).unwrap();

@@ -9905,10 +9905,13 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
+// fourteen, so the recursion is a tail call that both returns more than the return registers hold
+// and changes more arguments than the six an x86-64 sibcall can rewrite. `Max` folds the chain into
+// a loop by inlining, which is where this runs in constant stack.
 #[test]
 pub fn test_regression_issue_63() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
-        // This test causes stack overflow unless the optimization level is "Max".
         return;
     }
     let source = r##"

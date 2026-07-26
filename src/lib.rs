@@ -22,4 +22,5 @@ pub mod parse;
 pub mod preliminary_command;
 pub mod printer;
 pub mod rc_ir;
+pub mod return_abi;
 pub mod tool;

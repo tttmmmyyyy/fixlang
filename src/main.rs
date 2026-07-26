@@ -42,6 +42,7 @@ mod parse;
 mod preliminary_command;
 mod printer;
 mod rc_ir;
+mod return_abi;
 #[cfg(test)]
 mod tests;
 mod tool;

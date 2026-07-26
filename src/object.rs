@@ -19,6 +19,7 @@ use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
+use crate::return_abi::returns_through_out_pointer;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
@@ -1279,13 +1280,36 @@ pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
+/// The scalar leaves a lambda of type `ty` returns, in `flatten_to_scalar_leaves` order: a boxed
+/// result is the single heap pointer, an unboxed one its flattened leaves. These are exactly the
+/// leaves of the `Object` the lambda's body returns, so a call site and a `return` agree on them.
+pub fn lambda_return_leaf_types<'c, 'm>(
+    ty: &Arc<TypeNode>,
+    gc: &mut Generator<'c, 'm>,
+) -> Vec<BasicTypeEnum<'c>> {
+    let ret_ty = ty.get_lambda_dst();
+    if ret_ty.is_box(gc.type_env()) {
+        return vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
+    }
+    let embedded = ret_ty.get_embedded_type(gc, &vec![]);
+    gc.flatten_to_scalar_leaves(embedded)
+}
+
+/// The buffer a lambda returning `leaf_tys` writes through its out-pointer: the flat struct those
+/// leaves would otherwise have been returned in.
+pub fn out_pointer_buffer_type<'c, 'm>(
+    leaf_tys: &[BasicTypeEnum<'c>],
+    gc: &Generator<'c, 'm>,
+) -> StructType<'c> {
+    gc.context.struct_type(leaf_tys, false)
+}
+
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
 ) -> FunctionType<'c> {
     // Any lamba takes argments.
     // In addition, if the lambda is closure (in other words, not a function pointer), it takes CAP, which is dynamic object consists of captured objects.
-    // In the last, if ret_ty is unboxed, it takes parameter for pointer to store return value and returns void.
 
     // Arguments. An unbox-struct argument is passed as its flat leaf scalars rather than as one
     // aggregate, so a loop-carried field stays visible to LLVM (see `flatten_to_scalar_leaves`).
@@ -1304,18 +1328,23 @@ pub fn lambda_function_type<'c, 'm>(
         arg_tys.push(gc.context.ptr_type(AddressSpace::from(0)).into());
     }
 
-    // The result is returned as its flat leaf scalars, mirroring how the arguments are passed (see
-    // `flatten_to_scalar_leaves`): no leaves returns `void`, a single leaf is returned bare, and
-    // several leaves are returned as a flat struct `{ leaf, ... }`. A later pass that decomposes the
-    // return value at a control-flow merge then yields one scalar phi per leaf instead of an
-    // aggregate phi, keeping a loop-carried field visible to LLVM.
-    let ret_ty = ty.get_lambda_dst();
-    let ret_leaf_tys: Vec<BasicTypeEnum> = if ret_ty.is_box(gc.type_env()) {
-        vec![gc.context.ptr_type(AddressSpace::from(0)).into()]
-    } else {
-        let embedded = ret_ty.get_embedded_type(gc, &vec![]);
-        gc.flatten_to_scalar_leaves(embedded)
-    };
+    // A result too wide for the target's return registers is written through an out-pointer, which
+    // precedes every other parameter, and the function returns `void`. Carrying the pointer as an
+    // ordinary parameter is what keeps the function's tail calls turning into jumps; see
+    // `return_abi`.
+    let ret_leaf_tys = lambda_return_leaf_types(ty, gc);
+    if returns_through_out_pointer(&ret_leaf_tys) {
+        let mut param_tys: Vec<BasicMetadataTypeEnum> =
+            vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
+        param_tys.extend(arg_tys);
+        return gc.context.void_type().fn_type(&param_tys, false);
+    }
+
+    // Otherwise the result is returned as its flat leaf scalars, mirroring how the arguments are
+    // passed (see `flatten_to_scalar_leaves`): no leaves returns `void`, a single leaf is returned
+    // bare, and several leaves are returned as a flat struct `{ leaf, ... }`. A later pass that
+    // decomposes the return value at a control-flow merge then yields one scalar phi per leaf
+    // instead of an aggregate phi, keeping a loop-carried field visible to LLVM.
     match ret_leaf_tys.as_slice() {
         [] => gc.context.void_type().fn_type(&arg_tys, false),
         [single] => single.fn_type(&arg_tys, false),

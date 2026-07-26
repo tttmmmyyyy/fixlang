@@ -44,6 +44,22 @@ sibcall 最適化を諦める。IR 上の `tail` マーカーは全ての IR パ
 
 挙動は LLVM 17.0.6, 20.1.2, 21.1.8, 22.1.8 で同一である。
 
+### 引数の側にも別の限界がある
+
+戻り値とは独立に、**x86-64 の sibcall は値の変わる引数を 6 本しか運べない**。7 本目からは
+スタック渡しになり、バックエンドは「呼び出し前後で同じスタックスロットに同じ値が載っている」
+場合しか末尾ジャンプにしない (`llc -O2`、整数 n 本を `+1` して末尾呼び出しする IR で実測)。
+AArch64 は 14 本まで通る。
+
+| target | 値が変わる整数引数 |
+| --- | --- |
+| `x86_64-unknown-linux-gnu` | 6 |
+| `aarch64-unknown-linux-gnu` | 14 以上 |
+
+`tailcc` 呼び出し規約はこちらを解消する (13 本 + out-pointer でも `jmp`)。ただし**戻り値の側は
+解消しない** (`tailcc` でも 4 leaf で `callq`、`swifttailcc` は 3 から 4 に上げるだけ)。
+つまり 2 つの限界は独立で、out-pointer は `tailcc` を採っても必要である。
+
 ### 同じ限界に由来する別件
 
 `defunctionalize_fix` が `self` の multi-use 部分適用を direct self-call に畳めず、`-O basic` で
@@ -154,12 +170,13 @@ CI でも走らせられる。
 実測 (`ulimit -s 8192`): `Basic` は 6 本すべてがスタックオーバーフローで落ち、`Max` は配列越しの
 間接ディスパッチのものだけが落ちる。所要は `Basic` 24 秒、`Max` 11 秒。
 
-#### 既存テストのガードを外す (Phase 2 で行う)
+#### 既存テストのガード: `test_regression_issue_63`
 
 `test_basic.rs` の `test_regression_issue_63` は、`U64` 12 個を状態に持つユーザ定義 State モナドを
-1000 万回回すもので、同じ限界により `Basic` 以下を飛ばしている。実測でも `-O basic` は SIGSEGV、
-`-O max` は完走である。ABI が直ったら、この分岐を `tail_call_optimization_enabled` に置き換えて
-`Basic` でも走らせる。状態は `(s, a)` で 13 leaf あるので、AArch64 の予算 8 も超える。
+1000 万回回すもので、`Basic` 以下を飛ばしている。out-pointer を入れても `-O basic` では依然
+スタックが溢れる。`run : s -> (s, a)` は引数 13 本・戻り値 14 leaf で、**引数の側の限界**
+(x86-64 で 6 本) に掛かっているためである。`tailcc` を採るならこのテストのガードを
+`tail_call_optimization_enabled` に変えて `Basic` でも走らせる。
 
 ### Phase 2 — codegen で out-pointer にする (オラクル)
 

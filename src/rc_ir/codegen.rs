@@ -16,10 +16,13 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_function_type, ObjectFieldType};
+use crate::object::{
+    create_obj, lambda_function_type, lambda_return_leaf_types, ObjectFieldType,
+};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
+use crate::return_abi::returns_through_out_pointer;
 use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
@@ -113,8 +116,13 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`), which are
         // exactly an object's leaves and become its `Object` directly. The CAP pointer follows all
-        // of them.
-        let mut next_param = 0u32;
+        // of them, and the out-pointer of a wide result precedes them.
+        let ret_leaf_tys = lambda_return_leaf_types(&func.fn_ty, self);
+        let mut next_param = if returns_through_out_pointer(&ret_leaf_tys) {
+            1u32
+        } else {
+            0u32
+        };
         for param in func.params.iter() {
             let embedded = param.ty.get_embedded_type(self, &vec![]);
             let leaf_count = self.flatten_to_scalar_leaves(embedded).len() as u32;
