@@ -35,7 +35,7 @@ let x = {expr1} in {expr0}
 ```
 */
 
-use std::sync::Arc;
+use super::rename::generate_new_names;
 use crate::{
     ast::{
         expr::{
@@ -49,7 +49,7 @@ use crate::{
     },
     misc::Set,
 };
-use super::rename::generate_new_names;
+use std::sync::Arc;
 
 /// Optimizes the expression of every symbol of the program.
 #[allow(dead_code)]
