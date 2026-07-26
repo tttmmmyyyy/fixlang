@@ -24,9 +24,7 @@
 //! out-pointer, a four-leaf state and a capture pointer already fill it. `LAMBDA_CALLING_CONVENTION`
 //! lifts this limit for every Fix lambda.
 
-use std::sync::OnceLock;
-
-use inkwell::{targets::TargetMachine, types::BasicTypeEnum};
+use inkwell::types::BasicTypeEnum;
 
 /// `tailcc`, the convention Fix lambdas are defined and called with. It lets the backend rewrite the
 /// stack arguments of a tail call rather than requiring them to already hold the values being
@@ -44,7 +42,7 @@ pub const LAMBDA_CALLING_CONVENTION: u32 = 18;
 
 /// How many registers of each class a target returns a value in.
 #[derive(Clone, Copy)]
-struct ReturnRegisters {
+pub struct ReturnRegisters {
     integer: usize,
     float: usize,
 }
@@ -63,24 +61,20 @@ const AARCH64: ReturnRegisters = ReturnRegisters {
     float: 8,
 };
 
-/// The budget of the target being compiled for, which is the host: every module is written by the
-/// target machine of `get_target_machine`, which builds for `TargetMachine::get_default_triple`.
+/// The budget of the target a module is built for. `Generator` reads it once from the module's
+/// triple, which `create_module` copies from the target machine, so it follows the target rather
+/// than the host.
 ///
 /// An architecture outside the table gets `X86_64`, the smallest entry, so an unlisted target
 /// returns through the out-pointer wherever a listed one might have used registers. The cost of that
 /// is optimization headroom, while the cost of guessing a budget too large is O(n) stack with
 /// nothing to signal it.
-fn host_return_registers() -> ReturnRegisters {
-    static REGISTERS: OnceLock<ReturnRegisters> = OnceLock::new();
-    *REGISTERS.get_or_init(|| {
-        let triple = TargetMachine::get_default_triple();
-        let triple = triple.as_str().to_string_lossy().into_owned();
-        match triple.split('-').next().unwrap_or("") {
-            "x86_64" => X86_64,
-            "aarch64" | "arm64" => AARCH64,
-            _ => X86_64,
-        }
-    })
+pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
+    match triple.split('-').next().unwrap_or("") {
+        "x86_64" => X86_64,
+        "aarch64" | "arm64" => AARCH64,
+        _ => X86_64,
+    }
 }
 
 /// The registers of each class that returning a value costs.
@@ -138,14 +132,13 @@ fn demand_of(ty: BasicTypeEnum) -> RegisterDemand {
 /// Whether a function returning these leaf scalars takes an out-pointer for its result and returns
 /// `void`. The leaves are a return value in `flatten_to_scalar_leaves` order.
 ///
-/// This must depend on the leaf types alone. Under separated compilation the units that define a
-/// function and that call it are generated apart, so a decision reading anything else could differ
-/// between the two and break the ABI between them.
-pub fn returns_through_out_pointer(leaf_tys: &[BasicTypeEnum]) -> bool {
+/// This must depend on the leaf types and the target alone. Under separated compilation the units
+/// that define a function and that call it are generated apart, so a decision reading anything else
+/// could differ between the two and break the ABI between them.
+pub fn returns_through_out_pointer(leaf_tys: &[BasicTypeEnum], budget: ReturnRegisters) -> bool {
     let demand = leaf_tys
         .iter()
         .map(|ty| demand_of(*ty))
         .fold(RegisterDemand::default(), RegisterDemand::plus);
-    let budget = host_return_registers();
     demand.unmodeled > 0 || demand.integer > budget.integer || demand.float > budget.float
 }

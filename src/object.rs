@@ -19,7 +19,7 @@ use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
-use crate::return_abi::returns_through_out_pointer;
+
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
@@ -285,8 +285,7 @@ impl ObjectFieldType {
         ),
     {
         // Append blocks: loop_check, loop_body and after_loop.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let dtor_func = current_bb.get_parent().unwrap();
+        let dtor_func = gc.current_function();
         let loop_check_bb = gc
             .context
             .append_basic_block(dtor_func, "loop_release_array_elements");
@@ -546,8 +545,7 @@ impl ObjectFieldType {
         len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
-        let curr_bb = gc.builder().get_insert_block().unwrap();
-        let curr_func = curr_bb.get_parent().unwrap();
+        let curr_func = gc.current_function();
         let is_out_of_range = gc
             .builder()
             .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range")
@@ -567,8 +565,7 @@ impl ObjectFieldType {
 
     // Panic if size is negative
     pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
-        let curr_bb = gc.builder().get_insert_block().unwrap();
-        let curr_func = curr_bb.get_parent().unwrap();
+        let curr_func = gc.current_function();
         let is_neg_size = gc
             .builder()
             .build_int_compare(
@@ -796,12 +793,7 @@ impl ObjectFieldType {
     ) {
         let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
-        let curr_func = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let curr_func = gc.current_function();
         let end_bb = gc.context.append_basic_block(curr_func, "end");
         let mut last_mismatch_bb: Option<BasicBlock> = None;
         let tag = ObjectFieldType::get_union_tag(gc, &union);
@@ -974,8 +966,7 @@ impl ObjectFieldType {
                 "is_tag_mismatch",
             )
             .unwrap();
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = gc.current_function();
         let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
         gc.builder()
@@ -1333,7 +1324,7 @@ pub fn lambda_function_type<'c, 'm>(
     // ordinary parameter is what keeps the function's tail calls turning into jumps; see
     // `return_abi`.
     let ret_leaf_tys = lambda_return_leaf_types(ty, gc);
-    if returns_through_out_pointer(&ret_leaf_tys) {
+    if gc.returns_through_out_pointer(&ret_leaf_tys) {
         let mut param_tys: Vec<BasicMetadataTypeEnum> =
             vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
         param_tys.extend(arg_tys);

@@ -45,7 +45,10 @@ use crate::object::ty_to_object_ty;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
-use crate::return_abi::{returns_through_out_pointer, LAMBDA_CALLING_CONVENTION};
+use crate::return_abi::{
+    return_registers_of_target, returns_through_out_pointer, ReturnRegisters,
+    LAMBDA_CALLING_CONVENTION,
+};
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
@@ -476,6 +479,9 @@ pub struct Generator<'c, 'm> {
     pub global: Map<FullName, ScopedValue<'c>>,
     type_env: TypeEnv,
     pub target_data: TargetData,
+    // How many registers of each class the target returns a value in, read once from the module's
+    // triple. `returns_through_out_pointer` needs it for every function type built.
+    return_registers: ReturnRegisters,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
     // Debug type built for each Fix type, keyed by the type's canonical string, so a type is
@@ -539,8 +545,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &str,
     ) -> PointerValue<'c> {
         let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let first_bb = current_func.get_first_basic_block().unwrap();
+        let first_bb = self.current_function().get_first_basic_block().unwrap();
         match first_bb.get_first_instruction() {
             Some(first_inst) => self.builder().position_before(&first_inst),
             None => self.builder().position_at_end(first_bb),
@@ -627,6 +632,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             global: Default::default(),
             type_env,
             target_data: target_data,
+            return_registers: return_registers_of_target(
+                &module.get_triple().as_str().to_string_lossy(),
+            ),
             config,
             global_strings: Map::default(),
             di_type_cache: Map::default(),
@@ -801,8 +809,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, BasicBlock<'c>) {
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
 
         let unique_bb = self.context.append_basic_block(current_func, "unique_bb");
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
@@ -891,8 +898,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
         // Load refcnt_state.
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
@@ -1015,7 +1021,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // decomposed into its leaf scalars to match the flattened signature (see
         // `lambda_function_type`).
         let ret_leaf_tys = lambda_return_leaf_types(&fun.ty, self);
-        let out_ptr = if returns_through_out_pointer(&ret_leaf_tys) {
+        let out_ptr = if self.returns_through_out_pointer(&ret_leaf_tys) {
             Some(self.build_out_pointer_argument(&ret_leaf_tys, tail))
         } else {
             None
@@ -1110,6 +1116,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             })
             .collect();
         Object::from_leaves(leaves, ret_ty, self)
+    }
+
+    // Whether a function returning `leaf_tys` takes an out-pointer for its result on this module's
+    // target (see `return_abi`).
+    pub fn returns_through_out_pointer(&self, leaf_tys: &[BasicTypeEnum<'c>]) -> bool {
+        returns_through_out_pointer(leaf_tys, self.return_registers)
     }
 
     // The function currently being generated.
@@ -1339,8 +1351,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
+                let current_func = self.current_function();
                 let nonnull_bb = self
                     .context
                     .append_basic_block(current_func, "nonnull_bb@retain");
@@ -1417,12 +1428,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
     // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
     pub(crate) fn retain_nonnull_boxed(&mut self, obj: &Object<'c>, amount: IntValue<'c>) {
-        let current_func = self
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = self.current_function();
         let cont_bb = self
             .context
             .append_basic_block(current_func, "cont_bb@retain_nonnull");
@@ -1539,8 +1545,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // Dynamic object can be null, so build null checking.
 
                 // Append basic blocks.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
+                let current_func = self.current_function();
                 let nonnull_bb = self
                     .context
                     .append_basic_block(current_func, "nonnull_in_release_dynamic");
@@ -1631,12 +1636,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let obj_ptr = obj.value(self).into_pointer_value();
 
         // Branch by refcnt_state.
-        let current_func = self
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = self.current_function();
         let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
         let destruction_bb = self
             .context
@@ -1804,8 +1804,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
         let cont_bb = self
             .context
             .append_basic_block(current_func, "cont_bb@mark_threaded");
@@ -1911,7 +1910,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
         let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
-        if returns_through_out_pointer(&leaf_tys) {
+        if self.returns_through_out_pointer(&leaf_tys) {
             let out_ptr = self
                 .current_function()
                 .get_nth_param(0)

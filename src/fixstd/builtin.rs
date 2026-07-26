@@ -935,14 +935,7 @@ impl LLVMGen for InlineLLVMFixBody {
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
         let fixf = create_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
-        let fixf_funptr = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap()
-            .as_global_value()
-            .as_pointer_value();
+        let fixf_funptr = gc.current_function().as_global_value().as_pointer_value();
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_scoped_obj(&self.cap_name);
         let cap_obj_ptr = cap_obj.value(gc);
@@ -2263,12 +2256,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .build_and(is_begin_zero, is_end_full, "append_full_range")
             .unwrap();
 
-        let current_func = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = gc.current_function();
         let maybe_move_bb = gc
             .context
             .append_basic_block(current_func, "append_maybe_move");
@@ -2572,8 +2560,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage = get_array_storage(gc, &array);
     let storage_ptr = storage.value(gc).into_pointer_value();
-    let current_bb = gc.builder().get_insert_block().unwrap();
-    let current_func = current_bb.get_parent().unwrap();
+    let current_func = gc.current_function();
 
     // Branch by whether the storage, which carries the reference count, is unique.
     let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
@@ -5312,8 +5299,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
                 "is_tag_match@union_mod_function",
             )
             .unwrap();
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = gc.current_function();
         let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
         let mut mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
@@ -5445,12 +5431,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
             gc.builder().build_unreachable().unwrap();
 
             // To satisfy LLVM, we need to create a valid control flow.
-            let current_func = gc
-                .builder()
-                .get_insert_block()
-                .unwrap()
-                .get_parent()
-                .unwrap();
+            let current_func = gc.current_function();
             let unreachable_bb = gc
                 .context
                 .append_basic_block(current_func, "unreachable_bb");
@@ -5529,12 +5510,7 @@ pub struct InlineLLVMHoleBody {}
 impl LLVMGen for InlineLLVMHoleBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         gc.builder().build_unreachable().unwrap();
-        let current_func = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = gc.current_function();
         let unreachable_bb = gc
             .context
             .append_basic_block(current_func, "unreachable_bb");
@@ -5678,8 +5654,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         // Get whether argument is unique.
         let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
             let obj_ptr = obj.value(gc).into_pointer_value();
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
+            let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
             // Add continuing basic block.
@@ -5841,8 +5816,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             let storage_ptr = array
                 .extract_field(gc, ARRAY_STORAGE_IDX)
                 .into_pointer_value();
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
+            let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");

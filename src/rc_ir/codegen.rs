@@ -20,7 +20,7 @@ use crate::object::{create_obj, lambda_function_type, lambda_return_leaf_types, 
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
-use crate::return_abi::{returns_through_out_pointer, LAMBDA_CALLING_CONVENTION};
+use crate::return_abi::LAMBDA_CALLING_CONVENTION;
 use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
@@ -117,7 +117,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // exactly an object's leaves and become its `Object` directly. The CAP pointer follows all
         // of them, and the out-pointer of a wide result precedes them.
         let ret_leaf_tys = lambda_return_leaf_types(&func.fn_ty, self);
-        let mut next_param = if returns_through_out_pointer(&ret_leaf_tys) {
+        let mut next_param = if self.returns_through_out_pointer(&ret_leaf_tys) {
             1u32
         } else {
             0u32
@@ -476,12 +476,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
         let scrut_is_boxed = scrut_obj.ty.is_box(self.type_env());
 
-        let current_func = self
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = self.current_function();
         let cont_bb = if tail {
             None
         } else {
