@@ -9,6 +9,7 @@ pub mod ast;
 pub mod borrow;
 pub mod codegen;
 pub mod lower;
+pub mod ownership;
 pub mod print;
 pub mod provenance;
 pub mod rc_insert;

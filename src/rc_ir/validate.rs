@@ -20,7 +20,7 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::misc::{grow_stack, Set};
 use crate::rc_ir::ast::{FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
-use crate::rc_ir::borrow::rc_units;
+use crate::rc_ir::ownership::rc_units;
 
 /// Check the well-formedness of every function and global, panicking on the first violation. A
 /// violation is an internal compiler error — the RC IR is malformed — so it aborts rather than
