@@ -1,5 +1,8 @@
 use crate::{
-    ast::name::Name, constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile,
+    ast::name::Name,
+    constants::{COMPILER_WORKER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
+    error::Errors,
+    parse::sourcefile::SourceFile,
 };
 use colored::Colorize;
 use std::io::IsTerminal;
@@ -7,6 +10,7 @@ use std::{
     env, fs,
     hash::Hash,
     path::{Path, PathBuf},
+    thread::{self, JoinHandle},
 };
 
 pub type Map<K, V> = fxhash::FxHashMap<K, V>;
@@ -35,6 +39,22 @@ pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
 pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
     // Allocate another 1 MiB of stack whenever less than 64 KiB of it remains.
     stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
+}
+
+/// Spawn a thread whose stack (`COMPILER_WORKER_THREAD_STACK_SIZE`) is large enough for the
+/// compiler's recursion over deeply nested user expressions. The parallel type checker, the
+/// per-unit code generator, and the top-level compilation all descend the program's expression
+/// tree, whose depth is unbounded, so a thread spawned with the default stack overflows on deep
+/// inputs.
+pub fn spawn_compiler_worker<F, T>(f: F) -> JoinHandle<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    thread::Builder::new()
+        .stack_size(COMPILER_WORKER_THREAD_STACK_SIZE)
+        .spawn(f)
+        .expect("failed to spawn a compiler thread")
 }
 
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
