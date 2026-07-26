@@ -10493,3 +10493,32 @@ pub fn test_export_unbox_struct_arg() {
     "##;
     test_source_with_c(&source, &c_source, function_name!());
 }
+
+// remove_tyanno runs at every optimization level (none and basic included). A program whose types
+// are pinned only by annotations must still select the same trait instances and compute the same
+// values after the annotation nodes are stripped.
+#[test]
+fn test_annotation_stripping_is_value_neutral() {
+    let source = r#"
+        module Main;
+
+        trait a : Deflt { deflt : a; }
+        impl I64 : Deflt { deflt = -7; }
+        impl Bool : Deflt { deflt = true; }
+
+        main : IO ();
+        main = (
+            let di : I64 = deflt;
+            let db : Bool = deflt;
+            let sum : I64 = (deflt : I64) + ((deflt : I64) : I64) + 100;
+            let e : Array I64 = Array::empty(0);
+            let e2 = e.push_back(5).push_back(6);
+            assert_eq(|_|"di", di, -7);;
+            assert_eq(|_|"db", db, true);;
+            assert_eq(|_|"sum", sum, 86);;
+            assert_eq(|_|"efold", e2.to_iter.fold(0, Add::add), 11);;
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}

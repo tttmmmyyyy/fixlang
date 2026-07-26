@@ -266,3 +266,64 @@ fn test_fix_boxed_capture_is_memory_safe() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// The `fix` argument captures a variable introduced by a non-trivial binder: a `match`-arm pattern
+// variable, a tuple destructure, and a struct destructure. Each captured name must appear in the
+// lifted capture struct with the type it has in scope, so lifting must compute the same value as the
+// closure form. A boxed array captured from a `match` arm and read across the recursion also checks
+// reference-count balance under valgrind. It runs at every optimization level, none included.
+#[test]
+fn test_fix_captures_from_nontrivial_binders_compute_correctly() {
+    let source = r#"
+    module Main;
+
+    type P = struct { fst : I64, snd : I64 };
+
+    match_arm_capture : Option I64 -> I64;
+    match_arm_capture = |opt| (
+        match opt {
+            some(v) => (
+                let go = fix(|go, i| if i >= 5 { 0 } else { v + go(i + 1) });
+                go(0)
+            ),
+            none() => -1
+        }
+    );
+
+    tuple_capture : (I64, I64) -> I64;
+    tuple_capture = |pair| (
+        let (a, b) = pair;
+        let go = fix(|go, i| if i >= 4 { 0 } else { a * b + go(i + 1) });
+        go(0)
+    );
+
+    struct_capture : P -> I64;
+    struct_capture = |p| (
+        let P { fst : x, snd : y } = p;
+        let go = fix(|go, i| if i >= 3 { 0 } else { x - y + go(i + 1) });
+        go(0)
+    );
+
+    match_boxed_capture : Option (Array I64) -> I64;
+    match_boxed_capture = |opt| (
+        match opt {
+            some(arr) => (
+                let go = fix(|go, i| if i >= arr.@size { 0 } else { arr.@(i) + go(i + 1) });
+                go(0) + arr.@(0)
+            ),
+            none() => -1
+        }
+    );
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"match_arm_capture", match_arm_capture(Option::some(7)), 35);;
+        assert_eq(|_|"tuple_capture", tuple_capture((3, 4)), 48);;
+        assert_eq(|_|"struct_capture", struct_capture(P { fst : 10, snd : 3 }), 21);;
+        let tbl = Array::from_map(4, |i| i + 1);
+        assert_eq(|_|"match_boxed_capture", match_boxed_capture(Option::some(tbl)), 11);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
