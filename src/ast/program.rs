@@ -33,7 +33,7 @@ use crate::fixstd::builtin::{
     union_new,
 };
 use crate::graph::Graph;
-use crate::misc::{collect_results, spawn_compiler_worker, to_absolute_path, Map, Set};
+use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -1352,7 +1352,7 @@ impl Program {
             let mut threads = vec![];
             for _ in 0..tc.num_worker_threads {
                 let queue = queue.clone();
-                let thread = spawn_compiler_worker(move || {
+                let thread = spawn_compiler_thread(move || {
                     let mut results = vec![];
                     loop {
                         let task = match queue.lock().unwrap().pop() {

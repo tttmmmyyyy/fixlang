@@ -1,6 +1,6 @@
 use crate::{
     ast::name::Name,
-    constants::{COMPILER_WORKER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
+    constants::{COMPILER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
     error::Errors,
     parse::sourcefile::SourceFile,
 };
@@ -41,16 +41,16 @@ pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
 }
 
-/// Spawn a thread whose stack (`COMPILER_WORKER_THREAD_STACK_SIZE`) is large enough for the
+/// Spawn a thread whose stack (`COMPILER_THREAD_STACK_SIZE`) is large enough for the
 /// compiler's recursion over deeply nested user expressions. The program's expression tree has
 /// unbounded depth, so a thread spawned with the default stack overflows on deep inputs.
-pub fn spawn_compiler_worker<F, T>(f: F) -> JoinHandle<T>
+pub fn spawn_compiler_thread<F, T>(f: F) -> JoinHandle<T>
 where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
     thread::Builder::new()
-        .stack_size(COMPILER_WORKER_THREAD_STACK_SIZE)
+        .stack_size(COMPILER_THREAD_STACK_SIZE)
         .spawn(f)
         .expect("failed to spawn a compiler thread")
 }

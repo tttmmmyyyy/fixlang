@@ -14,7 +14,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, spawn_compiler_worker, warn_msg, Set},
+    misc::{info_msg, spawn_compiler_thread, warn_msg, Set},
     optimization,
     rc_ir::{
         ast::RcProgram,
@@ -291,7 +291,7 @@ pub fn build_object_files<'c>(
         };
 
         let entry_io_value = program.entry_io_value.clone();
-        threads.push(spawn_compiler_worker(move || {
+        threads.push(spawn_compiler_thread(move || {
             // Create GenerationContext.
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);

@@ -1,7 +1,7 @@
 // The compiler compiles a deeply nested expression without overflowing its own
 // stack. Type checking and code generation recurse to the expression's nesting
 // depth; they run on worker threads sized for that recursion via
-// `COMPILER_WORKER_THREAD_STACK_SIZE`, and the whole compilation runs on a
+// `COMPILER_THREAD_STACK_SIZE`, and the whole compilation runs on a
 // thread of the same size, so a deep `let`/`;;` chain compiles rather than
 // aborting with a stack overflow.
 

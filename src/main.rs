@@ -47,7 +47,7 @@ mod tests;
 mod tool;
 
 use crate::error::Errors;
-use crate::misc::{disable_colored_no_tty, spawn_compiler_worker};
+use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
@@ -81,7 +81,7 @@ fn main() {
     // type-checking and code-generation workers already use — instead of the smaller default
     // main-thread stack. `run_cli` reports any failure through the panic hook before unwinding, so
     // a panicked join only needs to become a non-zero exit here.
-    if spawn_compiler_worker(run_cli).join().is_err() {
+    if spawn_compiler_thread(run_cli).join().is_err() {
         process::exit(1);
     }
 }
