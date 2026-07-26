@@ -11,16 +11,19 @@
 //! function or a global value, both referenceable by name (a direct call's callee is a function
 //! name, not a local binding) — every `Retain`/`Release` names one reference-counting unit of its
 //! variable; a function carries a capture parameter exactly for the closure ABI; every match has at
-//! least one arm, with any catch-all arm last; and an `Llvm` operation's embedded operand names match
-//! its argument list. Reference-count balance, use-after-consume, and capture-projection order are
-//! follow-ups: they need the ownership and consume model, and must be validated against the whole
-//! test suite to stay free of false positives.
+//! least one arm, with any catch-all arm last; an `Llvm` operation's embedded operand names match
+//! its argument list; and a closure value stores the capture layout its target function projects.
+//! Reference-count balance and use-after-consume are follow-ups: they need the ownership and consume
+//! model, and must be validated against the whole test suite to stay free of false positives.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
-use crate::misc::{grow_stack, Set};
-use crate::rc_ir::ast::{FieldPath, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::ast::types::TypeNode;
+use crate::fixstd::builtin::InlineLLVMCaptureProjectBody;
+use crate::misc::{grow_stack, Map, Set};
+use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::rc_units;
+use std::sync::Arc;
 
 /// Check the well-formedness of every function and global, panicking on the first violation. A
 /// violation is an internal compiler error — the RC IR is malformed — so it aborts rather than
@@ -42,9 +45,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
     for g in &prog.globals {
         globals.insert(g.symbol.clone());
     }
-    // The functions alone, for a closure's target: a global value is referenceable by name but is
-    // not something a closure can be built from.
-    let funcs: Set<FullName> = prog.funcs.keys().map(|f| f.name.clone()).collect();
+    let capture_layouts = capture_layouts(prog, stage);
 
     for func in prog.funcs.values() {
         // A capture parameter is present exactly for the closure ABI: it is the trailing capture-
@@ -62,7 +63,8 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
         let mut v = Validator::new(
             stage,
             &globals,
-            &funcs,
+            prog,
+            &capture_layouts,
             type_env,
             func.name.name.to_string(),
         );
@@ -72,9 +74,106 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
         v.check_expr(&func.body);
     }
     for g in &prog.globals {
-        let mut v = Validator::new(stage, &globals, &funcs, type_env, g.symbol.to_string());
+        let mut v = Validator::new(
+            stage,
+            &globals,
+            prog,
+            &capture_layouts,
+            type_env,
+            g.symbol.to_string(),
+        );
         v.check_expr(&g.init);
     }
+}
+
+/// The capture-object layout each function's capture projections read: the field types every
+/// projection of that function records, which is the layout a closure value targeting it must store.
+/// A function that projects no capture has no entry — it reads nothing, so any layout suits it.
+///
+/// Checking the projections of a function against each other, and against its capture parameter,
+/// happens here, where they are gathered.
+fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNode>>> {
+    let mut out = Map::default();
+    for func in prog.funcs.values() {
+        let mut layout: Option<Vec<Arc<TypeNode>>> = None;
+        for_each_rhs(&func.body, &mut |rhs| {
+            let RcRhs::Llvm(llvm_gen, _) = rhs else {
+                return;
+            };
+            let Some(proj) = llvm_gen
+                .as_any()
+                .downcast_ref::<InlineLLVMCaptureProjectBody>()
+            else {
+                return;
+            };
+            check_capture_projection(func, proj, layout.as_ref(), stage);
+            layout = Some(proj.cap_tys.clone());
+        });
+        if let Some(layout) = layout {
+            out.insert(func.name.clone(), layout);
+        }
+    }
+    out
+}
+
+/// A capture projection reads slot `cap_idx` of the function's capture object, whose layout it
+/// carries as `cap_tys`. It must read the function's own capture parameter, name a slot that layout
+/// has, and agree on the layout with the function's other projections — they are copies of one list,
+/// so a rewrite that retyped or reordered the captures of one projection alone would leave the rest
+/// reading the old layout.
+fn check_capture_projection(
+    func: &RcFunc,
+    proj: &InlineLLVMCaptureProjectBody,
+    layout: Option<&Vec<Arc<TypeNode>>>,
+    stage: &str,
+) {
+    let location = func.name.name.to_string();
+    let capture = func.capture.as_ref().map(|c| &c.name);
+    if capture != Some(&proj.cap_name) {
+        panic!(
+            "[RC IR validate] {}: capture projection reads `{}`, which is not the capture parameter of `{}`",
+            stage,
+            proj.cap_name.to_string(),
+            location,
+        );
+    }
+    if proj.cap_idx >= proj.cap_tys.len() {
+        panic!(
+            "[RC IR validate] {}: capture projection reads slot {} of a {}-slot capture in `{}`",
+            stage,
+            proj.cap_idx,
+            proj.cap_tys.len(),
+            location,
+        );
+    }
+    if let Some(layout) = layout {
+        if *layout != proj.cap_tys {
+            panic!(
+                "[RC IR validate] {}: capture projections of `{}` disagree on the capture layout: {:?} and {:?}",
+                stage, location, layout, proj.cap_tys,
+            );
+        }
+    }
+}
+
+/// Apply `f` to every right-hand side of an expression, arms of a match included.
+fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Let(_, rhs, k) => {
+            f(rhs);
+            if let RcRhs::Match(_, arms) = rhs {
+                for arm in arms {
+                    for_each_rhs(&arm.body, f);
+                }
+            }
+            for_each_rhs(k, f);
+        }
+        RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Destructure(_, _, k) => for_each_rhs(k, f),
+        RcExpr::Ret(_) => {}
+    })
 }
 
 /// The per-function state: the names bound anywhere in the function (`seen`, for uniqueness) and the
@@ -82,7 +181,8 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 struct Validator<'a> {
     stage: &'a str,
     globals: &'a Set<FullName>,
-    funcs: &'a Set<FullName>,
+    prog: &'a RcProgram,
+    capture_layouts: &'a Map<FuncRef, Vec<Arc<TypeNode>>>,
     type_env: &'a TypeEnv,
     location: String,
     seen: Set<FullName>,
@@ -93,14 +193,16 @@ impl<'a> Validator<'a> {
     fn new(
         stage: &'a str,
         globals: &'a Set<FullName>,
-        funcs: &'a Set<FullName>,
+        prog: &'a RcProgram,
+        capture_layouts: &'a Map<FuncRef, Vec<Arc<TypeNode>>>,
         type_env: &'a TypeEnv,
         location: String,
     ) -> Self {
         Validator {
             stage,
             globals,
-            funcs,
+            prog,
+            capture_layouts,
             type_env,
             location,
             seen: Set::default(),
@@ -201,13 +303,30 @@ impl<'a> Validator<'a> {
                 // A closure names a function of the program. A rewrite that mints a clone name and
                 // forgets to add its body leaves this reference dangling, which code generation only
                 // meets much later.
-                if !self.funcs.contains(&fref.name) {
+                if !self.prog.funcs.contains_key(fref) {
                     panic!(
                         "[RC IR validate] {}: closure targets `{}`, which is not a function of the program, in `{}`",
                         self.stage,
                         fref.name.to_string(),
                         self.location
                     );
+                }
+                // The closure stores its captures in this order, and the target reads them out by
+                // slot index against its own copy of the layout. The two are redundant stores of one
+                // layout, so a rewrite that reordered, retyped, added, or dropped the captures at one
+                // end alone would leave every projection reading the wrong slot.
+                if let Some(layout) = self.capture_layouts.get(fref) {
+                    let stored: Vec<Arc<TypeNode>> = caps.iter().map(|c| c.ty.clone()).collect();
+                    if *layout != stored {
+                        panic!(
+                            "[RC IR validate] {}: closure stores captures {:?} where `{}` projects {:?}, in `{}`",
+                            self.stage,
+                            stored,
+                            fref.name.to_string(),
+                            layout,
+                            self.location,
+                        );
+                    }
                 }
                 for c in caps {
                     self.use_var(&c.name);
@@ -270,15 +389,19 @@ impl<'a> Validator<'a> {
 mod tests {
     use super::*;
     use crate::ast::types::{type_fun, type_funptr};
-    use crate::fixstd::builtin::{make_i64_ty, InlineLLVMNullPtrLit};
-    use crate::misc::Map;
-    use crate::rc_ir::ast::{FuncRef, MatchArm, RcExpr, RcFunc, RcVar};
-    use std::sync::Arc;
+    use crate::fixstd::builtin::{
+        make_bool_ty, make_dynamic_object_ty, make_i64_ty, InlineLLVMNullPtrLit,
+    };
+    use crate::rc_ir::ast::MatchArm;
 
     fn var(name: &str) -> RcVar {
+        var_of(name, make_i64_ty())
+    }
+
+    fn var_of(name: &str, ty: Arc<TypeNode>) -> RcVar {
         RcVar {
             name: FullName::local(name),
-            ty: make_i64_ty(),
+            ty,
             source: None,
             debug_name: None,
             skip_null_check: false,
@@ -292,12 +415,75 @@ mod tests {
         }
     }
 
+    /// A program with no functions and no globals, for a check that names none of its own.
+    fn empty_prog() -> RcProgram {
+        RcProgram {
+            funcs: Map::default(),
+            globals: vec![],
+            entry: FuncRef {
+                name: FullName::local("main"),
+            },
+        }
+    }
+
+    /// A function returning `I64`: `fn_ty` fixes the ABI, and `capture` is the capture parameter the
+    /// closure ABI takes.
+    fn func(
+        name: &str,
+        fn_ty: Arc<TypeNode>,
+        params: Vec<RcVar>,
+        capture: Option<RcVar>,
+        body: RcExprNode,
+    ) -> RcFunc {
+        RcFunc {
+            name: FuncRef {
+                name: FullName::local(name),
+            },
+            fn_ty,
+            params,
+            capture,
+            ret_ty: make_i64_ty(),
+            body,
+            source: None,
+            borrowed_units: Set::default(),
+        }
+    }
+
+    /// Validate a program made of `funcs`, the first of which is its entry point.
+    fn validate_prog(funcs: Vec<RcFunc>) {
+        let entry = funcs
+            .first()
+            .expect("a program has at least one function")
+            .name
+            .clone();
+        let funcs = funcs.into_iter().map(|f| (f.name.clone(), f)).collect();
+        let prog = RcProgram {
+            funcs,
+            globals: vec![],
+            entry,
+        };
+        validate(&prog, &Set::default(), &TypeEnv::default(), "test");
+    }
+
     /// Check `body` as a function whose only bindings in scope on entry are `params`.
     fn check(body: &RcExprNode, params: &[&str]) {
-        let globals = Set::default();
+        check_with_globals(body, params, &[]);
+    }
+
+    /// Check `body` as `check` does, with `globals` as the program's global names.
+    fn check_with_globals(body: &RcExprNode, params: &[&str], globals: &[&str]) {
+        let globals: Set<FullName> = globals.iter().map(|g| FullName::local(g)).collect();
         let type_env = TypeEnv::default();
-        let funcs = Set::default();
-        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
+        let prog = empty_prog();
+        let capture_layouts = Map::default();
+        let mut v = Validator::new(
+            "test",
+            &globals,
+            &prog,
+            &capture_layouts,
+            &type_env,
+            "f".to_string(),
+        );
         for p in params {
             v.bind(&FullName::local(p));
         }
@@ -338,43 +524,25 @@ mod tests {
     #[test]
     fn accepts_use_of_a_global_name() {
         // let r = call g(); ret r   where g is a global (not a local binding)
-        let globals: Set<FullName> = [FullName::local("g")].into_iter().collect();
-        let type_env = TypeEnv::default();
-        let funcs = Set::default();
-        let mut v = Validator::new("test", &globals, &funcs, &type_env, "f".to_string());
         let body = node(RcExpr::Let(
             var("r"),
             RcRhs::App(var("g"), vec![]),
             node(RcExpr::Ret(var("r"))),
         ));
-        v.check_expr(&body);
+        check_with_globals(&body, &[], &["g"]);
     }
 
     #[test]
     #[should_panic(expected = "capture-present=false disagrees with closure-ABI=true")]
     fn rejects_capture_missing_for_closure_abi() {
         // A closure-typed function with no capture parameter: the closure ABI has a capture pointer.
-        let name = FuncRef {
-            name: FullName::local("f"),
-        };
-        let func = RcFunc {
-            name: name.clone(),
-            fn_ty: type_fun(make_i64_ty(), make_i64_ty()),
-            params: vec![var("p")],
-            capture: None,
-            ret_ty: make_i64_ty(),
-            body: node(RcExpr::Ret(var("p"))),
-            source: None,
-            borrowed_units: Set::default(),
-        };
-        let mut funcs = Map::default();
-        funcs.insert(name.clone(), func);
-        let prog = RcProgram {
-            funcs,
-            globals: vec![],
-            entry: name,
-        };
-        validate(&prog, &Set::default(), &TypeEnv::default(), "test");
+        validate_prog(vec![func(
+            "f",
+            type_fun(make_i64_ty(), make_i64_ty()),
+            vec![var("p")],
+            None,
+            node(RcExpr::Ret(var("p"))),
+        )]);
     }
 
     #[test]
@@ -417,27 +585,13 @@ mod tests {
     #[should_panic(expected = "capture-present=true disagrees with closure-ABI=false")]
     fn rejects_capture_present_for_funptr_abi() {
         // A funptr-typed function with a capture parameter: the funptr ABI has no capture pointer.
-        let name = FuncRef {
-            name: FullName::local("f"),
-        };
-        let func = RcFunc {
-            name: name.clone(),
-            fn_ty: type_funptr(vec![make_i64_ty()], make_i64_ty()),
-            params: vec![var("p")],
-            capture: Some(var("cap")),
-            ret_ty: make_i64_ty(),
-            body: node(RcExpr::Ret(var("p"))),
-            source: None,
-            borrowed_units: Set::default(),
-        };
-        let mut funcs = Map::default();
-        funcs.insert(name.clone(), func);
-        let prog = RcProgram {
-            funcs,
-            globals: vec![],
-            entry: name,
-        };
-        validate(&prog, &Set::default(), &TypeEnv::default(), "test");
+        validate_prog(vec![func(
+            "f",
+            type_funptr(vec![make_i64_ty()], make_i64_ty()),
+            vec![var("p")],
+            Some(var("cap")),
+            node(RcExpr::Ret(var("p"))),
+        )]);
     }
 
     #[test]
@@ -451,5 +605,84 @@ mod tests {
             node(RcExpr::Ret(var("r"))),
         ));
         check(&body, &["x"]);
+    }
+
+    /// A lifted closure function `f` reading captured value `cap_idx` of a capture object laid out as
+    /// `cap_tys`, out of `reads` — its capture parameter, in a well-formed function.
+    fn projecting_func(reads: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
+        let capture = var_of("cap", make_dynamic_object_ty());
+        let proj = Box::new(InlineLLVMCaptureProjectBody {
+            cap_name: reads.name.clone(),
+            cap_idx,
+            cap_tys,
+        });
+        let body = node(RcExpr::Let(
+            var("c"),
+            RcRhs::Llvm(proj, vec![reads.clone()]),
+            node(RcExpr::Ret(var("c"))),
+        ));
+        func(
+            "f",
+            type_fun(make_i64_ty(), make_i64_ty()),
+            vec![var("p")],
+            Some(capture),
+            body,
+        )
+    }
+
+    /// A function `g` whose body builds a closure value targeting `f`, storing `stored`.
+    fn closure_building_func(stored: RcVar) -> RcFunc {
+        let body = node(RcExpr::Let(
+            var("cl"),
+            RcRhs::Closure(
+                FuncRef {
+                    name: FullName::local("f"),
+                },
+                vec![stored.clone()],
+            ),
+            node(RcExpr::Ret(var("cl"))),
+        ));
+        func(
+            "g",
+            type_funptr(vec![stored.ty.clone()], make_i64_ty()),
+            vec![stored],
+            None,
+            body,
+        )
+    }
+
+    #[test]
+    fn accepts_a_closure_whose_captures_match_the_projected_layout() {
+        let capture = var_of("cap", make_dynamic_object_ty());
+        validate_prog(vec![
+            closure_building_func(var_of("v", make_bool_ty())),
+            projecting_func(&capture, 0, vec![make_bool_ty()]),
+        ]);
+    }
+
+    #[test]
+    #[should_panic(expected = "closure stores captures")]
+    fn rejects_a_closure_whose_captures_differ_from_the_projected_layout() {
+        // `f` projects one captured `I64`, while the closure value stores one `Bool`.
+        let capture = var_of("cap", make_dynamic_object_ty());
+        validate_prog(vec![
+            closure_building_func(var_of("v", make_bool_ty())),
+            projecting_func(&capture, 0, vec![make_i64_ty()]),
+        ]);
+    }
+
+    #[test]
+    #[should_panic(expected = "is not the capture parameter")]
+    fn rejects_a_capture_projection_of_another_variable() {
+        // The projection reads the parameter `p` rather than the capture parameter.
+        validate_prog(vec![projecting_func(&var("p"), 0, vec![make_i64_ty()])]);
+    }
+
+    #[test]
+    #[should_panic(expected = "of a 1-slot capture")]
+    fn rejects_a_capture_projection_past_the_layout() {
+        // The projection reads slot 1 of a capture object laid out with one slot.
+        let capture = var_of("cap", make_dynamic_object_ty());
+        validate_prog(vec![projecting_func(&capture, 1, vec![make_i64_ty()])]);
     }
 }
