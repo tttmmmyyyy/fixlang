@@ -544,13 +544,15 @@ impl ObjectFieldType {
         len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
-        let curr_func = gc.current_function();
+        let current_func = gc.current_function();
         let is_out_of_range = gc
             .builder()
             .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range")
             .unwrap();
-        let out_of_range_bb = gc.context.append_basic_block(curr_func, "out_of_range_bb");
-        let in_range_bb = gc.context.append_basic_block(curr_func, "in_range_bb");
+        let out_of_range_bb = gc
+            .context
+            .append_basic_block(current_func, "out_of_range_bb");
+        let in_range_bb = gc.context.append_basic_block(current_func, "in_range_bb");
         gc.builder()
             .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb)
             .unwrap();
@@ -564,7 +566,7 @@ impl ObjectFieldType {
 
     // Panic if size is negative
     pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
-        let curr_func = gc.current_function();
+        let current_func = gc.current_function();
         let is_neg_size = gc
             .builder()
             .build_int_compare(
@@ -574,8 +576,8 @@ impl ObjectFieldType {
                 "is_neg_size",
             )
             .unwrap();
-        let neg_size_bb = gc.context.append_basic_block(curr_func, "neg_size_bb");
-        let pos_size_bb = gc.context.append_basic_block(curr_func, "pos_size_bb");
+        let neg_size_bb = gc.context.append_basic_block(current_func, "neg_size_bb");
+        let pos_size_bb = gc.context.append_basic_block(current_func, "pos_size_bb");
         gc.builder()
             .build_conditional_branch(is_neg_size, neg_size_bb, pos_size_bb)
             .unwrap();
@@ -792,18 +794,18 @@ impl ObjectFieldType {
     ) {
         let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
-        let curr_func = gc.current_function();
-        let end_bb = gc.context.append_basic_block(curr_func, "end");
+        let current_func = gc.current_function();
+        let end_bb = gc.context.append_basic_block(current_func, "end");
         let mut last_mismatch_bb: Option<BasicBlock> = None;
         let tag = ObjectFieldType::get_union_tag(gc, &union);
         for (i, variant_ty) in variant_types.iter().enumerate() {
             // Compare tag and jump.
             let match_bb = gc
                 .context
-                .append_basic_block(curr_func, &format!("match_tag{}", i));
+                .append_basic_block(current_func, &format!("match_tag{}", i));
             let mismatch_bb = gc
                 .context
-                .append_basic_block(curr_func, &format!("mismatch_tag{}", i));
+                .append_basic_block(current_func, &format!("mismatch_tag{}", i));
             let expect_tag_val = ObjectFieldType::UnionTag
                 .to_basic_type(gc, vec![])
                 .into_int_type()

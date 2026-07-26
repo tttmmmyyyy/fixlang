@@ -1050,8 +1050,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
         // buffer allocated here does. In tail position the pointer is this function's own parameter,
         // naming an ancestor's buffer, so the assertion holds there.
-        let passes_own_buffer = out_ptr.is_some() && !tail;
-        ret.set_tail_call(!passes_own_buffer);
+        let passes_local_buffer = out_ptr.is_some() && !tail;
+        ret.set_tail_call(!passes_local_buffer);
         let call_result = ret.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
@@ -1116,12 +1116,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             .iter()
             .enumerate()
             .map(|(i, leaf_ty)| {
-                let field = self
+                let leaf_ptr = self
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
                     .unwrap();
                 self.builder()
-                    .build_load(*leaf_ty, field, "load_out_leaf")
+                    .build_load(*leaf_ty, leaf_ptr, "load_out_leaf")
                     .unwrap()
             })
             .collect();
@@ -1929,11 +1929,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             let out_ptr = self.own_out_pointer();
             let buf_ty = out_pointer_buffer_type(&leaf_tys, self);
             for (i, leaf) in leaves.iter().enumerate() {
-                let field = self
+                let leaf_ptr = self
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
                     .unwrap();
-                self.builder().build_store(field, *leaf).unwrap();
+                self.builder().build_store(leaf_ptr, *leaf).unwrap();
             }
             self.builder().build_return(None).unwrap();
             return;
