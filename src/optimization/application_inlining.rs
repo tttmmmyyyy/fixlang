@@ -51,6 +51,7 @@ use crate::{
 };
 use super::rename::generate_new_names;
 
+/// Optimizes the expression of every symbol of the program.
 #[allow(dead_code)]
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
@@ -58,17 +59,22 @@ pub fn run(prg: &mut Program) {
     }
 }
 
+/// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
+/// expression.
 pub fn run_on_symbol(sym: &mut Symbol) {
     let expr = sym.expr.as_ref().unwrap().clone();
     let expr = run_on_expr(expr);
     sym.expr = Some(expr);
 }
 
+/// Optimizes an expression to a fixpoint, repeating the traversal for as long as it keeps finding
+/// applications to rewrite.
 pub fn run_on_expr(mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
     while run_on_expr_once(&mut expr) {}
     expr
 }
 
+/// Optimizes an expression in place by a single traversal, and reports whether it rewrote anything.
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     let mut inliner = AppInliner {};
     let res = inliner.traverse(expr);
@@ -76,6 +82,8 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     res.changed
 }
 
+/// The visitor that carries out the two rewrites of this optimization. It acts on an application
+/// once its subexpressions have been visited, and leaves every other kind of expression as it is.
 struct AppInliner {}
 
 /// The value that the subexpressions of a function receive when an application is pushed into them,
