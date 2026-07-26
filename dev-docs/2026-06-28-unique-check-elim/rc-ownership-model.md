@@ -5,7 +5,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 ## 1. 単位
 
-- **RC unit** = `(変数名, Path)`（`RcUnit`）。`rc_units` が列挙し、`is_rc_unit_root`（boxed / union / punched array）で降下を止める。
+- **RC unit** = `(変数名, Path)`（`VarPath`）。`rc_units` が列挙し、`is_rc_unit_root`（boxed / union / punched array）で降下を止める。
   punched フィールドはスキップする。
 - **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched フィールドも
   スキップしない。
@@ -46,18 +46,18 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - boxed union の variant アーム: payload を retain する。
 - unbox コンテナの `Destructure` / unbox union・catch-all の payload: **別名**であって新しい参照ではない。
 
-## 3. 別名関係（`root`）
+## 3. 別名関係（`origin`）
 
-`root(facts, type_env, var, path)` が別名辺を遡り、参照を生んだ変数と path を返す。全域かつ決定的で、
-may-alias ではない。辺は次のとおり:
+`origin(vars, type_env, var, path)` が別名辺を遡り、参照を生んだ変数と path を返す。全域かつ決定的。
+辺は次のとおり:
 
-- `Def::Move(y)` -> `y`。
-- `Def::Field(container, idx)`: **unbox コンテナのときだけ**別名（boxed は retain するので producer）。
-- `Def::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
+- `Binding::Move(y)` -> `y`。
+- `Binding::Field(container, idx)`: **unbox コンテナのときだけ**別名（boxed は retain するので producer）。
+- `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
   **boxed union の variant** は producer。
-- `Def::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。unbox union の構築
+- `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。unbox union の構築
   （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名。
-- `Def::Param` / `Def::Producer` はそこで止まる。
+- `Binding::Param` / `Binding::Producer` はそこで止まる。
 
 ## 4. ステージごとの不変条件
 
@@ -66,7 +66,7 @@ may-alias ではない。辺は次のとおり:
 | `insert_rc` 直後 | 全 `Retain`/`Release` は path `[]`・`RcState::Unknown`。全パラメータ/capture が `Own`。各 binding の各参照はどのパスでもちょうど 1 回消費される |
 | `split_rc_units` 直後 | 同上、ただしキーが `(binding, unit)`。全 RC ノードの path が `rc_units(v.ty)` の要素 |
 | `borrow_ify` 直後 | `borrowed_units` に載る unit と、それに根を持つ値は**消費も RC 操作もされない**（`owns_unit` が判定）。それ以外は各パスちょうど 1 回消費 |
-| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `root` + `clamp_unit` のキーで別 binding をまたいで retain/release を対消滅させる。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer で +1・消費/`Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
+| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer で +1・消費/`Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
 
 `specialize` は RC ノードを素通しコピーし、`assuming_unique` は `LLVMGen` を差し替えるだけなので、消費モデルは
 特殊化の前後で不変（`result_prov` を force-unique 有無で変える op は存在しない）。

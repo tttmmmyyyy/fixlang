@@ -46,13 +46,18 @@ enum Binding {
     Join(Vec<RcVar>),
 }
 
-/// The per-function vars `origin` and the consume walk need: how each local variable is bound, which
-/// closure value targets which function, the function's own parameters, and every variable's type
-/// (so a leaf that roots at any variable can be clamped to its reference-counting unit).
+/// The variables of one function, as `origin` and the consume walk read them.
 pub(crate) struct VarTable {
+    /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
+    /// The function each closure value targets, so a call of one resolves to that function's
+    /// parameters and their ownership.
     closure_targets: Map<FullName, FuncRef>,
+    /// The type of each parameter and capture. A variable recorded here roots at an input of the
+    /// function, which is where inferred ownership is stated.
     pub(crate) param_tys: Map<FullName, Arc<TypeNode>>,
+    /// The type of every variable, parameters included, so a leaf that roots at any of them can be
+    /// truncated to its reference-counting unit.
     pub(crate) var_tys: Map<FullName, Arc<TypeNode>>,
 }
 impl VarTable {
@@ -208,6 +213,8 @@ pub(crate) fn origin(
     grow_stack(|| origin_inner(vars, type_env, var, path))
 }
 
+/// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
+/// far end, or the variable itself where the chain stops.
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -315,6 +322,8 @@ pub(crate) fn collect_consumes(
     collect_consumes_go(node, vars, prog, type_env, &owns, out);
 }
 
+/// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
+/// parameter leaf is owned, which decides whether the argument at that position is consumed.
 fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
@@ -511,6 +520,8 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
     out
 }
 
+/// Descend a type, pushing onto `out` the path of each unit root reached. `path` is the field path
+/// from the value's root down to `ty`, which each pushed unit is named relative to.
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -708,6 +719,7 @@ mod tests {
     use crate::fixstd::builtin::make_i64_ty;
     use crate::rc_ir::provenance::Provenance;
 
+    /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
         srcs.into_iter().collect()
     }
@@ -752,6 +764,7 @@ mod tests {
         assert_eq!(as_arg_projection(&sources(vec![])), None);
     }
 
+    /// A local variable of type `I64`.
     fn var(name: &str) -> RcVar {
         RcVar {
             name: FullName::local(name),
@@ -773,10 +786,12 @@ mod tests {
         vars
     }
 
+    /// The whole value of a local variable: its name at the empty path.
     fn at(name: &str) -> VarPath {
         (FullName::local(name), vec![])
     }
 
+    /// The origin of a variable's whole value.
     fn origin_of(vars: &VarTable, name: &str) -> Origin {
         origin(vars, &TypeEnv::default(), &FullName::local(name), &[])
     }

@@ -189,19 +189,24 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
     })
 }
 
-/// The per-function state: the names bound anywhere in the function (`seen`, for uniqueness) and the
-/// names currently in scope (`scope`, for use resolution).
+/// The state of the structural check over one function body or global initializer.
 struct Validator<'a> {
+    /// The pass whose output is being checked, named in a failure message.
     stage: &'a str,
+    /// The names a use may resolve to without a binding: the program's functions and global values.
     globals: &'a Set<FullName>,
     /// The program being checked, in which a closure's target function must be defined.
     prog: &'a RcProgram,
     /// The capture layout each function's projections read (`capture_layouts`), which a closure
     /// value targeting that function must store.
     capture_layouts: &'a Map<FuncRef, Vec<Arc<TypeNode>>>,
+    /// The type definitions, which decide where a value's reference-counting units sit.
     type_env: &'a TypeEnv,
+    /// The function or global whose body is being checked, named in a failure message.
     location: String,
+    /// Every name bound anywhere in this body; a second binding of one is a duplicate.
     seen: Set<FullName>,
+    /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
 
@@ -241,7 +246,6 @@ impl<'a> Validator<'a> {
         self.scope.insert(name.clone());
     }
 
-    /// A variable use must resolve to a binding in scope or to a global (a function or global value).
     /// A `Retain`/`Release` path stops at or above a reference-counting unit of its variable — at one
     /// exactly once `split_rc_units` has run, and above one (a whole value, or a subtree holding
     /// several units) before then. Descending past a unit is what must not happen: code generation
@@ -261,6 +265,7 @@ impl<'a> Validator<'a> {
         }
     }
 
+    /// A variable use must resolve to a binding in scope or to a global (a function or global value).
     fn use_var(&self, name: &FullName) {
         if !self.scope.contains(name) && !self.globals.contains(name) {
             panic!(
@@ -272,10 +277,13 @@ impl<'a> Validator<'a> {
         }
     }
 
+    /// Check an expression and everything under it, holding a binding in scope for exactly the
+    /// continuation or arm body it covers.
     fn check_expr(&mut self, node: &RcExprNode) {
         grow_stack(|| self.check_expr_inner(node));
     }
 
+    /// One node of the walk: the uses it makes, the bindings it introduces, and its continuation.
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
@@ -308,6 +316,9 @@ impl<'a> Validator<'a> {
         }
     }
 
+    /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
+    /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
+    /// a match's arms.
     fn check_rhs(&mut self, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
@@ -863,6 +874,7 @@ mod tests {
         TypeEnv::new(bulitin_tycons(), Map::default())
     }
 
+    /// A local variable of type `I64`, which is unboxed and so holds no reference-counting unit.
     fn var(name: &str) -> RcVar {
         var_of(name, make_i64_ty())
     }
@@ -878,6 +890,7 @@ mod tests {
         }
     }
 
+    /// An expression node carrying no source span, so a failure message quotes no code.
     fn node(expr: RcExpr) -> RcExprNode {
         RcExprNode {
             expr: Arc::new(expr),

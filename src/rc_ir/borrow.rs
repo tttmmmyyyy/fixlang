@@ -278,6 +278,8 @@ fn param_ownership_shape(
     owned_units: &Set<VarPath>,
     type_env: &TypeEnv,
 ) -> OwnershipShape {
+    /// The shape of the subtree of type `ty` that `path` names within `var`, `path` being the field
+    /// path from the parameter root down to that subtree.
     fn go(
         var: &FullName,
         ty: &Arc<TypeNode>,
@@ -326,6 +328,10 @@ fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     out
 }
 
+/// Collect the tail-position `App` and `Match` bindings of a subtree into `out`. `in_tail` says
+/// whether the subtree itself sits in tail position: a binding is in tail position when its
+/// continuation does nothing but return it (`trivially_returns`) and the subtree holding it is too,
+/// and a match arm inherits the tail position of the match.
 fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
@@ -407,6 +413,8 @@ struct RewriteCtx<'a> {
 }
 
 impl<'a> RewriteCtx<'a> {
+    /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
+    /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
     fn new(
         func: &RcFunc,
         is_borrow_version: bool,
@@ -426,10 +434,14 @@ impl<'a> RewriteCtx<'a> {
         }
     }
 
+    /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
+    /// with the reference counting the routed callee no longer does, and drop the counting this
+    /// version's borrowed parameters no longer need.
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
         grow_stack(|| self.rewrite_inner(node))
     }
 
+    /// One node of the rewrite, rebuilt over its rewritten continuation.
     fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
@@ -768,9 +780,9 @@ fn split_rc(
 
 // --- retain/release cancellation ---
 
-/// The pending retains at a program point: for each object (a reference-counting unit, keyed by its
-/// `root`), the stack of retains that have bumped it and not yet been un-bumped. A release un-bumps
-/// the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
+/// The pending retains at a program point: for each object (a reference-counting unit, keyed by
+/// `unit_key`), the stack of retains that have bumped it and not yet been un-bumped. A release
+/// un-bumps the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
 type PendingRetains = Map<VarPath, Vec<NodeId>>;
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is

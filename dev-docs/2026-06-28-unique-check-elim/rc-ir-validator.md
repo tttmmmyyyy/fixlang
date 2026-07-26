@@ -1,7 +1,7 @@
 # RC IR validator
 
 RC IR の well-formedness を静的に検査する、コンパイラ開発時専用のチェッカ。実装は `src/rc_ir/validate.rs`。
-消費モデルの仕様は `rc-ownership-model.md` を参照する（この文書はそれを重複させない）。
+消費モデルの仕様は `rc-ownership-model.md` にある。
 
 ## 位置づけ
 
