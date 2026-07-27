@@ -127,7 +127,7 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 #### Run the same program at every optimization level
 
-`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they skip tail-call optimization, so a deeply tail-recursive program overflows the stack there while `-O max` runs it, and they can let an `O(n)` program degrade to `O(n²)`. A stack overflow or a hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
+`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
 
 #### Check a transformation against a property it must preserve, over a corpus
 

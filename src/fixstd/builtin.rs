@@ -50,6 +50,9 @@ use std::sync::Arc;
 
 // Implement built-in functions, types, etc.
 
+// The type constructors the compiler provides itself — the primitive types, the function arrow,
+// `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
+// a user-defined type would get from its declaration.
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -293,6 +296,7 @@ pub fn make_arrow_name_abs() -> FullName {
     name
 }
 
+// The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -908,10 +912,18 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr
 }
 
+/// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
+/// the function being generated and that function's own capture, passes it to `f` as the recursive
+/// `self`, and applies the result to `x`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
+    /// The variable holding the argument the recursion is applied to.
     x_str: FullName,
+    /// The variable holding the recursion functional, which takes `self` and returns the recursive
+    /// function.
     f_str: FullName,
+    /// The variable holding the capture of the function being generated, which the rebuilt `fix(f)`
+    /// closure carries so that it captures the same values.
     cap_name: FullName,
 }
 
@@ -935,14 +947,7 @@ impl LLVMGen for InlineLLVMFixBody {
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
         let fixf = create_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
-        let fixf_funptr = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap()
-            .as_global_value()
-            .as_pointer_value();
+        let fixf_funptr = gc.current_function().as_global_value().as_pointer_value();
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_scoped_obj(&self.cap_name);
         let cap_obj_ptr = cap_obj.value(gc);
@@ -2263,12 +2268,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .build_and(is_begin_zero, is_end_full, "append_full_range")
             .unwrap();
 
-        let current_func = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = gc.current_function();
         let maybe_move_bb = gc
             .context
             .append_basic_block(current_func, "append_maybe_move");
@@ -2560,8 +2560,9 @@ fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> O
     make_array_unique_with_hole(gc, array, None)
 }
 
-// Force array object to be unique, as `make_array_unique`. When `hole` is `Some(idx)`, a shared
-// array is cloned skipping the element at `idx` (its slot in the clone is left uninitialized).
+// Force array object to be unique: a unique array is returned as it is, and a shared one is cloned.
+// When `hole` is `Some(idx)`, the clone skips the element at `idx`, leaving that slot
+// uninitialized.
 fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -2572,8 +2573,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage = get_array_storage(gc, &array);
     let storage_ptr = storage.value(gc).into_pointer_value();
-    let current_bb = gc.builder().get_insert_block().unwrap();
-    let current_func = current_bb.get_parent().unwrap();
+    let current_func = gc.current_function();
 
     // Branch by whether the storage, which carries the reference count, is unique.
     let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
@@ -3357,10 +3357,10 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
-        let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
+        let cap = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
-        int_obj.insert_field(gc, 0, len)
+        int_obj.insert_field(gc, 0, cap)
     }
 
     fn name(&self) -> String {
@@ -4145,10 +4145,10 @@ pub fn struct_act(
     let str_ty = definition.applied_type();
     let field_ty = field.ty.clone();
     // To determine the name of the type variable for Functor, avoid names used in `str_ty` and `field_ty`.
-    let mut used_tyvar_namess = Set::default();
-    str_ty.collect_tyvar_names(&mut used_tyvar_namess);
-    field_ty.collect_tyvar_names(&mut used_tyvar_namess);
-    let used_tyvar_names: Set<FullName> = used_tyvar_namess
+    let mut used_tyvar_names = Set::default();
+    str_ty.collect_tyvar_names(&mut used_tyvar_names);
+    field_ty.collect_tyvar_names(&mut used_tyvar_names);
+    let used_tyvar_names: Set<FullName> = used_tyvar_names
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
@@ -5008,10 +5008,10 @@ pub fn union_new_body(
 ) -> Arc<ExprNode> {
     let name = format!("new_{}({})", field_name, union_name.to_string());
     let name_cloned = name.clone();
-    let field_name_cloned = FullName::local(field_name);
+    let field_name_local = FullName::local(field_name);
     expr_llvm(
         Box::new(InlineLLVMMakeUnionBody {
-            field_name: field_name_cloned,
+            field_name: field_name_local,
             generated_union_name: name_cloned,
             field_idx,
         }),
@@ -5312,8 +5312,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
                 "is_tag_match@union_mod_function",
             )
             .unwrap();
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = gc.current_function();
         let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
         let mut mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
@@ -5414,8 +5413,12 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
+/// Inline-LLVM body of the `_undefined_internal` builtin: with runtime checks on it prints the
+/// message and aborts, and with them off it emits an `unreachable` instruction. Either way the
+/// expression stands for a value of the result type that is never produced.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedInternalBody {
+    /// The variable holding the message printed before aborting.
     msg_name: FullName,
 }
 
@@ -5445,12 +5448,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
             gc.builder().build_unreachable().unwrap();
 
             // To satisfy LLVM, we need to create a valid control flow.
-            let current_func = gc
-                .builder()
-                .get_insert_block()
-                .unwrap()
-                .get_parent()
-                .unwrap();
+            let current_func = gc.current_function();
             let unreachable_bb = gc
                 .context
                 .append_basic_block(current_func, "unreachable_bb");
@@ -5529,12 +5527,7 @@ pub struct InlineLLVMHoleBody {}
 impl LLVMGen for InlineLLVMHoleBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         gc.builder().build_unreachable().unwrap();
-        let current_func = gc
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = gc.current_function();
         let unreachable_bb = gc
             .context
             .append_basic_block(current_func, "unreachable_bb");
@@ -5678,8 +5671,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         // Get whether argument is unique.
         let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
             let obj_ptr = obj.value(gc).into_pointer_value();
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
+            let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
             // Add continuing basic block.
@@ -5687,20 +5679,20 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 
             // Implement unique_bb.
             gc.builder().position_at_end(unique_bb);
-            let flag_unique_bb = bool_ty.const_int(1, false);
+            let unique_flag = bool_ty.const_int(1, false);
             // Jump to cont_bb.
             gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             // Implement shared_bb.
             gc.builder().position_at_end(shared_bb);
-            let flag_shared_bb = bool_ty.const_int(0, false);
+            let shared_flag = bool_ty.const_int(0, false);
             // Jump to cont_bb.
             gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             // Implement cont_bb.
             gc.builder().position_at_end(cont_bb);
             let flag = gc.builder().build_phi(bool_ty, "phi@is_unique").unwrap();
-            flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
+            flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
             // Under the `[a : Boxed]` bound the argument is always boxed, so the check above runs
@@ -5841,18 +5833,17 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             let storage_ptr = array
                 .extract_field(gc, ARRAY_STORAGE_IDX)
                 .into_pointer_value();
-            let current_bb = gc.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
+            let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
             gc.builder().position_at_end(unique_bb);
-            let flag_unique_bb = bool_ty.const_int(1, false);
+            let unique_flag = bool_ty.const_int(1, false);
             gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             gc.builder().position_at_end(shared_bb);
-            let flag_shared_bb = bool_ty.const_int(0, false);
+            let shared_flag = bool_ty.const_int(0, false);
             gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             gc.builder().position_at_end(cont_bb);
@@ -5860,7 +5851,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
                 .builder()
                 .build_phi(bool_ty, "phi@is_storage_unique")
                 .unwrap();
-            flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
+            flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.
@@ -7638,12 +7629,12 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
 
-        let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
 
         let value = gc
             .builder()
             .build_int_compare(
-                if is_singed {
+                if is_signed {
                     IntPredicate::SLT
                 } else {
                     IntPredicate::ULT
@@ -7795,13 +7786,13 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
             .build_int_compare(
-                if is_singed {
+                if is_signed {
                     IntPredicate::SLE
                 } else {
                     IntPredicate::ULE
@@ -8325,9 +8316,9 @@ impl LLVMGen for InlineLLVMIntDivBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let value = if is_singed {
+        let value = if is_signed {
             gc.builder()
                 .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
                 .unwrap()
@@ -8456,9 +8447,9 @@ impl LLVMGen for InlineLLVMIntRemBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let value = if is_singed {
+        let value = if is_signed {
             gc.builder()
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
                 .unwrap()

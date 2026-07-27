@@ -42,12 +42,14 @@ mod parse;
 mod preliminary_command;
 mod printer;
 mod rc_ir;
+mod return_abi;
 #[cfg(test)]
 mod tests;
 mod tool;
 
 use crate::error::Errors;
 use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
+use clap::ArgAction;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
@@ -94,41 +96,41 @@ fn run_cli() {
     let source_file = Arg::new("source-files")
         .long("file")
         .short('f')
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Source files to be compiled and linked.");
     let object_file = Arg::new("object-files")
         .long("object")
         .short('b')
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Object files to be linked.");
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .short('s')
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Add statically linked library. For example, give \"abc\" to link \"libabc.a\".");
     let dynamic_link_library = Arg::new("dynamic-link-library")
         .long("dynamic-link")
         .short('d')
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Add dynamically linked library. For example, give \"abc\" to link \"libabc.so\".");
     let library_paths = Arg::new("library-paths")
         .long("library-paths")
         .short('L')
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Add library search paths.");
     let ld_flags = Arg::new("ld-flags")
         .long("ld-flags")
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help("Other linker flags.");
@@ -146,7 +148,7 @@ fn run_cli() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations (tail recursion may lead to stack overflow); suitable for debugging."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations; the shortest compile time. Suitable for debugging."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
@@ -154,7 +156,7 @@ fn run_cli() {
         .help("Optimization level.");
     let disable_cpu_feature = Arg::new("disable-cpu-feature")
         .long("disable-cpu-feature")
-        .action(clap::ArgAction::Append)
+        .action(ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
         .help(
@@ -387,7 +389,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             Arg::new("modules")
                 .long("mods")
                 .short('m')
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .multiple_values(true)
                 .takes_value(true)
                 .help("Modules for which documents should be generated. If not specified, documents are generated for all modules. To specify modules that are only included during testing, the --test option must be added."),
@@ -559,6 +561,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
     }
 
+    // Apply the options of one invocation on top of `config`, which already carries what the
+    // project file declares.
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Files passed via `--source` are user code — append to both
         // `source_files` and `root_source_files`. Note that this runs

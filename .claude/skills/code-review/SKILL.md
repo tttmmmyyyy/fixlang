@@ -81,7 +81,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, invariant assertions, shotgun-surgery annotation, root-cause vs symptom check, etc.).
 7. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
 8. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
-9. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
+9. **comment-style** — apply the project comment/doc conventions (Rust comments, hand-written Markdown docs, and the changelog entries the change adds) to whatever survived the earlier editing passes.
 
 ## Why Sequential, Not Parallel
 
@@ -825,7 +825,7 @@ In this case, keep one as a `use` import and qualify the other minimally, or qua
 
 ## Aspect: comment-style
 
-Scan the doc/inline comments touched by the diff — in Rust source, and the prose in hand-written Markdown docs. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both.
+Scan the doc/inline comments touched by the diff — in Rust source, in the prose of hand-written Markdown docs, and in the changelog entries the change adds. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both, **[Changelog]** for entries in `CHANGELOG.md`.
 
 ### Conventions
 
@@ -916,17 +916,39 @@ Point at things by a name the reader can search for — a function, type, module
 
 **Rewrite**: replace the numeric locator with the name of the thing it points to.
 
+#### Write changelog entries for the user, and keep them short — [Changelog]
+
+A changelog entry is read by a Fix programmer working out what an upgrade means for their code, so it says what they can now observe or now have to do. Two anti-patterns to catch:
+
+**(a) Compiler internals as the subject.** Names of compiler passes, IR stages, compiler modules, worker threads, data structures, and allocation strategies mean nothing to a reader who never opens the compiler's source, and they leave the entry saying nothing about the user's program. Describe the behavior the user sees; bring the mechanism in only where it decides what they do — a flag to pass, a construct to prefer, a workaround they can now drop.
+- *Before*: `The array read loop's bounds check is now folded away by the RC-IR simplifier before the LLVM vectorizer runs.`
+- *After*: `Loops that read array elements one by one are faster.`
+
+**(b) Everything the author learned.** One change is one entry, in a sentence or two: what changed, and what the reader does about it. The investigation, the symptoms along the way, and the reasoning behind the design belong in the commit message and the PR.
+
+**Rewrite**: state the observable change, then cut every sentence that neither describes it nor tells the reader what to do.
+
+#### Leave out fixes for bugs that never shipped — [Changelog]
+
+A `### Fixed` entry tells users what is different from the version they are running, so it covers bugs that were present in the previous release. A bug introduced and fixed within the same unreleased cycle was never visible to anyone, and listing it buries the entries that matter.
+
+The test: could a user of the latest release hit this bug? A bug whose cause is another change still sitting under `## [Unreleased]`, or that only reaches a feature this cycle introduces, could not.
+
+**Remove** the entry when the cause traces to unreleased work. **Flag** it when you cannot tell how far back the bug reaches — the author knows that history.
+
 ### Procedure
 
-1. Run `git diff <base>` to find changed files and the touched line ranges. Two file kinds are in scope:
+1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
-   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, `CHANGELOG.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
+   - **`CHANGELOG.md`**: the **[Rust + Markdown]** and **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
 
    In `neighborhood` mode, apply (a) and (b) to the rest of the file instead — its other comments and its undocumented items — under the radius rules. Every convention here edits prose alone, so all of them travel to ring 2.
 3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions; in `neighborhood` mode, the document's other prose.
+   In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well; in `neighborhood` mode, the rest of the `## [Unreleased]` section.
 4. For each violation:
    - Identify which convention it is.
    - For a rewriting convention: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
@@ -934,11 +956,11 @@ Point at things by a name the reader can search for — a function, type, module
 5. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes). Markdown edits don't affect the build.
 6. Report:
    - **Applied edits**: file, convention, brief rationale.
-   - **Flagged for review** (the doc-comment convention only): file, item name, why no comment was written.
+   - **Flagged for review** (the doc-comment and changelog conventions): file, item name or entry, and why it was left to the author.
 
 ### Scope
 
-- **Do not rewrite comments just because they're long.** Length is not the issue; the listed anti-patterns are.
+- **Do not rewrite Rust comments or doc prose just because they're long.** Length is not the issue there; the listed anti-patterns are. Changelog entries are the exception — brevity is one of their conventions.
 - **Do not enforce conventions beyond the ones listed here.** Other style judgments (tone, capitalization) are not in scope.
 
 ---
