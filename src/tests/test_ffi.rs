@@ -4,10 +4,10 @@ use crate::{
     tests::test_util::{test_source, test_source_fail, test_source_with_c},
 };
 
-// An exported function exchanges values with C through the C ABI, and the wrapper that
-// `ExportStatement::implement` builds passes every argument and the result by value in the LLVM
-// type Fix uses internally. That matches the C ABI for a scalar and for a pointer, and for nothing
-// else: the C ABI classifies a structure by its size and by the class of each of its eightbytes
+// An exported function exchanges values with C through the C ABI, and the wrapper the compiler
+// generates for it passes every argument and the result by value in the LLVM type Fix uses
+// internally. That matches the C ABI for a scalar and for a pointer, and for nothing else: the C
+// ABI classifies a structure by its size and by the class of each of its eightbytes
 // (System V AMD64) or by whether it is a homogeneous floating-point aggregate (AAPCS64), while
 // LLVM assigns a register to each element. The tests below pin both halves of that boundary — the
 // types an export accepts, and the diagnostic the rest receive — and the way to exchange an
@@ -202,6 +202,7 @@ pub fn test_export_aggregate_argument_fails() {
 
 #[test]
 pub fn test_export_unbox_struct_result_fails() {
+    // A named unbox struct is refused as the result of an exported function, as any aggregate is.
     let source = r##"
         module Main;
 
@@ -642,6 +643,9 @@ pub fn test_document_example_array_elements_from_c() {
 
 #[test]
 pub fn test_export_signature_shapes() {
+    // Each shape an exported value's type may take — no argument, one argument, two arguments, and
+    // an `IO` action with and without a result — reaches C as a function of the matching arity and
+    // result type.
     let source = r##"
         module Main;
 
@@ -725,6 +729,8 @@ pub fn test_export_signature_shapes() {
 
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1() {
+    // `get_funptr_release` and `get_funptr_retain` take the type to act on from a `Lazy` whose body
+    // never runs, so a boxed type that has no value at hand can still be named.
     let source = r##"
         module Main;
 
@@ -743,6 +749,8 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_2() {
+    // The `Lazy` that names the type may fix it indirectly: through the domain or the codomain of a
+    // function in scope, or through an annotation mentioning a `Boxed` type variable.
     let source = r##"
         module Main;
 
@@ -784,6 +792,8 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
 #[test]
 pub fn test_get_funptr_release_error() {
+    // Only a boxed type has a reference counter, so `get_funptr_release` on an unboxed type such as
+    // `I64` is a compilation error.
     let source = r##"
         module Main;
 
@@ -798,6 +808,7 @@ pub fn test_get_funptr_release_error() {
 
 #[test]
 pub fn test_get_funptr_retain_error() {
+    // `get_funptr_retain` requires a boxed type, and rejects an unboxed one such as `I64`.
     let source = r##"
         module Main;
 

@@ -2235,13 +2235,13 @@ Give the exported value a type the C ABI can carry:
 * Integers: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`
 * Floating point numbers: `F32`, `F64`
 * Pointers: `Ptr`
-* The C numeric types listed for `FFI_CALL` above, such as `CInt`, which are aliases of the types above
+* The C numeric types listed in [Calling External Functions from Fix](#calling-external-functions-from-fix), such as `CInt`, which are aliases of the integer and floating point types listed here
 * Boxed types, which the foreign language receives as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
 * `()`, available as the result type, where it becomes `void`
 
 Any other type is rejected when the program is compiled.
 
-* To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described below. How C passes a structure depends on the target, so Fix asks you to name the memory instead.
+* To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value). How C passes a structure depends on the target, so Fix asks you to name the memory instead.
 * For a truth value, take a `U8` or a `CInt` and convert it on the Fix side. C leaves the width of `_Bool` to the implementation, and a caller is free to declare the parameter as `int`.
 * `String` and `Array` are structs. Wrap one in a boxed struct such as `Std::Box` to hand it over as an opaque pointer, or copy its bytes through a pointer.
 

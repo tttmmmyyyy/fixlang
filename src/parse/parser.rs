@@ -2597,6 +2597,8 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     tycon(name)
 }
 
+// Parses the parameter types of a C function signature written in `FFI_CALL`. A parameter written
+// as `()` is an error, since `()` stands for `void`.
 fn parse_ffi_param_tys(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,

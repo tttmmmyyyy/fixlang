@@ -163,14 +163,15 @@ impl ExportStatement {
     }
 }
 
-// Whether the C ABI passes a value of `ty` the way `ExportStatement::implement` passes it.
+// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
+// passed.
 //
-// `implement` passes every argument and the result by value in the LLVM type Fix uses internally,
-// and LLVM assigns registers to an aggregate element by element. The C ABI instead classifies a
-// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
-// it is a homogeneous floating-point aggregate (AAPCS64). The two agree only where the shape
-// happens to line up, and the shapes that line up differ between targets, so an aggregate is
-// exportable on neither. A scalar and a pointer are laid down identically by both.
+// The wrapper generated for an exported function passes every argument and the result by value in
+// the LLVM type Fix uses internally, and LLVM assigns registers to an aggregate element by element.
+// The C ABI instead classifies a structure by its size and by the class of each of its eightbytes
+// (System V AMD64), or by whether it is a homogeneous floating-point aggregate (AAPCS64). The
+// shapes on which the two agree differ from target to target, so an aggregate is exportable on
+// none of them. A scalar and a pointer are laid down identically by both.
 fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     let tycon = match ty.toplevel_tycon() {
         Some(tycon) => tycon,
@@ -183,8 +184,8 @@ fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     tycon.is_c_scalar()
 }
 
-// The message shown when `ty` is used as `position` ("an argument" / "the return value") of an
-// exported function although `has_c_abi` rejects it.
+// The error message for a type the C ABI cannot carry appearing in an exported function's
+// signature. `position` names where it appears, as "an argument" or "the return value".
 fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     let head = format!(
         "`{}` cannot be used as {} of an exported function",

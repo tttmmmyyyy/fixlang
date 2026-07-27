@@ -159,8 +159,7 @@ pub enum TyConVariant {
     Opaque,
 }
 
-// The names, in the `Std` namespace, of the types `TyCon::is_c_scalar` accepts. `TyCon::get_c_type`
-// maps each of them to the LLVM type C passes it as.
+// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
 const C_SCALAR_NAMES: &[&str] = &[
     I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
     F64_NAME, PTR_NAME,
@@ -266,6 +265,8 @@ impl TyCon {
         })
     }
 
+    // Whether this is an integer type that carries a sign. Panics for a type that is not an
+    // integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())

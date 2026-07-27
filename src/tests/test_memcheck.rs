@@ -56,9 +56,8 @@ pub fn test_memory_leak() {
 
 #[test]
 pub fn test_use_after_free() {
-    // Test use-after-free detection. Several tests elsewhere assert memory safety by running a
-    // program under memcheck and expecting it to succeed; this one is the other half, showing that
-    // a read of freed memory does reach the test as a failure.
+    // A read of freed memory reaches the test as a failure. This is what gives weight to the tests
+    // that assert memory safety by running a program under memcheck and expecting it to succeed.
     if !platform_valgrind_supported() {
         eprintln!(
             "Skipping {}: Valgrind not available on this platform.",
@@ -85,7 +84,8 @@ pub fn test_use_after_free() {
 
 #[test]
 pub fn test_double_free() {
-    // Test double-free detection.
+    // Freeing the same pointer twice reaches the test as a failure, so a program under memcheck
+    // that frees twice is caught even though it runs to completion.
     if !platform_valgrind_supported() {
         eprintln!(
             "Skipping {}: Valgrind not available on this platform.",
