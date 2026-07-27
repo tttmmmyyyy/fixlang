@@ -33,6 +33,9 @@ is transformed into
 ```
 let x = {expr1} in {expr0}
 ```
+
+The `let` here is the lambda's own binder: `x` keeps its name and its scope, so this rewrite leaves
+the number of bindings as it found it.
 */
 
 use super::rename::{
