@@ -227,6 +227,11 @@ pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &s
         "Error message did not contain expected text.\nExpected to include:\n{}\n\nActual message:\n{}", included_errmsg, errmsg);
 }
 
+/// Whether `path` names a Fix source file.
+fn is_fix_source(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| extension == "fix")
+}
+
 // Run all "*.fix" files in the specified directory.
 // If the directory contains subdirectories, run Fix program consists of all "*.fix" files in each subdirectory.
 pub fn test_files_in_directory(path: &Path) {
@@ -244,14 +249,14 @@ pub fn test_files_in_directory(path: &Path) {
             let files = fs::read_dir(&path).unwrap();
             for file in files {
                 let file = file.unwrap().path();
-                if file.extension().is_none() || file.extension().unwrap() != "fix" {
+                if !is_fix_source(&file) {
                     continue;
                 }
                 config.add_user_source_file(file);
             }
         } else {
             // For each file which has extention "fix" in "tests" directory, run it as Fix program.
-            if path.extension().is_none() || path.extension().unwrap() != "fix" {
+            if !is_fix_source(&path) {
                 continue;
             }
             config.add_user_source_file(path.clone());

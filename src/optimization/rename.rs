@@ -55,12 +55,53 @@ pub struct Substitutor {
     shadowed: Set<FullName>,
 }
 
+// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
+// puts back.
+struct ScopeBackup {
+    map: Map<FullName, Arc<ExprNode>>,
+    shadowed: Set<FullName>,
+}
+
 impl Substitutor {
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
         Self {
             map,
             shadowed: Set::default(),
         }
+    }
+
+    // Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
+    // stop being substituted and count as shadowed, and each local name that would capture a
+    // substituted value is given a new name. Returns that renaming together with the state that
+    // `leave_scope` puts back.
+    fn enter_scope(
+        &mut self,
+        introduced_names: &Vec<FullName>,
+        expr: &Arc<ExprNode>,
+    ) -> (ScopeBackup, Map<FullName, FullName>) {
+        let backup = ScopeBackup {
+            map: self.map.clone(),
+            shadowed: self.shadowed.clone(),
+        };
+
+        for name in introduced_names {
+            self.map.remove(name);
+            self.shadowed.insert(name.clone());
+        }
+
+        let rename = self.create_rename_of_local_names(introduced_names, expr);
+        for (org, renamed) in rename.iter() {
+            self.map
+                .insert(org.clone(), expr_var(renamed.clone(), None));
+        }
+
+        (backup, rename)
+    }
+
+    // Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
+    fn leave_scope(&mut self, backup: ScopeBackup) {
+        self.map = backup.map;
+        self.shadowed = backup.shadowed;
     }
 
     // When visiting an expression where a new local name is introduced, determine whether to rename that local name and compute the new name.
@@ -220,23 +261,10 @@ impl ExprVisitor for Substitutor {
         );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
-        let bak_map = self.map.clone();
-        let bak_shadowed = self.shadowed.clone();
-
-        for name in &introduced_names {
-            self.map.remove(name);
-            self.shadowed.insert(name.clone());
-        }
-
-        let rename = self.create_rename_of_local_names(&introduced_names, expr);
-        for (org, renamed) in rename.iter() {
-            self.map
-                .insert(org.clone(), expr_var(renamed.clone(), None));
-        }
+        let (backup, rename) = self.enter_scope(&introduced_names, expr);
 
         if self.map.is_empty() {
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
             return StartVisitResult::Return;
         }
 
@@ -250,8 +278,7 @@ impl ExprVisitor for Substitutor {
         let body = self.traverse(&body).expr;
         let expr = expr.set_lam_params(params).set_lam_body(body);
 
-        self.map = bak_map;
-        self.shadowed = bak_shadowed;
+        self.leave_scope(backup);
 
         StartVisitResult::ReplaceAndReturn(expr)
     }
@@ -279,22 +306,9 @@ impl ExprVisitor for Substitutor {
             .cloned()
             .collect::<Vec<_>>();
 
-        let bak_map = self.map.clone();
-        let bak_shadowed = self.shadowed.clone();
-
-        for name in &introduced_names {
-            self.map.remove(name);
-            self.shadowed.insert(name.clone());
-        }
-
-        let rename = self.create_rename_of_local_names(&introduced_names, &expr);
-        for (org, renamed) in rename.iter() {
-            self.map
-                .insert(org.clone(), expr_var(renamed.clone(), None));
-        }
+        let (backup, rename) = self.enter_scope(&introduced_names, &expr);
         if self.map.is_empty() {
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
             if changed {
                 return StartVisitResult::ReplaceAndReturn(expr);
             } else {
@@ -309,8 +323,7 @@ impl ExprVisitor for Substitutor {
         let value = self.traverse(&value).expr;
         let expr = expr.set_let_pat(pattern).set_let_value(value);
 
-        self.map = bak_map;
-        self.shadowed = bak_shadowed;
+        self.leave_scope(backup);
 
         StartVisitResult::ReplaceAndReturn(expr)
     }
@@ -349,22 +362,9 @@ impl ExprVisitor for Substitutor {
         for (pat, val) in pat_vals.iter_mut() {
             let introduced_names = pat.pattern.vars().into_iter().collect::<Vec<_>>();
 
-            let bak_map = self.map.clone();
-            let bak_shadowed = self.shadowed.clone();
-
-            for name in &introduced_names {
-                self.map.remove(name);
-                self.shadowed.insert(name.clone());
-            }
-
-            let rename = self.create_rename_of_local_names(&introduced_names, &expr);
-            for (org, renamed) in rename.iter() {
-                self.map
-                    .insert(org.clone(), expr_var(renamed.clone(), None));
-            }
+            let (backup, rename) = self.enter_scope(&introduced_names, &expr);
             if self.map.is_empty() {
-                self.map = bak_map;
-                self.shadowed = bak_shadowed;
+                self.leave_scope(backup);
                 continue;
             }
             changed = true;
@@ -372,8 +372,7 @@ impl ExprVisitor for Substitutor {
             *pat = pat.rename_by_map(&rename);
             *val = self.traverse(&val).expr;
 
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
         }
         let expr = expr.set_match_pat_vals(pat_vals);
 
