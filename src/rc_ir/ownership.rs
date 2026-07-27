@@ -639,22 +639,6 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
     (root.clone(), truncate_to_unit(ty, path, type_env))
 }
 
-/// Whether the reference-counting unit a unit path names is an unboxed union. Such a unit is one
-/// refcount operation over whichever variant is live, so its whole-value path names no boxed leaf,
-/// and `origin` — defined over leaves — cannot tell an alias of one from a producer of it.
-pub(crate) fn is_unboxed_union_unit(
-    ty: &Arc<TypeNode>,
-    unit: &FieldPath,
-    type_env: &TypeEnv,
-) -> bool {
-    // A unit path stops at its unit root, so the subtree it names is the unit itself. The only path
-    // with no subtree is one into a closure, which names its capture, a boxed object.
-    match subtree_type(ty, unit, type_env) {
-        Some(unit_ty) => unit_ty.is_union(type_env) && !unit_ty.is_box(type_env),
-        None => false,
-    }
-}
-
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
