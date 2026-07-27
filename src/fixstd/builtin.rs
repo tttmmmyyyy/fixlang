@@ -3655,7 +3655,6 @@ impl LLVMGen for InlineLLVMFFICallBody {
             .map(|name| gc.get_scoped_obj_noretain(name))
             .collect::<Vec<_>>();
         gc.build_ffi_call_core(
-            &None,
             obj,
             &self.fun_name,
             &self.ret_tycon,

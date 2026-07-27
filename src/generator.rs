@@ -24,7 +24,6 @@ use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
 use crate::error::panic_with_msg;
-use crate::error::panic_with_msg_src;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
@@ -2109,7 +2108,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     // `is_io`, else field 0). A void return writes nothing.
     pub fn build_ffi_call_core(
         &mut self,
-        source: &Option<Span>,
         mut obj: Object<'c>,
         fun_name: &Name,
         ret_tycon: &Arc<TyCon>,
@@ -2126,14 +2124,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let param_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
                     .iter()
                     .map(|param_ty| {
-                        let c_type = param_ty.get_c_type(self.context);
-                        if c_type.is_none() {
-                            panic_with_msg_src(
-                                "Cannot use `()` as a parameter type of C function.",
-                                source,
-                            )
-                        }
-                        c_type.unwrap().into()
+                        // `parse_ffi_param_tys` rejects `()`, the one type without a C type.
+                        param_ty.get_c_type(self.context).unwrap().into()
                     })
                     .collect::<Vec<_>>();
                 let fn_ty = match ret_c_ty {

@@ -1933,7 +1933,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
     // Bool is a union type bit-identical to i8, but its debug type is `DW_ATE_BOOLEAN`. It is
     // checked before the primitive gate because Bool's variant is `Union`.
-    if ty.toplevel_tycon().map_or(false, |tc| tc.is_boolean()) {
+    if ty.is_boolean() {
         return gc
             .get_di_builder()
             .create_basic_type(

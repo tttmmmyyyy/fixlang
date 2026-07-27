@@ -160,6 +160,7 @@ pub enum TyConVariant {
 }
 
 // The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
+// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
 const C_SCALAR_NAMES: &[&str] = &[
     I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
     F64_NAME, PTR_NAME,
