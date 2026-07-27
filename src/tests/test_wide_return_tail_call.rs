@@ -233,3 +233,40 @@ fn test_return_wider_than_any_target_runs_in_constant_stack() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// The two functions carry different numbers of arguments, so the call from the narrow one to the wide
+// one has to grow the outgoing argument area. A sibcall may only reuse the caller's own argument
+// area, while a tail call under `tailcc` may grow it, which is what keeps this loop flat. Ten
+// arguments overflow the argument registers of both supported targets, and stay under the arity where
+// the compiler's own eta expansion blows up (fixlang issue #76).
+//
+// x86-64 alone, since that is where `lambda_calling_convention_of_target` gives Fix lambdas `tailcc`.
+// AArch64 keeps the C convention, where this call stays an ordinary one and the stack grows with the
+// recursion (fixlang issue #111).
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    narrow : I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64;
+    narrow = |n, a, b, c, d, e| (
+        if n == 0 { a + b + c + d + e };
+        wide(n - 1, a, b, c, d, e, a + 1, b + 1, c + 1, d + 1)
+    );
+
+    wide : I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64 -> I64;
+    wide = |n, a, b, c, d, e, f, g, h, i| (
+        if n == 0 { a + b + c + d + e + f + g + h + i };
+        narrow(n - 1, a, b, c, d, e)
+    );
+
+    main : IO ();
+    main = (
+        let r = narrow(1000000, 1, 2, 3, 4, 5);
+        assert_eq(|_|"unexpected result", r, 15);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
