@@ -152,10 +152,12 @@ impl ExprVisitor for AppInliner {
             Expr::Lam(params, body) => {
                 // The expression is of the form `(|x| {expr})({a})`.
                 // Replace it with `let x = {a} in {expr}`.
-                if params.len() != 1 {
-                    // This optimization does not support multi-parameter lambdas.
-                    return EndVisitResult::unchanged(expr);
-                }
+                assert_eq!(
+                    params.len(),
+                    1,
+                    "a lambda of {} parameters reached application inlining",
+                    params.len()
+                );
                 let param = &params[0];
                 let pat = PatternNode::make_var(param.clone(), None)
                     .set_type(arg.type_.as_ref().unwrap().clone());

@@ -60,6 +60,11 @@ mod tests {
     // a failure instead of occupying the machine.
     const TIMEOUT: Duration = Duration::from_secs(180);
 
+    /// The text `item` gives each of the `ARITY` parameter positions, joined by `separator`.
+    fn joined_over_parameters(separator: &str, item: impl Fn(usize) -> String) -> String {
+        (0..ARITY).map(item).collect::<Vec<_>>().join(separator)
+    }
+
     /// Builds and runs a global function of `ARITY` parameters, failing if the build does not
     /// finish within `TIMEOUT`. The body weights each parameter by its position, so the result also
     /// pins the order the arguments arrive in.
@@ -69,19 +74,10 @@ mod tests {
     /// while building and running a function of this many parameters is a check of its own.
     #[test]
     fn test_many_parameter_function_compiles_in_reasonable_time() {
-        let params = (0..ARITY)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let params = joined_over_parameters(", ", |i| format!("x{}", i));
         let signature = vec!["I64"; ARITY + 1].join(" -> ");
-        let body = (0..ARITY)
-            .map(|i| format!("x{} * {}", i, i))
-            .collect::<Vec<_>>()
-            .join(" + ");
-        let args = (0..ARITY)
-            .map(|i| i.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let body = joined_over_parameters(" + ", |i| format!("x{} * {}", i, i));
+        let args = joined_over_parameters(", ", |i| i.to_string());
         let expected: usize = (0..ARITY).map(|i| i * i).sum();
         let source = format!(
             "module Main;\n\
@@ -122,7 +118,7 @@ mod tests {
             "compiling a {}-parameter function failed: {}\n{}",
             ARITY,
             status,
-            fs::read_to_string(&log_path).unwrap_or_default()
+            fs::read_to_string(&log_path).expect("Failed to read the build log")
         );
 
         let output = Command::new(&program_path)
