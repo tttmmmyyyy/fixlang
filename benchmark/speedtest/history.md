@@ -2,6 +2,28 @@
 
 Newer is above.
 
+## 6591c2396f24380a346a09577850db263b506225
+
+The `fix-many-args-compile-blowup` branch (PR #106), which stops application inlining from binding a
+variable argument to a fresh name each time it pushes an application into a `let`, an `if`, a `match`
+or an `eval`. The rewrite is what uncurrying's eta expansion runs per parameter, so the binding per
+level made the intermediate expression grow as `2^arity`: compiling a 15-parameter function took 314
+seconds, and a 13-parameter one aborted the compiler on the stacks v1.4.0 shipped with.
+
+**The emitted programs are unchanged.** Measured back-to-back at one path against the branch's fork
+point `9ed0e65a` — the row before this one in `log.csv`, taken minutes earlier in the same
+environment — the
+executed-instruction total moves from 16,384,259,453 to 16,384,259,427, or -0.0000%. No case moves by
+more than 0.05%; the largest single movement is +0.037% on `sum_by_fix`'s memory accesses, a
+300-thousand-access micro-benchmark. Dropping the intermediate binding makes the argument variable
+occur once per branch, which could have cost `let_elimination` its "used exactly once" condition and
+with it an inlining opportunity. It does not — every path that runs this pass runs let-elimination
+afterwards, and the binding the pass used to add is a `let` whose bound expression is a variable,
+which is exactly what let-elimination removes, so the two shapes converge before code generation.
+
+What the change buys is compile time: at `-O basic` a 15-parameter function goes from 314 seconds to
+2.8, and 25 and 40 parameters, previously out of reach, compile in 2.8 and 3.4 seconds.
+
 ## b8d298a0550fc15b9369694b53f9483a57f079d2
 
 The same branch with the x86-64 return-register budget corrected: `tailcc`, the convention Fix
@@ -194,8 +216,7 @@ become register reads and the bounds / capacity checks fold: struct_field_mod -9
 prime_table -45.0%, write_by_range_fold -38.5%, array_mod -25.4%, arrayrw -16.7%,
 push_back -13.6%, cp_lib_prime_list -13.4%.
 
-Read / fold cases regress, the risk anticipated by the ABI and performance section of
-`dev-docs/2026-07-18-array-buffer-representation/design.md`: the fatter 3-word `Array`
+Read / fold cases regress, the risk the design's §10 anticipated: the fatter 3-word `Array`
 value swells the iterator loop state (`Option (ArrayIterator a, a)`), which then spills to
 memory instead of staying scalar. sum_by_loop_iter_cap +165%, sum_by_fold / sum_by_fold_cap /
 sum_by_range_fold +141%, fill_from_map +136%, sum_by_loop_iter +40%. cp_lib_unionfind +30%

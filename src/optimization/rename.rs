@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{expr_let_typed, expr_var, var_var, ExprNode},
@@ -9,8 +7,10 @@ use crate::{
     },
     misc::{Map, Set},
 };
+use std::sync::Arc;
 
-// Replace free variables of an expression to other names.
+/// Replaces the free occurrences of the names of `map` with the names they map to. A local name of
+/// `expr` that would capture one of the new names is renamed apart first.
 pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>) -> Arc<ExprNode> {
     // If `map` includes a redundant mapping, we can skip the replacement.
     map.retain(|from, to| from != to);
@@ -21,12 +21,12 @@ pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>)
         .into_iter()
         .map(|(from, to)| (from, expr_var(to, None)))
         .collect::<Map<FullName, Arc<ExprNode>>>();
-    let mut replacer = Substitutor::new(map);
-    let res = replacer.traverse(expr);
+    let mut substitutor = Substitutor::new(map);
+    let res = substitutor.traverse(expr);
     res.expr
 }
 
-// Replace free variables of an expression to other names.
+/// Replaces the free occurrences of `from` in `expr` with `to`.
 pub fn rename_free_name(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc<ExprNode> {
     let mut map = Map::default();
     map.insert(from.clone(), to.clone());
@@ -47,15 +47,25 @@ pub fn substitute_free_name(
     res.expr
 }
 
-// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
+/// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
 pub struct Substitutor {
-    // The mapping from names to expressions.
+    /// The mapping from names to the expressions they are replaced by.
     map: Map<FullName, Arc<ExprNode>>,
-    // Local names available at this scope.
+    /// Local names available at this scope.
+    shadowed: Set<FullName>,
+}
+
+/// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
+/// puts back.
+struct ScopeBackup {
+    /// The mapping from names to expressions in force outside the binder.
+    map: Map<FullName, Arc<ExprNode>>,
+    /// The local names available outside the binder.
     shadowed: Set<FullName>,
 }
 
 impl Substitutor {
+    /// Creates a substitutor that replaces each name of `map` with the expression it maps to.
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
         Self {
             map,
@@ -63,7 +73,43 @@ impl Substitutor {
         }
     }
 
-    // When visiting an expression where a new local name is introduced, determine whether to rename that local name and compute the new name.
+    /// Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
+    /// stop being substituted and count as shadowed, and each local name that would capture a
+    /// substituted value is given a new name. Returns that renaming together with the state that
+    /// `leave_scope` puts back.
+    fn enter_scope(
+        &mut self,
+        introduced_names: &Vec<FullName>,
+        expr: &Arc<ExprNode>,
+    ) -> (ScopeBackup, Map<FullName, FullName>) {
+        let backup = ScopeBackup {
+            map: self.map.clone(),
+            shadowed: self.shadowed.clone(),
+        };
+
+        for name in introduced_names {
+            self.map.remove(name);
+            self.shadowed.insert(name.clone());
+        }
+
+        let rename = self.create_rename_of_local_names(introduced_names, expr);
+        for (org, renamed) in rename.iter() {
+            self.map
+                .insert(org.clone(), expr_var(renamed.clone(), None));
+        }
+
+        (backup, rename)
+    }
+
+    /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
+    fn leave_scope(&mut self, backup: ScopeBackup) {
+        self.map = backup.map;
+        self.shadowed = backup.shadowed;
+    }
+
+    /// Decides which of the local names `introduced_names` that `expr` introduces have to be
+    /// renamed for the substitution to enter their scope without capturing them, and computes a new
+    /// name for each of those. A name that can stay as it is has no entry in the returned map.
     fn create_rename_of_local_names(
         &self,
         introduced_names: &Vec<FullName>,
@@ -91,10 +137,10 @@ impl Substitutor {
             to_names.extend(to.free_vars());
         }
 
-        let mut renamed_names = vec![];
+        let mut names_to_rename = vec![];
         for introduced_name in introduced_names {
             if to_names.contains(&introduced_name) {
-                renamed_names.push(introduced_name.clone());
+                names_to_rename.push(introduced_name.clone());
             }
         }
 
@@ -102,10 +148,10 @@ impl Substitutor {
         let ng_as_new_name = |name: &FullName| {
             to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
         };
-        let new_names = generate_new_names_pred(ng_as_new_name, renamed_names.len());
+        let new_names = generate_new_names_pred(ng_as_new_name, names_to_rename.len());
 
         let mut map = Map::default();
-        for (old_name, new_name) in renamed_names.into_iter().zip(new_names) {
+        for (old_name, new_name) in names_to_rename.into_iter().zip(new_names) {
             map.insert(old_name, new_name);
         }
 
@@ -133,7 +179,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -141,7 +187,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -199,7 +245,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -211,7 +257,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let mut params = expr.get_lam_params();
         assert_eq!(
             params.len(),
@@ -220,23 +266,10 @@ impl ExprVisitor for Substitutor {
         );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
-        let bak_map = self.map.clone();
-        let bak_shadowed = self.shadowed.clone();
-
-        for name in &introduced_names {
-            self.map.remove(name);
-            self.shadowed.insert(name.clone());
-        }
-
-        let rename = self.create_rename_of_local_names(&introduced_names, expr);
-        for (org, renamed) in rename.iter() {
-            self.map
-                .insert(org.clone(), expr_var(renamed.clone(), None));
-        }
+        let (backup, rename) = self.enter_scope(&introduced_names, expr);
 
         if self.map.is_empty() {
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
             return StartVisitResult::Return;
         }
 
@@ -250,8 +283,7 @@ impl ExprVisitor for Substitutor {
         let body = self.traverse(&body).expr;
         let expr = expr.set_lam_params(params).set_lam_body(body);
 
-        self.map = bak_map;
-        self.shadowed = bak_shadowed;
+        self.leave_scope(backup);
 
         StartVisitResult::ReplaceAndReturn(expr)
     }
@@ -264,7 +296,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let bound = expr.get_let_bound();
         let bound_res = self.traverse(&bound);
         let changed = bound_res.changed;
@@ -279,22 +311,9 @@ impl ExprVisitor for Substitutor {
             .cloned()
             .collect::<Vec<_>>();
 
-        let bak_map = self.map.clone();
-        let bak_shadowed = self.shadowed.clone();
-
-        for name in &introduced_names {
-            self.map.remove(name);
-            self.shadowed.insert(name.clone());
-        }
-
-        let rename = self.create_rename_of_local_names(&introduced_names, &expr);
-        for (org, renamed) in rename.iter() {
-            self.map
-                .insert(org.clone(), expr_var(renamed.clone(), None));
-        }
+        let (backup, rename) = self.enter_scope(&introduced_names, &expr);
         if self.map.is_empty() {
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
             if changed {
                 return StartVisitResult::ReplaceAndReturn(expr);
             } else {
@@ -309,8 +328,7 @@ impl ExprVisitor for Substitutor {
         let value = self.traverse(&value).expr;
         let expr = expr.set_let_pat(pattern).set_let_value(value);
 
-        self.map = bak_map;
-        self.shadowed = bak_shadowed;
+        self.leave_scope(backup);
 
         StartVisitResult::ReplaceAndReturn(expr)
     }
@@ -323,7 +341,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -335,7 +353,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let mut changed;
 
         let cond = expr.get_match_cond();
@@ -349,22 +367,9 @@ impl ExprVisitor for Substitutor {
         for (pat, val) in pat_vals.iter_mut() {
             let introduced_names = pat.pattern.vars().into_iter().collect::<Vec<_>>();
 
-            let bak_map = self.map.clone();
-            let bak_shadowed = self.shadowed.clone();
-
-            for name in &introduced_names {
-                self.map.remove(name);
-                self.shadowed.insert(name.clone());
-            }
-
-            let rename = self.create_rename_of_local_names(&introduced_names, &expr);
-            for (org, renamed) in rename.iter() {
-                self.map
-                    .insert(org.clone(), expr_var(renamed.clone(), None));
-            }
+            let (backup, rename) = self.enter_scope(&introduced_names, &expr);
             if self.map.is_empty() {
-                self.map = bak_map;
-                self.shadowed = bak_shadowed;
+                self.leave_scope(backup);
                 continue;
             }
             changed = true;
@@ -372,8 +377,7 @@ impl ExprVisitor for Substitutor {
             *pat = pat.rename_by_map(&rename);
             *val = self.traverse(&val).expr;
 
-            self.map = bak_map;
-            self.shadowed = bak_shadowed;
+            self.leave_scope(backup);
         }
         let expr = expr.set_match_pat_vals(pat_vals);
 
@@ -391,7 +395,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -407,7 +411,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -423,7 +427,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -439,7 +443,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -505,7 +509,6 @@ pub fn rename_pattern_value_avoiding(
     (pattern, value)
 }
 
-#[allow(dead_code)]
 pub fn rename_let_pattern_avoiding(
     black_list: &Set<FullName>,
     let_expr: Arc<ExprNode>,
@@ -516,7 +519,6 @@ pub fn rename_let_pattern_avoiding(
     let_expr.set_let_pat(pattern).set_let_value(value)
 }
 
-#[allow(dead_code)]
 pub fn rename_match_pattern_avoiding(
     black_list: &Set<FullName>,
     match_expr: Arc<ExprNode>,
@@ -541,11 +543,11 @@ pub fn rename_lam_param_avoiding(
     }
     let old_params = lam_expr.get_lam_params();
     let old_param = old_params[0].clone();
-    let old_value = lam_expr.get_lam_body().clone();
+    let old_body = lam_expr.get_lam_body().clone();
     let renaming = calculate_renaming_bound_vars_avoiding(
         black_list,
         vec![old_param.name.clone()],
-        old_value.clone(),
+        old_body.clone(),
     );
 
     let new_param = if let Some(new_name) = renaming.get(&old_param.name) {
@@ -553,10 +555,10 @@ pub fn rename_lam_param_avoiding(
     } else {
         old_param.clone()
     };
-    let new_value = rename_free_names(&old_value, renaming);
+    let new_body = rename_free_names(&old_body, renaming);
     lam_expr
         .set_lam_params(vec![new_param])
-        .set_lam_body(new_value)
+        .set_lam_body(new_body)
 }
 
 // Consider the situation that let, match or lam expression binds variables `bound_vars` and evaluates the expression `expr`.
@@ -567,10 +569,10 @@ fn calculate_renaming_bound_vars_avoiding(
     value: Arc<ExprNode>,
 ) -> Map<FullName, FullName> {
     // Calculate the set of names that should be renamed.
-    let mut renamed: Vec<FullName> = vec![];
+    let mut names_to_rename: Vec<FullName> = vec![];
     for name in bound_vars.iter() {
         if black_list.contains(name) {
-            renamed.push(name.clone());
+            names_to_rename.push(name.clone());
         }
     }
 
@@ -584,11 +586,11 @@ fn calculate_renaming_bound_vars_avoiding(
     }
 
     // Decide new names.
-    let new_names = generate_new_names(&black_list, renamed.len());
+    let new_names = generate_new_names(&black_list, names_to_rename.len());
 
     // Create the renaming map.
     let mut renaming: Map<FullName, FullName> = Map::default();
-    for (old, new) in renamed.into_iter().zip(new_names.into_iter()) {
+    for (old, new) in names_to_rename.into_iter().zip(new_names.into_iter()) {
         renaming.insert(old, new);
     }
     renaming

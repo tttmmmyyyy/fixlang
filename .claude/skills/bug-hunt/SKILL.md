@@ -129,6 +129,10 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
 
+#### Check a transformation against a property it must preserve, over a corpus
+
+A transformation that has to leave some computable property of its input alone — the free names of a term, the scalar leaves of a value, an arity, the set of cases a dispatch covers — can be checked with no expected output and no baseline: derive the property from the input and from the output inside the transformation itself, assert the two agree, and compile everything available (the standard library alone puts a compiler pass through thousands of shapes per build). The oracle comes from the code under test, which is what makes it cheap enough to run over a whole corpus, and the failures it catches are the silent ones. Variable capture is the clearest case — moving an expression under a binder, or renaming a binder that the expression mentions, makes a free name disappear, and the wrong value that results carries no diagnostic — and the same probe catches a dropped subexpression, a leaf count that stopped matching its type, and an argument list that lost an entry.
+
 #### Run the emitted programs under valgrind memcheck
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.

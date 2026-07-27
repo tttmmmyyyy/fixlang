@@ -1,4 +1,5 @@
 mod test_abs_path_dep_hash;
+mod test_application_inlining;
 mod test_array_bounds_check;
 mod test_array_builder;
 mod test_array_rmw;
