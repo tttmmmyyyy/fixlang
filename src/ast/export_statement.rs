@@ -198,7 +198,7 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
         position
     );
     if ty.is_boolean() {
-        return head + ", because the width of `_Bool` in C is implementation-defined. Use `U8` or `CInt`, and convert it on the Fix side.";
+        return head + ". Use `U8` or `CInt`, and convert it on the Fix side.";
     }
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
 }

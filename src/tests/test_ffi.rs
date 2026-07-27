@@ -319,7 +319,7 @@ pub fn test_export_bool_argument_fails() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "the width of `_Bool` in C is implementation-defined",
+        "Use `U8` or `CInt`, and convert it on the Fix side",
     );
 }
 
