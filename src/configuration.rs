@@ -22,15 +22,21 @@ use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
 
+/// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
+    /// The library is copied into the output at link time.
     Static,
+    /// The library is resolved when the output is loaded.
     Dynamic,
 }
 
+/// What a build produces.
 #[derive(Clone, Copy)]
 pub enum OutputFileType {
+    /// A program that can be run on its own.
     Executable,
+    /// A shared library other programs link against.
     DynamicLibrary,
 }
 
@@ -54,9 +60,12 @@ impl OutputFileType {
     }
 }
 
+/// The valgrind tool the built program is run under in `run` mode.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum ValgrindTool {
+    /// Run the program directly.
     None,
+    /// Run under memcheck, which reports invalid memory accesses and leaks.
     MemCheck,
     // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
     // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
@@ -194,6 +203,9 @@ pub struct DocsConfig {
     pub mode: BuildConfigType,
 }
 
+/// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
+/// link it, what to produce, and how to run it. It is assembled from the command line and the
+/// project file, and then read by every stage of the build.
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -293,6 +305,8 @@ impl Default for DeprecationMode {
     }
 }
 
+/// How hard the compiler works to make the program fast, trading compile time for run time. The
+/// variants are ordered, so a pass can turn itself on from a given level up.
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum FixOptimizationLevel {
     None,         // For debugging; skip even tail call optimization.

@@ -170,6 +170,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         result
     }
 
+    /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
+    /// continuation. The node's debug location is already in effect. Returns the produced object
+    /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
@@ -299,10 +302,10 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // node iff it is used afterward). `get_struct_fields` performs the whole-container
                 // reference counting: a boxed container retains the fields and releases itself, an
                 // unboxed container moves the fields out and releases the fields not named here.
-                let cont_obj = self.get_scoped_obj_noretain(&container.name);
+                let container_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
                 let field_objs =
-                    ObjectFieldType::get_struct_fields(self, &cont_obj, &field_indices);
+                    ObjectFieldType::get_struct_fields(self, &container_obj, &field_indices);
                 // One object per requested index; the pop below walks `fields`, so a shorter list
                 // would leave it popping names this loop never pushed.
                 assert_eq!(
@@ -310,13 +313,13 @@ impl<'c, 'm> Generator<'c, 'm> {
                     field_objs.len(),
                     "a destructure extracts one object per field"
                 );
-                for ((_, fv), obj) in fields.iter().zip(field_objs.iter()) {
-                    self.scope_push(&fv.name, obj);
-                    self.emit_debug_local_variable(fv, obj);
+                for ((_, field_var), obj) in fields.iter().zip(field_objs.iter()) {
+                    self.scope_push(&field_var.name, obj);
+                    self.emit_debug_local_variable(field_var, obj);
                 }
                 let res = self.eval_rc_expr(k, tail, func_vals);
-                for (_, fv) in fields {
-                    self.scope_pop(&fv.name);
+                for (_, field_var) in fields {
+                    self.scope_pop(&field_var.name);
                 }
                 res
             }
@@ -544,15 +547,15 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_push(&arm.payload.name, &payload_obj);
             self.emit_debug_local_variable(&arm.payload, &payload_obj);
 
-            let arm_val = self.eval_rc_expr(&arm.body, tail, func_vals);
+            let arm_obj = self.eval_rc_expr(&arm.body, tail, func_vals);
             self.scope_pop(&arm.payload.name);
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
             // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds
             // the phi an undef value from its unreachable block.
-            if let Some(arm_val) = arm_val {
+            if let Some(arm_obj) = arm_obj {
                 let arm_end_bb = self.builder().get_insert_block().unwrap();
-                incomings.push((arm_val, arm_end_bb));
+                incomings.push((arm_obj, arm_end_bb));
                 self.builder()
                     .build_unconditional_branch(
                         cont_bb.expect("a non-tail match has a merge block"),

@@ -561,6 +561,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
     }
 
+    // Apply the options of one invocation on top of `config`, which already carries what the
+    // project file declares.
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Files passed via `--source` are user code — append to both
         // `source_files` and `root_source_files`. Note that this runs

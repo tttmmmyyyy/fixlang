@@ -129,6 +129,8 @@ impl<'c> ValueAccessor<'c> {
     }
 }
 
+// A Fix value being generated, living in LLVM registers, together with the Fix type that gives it
+// its layout and reference-counting behavior.
 #[derive(Clone)]
 pub struct Object<'c> {
     // The object's value, held as the flat list of leaf (non-struct) scalars it decomposes into,
@@ -142,6 +144,9 @@ pub struct Object<'c> {
 }
 
 impl<'c> Object<'c> {
+    // Construct an object from its assembled value: the heap pointer of a boxed object, the
+    // function pointer of a funptr, or the embedded value of an unboxed one. The value is exploded
+    // into leaves on the way in.
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
@@ -207,6 +212,8 @@ impl<'c> Object<'c> {
         gc.assemble_from_scalar_leaves(embedded, &mut leaves)
     }
 
+    // An object of type `ty` whose value is `undef`, for an unreachable point that still has to
+    // produce a value of the type.
     pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc, &vec![])
@@ -438,12 +445,17 @@ impl<'c> Object<'c> {
     }
 }
 
+// The local variables in scope at the point being generated. Globals are held separately, in
+// `Generator::global`.
 #[derive(Default)]
 pub struct Scope<'c> {
+    // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
+    // shadows the outer bindings of the same name for as long as it lives.
     data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
+    // Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         if !self.data.contains_key(var) {
@@ -625,7 +637,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         type_env: TypeEnv,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
-        let ret = Self {
+        let gc = Self {
             context: ctx,
             module,
             builders: Arc::new(RefCell::new(vec![Arc::new(ctx.create_builder())])),
@@ -643,7 +655,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
         };
-        ret
+        gc
     }
 
     // Create debug info builders and compilation units.
@@ -1042,17 +1054,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             call_args.push(fun.extract_field(self, CLOSURE_CAPTURE_IDX).into());
         }
 
-        let ret = self
+        let call_site = self
             .builder()
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
-        ret.set_call_convention(self.lambda_calling_convention());
+        call_site.set_call_convention(self.lambda_calling_convention());
         // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
         // buffer allocated here does. In tail position the pointer is this function's own parameter,
         // naming an ancestor's buffer, so the assertion holds there.
         let passes_local_buffer = out_ptr.is_some() && !tail;
-        ret.set_tail_call(!passes_local_buffer);
-        let call_result = ret.try_as_basic_value().left();
+        call_site.set_tail_call(!passes_local_buffer);
+        let call_result = call_site.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
             // returns what its caller returns), so forward it verbatim without unpacking and repacking.
@@ -2096,7 +2108,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Some(fun) => fun,
             None => {
                 let ret_c_ty = ret_tycon.get_c_type(self.context);
-                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
+                let param_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
                     .iter()
                     .map(|param_ty| {
                         let c_type = param_ty.get_c_type(self.context);
@@ -2112,9 +2124,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let fn_ty = match ret_c_ty {
                     None => {
                         // Void case.
-                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
+                        self.context.void_type().fn_type(&param_c_tys, is_var_args)
                     }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
                 };
                 self.module.add_function(&fun_name, fn_ty, None)
             }
@@ -2127,11 +2139,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             .collect::<Vec<_>>();
 
         // Call c function
-        let ret_c_val = self
+        let call_site = self
             .builder()
             .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name))
             .unwrap();
-        match ret_c_val.try_as_basic_value() {
+        match call_site.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
                     let ret_str = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
@@ -2307,8 +2319,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             return val;
         }
         // If the types are not equal, we need to use alloca to bit cast.
-        let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
-        let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
+        let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
+        let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         self.builder().build_store(ptr, val).unwrap();
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()

@@ -31,6 +31,9 @@ use inkwell::{
 use inkwell::{AddressSpace, IntPredicate};
 use std::sync::Arc;
 
+// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
+// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
+// subobject, a union's payload buffer, an array).
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
     ControlBlock,
@@ -284,12 +287,12 @@ impl ObjectFieldType {
         ),
     {
         // Append blocks: loop_check, loop_body and after_loop.
-        let dtor_func = gc.current_function();
+        let current_func = gc.current_function();
         let loop_check_bb = gc
             .context
-            .append_basic_block(dtor_func, "loop_release_array_elements");
-        let loop_body_bb = gc.context.append_basic_block(dtor_func, "loop_body");
-        let after_loop_bb = gc.context.append_basic_block(dtor_func, "after_loop");
+            .append_basic_block(current_func, "loop_release_array_elements");
+        let loop_body_bb = gc.context.append_basic_block(current_func, "loop_body");
+        let after_loop_bb = gc.context.append_basic_block(current_func, "after_loop");
 
         // Allocate and initialize loop counter.
         let counter_type = gc.context.i64_type();
@@ -604,15 +607,18 @@ impl ObjectFieldType {
         }
 
         // Get element.
-        let elm_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
         let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(elm_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         }
         .unwrap();
 
         // Get value
-        let elem_val = gc.builder().build_load(elm_ty, elm_ptr, "elem").unwrap();
+        let elem_val = gc
+            .builder()
+            .build_load(elm_basic_ty, elm_ptr, "elem")
+            .unwrap();
 
         // Return value
         Object::new(elem_val, elem_ty, gc)
@@ -649,16 +655,19 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let elm_ty = value.ty.get_embedded_type(gc, &vec![]);
+        let elm_basic_ty = value.ty.get_embedded_type(gc, &vec![]);
         let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(elm_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         }
         .unwrap();
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elm_val = gc.builder().build_load(elm_ty, elm_ptr, "elem").unwrap();
+            let elm_val = gc
+                .builder()
+                .build_load(elm_basic_ty, elm_ptr, "elem")
+                .unwrap();
             let elem_obj = Object::new(elm_val, elem_ty, gc);
             gc.release(elem_obj);
         }
@@ -859,12 +868,15 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_mark_union(gc, union, None, amount);
     }
 
+    // The tag of a union value: the index, among the union's variants, of the variant it holds.
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
         let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
         union.extract_field(gc, union_tag_idx).into_int_value()
     }
 
+    // The union with its tag set to `tag`, the index of the variant it is to hold. The payload
+    // buffer is left as it is, so the caller writes the variant's value into it.
     pub fn set_union_tag<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1129,14 +1141,14 @@ impl ObjectType {
                 .builder()
                 .build_struct_gep(struct_ty, null, buf_field_idx, "gep_first_elem_size_of")
                 .unwrap();
-            let first_elm_ptr = gc
+            let header_size = gc
                 .builder()
                 .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "size_with_one_elem")
                 .unwrap();
 
             let size_with_elems = gc
                 .builder()
-                .build_int_add(first_elm_ptr, elems_size, "size_with_elems")
+                .build_int_add(header_size, elems_size, "size_with_elems")
                 .unwrap();
             return size_with_elems;
         } else {
@@ -1268,6 +1280,7 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
         .as_type()
 }
 
+// The type of a union's tag, an index into the union's variants.
 pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
@@ -1296,13 +1309,13 @@ pub fn out_pointer_buffer_type<'c, 'm>(
     gc.context.struct_type(leaf_tys, false)
 }
 
+/// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
+/// CAP pointer when the lambda is a closure, and the result either returned directly or written
+/// through an out-pointer that precedes them all.
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
 ) -> FunctionType<'c> {
-    // Any lamba takes argments.
-    // In addition, if the lambda is closure (in other words, not a function pointer), it takes CAP, which is dynamic object consists of captured objects.
-
     // Arguments. An unbox-struct argument is passed as its flat leaf scalars rather than as one
     // aggregate, so a loop-carried field stays visible to LLVM (see `flatten_to_scalar_leaves`).
     let mut arg_tys: Vec<BasicMetadataTypeEnum> = ty
@@ -1629,9 +1642,9 @@ pub fn create_obj<'c, 'm>(
             ObjectFieldType::Array(_) => {
                 // Initialize the capacity of the array.
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
-                let ptr_to_size = obj.gep_boxed(gc, i as u32);
+                let ptr_to_cap = obj.gep_boxed(gc, i as u32);
                 gc.builder()
-                    .build_store(ptr_to_size, array_capacity.unwrap())
+                    .build_store(ptr_to_cap, array_capacity.unwrap())
                     .unwrap();
             }
             // The storage buffer is left uninitialized; there is no capacity field to set.
@@ -1769,12 +1782,12 @@ pub fn create_traverser<'c, 'm>(
                 work_bbs.push((TRAVERSER_WORK_MARK_THREADED, mark_threaded_bb))
             }
             let work_ty = traverser_work_type(gc.context);
-            let mut switches = work_bbs
+            let mut cases = work_bbs
                 .iter()
                 .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
             gc.builder()
-                .build_switch(work, switches.pop().unwrap().1, &switches)
+                .build_switch(work, cases.pop().unwrap().1, &cases)
                 .unwrap();
 
             for (work, work_bb) in work_bbs.iter() {

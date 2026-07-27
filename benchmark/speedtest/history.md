@@ -182,7 +182,8 @@ become register reads and the bounds / capacity checks fold: struct_field_mod -9
 prime_table -45.0%, write_by_range_fold -38.5%, array_mod -25.4%, arrayrw -16.7%,
 push_back -13.6%, cp_lib_prime_list -13.4%.
 
-Read / fold cases regress, the risk the design's §10 anticipated: the fatter 3-word `Array`
+Read / fold cases regress, the risk anticipated by the ABI and performance section of
+`dev-docs/2026-07-18-array-buffer-representation/design.md`: the fatter 3-word `Array`
 value swells the iterator loop state (`Option (ArrayIterator a, a)`), which then spills to
 memory instead of staying scalar. sum_by_loop_iter_cap +165%, sum_by_fold / sum_by_fold_cap /
 sum_by_range_fold +141%, fill_from_map +136%, sum_by_loop_iter +40%. cp_lib_unionfind +30%
