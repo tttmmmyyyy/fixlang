@@ -133,6 +133,9 @@ impl PushedArg {
 }
 
 impl ExprVisitor for AppInliner {
+    /// Rewrites an application whose function is a lambda, a `let`, an `if`, a `match` or an
+    /// `eval`, and asks for the result to be visited again, so that the application the rewrite
+    /// moves inward is rewritten in turn.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
         // rewrites call sites onto function pointers, which happens after every pass that runs this

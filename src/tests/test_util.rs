@@ -126,6 +126,8 @@ pub fn wait_within(child: &mut Child, timeout: Duration, description: &str) -> E
     }
 }
 
+/// Compiles `source` under `config` and runs the resulting program. The outer `Result` reports the
+/// compilation, and the inner one the spawning of the compiled program.
 fn run_source(
     source: &str,
     mut config: Configuration,
@@ -223,6 +225,8 @@ pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_e
     );
 }
 
+/// Compiles and runs `source`, and asserts that it fails with a diagnostic containing
+/// `included_errmsg`.
 pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &str) {
     let errmsg = run_source_assert_failed(source, config);
     assert!(errmsg.contains(included_errmsg),
@@ -234,8 +238,9 @@ fn is_fix_source(path: &Path) -> bool {
     path.extension().is_some_and(|extension| extension == "fix")
 }
 
-// Run all "*.fix" files in the specified directory.
-// If the directory contains subdirectories, run Fix program consists of all "*.fix" files in each subdirectory.
+/// Runs each `*.fix` file directly under `dir` as a Fix program of its own, and each subdirectory of
+/// `dir` as one Fix program made of all the `*.fix` files it contains. Hidden subdirectories are
+/// skipped. Fails the test unless every program exits with code 0.
 pub fn test_files_in_directory(dir: &Path) {
     let entries = fs::read_dir(dir).unwrap();
     for entry in entries {
@@ -273,6 +278,9 @@ pub fn test_files_in_directory(dir: &Path) {
     }
 }
 
+/// Compiles `c_src` with `gcc`, links the resulting object file into the Fix program `fix_src`, and
+/// runs it, failing the test unless it exits with code 0. `test_name` names the intermediate C and
+/// object files, so each test that calls this needs a name of its own.
 pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
@@ -311,7 +319,8 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     let _ = fs::remove_file(o_file_path);
 }
 
-// Copy directory recursively
+/// Copies the directory `src` into `dst`, recursing into subdirectories and creating `dst` and its
+/// subdirectories as needed.
 pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {

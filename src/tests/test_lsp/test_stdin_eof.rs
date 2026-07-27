@@ -1,12 +1,9 @@
 //! LSP integration test for stdin EOF handling.
 //!
 //! When the parent editor process dies it closes the pipe connected to
-//! the language server's stdin. The server's read loop must notice the
-//! resulting EOF and terminate. Previously it did not: `read_line`
-//! returns `Ok(0)` (not an error) on EOF, and the loop treated that as
-//! an empty line and `continue`d, spinning at ~100% CPU forever and
-//! leaving an orphaned process behind. This test reproduces that
-//! scenario and asserts the server exits instead.
+//! the language server's stdin. `read_line` then returns `Ok(0)` on
+//! every call, and the server's read loop must recognize that as EOF and
+//! terminate, so that no orphaned process is left behind.
 
 #[cfg(test)]
 mod tests {
@@ -33,8 +30,7 @@ mod tests {
     }
 
     /// Verifies that the language server terminates promptly once its
-    /// stdin reaches EOF (parent editor closed the pipe), rather than
-    /// busy-looping on `read_line` returning `Ok(0)`.
+    /// stdin reaches EOF (parent editor closed the pipe).
     #[test]
     fn test_lsp_exits_on_stdin_eof() {
         let (_temp_dir, project_dir) = setup_test_env("completion");
@@ -65,8 +61,7 @@ mod tests {
         // server observes EOF.
         drop(child.stdin.take().expect("stdin handle already taken"));
 
-        // The server must terminate promptly. Before the fix it would
-        // spin on `read_line` returning `Ok(0)` forever and never exit.
+        // The server must terminate promptly once it observes the EOF.
         wait_within(
             &mut child,
             Duration::from_secs(10),

@@ -9,7 +9,8 @@ use crate::{
     misc::{Map, Set},
 };
 
-// Replace free variables of an expression to other names.
+/// Replaces the free occurrences of the names of `map` with the names they map to. A local name of
+/// `expr` that would capture one of the new names is renamed apart first.
 pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>) -> Arc<ExprNode> {
     // If `map` includes a redundant mapping, we can skip the replacement.
     map.retain(|from, to| from != to);
@@ -25,7 +26,7 @@ pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>)
     res.expr
 }
 
-// Replace free variables of an expression to other names.
+/// Replaces the free occurrences of `from` in `expr` with `to`.
 pub fn rename_free_name(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc<ExprNode> {
     let mut map = Map::default();
     map.insert(from.clone(), to.clone());
@@ -46,11 +47,11 @@ pub fn substitute_free_name(
     res.expr
 }
 
-// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
+/// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
 pub struct Substitutor {
-    // The mapping from names to expressions.
+    /// The mapping from names to the expressions they are replaced by.
     map: Map<FullName, Arc<ExprNode>>,
-    // Local names available at this scope.
+    /// Local names available at this scope.
     shadowed: Set<FullName>,
 }
 
@@ -64,6 +65,7 @@ struct ScopeBackup {
 }
 
 impl Substitutor {
+    /// Creates a substitutor that replaces each name of `map` with the expression it maps to.
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
         Self {
             map,
@@ -105,7 +107,9 @@ impl Substitutor {
         self.shadowed = backup.shadowed;
     }
 
-    // When visiting an expression where a new local name is introduced, determine whether to rename that local name and compute the new name.
+    /// Decides which of the local names `introduced_names` that `expr` introduces have to be
+    /// renamed for the substitution to enter their scope without capturing them, and computes a new
+    /// name for each of those. A name that can stay as it is has no entry in the returned map.
     fn create_rename_of_local_names(
         &self,
         introduced_names: &Vec<FullName>,
