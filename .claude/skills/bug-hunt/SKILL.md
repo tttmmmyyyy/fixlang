@@ -129,10 +129,6 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they skip tail-call optimization, so a deeply tail-recursive program overflows the stack there while `-O max` runs it, and they can let an `O(n)` program degrade to `O(n²)`. A stack overflow or a hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
 
-#### Assert that a rewrite preserves the free names of what it rewrites, then compile a corpus
-
-A pass that moves an expression under a binder, or renames a binder an expression mentions, can capture a name — and a captured name is a wrong value with no diagnostic. The free-variable set is the invariant that catches the whole class: capture makes a free name disappear, and dropping a subexpression does too, so wrapping the rewrite in `assert_eq!(before.free_vars(), after.free_vars())` and compiling a corpus (the standard library alone exercises it thousands of times) is a complete detector for it. It needs no expected output and no baseline, which is what makes it cheap enough to run over every program you have. The same shape applies to any rewrite with a set-valued invariant — the bound names of a pattern, the arms of a match, the parameters of a lambda.
-
 #### Run the emitted programs under valgrind memcheck
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
