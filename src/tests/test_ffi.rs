@@ -1,7 +1,13 @@
 use crate::{
     configuration::Configuration,
+    constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::test_util::{test_source, test_source_fail, test_source_with_c},
+    tests::test_util::{fix_command, test_source, test_source_fail, test_source_with_c},
+};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -114,6 +120,101 @@ pub fn test_export_scalar_types() {
         }
     "##;
     test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_narrow_integers_carry_the_c_extension_attribute() {
+    // An integer narrower than 32 bits travels in the low bits of a register, and `signext` /
+    // `zeroext` is how a signature says which side of the call extends it. Leaving it off costs
+    // nothing on x86-64, where whoever reads the value narrows it anyway, and yields the wrong
+    // number on AArch64, where the reader takes the whole register on the promise that the other
+    // side extended it. On an x86-64 host the attribute is therefore visible only in the emitted
+    // IR, which is what this test reads.
+    let source = r#"
+        module Main;
+
+        add_i8 : I8 -> I8 -> I8;
+        add_i8 = |x, y| x + y;
+        FFI_EXPORT[add_i8, c_add_i8];
+
+        add_u16 : U16 -> U16 -> U16;
+        add_u16 = |x, y| x + y;
+        FFI_EXPORT[add_u16, c_add_u16];
+
+        add_i64 : I64 -> I64 -> I64;
+        add_i64 = |x, y| x + y;
+        FFI_EXPORT[add_i64, c_add_i64];
+
+        write_byte : Ptr -> U8 -> IO ();
+        write_byte = |p, v| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), p, v];
+        FFI_EXPORT[write_byte, c_write_byte];
+
+        main : IO ();
+        main = pure();
+    "#;
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    File::create(work_dir.join("main.fix"))
+        .unwrap()
+        .write_all(source.as_bytes())
+        .unwrap();
+
+    let output = fix_command()
+        .args([
+            "build",
+            "-O",
+            "none",
+            "--emit-llvm",
+            "--file",
+            "main.fix",
+            "--output",
+            "prog",
+        ])
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`fix build --emit-llvm` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // `-O none` compiles the program as several modules, and the wrappers are spread over them.
+    let ir = fs::read_dir(&work_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            let name = p.file_name().unwrap().to_string_lossy();
+            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
+        })
+        .map(|p| fs::read_to_string(p).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for expected in [
+        // An exported function extends its narrow arguments and result, by sign or by zero
+        // according to the Fix type.
+        "define signext i8 @c_add_i8(i8 signext %0, i8 signext %1)",
+        "define zeroext i16 @c_add_u16(i16 zeroext %0, i16 zeroext %1)",
+        // A type that fills the register carries no attribute, and neither does a pointer.
+        "define i64 @c_add_i64(i64 %0, i64 %1)",
+        "define void @c_write_byte(ptr %0, i8 zeroext %1)",
+        // The same holds for the C functions Fix calls.
+        "declare void @fixruntime_u8_to_bytes(ptr, i8 zeroext)",
+    ] {
+        assert!(
+            ir.contains(expected),
+            "emitted IR lacks `{}`:\n{}",
+            expected,
+            ir
+        );
+    }
 }
 
 #[test]

@@ -273,6 +273,9 @@ impl TyCon {
     // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
     // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
     // which side of the call extends it; a wider type fills the register and needs no extension.
+    //
+    // The 32-bit threshold holds for the targets Fix builds for. An ABI that extends a 32-bit
+    // integer to the width of a register — RISC-V 64 does — widens this set.
     pub fn is_narrow_c_integer(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::new_str(&[STD_NAME])
             && matches!(
