@@ -207,15 +207,15 @@ impl TyCon {
     // If struct / union have type parameter, introduces new type arguments.
     pub fn get_struct_union_value_type(
         self: &TyCon,
-        typechcker: &mut TypeCheckContext,
+        typechecker: &mut TypeCheckContext,
     ) -> Arc<TypeNode> {
-        let ti = typechcker.type_env.tycons.get(self).unwrap();
+        let ti = typechecker.type_env.tycons.get(self).unwrap();
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
         let mut new_tyvars: Vec<Arc<TypeNode>> = vec![];
         for tv in ti.tyvars.clone() {
-            let tv = typechcker.new_tyvar_by(&tv);
+            let tv = typechecker.new_tyvar_by(&tv);
             new_tyvars.push(type_from_tyvar(tv));
         }
 

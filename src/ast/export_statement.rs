@@ -134,8 +134,8 @@ impl ExportStatement {
             IOType::Pure => {}
             IOType::IO => {}
             IOType::IOState => {
-                let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
-                args.push(ios);
+                let iostate = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+                args.push(iostate);
             }
         }
         while args.len() > 0 {
