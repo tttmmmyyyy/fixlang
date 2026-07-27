@@ -1069,6 +1069,14 @@ impl TypeNode {
         }
     }
 
+    // Whether this is the type `Bool`.
+    pub fn is_boolean(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.is_boolean(),
+            None => false,
+        }
+    }
+
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
