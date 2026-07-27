@@ -100,7 +100,9 @@ codom.get_embedded_type(gc, &vec![]).fn_type(&dom_llvm_tys, false)
 `FFI_EXPORT` の型制限で FFI 周辺のテストを触るので、ここも埋める。`test_source_with_c` で C 側から関数ポインタを呼び、次を確かめる。
 
 - retain を呼ぶと参照カウンタが増え、Fix 側が手放しても値が生き続けること。`boxed_from_retained_ptr` で戻した値が読めること
-- release を必要回数呼ぶと解放されること。解放の観測には `Destructor` を使い、dtor が走ったことを `IORef` に記録する
+- release を必要回数呼ぶと解放されること。解放の観測には `Destructor` を使い、その dtor から
+  `FFI_CALL` で C の関数を呼んでフラグを立て、テストの最後にそのフラグを読む（`IORef` は標準
+  ライブラリに無い）
 - ドキュメントの手順（責任の回数は retain N 回に対して N+1 回）どおりに使えば辻褄が合うこと
 - valgrind で leak も double free も出ないこと
 
