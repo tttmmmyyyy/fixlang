@@ -1031,6 +1031,21 @@ impl<'c, 'm> Generator<'c, 'm> {
         let func_ptr = self.get_lambda_func_ptr(fun.clone());
         let func_ty = lambda_function_type(&fun.ty, self);
 
+        // A tail call returns what this function returns, so the two signatures agree on how the
+        // result travels: both return it by value, or both take an out-pointer and return `void`.
+        // Everything below leans on that — the forwarded out-pointer names this function's own
+        // buffer, and the callee's result is returned verbatim. Checked under develop mode (the unit
+        // tests).
+        if tail && self.config.develop_mode {
+            let func = self.current_function();
+            assert_eq!(
+                func.get_type().get_return_type(),
+                func_ty.get_return_type(),
+                "the tail call in `{}` returns something other than what it returns",
+                func.get_name().to_str().unwrap()
+            );
+        }
+
         // Call function pointer with the out-pointer if the result is too wide for the return
         // registers, then the arguments, then CAP if closure. Each unbox-struct argument is
         // decomposed into its leaf scalars to match the flattened signature (see
