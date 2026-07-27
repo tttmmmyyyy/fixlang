@@ -460,7 +460,7 @@ fn resolve_callee_params<'a>(
             };
             prog.funcs.contains_key(&fref).then_some(fref)
         })?;
-    // A closure target is registered as a function when it is lifted, and the other way in resolved
+    // A closure target is registered as a function when it is lifted, and the other branch resolved
     // the name against the program already, so the callee is there either way. Reporting it absent
     // here would read as an indirect call and quietly give up the borrow optimization.
     let func = prog.funcs.get(&fref).unwrap_or_else(|| {
