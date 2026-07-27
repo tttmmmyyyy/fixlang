@@ -13,9 +13,12 @@
 //! which functions get one.
 //!
 //! The predicate LLVM itself uses is `TargetLowering::CanLowerReturn`, which neither the C API nor
-//! inkwell exposes, so the budget lives here as a table keyed by target architecture. Adding a
-//! target, or raising the LLVM version, means revisiting the table; the constant-stack tests in
-//! `test_wide_return_tail_call.rs` are what make a stale entry visible.
+//! inkwell exposes, so the budget lives here as a table. A budget belongs to a calling convention on
+//! a target rather than to the target alone, so each entry records the budget of the convention
+//! `lambda_calling_convention_of_target` picks for that target, and the two are keyed alike. Adding a
+//! target, changing the convention it uses, or raising the LLVM version means revisiting the table;
+//! the constant-stack tests in `test_wide_return_tail_call.rs` are what make a stale entry visible,
+//! one test per register class.
 //!
 //! **The arguments whose values change must fit in the argument registers.** Beyond them arguments
 //! travel on the stack, and an x86-64 sibcall may only reuse a stack slot that already holds the
@@ -28,8 +31,8 @@ use inkwell::types::BasicTypeEnum;
 
 /// `llvm::CallingConv::Tail`, which inkwell exposes only as a number. The backend may rewrite — and
 /// grow — the outgoing argument area of a tail call made with it, rather than requiring the stack
-/// arguments to already hold the values being passed. It leaves the return-register budget alone, so
-/// a wide result still needs its out-pointer.
+/// arguments to already hold the values being passed. It carries its own return-register budget,
+/// which `return_registers_of_target` records for the targets that use it.
 const TAILCC: u32 = 18;
 
 /// `llvm::CallingConv::C`.
@@ -71,33 +74,35 @@ pub struct ReturnRegisters {
     float: usize,
 }
 
-/// x86-64 returns integers and pointers in RAX, RDX and RCX, and floating-point values in XMM0-XMM3.
-/// Linux, macOS and Windows agree.
-const X86_64: ReturnRegisters = ReturnRegisters {
+/// What `tailcc` returns in registers on x86-64: three integers or pointers, and five floating-point
+/// values of either width. The C convention on the same target returns one floating-point value
+/// fewer, which is why the entry belongs to the convention rather than to the architecture. Linux,
+/// macOS and Windows agree.
+const X86_64_TAILCC: ReturnRegisters = ReturnRegisters {
     integer: 3,
-    float: 4,
+    float: 5,
 };
 
-/// AArch64 returns integers and pointers in X0-X7 and floating-point values in V0-V7. Linux and
-/// macOS agree.
-const AARCH64: ReturnRegisters = ReturnRegisters {
+/// What the C convention returns in registers on AArch64: integers and pointers in X0-X7, and
+/// floating-point values in V0-V7. Linux and macOS agree.
+const AARCH64_CCC: ReturnRegisters = ReturnRegisters {
     integer: 8,
     float: 8,
 };
 
-/// The budget of the target a module is built for. `Generator` reads it once from the module's
-/// triple, which `create_module` copies from the target machine, so it follows the target rather
-/// than the host.
+/// The budget a module is built against: that of the target it names, under the convention
+/// `lambda_calling_convention_of_target` gives that target. `Generator` reads it once from the
+/// module's triple, which `create_module` copies from the target machine, so it follows the target
+/// rather than the host.
 ///
-/// An architecture outside the table gets `X86_64`, the smallest entry, so an unlisted target
-/// returns through the out-pointer wherever a listed one might have used registers. The cost of that
-/// is optimization headroom, while the cost of guessing a budget too large is O(n) stack with
-/// nothing to signal it.
+/// An architecture outside the table gets the smallest entry, so an unlisted target returns through
+/// the out-pointer wherever a listed one might have used registers. The cost of that is optimization
+/// headroom, while the cost of guessing a budget too large is O(n) stack with nothing to signal it.
 pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
     match architecture_of_target(triple) {
-        "x86_64" => X86_64,
-        "aarch64" | "arm64" => AARCH64,
-        _ => X86_64,
+        "x86_64" => X86_64_TAILCC,
+        "aarch64" | "arm64" => AARCH64_CCC,
+        _ => X86_64_TAILCC,
     }
 }
 
