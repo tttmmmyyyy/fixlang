@@ -2247,7 +2247,7 @@ Any other type is rejected when the program is compiled:
 
 #### Returning more than one value
 
-An exported function returns one value, so hand several values back through memory the foreign language owns: take a `Ptr` to it and copy into it. Fix reaches the bytes of an aggregate through a boxed value — `Std::FFI::borrow_boxed_io` hands out a pointer to read from, and `Std::FFI::mutate_boxed_io` a pointer to write to — and the payload of a boxed struct is laid out like a C structure with the same fields, as described in [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c).
+An exported function returns one value, so hand several values back through memory the foreign language owns: take a `Ptr` to it and copy into it. Fix reaches the bytes of an aggregate through a boxed value — `Std::FFI::borrow_boxed_io` hands out a pointer to read from, and `Std::FFI::mutate_boxed_io` a pointer to write to — and the payload of a boxed struct is laid out like a C structure with the same fields, as described in [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c). For an array, `Std::Array::borrow_elements` and `Std::Array::mutate_elements` give a pointer to the element buffer in the same way, as described in [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c).
 
 ```
 type Pair = box struct { a : I64, b : F64 };
@@ -2273,7 +2273,7 @@ sum_pair = |src, size| (
 FFI_EXPORT[sum_pair, sum_pair]; // double sum_pair(const struct pair* src, uint64_t size);
 ```
 
-The C caller passes `sizeof(struct pair)` as `size`, so the number of bytes copied comes from the C declaration.
+Fix has no `sizeof` operator, so let the byte count come from the C side: declare the exported function to take it, and pass `sizeof(struct pair)` at the call. The same applies to an array's element buffer, whose length in bytes is the element count times a size only C can state.
 
 ### Managing External Resources in Fix
 
