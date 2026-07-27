@@ -34,6 +34,8 @@ use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Formatter};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -80,8 +82,8 @@ impl PartialEq for AssocType {
 
 impl Eq for AssocType {}
 
-impl std::hash::Hash for AssocType {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for AssocType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
@@ -403,8 +405,8 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
-impl std::fmt::Debug for TypeNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for TypeNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
     }
 }

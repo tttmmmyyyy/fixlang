@@ -14,7 +14,6 @@ use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
 use inkwell::types::BasicType;
 use std::sync::Arc;
-use std::usize;
 
 // The export statement.
 #[derive(Clone)]

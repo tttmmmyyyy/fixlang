@@ -51,7 +51,7 @@ use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
 use num_bigint::BigInt;
-use pest::error::Error;
+use pest::error::{Error, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::path::PathBuf;
@@ -377,12 +377,12 @@ pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint>
 /// location and classify the expected-rule set.
 fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
     let insert_at = match e.location {
-        pest::error::InputLocation::Pos(p) => p,
-        pest::error::InputLocation::Span((s, _)) => s,
+        InputLocation::Pos(p) => p,
+        InputLocation::Span((s, _)) => s,
     };
     let positives: &[Rule] = match &e.variant {
-        pest::error::ErrorVariant::ParsingError { positives, .. } => positives.as_slice(),
-        pest::error::ErrorVariant::CustomError { .. } => &[],
+        ErrorVariant::ParsingError { positives, .. } => positives.as_slice(),
+        ErrorVariant::CustomError { .. } => &[],
     };
     let kind = classify_repair_hint(positives);
     RepairHint { insert_at, kind }
@@ -3280,7 +3280,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
     // Show error content.
     msg += "Expected ";
     match &e.variant {
-        pest::error::ErrorVariant::ParsingError {
+        ErrorVariant::ParsingError {
             positives,
             negatives,
         } => {
@@ -3304,7 +3304,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
                 msg += ".";
             }
         }
-        pest::error::ErrorVariant::CustomError { message: _ } => unreachable!(),
+        ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
     if suggestion.is_some() {
         msg += "\n";
@@ -3319,12 +3319,12 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
 
     // Create span (source location).
     let span = match e.location {
-        pest::error::InputLocation::Pos(s) => Span {
+        InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
             end: min(s + 1, src_string.len()),
         },
-        pest::error::InputLocation::Span((s, e)) => Span {
+        InputLocation::Span((s, e)) => Span {
             input: src.clone(),
             start: s,
             end: e,
