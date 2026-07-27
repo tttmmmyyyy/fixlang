@@ -162,6 +162,46 @@ pub fn test_export_boxed_value() {
 }
 
 #[test]
+pub fn test_export_non_ascii_c_function_name_fails() {
+    // A C identifier is written in ASCII, so a letter outside it is refused even though it is a
+    // letter. The grammar takes any character up to the `]`, so the name reaches this check.
+    let source = r##"
+        module Main;
+
+        value : CInt;
+        value = 42.c_int;
+        FFI_EXPORT[value, café];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "The rest of the characters should be an ASCII letter, a digit or an underscore",
+    );
+}
+
+#[test]
+pub fn test_export_non_ascii_first_character_fails() {
+    let source = r##"
+        module Main;
+
+        value : CInt;
+        value = 42.c_int;
+        FFI_EXPORT[value, Δelta];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "The first character should be an ASCII letter or an underscore",
+    );
+}
+
+#[test]
 pub fn test_ffi_call_unit_parameter_fails() {
     // `()` stands for `void`, which a C function takes as a return type alone.
     let source = r##"

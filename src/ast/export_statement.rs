@@ -60,22 +60,24 @@ impl ExportStatement {
     // Validate the names in the export statement.
     // - src: The source of the export statement. Used for error messages.
     pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
-        // If `c_function_name` is not a valid C function name, exit with error
-        // The first character should be a letter or an underscore
-        // The rest of the characters should be a letter, a digit or an underscore
-        if !self.function_name.chars().next().unwrap().is_alphabetic()
-            && self.function_name.chars().next().unwrap() != '_'
-        {
+        // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
+        // underscores.
+        let first = self
+            .function_name
+            .chars()
+            .next()
+            .expect("the grammar gives an export statement a non-empty C function name");
+        if !first.is_ascii_alphabetic() && first != '_' {
             let msg = format!(
-                "`{}` is not a valid C function name. The first character should be a letter or an underscore.",
+                "`{}` is not a valid C function name. The first character should be an ASCII letter or an underscore.",
                 &self.function_name
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
         for c in self.function_name.chars() {
-            if !c.is_alphanumeric() && c != '_' {
+            if !c.is_ascii_alphanumeric() && c != '_' {
                 let msg = format!(
-                    "`{}` is not a valid C function name. The rest of the characters should be a letter, a digit or an underscore.",
+                    "`{}` is not a valid C function name. The rest of the characters should be an ASCII letter, a digit or an underscore.",
                     &self.function_name
                 );
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
