@@ -2,6 +2,29 @@
 
 Newer is above.
 
+## 6591c2396f24380a346a09577850db263b506225
+
+The `fix-many-args-compile-blowup` branch (PR #106), which stops application inlining from binding a
+variable argument to a fresh name each time it pushes an application into a `let`, an `if`, a `match`
+or an `eval`. The rewrite is what uncurrying's eta expansion runs per parameter, so the binding per
+level made the intermediate expression grow as `2^arity`: compiling a 15-parameter function took 314
+seconds, and a 13-parameter one aborted the compiler on the stacks v1.4.0 shipped with.
+
+**The emitted programs are unchanged.** Measured back-to-back at one path against the branch's fork
+point `9ed0e65a` — the row before this one in `log.csv`, taken minutes earlier in the same
+environment — the
+executed-instruction total moves from 16,384,259,453 to 16,384,259,427, or -0.0000%. No case moves by
+more than 0.05%; the largest single movement is +0.037% on `sum_by_fix`'s memory accesses, a
+300-thousand-access micro-benchmark. This is the answer to the one runtime question the change raised:
+dropping the intermediate binding makes the argument variable occur once per branch instead of once,
+which could have cost `let_elimination` its "used exactly once" condition and with it an inlining
+opportunity. It does not — every path that runs this pass runs let-elimination afterwards, and the
+binding the pass used to add is exactly what let-elimination case 1 removes, so the two shapes
+converge before code generation.
+
+What the change buys is compile time: at `-O basic` a 15-parameter function goes from 314 seconds to
+2.8, and 25 and 40 parameters, previously out of reach, compile in 2.8 and 3.4 seconds.
+
 ## 476f40aa1ef55bf5f0880495bd2000860ad13e13
 
 The `defunctionalize-fix-tco` branch (PR #95), which rewrites `Std::fix` into a directly
