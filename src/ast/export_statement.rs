@@ -12,7 +12,8 @@ use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
-use inkwell::types::BasicType;
+use inkwell::attributes::AttributeLoc;
+use inkwell::types::{BasicType, BasicTypeEnum};
 use std::sync::Arc;
 
 // The export statement.
@@ -95,35 +96,40 @@ impl ExportStatement {
             io_type,
         } = self.function_type.clone().unwrap();
 
-        // Create the LLVM type of the exported C function.
+        // Create the LLVM type of the exported C function. Each exchanged value is its own scalar
+        // leaf — an integer, a floating point number or a pointer — which is the type a C
+        // declaration of the same function names. `has_c_abi` admits nothing with another shape.
         let dom_llvm_tys = doms
             .iter()
-            .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
+            .map(|dom| c_leaf_type(dom, gc).into())
             .collect::<Vec<_>>();
         let func_ty = if codom.is_unit() {
             gc.context.void_type().fn_type(&dom_llvm_tys, false)
         } else {
-            codom
-                .get_embedded_type(gc, &vec![])
-                .fn_type(&dom_llvm_tys, false)
+            c_leaf_type(&codom, gc).fn_type(&dom_llvm_tys, false)
         };
 
         // Declare the function.
         let func = gc.module.add_function(&self.function_name, func_ty, None);
+        if let Some(tycon) = codom.toplevel_tycon() {
+            gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
+        }
+        for (i, dom) in doms.iter().enumerate() {
+            if let Some(tycon) = dom.toplevel_tycon() {
+                gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
+            }
+        }
 
         // Implement the function.
         let bb = gc.context.append_basic_block(func, "entry");
         gc.builder().position_at_end(bb);
 
-        // Create Fix values from arguments.
-        let mut args = func
-            .get_params()
+        // Create Fix values from arguments. Each parameter is the value's one scalar leaf.
+        let params = func.get_params();
+        let mut args = params
             .iter()
             .enumerate()
-            .map(|(i, arg)| {
-                let arg_ty = doms[i].clone();
-                Object::new(*arg, arg_ty, gc)
-            })
+            .map(|(i, arg)| Object::from_leaves(vec![*arg], doms[i].clone(), gc))
             .collect::<Vec<_>>();
 
         // Get the Fix value to be exported. `value_expr` is a reference to the instantiated symbol
@@ -158,25 +164,39 @@ impl ExportStatement {
             }
         }
 
-        // Return the result.
+        // Return the result as its one scalar leaf.
         if codom.is_unit() {
             gc.builder().build_return(None).unwrap();
         } else {
-            let ret_val = fix_value.value(gc);
+            let ret_val = fix_value.leaves()[0];
             gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
 }
 
+// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar leaf,
+// which is the type a C declaration of the same function names.
+fn c_leaf_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
+    let embedded_ty = ty.get_embedded_type(gc, &vec![]);
+    let leaves = gc.flatten_to_scalar_leaves(embedded_ty);
+    assert_eq!(
+        leaves.len(),
+        1,
+        "`{}` reached an exported signature with {} scalar leaves",
+        ty.to_string(),
+        leaves.len()
+    );
+    leaves[0]
+}
+
 // Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
 // passed.
 //
-// The wrapper generated for an exported function passes every argument and the result by value in
-// the LLVM type Fix uses internally, and LLVM assigns registers to an aggregate element by element.
-// The C ABI instead classifies a structure by its size and by the class of each of its eightbytes
-// (System V AMD64), or by whether it is a homogeneous floating-point aggregate (AAPCS64). The
-// shapes on which the two agree differ from target to target, so an aggregate is exportable on
-// none of them. A scalar and a pointer are laid down identically by both.
+// A value with one scalar leaf — an integer, a floating point number, or a pointer — is laid down
+// identically by Fix and by C. An aggregate is not: the C ABI classifies a structure by its size
+// and by the class of each of its eightbytes (System V AMD64), or by whether it is a homogeneous
+// floating-point aggregate (AAPCS64), and the shapes on which that agrees with Fix's element-wise
+// layout differ from target to target.
 fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     let tycon = match ty.toplevel_tycon() {
         Some(tycon) => tycon,

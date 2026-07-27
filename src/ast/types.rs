@@ -270,6 +270,17 @@ impl TyCon {
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an
     // integer type of `Std`.
+    // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
+    // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
+    // which side of the call extends it; a wider type fills the register and needs no extension.
+    pub fn is_narrow_c_integer(self: &TyCon) -> bool {
+        self.name.namespace == NameSpace::new_str(&[STD_NAME])
+            && matches!(
+                self.name.name.as_str(),
+                I8_NAME | U8_NAME | I16_NAME | U16_NAME
+            )
+    }
+
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())

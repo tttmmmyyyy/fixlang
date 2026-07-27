@@ -2135,7 +2135,16 @@ impl<'c, 'm> Generator<'c, 'm> {
                     }
                     Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
                 };
-                self.module.add_function(&fun_name, fn_ty, None)
+                let func = self.module.add_function(&fun_name, fn_ty, None);
+                self.add_c_integer_extension_attribute(func, AttributeLoc::Return, ret_tycon);
+                for (i, param_ty) in param_tys.iter().enumerate() {
+                    self.add_c_integer_extension_attribute(
+                        func,
+                        AttributeLoc::Param(i as u32),
+                        param_ty,
+                    );
+                }
+                func
             }
         };
 
@@ -2339,6 +2348,32 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn add_enum_attribute(&self, func: FunctionValue<'c>, name: &str, loc: AttributeLoc) {
         let kind = Attribute::get_named_enum_kind_id(name);
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
+    }
+
+    // Mark a value crossing the C boundary as one the ABI extends to 32 bits.
+    //
+    // An integer narrower than 32 bits travels in the low bits of a register, and the ABIs differ
+    // over the rest: Apple's AArch64 has the caller extend an argument and the callee extend a
+    // result, and lets the other side read the whole register on that promise, while AAPCS64 and
+    // System V leave those bits unspecified and have the reader narrow the value itself. `signext`
+    // and `zeroext` are how the signature says which of the two it follows, and a C compiler puts
+    // them on every such parameter and result. A Fix function reaching C carries them for the same
+    // reason: without them the reader of a promise-based ABI sees whatever the bits happen to hold.
+    pub fn add_c_integer_extension_attribute(
+        &self,
+        func: FunctionValue<'c>,
+        loc: AttributeLoc,
+        tycon: &TyCon,
+    ) {
+        if !tycon.is_narrow_c_integer() {
+            return;
+        }
+        let name = if tycon.is_signed_integer() {
+            "signext"
+        } else {
+            "zeroext"
+        };
+        self.add_enum_attribute(func, name, loc);
     }
 
     // Add frame-pointer attribute to all functions in the module
