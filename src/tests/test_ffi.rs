@@ -459,21 +459,21 @@ pub fn test_export_boxed_value_and_reference_counting_funptrs() {
 
             // C retains, calls the exported function, and releases. The value stays alive across
             // the call and is destroyed by the last release.
-            let res = *make_resource(7);
-            let ptr = *res.boxed_to_retained_ptr;
+            let resource = *make_resource(7);
+            let ptr = *resource.boxed_to_retained_ptr;
             let code = *FFI_CALL_IO[CInt c_use_resource(Ptr, Ptr, Ptr), ptr, retain, release];
             assert_eq(|_|"C reported failure", code, 0.c_int);;
 
             // A retain followed by a release leaves the value untouched, and `boxed_from_retained_ptr`
             // brings the remaining responsibility back to Fix.
-            let res = *make_resource(9);
-            let ptr = *res.boxed_to_retained_ptr;
+            let resource = *make_resource(9);
+            let ptr = *resource.boxed_to_retained_ptr;
             FFI_CALL_IO[() c_call_refcount_funptr(Ptr, Ptr), retain, ptr];;
             FFI_CALL_IO[() c_call_refcount_funptr(Ptr, Ptr), release, ptr];;
             let released = *FFI_CALL_IO[I64 c_was_released(I64), 9];
             assert_eq(|_|"the resource was destroyed while C still held it", released, 0);;
-            let res : Destructor I64 = *ptr.boxed_from_retained_ptr;
-            assert_eq(|_|"the resource did not survive", res.borrow(|tag| tag), 9);;
+            let resource : Destructor I64 = *ptr.boxed_from_retained_ptr;
+            assert_eq(|_|"the resource did not survive", resource.borrow(|tag| tag), 9);;
 
             pure()
         );
