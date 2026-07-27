@@ -264,9 +264,9 @@ impl TyCon {
         })
     }
 
-    pub fn is_singned_intger(self: &TyCon) -> bool {
+    pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
-            panic!("call is_singned_intger for {}", self.to_string())
+            panic!("call is_signed_integer for {}", self.to_string())
         }
         match self.name.name.as_str() {
             U8_NAME => false,

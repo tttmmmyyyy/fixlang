@@ -117,7 +117,7 @@ pub fn test_export_scalar_types() {
 }
 
 #[test]
-pub fn test_export_boxed_result() {
+pub fn test_export_boxed_value() {
     // A boxed value returned to the foreign language arrives as an opaque pointer carrying one
     // responsibility to release, and an exported function taking a boxed argument takes that
     // responsibility over. The two together are balanced, which memcheck checks.
@@ -262,7 +262,7 @@ pub fn test_export_string_result_fails() {
 }
 
 #[test]
-pub fn test_export_bool_fails() {
+pub fn test_export_bool_argument_fails() {
     // `Bool` is one byte in Fix, but the width C gives `_Bool` is implementation-defined, and a
     // caller is free to declare the function with `int` instead.
     let source = r##"
@@ -641,7 +641,7 @@ pub fn test_document_example_array_elements_from_c() {
 }
 
 #[test]
-pub fn test_export() {
+pub fn test_export_signature_shapes() {
     let source = r##"
         module Main;
 

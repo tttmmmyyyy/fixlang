@@ -172,7 +172,7 @@ impl ExportStatement {
 // it is a homogeneous floating-point aggregate (AAPCS64). The two agree only where the shape
 // happens to line up, and the shapes that line up differ between targets, so an aggregate is
 // exportable on neither. A scalar and a pointer are laid down identically by both.
-fn is_exportable_type(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     let tycon = match ty.toplevel_tycon() {
         Some(tycon) => tycon,
         None => return false,
@@ -185,7 +185,7 @@ fn is_exportable_type(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
 }
 
 // The message shown when `ty` is used as `position` ("an argument" / "the return value") of an
-// exported function although `is_exportable_type` rejects it.
+// exported function although `has_c_abi` rejects it.
 fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     let head = format!(
         "`{}` cannot be used as {} of an exported function",
@@ -264,14 +264,14 @@ impl ExportedFunctionType {
 
         // Each argument and the result should have a C ABI.
         for dom in &doms {
-            if !is_exportable_type(dom, type_env) {
+            if !has_c_abi(dom, type_env) {
                 return Err(Errors::from_msg_srcs(
                     err_msg_prefix + &unexportable_type_msg(dom, "an argument"),
                     &[src],
                 ));
             }
         }
-        if !codom.is_unit() && !is_exportable_type(&codom, type_env) {
+        if !codom.is_unit() && !has_c_abi(&codom, type_env) {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
                 &[src],
