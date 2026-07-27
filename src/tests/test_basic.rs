@@ -9862,6 +9862,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// Type annotations written inside a polymorphic definition — on the lambda's parameters, on an
+// argument, and on the body — naming the type variables of the definition's signature.
 #[test]
 pub fn test_generic_type_annotation() {
     let source = r##"
@@ -9905,12 +9907,12 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
+// fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
+// hold: the wide result travels through an out-pointer, and the calling convention lets the tail
+// call rewrite the arguments that do not fit in registers.
 #[test]
 pub fn test_regression_issue_63() {
-    if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
-        // This test causes stack overflow unless the optimization level is "Max".
-        return;
-    }
     let source = r##"
 module Main;
 
@@ -9993,6 +9995,8 @@ main: IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// Reading an element out of a struct's array and keeping the value must leave no reference to the
+// array behind: the array is still unique when the same function goes on to modify it.
 #[test]
 pub fn test_regression_issue_67() {
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()

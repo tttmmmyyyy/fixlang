@@ -34,6 +34,8 @@ use crate::misc::Map;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
+use crate::object::lambda_return_leaf_types;
+use crate::object::out_pointer_buffer_type;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -43,6 +45,10 @@ use crate::object::ty_to_object_ty;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
+use crate::return_abi::{
+    lambda_calling_convention_of_target, return_registers_of_target, returns_through_out_pointer,
+    ReturnRegisters,
+};
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
@@ -123,6 +129,8 @@ impl<'c> ValueAccessor<'c> {
     }
 }
 
+// A Fix value being generated, living in LLVM registers, together with the Fix type that gives it
+// its layout and reference-counting behavior.
 #[derive(Clone)]
 pub struct Object<'c> {
     // The object's value, held as the flat list of leaf (non-struct) scalars it decomposes into,
@@ -136,6 +144,9 @@ pub struct Object<'c> {
 }
 
 impl<'c> Object<'c> {
+    // Construct an object from its assembled value: the heap pointer of a boxed object, the
+    // function pointer of a funptr, or the embedded value of an unboxed one. The value is exploded
+    // into leaves on the way in.
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
@@ -201,6 +212,8 @@ impl<'c> Object<'c> {
         gc.assemble_from_scalar_leaves(embedded, &mut leaves)
     }
 
+    // An object of type `ty` whose value is `undef`, for an unreachable point that still has to
+    // produce a value of the type.
     pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc, &vec![])
@@ -432,12 +445,17 @@ impl<'c> Object<'c> {
     }
 }
 
+// The local variables in scope at the point being generated. Globals are held separately, in
+// `Generator::global`.
 #[derive(Default)]
 pub struct Scope<'c> {
+    // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
+    // shadows the outer bindings of the same name for as long as it lives.
     data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
+    // Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         if !self.data.contains_key(var) {
@@ -473,6 +491,12 @@ pub struct Generator<'c, 'm> {
     pub global: Map<FullName, ScopedValue<'c>>,
     type_env: TypeEnv,
     pub target_data: TargetData,
+    // How many registers of each class the target returns a value in, read once from the module's
+    // triple. `returns_through_out_pointer` needs it for every function type built.
+    return_registers: ReturnRegisters,
+    // The convention every Fix lambda in this module is defined and called with, read once from the
+    // module's triple.
+    lambda_calling_convention: u32,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
     // Debug type built for each Fix type, keyed by the type's canonical string, so a type is
@@ -536,8 +560,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &str,
     ) -> PointerValue<'c> {
         let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let first_bb = current_func.get_first_basic_block().unwrap();
+        let first_bb = self.current_function().get_first_basic_block().unwrap();
         match first_bb.get_first_instruction() {
             Some(first_inst) => self.builder().position_before(&first_inst),
             None => self.builder().position_at_end(first_bb),
@@ -613,7 +636,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         config: Configuration,
         type_env: TypeEnv,
     ) -> Self {
-        let ret = Self {
+        let triple = module.get_triple().as_str().to_string_lossy().to_string();
+        let gc = Self {
             context: ctx,
             module,
             builders: Arc::new(RefCell::new(vec![Arc::new(ctx.create_builder())])),
@@ -624,12 +648,14 @@ impl<'c, 'm> Generator<'c, 'm> {
             global: Default::default(),
             type_env,
             target_data: target_data,
+            return_registers: return_registers_of_target(&triple),
+            lambda_calling_convention: lambda_calling_convention_of_target(&triple),
             config,
             global_strings: Map::default(),
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
         };
-        ret
+        gc
     }
 
     // Create debug info builders and compilation units.
@@ -798,8 +824,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, BasicBlock<'c>) {
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
 
         let unique_bb = self.context.append_basic_block(current_func, "unique_bb");
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
@@ -888,8 +913,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
         // Load refcnt_state.
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
@@ -1007,10 +1031,35 @@ impl<'c, 'm> Generator<'c, 'm> {
         let func_ptr = self.get_lambda_func_ptr(fun.clone());
         let func_ty = lambda_function_type(&fun.ty, self);
 
-        // Call function pointer with arguments, CAP if closure. Each unbox-struct argument is
+        // A tail call returns what this function returns, so the two signatures agree on how the
+        // result travels: both return it by value, or both take an out-pointer and return `void`.
+        // Everything below leans on that — the forwarded out-pointer names this function's own
+        // buffer, and the callee's result is returned verbatim. Checked under develop mode (the unit
+        // tests).
+        if tail && self.config.develop_mode {
+            let func = self.current_function();
+            assert_eq!(
+                func.get_type().get_return_type(),
+                func_ty.get_return_type(),
+                "the tail call in `{}` returns something other than what it returns",
+                func.get_name().to_str().unwrap()
+            );
+        }
+
+        // Call function pointer with the out-pointer if the result is too wide for the return
+        // registers, then the arguments, then CAP if closure. Each unbox-struct argument is
         // decomposed into its leaf scalars to match the flattened signature (see
-        // `lambda_function_type`); the CAP pointer follows all argument scalars.
+        // `lambda_function_type`).
+        let ret_leaf_tys = lambda_return_leaf_types(&fun.ty, self);
+        let out_ptr = if self.returns_through_out_pointer(&ret_leaf_tys) {
+            Some(self.build_out_pointer_argument(&ret_leaf_tys, tail))
+        } else {
+            None
+        };
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+        if let Some(out_ptr) = out_ptr {
+            call_args.push(out_ptr.into());
+        }
         for arg in args {
             for leaf in arg.leaves() {
                 call_args.push((*leaf).into());
@@ -1020,22 +1069,110 @@ impl<'c, 'm> Generator<'c, 'm> {
             call_args.push(fun.extract_field(self, CLOSURE_CAPTURE_IDX).into());
         }
 
-        let ret = self
+        let call_site = self
             .builder()
             .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
             .unwrap();
-        ret.set_tail_call(!self.has_di());
-        let call_result = ret.try_as_basic_value().left();
+        call_site.set_call_convention(self.lambda_calling_convention());
+        // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
+        // buffer allocated here does. In tail position the pointer is this function's own parameter,
+        // naming an ancestor's buffer, so the assertion holds there.
+        let passes_local_buffer = out_ptr.is_some() && !tail;
+        call_site.set_tail_call(!passes_local_buffer);
+        let call_result = call_site.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
             // returns what its caller returns), so forward it verbatim without unpacking and repacking.
+            // A callee writing through the out-pointer returned `void` and has already filled this
+            // function's own buffer, which the forwarded pointer named.
             match call_result {
                 Some(v) => self.builder().build_return(Some(&v)).unwrap(),
                 None => self.builder().build_return(None).unwrap(),
             };
             return None;
         }
+        if let Some(out_ptr) = out_ptr {
+            return Some(self.load_out_pointer_buffer(out_ptr, &ret_leaf_tys, ret_ty));
+        }
         Some(self.unpack_return(call_result, ret_ty))
+    }
+
+    // The pointer to pass as a call's out-pointer argument. In tail position it is this function's
+    // own out-pointer: a tail call returns what its caller returns, so the two share a return type
+    // and hence this ABI, and the buffer belongs to an ancestor frame that outlives the frame being
+    // replaced. Elsewhere it is a fresh buffer in this function's entry block, which the caller
+    // reads back with `load_out_pointer_buffer`.
+    fn build_out_pointer_argument(
+        &mut self,
+        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        tail: bool,
+    ) -> PointerValue<'c> {
+        if tail {
+            return self.own_out_pointer();
+        }
+        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        self.build_alloca_at_entry(buf_ty, "out@call_lambda")
+    }
+
+    // The out-pointer parameter of the function being generated, the buffer its result is written
+    // through. A function whose result goes through an out-pointer returns `void` and takes the
+    // pointer before every other parameter (see `lambda_function_type`). Checked under develop mode
+    // (the unit tests).
+    fn own_out_pointer(&self) -> PointerValue<'c> {
+        let func = self.current_function();
+        if self.config.develop_mode {
+            assert!(
+                func.get_type().get_return_type().is_none() && func.count_params() >= 1,
+                "`{}` returns through an out-pointer: it must return `void` and take it first",
+                func.get_name().to_str().unwrap()
+            );
+        }
+        func.get_nth_param(0).unwrap().into_pointer_value()
+    }
+
+    // Read back the leaves a callee wrote through the out-pointer, as the object of type `ret_ty`
+    // it returned.
+    fn load_out_pointer_buffer(
+        &mut self,
+        out_ptr: PointerValue<'c>,
+        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        ret_ty: Arc<TypeNode>,
+    ) -> Object<'c> {
+        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        let leaves: Vec<BasicValueEnum<'c>> = ret_leaf_tys
+            .iter()
+            .enumerate()
+            .map(|(i, leaf_ty)| {
+                let leaf_ptr = self
+                    .builder()
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .unwrap();
+                self.builder()
+                    .build_load(*leaf_ty, leaf_ptr, "load_out_leaf")
+                    .unwrap()
+            })
+            .collect();
+        Object::from_leaves(leaves, ret_ty, self)
+    }
+
+    // Whether a function returning `leaf_tys` takes an out-pointer for its result on this module's
+    // target (see `return_abi`).
+    pub fn returns_through_out_pointer(&self, leaf_tys: &[BasicTypeEnum<'c>]) -> bool {
+        returns_through_out_pointer(leaf_tys, self.return_registers)
+    }
+
+    // The convention every Fix lambda in this module is defined and called with (see `return_abi`).
+    pub fn lambda_calling_convention(&self) -> u32 {
+        self.lambda_calling_convention
+    }
+
+    // The function currently being generated.
+    pub fn current_function(&self) -> FunctionValue<'c> {
+        self.builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap()
     }
 
     // Build an `undef` constant of the given basic type.
@@ -1256,8 +1393,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
+                let current_func = self.current_function();
                 let nonnull_bb = self
                     .context
                     .append_basic_block(current_func, "nonnull_bb@retain");
@@ -1334,12 +1470,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
     // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
     pub(crate) fn retain_nonnull_boxed(&mut self, obj: &Object<'c>, amount: IntValue<'c>) {
-        let current_func = self
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = self.current_function();
         let cont_bb = self
             .context
             .append_basic_block(current_func, "cont_bb@retain_nonnull");
@@ -1456,8 +1587,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // Dynamic object can be null, so build null checking.
 
                 // Append basic blocks.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
+                let current_func = self.current_function();
                 let nonnull_bb = self
                     .context
                     .append_basic_block(current_func, "nonnull_in_release_dynamic");
@@ -1548,12 +1678,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let obj_ptr = obj.value(self).into_pointer_value();
 
         // Branch by refcnt_state.
-        let current_func = self
-            .builder()
-            .get_insert_block()
-            .unwrap()
-            .get_parent()
-            .unwrap();
+        let current_func = self.current_function();
         let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
         let destruction_bb = self
             .context
@@ -1721,8 +1846,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
-        let current_bb = self.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
+        let current_func = self.current_function();
         let cont_bb = self
             .context
             .append_basic_block(current_func, "cont_bb@mark_threaded");
@@ -1823,9 +1947,24 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Return `obj` from the current function under the scalarized return ABI (see
     // `lambda_function_type`): its leaves are packed into the flat return value — `void` for none, the
-    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several.
+    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several. Leaves
+    // too wide for the return registers are stored through the function's out-pointer instead.
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
+        let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
+        if self.returns_through_out_pointer(&leaf_tys) {
+            let out_ptr = self.own_out_pointer();
+            let buf_ty = out_pointer_buffer_type(&leaf_tys, self);
+            for (i, leaf) in leaves.iter().enumerate() {
+                let leaf_ptr = self
+                    .builder()
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .unwrap();
+                self.builder().build_store(leaf_ptr, *leaf).unwrap();
+            }
+            self.builder().build_return(None).unwrap();
+            return;
+        }
         match leaves.len() {
             0 => {
                 self.builder().build_return(None).unwrap();
@@ -1834,8 +1973,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.builder().build_return(Some(&leaves[0])).unwrap();
             }
             _ => {
-                let leaf_tys: Vec<BasicTypeEnum<'c>> =
-                    leaves.iter().map(|l| l.get_type()).collect();
                 let struct_ty = self.context.struct_type(&leaf_tys, false);
                 let mut val = struct_ty.get_undef();
                 for (i, leaf) in leaves.iter().enumerate() {
@@ -1891,6 +2028,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
         };
         let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
+        lam_fn.set_call_conventions(self.lambda_calling_convention());
         // Create and set debug info subprogram.
         if self.has_di() {
             let fn_name = lam_fn.get_name().to_str().unwrap();
@@ -1985,7 +2123,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             Some(fun) => fun,
             None => {
                 let ret_c_ty = ret_tycon.get_c_type(self.context);
-                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
+                let param_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
                     .iter()
                     .map(|param_ty| {
                         let c_type = param_ty.get_c_type(self.context);
@@ -2001,9 +2139,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let fn_ty = match ret_c_ty {
                     None => {
                         // Void case.
-                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
+                        self.context.void_type().fn_type(&param_c_tys, is_var_args)
                     }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
                 };
                 self.module.add_function(&fun_name, fn_ty, None)
             }
@@ -2016,11 +2154,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             .collect::<Vec<_>>();
 
         // Call c function
-        let ret_c_val = self
+        let call_site = self
             .builder()
             .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name))
             .unwrap();
-        match ret_c_val.try_as_basic_value() {
+        match call_site.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
                     let ret_str = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
@@ -2196,8 +2334,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             return val;
         }
         // If the types are not equal, we need to use alloca to bit cast.
-        let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
-        let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
+        let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
+        let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         self.builder().build_store(ptr, val).unwrap();
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()

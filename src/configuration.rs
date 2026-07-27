@@ -16,19 +16,27 @@ use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fs::{self, File};
 use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
 
+/// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
+    /// The library is copied into the output at link time.
     Static,
+    /// The library is resolved when the output is loaded.
     Dynamic,
 }
 
+/// What a build produces.
 #[derive(Clone, Copy)]
 pub enum OutputFileType {
+    /// A program that can be run on its own.
     Executable,
+    /// A shared library other programs link against.
     DynamicLibrary,
 }
 
@@ -52,9 +60,12 @@ impl OutputFileType {
     }
 }
 
+/// The valgrind tool the built program is run under in `run` mode.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum ValgrindTool {
+    /// Run the program directly.
     None,
+    /// Run under memcheck, which reports invalid memory accesses and leaks.
     MemCheck,
     // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
     // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
@@ -62,8 +73,8 @@ pub enum ValgrindTool {
     // DataRaceDetection,
 }
 
-impl std::fmt::Display for ValgrindTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ValgrindTool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValgrindTool::None => write!(f, "none"),
             ValgrindTool::MemCheck => write!(f, "memcheck"),
@@ -192,6 +203,9 @@ pub struct DocsConfig {
     pub mode: BuildConfigType,
 }
 
+/// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
+/// link it, what to produce, and how to run it. It is assembled from the command line and the
+/// project file, and then read by every stage of the build.
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -291,6 +305,8 @@ impl Default for DeprecationMode {
     }
 }
 
+/// How hard the compiler works to make the program fast, trading compile time for run time. The
+/// variants are ordered, so a pass can turn itself on from a given level up.
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum FixOptimizationLevel {
     None,         // For debugging; skip even tail call optimization.
@@ -299,8 +315,8 @@ pub enum FixOptimizationLevel {
     Experimental, // Performs optimizations that are still unstable.
 }
 
-impl std::fmt::Display for FixOptimizationLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FixOptimizationLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
             FixOptimizationLevel::Basic => write!(f, "{}", OPTIMIZATION_LEVEL_BASIC),
@@ -542,10 +558,13 @@ impl Configuration {
     }
 
     /// Defunctionalize `Std::fix` into a directly self-recursive global function. The self-call it
-    /// produces is direct, so LLVM's tail-call elimination folds it into a loop even when the return
-    /// value uses the `sret` ABI, which an indirect `fix` self-call cannot get. It runs at `Basic`
-    /// and above alongside uncurrying, which flattens the produced self-call; `None` deliberately
-    /// keeps even tail calls, so it stays off there.
+    /// produces is direct, so LLVM's tail-recursion elimination folds it into a loop. The loop is
+    /// much stronger than the tail jumps an indirect self-call already gets from the return ABI (see
+    /// `return_abi`): it also removes the closure the `fix` combinator builds on every iteration,
+    /// with its heap allocation and reference-count updates. The `sum_by_fix` benchmark at `Basic`
+    /// measures 47M instructions with the pass against 686M without, at equal compile time, which is
+    /// why it runs from `Basic` up. Uncurrying, which flattens the produced self-call, shares that
+    /// threshold.
     pub fn enable_defunctionalize_fix(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
@@ -778,7 +797,7 @@ int main() {
             // Create parent folders
             let check_c_types_path = PathBuf::from(check_c_types_path.clone());
             let parent = check_c_types_path.parent().unwrap();
-            if let Err(e) = std::fs::create_dir_all(parent) {
+            if let Err(e) = fs::create_dir_all(parent) {
                 return Err(Errors::from_msg(format!(
                     "Failed to create directory \"{}\": {}",
                     parent.to_string_lossy().to_string(),
@@ -788,11 +807,11 @@ int main() {
 
             let check_c_types_path_clone = check_c_types_path.clone();
             finally.defer(move || {
-                let _ = std::fs::remove_file(&check_c_types_path_clone);
+                let _ = fs::remove_file(&check_c_types_path_clone);
             });
 
             // Write the C source to the file.
-            if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
+            if let Err(e) = fs::write(&check_c_types_path, c_source) {
                 return Err(Errors::from_msg(format!(
                     "Failed to write file \"{}\": {}",
                     check_c_types_path.to_string_lossy().to_string(),
@@ -807,7 +826,7 @@ int main() {
 
         let check_c_types_exec_path_clone = check_c_types_exec_path.clone();
         finally.defer(move || {
-            let _ = std::fs::remove_file(&check_c_types_exec_path_clone);
+            let _ = fs::remove_file(&check_c_types_exec_path_clone);
         });
 
         let output = Command::new("gcc")
@@ -872,7 +891,7 @@ int main() {
     fn save_to_file(&self) -> Result<(), Errors> {
         // Open json file.
         let path = C_TYPES_JSON_PATH;
-        let file = std::fs::File::create(path);
+        let file = File::create(path);
         if let Err(e) = file {
             return Err(Errors::from_msg(format!(
                 "Failed to create \"{}\": {}",
@@ -896,7 +915,7 @@ int main() {
         if !path.exists() {
             return None;
         }
-        let file = std::fs::File::open(path);
+        let file = File::open(path);
         if file.is_err() {
             warn_msg(&format!("Failed to open \"{}\".", C_TYPES_JSON_PATH));
             return None;
