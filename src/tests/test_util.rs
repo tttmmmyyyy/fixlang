@@ -234,10 +234,10 @@ fn is_fix_source(path: &Path) -> bool {
 
 // Run all "*.fix" files in the specified directory.
 // If the directory contains subdirectories, run Fix program consists of all "*.fix" files in each subdirectory.
-pub fn test_files_in_directory(path: &Path) {
-    let paths = fs::read_dir(path).unwrap();
-    for path in paths {
-        let path = path.unwrap().path();
+pub fn test_files_in_directory(dir: &Path) {
+    let entries = fs::read_dir(dir).unwrap();
+    for entry in entries {
+        let path = entry.unwrap().path();
         let mut config = Configuration::develop_mode();
         if path.is_dir() {
             // Skip hidden directories.
@@ -276,18 +276,18 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
 
     // Save `c_source` to a file.
-    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
-    let mut file = File::create(&c_file).unwrap();
+    let c_file_path = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
+    let mut file = File::create(&c_file_path).unwrap();
     file.write_all(c_src.as_bytes()).unwrap();
 
     // Build `c_source` into an object file.
     let o_file_path = format!("{}/{}.o", COMPILER_TEST_WORKING_PATH, test_name);
-    let mut com = Command::new("gcc");
-    let output = com
+    let mut command = Command::new("gcc");
+    let output = command
         .arg("-c")
         .arg("-o")
         .arg(&o_file_path)
-        .arg(&c_file)
+        .arg(&c_file_path)
         .output()
         .expect("Failed to run gcc.");
     if output.stderr.len() > 0 {

@@ -21,8 +21,8 @@ pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>)
         .into_iter()
         .map(|(from, to)| (from, expr_var(to, None)))
         .collect::<Map<FullName, Arc<ExprNode>>>();
-    let mut replacer = Substitutor::new(map);
-    let res = replacer.traverse(expr);
+    let mut substitutor = Substitutor::new(map);
+    let res = substitutor.traverse(expr);
     res.expr
 }
 
@@ -132,10 +132,10 @@ impl Substitutor {
             to_names.extend(to.free_vars());
         }
 
-        let mut renamed_names = vec![];
+        let mut names_to_rename = vec![];
         for introduced_name in introduced_names {
             if to_names.contains(&introduced_name) {
-                renamed_names.push(introduced_name.clone());
+                names_to_rename.push(introduced_name.clone());
             }
         }
 
@@ -143,10 +143,10 @@ impl Substitutor {
         let ng_as_new_name = |name: &FullName| {
             to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
         };
-        let new_names = generate_new_names_pred(ng_as_new_name, renamed_names.len());
+        let new_names = generate_new_names_pred(ng_as_new_name, names_to_rename.len());
 
         let mut map = Map::default();
-        for (old_name, new_name) in renamed_names.into_iter().zip(new_names) {
+        for (old_name, new_name) in names_to_rename.into_iter().zip(new_names) {
             map.insert(old_name, new_name);
         }
 
@@ -538,11 +538,11 @@ pub fn rename_lam_param_avoiding(
     }
     let old_params = lam_expr.get_lam_params();
     let old_param = old_params[0].clone();
-    let old_value = lam_expr.get_lam_body().clone();
+    let old_body = lam_expr.get_lam_body().clone();
     let renaming = calculate_renaming_bound_vars_avoiding(
         black_list,
         vec![old_param.name.clone()],
-        old_value.clone(),
+        old_body.clone(),
     );
 
     let new_param = if let Some(new_name) = renaming.get(&old_param.name) {
@@ -550,10 +550,10 @@ pub fn rename_lam_param_avoiding(
     } else {
         old_param.clone()
     };
-    let new_value = rename_free_names(&old_value, renaming);
+    let new_body = rename_free_names(&old_body, renaming);
     lam_expr
         .set_lam_params(vec![new_param])
-        .set_lam_body(new_value)
+        .set_lam_body(new_body)
 }
 
 // Consider the situation that let, match or lam expression binds variables `bound_vars` and evaluates the expression `expr`.
@@ -564,10 +564,10 @@ fn calculate_renaming_bound_vars_avoiding(
     value: Arc<ExprNode>,
 ) -> Map<FullName, FullName> {
     // Calculate the set of names that should be renamed.
-    let mut renamed: Vec<FullName> = vec![];
+    let mut names_to_rename: Vec<FullName> = vec![];
     for name in bound_vars.iter() {
         if black_list.contains(name) {
-            renamed.push(name.clone());
+            names_to_rename.push(name.clone());
         }
     }
 
@@ -581,11 +581,11 @@ fn calculate_renaming_bound_vars_avoiding(
     }
 
     // Decide new names.
-    let new_names = generate_new_names(&black_list, renamed.len());
+    let new_names = generate_new_names(&black_list, names_to_rename.len());
 
     // Create the renaming map.
     let mut renaming: Map<FullName, FullName> = Map::default();
-    for (old, new) in renamed.into_iter().zip(new_names.into_iter()) {
+    for (old, new) in names_to_rename.into_iter().zip(new_names.into_iter()) {
         renaming.insert(old, new);
     }
     renaming
