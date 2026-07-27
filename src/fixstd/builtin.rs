@@ -1341,7 +1341,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
     }
 }
 
-// Cast function from int to float.
+// Cast function from float to int.
 pub fn cast_float_to_int_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,

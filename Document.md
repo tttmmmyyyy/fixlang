@@ -2289,7 +2289,7 @@ However, using `Destructor` properly is not easy and requires attention to vario
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
-In the previous section, we explained how to manage resources allocated by C functions (such as `fopen`) in Fix.
+[Managing External Resources in Fix](#managing-external-resources-in-fix) explained how to manage resources allocated by C functions (such as `fopen`) in Fix.
 This section explains the reverse: how to manage Fix's boxed type values in a foreign language such as C.
 
 The function `Std::FFI::boxed_to_retained_ptr : [a : Boxed] a -> IO Ptr` returns a pointer to a Fix boxed type value.

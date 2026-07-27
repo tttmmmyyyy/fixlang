@@ -2501,6 +2501,11 @@ fn parse_expr_make_struct(
         .set_aux_src(Some(tycon_span)))
 }
 
+// Parses an `FFI_CALL`, `FFI_CALL_IO` or `FFI_CALL_IOS` expression, i.e. a call to a C function
+// written with its C signature. `FFI_CALL_IO` produces an `IO` action that performs the call;
+// `FFI_CALL_IOS` takes the `IOState` token as one further argument and returns it with the result.
+// A signature ending in `, ...` is variadic, so arguments beyond the declared parameters are
+// accepted.
 fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_call_c);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -2580,6 +2585,9 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     Ok(expr)
 }
 
+// Parses one type written in a C function signature into the Fix type constructor that represents
+// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
+// the unit type, which stands for `void`.
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let mut name = if pair.as_str() == "()" {
@@ -2619,6 +2627,10 @@ fn parse_ffi_param_tys(
     Ok(param_tys)
 }
 
+// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
+// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
+// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
+// its bit width, so `0b11111111_I8` is `-1`.
 fn parse_expr_number_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,

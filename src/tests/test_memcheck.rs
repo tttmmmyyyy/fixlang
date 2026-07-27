@@ -6,7 +6,9 @@ use crate::{
 
 #[test]
 pub fn test_use_undefined_value() {
-    // Test using undefined value.
+    // A read of memory that was never written reaches the test as a failure. This is what gives
+    // weight to the tests that assert memory safety by running a program under memcheck and
+    // expecting it to succeed.
     if !platform_valgrind_supported() {
         eprintln!(
             "Skipping {}: Valgrind not available on this platform.",
@@ -31,7 +33,8 @@ pub fn test_use_undefined_value() {
 
 #[test]
 pub fn test_memory_leak() {
-    // Test memory leak detection.
+    // Memory that is allocated and never freed reaches the test as a failure, so a program under
+    // memcheck that leaks is caught even though it exits successfully.
     if !platform_valgrind_supported() {
         eprintln!(
             "Skipping {}: Valgrind not available on this platform.",

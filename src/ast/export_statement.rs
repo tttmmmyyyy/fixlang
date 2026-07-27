@@ -1,4 +1,4 @@
-// Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
+// Export syntax: `FFI_EXPORT[fix_value_name, c_function_name];`
 
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
@@ -39,6 +39,9 @@ pub struct ExportStatement {
 }
 
 impl ExportStatement {
+    // Create an export statement carrying what the source gives.
+    // `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
+    // exported value fills in `value_expr`.
     pub fn new(
         fix_value_name: FullName,
         c_function_name: String,
@@ -81,8 +84,8 @@ impl ExportStatement {
         Ok(())
     }
 
-    // Implement the exported c function.
-    // This function requires `self.exported_function_type` and `self.instantiated_value_expr` to already be set.
+    // Implement the exported C function.
+    // Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let ExportedFunctionType {
             doms,
@@ -198,22 +201,29 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
 }
 
-// A type to represent the type of an exported Fix value.
-// This struct value reresents a type `{doms} -> {codom}` if `is_io` is `false`,
-// and a type `{doms} -> IO {codom}` if `is_io` is `true`.
+// The type of an exported Fix value, split into the parts the generated C function is built from.
+// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
+// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
 #[derive(Clone)]
 pub struct ExportedFunctionType {
+    // The types of the arguments, in the order the C function takes them.
     pub doms: Vec<Arc<TypeNode>>,
+    // The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
     pub codom: Arc<TypeNode>,
+    // How the value produces a result of type `codom`.
     pub io_type: IOType,
 }
 
-// Pure, IO a or IOState -> (IOState, a).
+// How an exported Fix value produces its result.
 #[derive(Clone)]
 pub enum IOType {
+    // The value is the result itself.
     Pure,
+    // The value is an `IO` action, which the generated C function runs.
     IO,
-    IOState, // The user cannot export a function of this type, but optimization may convert `IO a` to `IOState -> (IOState, a)`.
+    // The value takes an `IOState` token and returns it alongside the result. An exported value is
+    // written as `IO {codom}`; an optimization may rewrite it into this form.
+    IOState,
 }
 
 impl ExportedFunctionType {

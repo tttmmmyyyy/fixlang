@@ -7537,6 +7537,8 @@ pub fn test_circular_type_definition() {
     test_source(&source, Configuration::develop_mode());
 }
 
+// `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
+// that distinct numbers give distinct names.
 #[test]
 pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(0), "a");
@@ -7548,6 +7550,8 @@ pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(52), "a2");
 }
 
+// Two `*` operators on one expression bind through two monad layers, so `**x` on a nested
+// `Option` reaches the innermost value.
 #[test]
 pub fn test_double_bind() {
     let source = r##"
@@ -10224,8 +10228,8 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
     // An empty-payload union value — `Bool` is `{ i8 tag, [0 x i8] payload }` — merged through
     // `build_scalar_phi` must not yield a phi of its zero-sized payload. LLVM's AArch64 GlobalISel
     // (the `-O0` default on Apple Silicon) crashes on a phi of a zero-sized aggregate, a failure
-    // invisible on an x86_64 host and at `-O max`. This pins the fix by emitting the unoptimized IR
-    // and asserting it carries no such phi.
+    // invisible on an x86_64 host and at `-O max`. The test emits the unoptimized IR and asserts
+    // that it carries no such phi.
     let source = r#"
         module Main;
         main : IO ();

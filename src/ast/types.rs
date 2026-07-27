@@ -165,6 +165,8 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
+// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
+// it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     pub name: FullName,
@@ -241,8 +243,8 @@ impl TyCon {
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
-    // Convert "()", "I8", "Ptr", etc to corresponding c_type.
-    // Returns none if it is VoidType.
+    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
+    // `()` is C's `void`, which carries no value, so it maps to `None`.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
         if self.is_unit() {
             return None;
@@ -284,6 +286,7 @@ impl TyCon {
         }
     }
 
+    // Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
@@ -293,6 +296,7 @@ impl TyCon {
         self == make_io_tycon().as_ref()
     }
 
+    // Whether this is the type `IOState`, the token that an `IO` action threads.
     #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
         return self.name == make_iostate_name();
@@ -1094,6 +1098,8 @@ impl TypeNode {
         }
     }
 
+    // Whether the top-level type constructor of this type is a struct.
+    // Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
