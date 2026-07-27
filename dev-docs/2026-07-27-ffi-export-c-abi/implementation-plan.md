@@ -108,7 +108,8 @@ codom.get_embedded_type(gc, &vec![]).fn_type(&dom_llvm_tys, false)
 
 ## ドキュメント
 
-`Document.md` と `Document-ja.md` の FFI の節を直す。
+`Document.md` と `Document-ja.md` の FFI の節を直す。**この機会に節全体を読み直す**: 型制限に直接
+関係しない記述も、現在の実装と食い違っていないか、両言語版で内容がそろっているかを確かめる。
 
 - `FFI_EXPORT` できる型の一覧と、拒否される型（集約型・`Bool`）
 - **多値を返す方法**: C 側で確保した領域のポインタを引数で受け取り、`FFI_CALL` の `memcpy` で書き込む形。Fix の unbox struct は非 packed の LLVM 構造体なので、同じフィールド順の C 構造体とレイアウトが一致することを述べる。コード例を両言語で置く

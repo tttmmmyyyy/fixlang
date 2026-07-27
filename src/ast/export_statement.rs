@@ -1,10 +1,14 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
 
 use crate::ast::expr::ExprNode;
-use crate::ast::name::FullName;
+use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
+use crate::constants::{
+    F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, STD_NAME, U16_NAME,
+    U32_NAME, U64_NAME, U8_NAME,
+};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, make_unit_ty, run_io};
 use crate::generator::Generator;
@@ -96,7 +100,7 @@ impl ExportStatement {
             .iter()
             .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
             .collect::<Vec<_>>();
-        let func_ty = if codom.to_string() == make_unit_ty().to_string() {
+        let func_ty = if is_unit_type(&codom) {
             gc.context.void_type().fn_type(&dom_llvm_tys, false)
         } else {
             codom
@@ -155,13 +159,65 @@ impl ExportStatement {
         }
 
         // Return the result.
-        if codom.to_string() == make_unit_ty().to_string() {
+        if is_unit_type(&codom) {
             gc.builder().build_return(None).unwrap();
         } else {
             let ret_val = fix_value.value(gc);
             gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
+}
+
+// The types Fix represents as one scalar or one pointer.
+//
+// These are the types an exported function can exchange with C: the C ABI passes each of them in
+// one register, exactly as `ExportStatement::implement` does.
+const EXPORTABLE_SCALAR_NAMES: &[&str] = &[
+    I8_NAME, I16_NAME, I32_NAME, I64_NAME, U8_NAME, U16_NAME, U32_NAME, U64_NAME, F32_NAME,
+    F64_NAME, PTR_NAME,
+];
+
+// Whether the C ABI passes a value of `ty` the way `ExportStatement::implement` passes it.
+//
+// `implement` passes every argument and the result by value in the LLVM type Fix uses internally,
+// and LLVM assigns registers to an aggregate element by element. The C ABI instead classifies a
+// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
+// it is a homogeneous floating-point aggregate (AAPCS64). The two agree only where the shape
+// happens to line up, and the shapes that line up differ between targets, so an aggregate is
+// exportable on neither. A scalar and a pointer are laid down identically by both.
+fn is_exportable_type(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+    let tycon = match ty.toplevel_tycon() {
+        Some(tycon) => tycon,
+        None => return false,
+    };
+    // A boxed value is a pointer.
+    if ty.is_box(type_env) {
+        return true;
+    }
+    tycon.name.namespace == NameSpace::new_str(&[STD_NAME])
+        && EXPORTABLE_SCALAR_NAMES.contains(&tycon.name.name.as_str())
+}
+
+// The message shown when `ty` is used as `position` ("an argument" / "the return value") of an
+// exported function although `is_exportable_type` rejects it.
+fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
+    let head = format!(
+        "`{}` cannot be used as {} of an exported function",
+        ty.to_string(),
+        position
+    );
+    if ty
+        .toplevel_tycon()
+        .map_or(false, |tycon| tycon.is_boolean())
+    {
+        return head + ", because the width of `_Bool` in C is implementation-defined. Use `U8` or `CInt`, and convert it on the Fix side.";
+    }
+    head + ". An exported function can exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, and boxed values; the C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to a region the foreign side owns and copy through it by `FFI_CALL[Ptr memcpy(Ptr, Ptr, U64), ...]`."
+}
+
+// Whether `ty` is the unit type `()`.
+fn is_unit_type(ty: &Arc<TypeNode>) -> bool {
+    ty.to_string() == make_unit_ty().to_string()
 }
 
 // A type to represent the type of an exported Fix value.
@@ -226,6 +282,22 @@ impl ExportedFunctionType {
                 }
             }
             _ => {}
+        }
+
+        // Each argument and the result should have a C ABI.
+        for dom in &doms {
+            if !is_exportable_type(dom, type_env) {
+                return Err(Errors::from_msg_srcs(
+                    err_msg_prefix + &unexportable_type_msg(dom, "an argument"),
+                    &[src],
+                ));
+            }
+        }
+        if !is_unit_type(&codom) && !is_exportable_type(&codom, type_env) {
+            return Err(Errors::from_msg_srcs(
+                err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
+                &[src],
+            ));
         }
 
         // Return the result.
