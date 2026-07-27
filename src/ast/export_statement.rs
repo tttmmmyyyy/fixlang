@@ -168,11 +168,10 @@ impl ExportStatement {
     }
 }
 
-// The types Fix represents as one scalar or one pointer.
-//
-// These are the types an exported function can exchange with C: the C ABI passes each of them in
-// one register, exactly as `ExportStatement::implement` does.
-const EXPORTABLE_SCALAR_NAMES: &[&str] = &[
+// The unboxed types an exported function can exchange with C. Each of them is one integer, one
+// floating point number, or one pointer, which C and Fix both pass in a single register. A boxed
+// type is exchangeable as well; `is_exportable_type` admits it separately.
+const EXPORTABLE_UNBOXED_TYPE_NAMES: &[&str] = &[
     I8_NAME, I16_NAME, I32_NAME, I64_NAME, U8_NAME, U16_NAME, U32_NAME, U64_NAME, F32_NAME,
     F64_NAME, PTR_NAME,
 ];
@@ -195,7 +194,7 @@ fn is_exportable_type(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         return true;
     }
     tycon.name.namespace == NameSpace::new_str(&[STD_NAME])
-        && EXPORTABLE_SCALAR_NAMES.contains(&tycon.name.name.as_str())
+        && EXPORTABLE_UNBOXED_TYPE_NAMES.contains(&tycon.name.name.as_str())
 }
 
 // The message shown when `ty` is used as `position` ("an argument" / "the return value") of an
