@@ -6,7 +6,7 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
 use crate::error::Errors;
-use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, run_io};
+use crate::fixstd::builtin::{make_iostate_ty, run_io};
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
@@ -254,7 +254,7 @@ impl ExportedFunctionType {
         let mut io_type = IOType::Pure;
         match &codom.ty {
             Type::TyApp(fun, arg) => {
-                if fun.to_string() == make_io_ty().to_string() {
+                if fun.is_io() {
                     codom = arg.clone();
                     io_type = IOType::IO;
                 }

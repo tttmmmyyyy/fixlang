@@ -19,7 +19,7 @@ use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
-    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_iostate_name,
+    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_io_tycon, make_iostate_name,
     make_tuple_name_abs,
 };
 use crate::generator::Generator;
@@ -283,6 +283,11 @@ impl TyCon {
 
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+    }
+
+    // Whether this is the type constructor `IO`.
+    pub fn is_io(&self) -> bool {
+        self == make_io_tycon().as_ref()
     }
 
     #[allow(dead_code)]
@@ -1073,6 +1078,15 @@ impl TypeNode {
     pub fn is_boolean(&self) -> bool {
         match self.toplevel_tycon() {
             Some(tc) => tc.is_boolean(),
+            None => false,
+        }
+    }
+
+    // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
+    // `IO a`.
+    pub fn is_io(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.is_io(),
             None => false,
         }
     }
