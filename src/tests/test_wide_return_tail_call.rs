@@ -270,3 +270,209 @@ fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// The result crosses the floating-point half of the register budget rather than the integer half.
+// `tailcc`, the convention x86-64 Fix lambdas use, returns five floating-point leaves in registers
+// and sends six to memory, so six is where the `float` entry of the budget decides the outcome.
+// Every other loop here carries pointers and integers only.
+#[test]
+fn test_float_wide_return_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    walk : I64 -> (F64, F64, F64, F64, F64, F64) -> IO (F64, F64, F64, F64, F64, F64);
+    walk = |i, st| (
+        if i == 0 { pure(st) };
+        let _ = *pure(0);
+        walk(i - 1, (st.@0 + 1.0, st.@1, st.@2, st.@3, st.@4, st.@5))
+    );
+
+    main : IO ();
+    main = (
+        let (a, b, c, d, e, f) = *walk(1000000, (0.0, 1.0, 2.0, 3.0, 4.0, 5.0));
+        assert_eq(|_|"unexpected result", a + b + c + d + e + f, 1000015.0);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// Under separated compilation the unit that defines a function and the unit that calls it are
+// generated apart, so both sides derive the out-pointer decision and the calling convention from the
+// target alone. One symbol per unit puts a unit boundary on every call. The shapes cover an integer
+// result wider than the return registers, a result carrying arrays, a result mixing floating-point
+// and integer leaves, a wide global, and mutual recursion between two wide-returning functions.
+#[test]
+fn test_wide_return_across_compilation_units() {
+    let source = r#"
+    module Main;
+
+    mk4 : I64 -> (I64, I64, I64, I64);
+    mk4 = |n| (n, n + 1, n + 2, n + 3);
+
+    mk_arrays : I64 -> (Array I64, Array I64);
+    mk_arrays = |n| (Array::fill(n, 1), Array::fill(n + 1, 2));
+
+    mixed : I64 -> (F64, F64, I64, I64, F64);
+    mixed = |n| (n.f64, (n + 1).f64, n + 2, n + 3, (n + 4).f64);
+
+    wide_const : (I64, I64, I64, I64, I64);
+    wide_const = (11, 22, 33, 44, 55);
+
+    step_a : I64 -> (I64, I64, I64, I64);
+    step_a = |n| if n == 0 { (1, 2, 3, 4) } else { step_b(n - 1) };
+
+    step_b : I64 -> (I64, I64, I64, I64);
+    step_b = |n| if n == 0 { (5, 6, 7, 8) } else { step_a(n - 1) };
+
+    main : IO ();
+    main = (
+        let (a, b, c, d) = mk4(10);
+        assert_eq(|_|"mk4", a * 1000 + b * 100 + c * 10 + d, 10 * 1000 + 11 * 100 + 12 * 10 + 13);;
+        let (xs, ys) = mk_arrays(3);
+        assert_eq(|_|"mk_arrays", xs.@size * 10 + ys.@size, 34);;
+        let (u, v, w, x, y) = mixed(2);
+        assert_eq(|_|"mixed", (u + v + y).i64 + w + x, 2 + 3 + 6 + 4 + 5);;
+        let (p, q, r, s, t) = wide_const;
+        assert_eq(|_|"wide_const", p + q + r + s + t, 165);;
+        let (e, f, g, h) = step_a(7);
+        assert_eq(|_|"step", e + f + g + h, 5 + 6 + 7 + 8);;
+        pure()
+    );
+    "#;
+    let mut config = Configuration::develop_mode();
+    config.max_cu_size = 1;
+    test_source(source, config);
+}
+
+// The out-pointer path must move the same bytes the register path did, for every leaf shape that
+// straddles the budget: three integer leaves against four, a union payload plus its tag, floating-
+// point leaves mixed with integer ones, a nested tuple with zero-sized members, and a boxed value.
+// Each is reached directly, in tail position, through a closure, and out of an array, so a value
+// crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
+#[test]
+fn test_wide_return_shapes_compute_correctly() {
+    let source = r#"
+    module Main;
+
+    type Rec = unbox struct { a : I64, b : F64, c : F32, d : U8 };
+    type Boxy = box struct { p : I64, q : I64, r : I64, s : I64 };
+
+    // Three integer leaves: within the x86-64 return registers.
+    narrow : I64 -> (I64, I64, I64);
+    narrow = |n| (n, n + 1, n + 2);
+
+    // Four integer leaves: past them.
+    wide : I64 -> (I64, I64, I64, I64);
+    wide = |n| (n, n + 1, n + 2, n + 3);
+
+    // Integer and floating-point leaves mixed, and a nested tuple with zero-sized members.
+    mixed : I64 -> (I64, (), F64, ((), F32), U8, ());
+    mixed = |n| (n, (), n.f64 + 0.5, ((), n.f32 + 0.25_F32), (n + 7).u8, ());
+
+    // A union payload plus its tag.
+    unioned : I64 -> Result String I64;
+    unioned = |n| if n % 2 == 0 { err("e" + n.to_string) } else { ok(n * 3) };
+
+    // A struct of several scalar kinds, and a boxed one (a single pointer leaf).
+    record : I64 -> Rec;
+    record = |n| Rec { a : n, b : n.f64 + 0.5, c : n.f32 + 0.25_F32, d : (n + 7).u8 };
+
+    boxed : I64 -> Boxy;
+    boxed = |n| Boxy { p : n, q : n + 1, r : n + 2, s : n + 3 };
+
+    chk : I64 -> I64;
+    chk = |n| (
+        let t3 = narrow(n);
+        let t4 = wide(n);
+        let m = mixed(n);
+        let u = unioned(n);
+        let r = record(n);
+        let b = boxed(n);
+        t3.@0 + t3.@1 * 3 + t3.@2 * 5
+            + t4.@0 * 7 + t4.@1 * 11 + t4.@2 * 13 + t4.@3 * 17
+            + m.@0 * 19 + (m.@2 * 2.0).i64 * 23 + (m.@3.@1 * 4.0_F32).i64 * 29
+            + m.@4.i64 * 31
+            + (if u.is_ok { u.as_ok } else { -u.as_err.@size }) * 37
+            + r.@a * 41 + (r.@b * 2.0).i64 * 43 + (r.@c * 4.0_F32).i64 * 47
+            + r.@d.i64 * 53
+            + b.@p * 59 + b.@q * 61 + b.@r * 67 + b.@s * 71
+    );
+
+    // The same functions reached in tail position, through a closure, and out of an array, so the
+    // value crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
+    tail_wide : I64 -> (I64, I64, I64, I64);
+    tail_wide = |n| wide(n);
+
+    table : Array (I64 -> (I64, I64, I64, I64));
+    table = [wide, tail_wide, |n| wide(n + 100)];
+
+    indirect : I64 -> I64;
+    indirect = |n| (
+        let k = |m| wide(m + 1000);
+        let a = k(n);
+        let b = (table.@(n % 3))(n);
+        let c = tail_wide(n);
+        a.@0 + a.@3 * 3 + b.@0 * 5 + b.@3 * 7 + c.@0 * 11 + c.@3 * 13
+    );
+
+    main : IO ();
+    main = (
+        let acc = Iterator::range(0, 20).fold(0, |n, acc| acc * 3 + chk(n) + indirect(n) * 97);
+        assert_eq(|_|"unexpected result", acc, 710000889699219);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// Three integer and four floating-point leaves fill both halves of the budget at once, the widest
+// result the table still returns in registers on x86-64.
+#[test]
+fn test_mixed_result_filling_both_register_classes_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    type S = (I64, I64, I64, F64, F64, F64, F64);
+
+    walk : I64 -> S -> IO S;
+    walk = |i, st| (
+        if i == 0 { pure(st) };
+        let _ = *pure(0);
+        walk(i - 1, (st.@1, st.@2, st.@0 + 1, st.@4, st.@5, st.@6, st.@3 + 1.0))
+    );
+
+    main : IO ();
+    main = (
+        let (a, b, c, d, e, f, g) = *walk(1000000, (0, 1, 2, 0.0, 1.0, 2.0, 3.0));
+        assert_eq(|_|"unexpected integer result", a + b + c, 1000003);;
+        assert_eq(|_|"unexpected float result", d + e + f + g, 1000006.0);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// A `Destructor` holding a wide resource. Its destructor is applied from inside the reference-
+// counting helper that releases the value -- a function with the C convention, not a Fix lambda -- so
+// that helper's own frame holds the out-pointer buffer of the call. It is the one place outside a
+// Fix lambda where a buffer is allocated and handed to a call, which is what makes the call's
+// `tail` marker load-bearing there.
+#[test]
+fn test_destructor_with_wide_resource_is_memory_safe() {
+    let source = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        let d = *Destructor::make(
+            (Array::fill(3, "p"), Array::fill(3, "q"), Array::fill(3, "r")),
+            |v| pure(v)
+        );
+        let n = d.borrow(|v| v.@0.@size + v.@1.@size + v.@2.@size);
+        assert_eq(|_|"unexpected result", n, 9);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}

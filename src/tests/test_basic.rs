@@ -10460,6 +10460,45 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
 }
 
 #[test]
+pub fn test_export_wide_return() {
+    // An exported Fix function whose result is too wide for the target's return registers: the Fix
+    // value returns through an out-pointer, and the export wrapper reads that buffer back before
+    // returning to C. Complements `test_export_unbox_struct_arg`, whose result is a scalar.
+    let source = r##"
+        module Main;
+
+        quad : I64 -> (I64, I64, I64, I64);
+        quad = |n| (n, n + 1, n + 2, n + 3);
+        FFI_EXPORT[quad, c_quad];
+
+        quad_io : I64 -> IO (I64, I64, I64, I64);
+        quad_io = |n| pure $ (n * 10, n * 10 + 1, n * 10 + 2, n * 10 + 3);
+        FFI_EXPORT[quad_io, c_quad_io];
+
+        main : IO ();
+        main = (
+            let res = FFI_CALL[CInt run_c()];
+            assert_eq(|_|"C reported failure", res, 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        struct quad { long a; long b; long c; long d; };
+        struct quad c_quad(long n);
+        struct quad c_quad_io(long n);
+
+        int run_c() {
+            struct quad q = c_quad(7);
+            if (q.a != 7 || q.b != 8 || q.c != 9 || q.d != 10) { return 1; }
+            struct quad r = c_quad_io(2);
+            if (r.a != 20 || r.b != 21 || r.c != 22 || r.d != 23) { return 1; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
 pub fn test_export_unbox_struct_arg() {
     // An exported Fix function whose argument is an unbox struct (a tuple) receives it correctly: the
     // C caller passes the struct by value, and the export wrapper reassembles it before applying the
