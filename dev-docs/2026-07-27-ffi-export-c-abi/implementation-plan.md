@@ -1,6 +1,6 @@
-# FFI_EXPORT の C ABI: 実装計画
+# FFI_EXPORT の型を C ABI が保証できる範囲に限る: 実装計画
 
-issue #112。`FFI_EXPORT` した関数の引数・戻り値が集約型のとき、C 側と値が食い違う。
+issue #112。`FFI_EXPORT` した関数の引数・戻り値が集約型（タプル・unbox struct・union を値渡し）のとき、C 側と値が食い違う。
 
 ## 問題
 
@@ -10,11 +10,11 @@ issue #112。`FFI_EXPORT` した関数の引数・戻り値が集約型のとき
 codom.get_embedded_type(gc, &vec![]).fn_type(&dom_llvm_tys, false)
 ```
 
-の形、つまり **LLVM IR の集約型をそのまま値渡し・値返し**で作る。LLVM はこれを要素ごとに `CC_X86_64_C` / `RetCC_AArch64_AAPCS` のレジスタへ割り付けるが、C の ABI は構造体を「サイズと eightbyte ごとのクラス」で分類する。両者が一致するのは形が偶然そろったときだけである。
+の形、つまり **LLVM IR の集約型をそのまま値渡し・値返し**で作る。LLVM はこれを要素ごとにレジスタへ割り付けるが、C の ABI は構造体を「サイズと eightbyte ごとのクラス」（System V AMD64）あるいは「HFA かどうかと 16 バイト境界」（AAPCS64）で分類する。両者が一致するのは形が偶然そろったときだけである。
 
 `llc -O2` (LLVM 17.0.6) と `gcc -O2` で戻り値を突き合わせた結果:
 
-| 形 | サイズ | C (x86-64) | 現状の Fix | AArch64 の C | 現状の Fix |
+| 形 | サイズ | C (x86-64) | 現状の Fix | C (AArch64) | 現状の Fix |
 | --- | --- | --- | --- | --- | --- |
 | `{i64, i64}` | 16 | RAX, RDX | 同じ | X0, X1 | 同じ |
 | `{double, double}` | 16 | XMM0, XMM1 | 同じ | D0, D1 (HFA) | 同じ |
@@ -24,83 +24,78 @@ codom.get_embedded_type(gc, &vec![]).fn_type(&dom_llvm_tys, false)
 | `{i8, i8}` | 2 | RAX に詰める | **AL, DL** | X0 に詰める | **W0, W1** |
 | `{i64, i64, i64}` | 24 | 隠しポインタ | **RAX, RDX, RCX** | X8 経由 | **X0, X1, X2** |
 
-引数側も同じ性質である (24 バイトの構造体を C はスタックに置き、現状の Fix は RDI/RSI/RDX に置く。2 個の `float` を C は XMM0 に詰め、現状の Fix は XMM0/XMM1 に置く)。
+引数側も同じ性質である（24 バイトの構造体を C はスタックに置き、現状の Fix は RDI/RSI/RDX に置く。2 個の `float` を C は XMM0 に詰め、現状の Fix は XMM0/XMM1 に置く）。
 
 **16 バイト超だけの問題ではない。** 8 バイト未満のフィールドが同じ eightbyte を共有する形は、小さくても壊れている。そして**安全な形の集合はターゲットごとに違う**: `(I64, F64)` は x86-64 で一致し AArch64 で壊れ、`(F32, F32)` は AArch64 で一致し x86-64 で壊れる。
 
-`FFI_CALL` は影響を受けない。パーサが型名をスカラーの C 型に限定しており、集約型は構文エラーになる。
+**スカラーは正しい。** 整数・浮動小数・ポインタは LLVM の既定の下ろし方が C ABI とそのまま一致する。8 バイト未満の整数の上位ビットも、C 側の callee が自分で拡張する（`movsbl %dil, %eax` / `sxtb w0, w0`）ので食い違わない。
 
-レイアウトそのものは既に C と一致している。Fix の unbox struct は非 packed の LLVM 構造体 (`context.struct_type(&fields, false)`) なので、同じ順序・同じフィールド型の C 構造体と同じオフセットになる。**直すのは受け渡しの規約だけ**である。
+`FFI_CALL` は影響を受けない。文法 `ffi_c_fun_ty = { ffi_c_ty | ffi_c_ty_unit | ffi_c_ty_ptr | number_lit_type }` が受け付けるのは C の型名（`CInt` 等、`c_type_sizes` を引いて `I32` 等に解決される）、Fix の固定幅型 `I8`..`U64` / `F32` / `F64`、`Ptr`、戻り値の `()` だけで、集約型は構文段階で弱かれる。
 
-## 何を約束するか
+## 方針
 
-「C ABI に合わせる」と言うには、まず Fix の型が C 側でどの型に見えるかを決める必要がある。現状 `Document.md` はスカラーの例しか書いていない。
+**`FFI_EXPORT` を、ABI が保証できる型に限る。** 集約型は診断で拒否する。
 
-| Fix の型 | C 側 |
+集約型を渡せるようにするには、System V の eightbyte 分類と AAPCS64 の HFA 判定を Fix 側に実装し、coerce した IR 型（`i64` / `double` / `<2 x float>`）や `sret` / `byval` を出し分けることになる。引数側にはレジスタ枯渇の規則もある。ターゲットを増やすたびに保守が要る。それは機能追加であって、この issue が報告している「黙って壊れた値が渡る」ことの修正ではない。
+
+修正としては、`FFI_CALL` が既に持っている制限に `FFI_EXPORT` を揃えるのが筋である。多値を C に渡したいときは、C 側で確保した領域のポインタを受け取り、`FFI_CALL` の `memcpy` で書き込む形が今も使える（Fix の unbox struct は非 packed の LLVM 構造体なので、同じフィールド順の C 構造体とレイアウトは一致する）。
+
+### 既存コードへの影響
+
+`FFI_EXPORT` の実例を調べた結果:
+
+| 場所 | export した型 |
 | --- | --- |
-| `I8`..`I64` / `U8`..`U64` / `F32` / `F64` / `Ptr` / `CInt` 等 | 対応するスカラー |
-| `Bool` | `bool` (1 バイト) |
-| `()` | `void` (戻り値のみ) |
-| unbox struct / タプル | 同じ順序・同じフィールド型の C 構造体 |
-| boxed 型 | 不透明ポインタ |
-| union | タグ + payload バッファ (下記の判断待ち) |
-| 固定長配列を含む unbox struct | 同じ配列を含む C 構造体 |
+| minilib `_sandbox/ffi/dylib/mylib` | `I64 -> I64 -> I64`、`Ptr -> Ptr -> Ptr` × 2 |
+| minilib `_sandbox/curl` | `Ptr -> CSizeT -> CSizeT -> Ptr -> CSizeT` |
+| minilib `_sandbox/io/uv` | `Ptr -> ()` 系のコールバック |
+| asynctask | `Box (IO Ptr) -> IO Ptr` |
+| このリポジトリのテスト | `test_export`（`CInt`）、`test_export_unbox_struct_arg`（`(I64, I64)` の引数） |
+| `Document.md` / `Document-ja.md` の例 | すべて `CInt` / `Ptr` |
 
-## 分類器
+集約型を使っているのはこのリポジトリのテスト 1 本だけである。**boxed 型（asynctask の `Box (IO Ptr)`）は使われている**ので、許可し続ける。
 
-新モジュール `src/c_abi.rs` に、LLVM 型と triple から受け渡し方を返す関数を置く。
+## 許可する型
 
-```rust
-enum CAbiClass {
-    /// レジスタで渡す。coerce した IR 型の列 (`i64`, `double`, `<2 x float>` 等)。
-    Direct(Vec<BasicTypeEnum>),
-    /// メモリで渡す。戻り値は `sret`、引数は `byval`。
-    Indirect,
-}
-```
+| Fix の型 | C 側 | 理由 |
+| --- | --- | --- |
+| `I8`..`I64` / `U8`..`U64` | 対応する固定幅整数 | レジスタ 1 本、C と一致 |
+| `F32` / `F64` | `float` / `double` | SIMD レジスタ 1 本、C と一致 |
+| `Ptr` | `void *` | レジスタ 1 本 |
+| boxed 型 | 不透明ポインタ | LLVM 型がポインタ 1 個 |
+| `()` | `void` | 戻り値のみ |
 
-### x86-64 System V
+`CInt` などの C 型名は上記の固定幅型の別名なので、そのまま通る。
 
-1. サイズが 16 バイトを超えるものは MEMORY。
-2. それ以外は eightbyte ごとに INTEGER / SSE を判定し、マージ規則 (INTEGER が勝つ) を適用する。
-3. eightbyte のクラスから coerce する IR 型を決める。INTEGER は `i64`、SSE は含まれるフィールドに応じて `double` または `<2 x float>`。
-4. 引数はレジスタ枯渇を見る。整数 6 本・SSE 8 本を使い切った後の集約は MEMORY へ落ちる。
+拒否する型と、その理由:
 
-Fix には x87 の `long double` も `__int128` も可変長引数も無いので、その分類は実装しない。
-
-### AArch64 AAPCS64
-
-1. HFA / HVA (同じ浮動小数型のメンバ 1-4 個) は SIMD レジスタで渡す。
-2. それ以外で 16 バイト以下は汎用レジスタに詰める (`i64` の列に coerce)。
-3. 16 バイトを超えるものは間接。戻り値は X8 (= `sret`)、引数はコピーのポインタ (= `byval`)。
-4. 引数はレジスタ枯渇を見る (X0-X7 / V0-V7)。
-
-### 表に無いターゲット
-
-export をコンパイルエラーにする。黙って壊れた ABI を出すより、そのターゲットで export が使えないことを告げる方がよい。
+- **unbox struct・タプル・union**（この issue の本体）
+- **`Bool`** — System V と AAPCS64 は `_Bool` を 1 バイトと定めているが、C 側で `int` や独自 typedef の `BOOL` を書けば黙って食い違う。`U8` か `CInt` を明示してもらう
+- **`Array` / `String` などの unbox でない標準型** — boxed なら不透明ポインタとして通る
 
 ## 実装
 
-- `src/c_abi.rs`: `classify_return(llvm_ty, triple)` と `classify_arguments(llvm_tys, triple)`。引数側は枯渇を見るため列全体を受け取る。
-- `ExportStatement::implement`: 分類の結果から wrapper の署名を組み、marshalling を書く。Direct は alloca 経由で bit を読み替える (`store` した後に coerce 型で `load`)、Indirect は `sret` / `byval` 属性を付けたポインタ引数にする。
-- `ExportedFunctionType::validate`: 対応できない型を診断で拒否する。
+- `ExportedFunctionType::validate`: `doms` の各要素と `codom` を上記の集合で検査し、外れたら診断を返す。`()` は戻り値の位置でのみ許す（引数の `()` は現在 `build_ffi_call_core` が実行時に `panic_with_msg_src` するが、export 側は `validate` で弾く）。
+- 診断の文面は、拒否した型と、`Ptr` + `FFI_CALL` の `memcpy` で受け渡す回避策を示す。
+- `ExportStatement::implement` は変更しない。許可した型はすべて LLVM 型がスカラーかポインタ 1 個で、現状の値渡しがそのまま C ABI と一致する。
 
 ## テスト
 
-`src/tests/test_basic.rs` の `test_source_with_c` を使い、C 側で値を検証する差分テストを形の行列で用意する。CI が x86-64 (ubuntu) と AArch64 (macOS) の両方を回すので、そこが実証になる。
+- 拒否のテスト: タプル・unbox struct・`Bool` を export したときに診断が出ること（`test_source_fail` の形）。
+- 通過のテスト: 現行の `test_export`（`CInt`）に加え、`I64` / `F64` / `Ptr` / boxed 型 / `()` 戻り値を C から呼ぶ形。
+- `test_export_unbox_struct_arg` は削除する。16 バイトの引数がたまたま一致することを固定しているテストであり、この変更で拒否される形になる。
+- 回避策のテスト: `Ptr` を受け取り `FFI_CALL` の `memcpy` で C 側の構造体に書き込む形が、C 側から見て正しい値になること。
 
-行列: `(I64,I64)` / `(I64,I64,I64)` / `(F64,F64)` / `(F32,F32)` / `(I32,I32)` / `(U8,U8)` / `(I64,F64)` / 入れ子の struct / 24 バイト超 / `Bool` / 引数を多数並べてレジスタを枯渇させる形。各形を引数と戻り値の両方で通す。
+## ドキュメント
 
-## フェーズ
+`Document.md` と `Document-ja.md` の `FFI_EXPORT` の節に、export できる型の一覧と、集約型を渡したいときの `Ptr` + `memcpy` の形を書く。
 
-1. 型の対応を決め、`validate` を対応済みの型に限定する。拒否の診断とそのテスト。
-2. x86-64 の分類器と wrapper の書き換え。差分テスト。
-3. AArch64 の分類器。CI で実証する。
-4. `Document.md` に型の対応を書く。
+## 将来: 集約型を渡せるようにする場合
 
-## 判断が要る点
+この計画では実装しないが、やるとすれば次の形になる。
 
-- **union を export 可能にするか。** Fix の union は「タグ + payload バッファ」で、C の `union` とは違う形である。C 側で対応する型を書くことはできるが、レイアウトを公開の約束にするかどうかは別の判断である。拒否する方が安全である。
-- **boxed 型を export 可能にするか。** ABI 上は単なるポインタなので分類器の問題は無い。参照カウントの扱いを C 側に要求することになる。
-- **レジスタ枯渇を忠実に実装するか。** 引数が多い export は稀だが、外すと黙って壊れる形が残る。
-- **対応外ターゲットで export を拒否してよいか。**
+- 新モジュール `src/c_abi.rs` に `classify_return(llvm_ty, triple)` と `classify_arguments(llvm_tys, triple)` を置き、`Direct(coerce した型の列)` か `Indirect`（`sret` / `byval`）を返す。
+- System V: 16 バイト超は MEMORY。16 バイト以下は eightbyte ごとに INTEGER / SSE を判定し、マージ規則（INTEGER が勝つ）を適用して coerce する。引数は整数 6 本・SSE 8 本の枯渇を見る。
+- AAPCS64: HFA / HVA（同じ浮動小数型のメンバ 1-4 個）は SIMD レジスタ、16 バイト以下は汎用レジスタに詰める、超えるものは間接。
+- 表に無いターゲットでは集約型の export を拒否する。
+- 両ターゲットの CI で、プラットフォームの C コンパイラと突き合わせる差分テストを形の行列で回す。
