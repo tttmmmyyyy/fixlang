@@ -22,11 +22,12 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_shadowing_let : I64 -> I64;
+        apply_shadowing_let = |x| (let x = |v : I64| v + 1; x)(x);
+
         main : IO ();
         main = (
-            let x = 10;
-            let y = (let x = |v : I64| v + 1; x)(x);
-            assert_eq(|_|"the argument denotes the lambda bound by the inner `let`", y, 11);;
+            assert_eq(|_|"the argument denotes the lambda bound by the inner `let`", apply_shadowing_let(10), 11);;
             pure()
         );
         "#;
@@ -40,12 +41,15 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_arm_binding_the_argument : I64 -> I64;
+        apply_arm_binding_the_argument = |a| (
+            let o : Option (I64 -> I64) = Option::some(|w| w + 1);
+            (match o { some(a) => a, none(_) => |w| w + 100 })(a)
+        );
+
         main : IO ();
         main = (
-            let a = 20;
-            let o : Option (I64 -> I64) = Option::some(|w| w + 1);
-            let z = (match o { some(a) => a, none(_) => |w| w + 100 })(a);
-            assert_eq(|_|"the argument denotes the function bound by the arm", z, 21);;
+            assert_eq(|_|"the argument denotes the function bound by the arm", apply_arm_binding_the_argument(20), 21);;
             pure()
         );
         "#;
@@ -143,11 +147,12 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_tuple_pattern_let : I64 -> I64;
+        apply_tuple_pattern_let = |a| (let (a, b) = (100, |v : I64| v * 2); b)(a);
+
         main : IO ();
         main = (
-            let a = 5;
-            let r = (let (a, b) = (100, |v : I64| v * 2); b)(a);
-            assert_eq(|_|"the argument denotes the outer `a`", r, 10);;
+            assert_eq(|_|"the argument denotes the outer `a`", apply_tuple_pattern_let(5), 10);;
             pure()
         );
         "#;
@@ -163,12 +168,15 @@ mod tests {
 
         type S = struct { x : I64, f : I64 -> I64 };
 
+        apply_struct_pattern_let : I64 -> I64;
+        apply_struct_pattern_let = |x| (
+            let s = S { x : 100, f : |v : I64| v * 2 };
+            (let S { x : x, f : f } = s; f)(x)
+        );
+
         main : IO ();
         main = (
-            let x = 5;
-            let s = S { x : 100, f : |v : I64| v * 2 };
-            let r = (let S { x : x, f : f } = s; f)(x);
-            assert_eq(|_|"the argument denotes the outer `x`", r, 10);;
+            assert_eq(|_|"the argument denotes the outer `x`", apply_struct_pattern_let(5), 10);;
             pure()
         );
         "#;
@@ -183,12 +191,15 @@ mod tests {
 
         type U = union { p : (I64, I64 -> I64), q : () };
 
+        apply_nested_pattern_arm : I64 -> I64;
+        apply_nested_pattern_arm = |a| (
+            let u : U = U::p((100, |v : I64| v * 2));
+            (match u { p((a, f)) => f, q(_) => |v : I64| v + 1000 })(a)
+        );
+
         main : IO ();
         main = (
-            let a = 5;
-            let u : U = U::p((100, |v : I64| v * 2));
-            let r = (match u { p((a, f)) => f, q(_) => |v : I64| v + 1000 })(a);
-            assert_eq(|_|"the argument denotes the outer `a`", r, 10);;
+            assert_eq(|_|"the argument denotes the outer `a`", apply_nested_pattern_arm(5), 10);;
             pure()
         );
         "#;
@@ -226,11 +237,12 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_eval_head : I64 -> I64;
+        apply_eval_head = |x| (eval x + 1; let x = 100; |v : I64| v * 2)(x);
+
         main : IO ();
         main = (
-            let x = 5;
-            let r = (eval x + 1; let x = 100; |v : I64| v * 2)(x);
-            assert_eq(|_|"the argument denotes the outer `x`", r, 10);;
+            assert_eq(|_|"the argument denotes the outer `x`", apply_eval_head(5), 10);;
             pure()
         );
         "#;
@@ -244,12 +256,15 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_let_read_by_an_array : I64 -> I64;
+        apply_let_read_by_an_array = |i| (
+            let arr = Array::from_map(3, |k| k * 10);
+            (let i = 0; |v : I64| arr.@(i) + v)(i)
+        );
+
         main : IO ();
         main = (
-            let arr = Array::from_map(3, |k| k * 10);
-            let i = 1;
-            let r = (let i = 0; |v : I64| arr.@(i) + v)(i);
-            assert_eq(|_|"the index reads the inner `i` and the argument the outer one", r, 1);;
+            assert_eq(|_|"the index reads the inner `i` and the argument the outer one", apply_let_read_by_an_array(1), 1);;
             pure()
         );
         "#;
@@ -263,15 +278,17 @@ mod tests {
         let source = r#"
         module Main;
 
+        apply_arms_binding_different_names : Option (I64 -> I64) -> I64 -> I64;
+        apply_arms_binding_different_names = |o, a| (
+            (match o { some(a) => a, none(b) => |v : I64| v + 1000 })(a)
+        );
+
         main : IO ();
         main = (
-            let a = 5;
-            let some_f : Option (I64 -> I64) = Option::some(|v : I64| v * 2);
-            let none_f : Option (I64 -> I64) = Option::none();
-            let taken = (match some_f { some(a) => a, none(b) => |v : I64| v + 1000 })(a);
-            assert_eq(|_|"the taken arm applies its bound function to the outer `a`", taken, 10);;
-            let fallback = (match none_f { some(a) => a, none(b) => |v : I64| v + 1000 })(a);
-            assert_eq(|_|"the other arm applies its own function to the outer `a`", fallback, 1005);;
+            let doubling : Option (I64 -> I64) = Option::some(|v : I64| v * 2);
+            let missing : Option (I64 -> I64) = Option::none();
+            assert_eq(|_|"the taken arm applies its bound function to the outer `a`", apply_arms_binding_different_names(doubling, 5), 10);;
+            assert_eq(|_|"the other arm applies its own function to the outer `a`", apply_arms_binding_different_names(missing, 5), 1005);;
             pure()
         );
         "#;
@@ -285,16 +302,19 @@ mod tests {
         let source = r#"
         module Main;
 
-        main : IO ();
-        main = (
-            let a = 5;
-            let r = (
+        apply_chain_of_shadowing_lets : I64 -> I64;
+        apply_chain_of_shadowing_lets = |a| (
+            (
                 let a = 100;
                 let a = a + 1;
                 let a = a + 1;
                 |v : I64| v * 2 + a
-            )(a);
-            assert_eq(|_|"the argument denotes the outer `a`", r, 112);;
+            )(a)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `a`", apply_chain_of_shadowing_lets(5), 112);;
             pure()
         );
         "#;
@@ -308,17 +328,49 @@ mod tests {
         let source = r#"
         module Main;
 
-        main : IO ();
-        main = (
-            let x = 9;
-            let y = (
+        apply_nested_shadowing_binders : I64 -> I64;
+        apply_nested_shadowing_binders = |x| (
+            (
                 let x = Option::some(7);
                 match x {
                     some(x) => (let x = |v : I64| v * 2; x),
                     none(_) => |v : I64| v
                 }
-            )(x);
-            assert_eq(|_|"the argument denotes the outer `x` through three shadowing binders", y, 18);;
+            )(x)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `x` through three shadowing binders", apply_nested_shadowing_binders(9), 18);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// An argument that is an expression rather than a variable is bound to a fresh name before it
+    /// travels, so it is evaluated once. The name has to avoid what is free in the function it is
+    /// pushed into, while the binders that function carries — here the `#vN` names lifting a `fix`
+    /// gave them — are what the renaming keeps clear of it.
+    #[test]
+    fn test_computed_argument_is_bound_before_it_is_pushed_in() {
+        let source = r#"
+        module Main;
+
+        apply_to_computed_argument : I64 -> I64;
+        apply_to_computed_argument = fix(|self, n| (
+            let s = 2;
+            let s = s + 1;
+            if n <= 0 {
+                (let s = 100; |v : I64| v * 10 + s)(n * 3 + s)
+            } else {
+                self(n - 1)
+            }
+        ));
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the computed argument reaches the parameter with its own value", apply_to_computed_argument(2), 130);;
             pure()
         );
         "#;
