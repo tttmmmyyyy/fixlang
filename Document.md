@@ -74,6 +74,8 @@
     - [Foreign Function Interface (FFI)](#foreign-function-interface-ffi)
         - [Calling External Functions from Fix](#calling-external-functions-from-fix)
         - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
+            - [Types an exported function can exchange](#types-an-exported-function-can-exchange)
+            - [Returning more than one value](#returning-more-than-one-value)
         - [Managing External Resources in Fix](#managing-external-resources-in-fix)
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
@@ -2111,7 +2113,7 @@ pythagorean_triples = |limit| (
 
 ## Foreign Function Interface (FFI)
 
-By linking a static or shared library to a Fix program using the `--static-link` (`-s`) or `--dynamic-link` (`-s`) compiler flags, you can call native functions within a Fix program and call Fix functions within a library.
+By linking a static or shared library to a Fix program using the `--static-link` (`-s`) or `--dynamic-link` (`-d`) compiler flags, you can call native functions within a Fix program and call Fix functions within a library.
 
 However, using FFI can allow external functions to break Fix's guarantees of immutability and memory safety. Programmers are responsible for hiding the side effects of external functions in `IO` and properly managing resources to avoid segmentation faults and memory leaks.
 
@@ -2163,7 +2165,7 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * Pointers: `Ptr`
 * Numeric types with explicit bit widths: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64`
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
-* Substitute for `void`: `()`
+* Substitute for `void`: `()`, available as `{return_type}`. Giving it as an `{arg_type_i}` is an error.
 
 Note that the function signature must match what is declared in the C language header.
 For example, `scanf` is declared as `int scanf(const char *format, ...);`.
@@ -2213,8 +2215,8 @@ FFI_EXPORT[x, f]; // int f(void);
 x : CInt -> CInt;
 FFI_EXPORT[x, f]; // int f(int);
 
-x : CInt -> CInt;
-FFI_EXPORT[x, f]; // int f(int);
+x : CInt -> CInt -> CInt;
+FFI_EXPORT[x, f]; // int f(int, int);
 
 x : IO ();
 FFI_EXPORT[x, f]; // void f(void);
@@ -2226,15 +2228,62 @@ x : CInt -> IO CInt;
 FFI_EXPORT[x, f]; // int f(int);
 ```
 
+#### Types an exported function can exchange
+
+The exported function follows the C ABI of the target, so the type of the exported value is restricted to the types Fix can pass under that ABI:
+
+* Integers: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`
+* Floating point numbers: `F32`, `F64`
+* Pointers: `Ptr`
+* The C numeric types listed for `FFI_CALL` above, such as `CInt`, which are aliases of the types above
+* Boxed types, which reach the foreign language as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
+* `()`, available as the result type, where it becomes `void`
+
+Any other type is rejected when the program is compiled:
+
+* A struct, a tuple or a union is rejected. C decides how to pass such a value from its size together with the class of each of its eightbytes (on x86-64), or from whether all of its members share one floating point type (on AArch64), and the resulting rule differs between targets. Exchange such a value through a pointer, as described below.
+* `Bool` is rejected, because the width C gives `_Bool` is implementation-defined and a caller may declare the parameter as `int` instead. Take a `U8` or a `CInt` and convert it on the Fix side.
+* `String` and `Array` are structs, so they are rejected as well. Wrap them in a boxed struct such as `Std::Box` to exchange them as an opaque pointer, or copy their bytes through a pointer.
+
+#### Returning more than one value
+
+An exported function returns one value, so hand several values back through memory the foreign language owns: take a `Ptr` to it and copy into it. Fix reaches the bytes of an aggregate through a boxed value — `Std::FFI::borrow_boxed_io` hands out a pointer to read from, and `Std::FFI::mutate_boxed_io` a pointer to write to — and the payload of a boxed struct is laid out like a C structure with the same fields, as described in [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c).
+
+```
+type Pair = box struct { a : I64, b : F64 };
+
+// Fills the `struct pair` that `dst` points to.
+write_pair : Ptr -> U64 -> IO ();
+write_pair = |dst, size| (
+    let pair = Pair { a : 10, b : 0.5 };
+    pair.borrow_boxed_io(|src| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]);;
+    pure()
+);
+FFI_EXPORT[write_pair, write_pair]; // void write_pair(struct pair* dst, uint64_t size);
+
+// Reads the `struct pair` that `src` points to.
+sum_pair : Ptr -> U64 -> IO F64;
+sum_pair = |src, size| (
+    let pair = Pair { a : 0, b : 0.0 };
+    let (pair, _) = *pair.mutate_boxed_io(|dst|
+        FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]
+    );
+    pure $ pair.@a.to_F64 + pair.@b
+);
+FFI_EXPORT[sum_pair, sum_pair]; // double sum_pair(const struct pair* src, uint64_t size);
+```
+
+The C caller passes `sizeof(struct pair)` as `size`, so the number of bytes copied comes from the C declaration.
+
 ### Managing External Resources in Fix
 
 Some C functions allocate resources that must eventually be freed by another C function. The most famous examples are `malloc` / `free` and `fopen` / `fclose`. If you use `FFI_CALL` from Fix to allocate a resource, you must call the freeing function again using `FFI_CALL` at the end of that resource's lifetime.
 
-To manage such resources, you can use `Std::FFI::Destructor`. A `Destructor a` is a boxed type that, as its data, holds a `value` of type `a` and a `dtor` of type `a -> IO a`. When the Fix compiler deallocates a `Destructor a` from heap memory, it calls `dtor` on `value`.
+To manage such resources, you can use `Std::FFI::Destructor`. A `Destructor a` is a boxed type holding a resource of type `a` together with a destructor of type `a -> IO a`. `Std::FFI::Destructor::make : a -> (a -> IO a) -> IO (Destructor a)` builds one from the two, and `Std::FFI::Destructor::borrow : (a -> b) -> Destructor a -> b` reads the resource. When the Fix compiler deallocates a `Destructor a` from heap memory, it calls the destructor on the resource.
 
-A typical use case is to store a pointer to a resource obtained with `malloc` or `fopen` in the `value` field of a `Destructor Ptr` and store the IO operation that calls `free` or `fclose` in the `dtor` field. This ensures the resource is automatically freed when the `Destructor Ptr` value goes out of scope.
+A typical use case is to give `Destructor::make` a pointer to a resource obtained with `malloc` or `fopen`, together with the IO operation that calls `free` or `fclose` on it. This ensures the resource is automatically freed when the `Destructor Ptr` value goes out of scope.
 
-However, using `Destructor` properly is not easy and requires attention to various details. Please also check the functions in the documentation for [`Destructor`](https://www.google.com/search?q=/std_doc/Std.md%23Destructor) and [namespace Destructor](https://www.google.com/search?q=/std_doc/Std.md%23namespace_Std::FFI::Destructor).
+However, using `Destructor` properly is not easy and requires attention to various details. Please also check the functions in the documentation for [`Destructor`](/std_doc/Std.md#Destructor) and [namespace Destructor](/std_doc/Std.md#namespace_Std::FFI::Destructor).
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
@@ -2273,8 +2322,9 @@ but when you create a pointer from a boxed type value using `boxed_to_retained_p
 - Decrement the reference counter
 - Return the responsibility of decrementing the reference counter to the Fix compiler
 
-To decrement the reference counter, first call `Std::FFI::get_funptr_release : a -> Ptr` from the foreign language side to get a function pointer of type `void (*)(void*)`.
-By calling this function pointer (passing the pointer to the value as an argument), you can decrement the reference counter.
+The foreign language side decrements the reference counter by calling a function pointer of type `void (*)(void*)`, passing the pointer to the value as its argument.
+`Std::FFI::get_funptr_release : [a : Boxed] Lazy a -> Ptr` returns that function pointer, so obtain it on the Fix side and hand it to the foreign language — for example, from an exported function that returns it.
+Its argument serves only to name the type to be released, so `|_| undefined("") : T` will do when no value of type `T` is at hand.
 
 To return the responsibility of decrementing the reference counter to the Fix compiler, pass the pointer to `boxed_from_retained_ptr`.
 
@@ -2285,7 +2335,7 @@ Therefore, when using a Fix value **at most once** on the foreign language side,
 
 However, you may want to use a Fix value multiple times on the foreign language side.
 For such cases, there is a way to increase "the number of times you should fulfill (or return) the responsibility".
-To do this, call `Std::FFI::get_funptr_retain : a -> Ptr` from the foreign language side to get a function pointer of type `void (*)(void*)`, and call that function pointer.
+To do this, obtain a function pointer of type `void (*)(void*)` from `Std::FFI::get_funptr_retain : [a : Boxed] Lazy a -> Ptr` the same way, and have the foreign language call it.
 
 Therefore, when using a Fix value **multiple times** on the foreign language side, implement as follows:
 - Use `boxed_to_retained_ptr` to get a pointer and pass it to the foreign language.
@@ -2339,7 +2389,7 @@ void access_vec(Vec* v) {
 }
 ```
 
-If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, `Std::FFI::borrow_boxed : (Ptr -> b) -> a -> b` will be useful: 
+If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, `Std::FFI::borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b` will be useful: 
 `vec.borrow_boxed(|p| FFI_CALL[() access_vec(Ptr), p])` will allows `access_vec` on work on `vec.@x` and `vec.@y`.
 
 NOTE: 

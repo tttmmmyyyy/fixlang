@@ -22,6 +22,10 @@
 
 ### Changed
 
+#### Language
+
+- `FFI_EXPORT` now rejects a value whose type Fix cannot pass under the C ABI, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which cross as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected: C decides how to pass one from its size together with the class of each of its eightbytes (x86-64), or from whether its members share one floating point type (AArch64), so the shapes that happened to agree differed between targets. `Bool` is rejected as well, because the width C gives `_Bool` is implementation-defined. To exchange an aggregate, take a `Ptr` to memory the foreign side owns and copy through it; see the FFI section of `Document.md`.
+
 #### Std
 
 - `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
