@@ -40,6 +40,7 @@
 
 #### Tool
 
+- Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.
 - Tail call optimization now applies with `-O none` and with `-g` as well. `-g` used to suppress it so that a debugger saw a stack frame for every call; a call in tail position no longer appears in a backtrace.
 - The compiler no longer aborts with a stack overflow when compiling a module whose expressions nest very deeply — for example a module with several hundred top-level values all sequenced from `main`, or a single deep `let` / `;;` chain. Such a module previously overflowed the small default stack of the compiler's type-checking and code-generation worker threads (most readily at `-O max` and `-O experimental`); the compiler now runs type checking, optimization, and code generation on threads sized for deep recursion.

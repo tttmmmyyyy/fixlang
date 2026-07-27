@@ -24,6 +24,14 @@ pub fn test_export_scalar_types() {
         add_i8 = |x, y| x + y;
         FFI_EXPORT[add_i8, c_add_i8];
 
+        add_u8 : U8 -> U8 -> U8;
+        add_u8 = |x, y| x + y;
+        FFI_EXPORT[add_u8, c_add_u8];
+
+        add_i16 : I16 -> I16 -> I16;
+        add_i16 = |x, y| x + y;
+        FFI_EXPORT[add_i16, c_add_i16];
+
         add_u16 : U16 -> U16 -> U16;
         add_u16 = |x, y| x + y;
         FFI_EXPORT[add_u16, c_add_u16];
@@ -31,6 +39,14 @@ pub fn test_export_scalar_types() {
         add_i32 : I32 -> I32 -> I32;
         add_i32 = |x, y| x + y;
         FFI_EXPORT[add_i32, c_add_i32];
+
+        add_u32 : U32 -> U32 -> U32;
+        add_u32 = |x, y| x + y;
+        FFI_EXPORT[add_u32, c_add_u32];
+
+        add_i64 : I64 -> I64 -> I64;
+        add_i64 = |x, y| x + y;
+        FFI_EXPORT[add_i64, c_add_i64];
 
         add_u64 : U64 -> U64 -> U64;
         add_u64 = |x, y| x + y;
@@ -65,8 +81,12 @@ pub fn test_export_scalar_types() {
         #include <stdint.h>
 
         int8_t c_add_i8(int8_t x, int8_t y);
+        uint8_t c_add_u8(uint8_t x, uint8_t y);
+        int16_t c_add_i16(int16_t x, int16_t y);
         uint16_t c_add_u16(uint16_t x, uint16_t y);
         int32_t c_add_i32(int32_t x, int32_t y);
+        uint32_t c_add_u32(uint32_t x, uint32_t y);
+        int64_t c_add_i64(int64_t x, int64_t y);
         uint64_t c_add_u64(uint64_t x, uint64_t y);
         float c_add_f32(float x, float y);
         double c_add_f64(double x, double y);
@@ -75,8 +95,12 @@ pub fn test_export_scalar_types() {
 
         int run_c() {
             if (c_add_i8(-100, 30) != -70) { return 1; }
+            if (c_add_u8(200, 55) != 255) { return 1; }
+            if (c_add_i16(30000, -1000) != 29000) { return 1; }
             if (c_add_u16(60000, 5000) != (uint16_t)65000) { return 1; }
             if (c_add_i32(2000000000, -1000000000) != 1000000000) { return 1; }
+            if (c_add_u32(4000000000u, 100u) != 4000000100u) { return 1; }
+            if (c_add_i64(1LL << 40, 7) != ((1LL << 40) + 7)) { return 1; }
             if (c_add_u64(1ULL << 63, 7) != ((1ULL << 63) + 7)) { return 1; }
             if (c_add_f32(0.5f, 0.25f) != 0.75f) { return 1; }
             if (c_add_f64(0.5, 0.25) != 0.75) { return 1; }
@@ -90,6 +114,70 @@ pub fn test_export_scalar_types() {
         }
     "##;
     test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_export_boxed_result() {
+    // A boxed value returned to the foreign language arrives as an opaque pointer carrying one
+    // responsibility to release, and an exported function taking a boxed argument takes that
+    // responsibility over. The two together are balanced, which memcheck checks.
+    let source = r##"
+        module Main;
+
+        type Resource = box struct { tag : I64 };
+
+        make_resource : I64 -> IO Resource;
+        make_resource = |tag| pure $ Resource { tag : tag };
+        FFI_EXPORT[make_resource, c_make_resource];
+
+        make_resource_pure : I64 -> Resource;
+        make_resource_pure = |tag| Resource { tag : tag };
+        FFI_EXPORT[make_resource_pure, c_make_resource_pure];
+
+        read_resource : Resource -> I64;
+        read_resource = |res| res.@tag;
+        FFI_EXPORT[read_resource, c_read_resource];
+
+        main : IO ();
+        main = (
+            let res = FFI_CALL[CInt run_c()];
+            assert_eq(|_|"C reported failure", res, 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdint.h>
+
+        void *c_make_resource(int64_t tag);
+        void *c_make_resource_pure(int64_t tag);
+        int64_t c_read_resource(void *res);
+
+        int run_c() {
+            if (c_read_resource(c_make_resource(42)) != 42) { return 1; }
+            if (c_read_resource(c_make_resource_pure(7)) != 7) { return 1; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_ffi_call_unit_parameter_fails() {
+    // `()` stands for `void`, which a C function takes as a return type alone.
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            FFI_CALL_IO[() puts(())];;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "which a C function cannot take as a parameter",
+    );
 }
 
 #[test]
@@ -191,6 +279,50 @@ pub fn test_export_bool_fails() {
         &source,
         Configuration::develop_mode(),
         "the width of `_Bool` in C is implementation-defined",
+    );
+}
+
+#[test]
+pub fn test_export_bool_result_fails() {
+    // The reason `Bool` is refused does not depend on which side of the arrow it sits.
+    let source = r##"
+        module Main;
+
+        is_positive : CInt -> Bool;
+        is_positive = |x| x > 0.c_int;
+        FFI_EXPORT[is_positive, c_is_positive];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be used as the return value of an exported function",
+    );
+}
+
+#[test]
+pub fn test_export_newtype_argument_fails() {
+    // A struct with one field is a struct. `unwrap_newtype` would later replace it with the field
+    // type, but only at `-O max` and above, so what C receives would depend on the optimization
+    // level. Unwrap it in the exported function's own signature instead.
+    let source = r##"
+        module Main;
+
+        type Meters = unbox struct { v : I64 };
+
+        double_it : Meters -> I64;
+        double_it = |m| m.@v * 2;
+        FFI_EXPORT[double_it, c_double_it];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be used as an argument of an exported function",
     );
 }
 

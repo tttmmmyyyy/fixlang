@@ -1,14 +1,10 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
 
 use crate::ast::expr::ExprNode;
-use crate::ast::name::{FullName, NameSpace};
+use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
-use crate::constants::{
-    F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, STD_NAME, U16_NAME,
-    U32_NAME, U64_NAME, U8_NAME,
-};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, run_io};
 use crate::generator::Generator;
@@ -168,14 +164,6 @@ impl ExportStatement {
     }
 }
 
-// The unboxed types an exported function can exchange with C. Each of them is one integer, one
-// floating point number, or one pointer, which C and Fix both pass in a single register. A boxed
-// type is exchangeable as well; `is_exportable_type` admits it separately.
-const EXPORTABLE_UNBOXED_TYPE_NAMES: &[&str] = &[
-    I8_NAME, I16_NAME, I32_NAME, I64_NAME, U8_NAME, U16_NAME, U32_NAME, U64_NAME, F32_NAME,
-    F64_NAME, PTR_NAME,
-];
-
 // Whether the C ABI passes a value of `ty` the way `ExportStatement::implement` passes it.
 //
 // `implement` passes every argument and the result by value in the LLVM type Fix uses internally,
@@ -193,8 +181,7 @@ fn is_exportable_type(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     if ty.is_box(type_env) {
         return true;
     }
-    tycon.name.namespace == NameSpace::new_str(&[STD_NAME])
-        && EXPORTABLE_UNBOXED_TYPE_NAMES.contains(&tycon.name.name.as_str())
+    tycon.is_c_scalar()
 }
 
 // The message shown when `ty` is used as `position` ("an argument" / "the return value") of an

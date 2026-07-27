@@ -2513,7 +2513,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
-    let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
+    let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx)?;
 
     let mut is_var_args = false;
     if let Some(pair) = pairs.peek() {
@@ -2597,11 +2597,24 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     tycon(name)
 }
 
-fn parse_ffi_param_tys(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<Arc<TyCon>> {
+fn parse_ffi_param_tys(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Vec<Arc<TyCon>>, Errors> {
     assert_eq!(pair.as_rule(), Rule::ffi_param_tys);
-    pair.into_inner()
-        .map(|pair| parse_ffi_c_fun_ty(pair, ctx))
-        .collect()
+    let mut param_tys = vec![];
+    for pair in pair.into_inner() {
+        let span = Span::from_pair(&ctx.source, &pair);
+        let param_ty = parse_ffi_c_fun_ty(pair, ctx);
+        if param_ty.is_unit() {
+            return Err(Errors::from_msg_srcs(
+                "`()` stands for `void`, which a C function cannot take as a parameter. It is available as the return type.".to_string(),
+                &[&Some(span)],
+            ));
+        }
+        param_tys.push(param_ty);
+    }
+    Ok(param_tys)
 }
 
 fn parse_expr_number_lit(

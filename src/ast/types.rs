@@ -157,6 +157,13 @@ pub enum TyConVariant {
     Opaque,
 }
 
+// The names, in the `Std` namespace, of the types `TyCon::is_c_scalar` accepts. `TyCon::get_c_type`
+// maps each of them to the LLVM type C passes it as.
+const C_SCALAR_NAMES: &[&str] = &[
+    I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
+    F64_NAME, PTR_NAME,
+];
+
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     pub name: FullName,
@@ -220,49 +227,41 @@ impl TyCon {
         ty
     }
 
+    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    pub fn is_unit(self: &TyCon) -> bool {
+        self.name == make_tuple_name_abs(0)
+    }
+
+    // Whether a value of this type crosses to C as one scalar: an integer, a floating point
+    // number, or a pointer, which C and Fix lay down the same way. These are the types a C
+    // function signature can name, and the types an exported Fix function can exchange.
+    pub fn is_c_scalar(self: &TyCon) -> bool {
+        self.name.namespace == NameSpace::new_str(&[STD_NAME])
+            && C_SCALAR_NAMES.contains(&self.name.name.as_str())
+    }
+
     // Convert "()", "I8", "Ptr", etc to corresponding c_type.
     // Returns none if it is VoidType.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
-        if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
-            panic!("call get_c_type for {}", self.to_string())
-        }
-        if self.name == make_tuple_name_abs(0) {
+        if self.is_unit() {
             return None;
         }
-        if self.name.name == I8_NAME {
-            return Some(ctx.i8_type().as_basic_type_enum());
-        }
-        if self.name.name == U8_NAME {
-            return Some(ctx.i8_type().as_basic_type_enum());
-        }
-        if self.name.name == I16_NAME {
-            return Some(ctx.i16_type().as_basic_type_enum());
-        }
-        if self.name.name == U16_NAME {
-            return Some(ctx.i16_type().as_basic_type_enum());
-        }
-        if self.name.name == I32_NAME {
-            return Some(ctx.i32_type().as_basic_type_enum());
-        }
-        if self.name.name == U32_NAME {
-            return Some(ctx.i32_type().as_basic_type_enum());
-        }
-        if self.name.name == I64_NAME {
-            return Some(ctx.i64_type().as_basic_type_enum());
-        }
-        if self.name.name == U64_NAME {
-            return Some(ctx.i64_type().as_basic_type_enum());
-        }
-        if self.name.name == F32_NAME {
-            return Some(ctx.f32_type().as_basic_type_enum());
-        }
-        if self.name.name == F64_NAME {
-            return Some(ctx.f64_type().as_basic_type_enum());
-        }
-        if self.name.name == PTR_NAME {
-            return Some(ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum());
-        }
-        panic!("call get_c_type for {}", self.to_string())
+        assert!(
+            self.is_c_scalar(),
+            "call get_c_type for {}",
+            self.to_string()
+        );
+        Some(match self.name.name.as_str() {
+            I8_NAME | U8_NAME => ctx.i8_type().as_basic_type_enum(),
+            I16_NAME | U16_NAME => ctx.i16_type().as_basic_type_enum(),
+            I32_NAME | U32_NAME => ctx.i32_type().as_basic_type_enum(),
+            I64_NAME | U64_NAME => ctx.i64_type().as_basic_type_enum(),
+            F32_NAME => ctx.f32_type().as_basic_type_enum(),
+            F64_NAME => ctx.f64_type().as_basic_type_enum(),
+            PTR_NAME => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
+            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            name => unreachable!("no C type for `{}`", name),
+        })
     }
 
     pub fn is_singned_intger(self: &TyCon) -> bool {
@@ -1065,7 +1064,7 @@ impl TypeNode {
     // Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(&self) -> bool {
         match self.toplevel_tycon() {
-            Some(tc) => tc.name == make_tuple_name_abs(0),
+            Some(tc) => tc.is_unit(),
             None => false,
         }
     }
