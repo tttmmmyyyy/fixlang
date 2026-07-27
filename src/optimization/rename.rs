@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::{expr_let_typed, expr_var, var_var, ExprNode},
@@ -8,6 +7,7 @@ use crate::{
     },
     misc::{Map, Set},
 };
+use std::sync::Arc;
 
 /// Replaces the free occurrences of the names of `map` with the names they map to. A local name of
 /// `expr` that would capture one of the new names is renamed apart first.
