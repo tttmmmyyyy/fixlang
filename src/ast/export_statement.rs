@@ -10,7 +10,7 @@ use crate::constants::{
     U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::error::Errors;
-use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, make_unit_ty, run_io};
+use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, run_io};
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
@@ -100,7 +100,7 @@ impl ExportStatement {
             .iter()
             .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
             .collect::<Vec<_>>();
-        let func_ty = if is_unit_type(&codom) {
+        let func_ty = if codom.is_unit() {
             gc.context.void_type().fn_type(&dom_llvm_tys, false)
         } else {
             codom
@@ -159,7 +159,7 @@ impl ExportStatement {
         }
 
         // Return the result.
-        if is_unit_type(&codom) {
+        if codom.is_unit() {
             gc.builder().build_return(None).unwrap();
         } else {
             let ret_val = fix_value.value(gc);
@@ -212,11 +212,6 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
         return head + ", because the width of `_Bool` in C is implementation-defined. Use `U8` or `CInt`, and convert it on the Fix side.";
     }
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
-}
-
-// Whether `ty` is the unit type `()`.
-fn is_unit_type(ty: &Arc<TypeNode>) -> bool {
-    ty.to_string() == make_unit_ty().to_string()
 }
 
 // A type to represent the type of an exported Fix value.
@@ -292,7 +287,7 @@ impl ExportedFunctionType {
                 ));
             }
         }
-        if !is_unit_type(&codom) && !is_exportable_type(&codom, type_env) {
+        if !codom.is_unit() && !is_exportable_type(&codom, type_env) {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
                 &[src],

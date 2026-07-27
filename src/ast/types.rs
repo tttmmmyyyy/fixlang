@@ -1062,6 +1062,14 @@ impl TypeNode {
         return is_punched_array_tycon(tc.as_ref());
     }
 
+    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    pub fn is_unit(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.name == make_tuple_name_abs(0),
+            None => false,
+        }
+    }
+
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
