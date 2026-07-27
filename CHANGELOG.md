@@ -24,7 +24,7 @@
 
 #### Language
 
-- `FFI_EXPORT` now rejects a value whose type Fix cannot pass under the C ABI, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which cross as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected: C decides how to pass one from its size together with the class of each of its eightbytes (x86-64), or from whether its members share one floating point type (AArch64), so the shapes that happened to agree differed between targets. `Bool` is rejected as well, because the width C gives `_Bool` is implementation-defined. To exchange an aggregate, take a `Ptr` to memory the foreign side owns and copy through it; see the FFI section of `Document.md`.
+- `FFI_EXPORT` now rejects a value whose type the C ABI cannot carry, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which the foreign language receives as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected, because how C passes one depends on the target; `Bool` is rejected because C leaves the width of `_Bool` to the implementation. To exchange an aggregate, take a `Ptr` to memory the foreign language owns and copy through it; see the FFI section of `Document.md`.
 
 #### Std
 

@@ -2230,24 +2230,28 @@ FFI_EXPORT[x, f]; // int f(int);
 
 #### Types an exported function can exchange
 
-The exported function follows the C ABI of the target, so the type of the exported value is restricted to the types Fix can pass under that ABI:
+Give the exported value a type the C ABI can carry:
 
 * Integers: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`
 * Floating point numbers: `F32`, `F64`
 * Pointers: `Ptr`
 * The C numeric types listed for `FFI_CALL` above, such as `CInt`, which are aliases of the types above
-* Boxed types, which reach the foreign language as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
+* Boxed types, which the foreign language receives as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
 * `()`, available as the result type, where it becomes `void`
 
-Any other type is rejected when the program is compiled:
+Any other type is rejected when the program is compiled.
 
-* A struct, a tuple or a union is rejected. C decides how to pass such a value from its size together with the class of each of its eightbytes (on x86-64), or from whether all of its members share one floating point type (on AArch64), and the resulting rule differs between targets. Exchange such a value through a pointer, as described below.
-* `Bool` is rejected, because the width C gives `_Bool` is implementation-defined and a caller may declare the parameter as `int` instead. Take a `U8` or a `CInt` and convert it on the Fix side.
-* `String` and `Array` are structs, so they are rejected as well. Wrap them in a boxed struct such as `Std::Box` to exchange them as an opaque pointer, or copy their bytes through a pointer.
+* To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described below. How C passes a structure depends on the target, so Fix asks you to name the memory instead.
+* For a truth value, take a `U8` or a `CInt` and convert it on the Fix side. C leaves the width of `_Bool` to the implementation, and a caller is free to declare the parameter as `int`.
+* `String` and `Array` are structs. Wrap one in a boxed struct such as `Std::Box` to hand it over as an opaque pointer, or copy its bytes through a pointer.
 
 #### Returning more than one value
 
-An exported function returns one value, so hand several values back through memory the foreign language owns: take a `Ptr` to it and copy into it. Fix reaches the bytes of an aggregate through a boxed value — `Std::FFI::borrow_boxed_io` hands out a pointer to read from, and `Std::FFI::mutate_boxed_io` a pointer to write to — and the payload of a boxed struct is laid out like a C structure with the same fields, as described in [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c). For an array, `Std::Array::borrow_elements` and `Std::Array::mutate_elements` give a pointer to the element buffer in the same way, as described in [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c).
+An exported function returns one value, so to hand several values back, let the foreign language own the memory: take a `Ptr` to it and copy into it.
+
+To copy, you need a pointer to the Fix side of the exchange as well. For a boxed value, `Std::FFI::borrow_boxed_io` gives a pointer to read from and `Std::FFI::mutate_boxed_io` a pointer to write to; for an array's elements, `Std::Array::borrow_elements` and `Std::Array::mutate_elements` do the same. The fields of a boxed struct are laid out like the fields of a C structure declared in the same order, so copying the bytes across is enough. (See [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c) and [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c).)
+
+Fix has no `sizeof` operator, so take the number of bytes to copy as an argument, and pass `sizeof(struct pair)` from C.
 
 ```
 type Pair = box struct { a : I64, b : F64 };
@@ -2272,8 +2276,6 @@ sum_pair = |src, size| (
 );
 FFI_EXPORT[sum_pair, sum_pair]; // double sum_pair(const struct pair* src, uint64_t size);
 ```
-
-Fix has no `sizeof` operator, so let the byte count come from the C side: declare the exported function to take it, and pass `sizeof(struct pair)` at the call. The same applies to an array's element buffer, whose length in bytes is the element count times a size only C can state.
 
 ### Managing External Resources in Fix
 
@@ -2382,10 +2384,10 @@ and a C program
 struct Vec {
     double x;
     double y;
-}
+};
 
-void access_vec(Vec* v) {
-    // Do something with / to `v->x` and `v->y`.
+void access_vec(struct Vec *v) {
+    // Read `v->x` and `v->y`. To write through the pointer, borrow it from `mutate_boxed` instead.
 }
 ```
 

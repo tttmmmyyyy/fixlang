@@ -240,23 +240,24 @@ pub fn test_export_aggregate_through_pointer() {
     // it, and Fix copies in or out through a boxed value. `borrow_boxed` and `mutate_boxed` hand
     // out a pointer to the payload of a boxed value, whose fields are laid out like the fields of
     // the corresponding C structure.
+    //
+    // The Fix source is the "Returning more than one value" example of the FFI section of
+    // `Document.md` and `Document-ja.md`.
     let source = r##"
         module Main;
 
         type Pair = box struct { a : I64, b : F64 };
 
-        // Fills the `struct pair` that `dst` points to. This is how an exported function returns
-        // more than one value.
+        // Fills the `struct pair` that `dst` points to.
         write_pair : Ptr -> U64 -> IO ();
         write_pair = |dst, size| (
             let pair = Pair { a : 10, b : 0.5 };
             pair.borrow_boxed_io(|src| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]);;
             pure()
         );
-        FFI_EXPORT[write_pair, c_write_pair];
+        FFI_EXPORT[write_pair, write_pair]; // void write_pair(struct pair* dst, uint64_t size);
 
-        // Reads the `struct pair` that `src` points to. This is how an exported function takes an
-        // aggregate argument.
+        // Reads the `struct pair` that `src` points to.
         sum_pair : Ptr -> U64 -> IO F64;
         sum_pair = |src, size| (
             let pair = Pair { a : 0, b : 0.0 };
@@ -265,7 +266,7 @@ pub fn test_export_aggregate_through_pointer() {
             );
             pure $ pair.@a.to_F64 + pair.@b
         );
-        FFI_EXPORT[sum_pair, c_sum_pair];
+        FFI_EXPORT[sum_pair, sum_pair]; // double sum_pair(const struct pair* src, uint64_t size);
 
         main : IO ();
         main = (
@@ -279,16 +280,16 @@ pub fn test_export_aggregate_through_pointer() {
 
         struct pair { int64_t a; double b; };
 
-        void c_write_pair(struct pair *dst, uint64_t size);
-        double c_sum_pair(const struct pair *src, uint64_t size);
+        void write_pair(struct pair *dst, uint64_t size);
+        double sum_pair(const struct pair *src, uint64_t size);
 
         int run_c() {
             struct pair p = {0, 0.0};
-            c_write_pair(&p, sizeof(p));
+            write_pair(&p, sizeof(p));
             if (p.a != 10 || p.b != 0.5) { return 1; }
 
             struct pair q = {3, 0.25};
-            if (c_sum_pair(&q, sizeof(q)) != 3.25) { return 1; }
+            if (sum_pair(&q, sizeof(q)) != 3.25) { return 1; }
 
             return 0;
         }
@@ -382,6 +383,129 @@ pub fn test_export_boxed_value_and_reference_counting_funptrs() {
         }
     "##;
     test_source_with_c(&source, &c_source, function_name!());
+}
+
+// The FFI section of `Document.md` and `Document-ja.md` prints the programs below for the reader
+// to copy. Running them here keeps the manual honest: a change to the language or to the standard
+// library that invalidates an example fails the suite instead of a reader's build.
+
+#[test]
+pub fn test_document_example_boxed_array_across_ffi() {
+    // Handing an array to the foreign language as a retained pointer, and reading an element back
+    // through it. `get_fix_array_element` takes over the responsibility to release, so C calls it
+    // once for the one pointer it holds.
+    let source = r##"
+        module Main;
+
+        create_fix_array : IO Ptr;
+        create_fix_array = (
+            let arr = Box::make([1,2,3,4,5]);
+            arr.boxed_to_retained_ptr
+        );
+        FFI_EXPORT[create_fix_array, create_fix_array];
+
+        get_fix_array_element : Ptr -> I64 -> IO I64;
+        get_fix_array_element = |ptr, idx| (
+            let arr : Box (Array I64) = *boxed_from_retained_ptr(ptr);
+            pure $ arr.@value.@(idx)
+        );
+        FFI_EXPORT[get_fix_array_element, get_fix_array_element];
+
+        main : IO ();
+        main = (
+            let res = FFI_CALL[CInt run_c()];
+            assert_eq(|_|"C reported failure", res, 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdint.h>
+
+        void *create_fix_array(void);
+        int64_t get_fix_array_element(void *ptr, int64_t idx);
+
+        int run_c() {
+            void *arr = create_fix_array();
+            if (get_fix_array_element(arr, 2) != 3) { return 1; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_document_example_borrow_boxed_struct_from_c() {
+    // Reading the fields of a boxed Fix struct from C through the pointer `borrow_boxed` lends.
+    // The C side records what it saw so that Fix can check the fields arrived at the offsets a C
+    // structure with the same fields would put them at.
+    let source = r##"
+        module Main;
+
+        type Vec = box struct { x : CDouble, y : CDouble };
+
+        main : IO ();
+        main = (
+            let vec = Vec { x : 3.0, y : 4.0 };
+            eval vec.borrow_boxed(|p| FFI_CALL[() access_vec(Ptr), p]);
+            let sum = *FFI_CALL_IO[CDouble seen_sum()];
+            assert_eq(|_|"C saw other fields", sum, 7.0);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        struct Vec {
+            double x;
+            double y;
+        };
+
+        static double sum;
+
+        void access_vec(struct Vec *v) {
+            sum = v->x + v->y;
+        }
+
+        double seen_sum() {
+            return sum;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_document_example_array_elements_from_c() {
+    // Passing an array's element buffer to C, for writing through `mutate_elements` and for
+    // reading through `borrow_elements`.
+    let source = r##"
+        module Main;
+
+        fill_bytes : U8 -> Array U8 -> Array U8;
+        fill_bytes = |c, arr| (
+            let n = arr.@size.c_size_t;
+            let (arr, _) = arr.mutate_elements(|p|
+                pure $ FFI_CALL[Ptr memset(Ptr, CInt, CSizeT), p, c.c_int, n]
+            );
+            arr
+        );
+
+        contains_byte : U8 -> Array U8 -> Bool;
+        contains_byte = |c, arr| (
+            let n = arr.@size.c_size_t;
+            let found = arr.borrow_elements(|p|
+                FFI_CALL[Ptr memchr(Ptr, CInt, CSizeT), p, c.c_int, n]
+            );
+            found != nullptr
+        );
+
+        main : IO ();
+        main = (
+            let arr = Array::fill(4, 0_U8).fill_bytes(65_U8);
+            assert_eq(|_|"fill_bytes wrote other bytes", arr, [65_U8, 65_U8, 65_U8, 65_U8]);;
+            assert(|_|"contains_byte missed a byte that is there", arr.contains_byte(65_U8));;
+            assert(|_|"contains_byte found a byte that is absent", !arr.contains_byte(66_U8));;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
