@@ -11,7 +11,7 @@
 #[cfg(test)]
 mod tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command, wait_within};
-    use std::{path::PathBuf, process::Stdio, time::Duration};
+    use std::{path::PathBuf, process::Stdio, thread::sleep, time::Duration};
     use tempfile::TempDir;
 
     /// Absolute path to the LSP `cases/` directory.
@@ -49,7 +49,7 @@ mod tests {
             .expect("Failed to spawn fix language-server");
 
         // Give the server time to start and block on its stdin read loop.
-        std::thread::sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(500));
 
         // Sanity check: the server should still be running here (blocked
         // waiting for input), not exited for some unrelated reason.

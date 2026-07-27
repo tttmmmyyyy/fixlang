@@ -7,6 +7,8 @@ use crate::{
     parse::parser::check_grammar_accepts,
 };
 use std::{
+    env,
+    ffi::OsString,
     fs::{self, remove_file, File},
     io::{self, Write},
     path::{Path, PathBuf},
@@ -46,7 +48,7 @@ fn build_fix() {
 /// running concurrently in several worktrees exercise their own build and
 /// never share an install location.
 fn fix_binary_dir() -> PathBuf {
-    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+    let target_dir = env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"));
     target_dir.join("release")
@@ -61,12 +63,12 @@ fn fix_binary_path() -> PathBuf {
 /// look `fix` up by name from its own subprocess (e.g. cp-library's IO test
 /// runs `fix run` on a generated program), and such a lookup has to find the
 /// binary under test.
-fn path_env_with_fix_binary_dir() -> std::ffi::OsString {
+fn path_env_with_fix_binary_dir() -> OsString {
     let mut dirs = vec![fix_binary_dir()];
-    if let Some(path) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&path));
+    if let Some(path) = env::var_os("PATH") {
+        dirs.extend(env::split_paths(&path));
     }
-    std::env::join_paths(dirs).expect("The build directory path contains a path separator.")
+    env::join_paths(dirs).expect("The build directory path contains a path separator.")
 }
 
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
@@ -310,7 +312,7 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
 }
 
 // Copy directory recursively
-pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
+pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;

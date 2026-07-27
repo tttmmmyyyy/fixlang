@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{expr_let_typed, expr_var, var_var, ExprNode},
@@ -174,7 +173,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -182,7 +181,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -240,7 +239,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -252,7 +251,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let mut params = expr.get_lam_params();
         assert_eq!(
             params.len(),
@@ -291,7 +290,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let bound = expr.get_let_bound();
         let bound_res = self.traverse(&bound);
         let changed = bound_res.changed;
@@ -336,7 +335,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -348,7 +347,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         let mut changed;
 
         let cond = expr.get_match_cond();
@@ -390,7 +389,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -406,7 +405,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -422,7 +421,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
@@ -438,7 +437,7 @@ impl ExprVisitor for Substitutor {
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
