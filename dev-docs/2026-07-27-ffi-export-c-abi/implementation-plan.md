@@ -86,9 +86,31 @@ codom.get_embedded_type(gc, &vec![]).fn_type(&dom_llvm_tys, false)
 - `test_export_unbox_struct_arg` は削除する。16 バイトの引数がたまたま一致することを固定しているテストであり、この変更で拒否される形になる。
 - 回避策のテスト: `Ptr` を受け取り `FFI_CALL` の `memcpy` で C 側の構造体に書き込む形が、C 側から見て正しい値になること。
 
+## 参照カウント用の関数ポインタのテスト
+
+`Std::FFI::get_funptr_retain` と `get_funptr_release` は、外部言語から `void (*)(void*)` として呼ぶための関数ポインタを返す。ドキュメントはこれで参照カウンタが増減すると約束しているが、既存のテストは**取得までしか見ていない**。
+
+| 既存のテスト | 見ているもの |
+| --- | --- |
+| `test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1` / `_2` | 呼べて型が付くこと |
+| `test_get_funptr_retain_error` / `test_get_funptr_release_error` | boxed でない型に使うとコンパイルエラーになること |
+
+いずれも取得した関数ポインタを呼ばずに `pure()` で終わり、テスト自身のコメントが「実際の使用は asynctask.fix でテストされている」と外部プロジェクトに委ねている。
+
+`FFI_EXPORT` の型制限で FFI 周辺のテストを触るので、ここも埋める。`test_source_with_c` で C 側から関数ポインタを呼び、次を確かめる。
+
+- retain を呼ぶと参照カウンタが増え、Fix 側が手放しても値が生き続けること。`boxed_from_retained_ptr` で戻した値が読めること
+- release を必要回数呼ぶと解放されること。解放の観測には `Destructor` を使い、dtor が走ったことを `IORef` に記録する
+- ドキュメントの手順（責任の回数は retain N 回に対して N+1 回）どおりに使えば辻褄が合うこと
+- valgrind で leak も double free も出ないこと
+
 ## ドキュメント
 
-`Document.md` と `Document-ja.md` の `FFI_EXPORT` の節に、export できる型の一覧と、集約型を渡したいときの `Ptr` + `memcpy` の形を書く。
+`Document.md` と `Document-ja.md` の FFI の節を直す。
+
+- `FFI_EXPORT` できる型の一覧と、拒否される型（集約型・`Bool`）
+- **多値を返す方法**: C 側で確保した領域のポインタを引数で受け取り、`FFI_CALL` の `memcpy` で書き込む形。Fix の unbox struct は非 packed の LLVM 構造体なので、同じフィールド順の C 構造体とレイアウトが一致することを述べる。コード例を両言語で置く
+- `get_funptr_retain` / `get_funptr_release` の節は、上のテストで確かめた手順と一致しているかを読み直す
 
 ## 将来: 集約型を渡せるようにする場合
 
