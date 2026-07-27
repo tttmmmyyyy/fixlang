@@ -211,7 +211,7 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     {
         return head + ", because the width of `_Bool` in C is implementation-defined. Use `U8` or `CInt`, and convert it on the Fix side.";
     }
-    head + ". An exported function can exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, and boxed values; the C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to a region the foreign side owns and copy through it by `FFI_CALL[Ptr memcpy(Ptr, Ptr, U64), ...]`."
+    head + ". An exported function can exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, and boxed values; the C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to a region the foreign side owns and copy through it by `FFI_CALL[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]`."
 }
 
 // Whether `ty` is the unit type `()`.
