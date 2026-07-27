@@ -461,8 +461,8 @@ mod tests {
             (
                 let first = arr.@(0);
                 let second = arr.@(1) + first;
-                let sized = arr.@size + second;
-                |a : Array I64| a.assert_unique_array(|_|"the pushed array is shared").set(0, sized)
+                let total = arr.@size + second;
+                |a : Array I64| a.assert_unique_array(|_|"the pushed array is shared").set(0, total)
             )(arr).to_iter.sum
         );
 
