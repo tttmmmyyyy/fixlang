@@ -100,8 +100,9 @@ impl PushedArg {
     /// Prepares an argument for being pushed into the subexpressions of a function.
     ///
     /// # Arguments
-    /// * `func` — the function the application is pushed into. A fresh name avoids every name
-    ///   `func` mentions, free or shadowing.
+    /// * `func` — the function the application is pushed into. A fresh name avoids the names free in
+    ///   `func`, which is where it has to stand: it is placed at the application's argument position,
+    ///   outside every binder `func` carries.
     fn new(arg: &Arc<ExprNode>, func: &Arc<ExprNode>) -> Self {
         if arg.is_var() {
             return PushedArg {
