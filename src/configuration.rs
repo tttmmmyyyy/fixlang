@@ -16,6 +16,8 @@ use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fs::{self, File};
 use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
@@ -62,8 +64,8 @@ pub enum ValgrindTool {
     // DataRaceDetection,
 }
 
-impl std::fmt::Display for ValgrindTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ValgrindTool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValgrindTool::None => write!(f, "none"),
             ValgrindTool::MemCheck => write!(f, "memcheck"),
@@ -299,8 +301,8 @@ pub enum FixOptimizationLevel {
     Experimental, // Performs optimizations that are still unstable.
 }
 
-impl std::fmt::Display for FixOptimizationLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FixOptimizationLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
             FixOptimizationLevel::Basic => write!(f, "{}", OPTIMIZATION_LEVEL_BASIC),
@@ -781,7 +783,7 @@ int main() {
             // Create parent folders
             let check_c_types_path = PathBuf::from(check_c_types_path.clone());
             let parent = check_c_types_path.parent().unwrap();
-            if let Err(e) = std::fs::create_dir_all(parent) {
+            if let Err(e) = fs::create_dir_all(parent) {
                 return Err(Errors::from_msg(format!(
                     "Failed to create directory \"{}\": {}",
                     parent.to_string_lossy().to_string(),
@@ -791,11 +793,11 @@ int main() {
 
             let check_c_types_path_clone = check_c_types_path.clone();
             finally.defer(move || {
-                let _ = std::fs::remove_file(&check_c_types_path_clone);
+                let _ = fs::remove_file(&check_c_types_path_clone);
             });
 
             // Write the C source to the file.
-            if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
+            if let Err(e) = fs::write(&check_c_types_path, c_source) {
                 return Err(Errors::from_msg(format!(
                     "Failed to write file \"{}\": {}",
                     check_c_types_path.to_string_lossy().to_string(),
@@ -810,7 +812,7 @@ int main() {
 
         let check_c_types_exec_path_clone = check_c_types_exec_path.clone();
         finally.defer(move || {
-            let _ = std::fs::remove_file(&check_c_types_exec_path_clone);
+            let _ = fs::remove_file(&check_c_types_exec_path_clone);
         });
 
         let output = Command::new("gcc")
@@ -875,7 +877,7 @@ int main() {
     fn save_to_file(&self) -> Result<(), Errors> {
         // Open json file.
         let path = C_TYPES_JSON_PATH;
-        let file = std::fs::File::create(path);
+        let file = File::create(path);
         if let Err(e) = file {
             return Err(Errors::from_msg(format!(
                 "Failed to create \"{}\": {}",
@@ -899,7 +901,7 @@ int main() {
         if !path.exists() {
             return None;
         }
-        let file = std::fs::File::open(path);
+        let file = File::open(path);
         if file.is_err() {
             warn_msg(&format!("Failed to open \"{}\".", C_TYPES_JSON_PATH));
             return None;
