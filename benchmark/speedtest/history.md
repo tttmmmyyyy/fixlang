@@ -15,12 +15,11 @@ point `9ed0e65a` — the row before this one in `log.csv`, taken minutes earlier
 environment — the
 executed-instruction total moves from 16,384,259,453 to 16,384,259,427, or -0.0000%. No case moves by
 more than 0.05%; the largest single movement is +0.037% on `sum_by_fix`'s memory accesses, a
-300-thousand-access micro-benchmark. This is the answer to the one runtime question the change raised:
-dropping the intermediate binding makes the argument variable occur once per branch instead of once,
-which could have cost `let_elimination` its "used exactly once" condition and with it an inlining
-opportunity. It does not — every path that runs this pass runs let-elimination afterwards, and the
-binding the pass used to add is exactly what let-elimination case 1 removes, so the two shapes
-converge before code generation.
+300-thousand-access micro-benchmark. Dropping the intermediate binding makes the argument variable
+occur once per branch, which could have cost `let_elimination` its "used exactly once" condition and
+with it an inlining opportunity. It does not — every path that runs this pass runs let-elimination
+afterwards, and the binding the pass used to add is a `let` whose bound expression is a variable,
+which is exactly what let-elimination removes, so the two shapes converge before code generation.
 
 What the change buys is compile time: at `-O basic` a 15-parameter function goes from 314 seconds to
 2.8, and 25 and 40 parameters, previously out of reach, compile in 2.8 and 3.4 seconds.

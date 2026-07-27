@@ -1,8 +1,8 @@
 // Application inlining moves an application into the subexpressions of the function it applies.
 // An argument that is already a variable is moved in as it is, which is what keeps the cost linear
 // in the number of arguments pushed through a chain of `let`s — the shape uncurrying's eta
-// expansion builds for a function of many parameters. A variable that the target binds is bound to
-// a fresh name first, so moving it in leaves it referring to the same value.
+// expansion builds for a function of many parameters. A binder of the target that binds a name the
+// argument mentions is renamed away first, so the argument refers to the same value where it lands.
 
 #[cfg(test)]
 mod tests {
@@ -92,9 +92,8 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let program_path = temp_dir.path().join("many_params");
 
-        // The compiler writes its diagnostics to a file rather than a pipe, which nothing reads
-        // until the child exits — long enough to fill a pipe's buffer and block the very build
-        // being timed.
+        // The compiler's diagnostics go to a file, which the test reads once the child has exited.
+        // A pipe left unread that long fills its buffer and blocks the very build being timed.
         let log_path = temp_dir.path().join("build.log");
         let log = File::create(&log_path).expect("Failed to create the build log");
         let log_for_stderr = log

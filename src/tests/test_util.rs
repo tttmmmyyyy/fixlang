@@ -89,8 +89,8 @@ pub fn fix_command() -> Command {
 /// to run has `test_source`.
 ///
 /// The returned command is ready to spawn, and the caller adds what it needs on top — an output
-/// path, redirected streams. Building the compiler happens here rather than at spawn time, which is
-/// what lets a caller time the spawn alone.
+/// path, redirected streams. The compiler itself is built while this command is constructed, so a
+/// caller that times the spawn measures the build of `source` alone.
 pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Command {
     let src_path = dir.join("generated.fix");
     fs::write(&src_path, source).expect("Failed to write the generated source file");

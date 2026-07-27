@@ -54,10 +54,12 @@ pub struct Substitutor {
     shadowed: Set<FullName>,
 }
 
-// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
-// puts back.
+/// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
+/// puts back.
 struct ScopeBackup {
+    /// The mapping from names to expressions in force outside the binder.
     map: Map<FullName, Arc<ExprNode>>,
+    /// The local names available outside the binder.
     shadowed: Set<FullName>,
 }
 
@@ -69,10 +71,10 @@ impl Substitutor {
         }
     }
 
-    // Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
-    // stop being substituted and count as shadowed, and each local name that would capture a
-    // substituted value is given a new name. Returns that renaming together with the state that
-    // `leave_scope` puts back.
+    /// Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
+    /// stop being substituted and count as shadowed, and each local name that would capture a
+    /// substituted value is given a new name. Returns that renaming together with the state that
+    /// `leave_scope` puts back.
     fn enter_scope(
         &mut self,
         introduced_names: &Vec<FullName>,
@@ -97,7 +99,7 @@ impl Substitutor {
         (backup, rename)
     }
 
-    // Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
+    /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
     fn leave_scope(&mut self, backup: ScopeBackup) {
         self.map = backup.map;
         self.shadowed = backup.shadowed;
