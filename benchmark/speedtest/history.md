@@ -2,6 +2,18 @@
 
 Newer is above.
 
+## b8d298a0550fc15b9369694b53f9483a57f079d2
+
+The same branch with the x86-64 return-register budget corrected: `tailcc`, the convention Fix
+lambdas use there, returns five floating-point values in registers where the C convention returns
+four, so a result of exactly five floating-point leaves now comes back in registers instead of
+through the out-pointer.
+
+**Nothing moves**: the 41 cases together go from 15,866,111,410 to 15,866,111,433 instructions, 34 of
+them byte-identical and the rest within ten instructions of program startup. No case in the suite
+returns exactly five floating-point leaves, so the corrected entry changes no code here. It changes
+what a reader has to re-measure when the convention or the LLVM version changes.
+
 ## 12165c4494bf4cc806f72ec6475cc146b2b36532
 
 The `wide-return-tail-call` branch (PR #109), which keeps a Fix tail call compiled as a jump in the
