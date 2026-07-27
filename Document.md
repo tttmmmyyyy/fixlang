@@ -2241,8 +2241,8 @@ Give the exported value a type the C ABI can carry:
 
 Any other type is rejected when the program is compiled.
 
-* To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value). How C passes a structure depends on the target, so Fix asks you to name the memory instead.
-* For a truth value, take a `U8` or a `CInt` and convert it on the Fix side. C leaves the width of `_Bool` to the implementation, and a caller is free to declare the parameter as `int`.
+* To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value).
+* For a truth value, take a `U8` or a `CInt` and convert it on the Fix side.
 * `String` and `Array` are structs. Wrap one in a boxed struct such as `Std::Box` to hand it over as an opaque pointer, or copy its bytes through a pointer.
 
 #### Returning more than one value
@@ -2251,7 +2251,7 @@ An exported function returns one value, so to hand several values back, let the 
 
 To copy, you need a pointer to the Fix side of the exchange as well. For a boxed value, `Std::FFI::borrow_boxed_io` gives a pointer to read from and `Std::FFI::mutate_boxed_io` a pointer to write to; for an array's elements, `Std::Array::borrow_elements` and `Std::Array::mutate_elements` do the same. The fields of a boxed struct are laid out like the fields of a C structure declared in the same order, so copying the bytes across is enough. (See [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c) and [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c).)
 
-Fix has no `sizeof` operator, so take the number of bytes to copy as an argument, and pass `sizeof(struct pair)` from C.
+Take the number of bytes to copy as an argument, and pass `sizeof(struct pair)` from C.
 
 ```
 type Pair = box struct { a : I64, b : F64 };
@@ -2324,9 +2324,9 @@ but when you create a pointer from a boxed type value using `boxed_to_retained_p
 - Decrement the reference counter
 - Return the responsibility of decrementing the reference counter to the Fix compiler
 
-The foreign language side decrements the reference counter by calling a function pointer of type `void (*)(void*)`, passing the pointer to the value as its argument.
-`Std::FFI::get_funptr_release : [a : Boxed] Lazy a -> Ptr` returns that function pointer, so obtain it on the Fix side and hand it to the foreign language — for example, from an exported function that returns it.
+`Std::FFI::get_funptr_release : [a : Boxed] Lazy a -> Ptr` gives the function pointer, of type `void (*)(void*)`, that decrements the reference counter.
 Its argument serves only to name the type to be released, so `|_| undefined("") : T` will do when no value of type `T` is at hand.
+Hand that pointer to the foreign language — for example, from an exported function that returns it — and calling it there with the pointer to the value decrements the counter.
 
 To return the responsibility of decrementing the reference counter to the Fix compiler, pass the pointer to `boxed_from_retained_ptr`.
 
