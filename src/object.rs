@@ -909,9 +909,6 @@ impl ObjectFieldType {
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // let buf = ObjectFieldType::get_union_buf(gc, &union);
-        // let value = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        // let value = Object::new(value, elem_ty.clone());
         let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
@@ -964,11 +961,8 @@ impl ObjectFieldType {
         union: Object<'c>,
         expected_tag: IntValue<'c>,
     ) {
-        let is_unbox = union.ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
-
         // Get tag value.
-        let actual_tag = union.extract_field(gc, 0 + offset).into_int_value();
+        let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
 
         // If tag mismatch, panic.
         let is_tag_mismatch = gc
@@ -1821,22 +1815,15 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, 0);
                 // Get pointer to control block.
                 let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
-                let ctrl_blk_ty = control_block_type(gc);
 
                 // Initialize the reference counter 1.
-                let ptr_to_refcnt = gc
-                    .builder()
-                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 0, "ptr_to_refcnt")
-                    .unwrap();
+                let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_ctrl_blk);
                 gc.builder()
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
                     .unwrap();
 
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
-                let ptr_to_refcnt_state = gc
-                    .builder()
-                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 1, "ptr_to_refcnt_state")
-                    .unwrap();
+                let ptr_to_refcnt_state = gc.get_refcnt_state_ptr(ptr_to_ctrl_blk);
                 gc.builder()
                     .build_store(
                         ptr_to_refcnt_state,

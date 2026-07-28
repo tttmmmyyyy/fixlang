@@ -7624,19 +7624,6 @@ impl LLVMGen for InlineLLVMPtrEqBody {
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
-        // let diff = gc
-        //     .builder()
-        //     .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr")
-        //     .unwrap();
-        // let value = gc
-        //     .builder()
-        //     .build_int_compare(
-        //         IntPredicate::EQ,
-        //         diff,
-        //         diff.get_type().const_zero(),
-        //         EQ_TRAIT_EQ_NAME,
-        //     )
-        //     .unwrap();
         let value = gc
             .builder()
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME)
