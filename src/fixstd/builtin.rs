@@ -2033,48 +2033,47 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Give a uniquely owned array room for `new_cap` elements and update its capacity field. The
-// elements are not touched: `realloc` preserves the block's contents, often growing it in place. An
-// array of capacity zero owns no block, so it is given a fresh one. The caller must ensure the array
-// is unique.
-fn realloc_array<'c, 'm>(
+// Give a uniquely owned array room for exactly `new_cap` elements and update its capacity field. The
+// elements it holds are carried over. The caller must ensure the array is unique, and that `new_cap`
+// covers the elements it wants to keep.
+fn set_array_capacity<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     new_cap: IntValue<'c>,
 ) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let grow_func = grow_array_storage_function(gc, elem_ty);
+    let resize_func = resize_array_storage_function(gc, elem_ty);
     let storage_ptr = get_array_storage(gc, &array).value(gc);
     let cap = array.extract_field(gc, ARRAY_CAP_IDX);
-    let grown_storage_ptr = gc
+    let resized_storage_ptr = gc
         .builder()
         .build_call(
-            grow_func,
+            resize_func,
             &[storage_ptr.into(), cap.into(), new_cap.into()],
-            "grow_array_storage",
+            "resize_array_storage",
         )
         .unwrap()
         .try_as_basic_value()
         .left()
         .unwrap();
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, grown_storage_ptr);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, resized_storage_ptr);
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
 
-// The function `realloc_array` calls for element type `elem_ty`: it takes an array's storage, its
+// The function `set_array_capacity` calls for element type `elem_ty`: it takes an array's storage, its
 // capacity and the capacity wanted, and returns the storage to use.
 //
-// It is a function, and one the inliner keeps out of its caller, because growing an array is a cold
-// path that the append loop around it would otherwise pay for: every block this needs becomes
-// another edge into the merge point each append flows through, and the loop loses registers to the
-// wider phis there. Measured on a sieve that appends into a pre-reserved array, inlining it costs
-// about 1.4% of the whole program.
-fn grow_array_storage_function<'c, 'm>(
+// It is a function, and one the inliner keeps out of its caller, because changing an array's capacity
+// is a cold path that the append loop around it would otherwise pay for: every block this needs
+// becomes another edge into the merge point each append flows through, and the loop loses registers
+// to the wider phis there. Measured on a sieve that appends into a pre-reserved array, inlining it
+// costs about 1.4% of the whole program.
+fn resize_array_storage_function<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
 ) -> FunctionValue<'c> {
     let storage_ty = make_array_storage_ty(elem_ty.clone());
-    let name = format!("grow_array_storage#{}", storage_ty.hash());
+    let name = format!("resize_array_storage#{}", storage_ty.hash());
     if let Some(func) = gc.module.get_function(&name) {
         return func;
     }
@@ -2156,7 +2155,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
 
         if !self.force_unique {
-            return realloc_array(gc, array, new_cap);
+            return set_array_capacity(gc, array, new_cap);
         }
 
         // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
@@ -2172,7 +2171,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let resized = realloc_array(gc, array.clone(), new_cap);
+        let resized = set_array_capacity(gc, array.clone(), new_cap);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 

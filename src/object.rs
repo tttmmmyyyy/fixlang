@@ -1538,7 +1538,7 @@ pub fn alloc_array_storage<'c, 'm>(
 // element access addresses an index below the capacity, so no read and no write reaches the block.
 // Such an array is therefore treated as uniquely owned — `Array::_unsafe_is_storage_unique` reports
 // it unique — and the one operation that would touch the block itself, raising the capacity, gives
-// the array a block of its own instead (`realloc_array`).
+// the array a block of its own instead (`set_array_capacity`).
 //
 // The block is an LLVM constant, so it lands in read-only memory and a write that escapes the
 // reasoning above stops the program where it happens instead of corrupting every empty array in it.
