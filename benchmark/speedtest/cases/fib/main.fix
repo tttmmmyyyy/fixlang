@@ -6,9 +6,9 @@ import Std::{I64, IO, Debug::assert_eq, IO::get_args, Monad::pure, Array::@size}
 // cross-language benchmark suites all carry. Nothing here allocates or touches an
 // array, so the cost is the call sequence itself.
 //
-// `n` comes from the argument count rather than a literal, so the whole call tree
-// cannot be folded to a constant while the assertion still holds: the case is run
-// with no arguments, and `get_args` then yields the program name alone.
+// `n` comes from the argument count, which keeps the call tree from folding to a
+// constant: the case runs with no arguments, so `get_args` yields the program name
+// alone and `n` is 34.
 fib : I64 -> I64;
 fib = |n| (
     if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
