@@ -34,7 +34,8 @@ pub fn rename_free_name(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) ->
     expr
 }
 
-// Substitute a free name of an expression with another expression, i.e., computes `{expr0}[x:={expr1}]`.
+/// Replaces the free occurrences of `from` in `expr` with the expression `to`, i.e. computes
+/// `{expr}[{from} := {to}]`.
 pub fn substitute_free_name(
     expr: &Arc<ExprNode>,
     from: &FullName,
@@ -106,7 +107,7 @@ impl Substitutor {
     ) -> Map<FullName, FullName> {
         // If the local name being introduced belongs to free names of values of `self.map`, we need to change the local name to something else.
         // The conditions that the new name must satisfy are:
-        // - It must not conflict with `self.to_names`.
+        // - It must not conflict with `to_names`.
         // - It must not conflict with the free names of this expression.
         // - Additionally, the local names should not conflict with each other.
 
@@ -149,6 +150,8 @@ impl Substitutor {
 }
 
 impl ExprVisitor for Substitutor {
+    /// Replaces a variable occurrence with the expression its name maps to, giving the replacement
+    /// the occurrence's type when it carries none of its own.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var().clone();
 
@@ -180,6 +183,9 @@ impl ExprVisitor for Substitutor {
         StartVisitResult::VisitChildren
     }
 
+    /// Substitutes the free names an inline-LLVM node reads: a name mapped to another name is
+    /// renamed in place, and a name mapped to a general expression becomes a `let` wrapped around
+    /// the node.
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // A parent expression keeps the subexpression it rebuilt only when the subexpression's
         // traversal reports a change, so every rewrite below has to be recorded in `changed`.
@@ -459,7 +465,7 @@ impl ExprVisitor for Substitutor {
     }
 }
 
-// Generate new names that is not in the set `ng_list`.
+/// Generates `n` fresh names, each of which is absent from `ng_list`.
 pub fn generate_new_names(ng_list: &Set<FullName>, n: usize) -> Vec<FullName> {
     generate_new_names_pred(|name| ng_list.contains(name), n)
 }
