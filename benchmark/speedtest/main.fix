@@ -181,6 +181,16 @@ main = (
         // Add to the log.
         let log = log.set(inst, log.@size - 1, bench.@(0));
         let log = log.set(mem, log.@size - 1, bench.@(1));
+        // Hardware counters that cachegrind's cache model cannot express: accesses split
+        // across a cache line, which cost real time, and cycles. A machine without the
+        // counters leaves both columns empty instead of failing the run.
+        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
+        let log = if perf_code != 0_U8 { log } else {
+            let perf = perf.strip_spaces.split(",").to_array;
+            if perf.@size < 2 { log };
+            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
+            log.set(case_name + "-cycles", log.@size - 1, perf.@(1))
+        };
         // Change back to the parent directory.
         ez_cd(config, "..");;
         log.pure
