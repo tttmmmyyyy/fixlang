@@ -17,8 +17,8 @@ main = (
     let t0 = *FFI_CALL_IO[I64 mono_nanos()];
     // `seed_i64` is an opaque identity ordered after t0, so `fib` cannot be
     // hoisted before the start timestamp.
-    let n2 = *FFI_CALL_IO[I64 seed_i64(I64), n];
-    let ans = fib(n2);
+    let n_opaque = *FFI_CALL_IO[I64 seed_i64(I64), n];
+    let ans = fib(n_opaque);
     // `sink_then_mono` consumes `ans`, so `fib` must finish before t1.
     let t1 = *FFI_CALL_IO[I64 sink_then_mono(I64), ans];
 

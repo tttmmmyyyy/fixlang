@@ -48,20 +48,20 @@ def parse_history(path):
     if not path.exists():
         return {}
     entries = {}
-    current, buf = None, []
+    current_hash, buf = None, []
 
     def flush():
-        if current is None:
+        if current_hash is None:
             return
         text = "\n".join(buf).strip()
-        entries[current] = render_markdown(text) if text else ""
+        entries[current_hash] = render_markdown(text) if text else ""
 
     for line in path.read_text(encoding="utf-8").splitlines():
         m = re.match(r"^##\s+([0-9a-f]{7,40})\s*$", line)
         if m:
             flush()
-            current, buf = m.group(1), []
-        elif current is not None:
+            current_hash, buf = m.group(1), []
+        elif current_hash is not None:
             buf.append(line)
     flush()
     return entries
@@ -239,7 +239,7 @@ const fmt = (v) => v >= 1e9 ? (v / 1e9).toFixed(2) + "G"
                  : v >= 1e3 ? (v / 1e3).toFixed(1) + "k" : String(Math.round(v));
 
 let metricKey = Object.keys(DATA.metrics)[0];
-let only = null;      // the single case shown, or null for all of them
+let onlyCase = null;  // the single case shown, or null for all of them
 let selected = null;  // the commit whose notes the pane shows
 
 function seriesOf(metric) {
@@ -262,7 +262,7 @@ function seriesOf(metric) {
   return out;
 }
 
-const visible = (s) => only === null || s.name === only;
+const visible = (s) => onlyCase === null || s.name === onlyCase;
 
 function scaleY(series, kind) {
   let lo = Infinity, hi = -Infinity;
@@ -272,11 +272,12 @@ function scaleY(series, kind) {
   }
   if (!isFinite(lo)) { lo = 1; hi = 1; }
   if (kind === "ratio") { lo = Math.min(lo, 0.8); hi = Math.max(hi, 1.25); }
-  const pad = Math.max((Math.log10(hi) - Math.log10(lo)) * 0.12, 0.05);
-  const l0 = Math.log10(lo) - pad, l1 = Math.log10(hi) + pad;
+  const logPad = Math.max((Math.log10(hi) - Math.log10(lo)) * 0.12, 0.05);
+  const logLo = Math.log10(lo) - logPad, logHi = Math.log10(hi) + logPad;
   // A zero sits below the axis; park it on the floor so the line stays continuous.
-  return { toY: (v) => PAD.t + PLOT_H * (1 - (Math.log10(Math.max(v, 10 ** l0)) - l0) / (l1 - l0)),
-           l0, l1 };
+  return { toY: (v) =>
+             PAD.t + PLOT_H * (1 - (Math.log10(Math.max(v, 10 ** logLo)) - logLo) / (logHi - logLo)),
+           logLo, logHi };
 }
 
 function render() {
@@ -285,13 +286,13 @@ function render() {
   svg.textContent = "";
   const series = seriesOf(metric);
   const n = DATA.commits.length;
-  const xs = (i) => PAD.l + (n === 1 ? PLOT_W / 2 : (PLOT_W * i) / (n - 1));
-  const { toY, l0, l1 } = scaleY(series, metric.kind);
+  const xAt = (i) => PAD.l + (n === 1 ? PLOT_W / 2 : (PLOT_W * i) / (n - 1));
+  const { toY, logLo, logHi } = scaleY(series, metric.kind);
 
   const grid = el("g", { class: "grid" }, svg);
   const axis = el("g", { class: "axis" }, svg);
-  const step = (l1 - l0) > 2.5 ? 1 : (l1 - l0) > 1 ? 0.5 : 0.25;
-  for (let e = Math.ceil(l0 / step) * step; e <= l1; e += step) {
+  const step = (logHi - logLo) > 2.5 ? 1 : (logHi - logLo) > 1 ? 0.5 : 0.25;
+  for (let e = Math.ceil(logLo / step) * step; e <= logHi; e += step) {
     const v = 10 ** e, y = toY(v);
     if (y < PAD.t - 1 || y > PAD.t + PLOT_H + 1) continue;
     el("line", { x1: PAD.l, y1: y, x2: PAD.l + PLOT_W, y2: y }, grid);
@@ -305,16 +306,16 @@ function render() {
   for (const s of series) {
     if (!visible(s)) continue;
     const pts = [];
-    s.values.forEach((v, i) => { if (v !== null) pts.push(`${xs(i)},${toY(v)}`); });
+    s.values.forEach((v, i) => { if (v !== null) pts.push(`${xAt(i)},${toY(v)}`); });
     if (!pts.length) continue;
     const d = "M" + pts.join("L");
     el("path", { class: "serie", stroke: s.color, d, "data-name": s.name }, lines);
     const hit = el("path", { class: "hit", d, "data-name": s.name }, lines);
-    hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xs));
+    hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xAt));
     hit.addEventListener("mouseleave", clearHover);
     // Clicking a line selects the commit it was clicked over, as clicking its tick would.
     hit.addEventListener("click", (ev) => {
-      const i = nearestIndex(ev, s, xs);
+      const i = nearestIndex(ev, s, xAt);
       selected = i;
       render();
       showHistory(i);
@@ -327,7 +328,7 @@ function render() {
     const g = el("g", {
       class: "xtick" + (c.history ? " has-history" : "") + (selected === i ? " on" : ""),
     }, ticks);
-    const x = xs(i), y = PAD.t + PLOT_H;
+    const x = xAt(i), y = PAD.t + PLOT_H;
     el("line", { x1: x, y1: y, x2: x, y2: y + 5, stroke: "var(--grid)" }, g);
     const t = el("text", {
       x: 0, y: 0, transform: `translate(${x} ${y + 10}) rotate(58)`, "text-anchor": "start",
@@ -363,20 +364,20 @@ function highlight(name) {
 }
 
 // The commit whose column the pointer is nearest, among those the series measured.
-function nearestIndex(ev, s, xs) {
+function nearestIndex(ev, s, xAt) {
   const box = document.getElementById("chart").getBoundingClientRect();
   const rel = ((ev.clientX - box.left) / box.width) * W;
   let best = 0, bestD = Infinity;
   DATA.commits.forEach((_, i) => {
-    const d = Math.abs(xs(i) - rel);
+    const d = Math.abs(xAt(i) - rel);
     if (d < bestD && s.values[i] !== null) { bestD = d; best = i; }
   });
   return best;
 }
 
-function hoverPoint(ev, s, xs) {
+function hoverPoint(ev, s, xAt) {
   const box = document.getElementById("chart").getBoundingClientRect();
-  const best = nearestIndex(ev, s, xs);
+  const best = nearestIndex(ev, s, xAt);
   const raw = s.raw[best], prev = [...s.raw.slice(0, best)].reverse().find((v) => v !== null);
   const delta = prev ? ((raw - prev) / prev) * 100 : null;
   highlight(s.name);
@@ -406,11 +407,14 @@ function renderLegend(series) {
   // Clicking a case shows it on its own; clicking it again brings the rest back.
   for (const s of series) {
     const b = document.createElement("button");
-    b.className = only !== null && only !== s.name ? "faded" : "";
+    b.className = onlyCase !== null && onlyCase !== s.name ? "faded" : "";
     b.innerHTML = `<span class="swatch" style="background:${s.color}"></span>${s.name}`;
     b.addEventListener("mouseenter", () => highlight(s.name));
     b.addEventListener("mouseleave", () => highlight(null));
-    b.addEventListener("click", () => { only = only === s.name ? null : s.name; render(); });
+    b.addEventListener("click", () => {
+      onlyCase = onlyCase === s.name ? null : s.name;
+      render();
+    });
     box.appendChild(b);
   }
 }

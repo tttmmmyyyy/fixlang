@@ -13,16 +13,16 @@ next_rand = |x| (16807 * x) % 2147483647;
 // `n` words of 3 to 10 lowercase letters.
 gen_words : I64 -> Array (Array U8);
 gen_words = |n| (
-    loop((0, 1, Array::empty(n)), |(k, x, words)|
+    loop((0, 1, Array::empty(n)), |(k, state, words)|
         if k == n { break $ words };
-        let x = next_rand(x);
-        let len = 3 + x % 8;
-        let (x, word) = loop((0, x, Array::empty(len)), |(i, x, word)|
-            if i == len { break $ (x, word) };
-            let x = next_rand(x);
-            continue $ (i + 1, x, word.push_back('a' + (x % 26).u8))
+        let state = next_rand(state);
+        let len = 3 + state % 8;
+        let (state, word) = loop((0, state, Array::empty(len)), |(i, state, word)|
+            if i == len { break $ (state, word) };
+            let state = next_rand(state);
+            continue $ (i + 1, state, word.push_back('a' + (state % 26).u8))
         );
-        continue $ (k + 1, x, words.push_back(word))
+        continue $ (k + 1, state, words.push_back(word))
     )
 );
 

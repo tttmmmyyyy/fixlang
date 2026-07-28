@@ -62,16 +62,16 @@ def main():
         work = {}
         for lang in LANGS:
             cmd = str(HERE / BIN / f"{name}_{lang}")
-            hi = best_ms([cmd, full], RUNS)
-            lo = best_ms([cmd, base], RUNS)
-            if hi - lo <= 0:
+            full_ms = best_ms([cmd, full], RUNS)
+            base_ms = best_ms([cmd, base], RUNS)
+            if full_ms - base_ms <= 0:
                 sys.exit(f"{name}/{lang}: the full input cost no more than the trivial one "
-                         f"({hi:.2f}ms vs {lo:.2f}ms). Raise the input in programs.txt.")
-            work[lang] = (hi - lo, lo)
+                         f"({full_ms:.2f}ms vs {base_ms:.2f}ms). Raise the input in programs.txt.")
+            work[lang] = (full_ms - base_ms, base_ms)
         for lang in LANGS:
-            w, start = work[lang]
-            print(f"  {name:<13} {lang:<5} {w:9.2f}ms {start:8.2f}ms "
-                  f"{w / work['c'][0]:6.2f}x {w / work['rust'][0]:7.2f}x")
+            work_ms, startup_ms = work[lang]
+            print(f"  {name:<13} {lang:<5} {work_ms:9.2f}ms {startup_ms:8.2f}ms "
+                  f"{work_ms / work['c'][0]:6.2f}x {work_ms / work['rust'][0]:7.2f}x")
 
 
 main()

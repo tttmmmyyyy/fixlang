@@ -42,10 +42,10 @@ while read -r name full base; do
         [ -x "$bin" ] || { echo "no $bin -- run build.sh first" >&2; exit 1; }
         out_full=$(cg "$bin" "$full") || exit 1
         out_base=$(cg "$bin" "$base") || exit 1
-        IFS=, read -r fi fm <<<"$out_full"
-        IFS=, read -r bi bm <<<"$out_base"
-        [ "$((fi - bi))" -gt 0 ] || { echo "$name/$lang: the full run cost no more than the trivial one" >&2; exit 1; }
-        echo "$name,$lang,$((fi - bi)),$((fm - bm))" | tee -a "$OUT"
+        IFS=, read -r full_inst full_mem <<<"$out_full"
+        IFS=, read -r base_inst base_mem <<<"$out_base"
+        [ "$((full_inst - base_inst))" -gt 0 ] || { echo "$name/$lang: the full run cost no more than the trivial one" >&2; exit 1; }
+        echo "$name,$lang,$((full_inst - base_inst)),$((full_mem - base_mem))" | tee -a "$OUT"
     done
 done < programs.txt
 
