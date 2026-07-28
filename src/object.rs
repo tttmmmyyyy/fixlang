@@ -1118,11 +1118,9 @@ impl ObjectType {
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
                 _ => panic!(),
             };
-            let elem_sizeof = elem_ty
-                .get_object_type(&vec![], gc.type_env())
-                .to_struct_type(gc, vec![])
-                .size_of()
-                .unwrap();
+            // The buffer holds elements as they are embedded -- a pointer where the element type is
+            // boxed -- which is the stride every read and write of it uses.
+            let elem_sizeof = elem_ty.get_embedded_type(gc, &vec![]).size_of().unwrap();
             let struct_ty = self.to_struct_type(gc, vec![]);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
             let size = array_size.unwrap();

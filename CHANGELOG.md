@@ -37,6 +37,7 @@
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
+- An array of a boxed element type no longer reserves the size of an element in place of the size of a reference to one. An `Array` of a boxed struct of eight `I64` fields took nine times the memory it used.
 
 #### Tool
 
