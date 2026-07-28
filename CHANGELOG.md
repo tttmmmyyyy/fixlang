@@ -40,6 +40,7 @@
 
 #### Tool
 
+- On AArch64 targets (Apple Silicon and other 64-bit ARM), an integer narrower than 32 bits crossed the FFI boundary as a wrong number: a function exported with `FFI_EXPORT` returned one to its foreign caller, and `FFI_CALL` passed one to a foreign function that takes one. A function of type `I8 -> I8 -> I8` exported and called from C with `-100` and `30` answered 186 instead of -70. This covers `I8`, `U8`, `I16` and `U16`, and the `Std::FFI` aliases of the same widths such as `CChar` and `CShort`. x86-64 targets were unaffected.
 - Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.
 - Tail call optimization now applies with `-O none` and with `-g` as well. `-g` used to suppress it so that a debugger saw a stack frame for every call; a call in tail position no longer appears in a backtrace.
