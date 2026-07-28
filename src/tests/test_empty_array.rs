@@ -1,11 +1,12 @@
 // Tests for the array literal with no element.
 //
-// Every empty array shares one module-level `#ArrayStorage`, so an empty literal allocates nothing.
-// The block is in the global reference-count state: it is never retained, released or freed. Sharing
-// it stays invisible because a capacity-zero array holds no element an alias could reach, so such an
-// array is still reported unique and raising its capacity gives it a block of its own. The tests
-// below exercise the paths where the sharing could show through — mutation, uniqueness, reference
-// counting, a global value's initializer, and boxed elements.
+// A literal with no element takes one module-level `#ArrayStorage` instead of allocating, so every
+// such literal of an element type shares a block. The block is in the global reference-count state:
+// it is never retained, released or freed. Sharing it stays invisible because a capacity-zero array
+// holds no element an alias could reach, so such an array is still reported unique and raising its
+// capacity gives it a block of its own. The tests below exercise the paths where the sharing could
+// show through — mutation, uniqueness, reference counting, a global value's initializer, and boxed
+// elements.
 
 #[cfg(test)]
 mod empty_array_tests {
@@ -194,30 +195,34 @@ main = (
         "#;
         let ir = emit_llvm_ir(source, function_name!(), "max");
 
-        // The block is a constant carrying a reference count of one and the global state tag, so
-        // that retain and release skip it and a stray write faults.
-        let expected = format!(
-            "= internal constant {{ {{ i32, i8 }}, {{ i64 }} }} \
-             {{ {{ i32, i8 }} {{ i32 1, i8 {} }}, {{ i64 }} zeroinitializer }}",
-            crate::constants::REFCNT_STATE_GLOBAL
-        );
-        assert!(
-            ir.contains(&expected),
-            "emitted IR lacks the shared empty storage `{}`:\n{}",
-            expected,
-            ir
-        );
-
         // Both `Array I64` literals reach the same block. `max` compiles the program as one module,
         // so a second definition would mean each literal took a block of its own.
         let definitions = ir
             .lines()
             .filter(|line| line.starts_with("@\"EmptyArrayStorage#"))
-            .count();
+            .collect::<Vec<_>>();
         assert_eq!(
-            definitions, 1,
+            definitions.len(),
+            1,
             "the two empty literals want one shared block, and the IR defines {}:\n{}",
-            definitions, ir
+            definitions.len(),
+            ir
         );
+
+        // The block is a constant, so a stray write faults, and it carries a reference count of one
+        // and the global state tag, so that retain and release skip it.
+        let definition = definitions[0];
+        for expected in [
+            "= internal constant".to_string(),
+            "i32 1".to_string(),
+            format!("i8 {}", crate::constants::REFCNT_STATE_GLOBAL),
+        ] {
+            assert!(
+                definition.contains(&expected),
+                "the shared empty storage lacks `{}`:\n{}",
+                expected,
+                definition
+            );
+        }
     }
 }

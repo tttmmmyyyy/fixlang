@@ -1528,10 +1528,10 @@ pub fn alloc_array_storage<'c, 'm>(
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
 
-// The `#ArrayStorage` that every empty array of element type `elem_ty` shares: a module-level block
-// whose reference-count state is `REFCNT_STATE_GLOBAL`, so retain and release leave it alone and it
-// is never freed. An array of capacity zero holds no element, so one block serves them all and an
-// empty array costs no allocation.
+// A module-level `#ArrayStorage` for element type `elem_ty` holding room for no element, which an
+// empty array literal takes in place of allocating one. Its reference-count state is
+// `REFCNT_STATE_GLOBAL`, so retain and release leave it alone and it is never freed, and every such
+// literal in the module gets the same block.
 //
 // Sharing it stays invisible because a capacity-zero array has nothing an alias could observe: every
 // element access addresses an index below the capacity, so no read and no write reaches the block.
@@ -1539,8 +1539,11 @@ pub fn alloc_array_storage<'c, 'm>(
 // it unique — and the one operation that would touch the block itself, raising the capacity, gives
 // the array a block of its own instead (`realloc_array`).
 //
-// The block is a constant, so it lands in read-only memory and a write that escapes the reasoning
-// above stops the program where it happens instead of corrupting every empty array in it.
+// The block is an LLVM constant, so it lands in read-only memory and a write that escapes the
+// reasoning above stops the program where it happens instead of corrupting every empty array in it.
+// That is why marking a value graph global skips an object already in that state (`mark_global_one`):
+// a global value holding an empty array reaches this block, and the store would fault. Must stay in
+// sync with `mark_global_one`.
 pub fn shared_empty_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,

@@ -1916,9 +1916,10 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Mark object as global so that it will not be retained or released.
     //
-    // An object already in that state is left untouched, so that a read-only object reached twice —
-    // the block every empty array shares is one, and it lives in a global two initializers may walk
-    // — is read rather than written.
+    // Skipping an object already in that state is load-bearing: `shared_empty_array_storage` emits
+    // its block as an LLVM constant, so it lives in read-only memory, and a global value holding an
+    // empty array brings it here. Storing unconditionally would fault. Must stay in sync with
+    // `shared_empty_array_storage`.
     fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
         self.store_refcnt_state_if(
             ptr,
