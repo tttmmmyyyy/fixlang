@@ -2139,6 +2139,8 @@ fn resize_array_storage_function<'c, 'm>(
     func
 }
 
+// Give an array a storage block of a requested capacity, carrying over the elements it holds.
+// See `array_set_capacity_bounds_unchecked` for what the caller has to guarantee.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     arr_name: FullName,
@@ -2284,6 +2286,8 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Append a range of one array's elements into the slots another array's capacity already holds.
+// See `array_append_capacity_bounds_unchecked` for what the caller has to guarantee.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityBoundsUnchecked {
     dst_name: FullName,
@@ -6240,6 +6244,8 @@ fn boxed_rc_operation_function<'c, 'm>(
     func
 }
 
+// Yield the address of a `void(ptr)` function that releases a boxed value of the argument's type,
+// defining that function on first request (`boxed_rc_operation_function`).
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -6320,6 +6326,8 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Yield the address of a `void(ptr)` function that retains a boxed value of the argument's type,
+// defining that function on first request (`boxed_rc_operation_function`).
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -6399,6 +6407,7 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Yield the address of a boxed value's payload, the region that follows its control block.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
     var_name: FullName,

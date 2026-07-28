@@ -187,6 +187,9 @@ fn run_source(
     run(config, false)
 }
 
+/// Compiles `source` under `config`, runs the resulting program and requires it to exit with status
+/// zero, so a failing `assert` inside the Fix program fails the test. What the program wrote to
+/// stdout and stderr is forwarded to the test's stderr, where it accompanies the failure.
 pub fn test_source(source: &str, config: Configuration) {
     let res = run_source(source, config);
     let res = panic_if_err(res);

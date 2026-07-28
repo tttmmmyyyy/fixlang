@@ -9944,6 +9944,8 @@ main : IO () = (
 
 #[test]
 pub fn test_regression_issue_69() {
+    // Two implementations that match a common instantiation — `(Array a, b)` and `(a, Array b)`,
+    // which both match `(Array a, Array b)` — are reported as overlapping.
     let source = r#"
 module Main;
 
@@ -10004,6 +10006,9 @@ main = (
 
 #[test]
 pub fn test_regression_issue_71() {
+    // A trait method whose body evaluates a value of a type written through nested type aliases
+    // (`TypeList3 a b c` expands to `TCons a (TCons b (TCons c TNil))`) resolves the instances of
+    // the expanded type, including the constraints carried by the enclosing implementation.
     let source = r#"
 module Main;
 
@@ -10083,6 +10088,9 @@ main = (
 
 #[test]
 pub fn test_regression_72() {
+    // A struct field whose type applies a parameter of kind `*->*` (`ReaderT e IO a`, where the
+    // kind is declared on `ReaderT`) is accepted, and a value of the enclosing struct can be
+    // constructed and evaluated.
     let source = r#"
 module Main;
 

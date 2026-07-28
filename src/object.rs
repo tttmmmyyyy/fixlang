@@ -1052,6 +1052,9 @@ impl ObjectFieldType {
     }
 }
 
+// The layout code generation gives a Fix type: the fields an object of it carries in layout order
+// (a boxed object begins with its control block), whether a value is held inline (`is_unbox`) or
+// behind a pointer, and the name the type is reported under.
 #[derive(Eq, PartialEq, Clone)]
 pub struct ObjectType {
     pub field_types: Vec<ObjectFieldType>,
@@ -1162,7 +1165,7 @@ impl ObjectType {
     }
 
     // Get type used when this object is embedded.
-    // i.e., for unboxed type, a pointer; for unboxed type, a struct.
+    // i.e., for a boxed type, a pointer; for an unboxed type, a struct.
     // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
     pub fn to_embedded_type<'c, 'm>(
         &self,
@@ -1219,10 +1222,14 @@ pub fn traverser_type<'c, 'm>(
     gc.context.void_type().fn_type(&arg_tys, false)
 }
 
+// The type of the argument telling a dynamic traverser which work to perform.
+// Values of this type are TRAVERSER_WORK_* constants.
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
+// The header every boxed object begins with: the reference count followed by the state that says
+// how the count is maintained.
 pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     let mut fields = vec![];
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
@@ -1362,6 +1369,8 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
+// The struct-type index at which a Fix struct's declared fields begin: an unboxed value starts at
+// zero, a boxed one after the control block.
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0

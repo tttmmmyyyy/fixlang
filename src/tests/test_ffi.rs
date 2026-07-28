@@ -236,6 +236,8 @@ pub fn test_export_non_ascii_c_function_name_fails() {
 
 #[test]
 pub fn test_export_non_ascii_first_character_fails() {
+    // A C identifier's first character is checked apart from the rest, and the message says what it
+    // is allowed to be.
     let source = r##"
         module Main;
 

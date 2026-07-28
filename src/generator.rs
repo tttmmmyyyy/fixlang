@@ -1833,6 +1833,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
+    // Mark object as local so that it will be retained and released non-atomically.
+    //
+    // The object has to be one this thread owns uniquely, since another thread holding a reference
+    // would keep updating the count atomically.
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
@@ -2122,6 +2126,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // Set the debug location back to the span the enclosing expression pushed, which is where code
+    // emitted between two sub-expressions belongs.
     pub fn reset_debug_location(&mut self) {
         self.set_debug_location(flatten_opt(self.debug_location.last().cloned()));
     }
@@ -2245,6 +2251,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // The debug-info entry for the file `src` was read from, so that a debugger can open the source.
+    // Code with no source of its own is attributed to a placeholder entry.
     pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile<'c> {
         if let Some(src) = src {
             self.get_di_builder()
@@ -2287,6 +2295,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         real
     }
 
+    // Make `obj` visible to a debugger as a local variable called `name`. The value is spilled to a
+    // stack slot, which is what the emitted declaration points the debugger at.
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
         // Push the value on the stack.
         let obj_val = obj.value(self);
@@ -2314,6 +2324,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
+    // Add the function through which `sym`'s value is obtained to the module and register it as
+    // `sym`'s global object, leaving its body to be implemented later. A symbol of funptr type is
+    // reached through the lambda's own function; any other symbol through an accessor function
+    // taking no argument and returning the value.
     pub fn declare_symbol(&mut self, sym: &Symbol) -> FunctionValue<'c> {
         let name = &sym.name;
         let obj_ty = &sym.ty;
