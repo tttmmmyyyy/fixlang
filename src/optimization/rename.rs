@@ -207,45 +207,51 @@ impl ExprVisitor for Substitutor {
         llvm_fvs.sort();
         llvm_fvs.dedup();
 
-        // The expressions to bind, and the fresh name each is bound to. A binder named after the
-        // name it replaces would capture that name where another bound expression reads it, since
-        // every bound expression sits outside every one of these binders; a fresh name cannot,
-        // because it avoids everything in their scope: what the node reads and what the
-        // replacements read.
-        let bounds = llvm_fvs
-            .iter()
-            .filter_map(|llvm_fv| match self.map.get(llvm_fv) {
-                Some(to) if !to.is_var() => Some((llvm_fv.clone(), to.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
+        // The names a fresh binder must avoid: what the node reads, and what each replacement it
+        // uses reads. Those are the names in the scope of the binders (2) wraps around the node.
         let mut ng_names = llvm_fvs.iter().cloned().collect::<Set<FullName>>();
         for llvm_fv in &llvm_fvs {
             if let Some(to) = self.map.get(llvm_fv) {
                 ng_names.extend(to.free_vars());
             }
         }
-        let fresh_names = generate_new_names(&ng_names, bounds.len());
-        let bindings = bounds.into_iter().zip(fresh_names).collect::<Vec<_>>();
-        let to_fresh = bindings
+        let bound_count = llvm_fvs
             .iter()
-            .map(|((llvm_fv, _), fresh)| (llvm_fv.clone(), fresh.clone()))
-            .collect::<Map<FullName, FullName>>();
+            .filter(|llvm_fv| matches!(self.map.get(*llvm_fv), Some(to) if !to.is_var()))
+            .count();
+        let mut fresh_names = generate_new_names(&ng_names, bound_count).into_iter();
+
+        // What each of the node's free names is renamed to, and the expressions to bind around the
+        // node. A binder named after the name it replaces would capture that name wherever another
+        // bound expression reads it, or wherever (1) has just renamed an occurrence onto it, since
+        // every bound expression sits outside every one of these binders. A fresh name cannot.
+        let mut renames = Map::default();
+        let mut bindings = vec![];
+        for llvm_fv in llvm_fvs {
+            let Some(to) = self.map.get(&llvm_fv) else {
+                continue;
+            };
+            if to.is_var() {
+                renames.insert(llvm_fv, to.get_var().name.clone());
+            } else {
+                let fresh = fresh_names.next().unwrap();
+                renames.insert(llvm_fv, fresh.clone());
+                bindings.push((fresh, to.clone()));
+            }
+        }
 
         // (1)
         for llvm_fv in generator.free_vars_mut() {
-            let to_name = match self.map.get(llvm_fv) {
-                None => continue,
-                Some(to) if to.is_var() => to.get_var().name.clone(),
-                Some(_) => to_fresh.get(llvm_fv).unwrap().clone(),
+            let Some(to_name) = renames.get(llvm_fv) else {
+                continue;
             };
-            changed |= *llvm_fv != to_name;
-            *llvm_fv = to_name;
+            changed |= llvm_fv != to_name;
+            *llvm_fv = to_name.clone();
         }
         let mut expr = expr.set_llvm(llvm);
 
         // (2)
-        for ((_, bound), fresh) in bindings {
+        for (fresh, bound) in bindings {
             changed = true;
             let pat = PatternNode::make_var(var_var(fresh), None)
                 .set_type(bound.type_.as_ref().unwrap().clone());
@@ -636,13 +642,30 @@ mod tests {
             field_names: names.iter().map(|name| local(name)).collect(),
         };
         let ty = make_tuple_ty(vec![make_i64_ty(); names.len()]);
-        expr_llvm(Box::new(generator), ty, None)
+        expr_llvm(Box::new(generator), ty.clone(), None).set_type(ty)
+    }
+
+    /// A null pointer, as an expression a name can be mapped to that is not a variable.
+    fn null_ptr() -> Arc<ExprNode> {
+        expr_llvm(Box::new(InlineLLVMNullPtrLit {}), make_ptr_ty(), None).set_type(make_ptr_ty())
     }
 
     /// The names the inline-LLVM expression `expr` reads from its enclosing scope, in the order it
     /// holds them.
     fn llvm_free_names(expr: &Arc<ExprNode>) -> Vec<FullName> {
         expr.get_llvm().generator.free_vars()
+    }
+
+    /// The names bound by the `let`s wrapped around an inline-LLVM expression, outermost first,
+    /// together with the expression itself.
+    fn peel_lets(expr: &Arc<ExprNode>) -> (Vec<FullName>, Arc<ExprNode>) {
+        let mut binders = vec![];
+        let mut expr = expr.clone();
+        while expr.is_let() {
+            binders.push(expr.get_let_pat().get_var().name.clone());
+            expr = expr.get_let_value();
+        }
+        (binders, expr)
     }
 
     /// The pattern `(x, y)`, which binds both of the names `x_to_a_and_y_to_y` substitutes.
@@ -726,15 +749,48 @@ mod tests {
         );
     }
 
-    /// An inline-LLVM expression of a type, for a node the substitution has to wrap in a `let`.
-    fn typed_llvm_with_free_names(names: &[&str]) -> Arc<ExprNode> {
-        let ty = make_tuple_ty(vec![make_i64_ty(); names.len()]);
-        llvm_with_free_names(names).set_type(ty)
+    /// Verifies that a name mapped to a general expression is bound around the node and read from
+    /// there, leaving the node's other names alone.
+    #[test]
+    fn a_llvm_replacement_expression_is_bound_around_the_node() {
+        let mut map = Map::default();
+        map.insert(local("x"), null_ptr());
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "w"]));
+        let (binders, node) = peel_lets(&res.expr);
+        assert_eq!(binders.len(), 1);
+        assert_eq!(
+            llvm_free_names(&node),
+            vec![binders[0].clone(), local("w")],
+            "the node did not read the name its replacement was bound to"
+        );
+        assert!(res.changed);
     }
 
-    /// A null pointer, as an expression a name can be mapped to that is not a variable.
-    fn null_ptr() -> Arc<ExprNode> {
-        expr_llvm(Box::new(InlineLLVMNullPtrLit {}), make_ptr_ty(), None).set_type(make_ptr_ty())
+    /// Verifies that a name read twice is bound once, and both occurrences read that one binding.
+    #[test]
+    fn a_llvm_name_read_twice_is_bound_once() {
+        let mut map = Map::default();
+        map.insert(local("x"), null_ptr());
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "x"]));
+        let (binders, node) = peel_lets(&res.expr);
+        assert_eq!(binders.len(), 1);
+        assert_eq!(
+            llvm_free_names(&node),
+            vec![binders[0].clone(), binders[0].clone()]
+        );
+    }
+
+    /// Verifies that the name a replacement is bound to avoids what the node already reads.
+    #[test]
+    fn a_llvm_binder_avoids_a_name_the_node_already_reads() {
+        // The node reads `#v0`, the first name the generator hands out.
+        let mut map = Map::default();
+        map.insert(local("x"), null_ptr());
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "#v0"]));
+        assert!(
+            res.expr.free_vars().contains(&local("#v0")),
+            "`#v0` of the enclosing scope was captured"
+        );
     }
 
     /// Verifies that the `let`s an inline-LLVM node's substitution introduces leave the names its
@@ -744,9 +800,9 @@ mod tests {
         // `LLVM(x, z)` under `x := LLVM(z)`, `z := null`. Both replacements are bound around the
         // node, and the one for `x` reads the `z` of the enclosing scope, so `z` stays free.
         let mut map = Map::default();
-        map.insert(local("x"), typed_llvm_with_free_names(&["z"]));
+        map.insert(local("x"), llvm_with_free_names(&["z"]));
         map.insert(local("z"), null_ptr());
-        let res = Substitutor::new(map).traverse(&typed_llvm_with_free_names(&["x", "z"]));
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
             res.expr.free_vars().contains(&local("z")),
             "`z` of the enclosing scope was captured"
@@ -762,7 +818,7 @@ mod tests {
         let mut map = Map::default();
         map.insert(local("x"), expr_var(local("z"), None));
         map.insert(local("z"), null_ptr());
-        let res = Substitutor::new(map).traverse(&typed_llvm_with_free_names(&["x", "z"]));
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
             res.expr.free_vars().contains(&local("z")),
             "`z` of the enclosing scope was captured"
@@ -773,11 +829,9 @@ mod tests {
     /// applies to the names the node read on entry, so a name a rename introduced is left alone.
     #[test]
     fn substituting_llvm_free_names_is_simultaneous() {
-        let null_ptr = expr_llvm(Box::new(InlineLLVMNullPtrLit {}), make_ptr_ty(), None)
-            .set_type(make_ptr_ty());
         let mut map = Map::default();
         map.insert(local("x"), expr_var(local("a"), None));
-        map.insert(local("a"), null_ptr);
+        map.insert(local("a"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "w"]));
         assert!(
             res.expr.is_llvm(),
