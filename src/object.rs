@@ -1105,12 +1105,13 @@ impl ObjectType {
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        array_size: Option<IntValue<'c>>,
+        array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
-        if array_size.is_some() {
-            // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
+        if array_capacity.is_some() {
+            // Get pointer to the first element (which is properly aligned) and add it to
+            // sizeof(elem_ty) * capacity.
 
-            // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
+            // Calculate sizeof(elem_ty) * capacity. The element buffer is the last field, of `Array`
             // (with a preceding capacity slot) or of `#ArrayStorage` (right after the control block).
             let elem_ty = match self.field_types.last().unwrap() {
                 ObjectFieldType::Array(ty) => ty.clone(),
@@ -1124,14 +1125,14 @@ impl ObjectType {
                 .unwrap();
             let struct_ty = self.to_struct_type(gc, vec![]);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-            let size = array_size.unwrap();
-            let size = gc
+            let cap = array_capacity.unwrap();
+            let cap = gc
                 .builder()
-                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty")
+                .build_int_cast(cap, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
             let elems_size = gc
                 .builder()
-                .build_int_mul(elem_sizeof, size, "elems_size")
+                .build_int_mul(elem_sizeof, cap, "elems_size")
                 .unwrap();
 
             // Get pointer to the first element (the buffer is the last struct field).

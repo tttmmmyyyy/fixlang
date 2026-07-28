@@ -2117,8 +2117,8 @@ fn grow_array_storage_function<'c, 'm>(
 
     // Otherwise resize the block in place, preserving the elements it holds.
     gc.builder().position_at_end(resize_bb);
-    let object_type = storage_ty.get_object_type(&vec![], gc.type_env());
-    let sizeof = object_type.size_of(gc, Some(new_cap));
+    let object_ty = storage_ty.get_object_type(&vec![], gc.type_env());
+    let sizeof = object_ty.size_of(gc, Some(new_cap));
     let realloc_fn = gc
         .module
         .get_function(RUNTIME_REALLOC)
@@ -2172,7 +2172,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced = realloc_array(gc, array.clone(), new_cap);
+        let resized = realloc_array(gc, array.clone(), new_cap);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2196,7 +2196,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         gc.build_object_phi(
-            &[(realloced, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
+            &[(resized, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
             "array_phi@set_capacity",
         )
     }
@@ -2323,7 +2323,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         };
 
         let src_storage = get_array_storage(gc, &src);
-        let src_ptr = src_storage.value(gc).into_pointer_value();
+        let src_storage_ptr = src_storage.value(gc).into_pointer_value();
         let src_buf = get_array_storage_buf(gc, &src);
         let src_len = src.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
@@ -2356,7 +2356,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
 
         // Full range: move the elements if `src` is unique, otherwise fall through to the copy.
         gc.builder().position_at_end(maybe_move_bb);
-        let (src_unique_bb, src_shared_bb) = gc.build_branch_by_is_unique(src_ptr);
+        let (src_unique_bb, src_shared_bb) = gc.build_branch_by_is_unique(src_storage_ptr);
 
         // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
         // without touching the moved-out elements. No reference counting.
@@ -5931,12 +5931,12 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             gc.builder().position_at_end(cont_bb);
-            let flag = gc
+            let is_refcnt_unique = gc
                 .builder()
                 .build_phi(bool_ty, "phi@is_storage_unique")
                 .unwrap();
-            flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
-            let flag = flag.as_basic_value().into_int_value();
+            is_refcnt_unique.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
+            let is_refcnt_unique = is_refcnt_unique.as_basic_value().into_int_value();
 
             // An array of capacity zero holds no element, so no alias of it can observe anything:
             // it is unique whatever block it sits on, including the one every empty array shares
@@ -5956,7 +5956,11 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
                 .build_int_z_extend(is_cap_zero, bool_ty, "is_cap_zero_flag@is_storage_unique")
                 .unwrap();
             gc.builder()
-                .build_or(flag, is_cap_zero_flag, "or_cap_zero@is_storage_unique")
+                .build_or(
+                    is_refcnt_unique,
+                    is_cap_zero_flag,
+                    "or_cap_zero@is_storage_unique",
+                )
                 .unwrap()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.
