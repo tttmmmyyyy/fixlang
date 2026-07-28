@@ -2056,17 +2056,17 @@ fn realloc_array<'c, 'm>(
     let struct_type = object_type.to_struct_type(gc, vec![]);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
-    let old_shift = read_alloc_offset(gc, storage_ptr);
+    let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
     let old_base = unsafe {
-        let back = gc
+        let neg_old_alloc_offset = gc
             .builder()
-            .build_int_neg(old_shift, "neg_old_shift@realloc_array")
+            .build_int_neg(old_alloc_offset, "neg_old_alloc_offset@realloc_array")
             .unwrap();
         gc.builder()
             .build_gep(
                 gc.context.i8_type(),
                 storage_ptr,
-                &[back],
+                &[neg_old_alloc_offset],
                 "old_base@realloc_array",
             )
             .unwrap()
@@ -2080,7 +2080,7 @@ fn realloc_array<'c, 'm>(
         .build_select(
             is_aligned,
             i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
-            old_shift,
+            old_alloc_offset,
             "slack@realloc_array",
         )
         .unwrap()
@@ -2105,14 +2105,14 @@ fn realloc_array<'c, 'm>(
         .left()
         .unwrap()
         .into_pointer_value();
-    let new_shift = {
-        let aligned_shift = build_array_storage_shift(gc, struct_type, new_base);
+    let new_alloc_offset = {
+        let aligned_alloc_offset = build_array_storage_shift(gc, struct_type, new_base);
         gc.builder()
             .build_select(
                 is_aligned,
-                aligned_shift,
-                old_shift,
-                "new_shift@realloc_array",
+                aligned_alloc_offset,
+                old_alloc_offset,
+                "new_alloc_offset@realloc_array",
             )
             .unwrap()
             .into_int_value()
@@ -2125,17 +2125,17 @@ fn realloc_array<'c, 'm>(
     let end_bb = gc
         .context
         .append_basic_block(current_func, "end_bb@realloc_array");
-    let moves = gc
+    let must_move = gc
         .builder()
         .build_int_compare(
             IntPredicate::NE,
-            new_shift,
-            old_shift,
-            "moves@realloc_array",
+            new_alloc_offset,
+            old_alloc_offset,
+            "must_move@realloc_array",
         )
         .unwrap();
     gc.builder()
-        .build_conditional_branch(moves, move_bb, end_bb)
+        .build_conditional_branch(must_move, move_bb, end_bb)
         .unwrap();
 
     // Carry the control block and the live elements to where the object now sits. The two ranges
@@ -2146,7 +2146,7 @@ fn realloc_array<'c, 'm>(
             .build_gep(
                 gc.context.i8_type(),
                 new_base,
-                &[old_shift],
+                &[old_alloc_offset],
                 "old_ptr@realloc_array",
             )
             .unwrap()
@@ -2156,20 +2156,20 @@ fn realloc_array<'c, 'm>(
             .build_gep(
                 gc.context.i8_type(),
                 new_base,
-                &[new_shift],
+                &[new_alloc_offset],
                 "new_ptr@realloc_array",
             )
             .unwrap()
     };
     let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
-    let elems_span = unsafe {
+    let elems_size_as_ptr = unsafe {
         gc.builder()
             .build_gep(
                 elem_value_ty,
                 gc.context.ptr_type(AddressSpace::from(0)).const_null(),
                 &[len],
-                "elems_span@realloc_array",
+                "elems_size_as_ptr@realloc_array",
             )
             .unwrap()
     };
@@ -2177,7 +2177,7 @@ fn realloc_array<'c, 'm>(
         .builder()
         .build_int_add(
             gc.builder()
-                .build_ptr_to_int(elems_span, i64_ty, "elems_bytes@realloc_array")
+                .build_ptr_to_int(elems_size_as_ptr, i64_ty, "elems_size@realloc_array")
                 .unwrap(),
             i64_ty.const_int(
                 gc.target_data
@@ -2200,12 +2200,12 @@ fn realloc_array<'c, 'm>(
             .build_gep(
                 gc.context.i8_type(),
                 new_base,
-                &[new_shift],
+                &[new_alloc_offset],
                 "storage_ptr@realloc_array",
             )
             .unwrap()
     };
-    write_alloc_offset(gc, storage_ptr, new_shift);
+    write_alloc_offset(gc, storage_ptr, new_alloc_offset);
     let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr.as_basic_value_enum());
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
