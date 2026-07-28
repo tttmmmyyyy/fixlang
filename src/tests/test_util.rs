@@ -114,6 +114,8 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
 ///   tests do not share one. Pass `function_name!()`.
 /// * `opt_level` — below `max` the program is split into several modules, and their IR is
 ///   concatenated; from `max` up it is one module, so a test that counts occurrences wants `max`.
+///   The level is passed to the compiler as its ceiling too, so that a suite run under a lower
+///   `FIX_MAX_OPT_LEVEL` still gets the level the test asked for.
 pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
     let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, test_name));
     let _ = fs::remove_dir_all(&work_dir);
@@ -125,6 +127,7 @@ pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
         .arg("--emit-llvm")
         .arg("--output")
         .arg("prog")
+        .env("FIX_MAX_OPT_LEVEL", opt_level)
         .output()
         .unwrap();
     assert_eq!(

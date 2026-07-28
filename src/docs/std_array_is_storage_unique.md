@@ -2,6 +2,8 @@ Checks whether the array's storage is uniquely referenced, and returns the resul
 
 This reads the reference count of the array's element storage in place, without retaining it. It is the array counterpart of `Std::unsafe_is_unique`, which does not apply to `Array` because an `Array` value is unboxed.
 
+An array whose capacity is zero is reported unique however many names hold it. Such an array has no element, so no other holder of it can observe anything about it.
+
 NOTE: Changing outputs of your function depending on uniqueness breaks the referential transparency of the function.
 
 NOTE: This function's return value may change depending on the optimization level, because optimizations may change a value from being shared to being unique.

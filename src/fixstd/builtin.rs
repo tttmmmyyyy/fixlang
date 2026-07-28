@@ -2145,9 +2145,9 @@ fn resize_array_storage_function<'c, 'm>(
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     arr_name: FullName,
     cap_name: FullName,
-    // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
-    // retain-copy a shared array's elements. Set false only where the array is statically known to
-    // be unique, leaving just the `realloc`.
+    // When true, branch on uniqueness: give a unique array the capacity in place, or allocate a new
+    // block and retain-copy a shared array's elements into it. Set false only where the array is
+    // statically known to be unique, leaving just the in-place path.
     pub(crate) force_unique: bool,
 }
 
@@ -2162,7 +2162,8 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         }
 
         // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
-        // storage to the shared side, so `realloc` only ever runs on a genuinely uniquely owned block.
+        // storage to the shared side, so the in-place path only ever runs on a genuinely uniquely
+        // owned block.
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
@@ -2247,7 +2248,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
     }
 }
 
-// Sets an array's capacity to `new_cap`, `realloc`ing a unique array in place or allocating and
+// Sets an array's capacity to `new_cap`, resizing a unique array's block in place or allocating and
 // copying a shared one, with no check that `new_cap` fits the elements. The caller must ensure
 // `new_cap >= size`; a smaller capacity causes undefined behavior.
 // Type: I64 -> Array a -> Array a

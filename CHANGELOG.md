@@ -30,6 +30,7 @@
 
 - `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
 - `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`.
+- `Array::_unsafe_is_storage_unique` and `Debug::assert_unique_array` now report an array whose capacity is zero as unique however many names hold it. Such an array has no element, so no other holder of it can observe anything about it.
 - The internal implementation of the counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` changed. As long as you iterate them the yielded elements are unchanged; only code that reads these iterators' fields directly is affected. See their definitions in the standard library for the details.
 
 ### Fixed

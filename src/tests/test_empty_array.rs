@@ -209,22 +209,36 @@ main = (
         "#;
         let ir = emit_llvm_ir(source, function_name!(), "max");
 
-        // Both `Array I64` literals reach the same block. `max` compiles the program as one module,
-        // so a second definition would mean each literal took a block of its own.
+        // Both `Array I64` literals reach the same block: the module defines a block per element
+        // type, so a second definition for one name would mean each literal took a block of its own.
+        // Definitions of other element types are the standard library's and are none of this test's
+        // business.
         let definitions = ir
             .lines()
             .filter(|line| line.starts_with("@\"EmptyArrayStorage#"))
             .collect::<Vec<_>>();
-        assert_eq!(
-            definitions.len(),
-            1,
-            "the two empty literals want one shared block, and the IR defines {}:\n{}",
-            definitions.len(),
+        let names = definitions
+            .iter()
+            .map(|line| line.split_whitespace().next().unwrap())
+            .collect::<Vec<_>>();
+        // A second block for one element type would be added under the name the first already holds,
+        // and LLVM keeps that unique by appending a counter — the one thing a hexadecimal hash never
+        // contains is a dot.
+        let renamed = names.iter().find(|name| name.contains('.'));
+        assert!(
+            renamed.is_none(),
+            "one element type wants one shared block, and the IR renamed a second `{}`:\n{}",
+            renamed.unwrap_or(&""),
+            ir
+        );
+        assert!(
+            !names.is_empty(),
+            "the empty literals want a shared block, and the IR defines none:\n{}",
             ir
         );
 
-        // The block is a constant, so a stray write faults, and it carries a reference count of one
-        // and the global state tag, so that retain and release skip it.
+        // The block is a constant, and it carries a reference count of one and the global state tag,
+        // so that retain and release skip it.
         let definition = definitions[0];
         for expected in [
             "= internal constant".to_string(),

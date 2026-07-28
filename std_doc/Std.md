@@ -796,6 +796,9 @@ Asserts that the storage buffer of the given array is uniquely referenced (not s
 and returns the array. If the assertion failed, prints a message to the stderr and aborts
 the program.
 
+An array whose capacity is zero passes however many names hold it: such an array has no
+element, so no other holder of it can observe anything about it.
+
 This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 
 ##### Parameters

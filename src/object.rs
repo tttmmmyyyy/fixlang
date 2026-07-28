@@ -1553,11 +1553,11 @@ pub fn alloc_array_storage<'c, 'm>(
 // it unique — and the one operation that would touch the block itself, raising the capacity, gives
 // the array a block of its own instead (`set_array_capacity`).
 //
-// The block is an LLVM constant, so it lands in read-only memory and a write that escapes the
-// reasoning above stops the program where it happens instead of corrupting every empty array in it.
-// That is why marking a value graph global skips an object already in that state (`mark_global_one`):
-// a global value holding an empty array reaches this block, and the store would fault. Must stay in
-// sync with `mark_global_one`.
+// The block is declared an LLVM constant — a claim the reasoning above establishes, and one the
+// optimizer then takes as given. It buys read-only placement; a write reaching the block anyway is
+// undefined behavior, which the optimizer is as free to delete as the hardware is to fault on. That
+// is why marking a value graph global skips an object already in that state (`mark_global_one`): a
+// global value holding an empty array reaches this block. Must stay in sync with `mark_global_one`.
 pub fn shared_empty_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
