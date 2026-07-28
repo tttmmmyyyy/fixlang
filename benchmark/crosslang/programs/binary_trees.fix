@@ -1,0 +1,27 @@
+module Main;
+
+// Allocation/refcount stress: build a full binary tree and count its nodes.
+// Each `node` is a heap-allocated (boxed) value, so building + dropping the tree
+// exercises the allocator and reference counting.
+type Tree = box union { leaf: (), node: (Tree, Tree) };
+
+make : I64 -> Tree;
+make = |d| (
+    if d == 0 { Tree::leaf() }
+    else { Tree::node $ (make(d - 1), make(d - 1)) }
+);
+
+check : Tree -> I64;
+check = |t| (
+    match t {
+        leaf(_) => 1,
+        node(lr) => 1 + check(lr.@0) + check(lr.@1)
+    }
+);
+
+main : IO ();
+main = (
+    let args = *get_args;
+    let n : I64 = args.@(args.@size - 1).from_string.as_ok;   // depth (runtime arg)
+    println $ check(make(n)).to_string
+);

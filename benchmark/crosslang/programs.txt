@@ -1,0 +1,15 @@
+# The programs, and the inputs each is measured with.
+#
+# Every program takes its size as the last command-line argument and prints a result
+# the three languages must agree on. The trivial input is measured too and subtracted,
+# which removes what a language spends starting up before any of the work begins.
+#
+# name          full        trivial
+fib             34          1
+loop            10000000    0
+binary_trees    20          0
+mandelbrot      400         1
+nbody           100000      0
+fannkuch        10          2
+arrayrw         10000       0
+levenshtein     2000        2

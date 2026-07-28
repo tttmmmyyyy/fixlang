@@ -1,0 +1,70 @@
+module Main;
+
+// Levenshtein distance between every unique pair of words: byte-array traversal
+// driving a two-row dynamic-programming table, with the two rows allocated per
+// pair. The words come from a fixed pseudo-random stream, so all three languages
+// measure the same input and must print the same sum.
+
+// Park-Miller minimal-standard LCG. 16807 * (2^31 - 1) < 2^63, so the multiply
+// stays within I64.
+next_rand : I64 -> I64;
+next_rand = |x| (16807 * x) % 2147483647;
+
+// `n` words of 3 to 10 lowercase letters.
+gen_words : I64 -> Array (Array U8);
+gen_words = |n| (
+    loop((0, 1, Array::empty(n)), |(k, x, words)|
+        if k == n { break $ words };
+        let x = next_rand(x);
+        let len = 3 + x % 8;
+        let (x, word) = loop((0, x, Array::empty(len)), |(i, x, word)|
+            if i == len { break $ (x, word) };
+            let x = next_rand(x);
+            continue $ (i + 1, x, word.push_back('a' + (x % 26).u8))
+        );
+        continue $ (k + 1, x, words.push_back(word))
+    )
+);
+
+distance : Array U8 -> Array U8 -> I64;
+distance = |a, b| (
+    // The shorter word indexes the rows, which keeps both rows as short as possible.
+    let (a, b) = if a.@size <= b.@size { (a, b) } else { (b, a) };
+    let m = a.@size;
+    let n = b.@size;
+    let (prev, _) = loop((1, Array::from_map(m + 1, |i| i), Array::fill(m + 1, 0)), |(j, prev, cur)|
+        if j > n { break $ (prev, cur) };
+        let bj = b.@(j - 1);
+        let cur = cur.set(0, j);
+        let cur = loop((1, cur), |(i, cur)|
+            if i > m { break $ cur };
+            let cost = if a.@(i - 1) == bj { 0 } else { 1 };
+            let d = min(min(prev.@(i) + 1, cur.@(i - 1) + 1), prev.@(i - 1) + cost);
+            continue $ (i + 1, cur.set(i, d))
+        );
+        // The row just computed becomes the previous row of the next round.
+        continue $ (j + 1, cur, prev)
+    );
+    prev.@(m)
+);
+
+sum_distances : Array (Array U8) -> I64;
+sum_distances = |words| (
+    let n = words.@size;
+    loop((0, 0), |(i, sum)|
+        if i == n { break $ sum };
+        let wi = words.@(i);
+        let sum = loop((i + 1, sum), |(j, sum)|
+            if j == n { break $ sum };
+            continue $ (j + 1, sum + distance(wi, words.@(j)))
+        );
+        continue $ (i + 1, sum)
+    )
+);
+
+main : IO ();
+main = (
+    let args = *get_args;
+    let n : I64 = args.@(args.@size - 1).from_string.as_ok;
+    println $ sum_distances(gen_words(n)).to_string
+);
