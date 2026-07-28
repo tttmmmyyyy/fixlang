@@ -15,6 +15,7 @@ mod test_defunctionalize_fix;
 mod test_dependencies;
 mod test_deprecation;
 mod test_docs;
+mod test_empty_array;
 mod test_explicit_import;
 mod test_external_projects;
 mod test_ffi;

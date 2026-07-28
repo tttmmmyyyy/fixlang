@@ -5,9 +5,9 @@ use crate::constants::{
     TraverserWorkType, ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME,
     BOXED_TYPE_DATA_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN,
     DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED,
-    DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_IDX,
+    DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_GLOBAL, REFCNT_STATE_LOCAL,
+    STD_NAME, STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -1526,6 +1526,58 @@ pub fn alloc_array_storage<'c, 'm>(
 ) -> Object<'c> {
     let storage_ty = make_array_storage_ty(elem_ty);
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
+}
+
+// The `#ArrayStorage` that every empty array of element type `elem_ty` shares: a module-level block
+// whose reference-count state is `REFCNT_STATE_GLOBAL`, so retain and release leave it alone and it
+// is never freed. An array of capacity zero holds no element, so one block serves them all and an
+// empty array costs no allocation.
+//
+// Sharing it stays invisible because a capacity-zero array has nothing an alias could observe: every
+// element access addresses an index below the capacity, so no read and no write reaches the block.
+// Such an array is therefore treated as uniquely owned — `Array::_unsafe_is_storage_unique` reports
+// it unique — and the one operation that would touch the block itself, raising the capacity, gives
+// the array a block of its own instead (`realloc_array`).
+//
+// The state byte is written: marking a value graph global stores the state unconditionally, and a
+// global value may hold an empty array. The block is therefore a mutable global.
+pub fn shared_empty_array_storage<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: Arc<TypeNode>,
+) -> Object<'c> {
+    let storage_ty = make_array_storage_ty(elem_ty);
+    let name = format!("EmptyArrayStorage#{}", storage_ty.hash());
+    let global = match gc.module.get_global(&name) {
+        Some(global) => global,
+        None => {
+            let object_ty = storage_ty.get_object_type(&vec![], gc.type_env());
+            let struct_ty = object_ty.to_struct_type(gc, vec![]);
+            assert_eq!(
+                struct_ty.count_fields(),
+                2,
+                "`#ArrayStorage` is a control block followed by the element buffer"
+            );
+            let control_block = control_block_type(gc).const_named_struct(&[
+                refcnt_type(gc.context).const_int(1, false).into(),
+                refcnt_state_type(gc.context)
+                    .const_int(REFCNT_STATE_GLOBAL as u64, false)
+                    .into(),
+            ]);
+            let buf = struct_ty
+                .get_field_type_at_index(STORAGE_BUF_IDX)
+                .unwrap()
+                .const_zero();
+            let global = gc.module.add_global(struct_ty, None, &name);
+            global.set_linkage(Linkage::Internal);
+            global.set_initializer(&struct_ty.const_named_struct(&[control_block.into(), buf]));
+            global
+        }
+    };
+    Object::new(
+        global.as_pointer_value().as_basic_value_enum(),
+        storage_ty,
+        gc,
+    )
 }
 
 // Create an object.

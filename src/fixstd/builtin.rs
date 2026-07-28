@@ -34,14 +34,16 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, create_obj, get_array_storage, get_array_storage_buf, ObjectFieldType,
+    alloc_array_storage, create_obj, get_array_storage, get_array_storage_buf,
+    shared_empty_array_storage, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, IntValue, PointerValue};
+use inkwell::values::{BasicValue, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -2031,24 +2033,97 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's single malloc block to hold `new_cap` elements with `realloc`,
-// then update its capacity field. The elements are not touched: `realloc` preserves the block's
-// contents, often growing it in place. The caller must ensure the array is unique.
+// Give a uniquely owned array room for `new_cap` elements and update its capacity field. The
+// elements are not touched: `realloc` preserves the block's contents, often growing it in place. An
+// array of capacity zero owns no block, so it is given a fresh one. The caller must ensure the array
+// is unique.
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     new_cap: IntValue<'c>,
 ) -> Object<'c> {
-    // Resize the storage block in place, then update the array value's storage pointer and capacity.
-    let storage = get_array_storage(gc, &array);
-    let storage_ptr = storage.value(gc).into_pointer_value();
-    let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+    let grow = grow_array_storage_function(gc, elem_ty);
+    let storage_ptr = get_array_storage(gc, &array).value(gc);
+    let cap = array.extract_field(gc, ARRAY_CAP_IDX);
+    let grown_storage_ptr = gc
+        .builder()
+        .build_call(
+            grow,
+            &[storage_ptr.into(), cap.into(), new_cap.into()],
+            "grow_array_storage",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap();
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, grown_storage_ptr);
+    array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+}
+
+// The function `realloc_array` calls for element type `elem_ty`: it takes an array's storage, its
+// capacity and the capacity wanted, and returns the storage to use.
+//
+// It is a function, and one the inliner keeps out of its caller, because growing an array is a cold
+// path that the append loop around it would otherwise pay for: every block this needs becomes
+// another edge into the merge point each append flows through, and the loop loses registers to the
+// wider phis there. Measured on a sieve that appends into a pre-reserved array, inlining it costs
+// about 1.4% of the whole program.
+fn grow_array_storage_function<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: Arc<TypeNode>,
+) -> FunctionValue<'c> {
+    let storage_ty = make_array_storage_ty(elem_ty.clone());
+    let name = format!("grow_array_storage#{}", storage_ty.hash());
+    if let Some(func) = gc.module.get_function(&name) {
+        return func;
+    }
+
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let i64_ty = gc.context.i64_type();
+    let func = gc.module.add_function(
+        &name,
+        ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), i64_ty.into()], false),
+        Some(Linkage::Internal),
+    );
+    gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
+    let storage_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
+    let cap = func.get_nth_param(1).unwrap().into_int_value();
+    let new_cap = func.get_nth_param(2).unwrap().into_int_value();
+
+    let entry_bb = gc.context.append_basic_block(func, "entry");
+    let empty_bb = gc.context.append_basic_block(func, "empty_bb");
+    let resize_bb = gc.context.append_basic_block(func, "resize_bb");
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(entry_bb);
+    let is_empty = gc
+        .builder()
+        .build_int_compare(IntPredicate::EQ, cap, i64_ty.const_zero(), "is_empty")
+        .unwrap();
+    gc.builder()
+        .build_conditional_branch(is_empty, empty_bb, resize_bb)
+        .unwrap();
+
+    // A capacity-zero array may sit on the storage every empty array shares
+    // (`shared_empty_array_storage`), which is not a heap block. Give it a block of its own: it holds
+    // no element, so nothing is copied, and dropping the old reference frees a heap block or leaves
+    // the shared one alone.
+    gc.builder().position_at_end(empty_bb);
+    let allocated = alloc_array_storage(gc, elem_ty, new_cap);
+    let allocated_ptr = allocated.value(gc);
+    let old_storage = Object::new(storage_ptr.into(), storage_ty.clone(), gc);
+    gc.release(old_storage);
+    gc.builder().build_return(Some(&allocated_ptr)).unwrap();
+
+    // Otherwise resize the block in place, preserving the elements it holds.
+    gc.builder().position_at_end(resize_bb);
+    let object_type = storage_ty.get_object_type(&vec![], gc.type_env());
     let sizeof = object_type.size_of(gc, Some(new_cap));
     let realloc_fn = gc
         .module
         .get_function(RUNTIME_REALLOC)
         .expect("realloc is not declared");
-    let new_storage_ptr = gc
+    let resized_ptr = gc
         .builder()
         .build_call(
             realloc_fn,
@@ -2059,8 +2134,9 @@ fn realloc_array<'c, 'm>(
         .try_as_basic_value()
         .left()
         .unwrap();
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, new_storage_ptr);
-    array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+    gc.builder().build_return(Some(&resized_ptr)).unwrap();
+
+    func
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -3568,6 +3644,8 @@ impl LLVMGen for InlineLLVMMakeStructBody {
 // Allocate an array whose length equals the number of operands and fill it with them. The array
 // type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
+//
+// A literal with no operand allocates nothing: it shares the module-level empty storage.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayLitBody {
     pub elem_names: Vec<FullName>,
@@ -3581,7 +3659,11 @@ impl LLVMGen for InlineLLVMArrayLitBody {
             .i64_type()
             .const_int(self.elem_names.len() as u64, false);
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
-        let storage = alloc_array_storage(gc, elem_ty, len);
+        let storage = if self.elem_names.is_empty() {
+            shared_empty_array_storage(gc, elem_ty)
+        } else {
+            alloc_array_storage(gc, elem_ty, len)
+        };
         let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
         let storage_val = storage.value(gc);
         let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
@@ -3617,6 +3699,9 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
+        // An empty literal shares one block with every other empty array, and that block is still
+        // uniquely owned in the sense this analysis uses: a capacity-zero array has no element an
+        // alias could reach. See `shared_empty_array_storage`.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
@@ -5851,7 +5936,28 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
                 .build_phi(bool_ty, "phi@is_storage_unique")
                 .unwrap();
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
-            flag.as_basic_value().into_int_value()
+            let flag = flag.as_basic_value().into_int_value();
+
+            // An array of capacity zero holds no element, so no alias of it can observe anything:
+            // it is unique whatever block it sits on, including the one every empty array shares
+            // (`shared_empty_array_storage`).
+            let cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
+            let is_empty = gc
+                .builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    cap,
+                    gc.context.i64_type().const_zero(),
+                    "is_empty@is_storage_unique",
+                )
+                .unwrap();
+            let is_empty = gc
+                .builder()
+                .build_int_z_extend(is_empty, bool_ty, "is_empty_flag@is_storage_unique")
+                .unwrap();
+            gc.builder()
+                .build_or(flag, is_empty, "or_empty@is_storage_unique")
+                .unwrap()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.
             bool_ty.const_int(1, false)
