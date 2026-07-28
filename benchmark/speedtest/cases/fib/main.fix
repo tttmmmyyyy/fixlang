@@ -1,0 +1,23 @@
+module Main;
+
+import Std::{I64, IO, Debug::assert_eq, IO::get_args, Monad::pure, Array::@size};
+
+// Naive recursive Fibonacci, the function-call-overhead micro-benchmark that public
+// cross-language benchmark suites all carry. Nothing here allocates or touches an
+// array, so the cost is the call sequence itself.
+//
+// `n` comes from the argument count rather than a literal, so the whole call tree
+// cannot be folded to a constant while the assertion still holds: the case is run
+// with no arguments, and `get_args` then yields the program name alone.
+fib : I64 -> I64;
+fib = |n| (
+    if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+);
+
+main : IO ();
+main = (
+    let args = *get_args;
+    let n = 33 + args.@size;
+    assert_eq(|_|"fib", fib(n), 5702887);;
+    pure()
+);
