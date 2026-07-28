@@ -83,13 +83,13 @@ impl Substitutor {
             self.map.remove(name);
         }
 
-        let rename = self.create_rename_of_local_names(introduced_names, expr);
-        for (org, renamed) in rename.iter() {
+        let renaming = self.create_rename_of_local_names(introduced_names, expr);
+        for (old, renamed) in renaming.iter() {
             self.map
-                .insert(org.clone(), expr_var(renamed.clone(), None));
+                .insert(old.clone(), expr_var(renamed.clone(), None));
         }
 
-        (backup, rename)
+        (backup, renaming)
     }
 
     /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
@@ -272,7 +272,7 @@ impl ExprVisitor for Substitutor {
         );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
-        let (backup, rename) = self.enter_scope(&introduced_names, expr);
+        let (backup, renaming) = self.enter_scope(&introduced_names, expr);
 
         if self.map.is_empty() {
             self.leave_scope(backup);
@@ -281,7 +281,7 @@ impl ExprVisitor for Substitutor {
 
         // Rename the parameters.
         for param in &mut params {
-            if let Some(new_name) = rename.get(&param.name) {
+            if let Some(new_name) = renaming.get(&param.name) {
                 *param = param.set_name(new_name.clone());
             }
         }
@@ -317,7 +317,7 @@ impl ExprVisitor for Substitutor {
             .cloned()
             .collect::<Vec<_>>();
 
-        let (backup, rename) = self.enter_scope(&introduced_names, &expr);
+        let (backup, renaming) = self.enter_scope(&introduced_names, &expr);
         if self.map.is_empty() {
             self.leave_scope(backup);
             if changed {
@@ -329,7 +329,7 @@ impl ExprVisitor for Substitutor {
 
         // Rename the local names.
         let pattern = expr.get_let_pat();
-        let pattern = pattern.rename_by_map(&rename);
+        let pattern = pattern.rename_by_map(&renaming);
         let value = expr.get_let_value();
         let value = self.traverse(&value).expr;
         let expr = expr.set_let_pat(pattern).set_let_value(value);
@@ -373,14 +373,14 @@ impl ExprVisitor for Substitutor {
         for (pat, val) in pat_vals.iter_mut() {
             let introduced_names = pat.pattern.vars().into_iter().collect::<Vec<_>>();
 
-            let (backup, rename) = self.enter_scope(&introduced_names, &expr);
+            let (backup, renaming) = self.enter_scope(&introduced_names, &expr);
             if self.map.is_empty() {
                 self.leave_scope(backup);
                 continue;
             }
             changed = true;
 
-            *pat = pat.rename_by_map(&rename);
+            *pat = pat.rename_by_map(&renaming);
             *val = self.traverse(&val).expr;
 
             self.leave_scope(backup);
@@ -497,15 +497,15 @@ pub fn generate_new_names_pred(is_ng_name: impl Fn(&FullName) -> bool, n: usize)
     names
 }
 
-// Rename the names in the pattern so that they will be disjoint from the set `black_list`.
+// Rename the names in the pattern so that they will be disjoint from the set `ng_list`.
 // Also, apply the same renaming to the value expression.
 pub fn rename_pattern_value_avoiding(
-    black_list: &Set<FullName>,
+    ng_list: &Set<FullName>,
     mut pattern: Arc<PatternNode>,
     mut value: Arc<ExprNode>,
 ) -> (Arc<PatternNode>, Arc<ExprNode>) {
     let renaming = calculate_renaming_bound_vars_avoiding(
-        black_list,
+        ng_list,
         pattern.pattern.vars().into_iter().collect(),
         value.clone(),
     );
@@ -516,24 +516,23 @@ pub fn rename_pattern_value_avoiding(
 }
 
 pub fn rename_let_pattern_avoiding(
-    black_list: &Set<FullName>,
+    ng_list: &Set<FullName>,
     let_expr: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     let pattern = let_expr.get_let_pat().clone();
     let value = let_expr.get_let_value().clone();
-    let (pattern, value) = rename_pattern_value_avoiding(black_list, pattern, value);
+    let (pattern, value) = rename_pattern_value_avoiding(ng_list, pattern, value);
     let_expr.set_let_pat(pattern).set_let_value(value)
 }
 
 pub fn rename_match_pattern_avoiding(
-    black_list: &Set<FullName>,
+    ng_list: &Set<FullName>,
     match_expr: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     let match_expr = match_expr.clone();
     let mut pat_vals = match_expr.get_match_pat_vals();
     for (pat, val) in pat_vals.iter_mut() {
-        let (new_pat, new_val) =
-            rename_pattern_value_avoiding(black_list, pat.clone(), val.clone());
+        let (new_pat, new_val) = rename_pattern_value_avoiding(ng_list, pat.clone(), val.clone());
         *pat = new_pat;
         *val = new_val;
     }
@@ -541,7 +540,7 @@ pub fn rename_match_pattern_avoiding(
 }
 
 pub fn rename_lam_param_avoiding(
-    black_list: &Set<FullName>,
+    ng_list: &Set<FullName>,
     lam_expr: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     if lam_expr.get_lam_params().len() > 1 {
@@ -551,7 +550,7 @@ pub fn rename_lam_param_avoiding(
     let old_param = old_params[0].clone();
     let old_body = lam_expr.get_lam_body().clone();
     let renaming = calculate_renaming_bound_vars_avoiding(
-        black_list,
+        ng_list,
         vec![old_param.name.clone()],
         old_body.clone(),
     );
@@ -568,31 +567,31 @@ pub fn rename_lam_param_avoiding(
 }
 
 // Consider the situation that let, match or lam expression binds variables `bound_vars` and evaluates the expression `expr`.
-// This function calculates how to rename bound variables so that they are disjoint from `black_list`.
+// This function calculates how to rename bound variables so that they are disjoint from `ng_list`.
 fn calculate_renaming_bound_vars_avoiding(
-    black_list: &Set<FullName>,
+    ng_list: &Set<FullName>,
     bound_vars: Vec<FullName>,
     value: Arc<ExprNode>,
 ) -> Map<FullName, FullName> {
     // Calculate the set of names that should be renamed.
     let mut names_to_rename: Vec<FullName> = vec![];
     for name in bound_vars.iter() {
-        if black_list.contains(name) {
+        if ng_list.contains(name) {
             names_to_rename.push(name.clone());
         }
     }
 
     // Calculate the set of names that should be avoided when we decide new names.
-    let mut black_list = black_list.clone();
+    let mut ng_list = ng_list.clone();
     for var in value.free_vars() {
-        black_list.insert(var.clone()); // Avoid shadowing free variables by bound variables.
+        ng_list.insert(var.clone()); // Avoid shadowing free variables by bound variables.
     }
     for var in bound_vars.iter() {
-        black_list.insert(var.clone()); // Avoid conflicts with other bound variables.
+        ng_list.insert(var.clone()); // Avoid conflicts with other bound variables.
     }
 
     // Decide new names.
-    let new_names = generate_new_names(&black_list, names_to_rename.len());
+    let new_names = generate_new_names(&ng_list, names_to_rename.len());
 
     // Create the renaming map.
     let mut renaming: Map<FullName, FullName> = Map::default();
