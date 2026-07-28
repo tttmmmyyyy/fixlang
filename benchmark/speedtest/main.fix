@@ -208,10 +208,9 @@ main = (
 
     ez_cd(config, "..");;
 
-    // Save the log to the log file and update the graph.
-    unless(args.@no_save, 
-        write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1));;
-        ["python3", "graph.py"].ez_run_o(config).forget
+    // Save the log to the log file.
+    unless(args.@no_save,
+        write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1))
     );;
 
     // Print the commit hash and this run's cachegrind costs, and those alone: `run_benchmark`

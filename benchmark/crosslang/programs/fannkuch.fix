@@ -20,7 +20,7 @@ count_flips = |perm| (
     )
 );
 
-type St = struct {
+type State = struct {
     perm1 : Array I64,
     count : Array I64,
     r : I64,
@@ -31,28 +31,28 @@ type St = struct {
 
 fannkuch : I64 -> (I64, I64);
 fannkuch = |n| (
-    let st0 = St {
+    let state0 = State {
         perm1 : Array::from_map(n, |i| i),
         count : Array::fill(n, 0),
         r : n, maxflips : 0, checksum : 0, permcount : 0
     };
-    loop(st0, |st|
+    loop(state0, |state|
         // while r != 1 { count[r-1] = r; r-- }
-        let st = loop(st, |st|
-            if st.@r == 1 { break $ st };
-            let r = st.@r;
-            continue $ st.mod_count(|c| c.set(r - 1, r)).mod_r(|x| x - 1)
+        let state = loop(state, |state|
+            if state.@r == 1 { break $ state };
+            let r = state.@r;
+            continue $ state.mod_count(|c| c.set(r - 1, r)).mod_r(|x| x - 1)
         );
         // flips on a (copied) perm1
-        let flips = count_flips(st.@perm1);
-        let pc = st.@permcount;
-        let st = st.mod_maxflips(|m| max(m, flips))
+        let flips = count_flips(state.@perm1);
+        let pc = state.@permcount;
+        let state = state.mod_maxflips(|m| max(m, flips))
                    .mod_checksum(|c| c + (if pc % 2 == 0 { flips } else { -flips }));
-        // next permutation -> (st, done)
-        let (st, done) = loop(st, |st|
-            if st.@r == n { break $ (st, true) };
-            let r = st.@r;
-            let st = st.mod_perm1(|perm1|
+        // next permutation -> (state, done)
+        let (state, done) = loop(state, |state|
+            if state.@r == n { break $ (state, true) };
+            let r = state.@r;
+            let state = state.mod_perm1(|perm1|
                 let perm0 = perm1.@(0);
                 let perm1 = loop((0, perm1), |(i, p)|
                     if i == r { break $ p };
@@ -60,11 +60,11 @@ fannkuch = |n| (
                 );
                 perm1.set(r, perm0)
             ).mod_count(|c| c.set(r, c.@(r) - 1));
-            if st.@count.@(r) > 0 { break $ (st, false) };
-            continue $ st.mod_r(|x| x + 1)
+            if state.@count.@(r) > 0 { break $ (state, false) };
+            continue $ state.mod_r(|x| x + 1)
         );
-        if done { break $ (st.@checksum, st.@maxflips) };
-        continue $ st.mod_permcount(|x| x + 1)
+        if done { break $ (state.@checksum, state.@maxflips) };
+        continue $ state.mod_permcount(|x| x + 1)
     )
 );
 

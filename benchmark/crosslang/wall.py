@@ -25,7 +25,7 @@ BIN = os.environ.get("BIN", "bin_native")
 LOAD_LIMIT = float(os.environ.get("LOAD_LIMIT", str(os.cpu_count() / 2)))
 
 
-def programs():
+def read_programs():
     out = {}
     for line in (HERE / "programs.txt").read_text().splitlines():
         line = line.split("#")[0].strip()
@@ -45,7 +45,7 @@ def best_ms(cmd, runs):
 
 
 def main():
-    progs = programs()
+    progs = read_programs()
     selected = sys.argv[1:] or list(progs)
     unknown = [p for p in selected if p not in progs]
     if unknown:

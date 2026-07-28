@@ -24,7 +24,7 @@ printf "  %-13s %-5s %14s %14s\n" "prog" "lang" "splits" "cycles"
 while read -r name full _; do
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
-    wanted "$name" || continue
+    is_wanted "$name" || continue
     for lang in fix c rust; do
         out=$(python3 "$COUNTERS" "$BIN/${name}_${lang}" "$full") || { echo "  $name $lang: unavailable"; continue; }
         printf "  %-13s %-5s %14s %14s\n" "$name" "$lang" "${out%%,*}" "${out##*,}"

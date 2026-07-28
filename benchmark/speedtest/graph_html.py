@@ -13,6 +13,7 @@ import csv
 import html
 import json
 import re
+import tempfile
 from pathlib import Path
 
 try:
@@ -80,6 +81,8 @@ def render_markdown(text):
 def read_log(path):
     with path.open(encoding="utf-8") as f:
         rows = [r for r in csv.reader(f) if any(c.strip() for c in r)]
+    if not rows:
+        raise SystemExit(f"{path} holds no rows")
     header, body = rows[0], rows[1:]
     return header, body
 
@@ -98,8 +101,11 @@ def build_data(log_path, history_path, latest_n):
         dirty = raw.endswith("(dirty)")
         h = raw[: -len("(dirty)")] if dirty else raw
         entry = history.get(h)
-        if entry is None:  # `history.md` may key an entry by a short hash.
-            entry = next((v for k, v in history.items() if h.startswith(k) or k.startswith(h)), None)
+        if entry is None:
+            # An entry may be keyed by a short hash. Take the longest key that matches, so
+            # two entries sharing a prefix resolve to the more specific one.
+            matches = [k for k in history if h.startswith(k) or k.startswith(h)]
+            entry = history[max(matches, key=len)] if matches else None
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
         commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry, "cpu": cpu})
 
@@ -124,7 +130,39 @@ def build_data(log_path, history_path, latest_n):
     return {"commits": commits, "metrics": metrics}
 
 
+def self_check():
+    """Read a fixture log, covering what the real one does not exercise yet.
+
+    The columns a page bug would hide behind -- the processor, a split-access series, a
+    cell left empty on a machine without the counters -- appear in no row of `log.csv`
+    today, and a run of the whole suite is an hour away. The fixture costs milliseconds,
+    so it runs on every invocation.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "log.csv"
+        log.write_text(
+            "commit,cpu,a-inst,a-mem,a-splits,b-inst\n"
+            "1111111111111111111111111111111111111111,Zen,100,200,4,50\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,150,,0,\n",
+            encoding="utf-8",
+        )
+        history = Path(tmp) / "history.md"
+        history.write_text("# Benchmark History\n\n## 2222222\n\nsecond commit\n", encoding="utf-8")
+        data = build_data(log, history, 40)
+
+    first, second = data["commits"]
+    assert first["cpu"] == "Zen" and not first["dirty"], first
+    assert second["dirty"] and "second commit" in second["history"], second
+    assert first["history"] is None, first
+    series = {k: v["series"] for k, v in data["metrics"].items()}
+    assert series["inst"] == {"a": [100, 150], "b": [50, None]}, series["inst"]
+    assert series["mem"] == {"a": [200, None]}, series["mem"]
+    assert series["splits"] == {"a": [4, 0]}, series["splits"]
+    assert data["metrics"]["splits"]["kind"] == "absolute"
+
+
 def main():
+    self_check()
     here = Path(__file__).resolve().parent
     ap = argparse.ArgumentParser()
     ap.add_argument("--log", default=here / "log.csv", type=Path)
@@ -171,9 +209,9 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; pa
 svg { width: 100%; height: auto; display: block; overflow: visible; }
 svg text { fill: var(--muted); font-size: 11px; }
 .grid line { stroke: var(--grid); stroke-width: 1; }
-.serie { fill: none; stroke-width: 1.7; opacity: .85; }
-.serie.dim { opacity: .1; }
-.serie.hot { stroke-width: 3.2; opacity: 1; }
+.series-line { fill: none; stroke-width: 1.7; opacity: .85; }
+.series-line.dim { opacity: .1; }
+.series-line.hot { stroke-width: 3.2; opacity: 1; }
 .hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
 .xtick { cursor: pointer; }
 .xtick text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; }
@@ -262,12 +300,12 @@ function seriesOf(metric) {
   return out;
 }
 
-const visible = (s) => onlyCase === null || s.name === onlyCase;
+const isVisible = (s) => onlyCase === null || s.name === onlyCase;
 
 function scaleY(series, kind) {
   let lo = Infinity, hi = -Infinity;
   for (const s of series) {
-    if (!visible(s)) continue;
+    if (!isVisible(s)) continue;
     for (const v of s.values) if (v !== null && v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
   }
   if (!isFinite(lo)) { lo = 1; hi = 1; }
@@ -304,12 +342,12 @@ function render() {
 
   const lines = el("g", {}, svg);
   for (const s of series) {
-    if (!visible(s)) continue;
+    if (!isVisible(s)) continue;
     const pts = [];
     s.values.forEach((v, i) => { if (v !== null) pts.push(`${xAt(i)},${toY(v)}`); });
     if (!pts.length) continue;
     const d = "M" + pts.join("L");
-    el("path", { class: "serie", stroke: s.color, d, "data-name": s.name }, lines);
+    el("path", { class: "series-line", stroke: s.color, d, "data-name": s.name }, lines);
     const hit = el("path", { class: "hit", d, "data-name": s.name }, lines);
     hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xAt));
     hit.addEventListener("mouseleave", clearHover);
@@ -357,7 +395,7 @@ function render() {
 }
 
 function highlight(name) {
-  document.querySelectorAll(".serie").forEach((p) => {
+  document.querySelectorAll(".series-line").forEach((p) => {
     p.classList.toggle("dim", name !== null && p.dataset.name !== name);
     p.classList.toggle("hot", name !== null && p.dataset.name === name);
   });

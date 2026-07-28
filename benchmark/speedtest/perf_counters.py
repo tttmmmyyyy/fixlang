@@ -25,7 +25,7 @@ CYCLE_EVENT = "cycles:u"
 ARCH = subprocess.check_output(["uname", "-m"], text=True).strip()
 
 
-def counters(argv):
+def read_counters(argv):
     """Event name -> count, for the events perf managed to read."""
     proc = subprocess.run(
         # ASLR off, as cachegrind.py runs it: the split count depends on where the
@@ -69,7 +69,7 @@ def main():
     if len(sys.argv) < 2:
         sys.exit("usage: perf_counters.py <program> [args...]\n"
                  "       perf_counters.py --cpu")
-    found, report = counters(sys.argv[1:])
+    found, report = read_counters(sys.argv[1:])
     missing = [e for e in SPLIT_EVENTS + [CYCLE_EVENT.removesuffix(":u")] if e not in found]
     if missing:
         # Say which of the two it was: the program never ran, or the counters are out of reach.

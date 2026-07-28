@@ -18,11 +18,11 @@ select_programs "$@"
 TAG=${TAG:-cachegrind}
 BIN="bin_$TAG"
 OUT="results_$TAG.csv"
-CGPY=../speedtest/cachegrind-benchmarking/cachegrind.py
+CACHEGRIND=../speedtest/cachegrind-benchmarking/cachegrind.py
 
 cg() {
     local out
-    out=$(python3 "$CGPY" "$@" | tail -1)
+    out=$(python3 "$CACHEGRIND" "$@" | tail -1)
     # An empty or non-numeric line means the run never happened -- a missing binary, a
     # program that aborted on this input, no valgrind. Subtracting it would report zero
     # instructions, which reads as the best result in the table instead of as a failure.
@@ -36,7 +36,7 @@ cg() {
 while read -r name full base; do
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
-    wanted "$name" || continue
+    is_wanted "$name" || continue
     for lang in fix c rust; do
         bin="$BIN/${name}_${lang}"
         [ -x "$bin" ] || { echo "no $bin -- run build.sh first" >&2; exit 1; }

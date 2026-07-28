@@ -21,7 +21,7 @@ select_programs() {
 }
 
 # True for every program when none were named.
-wanted() {
+is_wanted() {
     [ ${#SELECTED[@]} -eq 0 ] && return 0
     printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
 }

@@ -21,7 +21,7 @@ int64_t mono_nanos(void) {
 // Identity on `x` (g_sink is always 0), but opaque to the optimizer.
 // Calling this after the start timestamp forces the work that depends on its
 // result to be scheduled after the start timestamp.
-int64_t seed_i64(int64_t x) {
+int64_t opaque_i64(int64_t x) {
     return x + g_sink;
 }
 

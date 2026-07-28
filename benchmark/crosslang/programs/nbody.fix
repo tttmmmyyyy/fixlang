@@ -7,8 +7,8 @@ type Body = struct { x: F64, y: F64, z: F64, vx: F64, vy: F64, vz: F64, mass: F6
 sqrt : F64 -> F64;
 sqrt = |x| FFI_CALL[F64 sqrt(F64), x];
 
-init : Array Body;
-init = (
+initial_bodies : Array Body;
+initial_bodies = (
     let pi = 3.141592653589793;
     let solar_mass = 4.0 * pi * pi;
     let dpy = 365.24;
@@ -89,7 +89,7 @@ main : IO ();
 main = (
     let args = *get_args;
     let steps : I64 = args.@(args.@size - 1).from_string.as_ok;
-    let bodies = loop((0, init), |(s, bodies)|
+    let bodies = loop((0, initial_bodies), |(s, bodies)|
         if s == steps { break $ bodies };
         continue $ (s + 1, advance(0.01, bodies))
     );

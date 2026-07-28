@@ -51,7 +51,7 @@ gcc -O2 -c bench_clock.c -o bench_clock.o
 while read -r name _ _; do
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
-    wanted "$name" || continue
+    is_wanted "$name" || continue
     # `fib` and `loop` time themselves in-process through a C helper.
     fix_extra=()
     case "$name" in fib|loop) fix_extra=(-b "$PWD/bench_clock.o") ;; esac
