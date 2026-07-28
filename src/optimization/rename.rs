@@ -127,25 +127,7 @@ impl Substitutor {
             to_names.extend(to.free_vars());
         }
 
-        let mut names_to_rename = vec![];
-        for introduced_name in introduced_names {
-            if to_names.contains(&introduced_name) {
-                names_to_rename.push(introduced_name.clone());
-            }
-        }
-
-        let fvs = expr.free_vars();
-        let is_ng_name = |name: &FullName| {
-            to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
-        };
-        let new_names = generate_new_names_pred(is_ng_name, names_to_rename.len());
-
-        let mut rename = Map::default();
-        for (old_name, new_name) in names_to_rename.into_iter().zip(new_names) {
-            rename.insert(old_name, new_name);
-        }
-
-        rename
+        calculate_renaming_bound_vars_avoiding(&to_names, introduced_names.clone(), expr.clone())
     }
 }
 
