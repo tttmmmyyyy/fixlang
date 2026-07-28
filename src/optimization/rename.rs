@@ -49,7 +49,7 @@ pub fn substitute_free_name(
 }
 
 /// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
-pub struct Substitutor {
+struct Substitutor {
     /// The mapping from names to the expressions they are replaced by.
     map: Map<FullName, Arc<ExprNode>>,
 }
@@ -470,7 +470,7 @@ pub fn generate_new_names(ng_list: &Set<FullName>, n: usize) -> Vec<FullName> {
     generate_new_names_pred(|name| ng_list.contains(name), n)
 }
 
-// Generate `n` new names satisfies `!is_ng_name(x)`
+/// Generates `n` new names, each satisfying `!is_ng_name(name)`.
 pub fn generate_new_names_pred(is_ng_name: impl Fn(&FullName) -> bool, n: usize) -> Vec<FullName> {
     let mut names = vec![];
     let mut var_name_no = 0;
@@ -596,27 +596,49 @@ fn calculate_renaming_bound_vars_avoiding(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::expr::{expr_let, expr_llvm};
+    use crate::ast::expr::{expr_let, expr_llvm, expr_match};
     use crate::ast::types::tycon;
-    use crate::fixstd::builtin::{make_i64_ty, make_tuple_name_abs, InlineLLVMMakeStructBody};
+    use crate::fixstd::builtin::{
+        make_i64_ty, make_ptr_ty, make_tuple_name_abs, make_tuple_ty, InlineLLVMMakeStructBody,
+        InlineLLVMNullPtrLit,
+    };
 
     /// `name` in the empty namespace, where the bindings local to an expression live.
     fn local(name: &str) -> FullName {
         FullName::local(name)
     }
 
-    /// An inline-LLVM expression reading the local names `names`, in that order.
-    fn llvm_reading(names: &[&str]) -> Arc<ExprNode> {
+    /// An inline-LLVM expression building a tuple out of the local names `names`, in that order, so
+    /// that it reads exactly those names.
+    fn llvm_with_free_names(names: &[&str]) -> Arc<ExprNode> {
         let generator = InlineLLVMMakeStructBody {
             field_names: names.iter().map(|name| local(name)).collect(),
         };
-        expr_llvm(Box::new(generator), make_i64_ty(), None)
+        let ty = make_tuple_ty(vec![make_i64_ty(); names.len()]);
+        expr_llvm(Box::new(generator), ty, None)
     }
 
     /// The names the inline-LLVM expression `expr` reads from its enclosing scope, in the order it
     /// holds them.
     fn llvm_free_names(expr: &Arc<ExprNode>) -> Vec<FullName> {
         expr.get_llvm().generator.free_vars()
+    }
+
+    /// The pattern `(x, y)`, which binds both of the names `x_to_a_and_y_to_y` substitutes.
+    fn binds_x_and_y() -> Arc<PatternNode> {
+        PatternNode::make_struct(
+            tycon(make_tuple_name_abs(2)),
+            vec![
+                (
+                    "0".to_string(),
+                    PatternNode::make_var(var_var(local("x")), None),
+                ),
+                (
+                    "1".to_string(),
+                    PatternNode::make_var(var_var(local("y")), None),
+                ),
+            ],
+        )
     }
 
     /// A substitutor renaming `x` to `a` and leaving `y` where it is. An inline-LLVM node reading
@@ -632,9 +654,18 @@ mod tests {
     /// even when a name mapped to itself is substituted afterwards.
     #[test]
     fn renaming_one_llvm_free_name_reports_a_change() {
-        let res = x_to_a_and_y_to_y().traverse(&llvm_reading(&["x", "y"]));
+        let res = x_to_a_and_y_to_y().traverse(&llvm_with_free_names(&["x", "y"]));
         assert_eq!(llvm_free_names(&res.expr), vec![local("a"), local("y")]);
         assert!(res.changed);
+    }
+
+    /// Verifies that an inline-LLVM node whose only substituted name maps to itself reports no
+    /// change, which is what lets a caller take the flag as an answer about the node.
+    #[test]
+    fn an_identity_mapping_alone_reports_no_change() {
+        let res = x_to_a_and_y_to_y().traverse(&llvm_with_free_names(&["y", "w"]));
+        assert_eq!(llvm_free_names(&res.expr), vec![local("y"), local("w")]);
+        assert!(!res.changed);
     }
 
     /// Verifies that a `let` whose pattern binds every substituted name still carries the renaming
@@ -643,22 +674,9 @@ mod tests {
     fn let_keeps_the_rename_of_its_bound_expression() {
         // `let (x, y) = LLVM(x, y) in z`. The pattern binds every name being substituted, so the
         // substitution stops at the binder and the let is rebuilt from its bound expression alone.
-        let pat = PatternNode::make_struct(
-            tycon(make_tuple_name_abs(2)),
-            vec![
-                (
-                    "0".to_string(),
-                    PatternNode::make_var(var_var(local("x")), None),
-                ),
-                (
-                    "1".to_string(),
-                    PatternNode::make_var(var_var(local("y")), None),
-                ),
-            ],
-        );
         let expr = expr_let(
-            pat,
-            llvm_reading(&["x", "y"]),
+            binds_x_and_y(),
+            llvm_with_free_names(&["x", "y"]),
             expr_var(local("z"), None),
             None,
         );
@@ -667,5 +685,40 @@ mod tests {
             llvm_free_names(&res.expr.get_let_bound()),
             vec![local("a"), local("y")]
         );
+    }
+
+    /// Verifies that a `match` whose every arm binds all the substituted names still carries the
+    /// renaming applied inside its condition.
+    #[test]
+    fn match_keeps_the_rename_of_its_condition() {
+        // `match LLVM(x, y) { (x, y) => z }`, the condition's counterpart of
+        // `let_keeps_the_rename_of_its_bound_expression`.
+        let expr = expr_match(
+            llvm_with_free_names(&["x", "y"]),
+            vec![(binds_x_and_y(), expr_var(local("z"), None))],
+            None,
+        );
+        let res = x_to_a_and_y_to_y().traverse(&expr);
+        assert_eq!(
+            llvm_free_names(&res.expr.get_match_cond()),
+            vec![local("a"), local("y")]
+        );
+    }
+
+    /// Verifies that the substitution of an inline-LLVM node's free names is simultaneous: it
+    /// applies to the names the node read on entry, so a name a rename introduced is left alone.
+    #[test]
+    fn substituting_llvm_free_names_is_simultaneous() {
+        let null_ptr = expr_llvm(Box::new(InlineLLVMNullPtrLit {}), make_ptr_ty(), None)
+            .set_type(make_ptr_ty());
+        let mut map = Map::default();
+        map.insert(local("x"), expr_var(local("a"), None));
+        map.insert(local("a"), null_ptr);
+        let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "w"]));
+        assert!(
+            res.expr.is_llvm(),
+            "`a` was substituted again and wrapped the node in a let"
+        );
+        assert_eq!(llvm_free_names(&res.expr), vec![local("a"), local("w")]);
     }
 }
