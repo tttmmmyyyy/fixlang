@@ -134,17 +134,17 @@ impl Substitutor {
         }
 
         let fvs = expr.free_vars();
-        let ng_as_new_name = |name: &FullName| {
+        let is_ng_name = |name: &FullName| {
             to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
         };
-        let new_names = generate_new_names_pred(ng_as_new_name, names_to_rename.len());
+        let new_names = generate_new_names_pred(is_ng_name, names_to_rename.len());
 
-        let mut map = Map::default();
+        let mut rename = Map::default();
         for (old_name, new_name) in names_to_rename.into_iter().zip(new_names) {
-            map.insert(old_name, new_name);
+            rename.insert(old_name, new_name);
         }
 
-        map
+        rename
     }
 }
 
