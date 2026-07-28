@@ -6205,6 +6205,37 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// The `void(ptr)` function named `name` that performs `work` — a retain or a release — on a boxed
+// value of type `target_ty`, so that a Fix program can hold its address. One definition serves every
+// caller asking for the same name.
+fn boxed_rc_operation_function<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    name: &str,
+    target_ty: Arc<TypeNode>,
+    work: impl FnOnce(&mut Generator<'c, 'm>, Object<'c>),
+) -> FunctionValue<'c> {
+    if let Some(func) = gc.module.get_function(name) {
+        return func;
+    }
+    let func_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
+    let func = gc
+        .module
+        .add_function(name, func_ty, Some(Linkage::Internal));
+    let bb = gc.context.append_basic_block(func, "entry");
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+
+    let obj_ptr = func.get_nth_param(0).unwrap();
+    let obj = Object::new(obj_ptr, target_ty, gc);
+    work(gc, obj);
+    gc.builder().build_return(None).unwrap();
+
+    func
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -6223,34 +6254,12 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 
         // Get function pointer to release function.
         let release_function_name = format!("release#{}", arg.ty.to_string_normalize());
-        let func = if let Some(func) = gc.module.get_function(&release_function_name) {
-            func
-        } else {
-            // Define release function.
-            let release_function_ty = gc
-                .context
-                .void_type()
-                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let release_function = gc.module.add_function(
-                &release_function_name,
-                release_function_ty,
-                Some(Linkage::Internal),
-            );
-            let bb = gc.context.append_basic_block(release_function, "entry");
-            let _builder_guard = gc.push_builder();
-            gc.builder().position_at_end(bb);
-
-            // Get pointer to object.
-            let obj_ptr = release_function.get_nth_param(0).unwrap();
-            // Create object.
-            let obj = Object::new(obj_ptr, target_ty.clone(), gc);
-            // Release object.
-            gc.release(obj);
-            // Return.
-            gc.builder().build_return(None).unwrap();
-
-            release_function
-        };
+        let func = boxed_rc_operation_function(
+            gc,
+            &release_function_name,
+            target_ty,
+            |gc: &mut Generator<'c, 'm>, obj| gc.release(obj),
+        );
         let func_ptr = func.as_global_value().as_pointer_value();
 
         let ret = create_obj(
@@ -6325,34 +6334,12 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 
         // Get function pointer to retain function.
         let retain_function_name = format!("retain#{}", arg.ty.to_string_normalize());
-        let func = if let Some(func) = gc.module.get_function(&retain_function_name) {
-            func
-        } else {
-            // Define release function.
-            let retain_function_ty = gc
-                .context
-                .void_type()
-                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let retain_function = gc.module.add_function(
-                &retain_function_name,
-                retain_function_ty,
-                Some(Linkage::Internal),
-            );
-            let bb = gc.context.append_basic_block(retain_function, "entry");
-            let _builder_guard = gc.push_builder();
-            gc.builder().position_at_end(bb);
-
-            // Get pointer to object.
-            let obj_ptr = retain_function.get_nth_param(0).unwrap();
-            // Create object.
-            let obj = Object::new(obj_ptr, target_ty, gc);
-            // retain object.
-            gc.retain(obj);
-            // Return.
-            gc.builder().build_return(None).unwrap();
-
-            retain_function
-        };
+        let func = boxed_rc_operation_function(
+            gc,
+            &retain_function_name,
+            target_ty,
+            |gc: &mut Generator<'c, 'm>, obj| gc.retain(obj),
+        );
         let func_ptr = func.as_global_value().as_pointer_value();
 
         let ret = create_obj(

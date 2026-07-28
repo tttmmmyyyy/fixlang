@@ -1844,13 +1844,26 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
-    fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
+    // Store `new_state` into the object's reference-count state field where its current state
+    // satisfies `predicate` against `compared_state`, and leave the field as it is otherwise.
+    // `label` names the emitted basic blocks, so that the caller is readable in the IR.
+    fn store_refcnt_state_if(
+        &mut self,
+        obj_ptr: PointerValue<'c>,
+        predicate: IntPredicate,
+        compared_state: u8,
+        new_state: u8,
+        label: &str,
+    ) {
         let current_func = self.current_function();
+        let store_bb = self
+            .context
+            .append_basic_block(current_func, &format!("store_bb@{}", label));
         let cont_bb = self
             .context
-            .append_basic_block(current_func, "cont_bb@mark_threaded");
+            .append_basic_block(current_func, &format!("cont_bb@{}", label));
 
-        // Load refcnt state.
+        // Load the refcnt state and branch by comparing it against `compared_state`.
         let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
@@ -1861,31 +1874,25 @@ impl<'c, 'm> Generator<'c, 'm> {
             )
             .unwrap()
             .into_int_value();
-
-        // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
-        let local_bb = self
-            .context
-            .append_basic_block(current_func, "local_bb@mark_threaded");
-        let is_refcnt_state_local = self
+        let should_store = self
             .builder()
             .build_int_compare(
-                IntPredicate::EQ,
+                predicate,
                 refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
+                refcnt_state_type(self.context).const_int(compared_state as u64, false),
+                "should_store_refcnt_state",
             )
             .unwrap();
         self.builder()
-            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb)
+            .build_conditional_branch(should_store, store_bb, cont_bb)
             .unwrap();
 
-        // Implement local_bb.
-        self.builder().position_at_end(local_bb);
-        // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
+        // Implement store_bb.
+        self.builder().position_at_end(store_bb);
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+                refcnt_state_type(self.context).const_int(new_state as u64, false),
             )
             .unwrap();
         self.builder().build_unconditional_branch(cont_bb).unwrap();
@@ -1894,46 +1901,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
+    // Mark object as threaded so that it will be retained and released atomically.
+    //
+    // Only a local object is marked: one already threaded or global stays as it is.
+    fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
+        self.store_refcnt_state_if(
+            obj_ptr,
+            IntPredicate::EQ,
+            REFCNT_STATE_LOCAL,
+            REFCNT_STATE_THREADED,
+            "mark_threaded",
+        );
+    }
+
     // Mark object as global so that it will not be retained or released.
     //
     // An object already in that state is left untouched, so that a read-only object reached twice —
     // the block every empty array shares is one, and it lives in a global two initializers may walk
     // — is read rather than written.
     fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
-        let current_func = self.current_function();
-        let mark_bb = self
-            .context
-            .append_basic_block(current_func, "mark_bb@mark_global");
-        let cont_bb = self
-            .context
-            .append_basic_block(current_func, "cont_bb@mark_global");
-
-        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        let global = refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                ptr_refcnt_state,
-                "refcnt_state",
-            )
-            .unwrap()
-            .into_int_value();
-        let is_global = self
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt_state, global, "is_global")
-            .unwrap();
-        self.builder()
-            .build_conditional_branch(is_global, cont_bb, mark_bb)
-            .unwrap();
-
-        self.builder().position_at_end(mark_bb);
-        self.builder()
-            .build_store(ptr_refcnt_state, global)
-            .unwrap();
-        self.builder().build_unconditional_branch(cont_bb).unwrap();
-
-        self.builder().position_at_end(cont_bb);
+        self.store_refcnt_state_if(
+            ptr,
+            IntPredicate::NE,
+            REFCNT_STATE_GLOBAL,
+            REFCNT_STATE_GLOBAL,
+            "mark_global",
+        );
     }
 
     // Print Rust's &str to stderr.
