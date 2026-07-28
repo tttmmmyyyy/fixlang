@@ -51,8 +51,6 @@ pub fn substitute_free_name(
 pub struct Substitutor {
     /// The mapping from names to the expressions they are replaced by.
     map: Map<FullName, Arc<ExprNode>>,
-    /// Local names available at this scope.
-    shadowed: Set<FullName>,
 }
 
 /// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
@@ -60,23 +58,17 @@ pub struct Substitutor {
 struct ScopeBackup {
     /// The mapping from names to expressions in force outside the binder.
     map: Map<FullName, Arc<ExprNode>>,
-    /// The local names available outside the binder.
-    shadowed: Set<FullName>,
 }
 
 impl Substitutor {
     /// Creates a substitutor that replaces each name of `map` with the expression it maps to.
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
-        Self {
-            map,
-            shadowed: Set::default(),
-        }
+        Self { map }
     }
 
     /// Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
-    /// stop being substituted and count as shadowed, and each local name that would capture a
-    /// substituted value is given a new name. Returns that renaming together with the state that
-    /// `leave_scope` puts back.
+    /// stop being substituted, and each local name that would capture a substituted value is given a
+    /// new name. Returns that renaming together with the state that `leave_scope` puts back.
     fn enter_scope(
         &mut self,
         introduced_names: &Vec<FullName>,
@@ -84,12 +76,10 @@ impl Substitutor {
     ) -> (ScopeBackup, Map<FullName, FullName>) {
         let backup = ScopeBackup {
             map: self.map.clone(),
-            shadowed: self.shadowed.clone(),
         };
 
         for name in introduced_names {
             self.map.remove(name);
-            self.shadowed.insert(name.clone());
         }
 
         let rename = self.create_rename_of_local_names(introduced_names, expr);
@@ -104,7 +94,6 @@ impl Substitutor {
     /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
     fn leave_scope(&mut self, backup: ScopeBackup) {
         self.map = backup.map;
-        self.shadowed = backup.shadowed;
     }
 
     /// Decides which of the local names `introduced_names` that `expr` introduces have to be
@@ -192,6 +181,8 @@ impl ExprVisitor for Substitutor {
     }
 
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        // `start_visit_let` and `start_visit_match` keep the subexpression they rebuilt only when
+        // its traversal reports a change, so every rewrite below has to be recorded here.
         let mut changed = false;
         let mut llvm = expr.get_llvm().as_ref().clone();
 
@@ -204,14 +195,14 @@ impl ExprVisitor for Substitutor {
         //     This is transformed into the form `let x = e in {llvm}`.
 
         // (1)
-        let mut llvm_fvs = generator.free_vars().clone(); // Before updating, save free_vars for use in (2)
+        let mut llvm_fvs = generator.free_vars(); // Before updating, save free_vars for use in (2)
         for llvm_fv in generator.free_vars_mut() {
             if let Some(to) = self.map.get(llvm_fv) {
                 if !to.is_var() {
                     continue;
                 }
                 let to_name = to.get_var().name.clone();
-                changed = *llvm_fv != to_name;
+                changed |= *llvm_fv != to_name;
                 *llvm_fv = to_name;
             }
         }
@@ -594,4 +585,74 @@ fn calculate_renaming_bound_vars_avoiding(
         renaming.insert(old, new);
     }
     renaming
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::{expr_let, expr_llvm};
+    use crate::ast::types::tycon;
+    use crate::fixstd::builtin::{make_i64_ty, make_tuple_name_abs, InlineLLVMMakeStructBody};
+
+    fn local(name: &str) -> FullName {
+        FullName::local(name)
+    }
+
+    /// An inline-LLVM expression reading the local names `names`, in that order.
+    fn llvm_reading(names: &[&str]) -> Arc<ExprNode> {
+        let generator = InlineLLVMMakeStructBody {
+            field_names: names.iter().map(|name| local(name)).collect(),
+        };
+        expr_llvm(Box::new(generator), make_i64_ty(), None)
+    }
+
+    fn llvm_free_names(expr: &Arc<ExprNode>) -> Vec<FullName> {
+        expr.get_llvm().generator.free_vars()
+    }
+
+    /// A substitutor renaming `x` to `a` and leaving `y` where it is. An inline-LLVM node reading
+    /// both applies the identity mapping second, after it has already renamed a name.
+    fn x_to_a_and_y_to_y() -> Substitutor {
+        let mut map = Map::default();
+        map.insert(local("x"), expr_var(local("a"), None));
+        map.insert(local("y"), expr_var(local("y"), None));
+        Substitutor::new(map)
+    }
+
+    #[test]
+    fn renaming_one_llvm_free_name_reports_a_change() {
+        let res = x_to_a_and_y_to_y().traverse(&llvm_reading(&["x", "y"]));
+        assert_eq!(llvm_free_names(&res.expr), vec![local("a"), local("y")]);
+        assert!(res.changed);
+    }
+
+    #[test]
+    fn let_keeps_the_rename_of_its_bound_expression() {
+        // `let (x, y) = LLVM(x, y) in z`. The pattern binds every name being substituted, so the
+        // substitution stops at the binder and the let is rebuilt from its bound expression alone.
+        let pat = PatternNode::make_struct(
+            tycon(make_tuple_name_abs(2)),
+            vec![
+                (
+                    "0".to_string(),
+                    PatternNode::make_var(var_var(local("x")), None),
+                ),
+                (
+                    "1".to_string(),
+                    PatternNode::make_var(var_var(local("y")), None),
+                ),
+            ],
+        );
+        let expr = expr_let(
+            pat,
+            llvm_reading(&["x", "y"]),
+            expr_var(local("z"), None),
+            None,
+        );
+        let res = x_to_a_and_y_to_y().traverse(&expr);
+        assert_eq!(
+            llvm_free_names(&res.expr.get_let_bound()),
+            vec![local("a"), local("y")]
+        );
+    }
 }
