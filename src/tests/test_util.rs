@@ -105,6 +105,55 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
     command
 }
 
+/// Compiles `source` at `opt_level` with `--emit-llvm` and returns the LLVM IR as code generation
+/// wrote it, before the LLVM optimizer runs. A test that reads the IR is checking what the compiler
+/// emitted, so it wants that module rather than the optimized one beside it.
+///
+/// # Arguments
+/// * `test_name` — names the working directory under `COMPILER_TEST_WORKING_PATH`, so concurrent
+///   tests do not share one. Pass `function_name!()`.
+/// * `opt_level` — below `max` the program is split into several modules, and their IR is
+///   concatenated; from `max` up it is one module, so a test that counts occurrences wants `max`.
+pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
+    let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, test_name));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    // The command runs in `work_dir`, so the path it is given for the source has to be absolute.
+    let work_dir = fs::canonicalize(&work_dir).unwrap();
+
+    let output = fix_build_source_command(&work_dir, source, opt_level)
+        .arg("--emit-llvm")
+        .arg("--output")
+        .arg("prog")
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`fix build --emit-llvm` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let mut modules = fs::read_dir(&work_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            let name = p.file_name().unwrap().to_string_lossy();
+            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
+        })
+        .collect::<Vec<_>>();
+    modules.sort();
+    assert!(
+        !modules.is_empty(),
+        "`fix build --emit-llvm` wrote no module"
+    );
+    modules
+        .iter()
+        .map(|p| fs::read_to_string(p).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Waits for `child` to exit and returns its status, killing it and failing the test once `timeout`
 /// has passed. `description` names what was being waited for, and is what the failure reports.
 pub fn wait_within(child: &mut Child, timeout: Duration, description: &str) -> ExitStatus {

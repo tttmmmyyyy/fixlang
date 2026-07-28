@@ -11,14 +11,8 @@
 mod empty_array_tests {
     use crate::{
         configuration::Configuration,
-        constants::COMPILER_TEST_WORKING_PATH,
         misc::function_name,
-        tests::test_util::{fix_command, test_source},
-    };
-    use std::{
-        fs::{self, File},
-        io::Write,
-        path::PathBuf,
+        tests::test_util::{emit_llvm_ir, test_source},
     };
 
     #[test]
@@ -96,6 +90,24 @@ main = (
     assert_eq(|_|"grown literal", e, [1, 2]);;
     let a = a.push_back(3);
     assert_eq(|_|"grown allocated", a, [3]);;
+
+    // Two names for one capacity-zero block: both still read as unique, and growing one leaves the
+    // other empty.
+    let shared = Array::empty(0) : Array I64;
+    let keep = shared;
+    let (aliased_unique, shared) = shared._unsafe_is_storage_unique;
+    assert_eq(|_|"aliased empty is unique", aliased_unique, true);;
+    assert_eq(|_|"grown alias", shared.push_back(4), [4]);;
+    assert_eq(|_|"other alias untouched", keep, []);;
+
+    // Reserved capacity is what makes an array shareable, so an array with room and no element is
+    // reported shared once a second name holds it.
+    let reserved = Array::empty(4) : Array I64;
+    let keep_reserved = reserved;
+    let (reserved_unique, reserved) = reserved._unsafe_is_storage_unique;
+    assert_eq(|_|"reserved and aliased is shared", reserved_unique, false);;
+    assert_eq(|_|"reserved grows", reserved.push_back(5), [5]);;
+    assert_eq(|_|"reserved alias untouched", keep_reserved, []);;
     pure()
 );
 "#;
@@ -128,6 +140,11 @@ main = (
     let nested = [[] : Array I64, [1]];
     assert_eq(|_|"nested 0", nested.@(0), []);;
     assert_eq(|_|"nested 1", nested.@(1), [1]);;
+
+    // An element type of no size at all: the block's buffer field is an empty aggregate.
+    let units = [] : Array ();
+    assert_eq(|_|"unit size", units.@size, 0);;
+    assert_eq(|_|"unit grown", units.push_back(()).@size, 1);;
     pure()
 );
 "#;
@@ -175,54 +192,12 @@ main = (
             println((a.@size + rows.@size).to_string)
         );
         "#;
-        let work_dir = PathBuf::from(format!(
-            "{}/{}",
-            COMPILER_TEST_WORKING_PATH,
-            function_name!()
-        ));
-        let _ = fs::remove_dir_all(&work_dir);
-        fs::create_dir_all(&work_dir).unwrap();
-        File::create(work_dir.join("main.fix"))
-            .unwrap()
-            .write_all(source.as_bytes())
-            .unwrap();
+        let ir = emit_llvm_ir(source, function_name!(), "max");
 
-        let output = fix_command()
-            .args([
-                "build",
-                "-O",
-                "none",
-                "--emit-llvm",
-                "--file",
-                "main.fix",
-                "--output",
-                "prog",
-            ])
-            .current_dir(&work_dir)
-            .output()
-            .unwrap();
-        assert_eq!(
-            output.status.code(),
-            Some(0),
-            "`fix build --emit-llvm` failed:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let ir = fs::read_dir(&work_dir)
-            .unwrap()
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| {
-                let name = p.file_name().unwrap().to_string_lossy();
-                name.ends_with(".ll") && !name.ends_with("_optimized.ll")
-            })
-            .map(|p| fs::read_to_string(p).unwrap())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // The block carries a reference count of one and the global state tag, so that retain and
-        // release skip it.
+        // The block is a constant carrying a reference count of one and the global state tag, so
+        // that retain and release skip it and a stray write faults.
         let expected = format!(
-            "= internal global {{ {{ i32, i8 }}, {{ i64 }} }} \
+            "= internal constant {{ {{ i32, i8 }}, {{ i64 }} }} \
              {{ {{ i32, i8 }} {{ i32 1, i8 {} }}, {{ i64 }} zeroinitializer }}",
             crate::constants::REFCNT_STATE_GLOBAL
         );
@@ -231,6 +206,18 @@ main = (
             "emitted IR lacks the shared empty storage `{}`:\n{}",
             expected,
             ir
+        );
+
+        // Both `Array I64` literals reach the same block. `max` compiles the program as one module,
+        // so a second definition would mean each literal took a block of its own.
+        let definitions = ir
+            .lines()
+            .filter(|line| line.starts_with("@\"EmptyArrayStorage#"))
+            .count();
+        assert_eq!(
+            definitions, 1,
+            "the two empty literals want one shared block, and the IR defines {}:\n{}",
+            definitions, ir
         );
     }
 }

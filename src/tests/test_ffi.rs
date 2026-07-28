@@ -1,13 +1,7 @@
 use crate::{
     configuration::Configuration,
-    constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::test_util::{fix_command, test_source, test_source_fail, test_source_with_c},
-};
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
+    tests::test_util::{emit_llvm_ir, test_source, test_source_fail, test_source_with_c},
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -152,50 +146,7 @@ pub fn test_narrow_integers_carry_the_c_extension_attribute() {
         main : IO ();
         main = pure();
     "#;
-    let work_dir = PathBuf::from(format!(
-        "{}/{}",
-        COMPILER_TEST_WORKING_PATH,
-        function_name!()
-    ));
-    let _ = fs::remove_dir_all(&work_dir);
-    fs::create_dir_all(&work_dir).unwrap();
-    File::create(work_dir.join("main.fix"))
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
-
-    let output = fix_command()
-        .args([
-            "build",
-            "-O",
-            "none",
-            "--emit-llvm",
-            "--file",
-            "main.fix",
-            "--output",
-            "prog",
-        ])
-        .current_dir(&work_dir)
-        .output()
-        .unwrap();
-    assert_eq!(
-        output.status.code(),
-        Some(0),
-        "`fix build --emit-llvm` failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    // `-O none` compiles the program as several modules, and the wrappers are spread over them.
-    let ir = fs::read_dir(&work_dir)
-        .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| {
-            let name = p.file_name().unwrap().to_string_lossy();
-            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
-        })
-        .map(|p| fs::read_to_string(p).unwrap())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ir = emit_llvm_ir(source, function_name!(), "none");
 
     for expected in [
         // An exported function extends its narrow arguments and result, by sign or by zero

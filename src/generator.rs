@@ -1895,15 +1895,45 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Mark object as global so that it will not be retained or released.
+    //
+    // An object already in that state is left untouched, so that a read-only object reached twice —
+    // the block every empty array shares is one, and it lives in a global two initializers may walk
+    // — is read rather than written.
     fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
+        let current_func = self.current_function();
+        let mark_bb = self
+            .context
+            .append_basic_block(current_func, "mark_bb@mark_global");
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, "cont_bb@mark_global");
+
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
-        self.builder()
-            .build_store(
+        let global = refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false);
+        let refcnt_state = self
+            .builder()
+            .build_load(
+                refcnt_state_type(self.context),
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                "refcnt_state",
             )
+            .unwrap()
+            .into_int_value();
+        let is_global = self
+            .builder()
+            .build_int_compare(IntPredicate::EQ, refcnt_state, global, "is_global")
             .unwrap();
+        self.builder()
+            .build_conditional_branch(is_global, cont_bb, mark_bb)
+            .unwrap();
+
+        self.builder().position_at_end(mark_bb);
+        self.builder()
+            .build_store(ptr_refcnt_state, global)
+            .unwrap();
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+
+        self.builder().position_at_end(cont_bb);
     }
 
     // Print Rust's &str to stderr.

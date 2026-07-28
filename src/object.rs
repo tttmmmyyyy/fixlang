@@ -1539,8 +1539,8 @@ pub fn alloc_array_storage<'c, 'm>(
 // it unique — and the one operation that would touch the block itself, raising the capacity, gives
 // the array a block of its own instead (`realloc_array`).
 //
-// The state byte is written: marking a value graph global stores the state unconditionally, and a
-// global value may hold an empty array. The block is therefore a mutable global.
+// The block is a constant, so it lands in read-only memory and a write that escapes the reasoning
+// above stops the program where it happens instead of corrupting every empty array in it.
 pub fn shared_empty_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
@@ -1569,6 +1569,7 @@ pub fn shared_empty_array_storage<'c, 'm>(
                 .const_zero();
             let global = gc.module.add_global(struct_ty, None, &name);
             global.set_linkage(Linkage::Internal);
+            global.set_constant(true);
             global.set_initializer(&struct_ty.const_named_struct(&[control_block.into(), buf]));
             global
         }
