@@ -201,6 +201,19 @@ main = (
             if perf.@(0) == "" { log };
             log.set(case_name + "-splits", log.@size - 1, perf.@(0))
         };
+        // A case may carry `ref.c` and `ref.rs`: the same program on the same input,
+        // measured the same way, so the chart can show how far the Fix line is from C and
+        // Rust. The column name keeps the language last, which is what holds these out of
+        // the cost line printed at the end -- a reference does not move with a pass
+        // sequence, so it has no business in what the pass search compares.
+        let log = *["c", "rust"].to_iter.fold_m(log, |lang, log|
+            let (ref_out, _, ref_code) = *["python3", "../../reference.py", lang].ez_run_oec(config);
+            if ref_code != 0_U8 { log.pure };
+            let ref_out = ref_out.strip_spaces.split(",").to_array;
+            if ref_out.@size < 2 { log.pure };
+            let log = log.set(case_name + "-inst-" + lang, log.@size - 1, ref_out.@(0));
+            log.set(case_name + "-mem-" + lang, log.@size - 1, ref_out.@(1)).pure
+        );
         // Change back to the parent directory.
         ez_cd(config, "..");;
         log.pure

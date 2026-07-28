@@ -27,6 +27,9 @@ except ImportError:
 # cases of wildly different absolute cost readable on one axis. `absolute` keeps the raw
 # count: a split-access column is interesting precisely when it collapses by orders of
 # magnitude, and zero -- the value a fixed case reaches -- has no ratio.
+# A case may carry a counterpart in these languages, measured the same way.
+REFERENCE_LANGUAGES = ["c", "rust"]
+
 METRICS = [
     ("inst", "Cachegrind instructions",
      "Instructions executed (Ir), from cachegrind's simulation. The same program and input give the "
@@ -109,23 +112,28 @@ def build_data(log_path, history_path, latest_n):
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
         commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry, "cpu": cpu})
 
-    # Split each "<case>-<metric>" column apart.
+    # Split each "<case>-<metric>" column apart, and each "<case>-<metric>-<language>"
+    # reference beside it. A reference does not move with a Fix commit, so the last value
+    # measured is the one to draw.
     metrics = {}
     for suffix, label, note, kind, source in METRICS:
-        series = {}
+        series, refs = {}, {}
         for name, i in index.items():
-            if not name.endswith("-" + suffix):
+            column = [row[i].strip() if i < len(row) else "" for row in body]
+            numbers = [int(c) if c.isdigit() else None for c in column]
+            if not any(v is not None for v in numbers):
                 continue
-            case = name[: -(len(suffix) + 1)]
-            values = []
-            for row in body:
-                cell = row[i].strip() if i < len(row) else ""
-                values.append(int(cell) if cell.isdigit() else None)
-            if any(v is not None for v in values):
-                series[case] = values
+            if name.endswith("-" + suffix):
+                series[name[: -(len(suffix) + 1)]] = numbers
+            else:
+                for language in REFERENCE_LANGUAGES:
+                    tail = f"-{suffix}-{language}"
+                    if name.endswith(tail):
+                        last = next(v for v in reversed(numbers) if v is not None)
+                        refs.setdefault(name[: -len(tail)], {})[language] = last
         if series:
             metrics[suffix] = {"label": label, "note": note, "kind": kind,
-                               "source": source, "series": series}
+                               "source": source, "series": series, "refs": refs}
 
     return {"commits": commits, "metrics": metrics}
 
@@ -141,9 +149,9 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,a-inst,a-mem,a-splits,b-inst\n"
-            "1111111111111111111111111111111111111111,Zen,100,200,4,50\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,150,,0,\n",
+            "commit,cpu,a-inst,a-mem,a-splits,b-inst,a-inst-c,a-inst-rust\n"
+            "1111111111111111111111111111111111111111,Zen,100,200,4,50,90,\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,150,,0,,90,120\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
@@ -159,6 +167,8 @@ def self_check():
     assert series["mem"] == {"a": [200, None]}, series["mem"]
     assert series["splits"] == {"a": [4, 0]}, series["splits"]
     assert data["metrics"]["splits"]["kind"] == "absolute"
+    assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]
+    assert data["metrics"]["mem"]["refs"] == {}, data["metrics"]["mem"]["refs"]
 
 
 def main():
@@ -210,6 +220,8 @@ svg { width: 100%; height: auto; display: block; overflow: visible; }
 svg text { fill: var(--muted); font-size: 11px; }
 .grid line { stroke: var(--grid); stroke-width: 1; }
 .series-line { fill: none; stroke-width: 1.7; opacity: .85; }
+.reference { fill: none; stroke-width: 1.3; stroke-dasharray: 6 4; opacity: .6; }
+.reference-label { font-size: 10px; }
 .series-line.dim { opacity: .1; }
 .series-line.hot { stroke-width: 3.2; opacity: 1; }
 .hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
@@ -295,6 +307,7 @@ function seriesOf(metric) {
     out.push({
       name, color: color(i), raw, base,
       values: raw.map((v) => (v === null ? null : v / base)),
+      refs: metric.refs[name] || {},
     });
   });
   return out;
@@ -347,6 +360,16 @@ function render() {
     s.values.forEach((v, i) => { if (v !== null) pts.push(`${xAt(i)},${toY(v)}`); });
     if (!pts.length) continue;
     const d = "M" + pts.join("L");
+    // The C and Rust counterparts of this case, on the same input and the same measurement.
+    for (const [language, value] of Object.entries(s.refs)) {
+      const y = toY(metric.kind === "ratio" ? value / s.base : value);
+      el("line", { class: "reference", stroke: s.color,
+                   x1: PAD.l, y1: y, x2: PAD.l + PLOT_W, y2: y }, lines);
+      if (onlyCase !== null) {
+        el("text", { class: "reference-label", x: PAD.l + PLOT_W, y: y - 4,
+                     "text-anchor": "end", fill: s.color }, lines).textContent = language;
+      }
+    }
     el("path", { class: "series-line", stroke: s.color, d, "data-name": s.name }, lines);
     const hit = el("path", { class: "hit", d, "data-name": s.name }, lines);
     hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xAt));
@@ -421,7 +444,9 @@ function hoverPoint(ev, s, xAt) {
   highlight(s.name);
   const tip = document.getElementById("tip");
   tip.innerHTML = `<strong>${s.name}</strong><br>${DATA.commits[best].short}: ${raw.toLocaleString()}`
-    + (delta === null ? "" : `<br>${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% vs previous`);
+    + (delta === null ? "" : `<br>${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% vs previous`)
+    + Object.entries(s.refs).map(([language, value]) =>
+        `<br>${value.toLocaleString()} in ${language} (${(raw / value).toFixed(2)}x)`).join("");
   tip.style.opacity = 1;
   tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
   tip.style.top = ev.clientY - box.top - 10 + "px";

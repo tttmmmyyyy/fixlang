@@ -1,3 +1,7 @@
+// The C counterpart of `main.fix`, on the same input, so the log can carry a
+// reference the Fix line is read against. It checks the answer and prints nothing, as the
+// Fix case does: a reference that computed something else would otherwise pass unnoticed.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -54,10 +58,11 @@ static void advance(double dt) {
     for (int i = 0; i < N; i++) { b[i].x += dt*b[i].vx; b[i].y += dt*b[i].vy; b[i].z += dt*b[i].vz; }
 }
 
-int main(int argc, char **argv) {
-    long steps = atoll(argv[argc - 1]);
+int main(void) {
+    long steps = 2000000;
     init();
     for (long s = 0; s < steps; s++) advance(0.01);
-    printf("%.9f\n", energy());
+    double e = energy();
+    if (fabs(e - -0.171864733) > 5e-10) { fprintf(stderr, "nbody: %.9f\n", e); return 1; }
     return 0;
 }

@@ -1,3 +1,1 @@
-bin_*/
-results_*.csv
-*.o
+bin/

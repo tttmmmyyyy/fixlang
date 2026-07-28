@@ -1,3 +1,7 @@
+// The C counterpart of `main.fix`, on the same input, so the log can carry a
+// reference the Fix line is read against. It checks the answer and prints nothing, as the
+// Fix case does: a reference that computed something else would otherwise pass unnoticed.
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -33,8 +37,8 @@ static long distance(const char *a, long m, const char *b, long n) {
     return d;
 }
 
-int main(int argc, char **argv) {
-    long n = atoll(argv[argc - 1]);
+int main(void) {
+    long n = 1000;
     char **words = malloc(n * sizeof(char *));
     long *lens = malloc(n * sizeof(long));
     for (long k = 0; k < n; k++) {
@@ -48,6 +52,6 @@ int main(int argc, char **argv) {
     for (long i = 0; i < n; i++)
         for (long j = i + 1; j < n; j++)
             sum += distance(words[i], lens[i], words[j], lens[j]);
-    printf("%ld\n", sum);
+    if (sum != 3648154) { fprintf(stderr, "levenshtein: %ld\n", sum); return 1; }
     return 0;
 }

@@ -1,3 +1,7 @@
+// The Rust counterpart of `main.fix`, on the same input, so the log can carry a
+// reference the Fix line is read against. It checks the answer and prints nothing, as the
+// Fix case does: a reference that computed something else would otherwise pass unnoticed.
+
 #[derive(Clone, Copy)]
 struct Body { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
 
@@ -52,8 +56,9 @@ fn advance(b: &mut [Body; N], dt: f64) {
 }
 
 fn main() {
-    let steps: i64 = std::env::args().last().unwrap().parse().unwrap();
+    let steps: i64 = 2_000_000;
     let mut b = init();
     for _ in 0..steps { advance(&mut b, 0.01); }
-    println!("{:.9}", energy(&b));
+    let e = energy(&b);
+    assert!((e - -0.171864733).abs() < 5e-10, "nbody: {:.9}", e);
 }

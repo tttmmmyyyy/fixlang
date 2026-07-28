@@ -1,5 +1,9 @@
+// The Rust counterpart of `main.fix`, on the same input, so the log can carry a
+// reference the Fix line is read against. It checks the answer and prints nothing, as the
+// Fix case does: a reference that computed something else would otherwise pass unnoticed.
+
 fn main() {
-    let n: usize = std::env::args().last().unwrap().parse().unwrap();
+    let n: usize = 10;
     let mut perm = [0i32; 32];
     let mut perm1 = [0i32; 32];
     let mut count = [0i32; 32];
@@ -36,7 +40,7 @@ fn main() {
         checksum += if permcount % 2 == 0 { flips } else { -flips };
         loop {
             if r == n {
-                println!("{} {}", checksum, maxflips);
+                assert_eq!((checksum, maxflips), (73196, 38));
                 return;
             }
             let perm0 = perm1[0];

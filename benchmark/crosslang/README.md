@@ -1,70 +1,51 @@
 # Cross-language benchmarks
 
-The same eight programs written in Fix, C and Rust, to place Fix against the languages the
-public benchmark suites compare it with. `../speedtest` tracks Fix against its own history and
-runs on every change; this directory answers a different question -- how far Fix is from C and
-Rust today -- and runs when someone asks.
+How far Fix is from C and Rust today. `../speedtest` tracks Fix against its own history and
+runs on every commit; this directory takes the same programs and measures what the other two
+do with them.
 
-Each program takes its size as the last argument and prints a result the three languages must
-agree on. Check that they do before believing any number:
-
-```
-for l in fix c rust; do ./bin_native/fannkuch_$l 10; done
-```
-
-`fib` and `loop` print `<language>,<program>,<nanoseconds>,<result>`, so compare the last field
-alone there; the other six print the result by itself.
+The programs are not kept here. A case under `../speedtest/cases/` becomes comparable by
+carrying `ref.c` and `ref.rs` beside its `main.fix`: the same algorithm, on the same input,
+checking the same answer. One Fix source, so the three cannot drift apart, and the
+instruction counts land in `log.csv` next to the case's own — which is where the chart draws
+them as reference lines.
 
 ## Running
 
 ```
-MODE=cachegrind bash build.sh && bash cachegrind.sh              # instruction counts
-MODE=native     bash build.sh && bash perf.sh                    # split accesses
-MODE=native     bash build.sh && BIN=bin_native python3 wall.py  # wall time, idle machine only
+bash build.sh          # all three languages, tuned for this host
+python3 wall.py        # wall time, on an idle machine
+bash perf.sh           # split accesses and cycles
 ```
 
-Every script takes program names, so a before-and-after on one program costs one program's
-time: `MODE=native bash build.sh arrayrw && bash perf.sh arrayrw`.
+Every script takes case names, so a before-and-after on one case costs one case's time:
+`bash build.sh arrayrw && bash perf.sh arrayrw`. `build.sh` takes `FIX=<path>` so two
+compilers can be compared.
 
-`build.sh` takes `FIX=<path>` (default: this repository's `target/release/fix`) so two compilers
-can be compared by building each into its own `TAG`.
+Instruction counts come from the speedtest run, not from here.
 
-## The three measurements answer different questions
+## Adding a case to the comparison
 
-**Instruction counts** come from cachegrind and are deterministic: the same program and input
-give the same number whatever else the machine is doing. Fix is built without avx512 because
-cachegrind cannot simulate it, and C at `-O2`.
+Write `ref.c` and `ref.rs` next to a case's `main.fix`, on the input the case fixes, ending
+in a check of the same expected value — the Fix case asserts, so the counterparts must too,
+or a reference that computes something else becomes a number on the chart instead of a
+failure.
 
-**Split accesses** come from the hardware counters and are deterministic too, so `perf.sh` also
-runs on a busy machine. They fill a hole the instruction count leaves: a load or store crossing a
-64-byte cache line costs the load/store unit twice while counting as one instruction, so a layout
-that splits every other access is invisible to cachegrind and plain in the time. Reading the same
-program in Fix and in Rust shows it -- identical instruction sequences, and the counts differ by
-four orders of magnitude when one of them starts its data 8 bytes into the allocation.
+Only add counterparts to a case whose work dwarfs process startup. Startup is around 0.3 ms
+and is included in the wall-clock figure, and cachegrind counts it in the instruction figure
+as well; the cases carrying counterparts today all run for hundreds of millions of
+instructions, where that is under a percent.
+
+## Two measurements, two questions
+
+**Instruction counts** (from `../speedtest`) are deterministic: the same program and input
+give the same number whatever else the machine is doing. Fix is built without avx512 there,
+because cachegrind cannot simulate it, and the counterparts are built the same way.
 
 **Wall time** is what the public sites report, and the instruction count does not predict it.
-`fannkuch` executes 2.20x C's instructions and takes 1.08x its time; `fib` executes 1.14x and
-takes 1.92x. Both numbers are worth quoting, and neither substitutes for the other.
+`fannkuch` executes 2.20x C's instructions and takes 1.08x its time. Both numbers are worth
+quoting, and neither substitutes for the other.
 
-For wall time every language is tuned for the host CPU (`-march=native`, `-C target-cpu=native`).
-Fix enables every feature the host has by default, so comparing it against a plain `gcc -O3`
-would credit Fix with vectorized loops for reasons that have nothing to do with the language.
-`wall.py` refuses to measure when the machine is busy.
-
-## The programs
-
-| program | what it exercises |
-|---|---|
-| `fib` | naive recursion: the call sequence and nothing else |
-| `loop` | a tight integer loop with a carried dependency and a modulo |
-| `binary_trees` | allocation and reference counting |
-| `mandelbrot` | float arithmetic in nested loops, no arrays |
-| `nbody` | float arithmetic over an array of structs, with `sqrt` through libm |
-| `fannkuch` | in-place mutation of an integer array |
-| `arrayrw` | in-place mutation at its narrowest: `arr.set(i, arr.@(i) + 1)` over 1000 elements |
-| `levenshtein` | a two-row dynamic-programming table over every pair of a thousand words |
-
-Every program is timed from outside, by `wall.py`. `fib` and `loop` additionally carry opaque
-barriers around their work — `bench_clock.c` on the Fix side, `volatile` in C, `black_box` in
-Rust — because the answer is otherwise a compile-time constant. They print an in-process
-nanosecond count alongside the answer, which the harnesses ignore.
+**Split accesses** fill a hole the instruction count leaves: a load or store crossing a
+64-byte cache line costs the load/store unit twice while counting as one instruction. The
+count is deterministic, so `perf.sh` runs on a busy machine; the cycles beside it do not.

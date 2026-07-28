@@ -1,3 +1,7 @@
+// The C counterpart of `main.fix`, on the same input, so the log can carry a
+// reference the Fix line is read against. It checks the answer and prints nothing, as the
+// Fix case does: a reference that computed something else would otherwise pass unnoticed.
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -19,11 +23,11 @@ static void free_tree(Tree *t) {
     free(t);
 }
 
-int main(int argc, char **argv) {
-    long n = atoll(argv[argc - 1]);
+int main(void) {
+    long n = 20;
     Tree *t = make(n);
     long c = check(t);
     free_tree(t);
-    printf("%ld\n", c);
+    if (c != 2097151) { fprintf(stderr, "binary_trees: %ld\n", c); return 1; }
     return 0;
 }

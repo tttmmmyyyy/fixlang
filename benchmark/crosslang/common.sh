@@ -1,27 +1,43 @@
-# Shared by the harnesses in this directory: choosing which programs to work on.
+# Shared by the harnesses in this directory: finding the cases that carry counterparts.
 #
-# Sourced after the caller has changed into this directory, so `programs.txt` is at hand.
+# A case under `../speedtest/cases/` is comparable when it holds `ref.c` and `ref.rs` --
+# the same program on the same input as its `main.fix`. Sourced after the caller has
+# changed into this directory.
 
+CASES=../speedtest/cases
 SELECTED=()
 
-# Record the program names the caller was given, and reject one that is not a program --
-# a typo would otherwise select nothing, and the measurement that follows would report the
+# Every case with counterparts, in directory order.
+comparable_cases() {
+    local dir
+    for dir in "$CASES"/*/; do
+        [ -f "$dir/ref.c" ] && [ -f "$dir/ref.rs" ] && basename "$dir"
+    done
+    # A lister, not a predicate: the last directory failing the test is not an error.
+    return 0
+}
+
+# Record the case names the caller was given, and reject one that is not comparable -- a
+# typo would otherwise select nothing, and the measurement that follows would report the
 # binaries left over from a previous run as if they were this one's.
-select_programs() {
+select_cases() {
     SELECTED=("$@")
-    local unknown=()
-    local name
+    local unknown=() name
+    # Matched against a here-string rather than through a pipe: `grep -q` closes the pipe
+    # on its first match, and with `pipefail` that failure would come back as "no match".
+    local all
+    all=$(comparable_cases)
     for name in ${SELECTED[@]+"${SELECTED[@]}"}; do
-        grep -qE "^$name[[:space:]]" programs.txt || unknown+=("$name")
+        grep -qx "$name" <<<"$all" || unknown+=("$name")
     done
     if [ ${#unknown[@]} -ne 0 ]; then
-        echo "not in programs.txt: ${unknown[*]}" >&2
+        echo "no case with ref.c and ref.rs named: ${unknown[*]}" >&2
         exit 1
     fi
 }
 
-# True for every program when none were named.
+# True for every comparable case when none were named.
 is_wanted() {
     [ ${#SELECTED[@]} -eq 0 ] && return 0
-    printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
+    grep -qx "$1" <<<"$(printf '%s\n' "${SELECTED[@]}")"
 }

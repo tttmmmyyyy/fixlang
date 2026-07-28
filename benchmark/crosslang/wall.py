@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Wall-clock time for the binaries `build.sh` produced, reported as work-only time.
+"""Wall-clock time for the binaries `build.sh` produced, as the minimum of N runs.
 
-The minimum of N runs on the real input, minus the minimum of N runs on a trivial one.
 The public benchmark sites report wall time, and neither instruction counts nor cycles
-predict it reliably: `fannkuch` runs 2.20x C's instructions but 1.08x its time, and
-`fib` the other way round. Subtracting the trivial run removes process startup, which
-the languages do not spend equally and which would otherwise pull the ratios of the
-short programs toward 1. The minimum is the run least disturbed by everything else on
-the machine -- but it is still wall time, so measure on an idle machine.
+predict it reliably: `fannkuch` runs 2.20x C's instructions and 1.08x its time, `fib` the
+other way round. The minimum is the run least disturbed by everything else on the machine,
+but it is still wall time, so this refuses to measure a busy one.
 
-    BIN=bin_native RUNS=15 python3 wall.py [program ...]
+The programs take no arguments -- they carry the input the case fixes -- so process startup
+is included. Every comparable case runs for tens of milliseconds against a startup of about
+0.3, which is where the cases that carry counterparts are chosen from.
+
+    RUNS=15 python3 wall.py [case ...]
 """
 
 import os
@@ -19,59 +20,52 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+CASES = HERE.parent / "speedtest" / "cases"
 LANGS = ["fix", "c", "rust"]
 RUNS = int(os.environ.get("RUNS", "15"))
-BIN = os.environ.get("BIN", "bin_native")
 LOAD_LIMIT = float(os.environ.get("LOAD_LIMIT", str(os.cpu_count() / 2)))
 
 
-def read_programs():
-    out = {}
-    for line in (HERE / "programs.txt").read_text().splitlines():
-        line = line.split("#")[0].strip()
-        if line:
-            name, full, base = line.split()
-            out[name] = (full, base)
-    return out
+def comparable_cases():
+    """Cases carrying a counterpart in every language."""
+    return sorted(d.name for d in CASES.iterdir()
+                  if (d / "ref.c").exists() and (d / "ref.rs").exists())
 
 
-def best_ms(cmd, runs):
+def best_ms(command, runs):
     times = []
     for _ in range(runs):
-        t0 = time.perf_counter()
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
-        times.append((time.perf_counter() - t0) * 1000.0)
+        start = time.perf_counter()
+        # The programs check their own answer, so a mismatch fails here.
+        subprocess.run(command, stdout=subprocess.DEVNULL, check=True)
+        times.append((time.perf_counter() - start) * 1000.0)
     return min(times)
 
 
 def main():
-    progs = read_programs()
-    selected = sys.argv[1:] or list(progs)
-    unknown = [p for p in selected if p not in progs]
+    cases = comparable_cases()
+    selected = sys.argv[1:] or cases
+    unknown = [c for c in selected if c not in cases]
     if unknown:
-        sys.exit(f"not in programs.txt: {', '.join(unknown)}")
+        sys.exit(f"no case with ref.c and ref.rs named: {', '.join(unknown)}")
     load = os.getloadavg()[0]
     if load > LOAD_LIMIT:
         sys.exit(f"the machine is busy (load {load:.2f} > {LOAD_LIMIT:.1f}); "
                  f"wall-clock numbers taken now are not worth having. "
                  f"Raise LOAD_LIMIT to measure anyway.")
-    print(f"load1={load:.2f}  runs={RUNS}  bin={BIN}")
-    print(f"  {'prog':<13} {'lang':<5} {'work-only':>10} {'startup':>9} {'vs C':>7} {'vs Rust':>8}")
+
+    print(f"load1={load:.2f}  runs={RUNS}")
+    print(f"  {'case':<14} {'lang':<5} {'time':>10} {'vs C':>7} {'vs Rust':>8}")
     for name in selected:
-        full, base = progs[name]
-        work = {}
+        taken = {}
         for lang in LANGS:
-            cmd = str(HERE / BIN / f"{name}_{lang}")
-            full_ms = best_ms([cmd, full], RUNS)
-            base_ms = best_ms([cmd, base], RUNS)
-            if full_ms - base_ms <= 0:
-                sys.exit(f"{name}/{lang}: the full input cost no more than the trivial one "
-                         f"({full_ms:.2f}ms vs {base_ms:.2f}ms). Raise the input in programs.txt.")
-            work[lang] = (full_ms - base_ms, base_ms)
+            binary = HERE / "bin" / f"{name}_{lang}"
+            if not binary.exists():
+                sys.exit(f"no {binary} -- run build.sh first")
+            taken[lang] = best_ms([str(binary)], RUNS)
         for lang in LANGS:
-            work_ms, startup_ms = work[lang]
-            print(f"  {name:<13} {lang:<5} {work_ms:9.2f}ms {startup_ms:8.2f}ms "
-                  f"{work_ms / work['c'][0]:6.2f}x {work_ms / work['rust'][0]:7.2f}x")
+            print(f"  {name:<14} {lang:<5} {taken[lang]:9.2f}ms "
+                  f"{taken[lang] / taken['c']:6.2f}x {taken[lang] / taken['rust']:7.2f}x")
 
 
 main()

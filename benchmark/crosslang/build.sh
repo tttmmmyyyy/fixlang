@@ -1,65 +1,39 @@
 #!/usr/bin/env bash
-# Build every program in Fix, C and Rust into `bin_$TAG/`.
+# Build each comparable case in all three languages, tuned for this host.
 #
-#   MODE=cachegrind   flags for `cachegrind.sh`: Fix without avx512, which cachegrind
-#                     cannot simulate, and C at -O2 against the baseline instruction set.
-#   MODE=native       flags for `wall.py`: every language tuned for the host CPU, which
-#                     is the only comparison that is fair on wall-clock time -- Fix enables
-#                     every host feature by default, so a plain `gcc -O3` would be losing
-#                     vectorized loops for reasons that have nothing to do with the language.
+# `../speedtest` measures the same programs under cachegrind on every commit, which is
+# deterministic and hardware-independent. This directory answers the other question --
+# how long they actually take -- and for that every language has to be allowed the
+# instruction set the machine has: Fix enables every host feature by default, so a plain
+# `gcc -O3` would be losing vectorized loops for reasons that have nothing to do with the
+# language.
 #
 #   FIX=<path to the fix binary>   default: the release build in this repository
-#   TAG=<name>                     default: the mode
 #
-# Naming programs builds only those, which is what a before-and-after on one program wants.
+# Naming cases builds only those, which is what a before-and-after on one case wants.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 source ./common.sh
-select_programs "$@"
+select_cases "$@"
 
-MODE=${MODE:-cachegrind}
-TAG=${TAG:-$MODE}
-BIN="bin_$TAG"
-
-# Resolved here, because each program is built from inside `programs/`.
 FIX=${FIX:-../../target/release/fix}
 if [ ! -x "$FIX" ]; then
     echo "no fix binary at $FIX -- build one with \`cargo build --release\`, or set FIX=<path>" >&2
     exit 1
 fi
 FIX=$(realpath "$FIX")
-
-case "$MODE" in
-  cachegrind)
-    FIX_FLAGS=(-O experimental --disable-cpu-feature 'avx512.*')
-    CC_FLAGS=(-O2)
-    RUSTC_FLAGS=(-O)
-    ;;
-  native)
-    FIX_FLAGS=(-O experimental)
-    CC_FLAGS=(-O3 -march=native)
-    RUSTC_FLAGS=(-O -C target-cpu=native)
-    ;;
-  *) echo "MODE must be cachegrind or native" >&2; exit 1 ;;
-esac
-
+BIN=$PWD/bin
 mkdir -p "$BIN"
-echo "== $MODE, with $FIX"
-gcc -O2 -c bench_clock.c -o bench_clock.o
+echo "== building with $FIX"
 
-while read -r name _ _; do
-    [ -z "$name" ] && continue
-    case "$name" in \#*) continue ;; esac
+for name in $(comparable_cases); do
     is_wanted "$name" || continue
-    # `fib` and `loop` time themselves in-process through a C helper.
-    fix_extra=()
-    case "$name" in fib|loop) fix_extra=(-b "$PWD/bench_clock.o") ;; esac
-    (cd programs && "$FIX" build -f "$name.fix" "${fix_extra[@]}" "${FIX_FLAGS[@]}" \
-        -o "$OLDPWD/$BIN/${name}_fix" >/dev/null)
-    gcc "${CC_FLAGS[@]}" "programs/$name.c" -o "$BIN/${name}_c" -lm
-    rustc "${RUSTC_FLAGS[@]}" "programs/$name.rs" -o "$BIN/${name}_rust" 2>/dev/null
+    (cd "$CASES/$name" \
+        && "$FIX" build -f main.fix -O experimental -o "$BIN/${name}_fix" >/dev/null \
+        && gcc -O3 -march=native ref.c -o "$BIN/${name}_c" -lm \
+        && rustc -O -C target-cpu=native ref.rs -o "$BIN/${name}_rust" 2>/dev/null)
     echo "   $name"
-done < programs.txt
+done
 
-echo "built into $BIN/"
+echo "built into bin/"
