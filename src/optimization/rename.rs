@@ -153,11 +153,11 @@ impl ExprVisitor for Substitutor {
         let var = expr.get_var().clone();
 
         // If the visited variable is not in the map, do nothing.
-        if self.map.get(&var.name).is_none() {
+        let Some(to) = self.map.get(&var.name) else {
             return EndVisitResult::unchanged(expr);
-        }
+        };
 
-        let mut new_expr = self.map.get(&var.name).unwrap().clone();
+        let mut new_expr = to.clone();
         if new_expr.type_.is_none() && expr.type_.is_some() {
             new_expr = new_expr.set_type(expr.type_.clone().unwrap());
         }
@@ -206,7 +206,7 @@ impl ExprVisitor for Substitutor {
                 *llvm_fv = to_name;
             }
         }
-        let mut expr = expr.set_llvm(llvm.clone());
+        let mut expr = expr.set_llvm(llvm);
 
         // (2)
         llvm_fvs.sort();
