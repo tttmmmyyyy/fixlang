@@ -1718,7 +1718,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 IntPredicate::EQ,
                 old_refcnt,
                 refcnt_type(self.context).const_int(1, false),
-                "is_refcnt_zero",
+                "is_refcnt_one",
             )
             .unwrap();
         self.builder()

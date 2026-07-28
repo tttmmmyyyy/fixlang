@@ -890,8 +890,8 @@ impl ObjectFieldType {
 
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
-        offset + UNION_DATA_IDX
+        let field_offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
+        field_offset + UNION_DATA_IDX
     }
 
     pub fn get_union_buf<'c, 'm>(
@@ -1100,9 +1100,9 @@ impl ObjectType {
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        array_size: Option<IntValue<'c>>,
+        array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
-        if array_size.is_some() {
+        if array_capacity.is_some() {
             // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
 
             // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
@@ -1117,14 +1117,14 @@ impl ObjectType {
             let elem_sizeof = elem_ty.get_embedded_type(gc, &vec![]).size_of().unwrap();
             let struct_ty = self.to_struct_type(gc, vec![]);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-            let size = array_size.unwrap();
-            let size = gc
+            let cap = array_capacity.unwrap();
+            let cap = gc
                 .builder()
-                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty")
+                .build_int_cast(cap, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
             let elems_size = gc
                 .builder()
-                .build_int_mul(elem_sizeof, size, "elems_size")
+                .build_int_mul(elem_sizeof, cap, "elems_size")
                 .unwrap();
 
             // Get pointer to the first element (the buffer is the last struct field).
@@ -1136,7 +1136,7 @@ impl ObjectType {
                 .unwrap();
             let header_size = gc
                 .builder()
-                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "size_with_one_elem")
+                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "header_size")
                 .unwrap();
 
             let size_with_elems = gc

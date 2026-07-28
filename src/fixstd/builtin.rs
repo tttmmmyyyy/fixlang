@@ -7635,7 +7635,7 @@ impl LLVMGen for InlineLLVMPtrEqBody {
                 ObjectFieldType::I8
                     .to_basic_type(gc, vec![])
                     .into_int_type(),
-                "eq_of_int",
+                "eq_of_ptr",
             )
             .unwrap();
         let obj = create_obj(
