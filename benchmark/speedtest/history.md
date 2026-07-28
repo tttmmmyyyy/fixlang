@@ -2,6 +2,24 @@
 
 Newer is above.
 
+## 4161bc12449319e678c03ab42eacd25a2142f53c
+
+Adds the `fib` and `levenshtein` cases, so their columns open here at 200,990,240 and 1,007,853,029
+instructions. Both tasks are carried by the public cross-language benchmark suites: `fib` is naive
+recursion, where the whole cost is the call sequence, and `levenshtein` runs a two-row
+dynamic-programming table over every pair of a thousand generated words.
+
+**The other cases move because of what the two rows straddle, not because of anything added here.**
+The row above was measured on the `fix-many-args-compile-blowup` branch, which forked before the
+wide-return tail call reached main, so `mandelbrot` and `mandelbrot_fold` fall 53.94%, `index_syntax`
+3.33% and `cp_lib_conv_zp` 1.99% — the same three cases and the same percentages `12165c4494bf`
+records for that work.
+
+Of what is left, every micro-benchmark moves by a constant 1,253 to 1,281 instructions, which is
+program startup rather than the measured loop. Four cases move by more: `fannkuch` +1.51%,
+`cp_lib_bipartite` +1.10%, `cp_lib_lsegtree` +0.57% and `binary_trees` +0.40%, from the rest of the
+work merged between the two rows.
+
 ## 6591c2396f24380a346a09577850db263b506225
 
 The `fix-many-args-compile-blowup` branch (PR #106), which stops application inlining from binding a
