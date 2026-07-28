@@ -195,40 +195,61 @@ impl ExprVisitor for Substitutor {
         let generator = &mut llvm.generator;
 
         // Substitute free names in LLVM.
-        // (1) First, consider the case where a free name `x` in LLVM is replaced with another name `y`.
-        //     This can be done by simply replacing it in the list of free names in LLVM.
-        // (2) Next, consider the case where a free name `x` in LLVM is replaced with a Fix expression `e`.
-        //     This is transformed into the form `let x = e in {llvm}`.
+        // (1) A free name `x` of the node replaced by another name `y` is renamed in the node's list
+        //     of free names.
+        // (2) A free name `x` replaced by a Fix expression `e` turns the node into
+        //     `let {v} = e in {llvm}`, where `v` is a fresh name that (1) renames `x` onto.
+
+        // The names the node reads on entry. Both rewrites answer from this list, so that the
+        // substitution is simultaneous. Sorted, so that the result does not depend on the order the
+        // generator holds them in.
+        let mut llvm_fvs = generator.free_vars();
+        llvm_fvs.sort();
+        llvm_fvs.dedup();
+
+        // The expressions to bind, and the fresh name each is bound to. A binder named after the
+        // name it replaces would capture that name where another bound expression reads it, since
+        // every bound expression sits outside every one of these binders; a fresh name cannot,
+        // because it avoids everything in their scope: what the node reads and what the
+        // replacements read.
+        let bounds = llvm_fvs
+            .iter()
+            .filter_map(|llvm_fv| match self.map.get(llvm_fv) {
+                Some(to) if !to.is_var() => Some((llvm_fv.clone(), to.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut ng_names = llvm_fvs.iter().cloned().collect::<Set<FullName>>();
+        for llvm_fv in &llvm_fvs {
+            if let Some(to) = self.map.get(llvm_fv) {
+                ng_names.extend(to.free_vars());
+            }
+        }
+        let fresh_names = generate_new_names(&ng_names, bounds.len());
+        let bindings = bounds.into_iter().zip(fresh_names).collect::<Vec<_>>();
+        let to_fresh = bindings
+            .iter()
+            .map(|((llvm_fv, _), fresh)| (llvm_fv.clone(), fresh.clone()))
+            .collect::<Map<FullName, FullName>>();
 
         // (1)
-        let mut llvm_fvs = generator.free_vars(); // Before updating, save free_vars for use in (2)
         for llvm_fv in generator.free_vars_mut() {
-            if let Some(to) = self.map.get(llvm_fv) {
-                if !to.is_var() {
-                    continue;
-                }
-                let to_name = to.get_var().name.clone();
-                changed |= *llvm_fv != to_name;
-                *llvm_fv = to_name;
-            }
+            let to_name = match self.map.get(llvm_fv) {
+                None => continue,
+                Some(to) if to.is_var() => to.get_var().name.clone(),
+                Some(_) => to_fresh.get(llvm_fv).unwrap().clone(),
+            };
+            changed |= *llvm_fv != to_name;
+            *llvm_fv = to_name;
         }
         let mut expr = expr.set_llvm(llvm);
 
         // (2)
-        llvm_fvs.sort();
-        llvm_fvs.dedup();
-        for llvm_fv in llvm_fvs {
-            if let Some(to) = self.map.get(&llvm_fv) {
-                if to.is_var() {
-                    continue;
-                }
-                changed = true;
-                // Create a let-binding.
-                let bound = to.clone();
-                let pat = PatternNode::make_var(var_var(llvm_fv), None)
-                    .set_type(bound.type_.as_ref().unwrap().clone());
-                expr = expr_let_typed(pat, bound, expr);
-            }
+        for ((_, bound), fresh) in bindings {
+            changed = true;
+            let pat = PatternNode::make_var(var_var(fresh), None)
+                .set_type(bound.type_.as_ref().unwrap().clone());
+            expr = expr_let_typed(pat, bound, expr);
         }
 
         if !changed {
@@ -702,6 +723,49 @@ mod tests {
         assert_eq!(
             llvm_free_names(&res.expr.get_match_cond()),
             vec![local("a"), local("y")]
+        );
+    }
+
+    /// An inline-LLVM expression of a type, for a node the substitution has to wrap in a `let`.
+    fn typed_llvm_with_free_names(names: &[&str]) -> Arc<ExprNode> {
+        let ty = make_tuple_ty(vec![make_i64_ty(); names.len()]);
+        llvm_with_free_names(names).set_type(ty)
+    }
+
+    /// A null pointer, as an expression a name can be mapped to that is not a variable.
+    fn null_ptr() -> Arc<ExprNode> {
+        expr_llvm(Box::new(InlineLLVMNullPtrLit {}), make_ptr_ty(), None).set_type(make_ptr_ty())
+    }
+
+    /// Verifies that the `let`s an inline-LLVM node's substitution introduces leave the names its
+    /// replacements read denoting what they denoted outside.
+    #[test]
+    fn a_llvm_let_does_not_capture_a_name_another_replacement_reads() {
+        // `LLVM(x, z)` under `x := LLVM(z)`, `z := null`. Both replacements are bound around the
+        // node, and the one for `x` reads the `z` of the enclosing scope, so `z` stays free.
+        let mut map = Map::default();
+        map.insert(local("x"), typed_llvm_with_free_names(&["z"]));
+        map.insert(local("z"), null_ptr());
+        let res = Substitutor::new(map).traverse(&typed_llvm_with_free_names(&["x", "z"]));
+        assert!(
+            res.expr.free_vars().contains(&local("z")),
+            "`z` of the enclosing scope was captured"
+        );
+    }
+
+    /// Verifies that a `let` the substitution introduces leaves the names it renamed the node onto
+    /// denoting what they denoted outside.
+    #[test]
+    fn a_llvm_let_does_not_capture_a_name_the_node_was_renamed_onto() {
+        // `LLVM(x, z)` under `x := z`, `z := null`. The occurrence renamed from `x` to `z` reads
+        // the `z` of the enclosing scope, while the occurrence of `z` reads the null pointer.
+        let mut map = Map::default();
+        map.insert(local("x"), expr_var(local("z"), None));
+        map.insert(local("z"), null_ptr());
+        let res = Substitutor::new(map).traverse(&typed_llvm_with_free_names(&["x", "z"]));
+        assert!(
+            res.expr.free_vars().contains(&local("z")),
+            "`z` of the enclosing scope was captured"
         );
     }
 
