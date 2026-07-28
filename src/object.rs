@@ -1554,7 +1554,7 @@ pub fn shared_empty_array_storage<'c, 'm>(
             let struct_ty = object_ty.to_struct_type(gc, vec![]);
             assert_eq!(
                 struct_ty.count_fields(),
-                2,
+                STORAGE_BUF_IDX + 1,
                 "`#ArrayStorage` is a control block followed by the element buffer"
             );
             let control_block = control_block_type(gc).const_named_struct(&[

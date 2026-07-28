@@ -136,7 +136,7 @@ pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
 
     let mut modules = fs::read_dir(&work_dir)
         .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
+        .map(|e| e.unwrap().path())
         .filter(|p| {
             let name = p.file_name().unwrap().to_string_lossy();
             name.ends_with(".ll") && !name.ends_with("_optimized.ll")
