@@ -7,8 +7,16 @@
 # machine is doing, which is what makes this the measurement to run first.
 #
 #   TAG=<name>   which bin_<tag>/ to measure; default `cachegrind`
+#
+# Naming programs measures only those.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+SELECTED=("$@")
+wanted() {
+    [ ${#SELECTED[@]} -eq 0 ] && return 0
+    printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
+}
 
 TAG=${TAG:-cachegrind}
 BIN="bin_$TAG"
@@ -21,6 +29,7 @@ cg() { python3 "$CGPY" "$@" 2>/dev/null | tail -1; }
 while read -r name full base; do
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
+    wanted "$name" || continue
     for lang in fix c rust; do
         bin="$BIN/${name}_${lang}"
         IFS=, read -r fi fm <<<"$(cg "$bin" "$full")"

@@ -10,13 +10,28 @@
 #
 #   FIX=<path to the fix binary>   default: the release build in this repository
 #   TAG=<name>                     default: the mode
+#
+# Naming programs builds only those, which is what a before-and-after on one program wants.
 set -euo pipefail
 cd "$(dirname "$0")"
 
+SELECTED=("$@")
+wanted() {
+    [ ${#SELECTED[@]} -eq 0 ] && return 0
+    printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
+}
+
 MODE=${MODE:-cachegrind}
-FIX=${FIX:-../../target/release/fix}
 TAG=${TAG:-$MODE}
 BIN="bin_$TAG"
+
+# Resolved here, because each program is built from inside `programs/`.
+FIX=${FIX:-../../target/release/fix}
+if [ ! -x "$FIX" ]; then
+    echo "no fix binary at $FIX -- build one with \`cargo build --release\`, or set FIX=<path>" >&2
+    exit 1
+fi
+FIX=$(realpath "$FIX")
 
 case "$MODE" in
   cachegrind)
@@ -33,12 +48,13 @@ case "$MODE" in
 esac
 
 mkdir -p "$BIN"
-echo "== $MODE: $("$FIX" --version 2>/dev/null || echo 'fix (unknown version)')"
+echo "== $MODE, with $FIX"
 gcc -O2 -c bench_clock.c -o bench_clock.o
 
 while read -r name _ _; do
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
+    wanted "$name" || continue
     # `fib` and `loop` time themselves in-process through a C helper.
     fix_extra=()
     case "$name" in fib|loop) fix_extra=(-b "$PWD/bench_clock.o") ;; esac
