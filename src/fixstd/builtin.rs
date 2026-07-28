@@ -2211,9 +2211,14 @@ fn realloc_array<'c, 'm>(
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
 
+/// Gives an array a storage of `cap_name` elements, keeping the elements it already holds, and
+/// returns the array with its capacity field updated. The caller must ensure the new capacity holds
+/// the array's current size; a smaller one leaves elements outside the storage.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
+    /// The local binding holding the array to resize.
     arr_name: FullName,
+    /// The local binding holding the new capacity, in elements.
     cap_name: FullName,
     // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
     // retain-copy a shared array's elements. Set false only where the array is statically known to
@@ -5791,8 +5796,11 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Tests whether a boxed value is the only reference to its object, by reading the object's
+/// reference count in place, and returns that flag paired with the value handed back unchanged.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
+    /// The local binding holding the value to test.
     var_name: FullName,
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
     /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
@@ -7611,9 +7619,12 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Compares two `Ptr` values for equality of the addresses they hold, and returns a `Bool`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMPtrEqBody {
+    /// The local binding holding the left operand.
     lhs_name: FullName,
+    /// The local binding holding the right operand.
     rhs_name: FullName,
 }
 

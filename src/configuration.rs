@@ -667,6 +667,8 @@ impl Configuration {
         features.disable_by_regexes(&self.disable_cpu_features_regex);
     }
 
+    /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
+    /// configuration and for the errors the Fix runtime's memory management can produce.
     pub fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
         let check = Command::new("which").arg("valgrind").output();
@@ -694,17 +696,20 @@ impl Configuration {
                 // Check memory leaks.
                 com.arg("--tool=memcheck");
                 com.arg("--leak-check=yes"); // This option turns memory leak into error.
-                                             // An array large enough to have its elements aligned sits above the base of its
-                                             // allocation, so the only pointer to that block is an interior one, which the leak
-                                             // checker calls possibly lost for as long as the array is alive. Take as errors the
-                                             // kinds a reference counting mistake produces instead: a block nothing points to is
-                                             // definitely lost, and one held only by such a block is indirectly lost.
+
+                // An array large enough to have its elements aligned sits above the base of its
+                // allocation, so the only pointer to that block is an interior one, which the leak
+                // checker calls possibly lost for as long as the array is alive. Take as errors the
+                // kinds a reference counting mistake produces: a block nothing points to is
+                // definitely lost, and one held only by such a block is indirectly lost.
                 com.arg("--errors-for-leak-kinds=definite,indirect");
             }
         }
         Ok(com)
     }
 
+    /// The linkage to give a symbol that other compilation units may call: external where each unit
+    /// is compiled on its own, internal where the program is optimized as a whole.
     pub fn external_if_separated(&self) -> Linkage {
         if self.enable_separated_compilation() {
             Linkage::External
@@ -717,6 +722,8 @@ impl Configuration {
         approve_and_run(self)
     }
 
+    /// Whether the compiler is running to report diagnostics to an editor, rather than to produce a
+    /// program.
     #[allow(dead_code)]
     pub fn is_diagnostics_mode(&self) -> bool {
         match &self.subcommand {
@@ -725,6 +732,8 @@ impl Configuration {
         }
     }
 
+    /// Whether the generated program keeps the checks that abort it on a violation, such as array
+    /// bounds checks and the union variant checks of the `as_` functions.
     pub fn runtime_check(&self) -> bool {
         !self.no_runtime_check
     }

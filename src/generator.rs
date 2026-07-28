@@ -480,32 +480,51 @@ impl<'c> Scope<'c> {
     }
 }
 
+/// The state of code generation for one LLVM module: the module being written, where in it the next
+/// instruction goes, what is in scope there, and the caches shared across the whole module.
 pub struct Generator<'c, 'm> {
+    /// The LLVM context every type and value built here belongs to.
     pub context: &'c Context,
+    /// The LLVM module being written.
     pub module: &'m Module<'c>,
+    /// Stack of builders; the innermost is where instructions are appended. Generating a nested
+    /// function pushes a builder of its own and pops it on the way out.
     builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
+    /// Stack of local scopes, one per function body being generated. A local name is looked up in
+    /// the innermost scope alone.
     scope: Arc<RefCell<Vec<Scope<'c>>>>,
+    /// The debug info builder and compile unit, present where the module is built with debug info.
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
-    debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
-    debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
+    /// Stack of debug scopes matching the function bodies being generated. `None` where the code
+    /// being generated has no known source, in which case no debug location is emitted.
+    debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>,
+    /// Stack of source spans; the innermost is the location instructions are attributed to. `None`
+    /// where the code being generated has no known source.
+    debug_location: Vec<Option<Span>>,
+    /// The value of each global symbol of the program, by name.
     pub global: Map<FullName, ScopedValue<'c>>,
+    /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
+    /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
     pub target_data: TargetData,
-    // How many registers of each class the target returns a value in, read once from the module's
-    // triple. `returns_through_out_pointer` needs it for every function type built.
+    /// How many registers of each class the target returns a value in, read once from the module's
+    /// triple. `returns_through_out_pointer` needs it for every function type built.
     return_registers: ReturnRegisters,
-    // The convention every Fix lambda in this module is defined and called with, read once from the
-    // module's triple.
+    /// The convention every Fix lambda in this module is defined and called with, read once from the
+    /// module's triple.
     lambda_calling_convention: u32,
+    /// The configuration the program is being built under.
     pub config: Configuration,
+    /// The global constant emitted for each Rust string embedded in the module, keyed by the string,
+    /// so that one string is emitted once.
     global_strings: Map<String, GlobalValue<'c>>,
-    // Debug type built for each Fix type, keyed by the type's canonical string, so a type is
-    // described once and shared across every reference to it.
+    /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
+    /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
-    // Placeholder node for each Fix type whose debug type is mid-construction. A reference to the
-    // type reached while building it (as a recursive type refers to itself) resolves to the
-    // placeholder, which is replaced by the finished type once construction completes. Without it,
-    // describing a recursive type would recurse forever.
+    /// Placeholder node for each Fix type whose debug type is mid-construction. A reference to the
+    /// type reached while building it (as a recursive type refers to itself) resolves to the
+    /// placeholder, which is replaced by the finished type once construction completes. Without it,
+    /// describing a recursive type would recurse forever.
     di_type_placeholders: Map<String, DIDerivedType<'c>>,
 }
 
@@ -600,6 +619,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         &self.type_env
     }
 
+    /// The number of bytes a value of `ty` occupies on the target, padding included.
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
         self.target_data.get_bit_size(ty) / 8
     }
@@ -610,6 +630,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_abi_alignment(ty) as u64
     }
 
+    /// The number of bytes a pointer occupies on the target. Fix supports 64-bit targets, so this
+    /// asserts the size is 8.
     pub fn ptr_size(&mut self) -> u64 {
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let ptr_size = self.target_data.get_bit_size(&ptr_ty) / 8;
@@ -1836,6 +1858,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
+    /// Put the boxed object at `ptr` alone into the local reference counting state, leaving the
+    /// objects it owns as they are.
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
@@ -1847,6 +1871,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
+    /// Put the boxed object at `obj_ptr` alone into the threaded reference counting state, leaving
+    /// the objects it owns as they are. An object that is already threaded or global keeps its
+    /// state, so a global object stays exempt from retain and release.
     fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
         let current_func = self.current_function();
         let cont_bb = self

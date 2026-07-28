@@ -888,12 +888,16 @@ impl ObjectFieldType {
         union.insert_field(gc, union_tag_idx, tag)
     }
 
+    /// The index, among the fields of a union's struct type, of the buffer holding the value of the
+    /// variant it carries. A boxed union carries a control block ahead of that struct's fields.
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
         let field_offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
         field_offset + UNION_DATA_IDX
     }
 
+    /// The contents of a union's payload buffer, still typed as the buffer, which is wide enough for
+    /// whichever variant the union carries. Reading the variant's value out of it takes a bit cast.
     pub fn get_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: &Object<'c>,
@@ -956,6 +960,8 @@ impl ObjectFieldType {
         union.insert_field(gc, union_buf_idx, value)
     }
 
+    /// Emit a check that the union carries the variant of `expected_tag`, aborting the program with
+    /// a message where it carries another. Code after the call continues on the matching path.
     pub fn panic_if_union_tag_mismatch<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1236,6 +1242,8 @@ pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     gc.context.struct_type(&fields, false)
 }
 
+/// The debug info type describing the control block that heads every boxed object. It presents the
+/// reference counter alone, the one field a debugger session has use for.
 pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let str_type = control_block_type(gc);
 
@@ -1769,7 +1777,9 @@ pub fn write_alloc_offset<'c, 'm>(
         .unwrap();
 }
 
-// Create an object.
+/// A fresh object of type `ty`, with its control block initialized and its remaining fields left
+/// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
+/// pointer to it; an unboxed type comes back as an undefined aggregate value.
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.

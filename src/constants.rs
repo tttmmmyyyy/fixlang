@@ -198,15 +198,23 @@ pub const TRY_FIX_DEPS_UPDATE: &str = "Try `fix deps update` to update the lock 
 pub const TRY_FIX_DEPS_UPDATE_TEST: &str =
     "Try `fix deps update --test` to update the test dependencies lock file.";
 
+/// The work a traverser function performs on the boxed objects an object owns. The wrapped value is
+/// one of the `TRAVERSER_WORK_*` codes, and is what the generated traverser receives as its work
+/// argument when the work is chosen at run time.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
 impl TraverserWorkType {
+    /// Drop one reference to each object reached, freeing an object whose count falls to zero.
     pub fn release() -> Self {
         Self(TRAVERSER_WORK_RELEASE)
     }
+    /// Put each object reached into the global reference counting state, in which retains and
+    /// releases leave it alone.
     pub fn mark_global() -> Self {
         Self(TRAVERSER_WORK_MARK_GLOBAL)
     }
+    /// Put each object reached into the threaded reference counting state, in which retains and
+    /// releases update its counter atomically.
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
@@ -275,6 +283,7 @@ pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
 /// proportion to the recursion depth reached.
 pub const COMPILER_THREAD_STACK_SIZE: usize = 256 * 1024 * 1024;
 
+/// The characters an identifier in a Fix source file may be built from, as one string.
 pub fn chars_allowed_in_identifiers() -> String {
     // If you add a new character, please also update `name_char` in `grammar.pest`.
     let mut chars = String::new();
