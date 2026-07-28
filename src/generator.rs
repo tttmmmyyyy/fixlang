@@ -30,6 +30,7 @@ use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
+use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
@@ -1771,7 +1772,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Release the object's owned references, then free it.
         traverse_refs(self);
-        self.builder().build_free(obj_ptr).unwrap();
+        let ty = obj.ty.clone();
+        build_free_boxed(self, obj_ptr, &ty);
         self.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Implement global_bb.

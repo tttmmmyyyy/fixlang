@@ -694,6 +694,12 @@ impl Configuration {
                 // Check memory leaks.
                 com.arg("--tool=memcheck");
                 com.arg("--leak-check=yes"); // This option turns memory leak into error.
+                                             // An array large enough to have its elements aligned sits above the base of its
+                                             // allocation, so the only pointer to that block is an interior one, which the leak
+                                             // checker calls possibly lost for as long as the array is alive. Take as errors the
+                                             // kinds a reference counting mistake produces instead: a block nothing points to is
+                                             // definitely lost, and one held only by such a block is indirectly lost.
+                com.arg("--errors-for-leak-kinds=definite,indirect");
             }
         }
         Ok(com)

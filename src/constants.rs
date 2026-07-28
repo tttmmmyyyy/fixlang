@@ -117,6 +117,16 @@ pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
 pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;
 pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
 
+// The boundary a large array's element buffer starts on. A vectorized loop moves 32 bytes per
+// iteration, and an access that crosses a 64-byte cache line costs about 1.75 times one that does
+// not, so a buffer off this boundary makes every second vector access straddle a line.
+pub const ARRAY_BUF_ALIGNMENT: u64 = 32;
+
+// The `#ArrayStorage` allocation size, in bytes, from which the element buffer is worth aligning.
+// Below it the loop over the elements is too short for the alignment to pay for the bytes the
+// alignment costs, and such arrays are numerous enough that those bytes show up on their own.
+pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
+
 // The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
 pub const BOOL_FALSE_TAG: usize = 0;
 pub const BOOL_TRUE_TAG: usize = 1;
@@ -141,6 +151,11 @@ pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not b
 
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
+// How far the object sits above the base of its allocation. Nonzero where the object was placed
+// off the base to put a buffer following it on a boundary, which `#ArrayStorage` does for its
+// elements; `build_free_boxed` reads it to recover the block to free. It occupies a byte of the
+// control block's tail padding, so the control block keeps its size.
+pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
 
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";

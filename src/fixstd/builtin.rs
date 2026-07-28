@@ -18,23 +18,25 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX,
-    ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
-    BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
-    DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
-    I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
-    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL,
-    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME, UNION_DATA_IDX,
+    TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
+    ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME,
+    ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX,
+    CLOSURE_FUNPTR_IDX, CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+    DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
+    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+    STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
+    STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, create_obj, get_array_storage, get_array_storage_buf, ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, create_obj, get_array_storage,
+    get_array_storage_buf, read_alloc_offset, write_alloc_offset, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -2031,35 +2033,185 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's single malloc block to hold `new_cap` elements with `realloc`,
-// then update its capacity field. The elements are not touched: `realloc` preserves the block's
-// contents, often growing it in place. The caller must ensure the array is unique.
+// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
+// field. The elements are moved, not reference counted: the caller must ensure the array is unique.
+//
+// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
+// large enough to have its own pages, by remapping them, which costs nothing per element. What comes
+// back starts wherever the allocator put it, so the object is placed in it afresh, and the contents
+// move only in the case where that lands the object somewhere other than `realloc` left it.
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     new_cap: IntValue<'c>,
 ) -> Object<'c> {
-    // Resize the storage block in place, then update the array value's storage pointer and capacity.
+    let i64_ty = gc.context.i64_type();
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage = get_array_storage(gc, &array);
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
+    let struct_type = object_type.to_struct_type(gc, vec![]);
     let sizeof = object_type.size_of(gc, Some(new_cap));
+
+    let old_shift = read_alloc_offset(gc, storage_ptr);
+    let old_base = unsafe {
+        let back = gc
+            .builder()
+            .build_int_neg(old_shift, "neg_old_shift@realloc_array")
+            .unwrap();
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                storage_ptr,
+                &[back],
+                "old_base@realloc_array",
+            )
+            .unwrap()
+    };
+
+    // A storage worth aligning keeps room to be placed off the base of its block; one below the
+    // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
+    let is_large = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGE,
+            sizeof,
+            i64_ty.const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
+            "is_large@realloc_array",
+        )
+        .unwrap();
+    let slack = gc
+        .builder()
+        .build_select(
+            is_large,
+            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            old_shift,
+            "slack@realloc_array",
+        )
+        .unwrap()
+        .into_int_value();
+    let alloc_size = gc
+        .builder()
+        .build_int_add(sizeof, slack, "alloc_size@realloc_array")
+        .unwrap();
     let realloc_fn = gc
         .module
         .get_function(RUNTIME_REALLOC)
         .expect("realloc is not declared");
-    let new_storage_ptr = gc
+    let new_base = gc
         .builder()
         .build_call(
             realloc_fn,
-            &[storage_ptr.into(), sizeof.into()],
+            &[old_base.into(), alloc_size.into()],
             "realloc_storage",
         )
         .unwrap()
         .try_as_basic_value()
         .left()
+        .unwrap()
+        .into_pointer_value();
+    let new_shift = {
+        let aligned_shift = build_array_storage_shift(gc, struct_type, new_base);
+        gc.builder()
+            .build_select(
+                is_large,
+                aligned_shift,
+                old_shift,
+                "new_shift@realloc_array",
+            )
+            .unwrap()
+            .into_int_value()
+    };
+
+    let current_func = gc.current_function();
+    let move_bb = gc
+        .context
+        .append_basic_block(current_func, "move_bb@realloc_array");
+    let end_bb = gc
+        .context
+        .append_basic_block(current_func, "end_bb@realloc_array");
+    let moves = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::NE,
+            new_shift,
+            old_shift,
+            "moves@realloc_array",
+        )
         .unwrap();
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, new_storage_ptr);
+    gc.builder()
+        .build_conditional_branch(moves, move_bb, end_bb)
+        .unwrap();
+
+    // Carry the control block and the live elements to where the object now sits. The two ranges
+    // overlap, being at most `ARRAY_BUF_ALIGNMENT` apart.
+    gc.builder().position_at_end(move_bb);
+    let old_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[old_shift],
+                "old_ptr@realloc_array",
+            )
+            .unwrap()
+    };
+    let new_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[new_shift],
+                "new_ptr@realloc_array",
+            )
+            .unwrap()
+    };
+    let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+    let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+    let elems_span = unsafe {
+        gc.builder()
+            .build_gep(
+                elem_value_ty,
+                gc.context.ptr_type(AddressSpace::from(0)).const_null(),
+                &[len],
+                "elems_span@realloc_array",
+            )
+            .unwrap()
+    };
+    let live_bytes = gc
+        .builder()
+        .build_int_add(
+            gc.builder()
+                .build_ptr_to_int(elems_span, i64_ty, "elems_bytes@realloc_array")
+                .unwrap(),
+            i64_ty.const_int(
+                gc.target_data
+                    .offset_of_element(&struct_type, STORAGE_BUF_IDX)
+                    .unwrap(),
+                false,
+            ),
+            "live_bytes@realloc_array",
+        )
+        .unwrap();
+    gc.builder()
+        .build_memmove(new_ptr, 1, old_ptr, 1, live_bytes)
+        .ok()
+        .unwrap();
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+    gc.builder().position_at_end(end_bb);
+    let storage_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[new_shift],
+                "storage_ptr@realloc_array",
+            )
+            .unwrap()
+    };
+    write_alloc_offset(gc, storage_ptr, new_shift);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr.as_basic_value_enum());
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
 
