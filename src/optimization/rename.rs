@@ -181,8 +181,8 @@ impl ExprVisitor for Substitutor {
     }
 
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // `start_visit_let` and `start_visit_match` keep the subexpression they rebuilt only when
-        // its traversal reports a change, so every rewrite below has to be recorded here.
+        // A parent expression keeps the subexpression it rebuilt only when the subexpression's
+        // traversal reports a change, so every rewrite below has to be recorded in `changed`.
         let mut changed = false;
         let mut llvm = expr.get_llvm().as_ref().clone();
 
@@ -594,6 +594,7 @@ mod tests {
     use crate::ast::types::tycon;
     use crate::fixstd::builtin::{make_i64_ty, make_tuple_name_abs, InlineLLVMMakeStructBody};
 
+    /// `name` in the empty namespace, where the bindings local to an expression live.
     fn local(name: &str) -> FullName {
         FullName::local(name)
     }
@@ -606,6 +607,8 @@ mod tests {
         expr_llvm(Box::new(generator), make_i64_ty(), None)
     }
 
+    /// The names the inline-LLVM expression `expr` reads from its enclosing scope, in the order it
+    /// holds them.
     fn llvm_free_names(expr: &Arc<ExprNode>) -> Vec<FullName> {
         expr.get_llvm().generator.free_vars()
     }
@@ -619,6 +622,8 @@ mod tests {
         Substitutor::new(map)
     }
 
+    /// Verifies that an inline-LLVM node reports a change once any of its free names is renamed,
+    /// even when a name mapped to itself is substituted afterwards.
     #[test]
     fn renaming_one_llvm_free_name_reports_a_change() {
         let res = x_to_a_and_y_to_y().traverse(&llvm_reading(&["x", "y"]));
@@ -626,6 +631,8 @@ mod tests {
         assert!(res.changed);
     }
 
+    /// Verifies that a `let` whose pattern binds every substituted name still carries the renaming
+    /// applied inside its bound expression.
     #[test]
     fn let_keeps_the_rename_of_its_bound_expression() {
         // `let (x, y) = LLVM(x, y) in z`. The pattern binds every name being substituted, so the
