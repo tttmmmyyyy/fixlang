@@ -1,0 +1,73 @@
+module Main;
+
+import Std::{
+    Array, Bool, I64, IO, U8, Array::{empty, fill, from_map, push_back, set, @, @size},
+    Debug::assert_eq, LessThan::min, LoopState::{break, continue}, Monad::pure, ToU8::u8, loop
+};
+
+// Levenshtein distance between every unique pair of words: byte-array traversal
+// driving a two-row dynamic-programming table, with the two rows allocated per
+// pair. Public cross-language suites carry this task, and it is the one that mixes
+// short-array allocation, element-by-element reads of a shared array, and in-place
+// writes to a unique one.
+
+// Park-Miller minimal-standard LCG. 16807 * (2^31 - 1) < 2^63, so the multiply stays
+// within I64; the stream is deterministic, giving a stable benchmark input.
+_next : I64 -> I64 = |x| (16807 * x) % 2147483647;
+
+gen_words : I64 -> Array (Array U8);
+gen_words = |n| (
+    loop((0, 1, Array::empty(n)), |(k, x, words)|
+        if k == n { break $ words };
+        let x = _next(x);
+        let len = 3 + x % 8;
+        let (x, word) = loop((0, x, Array::empty(len)), |(i, x, word)|
+            if i == len { break $ (x, word) };
+            let x = _next(x);
+            continue $ (i + 1, x, word.push_back('a' + (x % 26).u8))
+        );
+        continue $ (k + 1, x, words.push_back(word))
+    )
+);
+
+distance : Array U8 -> Array U8 -> I64;
+distance = |a, b| (
+    // The shorter word indexes the rows, which keeps both rows as short as possible.
+    let (a, b) = if a.@size <= b.@size { (a, b) } else { (b, a) };
+    let m = a.@size;
+    let n = b.@size;
+    let (prev, _) = loop((1, Array::from_map(m + 1, |i| i), Array::fill(m + 1, 0)), |(j, prev, cur)|
+        if j > n { break $ (prev, cur) };
+        let bj = b.@(j - 1);
+        let cur = cur.set(0, j);
+        let cur = loop((1, cur), |(i, cur)|
+            if i > m { break $ cur };
+            let cost = if a.@(i - 1) == bj { 0 } else { 1 };
+            let d = min(min(prev.@(i) + 1, cur.@(i - 1) + 1), prev.@(i - 1) + cost);
+            continue $ (i + 1, cur.set(i, d))
+        );
+        // The row just computed becomes the previous row of the next round.
+        continue $ (j + 1, cur, prev)
+    );
+    prev.@(m)
+);
+
+sum_distances : Array (Array U8) -> I64;
+sum_distances = |words| (
+    let n = words.@size;
+    loop((0, 0), |(i, sum)|
+        if i == n { break $ sum };
+        let wi = words.@(i);
+        let sum = loop((i + 1, sum), |(j, sum)|
+            if j == n { break $ sum };
+            continue $ (j + 1, sum + distance(wi, words.@(j)))
+        );
+        continue $ (i + 1, sum)
+    )
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"levenshtein", sum_distances(gen_words(1000)), 3648154);;
+    pure()
+);
