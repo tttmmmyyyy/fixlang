@@ -10241,8 +10241,8 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
             pure()
         );
     "#;
-    // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
-    // the fix, omits) the zero-sized phi.
+    // build_scalar_phi runs during code generation, so the unoptimized module is where such a phi
+    // would appear.
     let ir = emit_llvm_ir(source, function_name!(), "none");
     assert!(
         !ir.contains("phi [0 x"),

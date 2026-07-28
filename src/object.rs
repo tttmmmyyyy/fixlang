@@ -1102,6 +1102,10 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
+    // The size in bytes of an object of this type.
+    // * `array_capacity` - For a type whose last field is an element buffer (`Array` or
+    //   `#ArrayStorage`), the number of elements the buffer is to hold; the size returned covers the
+    //   fields preceding the buffer plus that many elements. For every other type, `None`.
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,

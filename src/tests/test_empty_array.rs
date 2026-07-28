@@ -19,6 +19,8 @@ mod empty_array_tests {
 
     #[test]
     pub fn test_empty_arrays_are_independent() {
+        // Empty arrays that share one block stay independent: growing one leaves the others empty,
+        // and pushing into one empty value twice gives two results of one element each.
         let source = r#"
 module Main;
 
@@ -48,6 +50,8 @@ main = (
 
     #[test]
     pub fn test_empty_array_filled_into_a_larger_array() {
+        // An array filled with empty rows: pushing into one row leaves the other rows empty, as a
+        // fill of separately allocated rows would.
         let source = r#"
 module Main;
 
@@ -70,6 +74,9 @@ main = (
 
     #[test]
     pub fn test_empty_array_is_unique() {
+        // What uniqueness reports for a capacity-zero array — one from a literal, one from
+        // `Array::empty(0)`, and one held under two names — against what it reports for an array
+        // with reserved capacity, where a second name does make it shared.
         let source = r#"
 module Main;
 
@@ -118,6 +125,10 @@ main = (
 
     #[test]
     pub fn test_empty_array_of_boxed_elements() {
+        // Reference counting around the shared block: an empty array of boxed elements releases no
+        // element and takes ownership of what is pushed into it, and the block survives arbitrarily
+        // many empty arrays created and dropped. A nested literal and an element type of size zero
+        // are covered here too.
         let source = r#"
 module Main;
 
@@ -155,6 +166,8 @@ main = (
 
     #[test]
     pub fn test_empty_array_in_a_global_value() {
+        // A global value holding an empty array: initializing it marks its whole value graph global,
+        // which reaches the shared block, and the value stays readable and growable afterwards.
         let source = r#"
 module Main;
 

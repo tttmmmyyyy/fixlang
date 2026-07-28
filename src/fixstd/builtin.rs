@@ -2060,8 +2060,9 @@ fn set_array_capacity<'c, 'm>(
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
 }
 
-// The function `set_array_capacity` calls for element type `elem_ty`: it takes an array's storage, its
-// capacity and the capacity wanted, and returns the storage to use.
+// The function that gives an array of element type `elem_ty` the room it asks for: it takes the
+// array's storage and its current capacity, then the capacity wanted, and returns the storage with
+// room for that capacity, carrying over the elements the array holds.
 //
 // It is a function, and one the inliner keeps out of its caller, because changing an array's capacity
 // is a cold path that the append loop around it would otherwise pay for: every block this needs
@@ -2169,7 +2170,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
             .context
             .append_basic_block(current_func, "end_bb@set_capacity");
 
-        // Unique: resize the storage in place with `realloc`.
+        // Unique: give the array's own storage room for `new_cap` elements.
         gc.builder().position_at_end(unique_bb);
         let resized = set_array_capacity(gc, array.clone(), new_cap);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
