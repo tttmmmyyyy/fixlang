@@ -54,8 +54,7 @@ def cpu_model():
     """The processor these counters would be read on.
 
     A split count belongs to a microarchitecture the way an instruction count does not,
-    so a row measured on another machine cannot be compared with its neighbours. The log
-    records this next to the counts.
+    so counts read on different machines cannot be compared with each other.
     """
     for line in open("/proc/cpuinfo", encoding="utf-8"):
         if line.startswith("model name"):

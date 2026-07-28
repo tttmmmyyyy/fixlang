@@ -31,8 +31,8 @@ jobs:
           mkdir -p _site
           cp -r third-party-licenses/. _site/
 
-      # Kept apart from the step above, and allowed to fail: the licenses are what this site
-      # is for, and they should publish whether or not the benchmark page renders.
+      # Kept apart from `Assemble the site`, and allowed to fail: the licenses are what this
+      # site is for, and they should publish whether or not the benchmark page renders.
       - name: Add the benchmark page
         continue-on-error: true
         run: |

@@ -61,7 +61,7 @@ would credit Fix with vectorized loops for reasons that have nothing to do with 
 | `mandelbrot` | float arithmetic in nested loops, no arrays |
 | `nbody` | float arithmetic over an array of structs, with `sqrt` through libm |
 | `fannkuch` | in-place mutation of an integer array |
-| `arrayrw` | the narrowest form of that: `arr.set(i, arr.@(i) + 1)` over 1000 elements |
+| `arrayrw` | in-place mutation at its narrowest: `arr.set(i, arr.@(i) + 1)` over 1000 elements |
 | `levenshtein` | a two-row dynamic-programming table over every pair of a thousand words |
 
 `fib` and `loop` time themselves in-process through `bench_clock.c`, with opaque barriers around
