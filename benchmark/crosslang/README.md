@@ -64,6 +64,7 @@ would credit Fix with vectorized loops for reasons that have nothing to do with 
 | `arrayrw` | in-place mutation at its narrowest: `arr.set(i, arr.@(i) + 1)` over 1000 elements |
 | `levenshtein` | a two-row dynamic-programming table over every pair of a thousand words |
 
-`fib` and `loop` time themselves in-process through `bench_clock.c`, with opaque barriers around
-the work so the compiler cannot hoist it out of the timed region. The rest are timed from
-outside.
+Every program is timed from outside, by `wall.py`. `fib` and `loop` additionally carry opaque
+barriers around their work — `bench_clock.c` on the Fix side, `volatile` in C, `black_box` in
+Rust — because the answer is otherwise a compile-time constant. They print an in-process
+nanosecond count alongside the answer, which the harnesses ignore.
