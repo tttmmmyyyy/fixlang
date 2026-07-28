@@ -22,6 +22,10 @@
 
 ### Changed
 
+#### Language
+
+- `FFI_EXPORT` now rejects a value whose type the C ABI cannot carry, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which the foreign language receives as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected, because how C passes one depends on the target; `Bool` is rejected because C leaves the width of `_Bool` to the implementation. To exchange an aggregate, take a `Ptr` to memory the foreign language owns and copy through it; see the FFI section of `Document.md`.
+
 #### Std
 
 - `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
@@ -36,6 +40,8 @@
 
 #### Tool
 
+- On AArch64 targets (Apple Silicon and other 64-bit ARM), an integer narrower than 32 bits crossed the FFI boundary as a wrong number: a function exported with `FFI_EXPORT` returned one to its foreign caller, and `FFI_CALL` passed one to a foreign function that takes one. A function of type `I8 -> I8 -> I8` exported and called from C with `-100` and `30` answered 186 instead of -70. This covers `I8`, `U8`, `I16` and `U16`, and the `Std::FFI` aliases of the same widths such as `CChar` and `CShort`. x86-64 targets were unaffected.
+- Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.
 - Tail call optimization now applies with `-O none` and with `-g` as well. `-g` used to suppress it so that a debugger saw a stack frame for every call; a call in tail position no longer appears in a backtrace.
 - Compiling a function of many parameters takes far less time and memory. The cost used to double with each parameter, so a function of 13 or more parameters aborted the compiler with a stack overflow.

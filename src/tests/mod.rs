@@ -17,6 +17,7 @@ mod test_deprecation;
 mod test_docs;
 mod test_explicit_import;
 mod test_external_projects;
+mod test_ffi;
 mod test_file_io;
 mod test_get_args;
 mod test_git_ref;

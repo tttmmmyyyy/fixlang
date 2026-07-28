@@ -51,7 +51,7 @@ use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
 use num_bigint::BigInt;
-use pest::error::Error;
+use pest::error::{Error, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::path::PathBuf;
@@ -377,12 +377,12 @@ pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint>
 /// location and classify the expected-rule set.
 fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
     let insert_at = match e.location {
-        pest::error::InputLocation::Pos(p) => p,
-        pest::error::InputLocation::Span((s, _)) => s,
+        InputLocation::Pos(p) => p,
+        InputLocation::Span((s, _)) => s,
     };
     let positives: &[Rule] = match &e.variant {
-        pest::error::ErrorVariant::ParsingError { positives, .. } => positives.as_slice(),
-        pest::error::ErrorVariant::CustomError { .. } => &[],
+        ErrorVariant::ParsingError { positives, .. } => positives.as_slice(),
+        ErrorVariant::CustomError { .. } => &[],
     };
     let kind = classify_repair_hint(positives);
     RepairHint { insert_at, kind }
@@ -2501,6 +2501,11 @@ fn parse_expr_make_struct(
         .set_aux_src(Some(tycon_span)))
 }
 
+// Parses an `FFI_CALL`, `FFI_CALL_IO` or `FFI_CALL_IOS` expression, i.e. a call to a C function
+// written with its C signature. `FFI_CALL_IO` produces an `IO` action that performs the call;
+// `FFI_CALL_IOS` takes the `IOState` token as one further argument and returns it with the result.
+// A signature ending in `, ...` is variadic, so arguments beyond the declared parameters are
+// accepted.
 fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_call_c);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -2513,7 +2518,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
-    let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
+    let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx)?;
 
     let mut is_var_args = false;
     if let Some(pair) = pairs.peek() {
@@ -2580,6 +2585,9 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     Ok(expr)
 }
 
+// Parses one type written in a C function signature into the Fix type constructor that represents
+// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
+// the unit type, which stands for `void`.
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let mut name = if pair.as_str() == "()" {
@@ -2597,13 +2605,32 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     tycon(name)
 }
 
-fn parse_ffi_param_tys(pair: Pair<Rule>, ctx: &mut ParseContext) -> Vec<Arc<TyCon>> {
+// Parses the parameter types of a C function signature written in `FFI_CALL`. A parameter written
+// as `()` is an error, since `()` stands for `void`.
+fn parse_ffi_param_tys(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Vec<Arc<TyCon>>, Errors> {
     assert_eq!(pair.as_rule(), Rule::ffi_param_tys);
-    pair.into_inner()
-        .map(|pair| parse_ffi_c_fun_ty(pair, ctx))
-        .collect()
+    let mut param_tys = vec![];
+    for pair in pair.into_inner() {
+        let span = Span::from_pair(&ctx.source, &pair);
+        let param_ty = parse_ffi_c_fun_ty(pair, ctx);
+        if param_ty.is_unit() {
+            return Err(Errors::from_msg_srcs(
+                "`()` stands for `void`, which a C function cannot take as a parameter. It is available as the return type.".to_string(),
+                &[&Some(span)],
+            ));
+        }
+        param_tys.push(param_ty);
+    }
+    Ok(param_tys)
 }
 
+// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
+// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
+// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
+// its bit width, so `0b11111111_I8` is `-1`.
 fn parse_expr_number_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -3267,7 +3294,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
     // Show error content.
     msg += "Expected ";
     match &e.variant {
-        pest::error::ErrorVariant::ParsingError {
+        ErrorVariant::ParsingError {
             positives,
             negatives,
         } => {
@@ -3291,7 +3318,7 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
                 msg += ".";
             }
         }
-        pest::error::ErrorVariant::CustomError { message: _ } => unreachable!(),
+        ErrorVariant::CustomError { message: _ } => unreachable!(),
     };
     if suggestion.is_some() {
         msg += "\n";
@@ -3306,12 +3333,12 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
 
     // Create span (source location).
     let span = match e.location {
-        pest::error::InputLocation::Pos(s) => Span {
+        InputLocation::Pos(s) => Span {
             input: src.clone(),
             start: s,
             end: min(s + 1, src_string.len()),
         },
-        pest::error::InputLocation::Span((s, e)) => Span {
+        InputLocation::Span((s, e)) => Span {
             input: src.clone(),
             start: s,
             end: e,

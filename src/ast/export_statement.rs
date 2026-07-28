@@ -1,4 +1,4 @@
-// Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
+// Export syntax: `FFI_EXPORT[fix_value_name, c_function_name];`
 
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
@@ -6,15 +6,15 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
 use crate::error::Errors;
-use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, make_unit_ty, run_io};
+use crate::fixstd::builtin::{make_iostate_ty, run_io};
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
-use inkwell::types::BasicType;
+use inkwell::attributes::AttributeLoc;
+use inkwell::types::{BasicType, BasicTypeEnum};
 use std::sync::Arc;
-use std::usize;
 
 // The export statement.
 #[derive(Clone)]
@@ -40,6 +40,9 @@ pub struct ExportStatement {
 }
 
 impl ExportStatement {
+    // Create an export statement carrying what the source gives.
+    // `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
+    // exported value fills in `value_expr`.
     pub fn new(
         fix_value_name: FullName,
         c_function_name: String,
@@ -58,22 +61,24 @@ impl ExportStatement {
     // Validate the names in the export statement.
     // - src: The source of the export statement. Used for error messages.
     pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
-        // If `c_function_name` is not a valid C function name, exit with error
-        // The first character should be a letter or an underscore
-        // The rest of the characters should be a letter, a digit or an underscore
-        if !self.function_name.chars().next().unwrap().is_alphabetic()
-            && self.function_name.chars().next().unwrap() != '_'
-        {
+        // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
+        // underscores.
+        let first = self
+            .function_name
+            .chars()
+            .next()
+            .expect("the grammar gives an export statement a non-empty C function name");
+        if !first.is_ascii_alphabetic() && first != '_' {
             let msg = format!(
-                "`{}` is not a valid C function name. The first character should be a letter or an underscore.",
+                "`{}` is not a valid C function name. The first character should be an ASCII letter or an underscore.",
                 &self.function_name
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
         for c in self.function_name.chars() {
-            if !c.is_alphanumeric() && c != '_' {
+            if !c.is_ascii_alphanumeric() && c != '_' {
                 let msg = format!(
-                    "`{}` is not a valid C function name. The rest of the characters should be a letter, a digit or an underscore.",
+                    "`{}` is not a valid C function name. The rest of the characters should be an ASCII letter, a digit or an underscore.",
                     &self.function_name
                 );
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
@@ -82,8 +87,8 @@ impl ExportStatement {
         Ok(())
     }
 
-    // Implement the exported c function.
-    // This function requires `self.exported_function_type` and `self.instantiated_value_expr` to already be set.
+    // Implement the exported C function.
+    // Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let ExportedFunctionType {
             doms,
@@ -91,35 +96,40 @@ impl ExportStatement {
             io_type,
         } = self.function_type.clone().unwrap();
 
-        // Create the LLVM type of the exported C function.
+        // Create the LLVM type of the exported C function. Each exchanged value is its own scalar
+        // leaf — an integer, a floating point number or a pointer — which is the type a C
+        // declaration of the same function names. `has_c_abi` admits nothing with another shape.
         let dom_llvm_tys = doms
             .iter()
-            .map(|dom| dom.get_embedded_type(gc, &vec![]).into())
+            .map(|dom| c_leaf_type(dom, gc).into())
             .collect::<Vec<_>>();
-        let func_ty = if codom.to_string() == make_unit_ty().to_string() {
+        let func_ty = if codom.is_unit() {
             gc.context.void_type().fn_type(&dom_llvm_tys, false)
         } else {
-            codom
-                .get_embedded_type(gc, &vec![])
-                .fn_type(&dom_llvm_tys, false)
+            c_leaf_type(&codom, gc).fn_type(&dom_llvm_tys, false)
         };
 
         // Declare the function.
         let func = gc.module.add_function(&self.function_name, func_ty, None);
+        if let Some(tycon) = codom.toplevel_tycon() {
+            gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
+        }
+        for (i, dom) in doms.iter().enumerate() {
+            if let Some(tycon) = dom.toplevel_tycon() {
+                gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
+            }
+        }
 
         // Implement the function.
         let bb = gc.context.append_basic_block(func, "entry");
         gc.builder().position_at_end(bb);
 
-        // Create Fix values from arguments.
-        let mut args = func
-            .get_params()
+        // Create Fix values from arguments. Each parameter is the value's one scalar leaf.
+        let params = func.get_params();
+        let mut args = params
             .iter()
             .enumerate()
-            .map(|(i, arg)| {
-                let arg_ty = doms[i].clone();
-                Object::new(*arg, arg_ty, gc)
-            })
+            .map(|(i, arg)| Object::from_leaves(vec![*arg], doms[i].clone(), gc))
             .collect::<Vec<_>>();
 
         // Get the Fix value to be exported. `value_expr` is a reference to the instantiated symbol
@@ -134,8 +144,8 @@ impl ExportStatement {
             IOType::Pure => {}
             IOType::IO => {}
             IOType::IOState => {
-                let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
-                args.push(ios);
+                let iostate = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+                args.push(iostate);
             }
         }
         while args.len() > 0 {
@@ -154,32 +164,88 @@ impl ExportStatement {
             }
         }
 
-        // Return the result.
-        if codom.to_string() == make_unit_ty().to_string() {
+        // Return the result as its one scalar leaf.
+        if codom.is_unit() {
             gc.builder().build_return(None).unwrap();
         } else {
-            let ret_val = fix_value.value(gc);
+            let ret_val = fix_value.leaves()[0];
             gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
 }
 
-// A type to represent the type of an exported Fix value.
-// This struct value reresents a type `{doms} -> {codom}` if `is_io` is `false`,
-// and a type `{doms} -> IO {codom}` if `is_io` is `true`.
+// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar leaf,
+// which is the type a C declaration of the same function names.
+fn c_leaf_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
+    let embedded_ty = ty.get_embedded_type(gc, &vec![]);
+    let leaves = gc.flatten_to_scalar_leaves(embedded_ty);
+    assert_eq!(
+        leaves.len(),
+        1,
+        "`{}` reached an exported signature with {} scalar leaves",
+        ty.to_string(),
+        leaves.len()
+    );
+    leaves[0]
+}
+
+// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
+// passed.
+//
+// A value with one scalar leaf — an integer, a floating point number, or a pointer — is laid down
+// identically by Fix and by C. An aggregate is not: the C ABI classifies a structure by its size
+// and by the class of each of its eightbytes (System V AMD64), or by whether it is a homogeneous
+// floating-point aggregate (AAPCS64), and the shapes on which that agrees with Fix's element-wise
+// layout differ from target to target.
+fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+    let tycon = match ty.toplevel_tycon() {
+        Some(tycon) => tycon,
+        None => return false,
+    };
+    // A boxed value is a pointer.
+    if ty.is_box(type_env) {
+        return true;
+    }
+    tycon.is_c_scalar()
+}
+
+// The error message for a type the C ABI cannot carry appearing in an exported function's
+// signature. `position` names where it appears, as "an argument" or "the return value".
+fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
+    let head = format!(
+        "`{}` cannot be used as {} of an exported function",
+        ty.to_string(),
+        position
+    );
+    if ty.is_boolean() {
+        return head + ". Use `U8` or `CInt`, and convert it on the Fix side.";
+    }
+    head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
+}
+
+// The type of an exported Fix value, split into the parts the generated C function is built from.
+// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
+// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
 #[derive(Clone)]
 pub struct ExportedFunctionType {
+    // The types of the arguments, in the order the C function takes them.
     pub doms: Vec<Arc<TypeNode>>,
+    // The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
     pub codom: Arc<TypeNode>,
+    // How the value produces a result of type `codom`.
     pub io_type: IOType,
 }
 
-// Pure, IO a or IOState -> (IOState, a).
+// How an exported Fix value produces its result.
 #[derive(Clone)]
 pub enum IOType {
+    // The value is the result itself.
     Pure,
+    // The value is an `IO` action, which the generated C function runs.
     IO,
-    IOState, // The user cannot export a function of this type, but optimization may convert `IO a` to `IOState -> (IOState, a)`.
+    // The value takes an `IOState` token and returns it alongside the result. An exported value is
+    // written as `IO {codom}`; an optimization may rewrite it into this form.
+    IOState,
 }
 
 impl ExportedFunctionType {
@@ -220,12 +286,28 @@ impl ExportedFunctionType {
         let mut io_type = IOType::Pure;
         match &codom.ty {
             Type::TyApp(fun, arg) => {
-                if fun.to_string() == make_io_ty().to_string() {
+                if fun.is_io() {
                     codom = arg.clone();
                     io_type = IOType::IO;
                 }
             }
             _ => {}
+        }
+
+        // Each argument and the result should have a C ABI.
+        for dom in &doms {
+            if !has_c_abi(dom, type_env) {
+                return Err(Errors::from_msg_srcs(
+                    err_msg_prefix + &unexportable_type_msg(dom, "an argument"),
+                    &[src],
+                ));
+            }
+        }
+        if !codom.is_unit() && !has_c_abi(&codom, type_env) {
+            return Err(Errors::from_msg_srcs(
+                err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
+                &[src],
+            ));
         }
 
         // Return the result.

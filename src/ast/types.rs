@@ -19,7 +19,7 @@ use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
-    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_iostate_name,
+    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_io_tycon, make_iostate_name,
     make_tuple_name_abs,
 };
 use crate::generator::Generator;
@@ -34,6 +34,8 @@ use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Formatter};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -80,8 +82,8 @@ impl PartialEq for AssocType {
 
 impl Eq for AssocType {}
 
-impl std::hash::Hash for AssocType {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for AssocType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
@@ -157,6 +159,15 @@ pub enum TyConVariant {
     Opaque,
 }
 
+// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
+// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
+const C_SCALAR_NAMES: &[&str] = &[
+    I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
+    F64_NAME, PTR_NAME,
+];
+
+// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
+// it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     pub name: FullName,
@@ -200,15 +211,15 @@ impl TyCon {
     // If struct / union have type parameter, introduces new type arguments.
     pub fn get_struct_union_value_type(
         self: &TyCon,
-        typechcker: &mut TypeCheckContext,
+        typechecker: &mut TypeCheckContext,
     ) -> Arc<TypeNode> {
-        let ti = typechcker.type_env.tycons.get(self).unwrap();
+        let ti = typechecker.type_env.tycons.get(self).unwrap();
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
         let mut new_tyvars: Vec<Arc<TypeNode>> = vec![];
         for tv in ti.tyvars.clone() {
-            let tv = typechcker.new_tyvar_by(&tv);
+            let tv = typechecker.new_tyvar_by(&tv);
             new_tyvars.push(type_from_tyvar(tv));
         }
 
@@ -220,54 +231,62 @@ impl TyCon {
         ty
     }
 
-    // Convert "()", "I8", "Ptr", etc to corresponding c_type.
-    // Returns none if it is VoidType.
-    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
-        if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
-            panic!("call get_c_type for {}", self.to_string())
-        }
-        if self.name == make_tuple_name_abs(0) {
-            return None;
-        }
-        if self.name.name == I8_NAME {
-            return Some(ctx.i8_type().as_basic_type_enum());
-        }
-        if self.name.name == U8_NAME {
-            return Some(ctx.i8_type().as_basic_type_enum());
-        }
-        if self.name.name == I16_NAME {
-            return Some(ctx.i16_type().as_basic_type_enum());
-        }
-        if self.name.name == U16_NAME {
-            return Some(ctx.i16_type().as_basic_type_enum());
-        }
-        if self.name.name == I32_NAME {
-            return Some(ctx.i32_type().as_basic_type_enum());
-        }
-        if self.name.name == U32_NAME {
-            return Some(ctx.i32_type().as_basic_type_enum());
-        }
-        if self.name.name == I64_NAME {
-            return Some(ctx.i64_type().as_basic_type_enum());
-        }
-        if self.name.name == U64_NAME {
-            return Some(ctx.i64_type().as_basic_type_enum());
-        }
-        if self.name.name == F32_NAME {
-            return Some(ctx.f32_type().as_basic_type_enum());
-        }
-        if self.name.name == F64_NAME {
-            return Some(ctx.f64_type().as_basic_type_enum());
-        }
-        if self.name.name == PTR_NAME {
-            return Some(ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum());
-        }
-        panic!("call get_c_type for {}", self.to_string())
+    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    pub fn is_unit(self: &TyCon) -> bool {
+        self.name == make_tuple_name_abs(0)
     }
 
-    pub fn is_singned_intger(self: &TyCon) -> bool {
+    // Whether a value of this type crosses to C as one scalar: an integer, a floating point
+    // number, or a pointer, which C and Fix lay down the same way. These are the types a C
+    // function signature can name, and the types an exported Fix function can exchange.
+    pub fn is_c_scalar(self: &TyCon) -> bool {
+        self.name.namespace == NameSpace::new_str(&[STD_NAME])
+            && C_SCALAR_NAMES.contains(&self.name.name.as_str())
+    }
+
+    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
+    // `()` is C's `void`, which carries no value, so it maps to `None`.
+    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
+        if self.is_unit() {
+            return None;
+        }
+        assert!(
+            self.is_c_scalar(),
+            "call get_c_type for {}",
+            self.to_string()
+        );
+        Some(match self.name.name.as_str() {
+            I8_NAME | U8_NAME => ctx.i8_type().as_basic_type_enum(),
+            I16_NAME | U16_NAME => ctx.i16_type().as_basic_type_enum(),
+            I32_NAME | U32_NAME => ctx.i32_type().as_basic_type_enum(),
+            I64_NAME | U64_NAME => ctx.i64_type().as_basic_type_enum(),
+            F32_NAME => ctx.f32_type().as_basic_type_enum(),
+            F64_NAME => ctx.f64_type().as_basic_type_enum(),
+            PTR_NAME => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
+            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            name => unreachable!("no C type for `{}`", name),
+        })
+    }
+
+    // Whether this is an integer type that carries a sign. Panics for a type that is not an
+    // integer type of `Std`.
+    // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
+    // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
+    // which side of the call extends it; a wider type fills the register and needs no extension.
+    //
+    // The 32-bit threshold holds for the targets Fix builds for. An ABI that extends a 32-bit
+    // integer to the width of a register — RISC-V 64 does — widens this set.
+    pub fn is_narrow_c_integer(self: &TyCon) -> bool {
+        self.name.namespace == NameSpace::new_str(&[STD_NAME])
+            && matches!(
+                self.name.name.as_str(),
+                I8_NAME | U8_NAME | I16_NAME | U16_NAME
+            )
+    }
+
+    pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
-            panic!("call is_singned_intger for {}", self.to_string())
+            panic!("call is_signed_integer for {}", self.to_string())
         }
         match self.name.name.as_str() {
             U8_NAME => false,
@@ -282,10 +301,17 @@ impl TyCon {
         }
     }
 
+    // Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
 
+    // Whether this is the type constructor `IO`.
+    pub fn is_io(&self) -> bool {
+        self == make_io_tycon().as_ref()
+    }
+
+    // Whether this is the type `IOState`, the token that an `IO` action threads.
     #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
         return self.name == make_iostate_name();
@@ -399,8 +425,8 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
-impl std::fmt::Debug for TypeNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for TypeNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
     }
 }
@@ -1062,6 +1088,33 @@ impl TypeNode {
         return is_punched_array_tycon(tc.as_ref());
     }
 
+    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    pub fn is_unit(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.is_unit(),
+            None => false,
+        }
+    }
+
+    // Whether this is the type `Bool`.
+    pub fn is_boolean(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.is_boolean(),
+            None => false,
+        }
+    }
+
+    // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
+    // `IO a`.
+    pub fn is_io(&self) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => tc.is_io(),
+            None => false,
+        }
+    }
+
+    // Whether the top-level type constructor of this type is a struct.
+    // Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {

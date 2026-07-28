@@ -74,6 +74,8 @@
     - [外部関数インターフェース (FFI)](#外部関数インターフェース-ffi)
         - [Fixで外部関数を呼び出す](#fixで外部関数を呼び出す)
         - [Fixの値や関数を外部言語にエクスポートする](#fixの値や関数を外部言語にエクスポートする)
+            - [エクスポートできる型](#エクスポートできる型)
+            - [複数の値を返す](#複数の値を返す)
         - [Fixで外部リソースを管理する](#fixで外部リソースを管理する)
         - [外部言語でFixのボックス型の値を管理する](#外部言語でfixのボックス型の値を管理する)
         - [CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)
@@ -2218,7 +2220,7 @@ pythagorean_triples = |limit| (
 
 ## 外部関数インターフェース (FFI)
 
-Fixプログラムに静的または共有ライブラリを`--static-link` (`-s`) または`--dynamic-link` (`-s`) コンパイラフラグを使用してリンクすることで、Fixプログラム内でネイティブ関数を呼び出したり、ライブラリ内でFix関数を呼び出すことができます。
+Fixプログラムに静的または共有ライブラリを`--static-link` (`-s`) または`--dynamic-link` (`-d`) コンパイラフラグを使用してリンクすることで、Fixプログラム内でネイティブ関数を呼び出したり、ライブラリ内でFix関数を呼び出すことができます。
 
 ただし、FFIを使用すると、イミュータビリティやメモリ安全性などのFixの保証が外部関数によって破られる可能性があります。
 プログラマーには、外部関数の副作用を`IO`に隠し、セグメンテーションフォルトやメモリリークを回避するためにリソースを適切に管理する責任があります。
@@ -2270,7 +2272,7 @@ consumed_time_while_io = |io| (
 - ポインタ：`Ptr`
 - 明示的なビット幅を持つ数値型：`I8`、`U8`、`I16`、`U16`、`I32`、`U32`、`I64`、`U64`、`F32`、`F64`
 - Cの数値型：`CChar`、`CUnsignedChar`、`CShort`、`CUnsignedShort`、`CInt`、`CUnsignedInt`、`CLong`、`CUnsignedLong`、`CLongLong`、`CUnsignedLongLong`、`CSizeT`、`CFloat`、`CDouble`
-- `void`の代わり：`()`
+- `void`の代わり：`()`。`<return_type>`に使えます。`<arg_type_i>`に与えるとエラーになります。
 
 関数のシグネチャは、C言語のヘッダで宣言されているものに一致する必要があることに注意してください。
 例えば、`scanf`は`int scanf(const char *format, ...);`として宣言されています。
@@ -2321,8 +2323,8 @@ FFI_EXPORT[x, f]; // int f(void);
 x : CInt -> CInt;
 FFI_EXPORT[x, f]; // int f(int);
 
-x : CInt -> CInt;
-FFI_EXPORT[x, f]; // int f(int);
+x : CInt -> CInt -> CInt;
+FFI_EXPORT[x, f]; // int f(int, int);
 
 x : IO ();
 FFI_EXPORT[x, f]; // void f(void);
@@ -2334,6 +2336,55 @@ x : CInt -> IO CInt;
 FFI_EXPORT[x, f]; // int f(int);
 ```
 
+#### エクスポートできる型
+
+エクスポートする値には、C ABIで受け渡せる型を与えてください。
+
+- 整数：`I8`、`U8`、`I16`、`U16`、`I32`、`U32`、`I64`、`U64`
+- 浮動小数点数：`F32`、`F64`
+- ポインタ：`Ptr`
+- [Fixで外部関数を呼び出す](#fixで外部関数を呼び出す)で挙げたCの数値型（`CInt`など）。これらは、ここに挙げた整数型・浮動小数点数型の別名です
+- ボックス型。外部言語は不透明なポインタとして受け取ります（[外部言語でFixのボックス型の値を管理する](#外部言語でfixのボックス型の値を管理する)を参照）
+- `()`。戻り値の型に使え、`void`になります
+
+これら以外の型は、プログラムのコンパイル時に拒否されます。
+
+- 構造体・タプル・共用体を受け渡すには、外部言語が所有するメモリへの`Ptr`を受け取り、[複数の値を返す](#複数の値を返す)で説明するように、そこを経由してコピーします。
+- 真偽値には`U8`か`CInt`を受け取り、Fix側で変換してください。
+- `String`や`Array`は構造体です。`Std::Box`のようなボックス構造体に包んで不透明なポインタとして渡すか、バイト列をポインタ経由でコピーしてください。
+
+#### 複数の値を返す
+
+エクスポートされた関数が返す値は1個なので、複数の値を返すには、メモリを外部言語に所有させます。そこへの`Ptr`を受け取り、書き込んでください。
+
+コピーには、Fix側のポインタも必要です。ボックス型の値については、`Std::FFI::borrow_boxed_io`が読み出し用のポインタを、`Std::FFI::mutate_boxed_io`が書き込み用のポインタを渡します。配列の要素については、`Std::Array::borrow_elements`と`Std::Array::mutate_elements`が同じ役割を果たします。ボックス構造体のフィールドは、同じ順で宣言したC構造体のフィールドと同じレイアウトになるので、バイト列をそのままコピーすれば済みます（[CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)と[CからFixの配列の要素にアクセスする](#cからfixの配列の要素にアクセスする)を参照）。
+
+コピーするバイト数は引数で受け取り、C側から`sizeof(struct pair)`を渡します。
+
+```
+type Pair = box struct { a : I64, b : F64 };
+
+// `dst`が指す`struct pair`を埋めます。
+write_pair : Ptr -> U64 -> IO ();
+write_pair = |dst, size| (
+    let pair = Pair { a : 10, b : 0.5 };
+    pair.borrow_boxed_io(|src| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]);;
+    pure()
+);
+FFI_EXPORT[write_pair, write_pair]; // void write_pair(struct pair* dst, uint64_t size);
+
+// `src`が指す`struct pair`を読みます。
+sum_pair : Ptr -> U64 -> IO F64;
+sum_pair = |src, size| (
+    let pair = Pair { a : 0, b : 0.0 };
+    let (pair, _) = *pair.mutate_boxed_io(|dst|
+        FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, U64), dst, src, size]
+    );
+    pure $ pair.@a.to_F64 + pair.@b
+);
+FFI_EXPORT[sum_pair, sum_pair]; // double sum_pair(const struct pair* src, uint64_t size);
+```
+
 ### Fixで外部リソースを管理する
 
 一部のC関数は、最終的に別のC関数によって解放されるべきリソースを割り当てます。
@@ -2341,17 +2392,18 @@ FFI_EXPORT[x, f]; // int f(int);
 Fixから`FFI_CALL`を使用してリソースを割り当てた場合、そのリソースのライフタイムの終わりに再度`FFI_CALL`を使用して解放関数を呼び出す必要があります。
 
 このようなリソース管理を行うために、`Std::FFI::Destructor`を利用できます。
-`Destructor a`は、ボックス型であり、データとしては`value : a`と`dtor : a -> IO a`を持ちます。
-Fixコンパイラは、`Destructor a`をヒープメモリから解放する際に、`dtor`を`value`に対して呼び出します。
+`Destructor a`はボックス型であり、`a`型のリソースと`a -> IO a`型のデストラクタを持ちます。
+`Std::FFI::Destructor::make : a -> (a -> IO a) -> IO (Destructor a)`がこの2つから`Destructor`を作り、`Std::FFI::Destructor::borrow : (a -> b) -> Destructor a -> b`がリソースを読み出します。
+Fixコンパイラは、`Destructor a`をヒープメモリから解放する際に、デストラクタをリソースに対して呼び出します。
 
-典型的な使い方は、`malloc`や`fopen`を使用して得たリソースへのポインタを`Destructor Ptr`の`value`フィールドに格納し、`free`や`fclose`を呼び出すIO処理を`dtor`フィールドに格納することです。これで、その`Destructor Ptr`型の値がスコープから外れたときに、リソースが自動的に解放されます。
+典型的な使い方は、`malloc`や`fopen`を使用して得たリソースへのポインタと、それに対して`free`や`fclose`を呼び出すIO処理を`Destructor::make`に渡すことです。これで、その`Destructor Ptr`型の値がスコープから外れたときに、リソースが自動的に解放されます。
 
 ただし、Destructorを適切に使用するのは容易ではなく、様々な点に注意が必要です。
 [`Destructor`のドキュメント](/std_doc/Std.md#Destructor)、[namespace Destructor](/std_doc/Std.md#namespace_Std::FFI::Destructor) にある関数群も確認してください。
 
 ### 外部言語でFixのボックス型の値を管理する
 
-前セクションでは、C言語の関数（`fopen`など）が割り当てたリソースをFixで管理する方法を説明しました。
+[Fixで外部リソースを管理する](#fixで外部リソースを管理する)では、C言語の関数（`fopen`など）が割り当てたリソースをFixで管理する方法を説明しました。
 このセクションでは、その逆、つまり、Fixのボックス型の値をC言語などの外部言語で管理する方法を説明します。
 
 関数`Std::FFI::boxed_to_retained_ptr : [a : Boxed] a -> IO Ptr`は、Fixのボックス型の値へのポインタを返します。
@@ -2386,8 +2438,8 @@ Fixのボックス型の値の寿命は、参照カウンタによって管理�
 - 参照カウンタをデクリメントする
 - 参照カウンタをデクリメントする責任をFixコンパイラに返却する
 
-参照カウンタをデクリメントするには、まず、`Std::FFI::get_funptr_release : a -> Ptr`を外部言語側から呼び出して、`void (*)(void*)`型の関数ポインタを取得します。
-この関数ポインタを呼び出す（引数に値へのポインタを渡します）ことで、参照カウンタをデクリメントすることができます。
+参照カウンタをデクリメントする関数ポインタ（`void (*)(void*)`型）は、`Std::FFI::get_funptr_release : [a : Boxed] Lazy a -> Ptr`で得られます。引数は解放する型を示すためだけのものなので、`T`型の値が手元に無いときは`|_| undefined("") : T`で足ります。
+得た関数ポインタを外部言語に渡し（例えば、それを返す関数をエクスポートします）、外部言語側で値へのポインタを引数にして呼び出すと、参照カウンタがデクリメントされます。
 
 参照カウンタをデクリメントする責任をFixコンパイラに返却するには、`boxed_from_retained_ptr`にポインタを渡します。
 
@@ -2398,7 +2450,7 @@ Fixのボックス型の値の寿命は、参照カウンタによって管理�
 
 ただし、外部言語側で、Fixの値を何度も利用したい場合もあるでしょう。
 このような場合のために、「あなたが責任を果たす（あるいは返却する）べき回数」を増やす方法があります。
-これには、`Std::FFI::get_funptr_retain : a -> Ptr`を外部言語側から呼び出して、`void (*)(void*)`型の関数ポインタを取得し、その関数ポインタを呼び出します。
+これには、`Std::FFI::get_funptr_retain : [a : Boxed] Lazy a -> Ptr`から`void (*)(void*)`型の関数ポインタを同じように取得し、外部言語側でそれを呼び出します。
 
 したがって、外部言語側で、Fixの値を **複数回** 利用する場合は、以下のように実装します。
 - `boxed_to_retained_ptr`を使ってポインタを得て、外部言語に渡す。
@@ -2446,13 +2498,13 @@ type Vec = box struct { x : CDouble, y : CDouble };
 struct Vec {
     double x;
     double y;
-}
+};
 
-void access_vec(Vec* v) {
-    // `v->x`および`v->y`に対して何らかの操作を行います。
+void access_vec(struct Vec *v) {
+    // `v->x`および`v->y`を読みます。ポインタを通じて書き込むには、`mutate_boxed`から借りてください。
 }
 ```
-Fixのオブジェクト`vec`のフィールド`x`および`y`にC側からアクセスしたい場合、`Std::FFI::borrow_boxed : (Ptr -> b) -> a -> b`が便利です：
+Fixのオブジェクト`vec`のフィールド`x`および`y`にC側からアクセスしたい場合、`Std::FFI::borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b`が便利です：
 `vec.borrow_boxed(|p| FFI_CALL[() access_vec(Ptr), p])`を使用すると、`access_vec`が`vec.@x`および`vec.@y`で動作するようになります。
 
 注意：

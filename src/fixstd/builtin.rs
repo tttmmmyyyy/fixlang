@@ -1078,8 +1078,8 @@ pub fn cast_between_integral_function(
     const FROM_NAME: &str = "from";
     let from_name = FullName::local(FROM_NAME);
 
-    let is_source_signed = from.toplevel_tycon().unwrap().is_singned_intger();
-    let is_target_signed = to.toplevel_tycon().unwrap().is_singned_intger();
+    let is_source_signed = from.toplevel_tycon().unwrap().is_signed_integer();
+    let is_target_signed = to.toplevel_tycon().unwrap().is_signed_integer();
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -1250,7 +1250,7 @@ pub fn cast_int_to_float_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_singned_intger();
+    let is_signed = from.toplevel_tycon().unwrap().is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1341,13 +1341,13 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
     }
 }
 
-// Cast function from int to float.
+// Cast function from float to int.
 pub fn cast_float_to_int_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = to.toplevel_tycon().unwrap().is_singned_intger();
+    let is_signed = to.toplevel_tycon().unwrap().is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1386,7 +1386,7 @@ impl LLVMGen for InlineLLVMShiftBody {
             .into_int_value();
         let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
-        let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
 
         // Perform shift operation.
         let to_val = if self.is_left {
@@ -3655,7 +3655,6 @@ impl LLVMGen for InlineLLVMFFICallBody {
             .map(|name| gc.get_scoped_obj_noretain(name))
             .collect::<Vec<_>>();
         gc.build_ffi_call_core(
-            &None,
             obj,
             &self.fun_name,
             &self.ret_tycon,
@@ -7629,7 +7628,7 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs_obj.ty.toplevel_tycon().unwrap().is_signed_integer();
 
         let value = gc
             .builder()
@@ -7786,7 +7785,7 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -8316,7 +8315,7 @@ impl LLVMGen for InlineLLVMIntDivBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
 
         let value = if is_signed {
             gc.builder()
@@ -8447,7 +8446,7 @@ impl LLVMGen for InlineLLVMIntRemBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
+        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
 
         let value = if is_signed {
             gc.builder()

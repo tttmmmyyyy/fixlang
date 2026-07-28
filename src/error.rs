@@ -269,11 +269,6 @@ pub fn panic_with_msg(msg: &str) -> ! {
     panic_notrace(&errs.to_string())
 }
 
-pub fn panic_with_msg_src(msg: &str, src: &Option<Span>) -> ! {
-    let errs = Errors::from_msg_srcs(msg.to_string(), &[src]);
-    panic_notrace(&errs.to_string())
-}
-
 pub fn panic_if_err<T>(err: Result<T, Errors>) -> T {
     err.unwrap_or_else(|errs| panic_notrace(&errs.to_string()))
 }

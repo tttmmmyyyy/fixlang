@@ -737,6 +737,9 @@ pub struct CTypeSizes {
 }
 
 impl CTypeSizes {
+    // The C numeric types, each paired with the sign and the bit width of the Fix type it is an
+    // alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
+    // `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
             (C_CHAR_NAME, "I", self.char),
