@@ -207,24 +207,24 @@ impl ExprVisitor for Substitutor {
         // node. A binder named after the name it replaces would capture that name wherever another
         // bound expression reads it, or wherever (1) has just renamed an occurrence onto it, since
         // every bound expression sits outside every one of these binders. A fresh name cannot.
-        let mut renames = Map::default();
+        let mut renaming = Map::default();
         let mut bindings = vec![];
         for llvm_fv in llvm_fvs {
             let Some(to) = self.map.get(&llvm_fv) else {
                 continue;
             };
             if to.is_var() {
-                renames.insert(llvm_fv, to.get_var().name.clone());
+                renaming.insert(llvm_fv, to.get_var().name.clone());
             } else {
                 let fresh = fresh_names.next().unwrap();
-                renames.insert(llvm_fv, fresh.clone());
+                renaming.insert(llvm_fv, fresh.clone());
                 bindings.push((fresh, to.clone()));
             }
         }
 
         // (1)
         for llvm_fv in generator.free_vars_mut() {
-            let Some(to_name) = renames.get(llvm_fv) else {
+            let Some(to_name) = renaming.get(llvm_fv) else {
                 continue;
             };
             changed |= llvm_fv != to_name;
