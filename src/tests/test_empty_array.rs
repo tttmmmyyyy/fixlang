@@ -12,6 +12,7 @@
 mod empty_array_tests {
     use crate::{
         configuration::Configuration,
+        constants::REFCNT_STATE_GLOBAL,
         misc::function_name,
         tests::test_util::{emit_llvm_ir, test_source},
     };
@@ -215,7 +216,7 @@ main = (
         for expected in [
             "= internal constant".to_string(),
             "i32 1".to_string(),
-            format!("i8 {}", crate::constants::REFCNT_STATE_GLOBAL),
+            format!("i8 {}", REFCNT_STATE_GLOBAL),
         ] {
             assert!(
                 definition.contains(&expected),
