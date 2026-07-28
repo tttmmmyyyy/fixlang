@@ -134,7 +134,7 @@ pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let mut modules = fs::read_dir(&work_dir)
+    let mut module_paths = fs::read_dir(&work_dir)
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| {
@@ -142,12 +142,12 @@ pub fn emit_llvm_ir(source: &str, test_name: &str, opt_level: &str) -> String {
             name.ends_with(".ll") && !name.ends_with("_optimized.ll")
         })
         .collect::<Vec<_>>();
-    modules.sort();
+    module_paths.sort();
     assert!(
-        !modules.is_empty(),
+        !module_paths.is_empty(),
         "`fix build --emit-llvm` wrote no module"
     );
-    modules
+    module_paths
         .iter()
         .map(|p| fs::read_to_string(p).unwrap())
         .collect::<Vec<_>>()

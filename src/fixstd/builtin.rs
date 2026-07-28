@@ -2043,13 +2043,13 @@ fn realloc_array<'c, 'm>(
     new_cap: IntValue<'c>,
 ) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let grow = grow_array_storage_function(gc, elem_ty);
+    let grow_func = grow_array_storage_function(gc, elem_ty);
     let storage_ptr = get_array_storage(gc, &array).value(gc);
     let cap = array.extract_field(gc, ARRAY_CAP_IDX);
     let grown_storage_ptr = gc
         .builder()
         .build_call(
-            grow,
+            grow_func,
             &[storage_ptr.into(), cap.into(), new_cap.into()],
             "grow_array_storage",
         )
@@ -2092,28 +2092,28 @@ fn grow_array_storage_function<'c, 'm>(
     let new_cap = func.get_nth_param(2).unwrap().into_int_value();
 
     let entry_bb = gc.context.append_basic_block(func, "entry");
-    let empty_bb = gc.context.append_basic_block(func, "empty_bb");
+    let alloc_bb = gc.context.append_basic_block(func, "alloc_bb");
     let resize_bb = gc.context.append_basic_block(func, "resize_bb");
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(entry_bb);
-    let is_empty = gc
+    let is_cap_zero = gc
         .builder()
-        .build_int_compare(IntPredicate::EQ, cap, i64_ty.const_zero(), "is_empty")
+        .build_int_compare(IntPredicate::EQ, cap, i64_ty.const_zero(), "is_cap_zero")
         .unwrap();
     gc.builder()
-        .build_conditional_branch(is_empty, empty_bb, resize_bb)
+        .build_conditional_branch(is_cap_zero, alloc_bb, resize_bb)
         .unwrap();
 
     // A capacity-zero array may sit on the storage every empty array shares
     // (`shared_empty_array_storage`), which is not a heap block. Give it a block of its own: it holds
     // no element, so nothing is copied, and dropping the old reference frees a heap block or leaves
     // the shared one alone.
-    gc.builder().position_at_end(empty_bb);
-    let allocated = alloc_array_storage(gc, elem_ty, new_cap);
-    let allocated_ptr = allocated.value(gc);
+    gc.builder().position_at_end(alloc_bb);
+    let new_storage = alloc_array_storage(gc, elem_ty, new_cap);
+    let new_storage_ptr = new_storage.value(gc);
     let old_storage = Object::new(storage_ptr.into(), storage_ty.clone(), gc);
     gc.release(old_storage);
-    gc.builder().build_return(Some(&allocated_ptr)).unwrap();
+    gc.builder().build_return(Some(&new_storage_ptr)).unwrap();
 
     // Otherwise resize the block in place, preserving the elements it holds.
     gc.builder().position_at_end(resize_bb);
@@ -5942,21 +5942,21 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             // it is unique whatever block it sits on, including the one every empty array shares
             // (`shared_empty_array_storage`).
             let cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
-            let is_empty = gc
+            let is_cap_zero = gc
                 .builder()
                 .build_int_compare(
                     IntPredicate::EQ,
                     cap,
                     gc.context.i64_type().const_zero(),
-                    "is_empty@is_storage_unique",
+                    "is_cap_zero@is_storage_unique",
                 )
                 .unwrap();
-            let is_empty = gc
+            let is_cap_zero_flag = gc
                 .builder()
-                .build_int_z_extend(is_empty, bool_ty, "is_empty_flag@is_storage_unique")
+                .build_int_z_extend(is_cap_zero, bool_ty, "is_cap_zero_flag@is_storage_unique")
                 .unwrap();
             gc.builder()
-                .build_or(flag, is_empty, "or_empty@is_storage_unique")
+                .build_or(flag, is_cap_zero_flag, "or_cap_zero@is_storage_unique")
                 .unwrap()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.

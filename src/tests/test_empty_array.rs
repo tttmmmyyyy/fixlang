@@ -77,8 +77,8 @@ main = (
     // A capacity-zero array has no element an alias could reach, so it is unique whether it sits on
     // the shared block or on one of its own.
     let e = ([] : Array I64).assert_unique_array(|_|"empty literal");
-    let (shared_unique, e) = e._unsafe_is_storage_unique;
-    assert_eq(|_|"literal is unique", shared_unique, true);;
+    let (literal_unique, e) = e._unsafe_is_storage_unique;
+    assert_eq(|_|"literal is unique", literal_unique, true);;
     assert_eq(|_|"still empty", e, []);;
 
     let a = (Array::empty(0) : Array I64).assert_unique_array(|_|"empty capacity");
@@ -94,21 +94,21 @@ main = (
 
     // Two names for one capacity-zero block: both still read as unique, and growing one leaves the
     // other empty.
-    let shared = Array::empty(0) : Array I64;
-    let keep = shared;
-    let (aliased_unique, shared) = shared._unsafe_is_storage_unique;
+    let aliased = Array::empty(0) : Array I64;
+    let other_alias = aliased;
+    let (aliased_unique, aliased) = aliased._unsafe_is_storage_unique;
     assert_eq(|_|"aliased empty is unique", aliased_unique, true);;
-    assert_eq(|_|"grown alias", shared.push_back(4), [4]);;
-    assert_eq(|_|"other alias untouched", keep, []);;
+    assert_eq(|_|"grown alias", aliased.push_back(4), [4]);;
+    assert_eq(|_|"other alias untouched", other_alias, []);;
 
     // Reserved capacity is what makes an array shareable, so an array with room and no element is
     // reported shared once a second name holds it.
     let reserved = Array::empty(4) : Array I64;
-    let keep_reserved = reserved;
+    let reserved_alias = reserved;
     let (reserved_unique, reserved) = reserved._unsafe_is_storage_unique;
     assert_eq(|_|"reserved and aliased is shared", reserved_unique, false);;
     assert_eq(|_|"reserved grows", reserved.push_back(5), [5]);;
-    assert_eq(|_|"reserved alias untouched", keep_reserved, []);;
+    assert_eq(|_|"reserved alias untouched", reserved_alias, []);;
     pure()
 );
 "#;
