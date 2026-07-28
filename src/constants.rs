@@ -1,4 +1,5 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
+use std::env;
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
@@ -248,7 +249,7 @@ pub const TUPLE_UNBOX: bool = true;
 // The type in LLVM corresponding to `pthread_once_t` of this system.
 pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
     // TODO: we should compile C program including "sizeof(pthread_once_t)" and run it to get the correct size.
-    if std::env::consts::OS == "macos" {
+    if env::consts::OS == "macos" {
         ctx.i128_type()
     } else {
         ctx.i32_type()
