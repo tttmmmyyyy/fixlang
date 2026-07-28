@@ -10,8 +10,9 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::configuration::Configuration;
     use crate::constants::{ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT};
-    use crate::tests::test_util::test_source_with_c;
+    use crate::tests::test_util::{test_source, test_source_with_c};
 
     /// Reports the address of an array's first element modulo the alignment, which the Fix side
     /// asserts is zero.
@@ -70,6 +71,79 @@ mod tests {
         );
         "#;
         test_source_with_c(&source, ADDR_MOD_ALIGNMENT, "array_alignment_build");
+    }
+
+    /// Whatever the element type, a storage that clears the threshold lands its elements on the
+    /// boundary. `ARRAY_ALIGNED_ALLOC_THRESHOLD` elements clear it for every element type that
+    /// occupies at least a byte.
+    #[test]
+    fn test_element_buffer_is_aligned_for_every_element_type() {
+        let source = preamble()
+            + &format!(
+                r#"
+        type BoxedUnion = box union {{ num : I64, text : String }};
+        type UnboxUnion = union {{ num : I64, pair : (I64, I64) }};
+        type UnboxStruct = unbox struct {{ p : I64, q : I64, r : U8 }};
+
+        // An element count that puts a storage of any element type of at least one byte over the
+        // threshold.
+        count : I64;
+        count = {threshold};
+
+        main : IO ();
+        main = (
+            assert_aligned("F32", Array::from_map(count, |i| i.to_F32));;
+            assert_aligned("Bool", Array::from_map(count, |i| i % 2 == 0));;
+            assert_aligned("Ptr", Array::from_map(count, |_| nullptr));;
+            assert_aligned("tuple", Array::from_map(count, |i| (i, i.to_U8)));;
+            assert_aligned("unbox union", Array::from_map(count, |i|
+                if i % 2 == 0 {{ UnboxUnion::num(i) }} else {{ UnboxUnion::pair((i, i)) }}));;
+            assert_aligned("boxed union", Array::from_map(count, |i|
+                if i % 2 == 0 {{ BoxedUnion::num(i) }} else {{ BoxedUnion::text("x") }}));;
+            assert_aligned("unbox struct", Array::from_map(count, |i|
+                UnboxStruct {{ p : i, q : i, r : i.to_U8 }}));;
+            assert_aligned("String", Array::from_map(count, |i| i.to_string));;
+            assert_aligned("nested array", Array::from_map(count, |i| Array::fill(i % 3, i)));;
+            assert_aligned("closure", Array::from_map(count, |i| |x| x + i));;
+            pure()
+        );
+"#,
+                threshold = ARRAY_ALIGNED_ALLOC_THRESHOLD,
+            );
+        test_source_with_c(&source, ADDR_MOD_ALIGNMENT, "array_alignment_element_types");
+    }
+
+    /// Every capacity around the threshold, taken in both directions, keeps the array's elements.
+    /// Each crossing moves the storage between a block that starts at its allocation's base and one
+    /// that does not, and boxed elements make a lost or double-released element visible.
+    #[test]
+    fn test_every_capacity_across_the_threshold_keeps_the_elements() {
+        let source = r#"
+module Main;
+
+set_cap : I64 -> Array a -> Array a;
+set_cap = |c, a| a._unsafe_set_capacity_bounds_unchecked(c);
+
+sweep : I64 -> I64;
+sweep = |len| (
+    let base = Array::from_map(len, |i| Box::make(i * 7 + 1));
+    let expect = base.to_iter.map(|b| b.@value).sum;
+    Iterator::range(0, 49).fold(0, |c, acc|
+        let a = base.set_cap(max(c, len));
+        let a = a.set_cap(max(2 * c, len));
+        let a = a.set_cap(max(len, 1));
+        acc + (if a.to_iter.map(|b| b.@value).sum == expect { 0 } else { 1 })
+    )
+);
+
+main : IO ();
+main = (
+    let bad = Iterator::range(0, 40).fold(0, |len, acc| acc + sweep(len));
+    assert_eq(|_|"an array resized across the threshold lost elements", bad, 0);;
+    pure()
+);
+        "#;
+        test_source(source, Configuration::develop_mode());
     }
 
     /// An array that grows past the threshold lands on the boundary too, whether it grew by
