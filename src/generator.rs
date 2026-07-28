@@ -1658,12 +1658,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                 )
                 .unwrap();
         } else {
-            let trav = create_traverser(&obj.ty, &vec![], self, Some(work));
-            if let Some(trav) = trav {
-                self.builder()
-                    .build_call(trav, &[obj_ptr.into()], "call_trav")
-                    .unwrap();
-            }
+            // A boxed object always has a traverser: `create_traverser` declines only a dynamic
+            // object without a capture and a fully unboxed type.
+            let trav = create_traverser(&obj.ty, &vec![], self, Some(work)).unwrap_or_else(|| {
+                panic!("No traverser for the boxed type {}.", obj.ty.to_string())
+            });
+            self.builder()
+                .build_call(trav, &[obj_ptr.into()], "call_trav")
+                .unwrap();
         }
     }
 
@@ -1772,8 +1774,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Release the object's owned references, then free it.
         traverse_refs(self);
-        let ty = obj.ty.clone();
-        build_free_boxed(self, obj_ptr, &ty);
+        build_free_boxed(self, obj_ptr, &obj.ty);
         self.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Implement global_bb.

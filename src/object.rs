@@ -1567,6 +1567,13 @@ pub fn build_array_storage_shift<'c, 'm>(
     struct_type: StructType<'c>,
     base: PointerValue<'c>,
 ) -> IntValue<'c> {
+    // The mask below is the distance to the next boundary only for a power-of-two boundary, which
+    // is also what makes `ARRAY_BUF_ALIGNMENT - 1` the slack a block needs to hold a shifted object.
+    assert!(
+        ARRAY_BUF_ALIGNMENT.is_power_of_two(),
+        "ARRAY_BUF_ALIGNMENT must be a power of two, but is {}",
+        ARRAY_BUF_ALIGNMENT
+    );
     let i64_ty = gc.context.i64_type();
     let buf_offset = gc
         .target_data
@@ -1593,6 +1600,24 @@ pub fn build_array_storage_shift<'c, 'm>(
         .unwrap()
 }
 
+// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, which it does
+// from `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up.
+pub fn build_storage_is_aligned<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    sizeof: IntValue<'c>,
+) -> IntValue<'c> {
+    gc.builder()
+        .build_int_compare(
+            IntPredicate::UGE,
+            sizeof,
+            gc.context
+                .i64_type()
+                .const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
+            "storage_is_aligned",
+        )
+        .unwrap()
+}
+
 // Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address
 // within it, together with the distance from the base of the block to that address.
 //
@@ -1613,18 +1638,10 @@ fn build_alloc_array_storage<'c, 'm>(
     sizeof: IntValue<'c>,
 ) -> (PointerValue<'c>, IntValue<'c>) {
     let i64_ty = gc.context.i64_type();
-    let is_large = gc
+    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let aligned_mask = gc
         .builder()
-        .build_int_compare(
-            IntPredicate::UGE,
-            sizeof,
-            i64_ty.const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
-            "is_large@alloc_array_storage",
-        )
-        .unwrap();
-    let large_mask = gc
-        .builder()
-        .build_int_s_extend(is_large, i64_ty, "large_mask@alloc_array_storage")
+        .build_int_s_extend(is_aligned, i64_ty, "aligned_mask@alloc_array_storage")
         .unwrap();
 
     // A storage worth aligning asks for room to be placed off the base of its block; one below the
@@ -1632,7 +1649,7 @@ fn build_alloc_array_storage<'c, 'm>(
     let slack = gc
         .builder()
         .build_and(
-            large_mask,
+            aligned_mask,
             i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
             "slack@alloc_array_storage",
         )
@@ -1646,7 +1663,7 @@ fn build_alloc_array_storage<'c, 'm>(
         .builder()
         .build_and(
             build_array_storage_shift(gc, struct_type, base),
-            large_mask,
+            aligned_mask,
             "shift@alloc_array_storage",
         )
         .unwrap();
@@ -1768,26 +1785,31 @@ pub fn create_obj<'c, 'm>(
 
     // Allocate object. An array storage can be placed above the base of its allocation, so it
     // carries the distance it was placed by; every other object starts at the base.
-    let mut alloc_offset = gc.context.i64_type().const_zero();
-    let obj = if ty.is_array_storage() {
+    let at_alloc_base = gc.context.i64_type().const_zero();
+    let (obj, alloc_offset) = if ty.is_array_storage() {
         // When the object is the array storage (a control block and a flexible element buffer),
         let sizeof = object_type.size_of(gc, array_capacity);
         let (ptr, shift) = build_alloc_array_storage(gc, struct_type, sizeof);
-        alloc_offset = shift;
-        Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
+        (Object::new(ptr.as_basic_value_enum(), ty.clone(), gc), shift)
     } else {
         if object_type.is_unbox {
             // When the object is unboxed (not a funptr),
-            Object::new(
-                struct_type.get_undef().as_basic_value_enum(),
-                ty.clone(),
-                gc,
+            (
+                Object::new(
+                    struct_type.get_undef().as_basic_value_enum(),
+                    ty.clone(),
+                    gc,
+                ),
+                at_alloc_base,
             )
         } else {
             // When the object is boxed,
             let sizeof = struct_type.size_of().unwrap();
             let ptr = build_malloc(gc, sizeof, "malloc@create_obj");
-            Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
+            (
+                Object::new(ptr.as_basic_value_enum(), ty.clone(), gc),
+                at_alloc_base,
+            )
         }
     };
 

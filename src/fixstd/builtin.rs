@@ -18,9 +18,9 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
-    ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-    ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX,
+    TraverserWorkType, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX,
+    ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME,
+    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX,
     CLOSURE_FUNPTR_IDX, CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
@@ -35,8 +35,9 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, create_obj, get_array_storage,
-    get_array_storage_buf, read_alloc_offset, write_alloc_offset, ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, build_storage_is_aligned, create_obj,
+    get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
+    ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -573,7 +574,9 @@ pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
     if int_opt.is_some() {
         return (int_opt, false);
     }
-    (make_floating_ty(name), true)
+    let float_opt = make_floating_ty(name);
+    assert!(float_opt.is_some(), "Not a numeric type: {}", name);
+    (float_opt, true)
 }
 
 // Get dynamic object type.
@@ -2071,19 +2074,11 @@ fn realloc_array<'c, 'm>(
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
     // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
-    let is_large = gc
-        .builder()
-        .build_int_compare(
-            IntPredicate::UGE,
-            sizeof,
-            i64_ty.const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
-            "is_large@realloc_array",
-        )
-        .unwrap();
+    let is_aligned = build_storage_is_aligned(gc, sizeof);
     let slack = gc
         .builder()
         .build_select(
-            is_large,
+            is_aligned,
             i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
             old_shift,
             "slack@realloc_array",
@@ -2114,7 +2109,7 @@ fn realloc_array<'c, 'm>(
         let aligned_shift = build_array_storage_shift(gc, struct_type, new_base);
         gc.builder()
             .build_select(
-                is_large,
+                is_aligned,
                 aligned_shift,
                 old_shift,
                 "new_shift@realloc_array",
@@ -5820,7 +5815,18 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
 
         // Get whether argument is unique.
-        let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
+        let is_unique = if self.assume_unique {
+            // The caller proved the argument unique, so the flag is the constant `true`.
+            bool_ty.const_int(1, false)
+        } else {
+            // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
+            // reference count to branch on. An unboxed argument would take an "always unique"
+            // branch, which reports a shared value as unique.
+            assert!(
+                obj.is_box(gc.type_env()),
+                "is_unique is applied to a value of the unboxed type {}.",
+                obj.ty.to_string()
+            );
             let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
@@ -5845,11 +5851,6 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             let flag = gc.builder().build_phi(bool_ty, "phi@is_unique").unwrap();
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
-        } else {
-            // Under the `[a : Boxed]` bound the argument is always boxed, so the check above runs
-            // unless the caller proved the argument unique, in which case the flag is the constant
-            // `true`.
-            bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
         let bool_val = gc
