@@ -26,10 +26,17 @@ jobs:
         id: pages
         uses: actions/configure-pages@v4
 
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/benchmark
+          cp -r third-party-licenses/. _site/
+          python3 -m pip install --quiet markdown
+          python3 benchmark/speedtest/graph_html.py --out _site/benchmark/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./third-party-licenses
+          path: ./_site
 
       - name: Deploy to GitHub Pages
         id: deployment
