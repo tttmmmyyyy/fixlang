@@ -145,6 +145,14 @@ main = (
     let log = log.add_row;
     let log = log.set(_COMMIT_HASH, log.@size - 1, commit_hash);
 
+    // The processor the row was measured on. The cachegrind columns do not depend on it,
+    // but the counters read from the hardware do, so a row from another machine cannot be
+    // compared with its neighbours on those.
+    let (cpu, _, cpu_code) = *["python3", "perf_counters.py", "--cpu"].ez_run_oec(config);
+    let log = if cpu_code != 0_U8 { log } else {
+        log.set("cpu", log.@size - 1, cpu.strip_spaces)
+    };
+
     // See the cases directory.
     ez_cd(config, _CASES_PATH);;
     let dirs = *["find", ".", "-maxdepth", "1", "-type", "d"].ez_run_o(config);
@@ -181,15 +189,17 @@ main = (
         // Add to the log.
         let log = log.set(inst, log.@size - 1, bench.@(0));
         let log = log.set(mem, log.@size - 1, bench.@(1));
-        // Hardware counters that cachegrind's cache model cannot express: accesses split
-        // across a cache line, which cost real time, and cycles. A machine without the
-        // counters leaves both columns empty instead of failing the run.
+        // Accesses split across a cache line, which cachegrind's cache model cannot express
+        // and which cost real time. Only this counter is recorded: it is deterministic, as
+        // every column of this log must be, while the cycle count the same tool reports
+        // rises with whatever else the machine is doing and a run takes an hour, over which
+        // that is not constant. Read cycles by hand on an idle machine instead.
+        // A machine without the counter leaves the column empty rather than failing the run.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
         let log = if perf_code != 0_U8 { log } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@size < 2 { log };
-            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
-            log.set(case_name + "-cycles", log.@size - 1, perf.@(1))
+            if perf.@size < 1 { log };
+            log.set(case_name + "-splits", log.@size - 1, perf.@(0))
         };
         // Change back to the parent directory.
         ez_cd(config, "..");;

@@ -29,17 +29,14 @@ except ImportError:
 METRICS = [
     ("inst", "Cachegrind instructions",
      "Instructions executed (Ir), from cachegrind's simulation. The same program and input give the "
-     "same number on any machine, whatever else it is doing.", "ratio"),
+     "same number on any machine, whatever else it is doing.", "ratio", "cachegrind"),
     ("mem", "Cachegrind memory",
-     "Weighted memory-access estimate from cachegrind's cache model (l1 + 5*l3 + 35*ram).", "ratio"),
+     "Weighted memory-access estimate from cachegrind's cache model (l1 + 5*l3 + 35*ram).",
+     "ratio", "cachegrind"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "
      "model has no notion of these, and they cost real time; the count is deterministic and reaches "
-     "zero once the data is aligned, so it is plotted as an absolute count.", "absolute"),
-    ("cycles", "perf cycles",
-     "User-space cycles, from the hardware counters. Steadier than wall clock -- it stops while the "
-     "process is descheduled and ignores frequency scaling -- but shared L3 and memory bandwidth "
-     "still inflate it under load, so read it as a diagnostic rather than a tracked number.", "ratio"),
+     "zero once the data is aligned, so it is plotted as an absolute count.", "absolute", "perf"),
 ]
 
 
@@ -92,6 +89,9 @@ def build_data(log_path, history_path, latest_n):
     body = body[-latest_n:]
     history = parse_history(history_path)
 
+    index = {name.strip(): i for i, name in enumerate(header)}
+    cpu_col = index.get("cpu")
+
     commits = []
     for row in body:
         raw = row[0].strip()
@@ -100,12 +100,12 @@ def build_data(log_path, history_path, latest_n):
         entry = history.get(h)
         if entry is None:  # `history.md` may key an entry by a short hash.
             entry = next((v for k, v in history.items() if h.startswith(k) or k.startswith(h)), None)
-        commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry})
+        cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
+        commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry, "cpu": cpu})
 
-    # column name -> index, then split "<case>-<metric>" apart.
-    index = {name.strip(): i for i, name in enumerate(header)}
+    # Split each "<case>-<metric>" column apart.
     metrics = {}
-    for suffix, label, note, kind in METRICS:
+    for suffix, label, note, kind, source in METRICS:
         series = {}
         for name, i in index.items():
             if not name.endswith("-" + suffix):
@@ -120,7 +120,8 @@ def build_data(log_path, history_path, latest_n):
             if any(v is not None for v in values):
                 series[case] = values
         if series:
-            metrics[suffix] = {"label": label, "note": note, "kind": kind, "series": series}
+            metrics[suffix] = {"label": label, "note": note, "kind": kind,
+                               "source": source, "series": series}
 
     # The C reference of a case does not move with a Fix commit, so keep the last value.
     cref = {}
@@ -362,7 +363,16 @@ function render() {
 
   el("line", { x1: PAD.l, y1: PAD.t + PLOT_H, x2: PAD.l + PLOT_W, y2: PAD.t + PLOT_H,
                stroke: "var(--border)" }, svg);
-  document.getElementById("note").textContent = metric.note;
+  const note = document.getElementById("note");
+  note.textContent = metric.note;
+  // A count read from the hardware belongs to the processor that read it.
+  if (metric.source === "perf") {
+    const cpus = [...new Set(DATA.commits.map((c) => c.cpu).filter(Boolean))];
+    if (cpus.length > 1) {
+      note.textContent += ` Measured on more than one processor (${cpus.join("; ")}); `
+        + "counts from different ones do not belong on the same axis.";
+    }
+  }
   renderLegend(series);
 }
 
@@ -408,7 +418,7 @@ function clearHover() {
 function showHistory(i) {
   const c = DATA.commits[i];
   document.getElementById("history").innerHTML =
-    `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}</p>`
+    `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}${c.cpu ? "<br>" + c.cpu : ""}</p>`
     + (c.history || `<p class="placeholder">No note recorded for this commit.</p>`);
 }
 

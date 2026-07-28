@@ -42,16 +42,34 @@ def counters(argv):
         # perf appends `:u` to the event name when it may only count user space.
         name = fields[2].strip().removesuffix(":u")
         found[name] = int(fields[0])
-    return found
+    return found, proc.stderr
+
+
+def cpu_model():
+    """The processor these counters would be read on.
+
+    A split count belongs to a microarchitecture the way an instruction count does not,
+    so a row measured on another machine cannot be compared with its neighbours. The log
+    records this next to the counts.
+    """
+    for line in open("/proc/cpuinfo", encoding="utf-8"):
+        if line.startswith("model name"):
+            return line.split(":", 1)[1].strip().replace(",", " ")
+    return "unknown"
 
 
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] == "--cpu":
+        print(cpu_model())
+        return
     if len(sys.argv) < 2:
-        sys.exit("usage: perf_counters.py <program> [args...]")
-    found = counters(sys.argv[1:])
+        sys.exit("usage: perf_counters.py <program> [args...]\n"
+                 "       perf_counters.py --cpu")
+    found, report = counters(sys.argv[1:])
     missing = [e for e in SPLIT_EVENTS + [CYCLE_EVENT.removesuffix(":u")] if e not in found]
     if missing:
-        sys.exit("perf did not report: " + ", ".join(missing))
+        # Say which of the two it was: the program never ran, or the counters are out of reach.
+        sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n" + report.strip())
     splits = sum(found[e] for e in SPLIT_EVENTS)
     print(f"{splits},{found[CYCLE_EVENT.removesuffix(':u')]}")
 
