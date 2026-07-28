@@ -22,7 +22,7 @@ mod tests {
         }
     "#;
 
-    /// The Fix side of both tests: the assertion, and the element counts that clear the threshold.
+    /// The Fix side of every test: the assertion, and the element count that clears the threshold.
     fn preamble() -> String {
         format!(
             r#"
@@ -36,16 +36,12 @@ mod tests {
             assert_eq(|_|label + ": the element buffer is off the {alignment}-byte boundary", m, 0)
         );
 
-        // Element counts that put each storage over the threshold, so its elements are aligned.
+        // An element count that puts an I64 storage over the threshold, so its elements are aligned.
         i64_count : I64;
         i64_count = {i64_count};
-
-        u8_count : I64;
-        u8_count = {u8_count};
 "#,
             alignment = ARRAY_BUF_ALIGNMENT,
             i64_count = ARRAY_ALIGNED_ALLOC_THRESHOLD / 8 + 1,
-            u8_count = ARRAY_ALIGNED_ALLOC_THRESHOLD + 1,
         )
     }
 
@@ -54,6 +50,14 @@ mod tests {
     #[test]
     fn test_large_array_element_buffer_is_aligned() {
         let source = preamble()
+            + &format!(
+                r#"
+        // An element count that puts a U8 storage over the threshold.
+        u8_count : I64;
+        u8_count = {u8_count};
+"#,
+                u8_count = ARRAY_ALIGNED_ALLOC_THRESHOLD + 1,
+            )
             + r#"
         main : IO ();
         main = (
