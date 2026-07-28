@@ -15,11 +15,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SELECTED=("$@")
-wanted() {
-    [ ${#SELECTED[@]} -eq 0 ] && return 0
-    printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
-}
+source ./common.sh
+select_programs "$@"
 
 MODE=${MODE:-cachegrind}
 TAG=${TAG:-$MODE}

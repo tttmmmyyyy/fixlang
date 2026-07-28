@@ -12,6 +12,9 @@ agree on. Check that they do before believing any number:
 for l in fix c rust; do ./bin_native/fannkuch_$l 10; done
 ```
 
+`fib` and `loop` print `<language>,<program>,<nanoseconds>,<result>`, so compare the last field
+alone there; the other six print the result by itself.
+
 ## Running
 
 ```

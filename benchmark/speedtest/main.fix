@@ -198,7 +198,7 @@ main = (
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
         let log = if perf_code != 0_U8 { log } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@size < 1 { log };
+            if perf.@(0) == "" { log };
             log.set(case_name + "-splits", log.@size - 1, perf.@(0))
         };
         // Change back to the parent directory.
@@ -214,8 +214,18 @@ main = (
         ["python3", "graph.py"].ez_run_o(config).forget
     );;
 
-    // Print the latest log.
-    log.@(log.@size - 1).to_iter.join(",").println;;
+    // Print the commit hash and this run's cachegrind costs. The line is read back by
+    // `run_benchmark` in `passes_optimizer.py`, which takes every field after the hash as a
+    // number to compare one LLVM pass sequence against another -- so the columns read from
+    // the hardware stay out of it. They do not move with a pass sequence, they are empty on
+    // a machine without the counters, and the processor column is not a number at all.
+    // (must stay in sync with `run_benchmark` in passes_optimizer.py)
+    let header = log.@(0);
+    let latest = log.@(log.@size - 1);
+    let costs = Iterator::range(0, header.@size).filter(|i|
+        i == 0 || header.@(i).ends_with("-inst") || header.@(i).ends_with("-mem")
+    ).map(|i| latest.@(i));
+    costs.join(",").println;;
     
     pure()
 );

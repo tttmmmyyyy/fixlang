@@ -266,10 +266,10 @@ def run_benchmark(timeout=240):
             print(cp.stderr)
             return None
         else:
-            # Split the output by comma and take the second element
+            # The commit hash, then one number per cachegrind column.
+            # (must stay in sync with the line `benchmark/speedtest/main.fix` prints)
             costs = cp.stdout.strip().split(',')
             print('Benchmark result:', costs)
-            # remove the first element (it is not a number)
             return BenchmarkResult([float(x) for x in costs[1:]])
 
     except subprocess.TimeoutExpired:

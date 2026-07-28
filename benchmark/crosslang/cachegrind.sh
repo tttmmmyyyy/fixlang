@@ -12,18 +12,25 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SELECTED=("$@")
-wanted() {
-    [ ${#SELECTED[@]} -eq 0 ] && return 0
-    printf '%s\n' "${SELECTED[@]}" | grep -qx "$1"
-}
+source ./common.sh
+select_programs "$@"
 
 TAG=${TAG:-cachegrind}
 BIN="bin_$TAG"
 OUT="results_$TAG.csv"
 CGPY=../speedtest/cachegrind-benchmarking/cachegrind.py
 
-cg() { python3 "$CGPY" "$@" 2>/dev/null | tail -1; }
+cg() {
+    local out
+    out=$(python3 "$CGPY" "$@" | tail -1)
+    # An empty or non-numeric line means the run never happened -- a missing binary, a
+    # program that aborted on this input, no valgrind. Subtracting it would report zero
+    # instructions, which reads as the best result in the table instead of as a failure.
+    case "$out" in
+        [0-9]*,[0-9]*) echo "$out" ;;
+        *) echo "measuring $* produced \"$out\"" >&2; return 1 ;;
+    esac
+}
 
 : > "$OUT"
 while read -r name full base; do
@@ -32,8 +39,12 @@ while read -r name full base; do
     wanted "$name" || continue
     for lang in fix c rust; do
         bin="$BIN/${name}_${lang}"
-        IFS=, read -r fi fm <<<"$(cg "$bin" "$full")"
-        IFS=, read -r bi bm <<<"$(cg "$bin" "$base")"
+        [ -x "$bin" ] || { echo "no $bin -- run build.sh first" >&2; exit 1; }
+        out_full=$(cg "$bin" "$full") || exit 1
+        out_base=$(cg "$bin" "$base") || exit 1
+        IFS=, read -r fi fm <<<"$out_full"
+        IFS=, read -r bi bm <<<"$out_base"
+        [ "$((fi - bi))" -gt 0 ] || { echo "$name/$lang: the full run cost no more than the trivial one" >&2; exit 1; }
         echo "$name,$lang,$((fi - bi)),$((fm - bm))" | tee -a "$OUT"
     done
 done < programs.txt

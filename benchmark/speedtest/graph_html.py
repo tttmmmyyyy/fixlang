@@ -111,8 +111,6 @@ def build_data(log_path, history_path, latest_n):
             if not name.endswith("-" + suffix):
                 continue
             case = name[: -(len(suffix) + 1)]
-            if case.endswith("-c"):  # the C reference, held separately
-                continue
             values = []
             for row in body:
                 cell = row[i].strip() if i < len(row) else ""
@@ -123,20 +121,7 @@ def build_data(log_path, history_path, latest_n):
             metrics[suffix] = {"label": label, "note": note, "kind": kind,
                                "source": source, "series": series}
 
-    # The C reference of a case does not move with a Fix commit, so keep the last value.
-    cref = {}
-    for name, i in index.items():
-        m = re.match(r"^(.*)-c-(\w+)$", name)
-        if not m:
-            continue
-        case, suffix = m.groups()
-        for row in reversed(body):
-            cell = row[i].strip() if i < len(row) else ""
-            if cell.isdigit():
-                cref.setdefault(case, {})[suffix] = int(cell)
-                break
-
-    return {"commits": commits, "metrics": metrics, "cref": cref}
+    return {"commits": commits, "metrics": metrics}
 
 
 def main():
@@ -154,7 +139,7 @@ def main():
     args.out.write_text(page, encoding="utf-8")
     n_cases = max((len(m["series"]) for m in data["metrics"].values()), default=0)
     print(f"{args.out}: {len(data['commits'])} commits, {n_cases} cases, "
-          f"{len(data['metrics'])} metrics, {len(data['cref'])} C references")
+          f"{len(data['metrics'])} metrics")
 
 
 TEMPLATE = r"""<!doctype html>
@@ -189,7 +174,6 @@ svg text { fill: var(--muted); font-size: 11px; }
 .serie { fill: none; stroke-width: 1.7; opacity: .85; }
 .serie.dim { opacity: .1; }
 .serie.hot { stroke-width: 3.2; opacity: 1; }
-.cref { fill: none; stroke-width: 1.4; stroke-dasharray: 5 4; opacity: .55; }
 .hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
 .xtick { cursor: pointer; }
 .xtick text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; }
@@ -273,7 +257,6 @@ function seriesOf(metric) {
     out.push({
       name, color: color(i), raw, base,
       values: raw.map((v) => (v === null ? null : v / base)),
-      cref: (DATA.cref[name] || {})[metricKey] ?? null,
     });
   });
   return out;
@@ -325,10 +308,6 @@ function render() {
     s.values.forEach((v, i) => { if (v !== null) pts.push(`${xs(i)},${toY(v)}`); });
     if (!pts.length) continue;
     const d = "M" + pts.join("L");
-    if (s.cref) {
-      const y = toY(metric.kind === "ratio" ? s.cref / s.base : s.cref);
-      el("line", { class: "cref", stroke: s.color, x1: PAD.l, y1: y, x2: PAD.l + PLOT_W, y2: y }, lines);
-    }
     el("path", { class: "serie", stroke: s.color, d, "data-name": s.name }, lines);
     const hit = el("path", { class: "hit", d, "data-name": s.name }, lines);
     hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xs));
@@ -403,8 +382,7 @@ function hoverPoint(ev, s, xs) {
   highlight(s.name);
   const tip = document.getElementById("tip");
   tip.innerHTML = `<strong>${s.name}</strong><br>${DATA.commits[best].short}: ${raw.toLocaleString()}`
-    + (delta === null ? "" : `<br>${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% vs previous`)
-    + (s.cref ? `<br>C reference ${s.cref.toLocaleString()} (${(raw / s.cref).toFixed(2)}x)` : "");
+    + (delta === null ? "" : `<br>${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% vs previous`);
   tip.style.opacity = 1;
   tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
   tip.style.top = ev.clientY - box.top - 10 + "px";

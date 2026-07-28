@@ -34,6 +34,11 @@ def counters(argv):
          "-e", ",".join(SPLIT_EVENTS + [CYCLE_EVENT]), "--"] + argv,
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
     )
+    # perf exits with the program's status, and it reports whatever the program managed to
+    # execute before it died. Counting a partial run as a measurement would put a plausible
+    # number in the log.
+    if proc.returncode != 0:
+        sys.exit(f"{argv[0]} exited with {proc.returncode}")
     found = {}
     for line in proc.stderr.splitlines():
         fields = line.split(",")

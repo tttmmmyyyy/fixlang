@@ -46,12 +46,15 @@ def best_ms(cmd, runs):
 
 def main():
     progs = programs()
+    selected = sys.argv[1:] or list(progs)
+    unknown = [p for p in selected if p not in progs]
+    if unknown:
+        sys.exit(f"not in programs.txt: {', '.join(unknown)}")
     load = os.getloadavg()[0]
     if load > LOAD_LIMIT:
         sys.exit(f"the machine is busy (load {load:.2f} > {LOAD_LIMIT:.1f}); "
                  f"wall-clock numbers taken now are not worth having. "
                  f"Raise LOAD_LIMIT to measure anyway.")
-    selected = sys.argv[1:] or list(progs)
     print(f"load1={load:.2f}  runs={RUNS}  bin={BIN}")
     print(f"  {'prog':<13} {'lang':<5} {'work-only':>10} {'startup':>9} {'vs C':>7} {'vs Rust':>8}")
     for name in selected:
@@ -61,6 +64,9 @@ def main():
             cmd = str(HERE / BIN / f"{name}_{lang}")
             hi = best_ms([cmd, full], RUNS)
             lo = best_ms([cmd, base], RUNS)
+            if hi - lo <= 0:
+                sys.exit(f"{name}/{lang}: the full input cost no more than the trivial one "
+                         f"({hi:.2f}ms vs {lo:.2f}ms). Raise the input in programs.txt.")
             work[lang] = (hi - lo, lo)
         for lang in LANGS:
             w, start = work[lang]
