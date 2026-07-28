@@ -1706,12 +1706,7 @@ pub fn build_free_boxed<'c, 'm>(
             .unwrap();
         unsafe {
             gc.builder()
-                .build_gep(
-                    gc.context.i8_type(),
-                    ptr,
-                    &[neg_alloc_offset],
-                    "alloc_base",
-                )
+                .build_gep(gc.context.i8_type(), ptr, &[neg_alloc_offset], "alloc_base")
                 .unwrap()
         }
     } else {
