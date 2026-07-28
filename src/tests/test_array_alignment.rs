@@ -5,8 +5,8 @@
 // made vectorizable. A smaller array takes `malloc` and whatever alignment it gives, since the bytes
 // the alignment costs come out of every array while only the long loops win them back.
 //
-// The property is static, so these tests read the address rather than the clock: an instruction
-// count sees neither the alignment nor its loss.
+// The property is static, so these tests assert on the address of the element buffer: an
+// instruction count sees neither the alignment nor its loss.
 
 #[cfg(test)]
 mod tests {
@@ -72,9 +72,9 @@ mod tests {
         test_source_with_c(&source, ADDR_MOD_ALIGNMENT, "array_alignment_build");
     }
 
-    /// An array that grows past the threshold lands on the boundary too: over it, `reserve` gives a
-    /// unique array a fresh block and moves the elements over rather than resizing in place, because
-    /// a block from `realloc` starts where the allocator put it.
+    /// An array that grows past the threshold lands on the boundary too, whether it grew by
+    /// `push_back`, by `reserve` on a unique array, or by the clone `reserve` makes of a shared one,
+    /// which leaves the array it was cloned from aligned as well.
     #[test]
     fn test_array_grown_past_the_threshold_is_aligned() {
         let source = preamble()

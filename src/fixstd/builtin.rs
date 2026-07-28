@@ -2037,7 +2037,8 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
-// field. The elements are moved, not reference counted: the caller must ensure the array is unique.
+// field. The elements move as raw bytes, with their reference counts left alone: the caller must
+// ensure the array is unique.
 //
 // The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
 // large enough to have its own pages, by remapping them, which costs nothing per element. What comes
@@ -5820,8 +5821,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             bool_ty.const_int(1, false)
         } else {
             // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
-            // reference count to branch on. An unboxed argument would take an "always unique"
-            // branch, which reports a shared value as unique.
+            // reference count to branch on.
             assert!(
                 obj.is_box(gc.type_env()),
                 "is_unique is applied to a value of the unboxed type {}.",

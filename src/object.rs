@@ -1097,6 +1097,12 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
+    /// The size of this object in bytes, as a value computed at run time.
+    ///
+    /// # Arguments
+    /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
+    ///   object type that ends in one (`Array`, `#ArrayStorage`). For every other object type it is
+    ///   `None` and the size is that of the struct alone.
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1183,8 +1189,9 @@ pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-// How far the object sits above the base of its allocation, in bytes. A byte holds every distance
-// an object is placed by, which `ARRAY_BUF_ALIGNMENT` bounds.
+/// Type of the control block field holding how far the object sits above the base of its
+/// allocation, in bytes. A byte holds every distance an object is placed by, which
+/// `ARRAY_BUF_ALIGNMENT` bounds.
 pub fn alloc_offset_type<'c>(context: &'c Context) -> IntType<'c> {
     assert!(ARRAY_BUF_ALIGNMENT <= u8::MAX as u64 + 1);
     context.i8_type()
@@ -1530,11 +1537,11 @@ pub fn alloc_array_storage<'c, 'm>(
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
 
-// Emit a call to `malloc(sizeof)`.
-//
-// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an
-// i32 size parameter and truncate the size, which breaks allocations >= 4 GiB. Instead we call our
-// own `@malloc(i64)` declaration registered in `runtime.rs`.
+/// Emit a call to `malloc(sizeof)`.
+///
+/// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an
+/// i32 size parameter and truncate the size, which breaks allocations >= 4 GiB. Instead we call our
+/// own `@malloc(i64)` declaration registered in `runtime.rs`.
 fn build_malloc<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
@@ -1553,9 +1560,9 @@ fn build_malloc<'c, 'm>(
         .into_pointer_value()
 }
 
-// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
-// base, so that its element buffer starts on `ARRAY_BUF_ALIGNMENT`. The distance is below
-// `ARRAY_BUF_ALIGNMENT`, which is the slack a block needs to hold an object placed this way.
+/// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
+/// base, so that its element buffer starts on `ARRAY_BUF_ALIGNMENT`. The distance is below
+/// `ARRAY_BUF_ALIGNMENT`, which is the slack a block needs to hold an object placed this way.
 pub fn build_array_storage_shift<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,
@@ -1595,8 +1602,8 @@ pub fn build_array_storage_shift<'c, 'm>(
         .unwrap()
 }
 
-// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, which it does
-// from `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up.
+/// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, which it does
+/// from `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up.
 pub fn build_storage_is_aligned<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
@@ -1613,20 +1620,20 @@ pub fn build_storage_is_aligned<'c, 'm>(
         .unwrap()
 }
 
-// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address
-// within it, together with the distance from the base of the block to that address.
-//
-// From `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up, the block carries room to slide the object off its
-// base, and the object is placed where the element buffer starts on `ARRAY_BUF_ALIGNMENT`. A
-// smaller block takes the whole allocation and whatever alignment `malloc` gives.
-//
-// The distance is what the object is placed by, rather than what its address then implies, because
-// an allocator is free to hand out any alignment the requested size can hold: mimalloc, for one,
-// aligns an 8-byte allocation -- the size of an empty array's storage -- to 8 bytes.
-//
-// The threshold is applied as a mask rather than a branch. An array allocation is a handful of
-// instructions that many callers inline, and the basic blocks a branch here adds to every one of
-// them cost more in inlining decisions downstream than the arithmetic they save.
+/// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address
+/// within it, together with the distance from the base of the block to that address.
+///
+/// From `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up, the block carries room to slide the object off its
+/// base, and the object is placed where the element buffer starts on `ARRAY_BUF_ALIGNMENT`. A
+/// smaller block takes the whole allocation and whatever alignment `malloc` gives.
+///
+/// The returned distance is what the object was placed by, which its address alone does not tell:
+/// an allocator is free to hand out any alignment the requested size can hold, and mimalloc, for
+/// one, aligns an 8-byte allocation -- the size of an empty array's storage -- to 8 bytes.
+///
+/// The threshold is applied as a mask rather than a branch. An array allocation is a handful of
+/// instructions that many callers inline, and the basic blocks a branch here adds to every one of
+/// them cost more in inlining decisions downstream than the arithmetic they save.
 fn build_alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,
@@ -1675,7 +1682,7 @@ fn build_alloc_array_storage<'c, 'm>(
     (ptr, alloc_offset)
 }
 
-// Free the allocation a boxed object of type `ty` lives in.
+/// Free the allocation a boxed object of type `ty` lives in.
 pub fn build_free_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
@@ -1705,8 +1712,8 @@ pub fn build_free_boxed<'c, 'm>(
     gc.builder().build_free(base).unwrap();
 }
 
-// A pointer to the field of the control block of `ptr` recording how far the object sits above the
-// base of its allocation.
+/// A pointer to the field of the control block of `ptr` recording how far the object sits above the
+/// base of its allocation.
 fn build_gep_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
@@ -1722,7 +1729,7 @@ fn build_gep_alloc_offset<'c, 'm>(
         .unwrap()
 }
 
-// Read back the distance `write_alloc_offset` recorded, as a pointer-sized integer.
+/// How far the object at `ptr` sits above the base of its allocation, as a pointer-sized integer.
 pub fn read_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
@@ -1742,7 +1749,7 @@ pub fn read_alloc_offset<'c, 'm>(
         .unwrap()
 }
 
-// Record how far the object at `ptr` sits above the base of its allocation.
+/// Record how far the object at `ptr` sits above the base of its allocation.
 pub fn write_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
