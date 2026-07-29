@@ -39,12 +39,24 @@ under the size from which elements are aligned. Two cases gain splits — `cp_li
 400,179 and `cp_lib_scc` 45,542 to 70,919 — from the up-to-31 bytes a large array now asks for
 moving every allocation after it; neither moves in wall clock.
 
-In wall clock (hyperfine, repeated for each case named here): `fill_from_map` and `fill` 1.9 times
-faster, `arrayrw`, `arrayrw_fn` and `struct_field_mod` 1.7, `cp_lib_bipartite` 1.2, `get_sub` 1.1,
-and 29 of the 43 cases within a percent either way. `cp_lib_scc` is 2 percent slower, the one real
-regression: its arrays are 8 and 24 bytes, only 8 of its 226,000 allocations clear the threshold, so
-it pays the three instructions and the byte store an array allocation now costs and wins nothing
-back.
+In wall clock, measured on an idle machine with twenty runs of each case: `fill_from_map` 2.8 times
+faster and `fill` 2.3, `arrayrw`, `arrayrw_fn` and `struct_field_mod` 1.6, `cp_lib_bipartite` 1.2,
+`nbody_fold` and `index_syntax` 1.04, and 32 of the 46 cases within three percent either way and
+steady. The suite comes to 0.926 on the geometric mean of the ratios, or 0.934 taking each case's
+fastest run. `cp_lib_scc` is 4 percent slower, the one steady regression: its arrays are 8 and 24
+bytes, only 8 of its 226,000 allocations clear the threshold, so it pays the three instructions and
+the byte store an array allocation now costs and wins nothing back. `prime_table` reads 5 percent
+slower and `bounds_check_indexable`, `sort` and `cp_lib_segtree` within one percent, all four with a
+spread wide enough that the figure moves between runs.
+
+**`fill` and `fill_from_map` are bimodal, and that is the shape of the problem this change is
+about.** Each allocates a thousand-element array ten thousand times, so one recycled block decides
+the whole run, and where that block lands decides whether its accesses straddle. Five independent
+measurements of `fill` give the unaligned build a mean of 3.7 to 4.3 ms with a standard deviation of
+2.3, against 1.1 to 2.3 ms for the aligned one: the same program, the same input, and a factor of
+four between runs of the binary that leaves its elements where the allocator put them. A single
+timing of a case like this says more about the addresses it drew than about the code, which is why
+the split counters are the column to read.
 
 **This is the first row measured in the fixed environment, so the instruction counts fall against
 the row above by a constant that belongs to the instrument.** The micro-benchmarks all move by
