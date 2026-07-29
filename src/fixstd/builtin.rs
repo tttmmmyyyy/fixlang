@@ -43,8 +43,9 @@ use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, IntValue, PointerValue};
+use inkwell::values::{BasicValue, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -2036,24 +2037,73 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
-// field. The elements move as raw bytes, with their reference counts left alone: the caller must
-// ensure the array is unique.
+// Give a uniquely owned array room for exactly `new_cap` elements and update its capacity field. The
+// elements it holds are carried over. The caller must ensure the array is unique, and that `new_cap`
+// covers the elements it wants to keep.
+fn set_array_capacity<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    new_cap: IntValue<'c>,
+) -> Object<'c> {
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+    let resize_func = resize_array_storage_function(gc, elem_ty);
+    let storage_ptr = get_array_storage(gc, &array).value(gc);
+    let size = array.extract_field(gc, ARRAY_SIZE_IDX);
+    let resized_storage_ptr = gc
+        .builder()
+        .build_call(
+            resize_func,
+            &[storage_ptr.into(), size.into(), new_cap.into()],
+            "resize_array_storage",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap();
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, resized_storage_ptr);
+    array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+}
+
+// The function that gives an array of element type `elem_ty` the room it asks for: it takes the
+// array's storage and the number of elements it holds, then the capacity wanted, and returns the
+// storage with room for that capacity, carrying over the elements.
+//
+// It is a function, and one the inliner keeps out of its caller, because changing an array's capacity
+// is a cold path that the append loop around it would otherwise pay for: every block this needs
+// becomes another edge into the merge point each append flows through, and the loop loses registers
+// to the wider phis there.
 //
 // The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
 // large enough to have its own pages, by remapping them, which costs nothing per element. What comes
 // back starts wherever the allocator put it, so the object is placed in it afresh, and the contents
 // move only in the case where that lands the object somewhere other than `realloc` left it.
-fn realloc_array<'c, 'm>(
+fn resize_array_storage_function<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    array: Object<'c>,
-    new_cap: IntValue<'c>,
-) -> Object<'c> {
+    elem_ty: Arc<TypeNode>,
+) -> FunctionValue<'c> {
+    let storage_ty = make_array_storage_ty(elem_ty.clone());
+    let name = format!("resize_array_storage#{}", storage_ty.hash());
+    if let Some(func) = gc.module.get_function(&name) {
+        return func;
+    }
+
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let i64_ty = gc.context.i64_type();
-    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let storage = get_array_storage(gc, &array);
-    let storage_ptr = storage.value(gc).into_pointer_value();
-    let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
+    let func = gc.module.add_function(
+        &name,
+        ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), i64_ty.into()], false),
+        Some(Linkage::Internal),
+    );
+    gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
+    let storage_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
+    let size = func.get_nth_param(1).unwrap().into_int_value();
+    let new_cap = func.get_nth_param(2).unwrap().into_int_value();
+
+    let entry_bb = gc.context.append_basic_block(func, "entry");
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(entry_bb);
+
+    let object_type = storage_ty.get_object_type(&vec![], gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
@@ -2061,14 +2111,14 @@ fn realloc_array<'c, 'm>(
     let old_base = unsafe {
         let neg_old_alloc_offset = gc
             .builder()
-            .build_int_neg(old_alloc_offset, "neg_old_alloc_offset@realloc_array")
+            .build_int_neg(old_alloc_offset, "neg_old_alloc_offset")
             .unwrap();
         gc.builder()
             .build_gep(
                 gc.context.i8_type(),
                 storage_ptr,
                 &[neg_old_alloc_offset],
-                "old_base@realloc_array",
+                "old_base",
             )
             .unwrap()
     };
@@ -2082,13 +2132,13 @@ fn realloc_array<'c, 'm>(
             is_aligned,
             i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
             old_alloc_offset,
-            "slack@realloc_array",
+            "slack",
         )
         .unwrap()
         .into_int_value();
     let alloc_size = gc
         .builder()
-        .build_int_add(sizeof, slack, "alloc_size@realloc_array")
+        .build_int_add(sizeof, slack, "alloc_size")
         .unwrap();
     let realloc_fn = gc
         .module
@@ -2113,26 +2163,21 @@ fn realloc_array<'c, 'm>(
                 is_aligned,
                 aligned_alloc_offset,
                 old_alloc_offset,
-                "new_alloc_offset@realloc_array",
+                "new_alloc_offset",
             )
             .unwrap()
             .into_int_value()
     };
 
-    let current_func = gc.current_function();
-    let move_bb = gc
-        .context
-        .append_basic_block(current_func, "move_bb@realloc_array");
-    let end_bb = gc
-        .context
-        .append_basic_block(current_func, "end_bb@realloc_array");
+    let move_bb = gc.context.append_basic_block(func, "move_bb");
+    let end_bb = gc.context.append_basic_block(func, "end_bb");
     let must_move = gc
         .builder()
         .build_int_compare(
             IntPredicate::NE,
             new_alloc_offset,
             old_alloc_offset,
-            "must_move@realloc_array",
+            "must_move",
         )
         .unwrap();
     gc.builder()
@@ -2148,7 +2193,7 @@ fn realloc_array<'c, 'm>(
                 gc.context.i8_type(),
                 new_base,
                 &[old_alloc_offset],
-                "old_ptr@realloc_array",
+                "old_ptr",
             )
             .unwrap()
     };
@@ -2158,19 +2203,18 @@ fn realloc_array<'c, 'm>(
                 gc.context.i8_type(),
                 new_base,
                 &[new_alloc_offset],
-                "new_ptr@realloc_array",
+                "new_ptr",
             )
             .unwrap()
     };
-    let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
     let elems_size_as_ptr = unsafe {
         gc.builder()
             .build_gep(
                 elem_value_ty,
                 gc.context.ptr_type(AddressSpace::from(0)).const_null(),
-                &[len],
-                "elems_size_as_ptr@realloc_array",
+                &[size],
+                "elems_size_as_ptr",
             )
             .unwrap()
     };
@@ -2178,7 +2222,7 @@ fn realloc_array<'c, 'm>(
         .builder()
         .build_int_add(
             gc.builder()
-                .build_ptr_to_int(elems_size_as_ptr, i64_ty, "elems_size@realloc_array")
+                .build_ptr_to_int(elems_size_as_ptr, i64_ty, "elems_size")
                 .unwrap(),
             i64_ty.const_int(
                 gc.target_data
@@ -2186,7 +2230,7 @@ fn realloc_array<'c, 'm>(
                     .unwrap(),
                 false,
             ),
-            "live_bytes@realloc_array",
+            "live_bytes",
         )
         .unwrap();
     gc.builder()
@@ -2196,19 +2240,20 @@ fn realloc_array<'c, 'm>(
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     gc.builder().position_at_end(end_bb);
-    let storage_ptr = unsafe {
+    let resized_ptr = unsafe {
         gc.builder()
             .build_gep(
                 gc.context.i8_type(),
                 new_base,
                 &[new_alloc_offset],
-                "storage_ptr@realloc_array",
+                "resized_ptr",
             )
             .unwrap()
     };
-    write_alloc_offset(gc, storage_ptr, new_alloc_offset);
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr.as_basic_value_enum());
-    array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
+    write_alloc_offset(gc, resized_ptr, new_alloc_offset);
+    gc.builder().build_return(Some(&resized_ptr)).unwrap();
+
+    func
 }
 
 /// Gives an array a storage of `cap_name` elements, keeping the elements it already holds, and
@@ -2233,7 +2278,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
 
         if !self.force_unique {
-            return realloc_array(gc, array, new_cap);
+            return set_array_capacity(gc, array, new_cap);
         }
 
         // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
@@ -2249,7 +2294,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced = realloc_array(gc, array.clone(), new_cap);
+        let resized = set_array_capacity(gc, array.clone(), new_cap);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2273,7 +2318,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         gc.build_object_phi(
-            &[(realloced, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
+            &[(resized, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
             "array_phi@set_capacity",
         )
     }
