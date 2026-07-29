@@ -11,7 +11,7 @@
 #[cfg(test)]
 mod empty_array_tests {
     use crate::{
-        configuration::Configuration,
+        configuration::{Configuration, FixOptimizationLevel},
         constants::REFCNT_STATE_GLOBAL,
         misc::function_name,
         tests::test_util::{emit_llvm_ir, test_source},
@@ -185,6 +185,254 @@ main = (
     assert_eq(|_|"global still empty", empty_global.@size, 0);;
     assert_eq(|_|"global row", rows_global.@(1), []);;
     assert_eq(|_|"global row grown", rows_global.@(1).push_back(9), [9]);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// The Fix program the empty-array behavior is checked with, used at more than one build
+    /// setting.
+    const EMPTY_ARRAY_BEHAVIOR: &str = r#"
+module Main;
+
+type Boxed = box struct { value : I64 };
+
+empty_global : Array I64;
+empty_global = [];
+
+rows_global : Array (Array I64);
+rows_global = Array::fill(3, []);
+
+main : IO ();
+main = (
+    let a = [] : Array I64;
+    let b = [] : Array I64;
+    assert_eq(|_|"grown", a.push_back(1).push_back(2), [1, 2]);;
+    assert_eq(|_|"untouched", b, []);;
+    assert_eq(|_|"reserved", ([] : Array I64).reserve(4).push_back(7), [7]);;
+    assert_eq(|_|"appended", ([] : Array I64) + [1, 2], [1, 2]);;
+    assert_eq(|_|"appended empty", ([] : Array I64) + [], []);;
+    assert_eq(|_|"sorted", ([] : Array I64).sort, []);;
+    assert_eq(|_|"resized", ([] : Array I64).resize(2, 3), [3, 3]);;
+    assert_eq(|_|"collected", ([] : Array I64).to_iter.to_array, []);;
+
+    let rows = Array::fill(4, [] : Array I64);
+    let rows = rows.mod(1, push_back(11));
+    assert_eq(|_|"row 0", rows.@(0), []);;
+    assert_eq(|_|"row 1", rows.@(1), [11]);;
+
+    let e = [] : Array Boxed;
+    assert_eq(|_|"boxed pushed", e.push_back(Boxed { value : 42 }).@(0).@value, 42);;
+    let total = Iterator::range(0, 100).fold(0, |_, acc|
+        acc + ([] : Array Boxed).push_back(Boxed { value : 1 }).@(0).@value
+    );
+    assert_eq(|_|"boxed total", total, 100);;
+
+    assert_eq(|_|"global empty", empty_global, []);;
+    assert_eq(|_|"global grown", empty_global.push_back(5), [5]);;
+    assert_eq(|_|"global row grown", rows_global.@(1).push_back(9), [9]);;
+    pure()
+);
+"#;
+
+    #[test]
+    pub fn test_empty_array_at_every_optimization_level() {
+        // The shared block is taken at every optimization level, while the check that clones a
+        // shared array before writing into it is dropped only from `max` up. Both sides of that have
+        // to behave the same.
+        for level in [
+            FixOptimizationLevel::None,
+            FixOptimizationLevel::Basic,
+            FixOptimizationLevel::Max,
+            FixOptimizationLevel::Experimental,
+        ] {
+            let mut config = Configuration::develop_mode();
+            config.set_fix_opt_level(level);
+            test_source(EMPTY_ARRAY_BEHAVIOR, config);
+        }
+    }
+
+    #[test]
+    pub fn test_empty_array_survives_publication() {
+        // Publishing a value graph to other threads walks it and writes the threaded state into
+        // every object it reaches. The shared block lives in read-only memory, so the walk has to
+        // leave it as it is, and the arrays on it stay readable and growable afterwards.
+        let source = r#"
+module Main;
+
+type Rec = box struct { rows : Array (Array I64), tag : Array U8 };
+
+global_empty : Array I64;
+global_empty = [];
+
+main : IO ();
+main = (
+    let v = (Rec { rows : Array::fill(4, []), tag : [] }).mark_threaded;
+    assert_eq(|_|"row after publish", v.@rows.@(1), []);;
+    assert_eq(|_|"row grown after publish", v.@rows.@(1).push_back(1), [1]);;
+    assert_eq(|_|"tag after publish", v.@tag.@size, 0);;
+
+    let e = ([] : Array I64).mark_threaded;
+    assert_eq(|_|"published empty grown", e.push_back(2), [2]);;
+    let g = global_empty.mark_threaded;
+    assert_eq(|_|"published global grown", g.push_back(3), [3]);;
+    let twice = (([] : Array I64).mark_threaded).mark_threaded;
+    assert_eq(|_|"published twice", twice.push_back(4), [4]);;
+    let heap = (Array::empty(0) : Array I64).mark_threaded;
+    assert_eq(|_|"published capacity-zero heap block", heap.push_back(5), [5]);;
+
+    let n = Iterator::range(0, 200).fold(0, |_, acc|
+        acc + (([] : Array I64).mark_threaded).push_back(1).@size
+    );
+    assert_eq(|_|"loop", n, 200);;
+    pure()
+);
+"#;
+        let mut config = Configuration::develop_mode();
+        config.set_threaded();
+        test_source(source, config);
+    }
+
+    #[test]
+    pub fn test_capacity_zero_array_off_the_shared_block_grows() {
+        // A capacity-zero array that is a heap block of its own — no literal with no element appears
+        // in this program — takes the same path as one on the shared block when its capacity is
+        // raised: a fresh block is allocated and the old one is dropped. Its elements have to reach
+        // the new block, and the old block has to be freed exactly once.
+        let source = r#"
+module Main;
+
+type Boxed = box struct { v : I64 };
+
+main : IO ();
+main = (
+    let a = (Array::empty(0) : Array I64).push_back(1).push_back(2).push_back(3);
+    assert_eq(|_|"grown from empty(0)", a, [1, 2, 3]);;
+
+    let b = (Array::empty(0) : Array Boxed).push_back(Boxed { v : 5 });
+    assert_eq(|_|"boxed grown", b.@(0).@v, 5);;
+
+    // Many capacity-zero blocks grown, and many dropped without growing: a block that is neither
+    // carried over nor freed shows up as a leak.
+    let grown = Iterator::range(0, 200).fold(0, |i, acc|
+        acc + (Array::empty(0) : Array I64).push_back(i).@(0)
+    );
+    assert_eq(|_|"grown total", grown, 199 * 200 / 2);;
+    let dropped = Iterator::range(0, 200).fold(0, |_, acc|
+        acc + (Array::empty(0) : Array Boxed).@size
+    );
+    assert_eq(|_|"dropped", dropped, 0);;
+
+    // Capacity-zero arrays that other functions produce.
+    let sub = [1, 2, 3].get_sub(1, 1);
+    assert_eq(|_|"empty sub grown", sub.push_back(9), [9]);;
+    let filled = Array::fill(0, Boxed { v : 1 });
+    assert_eq(|_|"fill 0 grown", filled.push_back(Boxed { v : 2 }).@(0).@v, 2);;
+
+    // A capacity-zero array held under two names: growing one leaves the other empty.
+    let x = Array::empty(0) : Array I64;
+    let y = x;
+    assert_eq(|_|"x grown", x.push_back(11), [11]);;
+    assert_eq(|_|"y untouched", y.@size, 0);;
+    assert_eq(|_|"y grown", y.push_back(22), [22]);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    #[test]
+    pub fn test_capacity_shrunk_to_zero_and_grown_again() {
+        // An array whose capacity is lowered to zero joins the capacity-zero case from the other
+        // side: it sits on a block of its own, not on the shared one, and a second name for it makes
+        // that block genuinely shared. Growing it again has to leave the other name empty.
+        let source = r#"
+module Main;
+
+main : IO ();
+main = (
+    // Lowering the capacity to zero is in contract while the array holds no element.
+    let a = (Array::empty(8) : Array I64)._unsafe_set_capacity_bounds_unchecked(0);
+    assert_eq(|_|"lowered capacity", a.@capacity, 0);;
+    assert_eq(|_|"lowered size", a.@size, 0);;
+
+    // A second name for that block, then growth through the first.
+    let alias = a;
+    assert_eq(|_|"grown", a.push_back(1).push_back(2), [1, 2]);;
+    assert_eq(|_|"alias untouched", alias, []);;
+
+    // The same under the `true` arm of the uniqueness flag, which is where the optimizer reads the
+    // array as uniquely owned.
+    let b = (Array::empty(8) : Array I64)._unsafe_set_capacity_bounds_unchecked(0);
+    let b_alias = b;
+    let (unique, b) = b._unsafe_is_storage_unique;
+    let grown = if unique { b.reserve(4).push_back(10).push_back(20) } else { [-1] };
+    assert_eq(|_|"grown under the flag", grown, [10, 20]);;
+    assert_eq(|_|"alias untouched under the flag", b_alias, []);;
+
+    // Lowering the capacity of an array a second name already holds.
+    let c = Array::empty(8) : Array I64;
+    let c_alias = c;
+    let c = c._unsafe_set_capacity_bounds_unchecked(0);
+    assert_eq(|_|"shared lowered", c.push_back(3), [3]);;
+    assert_eq(|_|"shared alias untouched", c_alias, []);;
+
+    // Lowering and raising in a loop, with boxed elements to release each round.
+    let looped = Iterator::range(0, 200).fold([] : Array String, |i, arr|
+        arr.push_back(i.to_string).truncate(0)._unsafe_set_capacity_bounds_unchecked(0)
+    );
+    assert_eq(|_|"looped", looped.@size, 0);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    #[test]
+    pub fn test_update_driven_by_the_uniqueness_answer() {
+        // A program that branches on `_unsafe_is_storage_unique` and writes through the unchecked
+        // primitive on `true` — the shape `Array::_unsafe_act_bounds_unchecked` uses. An array that
+        // starts empty and is then grown and aliased must still take the checked path.
+        let source = r#"
+module Main;
+
+my_set : I64 -> I64 -> Array I64 -> Array I64;
+my_set = |idx, v, arr| (
+    let (unique, arr) = arr._unsafe_is_storage_unique;
+    if unique {
+        arr.unsafe_set_bounds_unchecked(idx, v)
+    } else {
+        arr.set(idx, v)
+    }
+);
+
+main : IO ();
+main = (
+    // Empty, then grown, then held under a second name: the write must not reach the second name.
+    let empty = [] : Array I64;
+    let empty_alias = empty;
+    let grown = empty.push_back(1).push_back(2).push_back(3);
+    let grown_alias = grown;
+    assert_eq(|_|"written", grown.my_set(1, 99), [1, 99, 3]);;
+    assert_eq(|_|"grown alias untouched", grown_alias, [1, 2, 3]);;
+    assert_eq(|_|"empty alias untouched", empty_alias, []);;
+
+    // The same starting from `Array::empty(0)`.
+    let allocated = Array::empty(0) : Array I64;
+    let allocated_alias = allocated;
+    let filled = allocated.push_back(4).push_back(5);
+    let filled_alias = filled;
+    assert_eq(|_|"allocated written", filled.my_set(0, 88), [88, 5]);;
+    assert_eq(|_|"allocated alias untouched", filled_alias, [4, 5]);;
+    assert_eq(|_|"allocated empty alias untouched", allocated_alias, []);;
+
+    // A row that started empty inside a larger array, updated through the same path.
+    let rows = Array::fill(3, [] : Array I64).mod(0, push_back(7)).mod(1, push_back(8));
+    let rows_alias = rows;
+    let rows = rows.mod(0, my_set(0, 77));
+    assert_eq(|_|"row written", rows.@(0), [77]);;
+    assert_eq(|_|"rows alias untouched", rows_alias.@(0), [7]);;
     pure()
 );
 "#;
