@@ -1250,7 +1250,11 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let refcnt_ty = refcnt_type(gc.context);
     let refcnt_size_in_bits = gc.target_data.get_bit_size(&refcnt_ty);
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
-    let refcnt_offset_in_bits = gc.target_data.offset_of_element(&str_type, 0).unwrap();
+    let refcnt_offset_in_bits = gc
+        .target_data
+        .offset_of_element(&str_type, CTRL_BLK_REFCNT_IDX)
+        .unwrap()
+        * 8;
     let refcnt_member = gc
         .get_di_builder()
         .create_member_type(
