@@ -10,6 +10,57 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## a9a1b1a2bd93952205e127f3cbe603d2e6a6c2c0
+
+Starts a large array's elements on a 32-byte boundary (PR #128), so that a vectorized loop over them
+stops straddling cache lines.
+
+**Read this row in the split columns, not the instruction counts.** The instruction count cannot see
+either the straddle or its removal: `arrayrw` retires the same instructions before and after, to
+within eleven out of 120 million, and runs 1.71 times faster. What the splits say:
+
+| case | before | after |
+|---|--:|--:|
+| arrayrw | 49,600,017 | 171 |
+| arrayrw_fn | 49,600,017 | 171 |
+| struct_field_mod | 49,600,019 | 171 |
+| cp_lib_bipartite | 54,743,346 | 76,832 |
+| fill, fill_from_map | 1,250,023 | 249 |
+| cp_lib_prime_list | 195,356 | 175 |
+| get_sub | 1,083,622 | 378,414 |
+| levenshtein | 577,126 | 344,955 |
+| nbody | 32,000,029 | 18,000,182 |
+| nbody_fold | 30,000,029 | 16,000,183 |
+
+A case whose elements are wider than a vector access is aligned only at its first element, which is
+why `nbody` and `levenshtein` halve rather than clear: their elements are 24 bytes, and 24 does not
+divide 32. `fannkuch` and `arrayrw_shared` do not move at all, the first because its arrays stay
+under the size from which elements are aligned. Two cases gain splits — `cp_lib_lsegtree` 25,034 to
+400,179 and `cp_lib_scc` 45,542 to 70,919 — from the up-to-31 bytes a large array now asks for
+moving every allocation after it; neither moves in wall clock.
+
+In wall clock (hyperfine, repeated for each case named here): `fill_from_map` and `fill` 1.9 times
+faster, `arrayrw`, `arrayrw_fn` and `struct_field_mod` 1.7, `cp_lib_bipartite` 1.2, `get_sub` 1.1,
+and 29 of the 43 cases within a percent either way. `cp_lib_scc` is 2 percent slower, the one real
+regression: its arrays are 8 and 24 bytes, only 8 of its 226,000 allocations clear the threshold, so
+it pays the three instructions and the byte store an array allocation now costs and wins nothing
+back.
+
+**This is the first row measured in the fixed environment, so the instruction counts fall against
+the row above by a constant that belongs to the instrument.** The micro-benchmarks all move by
+-43,546 give or take twenty; add that back to read what the change did. The large cases carry the
+constant too, where it is lost in the total: `nbody_fold` -9.1%, `fannkuch` -1.6% and
+`cp_lib_conv_zp` -1.0% fall, `cp_lib_scc` +2.0%, `index_syntax` +1.7%, `get_sub` +1.5% and
+`cp_lib_dijkstra` +1.2% rise, from inlining decisions moving in both directions around the
+allocation. Measured against the fork point in one environment, the whole suite comes to +0.33%.
+
+`push_back` is the largest riser and the least interesting: two register-to-register moves left in
+its inner loop by register allocation, on a program that retires ten instructions per iteration.
+
+The row also carries the corrected element size (an array of a boxed element type reserved the size
+of the element's own object where it stores a reference), which shows up nowhere here: no case in
+the suite holds an array of a boxed type.
+
 ## fd0a7ee93588a9bd19e7ec67dcbd9b7ed26586c6
 
 Opens three kinds of column: the split accesses read from the hardware counters, the processor the
