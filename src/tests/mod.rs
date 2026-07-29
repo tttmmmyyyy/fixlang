@@ -1,7 +1,9 @@
 mod test_abs_path_dep_hash;
 mod test_application_inlining;
+mod test_array_alignment;
 mod test_array_bounds_check;
 mod test_array_builder;
+mod test_array_element_size;
 mod test_array_rmw;
 mod test_array_swap;
 mod test_assert;

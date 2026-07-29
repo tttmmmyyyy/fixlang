@@ -37,6 +37,7 @@
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
+- An `Array` whose element type is boxed now uses one pointer of memory per element. An array of a boxed struct of eight `I64` fields used nine times the memory it needed.
 
 #### Tool
 
@@ -45,14 +46,14 @@
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.
 - Tail call optimization now applies with `-O none` and with `-g` as well. `-g` used to suppress it so that a debugger saw a stack frame for every call; a call in tail position no longer appears in a backtrace.
 - Compiling a function of many parameters takes far less time and memory. The cost used to double with each parameter, so a function of 13 or more parameters aborted the compiler with a stack overflow.
-- The compiler no longer aborts with a stack overflow when compiling a module whose expressions nest very deeply — for example a module with several hundred top-level values all sequenced from `main`, or a single deep `let` / `;;` chain. Such a module previously overflowed the small default stack of the compiler's type-checking and code-generation worker threads (most readily at `-O max` and `-O experimental`); the compiler now runs type checking, optimization, and code generation on threads sized for deep recursion.
+- The compiler no longer aborts with a stack overflow when compiling a module whose expressions nest very deeply — for example a module with several hundred top-level values all sequenced from `main`, or a single deep `let` / `;;` chain.
 - Building with debug information (`-g`) no longer crashes on a program that uses a recursive type, such as `type Tree = box union { leaf : (), node : (Tree, Tree) };`.
 - Debug information (`-g`) records every `Array` as having 100 elements, since the actual element count is only determined at run time. The byte sizes recorded for the array debug types covered only a single element, contradicting that element count: gdb refused to display the elements with an "access outside bounds of object" error, and recent lldb displayed wrong values for all elements after the first. The byte sizes now cover the 100 elements, so debuggers display them, the first `<array size>` of which are the valid values. This also applies to the byte array inside a `String`.
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).
 - `fix run` and `fix test` no longer crash on startup in debug builds of `fix` (released builds were unaffected).
 - `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
-- The type-checking cache is now invalidated when the compiler itself changes, not only when the source changes. Its key previously depended only on the source code, so a cache written by an earlier `fix` whose internal serialization format differed could be read back and misinterpreted by a newer `fix` — for example, hanging the build after an upgrade. Such caches are now regenerated instead.
+- Building a project after upgrading `fix` no longer hangs. The type-checking cache is now regenerated when the compiler itself changes, where before it was reused as long as the source was unchanged and a newer `fix` could misread a cache an older one wrote.
 
 ## [1.4.0] - 2026-06-22
 
