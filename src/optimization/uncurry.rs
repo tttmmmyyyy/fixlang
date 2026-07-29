@@ -4,7 +4,7 @@ Uncurrying optimizaion
 Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
 Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
 
-en For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
+For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
 and select the appropriate one according to the call site.
 
 NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
@@ -20,23 +20,26 @@ use crate::{
     },
     constants::{FUNPTR_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
     fixstd::stdlib::FIX_NAME,
-    misc::Set,
+    misc::{Map, Set},
     optimization::eta_expansion,
 };
-use std::{sync::Arc, usize};
+use std::{mem, sync::Arc, usize};
 
+/// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
+/// calls, export statements and entry IO value of the program onto the version matching the number
+/// of arguments they supply.
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
-    let syms = std::mem::replace(&mut fix_mod.symbols, Default::default());
+    let syms = mem::replace(&mut fix_mod.symbols, Default::default());
     for (sym_name, sym) in syms {
         fix_mod.symbols.insert(sym_name.clone(), sym.clone());
 
         // Add function pointer version as long as possible.
-        for arg_cnt in 1..(FUNPTR_ARGS_MAX + 1) {
+        for n_args in 1..(FUNPTR_ARGS_MAX + 1) {
             let mut expr = funptr_lambda(
                 &sym.generic_name,
                 sym.expr.as_ref().unwrap(),
-                arg_cnt as usize,
+                n_args as usize,
             );
             if expr.is_none() {
                 break;
@@ -44,14 +47,14 @@ pub fn run(fix_mod: &mut Program) {
             let expr = expr.take().unwrap();
             let ty = expr.type_.clone().unwrap();
             let mut name = sym_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
+            convert_to_funptr_name(name.name_as_mut(), n_args as usize);
             let mut generic_name = sym.generic_name.clone();
-            convert_to_funptr_name(generic_name.name_as_mut(), arg_cnt as usize);
+            convert_to_funptr_name(generic_name.name_as_mut(), n_args as usize);
             fix_mod.symbols.insert(
                 name.clone(),
                 Symbol {
                     name: name.clone(),
-                    generic_name: generic_name,
+                    generic_name,
                     ty,
                     expr: Some(expr.clone()),
                 },
@@ -73,27 +76,17 @@ pub fn run(fix_mod: &mut Program) {
     // Replace export statements so that they use uncurried functions.
     for export in &mut fix_mod.export_statements {
         let exported_value = export.value_expr.as_ref().unwrap();
-        let exported_value_name = &exported_value.get_var().name;
-        let exported_value_ty = exported_value.type_.as_ref().unwrap();
-        if !exported_value_ty.is_closure() {
+        let n_args = exported_value
+            .type_
+            .as_ref()
+            .unwrap()
+            .collect_app_src(usize::MAX)
+            .0
+            .len();
+        let Some(uncurried_value) = uncurried_symbol(&fix_mod.symbols, exported_value, n_args)
+        else {
             continue;
-        }
-        let mut n_args = exported_value_ty.collect_app_src(usize::MAX).0.len();
-        let uncurried_value = loop {
-            if n_args == 0 {
-                break None;
-            }
-            let mut name = exported_value_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), n_args);
-            if let Some(sym) = fix_mod.symbols.get(&name) {
-                break Some(sym);
-            }
-            n_args -= 1;
         };
-        if let None = uncurried_value {
-            continue;
-        }
-        let uncurried_value = uncurried_value.unwrap();
         export.value_name = uncurried_value.name.clone();
         export.value_expr =
             Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
@@ -101,34 +94,66 @@ pub fn run(fix_mod: &mut Program) {
 
     // Replace entry IO value so that it uses uncurried function.
     if let Some(entry_io_value) = &fix_mod.entry_io_value {
-        let entry_io_value_name = &entry_io_value.get_var().name;
-        let entry_io_value_ty = entry_io_value.type_.as_ref().unwrap();
-        if entry_io_value_ty.is_closure() {
-            // In this case, entry_io_value is expected to be the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type.
-            // Therefore, the number of arguments must be 1.
-            let mut name = entry_io_value_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), 1);
-            if let Some(sym) = fix_mod.symbols.get(&name) {
-                fix_mod.entry_io_value =
-                    Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
-            }
+        // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
+        // so it takes one argument.
+        if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
+            fix_mod.entry_io_value =
+                Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
 }
 
-// Is this symbol a Std::fix or its instance?
+/// The uncurried symbol to use in place of `value`, an expression referring to a global value.
+/// The uncurried version taking as many arguments as possible, up to `max_args`, is chosen.
+fn uncurried_symbol<'a>(
+    symbols: &'a Map<FullName, Symbol>,
+    value: &Arc<ExprNode>,
+    max_args: usize,
+) -> Option<&'a Symbol> {
+    let value_name = &value.get_var().name;
+    if !value.type_.as_ref().unwrap().is_closure() {
+        return None;
+    }
+    for n_args in (1..=max_args).rev() {
+        let mut name = value_name.clone();
+        convert_to_funptr_name(name.name_as_mut(), n_args);
+        if let Some(sym) = symbols.get(&name) {
+            return Some(sym);
+        }
+    }
+    None
+}
+
+/// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
+/// instance after the original, followed by the separator and the hash of the type it was
+/// instantiated at, so the separator is what tells `fix#<hash>` apart from a name that merely begins
+/// with `fix`.
 pub fn is_std_fix(name: &FullName) -> bool {
-    let fix_name = FullName::from_strs(&[STD_NAME], FIX_NAME);
-    *name == fix_name
-        || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
+    if name.namespace.names != [STD_NAME] {
+        return false;
+    }
+    match name.name.strip_prefix(FIX_NAME) {
+        Some(suffix) => suffix.is_empty() || suffix.starts_with(INSTANCIATED_NAME_SEPARATOR),
+        None => false,
+    }
 }
 
-fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
-    *name += &format!("#funptr{}", var_count);
+/// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
+/// arguments.
+fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
+    *name += &format!("#funptr{}", n_args);
 }
 
-// Convert lambda expression to function pointer taking `n` arguments.
-fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Option<Arc<ExprNode>> {
+/// Convert lambda expression to function pointer taking `n_args` arguments.
+///
+/// # Arguments
+/// * `generic_name` — the name of the global `expr` defines, before instantiation. `Std::fix` is
+///   identified by it, since that global has no function pointer version.
+fn funptr_lambda(
+    generic_name: &FullName,
+    expr: &Arc<ExprNode>,
+    n_args: usize,
+) -> Option<Arc<ExprNode>> {
     if is_std_fix(generic_name) {
         return None;
     }
@@ -138,12 +163,12 @@ fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Opt
         return None;
     }
 
-    // Eta expand the expression to take `n` arguments.
-    let expr = eta_expansion::run_on_expr(expr.clone(), n)?;
-    let (args, body) = collect_abs(&expr, n);
+    // Eta expand the expression to take `n_args` arguments.
+    let expr = eta_expansion::run_on_expr(expr.clone(), n_args)?;
+    let (args, body) = collect_abs(&expr, n_args);
 
     // Collect types of argments.
-    let (arg_types, body_ty) = expr_type.collect_app_src(n);
+    let (arg_types, body_ty) = expr_type.collect_app_src(n_args);
     assert_eq!(*body.type_.as_ref().unwrap(), body_ty);
 
     // Construct function pointer expression.
@@ -153,8 +178,14 @@ fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Opt
     Some(funptr)
 }
 
-// Decompose expression |x, y| z to ([x, y], z).
+/// Decompose expression `|x, y| z` to `([x, y], z)`.
+///
+/// # Arguments
+/// * `vars_limit` — the largest number of parameters to collect. A nested lambda that would carry
+///   the count past it is left in the returned body, parameters and all.
 fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+    /// Appends the parameters of the leading lambdas of `expr` to `vars` and returns the body they
+    /// wrap.
     fn collect_abs_inner(
         expr: &Arc<ExprNode>,
         vars: &mut Vec<Arc<Var>>,
@@ -177,10 +208,14 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
     (vars, val)
 }
 
-// Replace "call closure" expression to "call function pointer" expression.
+/// Replace "call closure" expression to "call function pointer" expression.
+///
+/// # Arguments
+/// * `symbol_names` — the names of every global defined in the program, including the uncurried
+///   ones. A call is rewritten only when the uncurried version it would name is among them.
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
-    symbols: &Set<FullName>,
+    symbol_names: &Set<FullName>,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = fun.type_.as_ref().unwrap();
@@ -200,7 +235,7 @@ fn replace_closure_call_to_funptr_call(
             }
             let mut f_funptr = v.as_ref().clone();
             convert_to_funptr_name(&mut f_funptr.name.name, args.len());
-            if !symbols.contains(&f_funptr.name) {
+            if !symbol_names.contains(&f_funptr.name) {
                 // If function pointer version is not defined, do not apply uncurry.
                 return expr.clone();
             }
@@ -217,50 +252,71 @@ fn replace_closure_call_to_funptr_call(
     }
 }
 
-// Replace all "call closure" subexpressions to "call function pointer" expression.
+/// Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
-    symbols: &Set<FullName>,
+    symbol_names: &Set<FullName>,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbols);
+    let expr = replace_closure_call_to_funptr_call(expr, symbol_names);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::LLVM(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbol_names))
                 .collect();
-            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(fun, symbols))
-                .set_app_args(args)
+            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
+                fun,
+                symbol_names,
+            ))
+            .set_app_args(args)
         }
-        Expr::Lam(_, val) => {
-            expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(val, symbols))
-        }
+        Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
+            val,
+            symbol_names,
+        )),
         Expr::Let(_, bound, val) => expr
-            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(bound, symbols))
-            .set_let_value(replace_closure_call_to_funptr_call_subexprs(val, symbols)),
+            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
+                bound,
+                symbol_names,
+            ))
+            .set_let_value(replace_closure_call_to_funptr_call_subexprs(
+                val,
+                symbol_names,
+            )),
         Expr::If(c, t, e) => expr
-            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, symbols))
-            .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, symbols))
-            .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, symbols)),
+            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
+                c,
+                symbol_names,
+            ))
+            .set_if_then(replace_closure_call_to_funptr_call_subexprs(
+                t,
+                symbol_names,
+            ))
+            .set_if_else(replace_closure_call_to_funptr_call_subexprs(
+                e,
+                symbol_names,
+            )),
         Expr::Match(cond, pat_vals) => {
-            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbols);
+            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbol_names);
             let mut new_pat_vals = vec![];
             for (pat, val) in pat_vals {
-                let val = replace_closure_call_to_funptr_call_subexprs(val, symbols);
+                let val = replace_closure_call_to_funptr_call_subexprs(val, symbol_names);
                 new_pat_vals.push((pat.clone(), val));
             }
             expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
         }
-        Expr::TyAnno(e, _) => {
-            expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, symbols))
-        }
+        Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
+            e,
+            symbol_names,
+        )),
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
             for (field_name, _, field_expr) in fields {
-                let field_expr = replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols);
+                let field_expr =
+                    replace_closure_call_to_funptr_call_subexprs(&field_expr, symbol_names);
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }
             expr
@@ -268,26 +324,36 @@ fn replace_closure_call_to_funptr_call_subexprs(
         Expr::ArrayLit(elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
-                expr = expr
-                    .set_array_lit_elem(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
+                expr = expr.set_array_lit_elem(
+                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
+                    i,
+                )
             }
             expr
         }
         Expr::FFICall(_, _, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
-                expr = expr
-                    .set_ffi_call_arg(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
+                expr = expr.set_ffi_call_arg(
+                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
+                    i,
+                )
             }
             expr
         }
         Expr::Eval(side, main) => expr
-            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(side, symbols))
-            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(main, symbols)),
+            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(
+                side,
+                symbol_names,
+            ))
+            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(
+                main,
+                symbol_names,
+            )),
     }
 }
 
-// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
+/// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
 fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     // Check if the expression is in the form of `let a = x in |b| y`.
     if !expr.is_let() {
@@ -316,7 +382,8 @@ fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     new_expr.set_type(expr.type_.clone().unwrap())
 }
 
-// Apply `internalize_let_to_var_one` recursively as long as it can increase the head `lam` expressions.
+/// Rewrites the head of `expr` to begin with as many nested lambdas as possible, by moving each
+/// `let` binding of a variable that stands between them inside the lambdas that follow it.
 pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Lam(_, body) => {
@@ -333,12 +400,49 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             // Apply `internalize_let_to_var_one` to the whole let expression.
             let expr = internalize_let_to_var_one(&expr);
 
-            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_tail` again.
+            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_head` again.
             match &*expr.expr {
                 Expr::Lam(_, _) => internalize_let_to_var_at_head(&expr),
                 _ => expr,
             }
         }
         _ => expr.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The name a global of `namespace` called `name` carries, once instantiated at some type.
+    fn instance_of(namespace: &str, name: &str) -> FullName {
+        FullName::from_strs(
+            &[namespace],
+            &format!("{}{}0123abcd", name, INSTANCIATED_NAME_SEPARATOR),
+        )
+    }
+
+    /// A global reaches the predicate both as declared and as instantiated at a type, so both forms
+    /// have to be recognized.
+    #[test]
+    fn std_fix_and_its_instances_are_recognized() {
+        assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
+        assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
+    }
+
+    /// A name sharing `fix` as a prefix belongs to a distinct global, whose application would be
+    /// rewritten into a fixed-point computation were the predicate to accept it.
+    #[test]
+    fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
+        assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
+    }
+
+    /// A module's own `fix` is an ordinary global, so recognition demands the `Std` namespace as
+    /// well as the name.
+    #[test]
+    fn a_global_named_fix_outside_std_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
+        assert!(!is_std_fix(&instance_of("Main", FIX_NAME)));
     }
 }
