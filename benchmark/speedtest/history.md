@@ -2,6 +2,14 @@
 
 Newer is above.
 
+**Rows measured before `cachegrind.py` fixed the environment are not comparable with rows after
+it.** Cachegrind counts the dynamic loader and libc start-up along with the program, and both walk
+the environment, so a row carried about 600 instructions per variable the shell that ran the
+harness happened to export — a background run and an interactive one differed by tens of thousands
+of instructions on every case. The measured command now runs with a fixed minimal environment, and
+the `startup` case records what a program that does nothing costs, so a row says how much of each
+figure was there before any of the work.
+
 ## fd0a7ee93588a9bd19e7ec67dcbd9b7ed26586c6
 
 Opens three kinds of column: the split accesses read from the hardware counters, the processor the
@@ -50,8 +58,10 @@ wide-return tail call reached main, so `mandelbrot` and `mandelbrot_fold` fall 5
 3.33% and `cp_lib_conv_zp` 1.99% — the same three cases and the same percentages `12165c4494bf`
 records for that work.
 
-Of what is left, every micro-benchmark moves by a constant 1,253 to 1,281 instructions, which is
-program startup rather than the measured loop. Four cases move by more: `fannkuch` +1.51%,
+Of what is left, every micro-benchmark moves by a constant 1,253 to 1,281 instructions. That is
+start-up, and the constant is the difference between the environments the two runs were measured
+from — about two variables' worth, at the 600 instructions each cost before `cachegrind.py` fixed
+the environment. Four cases move by more: `fannkuch` +1.51%,
 `cp_lib_bipartite` +1.10%, `cp_lib_lsegtree` +0.57% and `binary_trees` +0.40%, from the rest of the
 work merged between the two rows.
 
