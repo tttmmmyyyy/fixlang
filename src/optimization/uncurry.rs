@@ -32,11 +32,11 @@ pub fn run(fix_mod: &mut Program) {
         fix_mod.symbols.insert(sym_name.clone(), sym.clone());
 
         // Add function pointer version as long as possible.
-        for arg_cnt in 1..(FUNPTR_ARGS_MAX + 1) {
+        for n_args in 1..(FUNPTR_ARGS_MAX + 1) {
             let mut expr = funptr_lambda(
                 &sym.generic_name,
                 sym.expr.as_ref().unwrap(),
-                arg_cnt as usize,
+                n_args as usize,
             );
             if expr.is_none() {
                 break;
@@ -44,9 +44,9 @@ pub fn run(fix_mod: &mut Program) {
             let expr = expr.take().unwrap();
             let ty = expr.type_.clone().unwrap();
             let mut name = sym_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
+            convert_to_funptr_name(name.name_as_mut(), n_args as usize);
             let mut generic_name = sym.generic_name.clone();
-            convert_to_funptr_name(generic_name.name_as_mut(), arg_cnt as usize);
+            convert_to_funptr_name(generic_name.name_as_mut(), n_args as usize);
             fix_mod.symbols.insert(
                 name.clone(),
                 Symbol {
@@ -94,7 +94,8 @@ pub fn run(fix_mod: &mut Program) {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
         if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
-            fix_mod.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+            fix_mod.entry_io_value =
+                Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
 }
@@ -135,12 +136,16 @@ pub fn is_std_fix(name: &FullName) -> bool {
     }
 }
 
-fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
-    *name += &format!("#funptr{}", var_count);
+fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
+    *name += &format!("#funptr{}", n_args);
 }
 
-// Convert lambda expression to function pointer taking `n` arguments.
-fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Option<Arc<ExprNode>> {
+// Convert lambda expression to function pointer taking `n_args` arguments.
+fn funptr_lambda(
+    generic_name: &FullName,
+    expr: &Arc<ExprNode>,
+    n_args: usize,
+) -> Option<Arc<ExprNode>> {
     if is_std_fix(generic_name) {
         return None;
     }
@@ -150,12 +155,12 @@ fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Opt
         return None;
     }
 
-    // Eta expand the expression to take `n` arguments.
-    let expr = eta_expansion::run_on_expr(expr.clone(), n)?;
-    let (args, body) = collect_abs(&expr, n);
+    // Eta expand the expression to take `n_args` arguments.
+    let expr = eta_expansion::run_on_expr(expr.clone(), n_args)?;
+    let (args, body) = collect_abs(&expr, n_args);
 
     // Collect types of argments.
-    let (arg_types, body_ty) = expr_type.collect_app_src(n);
+    let (arg_types, body_ty) = expr_type.collect_app_src(n_args);
     assert_eq!(*body.type_.as_ref().unwrap(), body_ty);
 
     // Construct function pointer expression.
@@ -192,7 +197,7 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 // Replace "call closure" expression to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
-    symbols: &Set<FullName>,
+    symbol_names: &Set<FullName>,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = fun.type_.as_ref().unwrap();
@@ -212,7 +217,7 @@ fn replace_closure_call_to_funptr_call(
             }
             let mut f_funptr = v.as_ref().clone();
             convert_to_funptr_name(&mut f_funptr.name.name, args.len());
-            if !symbols.contains(&f_funptr.name) {
+            if !symbol_names.contains(&f_funptr.name) {
                 // If function pointer version is not defined, do not apply uncurry.
                 return expr.clone();
             }
@@ -232,47 +237,68 @@ fn replace_closure_call_to_funptr_call(
 // Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
-    symbols: &Set<FullName>,
+    symbol_names: &Set<FullName>,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbols);
+    let expr = replace_closure_call_to_funptr_call(expr, symbol_names);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::LLVM(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbols))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbol_names))
                 .collect();
-            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(fun, symbols))
-                .set_app_args(args)
+            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
+                fun,
+                symbol_names,
+            ))
+            .set_app_args(args)
         }
-        Expr::Lam(_, val) => {
-            expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(val, symbols))
-        }
+        Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
+            val,
+            symbol_names,
+        )),
         Expr::Let(_, bound, val) => expr
-            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(bound, symbols))
-            .set_let_value(replace_closure_call_to_funptr_call_subexprs(val, symbols)),
+            .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
+                bound,
+                symbol_names,
+            ))
+            .set_let_value(replace_closure_call_to_funptr_call_subexprs(
+                val,
+                symbol_names,
+            )),
         Expr::If(c, t, e) => expr
-            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, symbols))
-            .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, symbols))
-            .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, symbols)),
+            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
+                c,
+                symbol_names,
+            ))
+            .set_if_then(replace_closure_call_to_funptr_call_subexprs(
+                t,
+                symbol_names,
+            ))
+            .set_if_else(replace_closure_call_to_funptr_call_subexprs(
+                e,
+                symbol_names,
+            )),
         Expr::Match(cond, pat_vals) => {
-            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbols);
+            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbol_names);
             let mut new_pat_vals = vec![];
             for (pat, val) in pat_vals {
-                let val = replace_closure_call_to_funptr_call_subexprs(val, symbols);
+                let val = replace_closure_call_to_funptr_call_subexprs(val, symbol_names);
                 new_pat_vals.push((pat.clone(), val));
             }
             expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
         }
-        Expr::TyAnno(e, _) => {
-            expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, symbols))
-        }
+        Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
+            e,
+            symbol_names,
+        )),
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
             for (field_name, _, field_expr) in fields {
-                let field_expr = replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols);
+                let field_expr =
+                    replace_closure_call_to_funptr_call_subexprs(&field_expr, symbol_names);
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }
             expr
@@ -280,22 +306,32 @@ fn replace_closure_call_to_funptr_call_subexprs(
         Expr::ArrayLit(elems) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
-                expr = expr
-                    .set_array_lit_elem(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
+                expr = expr.set_array_lit_elem(
+                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
+                    i,
+                )
             }
             expr
         }
         Expr::FFICall(_, _, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
-                expr = expr
-                    .set_ffi_call_arg(replace_closure_call_to_funptr_call_subexprs(e, symbols), i)
+                expr = expr.set_ffi_call_arg(
+                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
+                    i,
+                )
             }
             expr
         }
         Expr::Eval(side, main) => expr
-            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(side, symbols))
-            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(main, symbols)),
+            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(
+                side,
+                symbol_names,
+            ))
+            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(
+                main,
+                symbol_names,
+            )),
     }
 }
 
@@ -345,7 +381,7 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             // Apply `internalize_let_to_var_one` to the whole let expression.
             let expr = internalize_let_to_var_one(&expr);
 
-            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_tail` again.
+            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_head` again.
             match &*expr.expr {
                 Expr::Lam(_, _) => internalize_let_to_var_at_head(&expr),
                 _ => expr,
