@@ -9855,6 +9855,93 @@ main: IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// Reading an element out of a struct's array leaves no reference to the array behind, whatever kind
+// of expression the read value is later consumed by. Each function below places the use of the read
+// behind a different expression form, which is what decides whether the read may be moved to it.
+#[test]
+pub fn test_read_before_modify_keeps_the_array_unique() {
+    let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
+        + r##"
+
+type Bx = unbox struct {
+    arr: Array I64,
+    tag: I64,
+};
+
+// The read value is returned in a tuple built after the modification.
+via_tuple : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_tuple"));
+    (b, v)
+);
+
+// The read value is used in one branch of an `if`.
+via_branch : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_branch"));
+    if i == 0 { (b, v) } else { (b, 0) }
+);
+
+// The read value becomes a field of a struct literal whose other field mentions no local name.
+via_struct_field : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_struct_field"));
+    let out = Bx { arr: Array::empty(0), tag: v };
+    (b, out.@tag)
+);
+
+// The read value is used in a `match` arm.
+via_match : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_match"));
+    let o : Option I64 = some(v);
+    match o {
+        some(x) => (b, x),
+        none(_) => (b, -1)
+    }
+);
+
+// The read value is captured by a lambda that is applied afterwards.
+via_lambda : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_lambda"));
+    let f = |k| k + v;
+    (b, f(1))
+);
+
+// The read value is the argument of a global function whose other argument is a literal.
+via_global_call : I64 -> Bx -> (Bx, I64) = |i, b| (
+    let v = b.@arr.@(i);
+    let b = b.mod_arr(|a| a.assert_unique(|_| "via_global_call"));
+    (b, max(1, v))
+);
+
+main : IO () = (
+    let mk = |_| Bx { arr: Array::fill(4, 7), tag: 0 };
+    let (b0, v0) = mk(()).via_tuple(1);
+    let (b1, v1) = mk(()).via_branch(0);
+    let (b2, v2) = mk(()).via_struct_field(2);
+    let (b3, v3) = mk(()).via_match(3);
+    let (b4, v4) = mk(()).via_lambda(0);
+    let (b5, v5) = mk(()).via_global_call(1);
+    eval b0;
+    eval b1;
+    eval b2;
+    eval b3;
+    eval b4;
+    eval b5;
+    assert_eq(|_|"via_tuple", v0, 7);;
+    assert_eq(|_|"via_branch", v1, 7);;
+    assert_eq(|_|"via_struct_field", v2, 7);;
+    assert_eq(|_|"via_match", v3, 7);;
+    assert_eq(|_|"via_lambda", v4, 8);;
+    assert_eq(|_|"via_global_call", v5, 7);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_identity_monad() {
     // Test Identity Monad: pure and bind
