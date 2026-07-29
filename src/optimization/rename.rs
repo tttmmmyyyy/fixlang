@@ -105,12 +105,6 @@ impl Substitutor {
         introduced_names: &Vec<FullName>,
         expr: &Arc<ExprNode>,
     ) -> Map<FullName, FullName> {
-        // If the local name being introduced belongs to free names of values of `self.map`, we need to change the local name to something else.
-        // The conditions that the new name must satisfy are:
-        // - It must not conflict with `to_names`.
-        // - It must not conflict with the free names of this expression.
-        // - Additionally, the local names should not conflict with each other.
-
         let introduced_names_set = introduced_names.iter().cloned().collect::<Set<FullName>>();
         assert!(
             introduced_names_set.len() == introduced_names.len(),
@@ -122,6 +116,7 @@ impl Substitutor {
                 .join(", ")
         );
 
+        // The names the replacement expressions read, which an introduced name would capture.
         let mut to_names = Set::default();
         for to in self.map.values() {
             to_names.extend(to.free_vars());
@@ -166,8 +161,8 @@ impl ExprVisitor for Substitutor {
     }
 
     /// Substitutes the free names an inline-LLVM node reads: a name mapped to another name is
-    /// renamed in place, and a name mapped to a general expression becomes a `let` wrapped around
-    /// the node.
+    /// renamed in place, and a name mapped to a general expression is renamed to a fresh name,
+    /// which a `let` wrapped around the node binds to that expression.
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // A parent expression keeps the subexpression it rebuilt only when the subexpression's
         // traversal reports a change, so every rewrite below has to be recorded in `changed`.
@@ -259,6 +254,9 @@ impl ExprVisitor for Substitutor {
         EndVisitResult::unchanged(expr)
     }
 
+    /// Substitutes the body of a lambda under the scope its parameter opens, renaming the parameter
+    /// when it would capture a name a replacement expression reads. Panics on a lambda taking
+    /// several parameters.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -298,6 +296,9 @@ impl ExprVisitor for Substitutor {
         EndVisitResult::unchanged(expr)
     }
 
+    /// Substitutes the bound expression of a `let` in the enclosing scope and its body under the
+    /// scope its pattern opens, renaming the names the pattern binds when they would capture a name
+    /// a replacement expression reads.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -355,6 +356,9 @@ impl ExprVisitor for Substitutor {
         EndVisitResult::unchanged(expr)
     }
 
+    /// Substitutes the condition of a `match` in the enclosing scope and each arm's body under the
+    /// scope that arm's pattern opens, renaming the names the pattern binds when they would capture
+    /// a name a replacement expression reads.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
