@@ -22,6 +22,7 @@ Concepts:
 - **Performance** 
   - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
   - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+  - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
 
 The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
