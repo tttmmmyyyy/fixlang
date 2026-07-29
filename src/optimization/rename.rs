@@ -497,8 +497,8 @@ pub fn generate_new_names_pred(is_ng_name: impl Fn(&FullName) -> bool, n: usize)
     names
 }
 
-// Rename the names in the pattern so that they will be disjoint from the set `ng_list`.
-// Also, apply the same renaming to the value expression.
+/// Renames the names `pattern` binds so that they are disjoint from `ng_list`, and applies the same
+/// renaming to `value`, the expression evaluated under the pattern.
 pub fn rename_pattern_value_avoiding(
     ng_list: &Set<FullName>,
     mut pattern: Arc<PatternNode>,
@@ -515,6 +515,8 @@ pub fn rename_pattern_value_avoiding(
     (pattern, value)
 }
 
+/// Renames the names the pattern of the `let` expression `let_expr` binds so that they are disjoint
+/// from `ng_list`, and applies the same renaming to its body.
 pub fn rename_let_pattern_avoiding(
     ng_list: &Set<FullName>,
     let_expr: Arc<ExprNode>,
@@ -525,6 +527,8 @@ pub fn rename_let_pattern_avoiding(
     let_expr.set_let_pat(pattern).set_let_value(value)
 }
 
+/// Renames the names each arm of the `match` expression `match_expr` binds so that they are
+/// disjoint from `ng_list`, and applies the same renaming to that arm's body.
 pub fn rename_match_pattern_avoiding(
     ng_list: &Set<FullName>,
     match_expr: Arc<ExprNode>,
@@ -539,6 +543,8 @@ pub fn rename_match_pattern_avoiding(
     match_expr.set_match_pat_vals(pat_vals)
 }
 
+/// Renames the parameter of the lambda `lam_expr` so that it is disjoint from `ng_list`, and
+/// applies the same renaming to the body. Panics on a lambda taking several parameters.
 pub fn rename_lam_param_avoiding(
     ng_list: &Set<FullName>,
     lam_expr: Arc<ExprNode>,
@@ -566,8 +572,9 @@ pub fn rename_lam_param_avoiding(
         .set_lam_body(new_body)
 }
 
-// Consider the situation that let, match or lam expression binds variables `bound_vars` and evaluates the expression `expr`.
-// This function calculates how to rename bound variables so that they are disjoint from `ng_list`.
+/// Computes how to rename the variables `bound_vars` that a `let`, `match` or lambda binds over the
+/// expression `value`, so that the renamed variables are disjoint from `ng_list`. A variable that
+/// can keep its name has no entry in the returned map.
 fn calculate_renaming_bound_vars_avoiding(
     ng_list: &Set<FullName>,
     bound_vars: Vec<FullName>,
