@@ -105,18 +105,78 @@ it.fold(s0, |i, s| s + n)
 
 After applying the pull-let transformation (2) and (3), the second code can be transformed into a form that can be applied with decapturing optimization.
 
+# Evaluation order
+
+Transformations (2) and (3) also set the order in which a call evaluates its arguments: the `let`s
+leave an application from the outside in, and the argument bound by the outermost `let` is evaluated
+first. A call written `f(x, y)` nests as `f(x)(y)` and one written `x.f(y)` nests as `f(y)(x)`, so
+`ExprNode::app_order` is what says whether the function position or the argument carries the
+argument written first. Both forms evaluate their arguments in the order they are written.
+
 */
 
 use std::sync::Arc;
 
 use crate::{
     ast::{
-        expr::{expr_app_typed, expr_let_typed, expr_var, var_var, ExprNode},
+        expr::{
+            expr_app_typed, expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr,
+            ExprNode,
+        },
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
     optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
+
+/// Transformation (2): `{expr0}({non-variable-expr})` to `let f = {non-variable-expr}; {expr0}(f)`.
+fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+    let fun = app.get_app_func();
+    let arg = app.get_app_args()[0].clone();
+
+    let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
+    let arg_ty = arg.type_.as_ref().unwrap();
+    let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
+    let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
+
+    expr_let_typed(
+        f_pat,
+        arg,
+        expr_app_typed(fun, vec![f_var]).set_app_order(app.app_order.clone()),
+    )
+}
+
+/// Transformation (3): `(let {pat} = {expr0}; {expr1})({expr2})` to
+/// `let {pat'} = {expr0}; {expr1'}({expr2})`.
+fn hoist_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+    let fun = app.get_app_func();
+    let arg = app.get_app_args()[0].clone();
+
+    let expr0 = fun.get_let_bound();
+    let expr1 = fun.get_let_value();
+    let pat = fun.get_let_pat();
+
+    // Rename `pat` and `expr1` to avoid conflicts with free variables in the argument.
+    let ng_names = arg.free_vars();
+    let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
+
+    expr_let_typed(
+        pat,
+        expr0,
+        expr_app_typed(expr1, vec![arg]).set_app_order(app.app_order.clone()),
+    )
+}
+
+/// Whether the function position of an application still holds a `let` for this pass to pull out:
+/// an application on its spine whose argument is not a variable yet, or a `let` that transformation
+/// (3) hoists.
+fn has_something_to_pull(fun: &Arc<ExprNode>) -> bool {
+    match fun.expr.as_ref() {
+        Expr::App(fun, args) => args.iter().any(|arg| !arg.is_var()) || has_something_to_pull(fun),
+        Expr::Let(_, _, _) => true,
+        _ => false,
+    }
+}
 
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut expr = expr.clone();
@@ -179,32 +239,26 @@ impl ExprVisitor for PullLet {
         assert_eq!(args.len(), 1);
         let arg = &args[0];
 
+        // The `let`s leave an application in the order the call evaluates its arguments in, so
+        // which of the function position and this argument is taken first is what sets that order.
+        // `f(x, y)` nests as `f(x)(y)`, which puts the argument written first on the inner
+        // application: settle the function position, then pull this one. `x.f(y)` nests as
+        // `f(y)(x)`, which puts the argument written first on this application.
+        if expr.app_order == AppSourceCodeOrderType::FX {
+            if fun.is_let() {
+                return StartVisitResult::ReplaceAndRevisit(hoist_let_out_of_function(expr));
+            }
+            if has_something_to_pull(&fun) {
+                return StartVisitResult::VisitChildren;
+            }
+        }
+
         if !arg.is_var() {
-            // Apply the transformation (2).
-            let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
-            let arg_ty = arg.type_.as_ref().unwrap();
-            let f_pat =
-                PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
-            let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
-            let expr = expr_let_typed(f_pat, arg.clone(), expr_app_typed(fun, vec![f_var]));
-            return StartVisitResult::ReplaceAndRevisit(expr);
+            return StartVisitResult::ReplaceAndRevisit(pull_argument_into_let(expr));
         }
 
         if fun.is_let() {
-            // Apply the transformation (3).
-            let expr0 = fun.get_let_bound();
-            let expr1 = fun.get_let_value();
-            let pat = fun.get_let_pat();
-            let expr2 = arg.clone();
-
-            // Rename `pat` and `expr1` to avoid conflicts with free variables in `expr2`.
-            let ng_names = expr2.free_vars();
-            let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
-
-            // Construct the new expression.
-            let expr = expr_let_typed(pat, expr0, expr_app_typed(expr1, vec![expr2]));
-
-            return StartVisitResult::ReplaceAndRevisit(expr);
+            return StartVisitResult::ReplaceAndRevisit(hoist_let_out_of_function(expr));
         }
 
         StartVisitResult::VisitChildren

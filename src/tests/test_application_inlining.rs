@@ -34,6 +34,27 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// The argument `x + 10` of `(let x = ..; ..)(x + 10)` denotes the outer `x` after the
+    /// application is moved inside the `let`, where the name `x` denotes the bound lambda. An
+    /// argument that has something to evaluate is bound to a fresh name, and that binding lands
+    /// inside the `let` as well.
+    #[test]
+    fn test_bound_argument_pushed_into_a_let_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        apply_shadowing_let : I64 -> I64;
+        apply_shadowing_let = |x| (let x = |v : I64| v + 1; x)(x + 10);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `x`", apply_shadowing_let(10), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// The argument `a` of `(match o { some(a) => a, .. })(a)` denotes the outer `a` after the
     /// application is moved into the arms, where the name `a` denotes what the pattern binds.
     #[test]
