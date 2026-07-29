@@ -256,20 +256,20 @@ def run_benchmark(timeout=240):
     llvm_passes_file_path = '../../' + LLVM_PASSES_TMP_FILE
 
     try:
-        cp = subprocess.run(['./a.out', '--no-save', '--llvm-passes-file', llvm_passes_file_path],
+        proc = subprocess.run(['./a.out', '--no-save', '--llvm-passes-file', llvm_passes_file_path],
                             capture_output=True, text=True, timeout=timeout, cwd=work_dir)
-        if cp.returncode != 0:
+        if proc.returncode != 0:
             print('run failed.')
             print('stdout:')
-            print(cp.stdout)
+            print(proc.stdout)
             print('stderr:')
-            print(cp.stderr)
+            print(proc.stderr)
             return None
         else:
-            # Split the output by comma and take the second element
-            costs = cp.stdout.strip().split(',')
+            # The commit hash, then one number per cachegrind column.
+            # (must stay in sync with the line `benchmark/speedtest/main.fix` prints)
+            costs = proc.stdout.strip().split(',')
             print('Benchmark result:', costs)
-            # remove the first element (it is not a number)
             return BenchmarkResult([float(x) for x in costs[1:]])
 
     except subprocess.TimeoutExpired:
