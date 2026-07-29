@@ -20,7 +20,7 @@ use crate::{
     },
     constants::{FUNPTR_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
     fixstd::stdlib::FIX_NAME,
-    misc::Set,
+    misc::{Map, Set},
     optimization::eta_expansion,
 };
 use std::{sync::Arc, usize};
@@ -51,7 +51,7 @@ pub fn run(fix_mod: &mut Program) {
                 name.clone(),
                 Symbol {
                     name: name.clone(),
-                    generic_name: generic_name,
+                    generic_name,
                     ty,
                     expr: Some(expr.clone()),
                 },
@@ -73,27 +73,17 @@ pub fn run(fix_mod: &mut Program) {
     // Replace export statements so that they use uncurried functions.
     for export in &mut fix_mod.export_statements {
         let exported_value = export.value_expr.as_ref().unwrap();
-        let exported_value_name = &exported_value.get_var().name;
-        let exported_value_ty = exported_value.type_.as_ref().unwrap();
-        if !exported_value_ty.is_closure() {
+        let n_args = exported_value
+            .type_
+            .as_ref()
+            .unwrap()
+            .collect_app_src(usize::MAX)
+            .0
+            .len();
+        let Some(uncurried_value) = uncurried_symbol(&fix_mod.symbols, exported_value, n_args)
+        else {
             continue;
-        }
-        let mut n_args = exported_value_ty.collect_app_src(usize::MAX).0.len();
-        let uncurried_value = loop {
-            if n_args == 0 {
-                break None;
-            }
-            let mut name = exported_value_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), n_args);
-            if let Some(sym) = fix_mod.symbols.get(&name) {
-                break Some(sym);
-            }
-            n_args -= 1;
         };
-        if let None = uncurried_value {
-            continue;
-        }
-        let uncurried_value = uncurried_value.unwrap();
         export.value_name = uncurried_value.name.clone();
         export.value_expr =
             Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
@@ -101,19 +91,34 @@ pub fn run(fix_mod: &mut Program) {
 
     // Replace entry IO value so that it uses uncurried function.
     if let Some(entry_io_value) = &fix_mod.entry_io_value {
-        let entry_io_value_name = &entry_io_value.get_var().name;
-        let entry_io_value_ty = entry_io_value.type_.as_ref().unwrap();
-        if entry_io_value_ty.is_closure() {
-            // In this case, entry_io_value is expected to be the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type.
-            // Therefore, the number of arguments must be 1.
-            let mut name = entry_io_value_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), 1);
-            if let Some(sym) = fix_mod.symbols.get(&name) {
-                fix_mod.entry_io_value =
-                    Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
-            }
+        // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
+        // so it takes one argument.
+        if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
+            fix_mod.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
+}
+
+/// The uncurried symbol to use in place of `value`, an expression referring to a global value.
+/// The uncurried version taking as many arguments as possible, up to `max_args`, is chosen.
+/// `None` if `value` is not a closure, or if no uncurried version of it is defined.
+fn uncurried_symbol<'a>(
+    symbols: &'a Map<FullName, Symbol>,
+    value: &Arc<ExprNode>,
+    max_args: usize,
+) -> Option<&'a Symbol> {
+    let value_name = &value.get_var().name;
+    if !value.type_.as_ref().unwrap().is_closure() {
+        return None;
+    }
+    for n_args in (1..=max_args).rev() {
+        let mut name = value_name.clone();
+        convert_to_funptr_name(name.name_as_mut(), n_args);
+        if let Some(sym) = symbols.get(&name) {
+            return Some(sym);
+        }
+    }
+    None
 }
 
 /// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
