@@ -10,6 +10,22 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## d51e4a2eeaf179d01e5a918974b3a28e40dfbb3f
+
+Removes two latent defects from the substitutor that rewrites free names (PR #127): a rewrite the
+substitutor reported as unchanged, which the enclosing `let` or `match` then discarded, and a `let`
+the inline-LLVM substitution introduces capturing a name that another replacement reads.
+
+Neither is reachable through the compiler's own passes, so this row is here to show that the code
+generated for these cases is the same. It is: no case moves by more than 0.05% in instructions or
+in memory accesses, and the totals over the 46 cases move by -0.0000% and -0.0001%. The largest
+movements are around fourteen instructions, on the cases small enough for that to register
+(`startup`, `sum_by_fix`).
+
+The split-access column drops by roughly 230 on nearly every case, `startup` included. A case that
+runs no code of its own cannot have gained that from a compiler change, so read it as process
+start-up rather than as anything this row measures.
+
 ## a9a1b1a2bd93952205e127f3cbe603d2e6a6c2c0
 
 Starts a large array's elements on a 32-byte boundary (PR #128), so that a vectorized loop over them
