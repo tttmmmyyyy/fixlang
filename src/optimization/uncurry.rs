@@ -102,7 +102,6 @@ pub fn run(fix_mod: &mut Program) {
 
 /// The uncurried symbol to use in place of `value`, an expression referring to a global value.
 /// The uncurried version taking as many arguments as possible, up to `max_args`, is chosen.
-/// `None` if `value` is not a closure, or if no uncurried version of it is defined.
 fn uncurried_symbol<'a>(
     symbols: &'a Map<FullName, Symbol>,
     value: &Arc<ExprNode>,
@@ -136,11 +135,17 @@ pub fn is_std_fix(name: &FullName) -> bool {
     }
 }
 
+/// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
+/// arguments.
 fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
     *name += &format!("#funptr{}", n_args);
 }
 
-// Convert lambda expression to function pointer taking `n_args` arguments.
+/// Convert lambda expression to function pointer taking `n_args` arguments.
+///
+/// # Arguments
+/// * `generic_name` — the name of the global `expr` defines, before instantiation. `Std::fix` is
+///   identified by it, since that global has no function pointer version.
 fn funptr_lambda(
     generic_name: &FullName,
     expr: &Arc<ExprNode>,
@@ -194,7 +199,11 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
     (vars, val)
 }
 
-// Replace "call closure" expression to "call function pointer" expression.
+/// Replace "call closure" expression to "call function pointer" expression.
+///
+/// # Arguments
+/// * `symbol_names` — the names of every global defined in the program, including the uncurried
+///   ones. A call is rewritten only when the uncurried version it would name is among them.
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbol_names: &Set<FullName>,
@@ -234,7 +243,7 @@ fn replace_closure_call_to_funptr_call(
     }
 }
 
-// Replace all "call closure" subexpressions to "call function pointer" expression.
+/// Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
     symbol_names: &Set<FullName>,
@@ -403,18 +412,24 @@ mod tests {
         )
     }
 
+    /// A global reaches the predicate both as declared and as instantiated at a type, so both forms
+    /// have to be recognized.
     #[test]
     fn std_fix_and_its_instances_are_recognized() {
         assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
         assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
     }
 
+    /// A name sharing `fix` as a prefix belongs to a distinct global, whose application would be
+    /// rewritten into a fixed-point computation were the predicate to accept it.
     #[test]
     fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
         assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
         assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
     }
 
+    /// A module's own `fix` is an ordinary global, so recognition demands the `Std` namespace as
+    /// well as the name.
     #[test]
     fn a_global_named_fix_outside_std_is_not_std_fix() {
         assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
