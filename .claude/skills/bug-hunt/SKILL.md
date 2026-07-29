@@ -125,6 +125,14 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 ### Detectors
 
+#### Show the detector fires before trusting its silence
+
+A detector that reports nothing is evidence only once you have seen it report something. Every detector has a way of going quiet while looking exactly as it does when it passes: a sanitizer can die on an instruction it cannot decode and still print a zero-error summary, a differential run can compare two binaries the optimizer emptied of the code under test, an assertion probe can sit on a path the corpus never reaches, a bounds check can be masked by slack the allocator handed out. So before a clean sweep goes in the report, inject the failure the detector exists to catch — read one element past the end, leak one block, corrupt one byte, break the invariant the assert guards — and confirm it is reported. When it is not, the sweep measured nothing, and *that* is the finding: a detector the project relies on is silently inert, and every clean result taken with it is void.
+
+Two shapes recur. **The detector never ran on the code**: the probe compiled away, the arm was unreachable, the process died before it got there. **The detector ran but could not see the fault**: the access stayed inside a block bigger than the data, the race needed a schedule that never happened, the wrong value was rounded away. The injection separates them, and both answers are worth more than the silence was.
+
+This applies with most force right after a change **tightens a bound that used to be loose** — an allocation sized exactly where it used to be over-approximate, a length that used to be padded, a timeout that used to be generous. The slack was hiding every violation smaller than itself; when it goes, the violations become reachable, and a detector proven to fire is how you find out whether any existed.
+
 #### Run the same program at every optimization level
 
 `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.

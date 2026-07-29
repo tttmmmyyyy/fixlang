@@ -27,12 +27,12 @@ namespace CSV {
     serialize : CSV -> String;
     serialize = |csv| (
         if csv.is_empty { "" };
-        let header_n = csv.@(0).@size;
+        let header_size = csv.@(0).@size;
         let csv = csv.map(|row| 
-            if row.@size > header_n {
+            if row.@size > header_size {
                 undefined("error: Row has more columns than header: " + row.to_string)
             };
-            row.resize(header_n, "")
+            row.resize(header_size, "")
         );
         csv.map(|row| row.to_iter.join(",")).to_iter.join("\n")
     );
@@ -77,8 +77,8 @@ namespace CSV {
         if csv.is_empty {
             undefined("error: Cannot add row to empty CSV")
         };
-        let header_n = csv.@(0).@size;
-        csv.push_back(Array::fill(header_n, ""))
+        let header_size = csv.@(0).@size;
+        csv.push_back(Array::fill(header_size, ""))
     );
 }
 
@@ -99,19 +99,19 @@ main : IO ();
 main = (
     let config = EZSConfig::default.set_execution_trace(true);
 
-    let arg_ss = *get_args;
+    let raw_args = *get_args;
     let args = loop((1, Args::default), |(i, args)|
-        if i >= arg_ss.@size { break $ args };
-        if arg_ss.@(i) == "--no-save" {
+        if i >= raw_args.@size { break $ args };
+        if raw_args.@(i) == "--no-save" {
             continue $ (i + 1, args.set_no_save(true))
-        } else if arg_ss.@(i) == "--llvm-passes-file" {
-            if i + 1 >= arg_ss.@size {
+        } else if raw_args.@(i) == "--llvm-passes-file" {
+            if i + 1 >= raw_args.@size {
                 undefined("error: --llvm-passes-file requires a file path argument")
             };
-            let llvm_passes_file = arg_ss.@(i + 1);
+            let llvm_passes_file = raw_args.@(i + 1);
             continue $ (i + 2, args.set_llvm_passes_file(llvm_passes_file))
         } else {
-            undefined("error: Unknown argument: " + arg_ss.@(i))
+            undefined("error: Unknown argument: " + raw_args.@(i))
         }
     );
 
@@ -145,6 +145,14 @@ main = (
     let log = log.add_row;
     let log = log.set(_COMMIT_HASH, log.@size - 1, commit_hash);
 
+    // The processor the row was measured on. The cachegrind columns do not depend on it,
+    // but the counters read from the hardware do, so a row from another machine cannot be
+    // compared with its neighbours on those.
+    let (cpu, _, cpu_code) = *["python3", "perf_counters.py", "--cpu"].ez_run_oec(config);
+    let log = if cpu_code != 0_U8 { log } else {
+        log.set("cpu", log.@size - 1, cpu.strip_spaces)
+    };
+
     // See the cases directory.
     ez_cd(config, _CASES_PATH);;
     let dirs = *["find", ".", "-maxdepth", "1", "-type", "d"].ez_run_o(config);
@@ -157,14 +165,14 @@ main = (
     );
     let log = *dirs.fold_m(log, |dir, log|
         ez_cd(config, dir);;
-        let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*", "--allow-preliminary-commands"];
-        let com = if args.@llvm_passes_file != "" {
-            com.push_back("--llvm-passes-file")
-               .push_back("../../" + args.@llvm_passes_file)
+        let command = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*", "--allow-preliminary-commands"];
+        let command = if args.@llvm_passes_file != "" {
+            command.push_back("--llvm-passes-file")
+                   .push_back("../../" + args.@llvm_passes_file)
         } else {
-            com
+            command
         };
-        com.ez_run_o(config);;
+        command.ez_run_o(config);;
         let bench = *["python3", "../../cachegrind-benchmarking/cachegrind.py", "./a.out"].ez_run_o(config);
         // Get the last line
         let bench = bench.strip_spaces.split("\n").to_array.get_last;
@@ -181,6 +189,31 @@ main = (
         // Add to the log.
         let log = log.set(inst, log.@size - 1, bench.@(0));
         let log = log.set(mem, log.@size - 1, bench.@(1));
+        // Accesses split across a cache line, which cachegrind's cache model cannot express
+        // and which cost real time. Only this counter is recorded: it is deterministic, as
+        // every column of this log must be, while the cycle count the same tool reports
+        // rises with whatever else the machine is doing and a run takes an hour, over which
+        // that is not constant. Read cycles by hand on an idle machine instead.
+        // On a machine without the counter the column stays empty and the run carries on.
+        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
+        let log = if perf_code != 0_U8 { log } else {
+            let perf = perf.strip_spaces.split(",").to_array;
+            if perf.@(0) == "" { log };
+            log.set(case_name + "-splits", log.@size - 1, perf.@(0))
+        };
+        // A case may carry `ref.c` and `ref.rs`: the same program on the same input,
+        // measured the same way, so the chart can show how far the Fix line is from C and
+        // Rust. The column name keeps the language last, which is what holds these out of
+        // the cost line printed at the end -- a reference does not move with a pass
+        // sequence, so it has no business in what the pass search compares.
+        let log = *["c", "rust"].to_iter.fold_m(log, |lang, log|
+            let (ref_out, _, ref_code) = *["python3", "../../reference.py", lang].ez_run_oec(config);
+            if ref_code != 0_U8 { log.pure };
+            let ref_out = ref_out.strip_spaces.split(",").to_array;
+            if ref_out.@size < 2 { log.pure };
+            let log = log.set(case_name + "-inst-" + lang, log.@size - 1, ref_out.@(0));
+            log.set(case_name + "-mem-" + lang, log.@size - 1, ref_out.@(1)).pure
+        );
         // Change back to the parent directory.
         ez_cd(config, "..");;
         log.pure
@@ -188,14 +221,21 @@ main = (
 
     ez_cd(config, "..");;
 
-    // Save the log to the log file and update the graph.
-    unless(args.@no_save, 
-        write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1));;
-        ["python3", "graph.py"].ez_run_o(config).forget
+    // Save the log to the log file.
+    unless(args.@no_save,
+        write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1))
     );;
 
-    // Print the latest log.
-    log.@(log.@size - 1).to_iter.join(",").println;;
+    // Print the commit hash and this run's cachegrind costs, and those alone: `run_benchmark`
+    // in `passes_optimizer.py` reads this line back and takes every field after the hash as a
+    // number to compare one LLVM pass sequence against another, so every field here must be
+    // a number that a pass sequence moves.
+    let header = log.@(0);
+    let latest = log.@(log.@size - 1);
+    let costs = Iterator::range(0, header.@size).filter(|i|
+        i == 0 || header.@(i).ends_with("-inst") || header.@(i).ends_with("-mem")
+    ).map(|i| latest.@(i));
+    costs.join(",").println;;
     
     pure()
 );

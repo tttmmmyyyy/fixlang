@@ -5,31 +5,10 @@ import Std::{
     LessThan::max, LoopState::{break, continue}, Monad::pure
 };
 
-// fannkuch-redux: heavy in-place integer-array mutation. `Array::set` and the
-// struct field modifiers update in place while the reference is unique, so this
-// exercises Fix's unique-reference O(1) array update over every permutation.
-//
-// The permutation is handed to a function that mutates it while the state keeps it
-// for the step after, so each permutation costs one copy-on-write clone. That is
-// what a Fix program says when it does not manage a buffer of its own;
-// `fannkuch_scratch` computes the same thing over one it carries, and the pair
-// measures what the clone costs.
-
-// Count prefix-reversal flips on `perm` (mutated locally) until perm[0] == 0.
-count_flips : Array I64 -> I64;
-count_flips = |perm| (
-    loop((0, perm), |(flips, perm)|
-        let k = perm.@(0);
-        if k == 0 { break $ flips };
-        let perm = loop((0, k, perm), |(i, j, perm)|
-            if i >= j { break $ perm };
-            let vi = perm.@(i);
-            let vj = perm.@(j);
-            continue $ (i + 1, j - 1, perm.set(i, vj).set(j, vi))
-        );
-        continue $ (flips + 1, perm)
-    )
-);
+// fannkuch-redux over a scratch buffer the program carries itself, which is what the C and
+// Rust counterparts do with a stack array. `fannkuch` computes the same thing by handing
+// the permutation to a function that mutates it, and pays a copy-on-write clone per
+// permutation for it. The pair measures what that clone costs.
 
 type St = struct {
     perm1 : Array I64,
@@ -40,6 +19,23 @@ type St = struct {
     permcount : I64
 };
 
+// Flip prefixes of `perm` until it starts with 0, and count how many that took. `perm` is
+// the caller's scratch buffer, handed over and handed back, so every write lands in place.
+count_flips : Array I64 -> (Array I64, I64);
+count_flips = |perm| (
+    loop((perm, 0), |(perm, flips)|
+        let k = perm.@(0);
+        if k == 0 { break $ (perm, flips) };
+        let perm = loop((0, k, perm), |(i, j, perm)|
+            if i >= j { break $ perm };
+            let vi = perm.@(i);
+            let vj = perm.@(j);
+            continue $ (i + 1, j - 1, perm.set(i, vj).set(j, vi))
+        );
+        continue $ (perm, flips + 1)
+    )
+);
+
 fannkuch : I64 -> (I64, I64);
 fannkuch = |n| (
     let st0 = St {
@@ -47,15 +43,24 @@ fannkuch = |n| (
         count : Array::fill(n, 0),
         r : n, maxflips : 0, checksum : 0, permcount : 0
     };
-    loop(st0, |st|
+    // The scratch buffer rides beside the state rather than inside it, so writing to it
+    // never goes through the struct.
+    loop((st0, Array::fill(n, 0)), |(st, scratch)|
         // while r != 1 { count[r-1] = r; r-- }
         let st = loop(st, |st|
             if st.@r == 1 { break $ st };
             let r = st.@r;
             continue $ st.mod_count(|c| c.set(r - 1, r)).mod_r(|x| x - 1)
         );
-        // flips on a (copied) perm1
-        let flips = count_flips(st.@perm1);
+        // Copy the permutation into the scratch buffer, as the C and Rust counterparts do
+        // into their stack array. `source` is read only and dies before the
+        // next-permutation step below, so `perm1` is back to one reference by then.
+        let source = st.@perm1;
+        let scratch = loop((0, scratch), |(i, scratch)|
+            if i == n { break $ scratch };
+            continue $ (i + 1, scratch.set(i, source.@(i)))
+        );
+        let (scratch, flips) = count_flips(scratch);
         let pc = st.@permcount;
         let st = st.mod_maxflips(|m| max(m, flips))
                    .mod_checksum(|c| c + (if pc % 2 == 0 { flips } else { -flips }));
@@ -75,14 +80,14 @@ fannkuch = |n| (
             continue $ st.mod_r(|x| x + 1)
         );
         if done { break $ (st.@checksum, st.@maxflips) };
-        continue $ st.mod_permcount(|x| x + 1)
+        continue $ (st.mod_permcount(|x| x + 1), scratch)
     )
 );
 
 main : IO ();
 main = (
     let (checksum, maxflips) = fannkuch(10);
-    assert_eq(|_|"fannkuch: checksum", checksum, 73196);;
-    assert_eq(|_|"fannkuch: maxflips", maxflips, 38);;
+    assert_eq(|_|"fannkuch_scratch: checksum", checksum, 73196);;
+    assert_eq(|_|"fannkuch_scratch: maxflips", maxflips, 38);;
     pure()
 );

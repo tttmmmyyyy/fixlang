@@ -2,6 +2,41 @@
 
 Newer is above.
 
+## fd0a7ee93588a9bd19e7ec67dcbd9b7ed26586c6
+
+Opens three kinds of column: the split accesses read from the hardware counters, the processor the
+row was measured on, and — for the seven cases that now carry `ref.c` and `ref.rs` — the same
+program in C and in Rust, measured the same way.
+
+**No case moves.** Every `-inst` figure is identical to the row above it, which is what the interval
+should give: the only change to `src/` between the two rows is the narrow-integer extension at the
+FFI boundary (PR #114), and no case here exports a function.
+
+The comparison the reference columns open, in instructions:
+
+| case | Fix | C | Rust | Fix/C | Fix/Rust |
+|---|--:|--:|--:|--:|--:|
+| modulo_loop | 112,658,350 | 140,161,307 | 112,835,735 | 0.80x | 1.00x |
+| arrayrw | 120,570,247 | 150,175,966 | 119,944,182 | 0.80x | 1.01x |
+| mandelbrot | 236,876,291 | 249,642,758 | 237,050,646 | 0.95x | 1.00x |
+| binary_trees | 784,558,542 | 705,427,716 | 739,079,768 | 1.11x | 1.06x |
+| nbody | 1,112,167,494 | 706,162,512 | 602,334,325 | 1.57x | 1.85x |
+| levenshtein | 1,007,853,029 | 572,081,751 | 902,130,778 | 1.76x | 1.12x |
+| fannkuch | 2,731,406,969 | 1,256,317,448 | 954,912,486 | 2.17x | 2.86x |
+
+The counterparts are built for this host with avx512 left out, as the Fix case is, so the three are
+allowed the same instruction set. Fix meets or beats Rust on four of the seven and beats C outright
+on three. The two that stand out are `fannkuch` at 2.86x Rust — one array clone per permutation,
+which is fixlang#123 — and `nbody` at 1.85x.
+
+`splits` opens across every case. `arrayrw` reads 49,600,017 against 16 for its C counterpart, which
+is fixlang#120: the element buffer starts 8 bytes into a 16-byte-aligned allocation, so half of
+every 32-byte access crosses a cache line. The instruction count cannot express that, which is why
+the case looks like the best in the suite there and is the slowest in wall-clock time.
+
+`modulo_loop` is a new case. A running sum has a closed form the optimizer reaches; the carried
+modulo denies it that, and vectorization with it, so what is left is the cost of an iteration.
+
 ## 4161bc12449319e678c03ab42eacd25a2142f53c
 
 Adds the `fib` and `levenshtein` cases, so their columns open here at 200,990,240 and 1,007,853,029
