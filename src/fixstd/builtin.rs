@@ -18,24 +18,26 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX,
-    ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
-    BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
-    DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
-    I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
-    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL,
-    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME, UNION_DATA_IDX,
+    TraverserWorkType, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX,
+    ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME,
+    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
+    CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+    DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
+    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+    STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
+    STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, create_obj, get_array_storage, get_array_storage_buf,
-    shared_empty_array_storage, ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, build_storage_is_aligned, create_obj,
+    get_array_storage, get_array_storage_buf, read_alloc_offset, shared_empty_array_storage,
+    write_alloc_offset, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -573,7 +575,9 @@ pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
     if int_opt.is_some() {
         return (int_opt, false);
     }
-    (make_floating_ty(name), true)
+    let float_opt = make_floating_ty(name);
+    assert!(float_opt.is_some(), "Not a numeric type: {}", name);
+    (float_opt, true)
 }
 
 // Get dynamic object type.
@@ -2044,12 +2048,13 @@ fn set_array_capacity<'c, 'm>(
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let resize_func = resize_array_storage_function(gc, elem_ty);
     let storage_ptr = get_array_storage(gc, &array).value(gc);
+    let size = array.extract_field(gc, ARRAY_SIZE_IDX);
     let cap = array.extract_field(gc, ARRAY_CAP_IDX);
     let resized_storage_ptr = gc
         .builder()
         .build_call(
             resize_func,
-            &[storage_ptr.into(), cap.into(), new_cap.into()],
+            &[storage_ptr.into(), size.into(), cap.into(), new_cap.into()],
             "resize_array_storage",
         )
         .unwrap()
@@ -2061,8 +2066,8 @@ fn set_array_capacity<'c, 'm>(
 }
 
 // The function that gives an array of element type `elem_ty` the room it asks for: it takes the
-// array's storage and its current capacity, then the capacity wanted, and returns the storage with
-// room for that capacity, carrying over the elements the array holds.
+// array's storage, the number of elements it holds and its current capacity, then the capacity
+// wanted, and returns the storage with room for that capacity, carrying over the elements.
 //
 // It is a function, and one the inliner keeps out of its caller, because changing an array's capacity
 // is a cold path that the append loop around it would otherwise pay for: every block this needs
@@ -2083,13 +2088,17 @@ fn resize_array_storage_function<'c, 'm>(
     let i64_ty = gc.context.i64_type();
     let func = gc.module.add_function(
         &name,
-        ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), i64_ty.into()], false),
+        ptr_ty.fn_type(
+            &[ptr_ty.into(), i64_ty.into(), i64_ty.into(), i64_ty.into()],
+            false,
+        ),
         Some(Linkage::Internal),
     );
     gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
     let storage_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
-    let cap = func.get_nth_param(1).unwrap().into_int_value();
-    let new_cap = func.get_nth_param(2).unwrap().into_int_value();
+    let size = func.get_nth_param(1).unwrap().into_int_value();
+    let cap = func.get_nth_param(2).unwrap().into_int_value();
+    let new_cap = func.get_nth_param(3).unwrap().into_int_value();
 
     let entry_bb = gc.context.append_basic_block(func, "entry");
     let alloc_bb = gc.context.append_basic_block(func, "alloc_bb");
@@ -2105,45 +2114,186 @@ fn resize_array_storage_function<'c, 'm>(
         .unwrap();
 
     // A capacity-zero array may sit on the storage every empty array shares
-    // (`shared_empty_array_storage`), which is not a heap block. Give it a block of its own: it holds
-    // no element, so nothing is copied, and dropping the old reference frees a heap block or leaves
-    // the shared one alone.
+    // (`shared_empty_array_storage`), which is not a heap block, so it is never what `realloc`
+    // receives. Give it a block of its own: it holds no element, so nothing is copied, and dropping
+    // the old reference frees a heap block or leaves the shared one alone.
     gc.builder().position_at_end(alloc_bb);
-    let new_storage = alloc_array_storage(gc, elem_ty, new_cap);
-    let new_storage_ptr = new_storage.value(gc);
+    let allocated = alloc_array_storage(gc, elem_ty.clone(), new_cap);
+    let allocated_ptr = allocated.value(gc);
     let old_storage = Object::new(storage_ptr.into(), storage_ty.clone(), gc);
     gc.release(old_storage);
-    gc.builder().build_return(Some(&new_storage_ptr)).unwrap();
+    gc.builder().build_return(Some(&allocated_ptr)).unwrap();
 
-    // Otherwise resize the block in place, preserving the elements it holds.
+    // Otherwise resize the storage in place. The elements move as raw bytes, with their reference
+    // counts left alone.
+    //
+    // The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
+    // large enough to have its own pages, by remapping them, which costs nothing per element. What
+    // comes back starts wherever the allocator put it, so the object is placed in it afresh, and the
+    // contents move only in the case where that lands the object somewhere other than `realloc` left
+    // it.
     gc.builder().position_at_end(resize_bb);
-    let object_ty = storage_ty.get_object_type(&vec![], gc.type_env());
-    let sizeof = object_ty.size_of(gc, Some(new_cap));
+    let object_type = storage_ty.get_object_type(&vec![], gc.type_env());
+    let struct_type = object_type.to_struct_type(gc, vec![]);
+    let sizeof = object_type.size_of(gc, Some(new_cap));
+
+    let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
+    let old_base = unsafe {
+        let neg_old_alloc_offset = gc
+            .builder()
+            .build_int_neg(old_alloc_offset, "neg_old_alloc_offset")
+            .unwrap();
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                storage_ptr,
+                &[neg_old_alloc_offset],
+                "old_base",
+            )
+            .unwrap()
+    };
+
+    // A storage worth aligning keeps room to be placed off the base of its block; one below the
+    // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
+    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let slack = gc
+        .builder()
+        .build_select(
+            is_aligned,
+            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            old_alloc_offset,
+            "slack",
+        )
+        .unwrap()
+        .into_int_value();
+    let alloc_size = gc
+        .builder()
+        .build_int_add(sizeof, slack, "alloc_size")
+        .unwrap();
     let realloc_fn = gc
         .module
         .get_function(RUNTIME_REALLOC)
         .expect("realloc is not declared");
-    let resized_ptr = gc
+    let new_base = gc
         .builder()
         .build_call(
             realloc_fn,
-            &[storage_ptr.into(), sizeof.into()],
+            &[old_base.into(), alloc_size.into()],
             "realloc_storage",
         )
         .unwrap()
         .try_as_basic_value()
         .left()
+        .unwrap()
+        .into_pointer_value();
+    let new_alloc_offset = {
+        let aligned_alloc_offset = build_array_storage_shift(gc, struct_type, new_base);
+        gc.builder()
+            .build_select(
+                is_aligned,
+                aligned_alloc_offset,
+                old_alloc_offset,
+                "new_alloc_offset",
+            )
+            .unwrap()
+            .into_int_value()
+    };
+
+    let move_bb = gc.context.append_basic_block(func, "move_bb");
+    let end_bb = gc.context.append_basic_block(func, "end_bb");
+    let must_move = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::NE,
+            new_alloc_offset,
+            old_alloc_offset,
+            "must_move",
+        )
         .unwrap();
+    gc.builder()
+        .build_conditional_branch(must_move, move_bb, end_bb)
+        .unwrap();
+
+    // Carry the control block and the live elements to where the object now sits. The two ranges
+    // overlap, being at most `ARRAY_BUF_ALIGNMENT` apart.
+    gc.builder().position_at_end(move_bb);
+    let old_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[old_alloc_offset],
+                "old_ptr",
+            )
+            .unwrap()
+    };
+    let new_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[new_alloc_offset],
+                "new_ptr",
+            )
+            .unwrap()
+    };
+    let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+    let elems_size_as_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                elem_value_ty,
+                gc.context.ptr_type(AddressSpace::from(0)).const_null(),
+                &[size],
+                "elems_size_as_ptr",
+            )
+            .unwrap()
+    };
+    let live_bytes = gc
+        .builder()
+        .build_int_add(
+            gc.builder()
+                .build_ptr_to_int(elems_size_as_ptr, i64_ty, "elems_size")
+                .unwrap(),
+            i64_ty.const_int(
+                gc.target_data
+                    .offset_of_element(&struct_type, STORAGE_BUF_IDX)
+                    .unwrap(),
+                false,
+            ),
+            "live_bytes",
+        )
+        .unwrap();
+    gc.builder()
+        .build_memmove(new_ptr, 1, old_ptr, 1, live_bytes)
+        .ok()
+        .unwrap();
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
+
+    gc.builder().position_at_end(end_bb);
+    let resized_ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                new_base,
+                &[new_alloc_offset],
+                "resized_ptr",
+            )
+            .unwrap()
+    };
+    write_alloc_offset(gc, resized_ptr, new_alloc_offset);
     gc.builder().build_return(Some(&resized_ptr)).unwrap();
 
     func
 }
 
-// Give an array a storage block of a requested capacity, carrying over the elements it holds.
-// See `array_set_capacity_bounds_unchecked` for what the caller has to guarantee.
+/// Gives an array a storage of `cap_name` elements, keeping the elements it already holds, and
+/// returns the array with its capacity field updated. The caller must ensure the new capacity holds
+/// the array's current size; a smaller one leaves elements outside the storage.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
+    /// The local binding holding the array to resize.
     arr_name: FullName,
+    /// The local binding holding the new capacity, in elements.
     cap_name: FullName,
     // When true, branch on uniqueness: give a unique array the capacity in place, or allocate a new
     // block and retain-copy a shared array's elements into it. Set false only where the array is
@@ -5733,8 +5883,11 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Tests whether a boxed value is the only reference to its object, by reading the object's
+/// reference count in place, and returns that flag paired with the value handed back unchanged.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
+    /// The local binding holding the value to test.
     var_name: FullName,
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
     /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
@@ -5758,7 +5911,17 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
 
         // Get whether argument is unique.
-        let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
+        let is_unique = if self.assume_unique {
+            // The caller proved the argument unique, so the flag is the constant `true`.
+            bool_ty.const_int(1, false)
+        } else {
+            // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
+            // reference count to branch on.
+            assert!(
+                obj.is_box(gc.type_env()),
+                "is_unique is applied to a value of the unboxed type {}.",
+                obj.ty.to_string()
+            );
             let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
@@ -5783,11 +5946,6 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             let flag = gc.builder().build_phi(bool_ty, "phi@is_unique").unwrap();
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
-        } else {
-            // Under the `[a : Boxed]` bound the argument is always boxed, so the check above runs
-            // unless the caller proved the argument unique, in which case the flag is the constant
-            // `true`.
-            bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
         let bool_val = gc
@@ -7565,9 +7723,12 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Compares two `Ptr` values for equality of the addresses they hold, and returns a `Bool`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMPtrEqBody {
+    /// The local binding holding the left operand.
     lhs_name: FullName,
+    /// The local binding holding the right operand.
     rhs_name: FullName,
 }
 
@@ -7578,19 +7739,6 @@ impl LLVMGen for InlineLLVMPtrEqBody {
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
-        // let diff = gc
-        //     .builder()
-        //     .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr")
-        //     .unwrap();
-        // let value = gc
-        //     .builder()
-        //     .build_int_compare(
-        //         IntPredicate::EQ,
-        //         diff,
-        //         diff.get_type().const_zero(),
-        //         EQ_TRAIT_EQ_NAME,
-        //     )
-        //     .unwrap();
         let value = gc
             .builder()
             .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME)
@@ -7602,7 +7750,7 @@ impl LLVMGen for InlineLLVMPtrEqBody {
                 ObjectFieldType::I8
                     .to_basic_type(gc, vec![])
                     .into_int_type(),
-                "eq_of_int",
+                "eq_of_ptr",
             )
             .unwrap();
         let obj = create_obj(

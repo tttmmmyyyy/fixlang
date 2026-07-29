@@ -2,6 +2,112 @@
 
 Newer is above.
 
+**Rows measured before `cachegrind.py` fixed the environment are not comparable with rows after
+it.** Cachegrind counts the dynamic loader and libc start-up along with the program, and both walk
+the environment, so a row carried about 600 instructions per variable the shell that ran the
+harness happened to export — a background run and an interactive one differed by tens of thousands
+of instructions on every case. The measured command now runs with a fixed minimal environment, and
+the `startup` case records what a program that does nothing costs, so a row says how much of each
+figure was there before any of the work.
+
+## a9a1b1a2bd93952205e127f3cbe603d2e6a6c2c0
+
+Starts a large array's elements on a 32-byte boundary (PR #128), so that a vectorized loop over them
+stops straddling cache lines.
+
+**Read this row in the split columns, not the instruction counts.** The instruction count cannot see
+either the straddle or its removal: `arrayrw` retires the same instructions before and after, to
+within eleven out of 120 million, and runs 1.71 times faster. What the splits say:
+
+| case | before | after |
+|---|--:|--:|
+| arrayrw | 49,600,017 | 171 |
+| arrayrw_fn | 49,600,017 | 171 |
+| struct_field_mod | 49,600,019 | 171 |
+| cp_lib_bipartite | 54,743,346 | 76,832 |
+| fill, fill_from_map | 1,250,023 | 249 |
+| cp_lib_prime_list | 195,356 | 175 |
+| get_sub | 1,083,622 | 378,414 |
+| levenshtein | 577,126 | 344,955 |
+| nbody | 32,000,029 | 18,000,182 |
+| nbody_fold | 30,000,029 | 16,000,183 |
+
+A case whose elements are wider than a vector access is aligned only at its first element, which is
+why `nbody` and `levenshtein` halve rather than clear: their elements are 24 bytes, and 24 does not
+divide 32. `fannkuch` and `arrayrw_shared` do not move at all, the first because its arrays stay
+under the size from which elements are aligned. Two cases gain splits — `cp_lib_lsegtree` 25,034 to
+400,179 and `cp_lib_scc` 45,542 to 70,919 — from the up-to-31 bytes a large array now asks for
+moving every allocation after it; neither moves in wall clock.
+
+In wall clock, measured on an idle machine with twenty runs of each case: `fill_from_map` 2.8 times
+faster and `fill` 2.3, `arrayrw`, `arrayrw_fn` and `struct_field_mod` 1.6, `cp_lib_bipartite` 1.2,
+`nbody_fold` and `index_syntax` 1.04, and 32 of the 46 cases within three percent either way and
+steady. The suite comes to 0.926 on the geometric mean of the ratios, or 0.934 taking each case's
+fastest run. `cp_lib_scc` is 4 percent slower, the one steady regression: its arrays are 8 and 24
+bytes, only 8 of its 226,000 allocations clear the threshold, so it pays the three instructions and
+the byte store an array allocation now costs and wins nothing back. `prime_table` reads 5 percent
+slower and `bounds_check_indexable`, `sort` and `cp_lib_segtree` within one percent, all four with a
+spread wide enough that the figure moves between runs.
+
+**`fill` and `fill_from_map` are bimodal, and that is the shape of the problem this change is
+about.** Each allocates a thousand-element array ten thousand times, so one recycled block decides
+the whole run, and where that block lands decides whether its accesses straddle. Five independent
+measurements of `fill` give the unaligned build a mean of 3.7 to 4.3 ms with a standard deviation of
+2.3, against 1.1 to 2.3 ms for the aligned one: the same program, the same input, and a factor of
+four between runs of the binary that leaves its elements where the allocator put them. A single
+timing of a case like this says more about the addresses it drew than about the code, which is why
+the split counters are the column to read.
+
+**This is the first row measured in the fixed environment, so the instruction counts fall against
+the row above by a constant that belongs to the instrument.** The micro-benchmarks all move by
+-43,546 give or take twenty; add that back to read what the change did. The large cases carry the
+constant too, where it is lost in the total: `nbody_fold` -9.1%, `fannkuch` -1.6% and
+`cp_lib_conv_zp` -1.0% fall, `cp_lib_scc` +2.0%, `index_syntax` +1.7%, `get_sub` +1.5% and
+`cp_lib_dijkstra` +1.2% rise, from inlining decisions moving in both directions around the
+allocation. Measured against the fork point in one environment, the whole suite comes to +0.33%.
+
+`push_back` is the largest riser and the least interesting: two register-to-register moves left in
+its inner loop by register allocation, on a program that retires ten instructions per iteration.
+
+The row also carries the corrected element size (an array of a boxed element type reserved the size
+of the element's own object where it stores a reference), which shows up nowhere here: no case in
+the suite holds an array of a boxed type.
+
+## fd0a7ee93588a9bd19e7ec67dcbd9b7ed26586c6
+
+Opens three kinds of column: the split accesses read from the hardware counters, the processor the
+row was measured on, and — for the seven cases that now carry `ref.c` and `ref.rs` — the same
+program in C and in Rust, measured the same way.
+
+**No case moves.** Every `-inst` figure is identical to the row above it, which is what the interval
+should give: the only change to `src/` between the two rows is the narrow-integer extension at the
+FFI boundary (PR #114), and no case here exports a function.
+
+The comparison the reference columns open, in instructions:
+
+| case | Fix | C | Rust | Fix/C | Fix/Rust |
+|---|--:|--:|--:|--:|--:|
+| modulo_loop | 112,658,350 | 140,161,307 | 112,835,735 | 0.80x | 1.00x |
+| arrayrw | 120,570,247 | 150,175,966 | 119,944,182 | 0.80x | 1.01x |
+| mandelbrot | 236,876,291 | 249,642,758 | 237,050,646 | 0.95x | 1.00x |
+| binary_trees | 784,558,542 | 705,427,716 | 739,079,768 | 1.11x | 1.06x |
+| nbody | 1,112,167,494 | 706,162,512 | 602,334,325 | 1.57x | 1.85x |
+| levenshtein | 1,007,853,029 | 572,081,751 | 902,130,778 | 1.76x | 1.12x |
+| fannkuch | 2,731,406,969 | 1,256,317,448 | 954,912,486 | 2.17x | 2.86x |
+
+The counterparts are built for this host with avx512 left out, as the Fix case is, so the three are
+allowed the same instruction set. Fix meets or beats Rust on four of the seven and beats C outright
+on three. The two that stand out are `fannkuch` at 2.86x Rust — one array clone per permutation,
+which is fixlang#123 — and `nbody` at 1.85x.
+
+`splits` opens across every case. `arrayrw` reads 49,600,017 against 16 for its C counterpart, which
+is fixlang#120: the element buffer starts 8 bytes into a 16-byte-aligned allocation, so half of
+every 32-byte access crosses a cache line. The instruction count cannot express that, which is why
+the case looks like the best in the suite there and is the slowest in wall-clock time.
+
+`modulo_loop` is a new case. A running sum has a closed form the optimizer reaches; the carried
+modulo denies it that, and vectorization with it, so what is left is the cost of an iteration.
+
 ## 4161bc12449319e678c03ab42eacd25a2142f53c
 
 Adds the `fib` and `levenshtein` cases, so their columns open here at 200,990,240 and 1,007,853,029
@@ -15,8 +121,10 @@ wide-return tail call reached main, so `mandelbrot` and `mandelbrot_fold` fall 5
 3.33% and `cp_lib_conv_zp` 1.99% — the same three cases and the same percentages `12165c4494bf`
 records for that work.
 
-Of what is left, every micro-benchmark moves by a constant 1,253 to 1,281 instructions, which is
-program startup rather than the measured loop. Four cases move by more: `fannkuch` +1.51%,
+Of what is left, every micro-benchmark moves by a constant 1,253 to 1,281 instructions. That is
+start-up, and the constant is the difference between the environments the two runs were measured
+from — about two variables' worth, at the 600 instructions each cost before `cachegrind.py` fixed
+the environment. Four cases move by more: `fannkuch` +1.51%,
 `cp_lib_bipartite` +1.10%, `cp_lib_lsegtree` +0.57% and `binary_trees` +0.40%, from the rest of the
 work merged between the two rows.
 
