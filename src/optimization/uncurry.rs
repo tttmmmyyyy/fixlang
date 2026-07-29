@@ -116,13 +116,18 @@ pub fn run(fix_mod: &mut Program) {
     }
 }
 
-/// Is this symbol `Std::fix` or an instance of it? An instance carries the separator and the hash of
-/// the type it was instantiated at, so the separator is what tells `Std::fix#<hash>` apart from a
-/// symbol whose name merely begins with `fix`.
+/// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
+/// instance after the original, followed by the separator and the hash of the type it was
+/// instantiated at, so the separator is what tells `fix#<hash>` apart from a name that merely begins
+/// with `fix`.
 pub fn is_std_fix(name: &FullName) -> bool {
-    let fix_name = FullName::from_strs(&[STD_NAME], FIX_NAME);
-    let instance_prefix = fix_name.to_string() + INSTANCIATED_NAME_SEPARATOR;
-    *name == fix_name || name.to_string().starts_with(&instance_prefix)
+    if name.namespace.names != [STD_NAME] {
+        return false;
+    }
+    match name.name.strip_prefix(FIX_NAME) {
+        Some(suffix) => suffix.is_empty() || suffix.starts_with(INSTANCIATED_NAME_SEPARATOR),
+        None => false,
+    }
 }
 
 fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
@@ -349,10 +354,10 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 mod tests {
     use super::*;
 
-    /// The name `Std::{name}` carries, once instantiated at some type.
-    fn instance_of(name: &str) -> FullName {
+    /// The name a global of `namespace` called `name` carries, once instantiated at some type.
+    fn instance_of(namespace: &str, name: &str) -> FullName {
         FullName::from_strs(
-            &[STD_NAME],
+            &[namespace],
             &format!("{}{}0123abcd", name, INSTANCIATED_NAME_SEPARATOR),
         )
     }
@@ -360,12 +365,18 @@ mod tests {
     #[test]
     fn std_fix_and_its_instances_are_recognized() {
         assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
-        assert!(is_std_fix(&instance_of(FIX_NAME)));
+        assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
     }
 
     #[test]
     fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
         assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
-        assert!(!is_std_fix(&instance_of("fixup")));
+        assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
+    }
+
+    #[test]
+    fn a_global_named_fix_outside_std_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
+        assert!(!is_std_fix(&instance_of("Main", FIX_NAME)));
     }
 }
