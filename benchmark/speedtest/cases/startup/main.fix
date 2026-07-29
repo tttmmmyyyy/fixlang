@@ -1,0 +1,9 @@
+module Main;
+
+import Std::{IO, Monad::pure};
+
+// A program that does nothing, measured like every other case. Cachegrind counts the
+// dynamic loader and the runtime's own start-up along with the work, so this column is what
+// a case's figure holds before any of its work: the micro-benchmarks are mostly this, and a
+// change to the runtime moves every case together with it.
+main : IO () = pure();

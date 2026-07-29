@@ -44,6 +44,13 @@ from tempfile import NamedTemporaryFile
 ARCH = check_output(["uname", "-m"]).strip()
 
 
+# Cachegrind counts the dynamic loader and libc start-up along with the program, and both
+# walk the environment, so the count carries about 600 instructions per variable the caller
+# happened to export. Rows measured from different shells were then not subtractable. The
+# measured command gets this fixed environment instead, which makes start-up a constant.
+MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+
+
 def run_with_cachegrind(args_list: List[str]) -> Dict[str, int]:
     """
     Run the the given program and arguments under Cachegrind, parse the
@@ -52,7 +59,7 @@ def run_with_cachegrind(args_list: List[str]) -> Dict[str, int]:
     For now we just ignore program output, and in general this is not robust.
     """
     temp_file = NamedTemporaryFile("r+")
-    check_call([
+    check_call(env=MEASUREMENT_ENV, args=[
         # Disable ASLR:
         "setarch",
         ARCH,
