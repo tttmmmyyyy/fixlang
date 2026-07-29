@@ -1,4 +1,5 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
+use std::env;
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
@@ -117,6 +118,16 @@ pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
 pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;
 pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
 
+// The boundary a large array's element buffer starts on. A vectorized loop moves 32 bytes per
+// iteration, and an access that crosses a 64-byte cache line costs about 1.75 times one that does
+// not, so a buffer off this boundary makes every second vector access straddle a line.
+pub const ARRAY_BUF_ALIGNMENT: u64 = 32;
+
+// The `#ArrayStorage` allocation size, in bytes, from which the element buffer is worth aligning.
+// Below it the loop over the elements is too short for the alignment to pay for the bytes the
+// alignment costs, and such arrays are numerous enough that those bytes show up on their own.
+pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
+
 // The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
 pub const BOOL_FALSE_TAG: usize = 0;
 pub const BOOL_TRUE_TAG: usize = 1;
@@ -141,6 +152,11 @@ pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not b
 
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
+// How far the object sits above the base of its allocation. Nonzero where the object was placed
+// off the base to put a buffer following it on a boundary, which `#ArrayStorage` does for its
+// elements; freeing or reallocating the object steps back by it to recover the block. It occupies
+// a byte of the control block's tail padding, so the control block keeps its size.
+pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
 
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";
@@ -182,15 +198,23 @@ pub const TRY_FIX_DEPS_UPDATE: &str = "Try `fix deps update` to update the lock 
 pub const TRY_FIX_DEPS_UPDATE_TEST: &str =
     "Try `fix deps update --test` to update the test dependencies lock file.";
 
+/// The work a traverser function performs on the boxed objects an object owns. The wrapped value is
+/// one of the `TRAVERSER_WORK_*` codes, and is what the generated traverser receives as its work
+/// argument when the work is chosen at run time.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
 impl TraverserWorkType {
+    /// Drop one reference to each object reached, freeing an object whose count falls to zero.
     pub fn release() -> Self {
         Self(TRAVERSER_WORK_RELEASE)
     }
+    /// Put each object reached into the global reference counting state, in which retains and
+    /// releases leave it alone.
     pub fn mark_global() -> Self {
         Self(TRAVERSER_WORK_MARK_GLOBAL)
     }
+    /// Put each object reached into the threaded reference counting state, in which retains and
+    /// releases update its counter atomically.
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
@@ -233,7 +257,7 @@ pub const TUPLE_UNBOX: bool = true;
 // The type in LLVM corresponding to `pthread_once_t` of this system.
 pub fn pthread_once_init_flag_type<'c>(ctx: &'c Context) -> IntType<'c> {
     // TODO: we should compile C program including "sizeof(pthread_once_t)" and run it to get the correct size.
-    if std::env::consts::OS == "macos" {
+    if env::consts::OS == "macos" {
         ctx.i128_type()
     } else {
         ctx.i32_type()
@@ -259,6 +283,7 @@ pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
 /// proportion to the recursion depth reached.
 pub const COMPILER_THREAD_STACK_SIZE: usize = 256 * 1024 * 1024;
 
+/// The characters an identifier in a Fix source file may be built from, as one string.
 pub fn chars_allowed_in_identifiers() -> String {
     // If you add a new character, please also update `name_char` in `grammar.pest`.
     let mut chars = String::new();

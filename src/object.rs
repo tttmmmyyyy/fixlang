@@ -2,10 +2,11 @@ use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
-    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME,
-    BOXED_TYPE_DATA_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN,
-    DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED,
-    DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
+    TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
+    ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX,
+    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
+    DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
+    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
     TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
     UNION_DATA_IDX, UNION_TAG_IDX,
 };
@@ -887,12 +888,16 @@ impl ObjectFieldType {
         union.insert_field(gc, union_tag_idx, tag)
     }
 
+    /// The index, among the fields of a union's struct type, of the buffer holding the value of the
+    /// variant it carries. A boxed union carries a control block ahead of that struct's fields.
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
-        offset + UNION_DATA_IDX
+        let field_offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
+        field_offset + UNION_DATA_IDX
     }
 
+    /// The contents of a union's payload buffer, still typed as the buffer, which is wide enough for
+    /// whichever variant the union carries. Reading the variant's value out of it takes a bit cast.
     pub fn get_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: &Object<'c>,
@@ -908,9 +913,6 @@ impl ObjectFieldType {
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // let buf = ObjectFieldType::get_union_buf(gc, &union);
-        // let value = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        // let value = Object::new(value, elem_ty.clone());
         let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
@@ -958,16 +960,15 @@ impl ObjectFieldType {
         union.insert_field(gc, union_buf_idx, value)
     }
 
+    /// Emit a check that the union carries the variant of `expected_tag`, aborting the program with
+    /// a message where it carries another. Code after the call continues on the matching path.
     pub fn panic_if_union_tag_mismatch<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         expected_tag: IntValue<'c>,
     ) {
-        let is_unbox = union.ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
-
         // Get tag value.
-        let actual_tag = union.extract_field(gc, 0 + offset).into_int_value();
+        let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
 
         // If tag mismatch, panic.
         let is_tag_mismatch = gc
@@ -1102,12 +1103,18 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
+    /// The size of this object in bytes, as a value computed at run time.
+    ///
+    /// # Arguments
+    /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
+    ///   object type that ends in one (`Array`, `#ArrayStorage`). For every other object type it is
+    ///   `None` and the size is that of the struct alone.
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        array_size: Option<IntValue<'c>>,
+        array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
-        if array_size.is_some() {
+        if array_capacity.is_some() {
             // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
 
             // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
@@ -1117,21 +1124,19 @@ impl ObjectType {
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
                 _ => panic!(),
             };
-            let elem_sizeof = elem_ty
-                .get_object_type(&vec![], gc.type_env())
-                .to_struct_type(gc, vec![])
-                .size_of()
-                .unwrap();
+            // The buffer holds elements as they are embedded -- a pointer where the element type is
+            // boxed -- which is the stride every read and write of it uses.
+            let elem_sizeof = elem_ty.get_embedded_type(gc, &vec![]).size_of().unwrap();
             let struct_ty = self.to_struct_type(gc, vec![]);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-            let size = array_size.unwrap();
-            let size = gc
+            let cap = array_capacity.unwrap();
+            let cap = gc
                 .builder()
-                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty")
+                .build_int_cast(cap, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
             let elems_size = gc
                 .builder()
-                .build_int_mul(elem_sizeof, size, "elems_size")
+                .build_int_mul(elem_sizeof, cap, "elems_size")
                 .unwrap();
 
             // Get pointer to the first element (the buffer is the last struct field).
@@ -1143,7 +1148,7 @@ impl ObjectType {
                 .unwrap();
             let header_size = gc
                 .builder()
-                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "size_with_one_elem")
+                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "header_size")
                 .unwrap();
 
             let size_with_elems = gc
@@ -1190,6 +1195,14 @@ pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
+/// Type of the control block field holding how far the object sits above the base of its
+/// allocation, in bytes. A byte holds every distance an object is placed by, which
+/// `ARRAY_BUF_ALIGNMENT` bounds.
+pub fn alloc_offset_type<'c>(context: &'c Context) -> IntType<'c> {
+    assert!(ARRAY_BUF_ALIGNMENT <= u8::MAX as u64 + 1);
+    context.i8_type()
+}
+
 // Type of traverser function.
 // - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
 pub fn traverser_type<'c, 'm>(
@@ -1224,16 +1237,24 @@ pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     fields.push(refcnt_type(gc.context).into());
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_STATE_IDX as usize);
     fields.push(refcnt_state_type(gc.context).into());
+    assert_eq!(fields.len(), CTRL_BLK_ALLOC_OFFSET_IDX as usize);
+    fields.push(alloc_offset_type(gc.context).into());
     gc.context.struct_type(&fields, false)
 }
 
+/// The debug info type describing the control block that heads every boxed object. It presents the
+/// reference counter alone, the one field a debugger session has use for.
 pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let str_type = control_block_type(gc);
 
     let refcnt_ty = refcnt_type(gc.context);
     let refcnt_size_in_bits = gc.target_data.get_bit_size(&refcnt_ty);
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
-    let refcnt_offset_in_bits = gc.target_data.offset_of_element(&str_type, 0).unwrap();
+    let refcnt_offset_in_bits = gc
+        .target_data
+        .offset_of_element(&str_type, CTRL_BLK_REFCNT_IDX)
+        .unwrap()
+        * 8;
     let refcnt_member = gc
         .get_di_builder()
         .create_member_type(
@@ -1528,7 +1549,236 @@ pub fn alloc_array_storage<'c, 'm>(
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
 
-// Create an object.
+/// Emit a call to `malloc(sizeof)`.
+///
+/// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an
+/// i32 size parameter and truncate the size, which breaks allocations >= 4 GiB. Instead we call our
+/// own `@malloc(i64)` declaration registered in `runtime.rs`.
+fn build_malloc<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    sizeof: IntValue<'c>,
+    name: &str,
+) -> PointerValue<'c> {
+    let malloc_fn = gc
+        .module
+        .get_function(RUNTIME_MALLOC)
+        .expect("malloc is not declared");
+    gc.builder()
+        .build_call(malloc_fn, &[sizeof.into()], name)
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap()
+        .into_pointer_value()
+}
+
+/// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
+/// base, so that its element buffer starts on `ARRAY_BUF_ALIGNMENT`. The distance is below
+/// `ARRAY_BUF_ALIGNMENT`, which is the slack a block needs to hold an object placed this way.
+pub fn build_array_storage_shift<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    struct_type: StructType<'c>,
+    base: PointerValue<'c>,
+) -> IntValue<'c> {
+    // The mask below is the distance to the next boundary only for a power-of-two boundary, which
+    // is also what makes `ARRAY_BUF_ALIGNMENT - 1` the slack a block needs to hold an object placed
+    // off its base.
+    assert!(
+        ARRAY_BUF_ALIGNMENT.is_power_of_two(),
+        "ARRAY_BUF_ALIGNMENT must be a power of two, but is {}",
+        ARRAY_BUF_ALIGNMENT
+    );
+    let i64_ty = gc.context.i64_type();
+    let buf_offset = gc
+        .target_data
+        .offset_of_element(&struct_type, STORAGE_BUF_IDX)
+        .unwrap();
+    let buf_addr_at_base = gc
+        .builder()
+        .build_int_add(
+            gc.builder()
+                .build_ptr_to_int(base, i64_ty, "base_addr")
+                .unwrap(),
+            i64_ty.const_int(buf_offset, false),
+            "buf_addr_at_base",
+        )
+        .unwrap();
+    gc.builder()
+        .build_and(
+            gc.builder()
+                .build_int_neg(buf_addr_at_base, "neg_buf_addr_at_base")
+                .unwrap(),
+            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            "storage_alloc_offset",
+        )
+        .unwrap()
+}
+
+/// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, which it does
+/// from `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up.
+pub fn build_storage_is_aligned<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    sizeof: IntValue<'c>,
+) -> IntValue<'c> {
+    gc.builder()
+        .build_int_compare(
+            IntPredicate::UGE,
+            sizeof,
+            gc.context
+                .i64_type()
+                .const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
+            "storage_is_aligned",
+        )
+        .unwrap()
+}
+
+/// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address
+/// within it, together with the distance from the base of the block to that address.
+///
+/// From `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up, the block carries room to slide the object off its
+/// base, and the object is placed where the element buffer starts on `ARRAY_BUF_ALIGNMENT`. A
+/// smaller block takes the whole allocation and whatever alignment `malloc` gives.
+///
+/// The returned distance is what the object was placed by, which its address alone does not tell:
+/// an allocator is free to hand out any alignment the requested size can hold, and mimalloc, for
+/// one, aligns an 8-byte allocation -- the size of an empty array's storage -- to 8 bytes.
+///
+/// The threshold is applied as a mask rather than a branch. An array allocation is a handful of
+/// instructions that many callers inline, and the basic blocks a branch here adds to every one of
+/// them cost more in inlining decisions downstream than the arithmetic they save.
+fn build_alloc_array_storage<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    struct_type: StructType<'c>,
+    sizeof: IntValue<'c>,
+) -> (PointerValue<'c>, IntValue<'c>) {
+    let i64_ty = gc.context.i64_type();
+    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let aligned_mask = gc
+        .builder()
+        .build_int_s_extend(is_aligned, i64_ty, "aligned_mask@alloc_array_storage")
+        .unwrap();
+
+    // A storage worth aligning asks for room to be placed off the base of its block; one below the
+    // threshold asks for its own size and stays at the base.
+    let slack = gc
+        .builder()
+        .build_and(
+            aligned_mask,
+            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            "slack@alloc_array_storage",
+        )
+        .unwrap();
+    let alloc_size = gc
+        .builder()
+        .build_int_add(sizeof, slack, "alloc_size@alloc_array_storage")
+        .unwrap();
+    let base = build_malloc(gc, alloc_size, "malloc_storage@alloc_array_storage");
+    let alloc_offset = gc
+        .builder()
+        .build_and(
+            build_array_storage_shift(gc, struct_type, base),
+            aligned_mask,
+            "alloc_offset@alloc_array_storage",
+        )
+        .unwrap();
+    let ptr = unsafe {
+        gc.builder()
+            .build_gep(
+                gc.context.i8_type(),
+                base,
+                &[alloc_offset],
+                "storage_ptr@alloc_array_storage",
+            )
+            .unwrap()
+    };
+    (ptr, alloc_offset)
+}
+
+/// Free the allocation a boxed object of type `ty` lives in.
+pub fn build_free_boxed<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+    ty: &Arc<TypeNode>,
+) {
+    // An `#ArrayStorage` can sit above the base of its allocation, so step back by the distance its
+    // control block records.
+    let base = if ty.is_array_storage() {
+        let alloc_offset = read_alloc_offset(gc, ptr);
+        let neg_alloc_offset = gc
+            .builder()
+            .build_int_neg(alloc_offset, "neg_alloc_offset")
+            .unwrap();
+        unsafe {
+            gc.builder()
+                .build_gep(gc.context.i8_type(), ptr, &[neg_alloc_offset], "alloc_base")
+                .unwrap()
+        }
+    } else {
+        ptr
+    };
+    gc.builder().build_free(base).unwrap();
+}
+
+/// A pointer to the field of the control block of `ptr` recording how far the object sits above the
+/// base of its allocation.
+fn build_gep_alloc_offset<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+) -> PointerValue<'c> {
+    let ctrl_blk_ty = control_block_type(gc);
+    gc.builder()
+        .build_struct_gep(
+            ctrl_blk_ty,
+            ptr,
+            CTRL_BLK_ALLOC_OFFSET_IDX,
+            "ptr_to_alloc_offset",
+        )
+        .unwrap()
+}
+
+/// How far the object at `ptr` sits above the base of its allocation, as a pointer-sized integer.
+pub fn read_alloc_offset<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+) -> IntValue<'c> {
+    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let alloc_offset = gc
+        .builder()
+        .build_load(
+            alloc_offset_type(gc.context),
+            ptr_to_alloc_offset,
+            "alloc_offset",
+        )
+        .unwrap()
+        .into_int_value();
+    gc.builder()
+        .build_int_z_extend(alloc_offset, gc.context.i64_type(), "alloc_offset_as_i64")
+        .unwrap()
+}
+
+/// Record how far the object at `ptr` sits above the base of its allocation.
+pub fn write_alloc_offset<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+    alloc_offset: IntValue<'c>,
+) {
+    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let alloc_offset = gc
+        .builder()
+        .build_int_truncate(
+            alloc_offset,
+            alloc_offset_type(gc.context),
+            "alloc_offset_as_byte",
+        )
+        .unwrap();
+    gc.builder()
+        .build_store(ptr_to_alloc_offset, alloc_offset)
+        .unwrap();
+}
+
+/// A fresh object of type `ty`, with its control block initialized and its remaining fields left
+/// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
+/// pointer to it; an unboxed type comes back as an undefined aggregate value.
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.
@@ -1549,49 +1799,36 @@ pub fn create_obj<'c, 'm>(
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
 
-    // Allocate object.
-    //
-    // We bypass inkwell's `build_malloc` / `build_array_malloc` because they
-    // declare `@malloc` with an i32 size parameter and truncate the size, which
-    // breaks allocations >= 4 GiB. Instead we call our own `@malloc(i64)`
-    // declaration registered in `runtime.rs`.
-    let malloc_fn = gc
-        .module
-        .get_function(RUNTIME_MALLOC)
-        .expect("malloc is not declared");
-    /// Emits a call to `malloc(sizeof)` and returns the resulting pointer
-    /// as a `BasicValueEnum`.
-    fn call_malloc<'c, 'm>(
-        gc: &Generator<'c, 'm>,
-        malloc_fn: FunctionValue<'c>,
-        sizeof: IntValue<'c>,
-        name: &str,
-    ) -> BasicValueEnum<'c> {
-        gc.builder()
-            .build_call(malloc_fn, &[sizeof.into()], name)
-            .unwrap()
-            .try_as_basic_value()
-            .left()
-            .unwrap()
-    }
-    let obj = if ty.is_array_storage() {
+    // Allocate object. An array storage can be placed above the base of its allocation, so it
+    // carries the distance it was placed by; every other object starts at the base.
+    let alloc_offset_at_base = gc.context.i64_type().const_zero();
+    let (obj, alloc_offset) = if ty.is_array_storage() {
         // When the object is the array storage (a control block and a flexible element buffer),
         let sizeof = object_type.size_of(gc, array_capacity);
-        let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc_storage@create_obj");
-        Object::new(ptr, ty.clone(), gc)
+        let (ptr, alloc_offset) = build_alloc_array_storage(gc, struct_type, sizeof);
+        (
+            Object::new(ptr.as_basic_value_enum(), ty.clone(), gc),
+            alloc_offset,
+        )
     } else {
         if object_type.is_unbox {
             // When the object is unboxed (not a funptr),
-            Object::new(
-                struct_type.get_undef().as_basic_value_enum(),
-                ty.clone(),
-                gc,
+            (
+                Object::new(
+                    struct_type.get_undef().as_basic_value_enum(),
+                    ty.clone(),
+                    gc,
+                ),
+                alloc_offset_at_base,
             )
         } else {
             // When the object is boxed,
             let sizeof = struct_type.size_of().unwrap();
-            let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc@create_obj");
-            Object::new(ptr, ty.clone(), gc)
+            let ptr = build_malloc(gc, sizeof, "malloc@create_obj");
+            (
+                Object::new(ptr.as_basic_value_enum(), ty.clone(), gc),
+                alloc_offset_at_base,
+            )
         }
     };
 
@@ -1603,28 +1840,24 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, 0);
                 // Get pointer to control block.
                 let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
-                let ctrl_blk_ty = control_block_type(gc);
 
                 // Initialize the reference counter 1.
-                let ptr_to_refcnt = gc
-                    .builder()
-                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 0, "ptr_to_refcnt")
-                    .unwrap();
+                let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_ctrl_blk);
                 gc.builder()
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
                     .unwrap();
 
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
-                let ptr_to_refcnt_state = gc
-                    .builder()
-                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 1, "ptr_to_refcnt_state")
-                    .unwrap();
+                let ptr_to_refcnt_state = gc.get_refcnt_state_ptr(ptr_to_ctrl_blk);
                 gc.builder()
                     .build_store(
                         ptr_to_refcnt_state,
                         refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
                     )
                     .unwrap();
+
+                // Record how far the object was placed above the base of its allocation.
+                write_alloc_offset(gc, ptr_to_ctrl_blk, alloc_offset);
             }
             ObjectFieldType::Ptr => {}
             ObjectFieldType::I8 => {}

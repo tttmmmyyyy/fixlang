@@ -1,0 +1,22 @@
+module Main;
+
+import Std::{
+    loop, I64, IO, Debug::assert_eq, LoopState::{break, continue}, Monad::pure
+};
+
+// A tight integer loop whose accumulator carries a modulo. The modulo is what makes this
+// case measure the cost of one iteration: a plain running sum has a closed form the
+// optimizer can reach, and vectorizes besides, so it stops measuring the loop.
+loop_sum : I64 -> I64;
+loop_sum = |n| (
+    loop((0, 0), |(i, acc)|
+        if i == n { break $ acc };
+        continue $ (i + 1, (acc + i) % 1000000007)
+    )
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"modulo_loop", loop_sum(10000000), 994650007);;
+    pure()
+);
