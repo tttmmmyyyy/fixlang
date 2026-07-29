@@ -23,11 +23,11 @@ use crate::{
     misc::{Map, Set},
     optimization::eta_expansion,
 };
-use std::{sync::Arc, usize};
+use std::{mem, sync::Arc, usize};
 
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
-    let syms = std::mem::replace(&mut fix_mod.symbols, Default::default());
+    let syms = mem::replace(&mut fix_mod.symbols, Default::default());
     for (sym_name, sym) in syms {
         fix_mod.symbols.insert(sym_name.clone(), sym.clone());
 
