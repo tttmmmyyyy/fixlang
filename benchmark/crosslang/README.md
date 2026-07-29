@@ -36,6 +36,17 @@ and is included in the wall-clock figure, and cachegrind counts it in the instru
 as well; the cases carrying counterparts today all run for hundreds of millions of
 instructions, where that is under a percent.
 
+## Counting allocations
+
+`allocations.c` interposes on the allocator and reports the counts at exit, which is the
+question a reference-counted language raises constantly and neither of the measurements above
+answers.
+
+```
+gcc -shared -fPIC -O2 allocations.c -o allocations.so -ldl
+LD_PRELOAD=$PWD/allocations.so ./bin/fannkuch_fix
+```
+
 ## Two measurements, two questions
 
 **Instruction counts** (from `../speedtest`) are deterministic: the same program and input
