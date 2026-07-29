@@ -2094,7 +2094,7 @@ fn resize_array_storage_function<'c, 'm>(
         ),
         Some(Linkage::Internal),
     );
-    gc.add_enum_attribute(func, "noinline", AttributeLoc::Function);
+    gc.add_enum_attribute(func, "alwaysinline", AttributeLoc::Function);
     let storage_ptr = func.get_nth_param(0).unwrap().into_pointer_value();
     let size = func.get_nth_param(1).unwrap().into_int_value();
     let cap = func.get_nth_param(2).unwrap().into_int_value();
