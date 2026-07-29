@@ -4,7 +4,7 @@ Uncurrying optimizaion
 Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
 Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
 
-en For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
+For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
 and select the appropriate one according to the call site.
 
 NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
@@ -25,6 +25,9 @@ use crate::{
 };
 use std::{mem, sync::Arc, usize};
 
+/// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
+/// calls, export statements and entry IO value of the program onto the version matching the number
+/// of arguments they supply.
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = mem::replace(&mut fix_mod.symbols, Default::default());
@@ -175,8 +178,14 @@ fn funptr_lambda(
     Some(funptr)
 }
 
-// Decompose expression |x, y| z to ([x, y], z).
+/// Decompose expression `|x, y| z` to `([x, y], z)`.
+///
+/// # Arguments
+/// * `vars_limit` — the largest number of parameters to collect. A nested lambda that would carry
+///   the count past it is left in the returned body, parameters and all.
 fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
+    /// Appends the parameters of the leading lambdas of `expr` to `vars` and returns the body they
+    /// wrap.
     fn collect_abs_inner(
         expr: &Arc<ExprNode>,
         vars: &mut Vec<Arc<Var>>,
@@ -344,7 +353,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
     }
 }
 
-// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
+/// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
 fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     // Check if the expression is in the form of `let a = x in |b| y`.
     if !expr.is_let() {
@@ -373,7 +382,8 @@ fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     new_expr.set_type(expr.type_.clone().unwrap())
 }
 
-// Apply `internalize_let_to_var_one` recursively as long as it can increase the head `lam` expressions.
+/// Rewrites the head of `expr` to begin with as many nested lambdas as possible, by moving each
+/// `let` binding of a variable that stands between them inside the lambdas that follow it.
 pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Lam(_, body) => {
