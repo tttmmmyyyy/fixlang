@@ -52,21 +52,25 @@ use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::PossibleValue;
-use clap::{App, AppSettings, Arg};
+use clap::{value_parser, App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
+use commands::{check, clean, deps, docs, run};
 use configuration::{
-    Configuration, DeprecationMode, FixOptimizationLevel, LinkType, OutputFileType, SubCommand,
+    BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
+    OutputFileType, SubCommand,
 };
 use constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
     OPTIMIZATION_LEVEL_NONE, PROJECT_FILE_PATH,
 };
+use edit::edit_explict_import;
 use error::panic_if_err;
 use git_version::git_version;
 use metafiles::config_file::ConfigFile;
 use metafiles::project_file::ProjectFile;
 use mimalloc::MiMalloc;
+use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
@@ -192,7 +196,7 @@ fn run_cli() {
         .long("max-cu-size")
         .takes_value(true)
         .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
-        .value_parser(clap::value_parser!(usize))
+        .value_parser(value_parser!(usize))
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
@@ -202,7 +206,7 @@ fn run_cli() {
         .long("llvm-passes-file")
         .takes_value(true)
         .help(
-            "Path to a file which contains a list of LLVM passes (intended for compiler development).",
+            "Path to a file listing LLVM passes, one pass-pipeline string per line, to run in place of the ones the optimization level implies (intended for compiler development).\n",
         );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
@@ -437,32 +441,16 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(edit_subc.clone())
         .subcommand(check_subc);
 
-    fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
-        let files = m.get_many::<String>("source-files");
-        if files.is_none() {
-            return Ok(vec![]);
-        }
-        let files = files.unwrap();
-        let mut pathbufs = vec![];
-        for file in files {
-            pathbufs.push(PathBuf::from(file));
-        }
-        Ok(pathbufs)
+    // Every path the option `opt_id` collects, across all of its occurrences.
+    fn read_path_list_option(m: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
+        let Some(paths) = m.get_many::<String>(opt_id) else {
+            return vec![];
+        };
+        paths.map(PathBuf::from).collect()
     }
 
-    fn read_object_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
-        let files = m.get_many::<String>("object-files");
-        if files.is_none() {
-            return Ok(vec![]);
-        }
-        let files = files.unwrap();
-        let mut pathbufs = vec![];
-        for file in files {
-            pathbufs.push(PathBuf::from(file));
-        }
-        Ok(pathbufs)
-    }
-
+    // The kind of file the `--output-type` option asks the build to produce, if the invocation
+    // gives that option.
     fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
         match m.get_one::<String>("output-file-type") {
             None => return Ok(None),
@@ -477,12 +465,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         };
 
         // `modules` option
-        let modules = m
-            .get_many::<String>("modules")
-            .unwrap_or_default()
-            .map(|f| f.to_string())
-            .collect::<Vec<_>>();
-        docs_config.modules = modules;
+        docs_config.modules = read_string_list_option(m, "modules");
 
         // `with-compiler-defined-methods` option
         docs_config.include_compiler_defined_methods =
@@ -504,80 +487,101 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
+    // The path the `--output` option names for the built file, if the invocation gives that option.
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
         m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
     }
 
+    // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
+    // has no such option yields an empty list.
+    fn read_string_list_option(m: &ArgMatches, opt_id: &str) -> Vec<String> {
+        m.try_get_many::<String>(opt_id)
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .cloned()
+            .collect()
+    }
+
+    // Every library the invocation links, each paired with how it is bound: `--static-link` names
+    // the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
     fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
             ("static-link-library", LinkType::Static),
             ("dynamic-link-library", LinkType::Dynamic),
         ] {
-            options.append(
-                &mut m
-                    .try_get_many::<String>(opt_id)
-                    .unwrap_or_default()
-                    .unwrap_or_default()
-                    .map(|v| (v.clone(), link_type))
-                    .collect::<Vec<_>>(),
+            options.extend(
+                read_string_list_option(m, opt_id)
+                    .into_iter()
+                    .map(|name| (name, link_type)),
             );
         }
         options
     }
 
+    // The directories the `--library-paths` option adds to the linker's search path for libraries.
     fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
-        m.try_get_many::<String>("library-paths")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .map(|v| PathBuf::from(v))
-            .collect::<Vec<_>>()
+        read_string_list_option(m, "library-paths")
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
     }
 
-    fn read_ld_flags_option(m: &ArgMatches) -> Vec<String> {
-        m.try_get_many::<String>("ld-flags")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>()
-    }
-
+    // The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
+    // against the host's feature names, checked here for valid regex syntax.
     fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
-        let features = m
-            .try_get_many::<String>("disable-cpu-feature")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>();
-        metafiles::project_file::ProjectFile::validate_disable_cpu_features(&features)?;
+        let features = read_string_list_option(m, "disable-cpu-feature");
+        ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 
-    fn get_build_mode(args: &ArgMatches) -> configuration::BuildConfigType {
+    // The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
+    // per line.
+    fn read_llvm_passes_file_option(m: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
+        let Some(path) = m.get_one::<String>("llvm-passes-file") else {
+            return Ok(None);
+        };
+        let content = fs::read_to_string(path).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to read the LLVM passes file \"{}\": {}.",
+                path, e
+            ))
+        })?;
+        Ok(Some(
+            content
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect(),
+        ))
+    }
+
+    // The set of project-file declarations the invocation applies to: `--test` selects the test
+    // dependencies and test source files, and its absence the build ones.
+    fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
         if args.contains_id("test") {
-            configuration::BuildConfigType::Test
+            BuildConfigType::Test
         } else {
-            configuration::BuildConfigType::Build
+            BuildConfigType::Build
         }
     }
 
     // Apply the options of one invocation on top of `config`, which already carries what the
     // project file declares.
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
-        // Files passed via `--source` are user code — append to both
+        // Files passed via `--file` are user code — append to both
         // `source_files` and `root_source_files`. Note that this runs
         // *after* the root `set_config` in `create_config`, so inside a
-        // project directory `--source foo.fix` adds `foo.fix` on top of
-        // whatever `fixproj.toml` already declared, rather than replacing
-        // it.
-        for file in read_source_files_options(args)? {
+        // project directory `--file foo.fix` adds `foo.fix` on top of
+        // whatever `fixproj.toml` already declared.
+        for file in read_path_list_option(args, "source-files") {
             config.add_user_source_file(file);
         }
 
         // Set `object_files`.
         config
             .object_files
-            .append(&mut read_object_files_options(args)?);
+            .append(&mut read_path_list_option(args, "object-files"));
 
         // Set `linked_libraries`.
         config
@@ -590,7 +594,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .append(&mut read_library_paths_option(args));
 
         // Set `ld_flags`.
-        config.ld_flags.append(&mut read_ld_flags_option(args));
+        config
+            .ld_flags
+            .append(&mut read_string_list_option(args, "ld-flags"));
 
         // Set `emit_llvm`.
         config.emit_llvm = args.contains_id("emit-llvm");
@@ -626,8 +632,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `output_file_type`. The `--output-type` argument exists only on
         // the `build` subcommand; `run` and `test` always build an executable.
         if matches!(config.subcommand, SubCommand::Build) {
-            if let Some(type_) = read_output_file_type_option(args)? {
-                config.output_file_type = type_;
+            if let Some(output_file_type) = read_output_file_type_option(args)? {
+                config.output_file_type = output_file_type;
             }
         }
 
@@ -648,9 +654,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .get_one::<usize>("max-cu-size")
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
 
-        // Set `llvm_passes_file`.
-        if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
-            config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
+        // Set `llvm_passes_override`.
+        // Reading the file here puts the passes into `Configuration::object_generation_hash`, so
+        // that a change to them invalidates the objects compiled under the previous ones.
+        if let Some(passes) = read_llvm_passes_file_option(args)? {
+            config.llvm_passes_override = Some(passes);
         }
 
         // Set `emit_symbols`.
@@ -677,28 +685,28 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
 
         // Set deprecation handling mode.
-        let allow_dep = args.contains_id("allow-deprecated");
-        let deny_dep = args.contains_id("deny-deprecated");
-        if allow_dep && deny_dep {
+        let allow_deprecated = args.contains_id("allow-deprecated");
+        let deny_deprecated = args.contains_id("deny-deprecated");
+        if allow_deprecated && deny_deprecated {
             return Err(Errors::from_msg(
                 "`--allow-deprecated` and `--deny-deprecated` cannot be used together.".to_string(),
             ));
         }
-        if allow_dep {
+        if allow_deprecated {
             config.deprecation_mode = DeprecationMode::Allow;
-        } else if deny_dep {
+        } else if deny_deprecated {
             config.deprecation_mode = DeprecationMode::Deny;
         }
 
         // Set `run_program_args`.
         match config.subcommand {
             SubCommand::Run | SubCommand::Test => {
-                let mut args = args
+                let mut program_args = args
                     .get_many::<String>("program-args")
                     .unwrap_or_default()
                     .cloned()
                     .collect::<Vec<_>>();
-                config.run_program_args.append(&mut args);
+                config.run_program_args.append(&mut program_args);
             }
             _ => {}
         }
@@ -737,23 +745,23 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             )));
         }
         Some(("run", args)) => {
-            commands::run::run_command(&create_config(SubCommand::Run, args));
+            run::run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            commands::run::run_command(&create_config(SubCommand::Test, args));
+            run::run_command(&create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {
-                commands::deps::deps_install_command(args);
+                deps::deps_install_command(args);
             }
             Some(("update", args)) => {
-                commands::deps::deps_update_command(args);
+                deps::deps_update_command(args);
             }
             Some(("add", args)) => {
-                commands::deps::deps_add_command(args, &fix_config);
+                deps::deps_add_command(args, &fix_config);
             }
             Some(("list", args)) => {
-                commands::deps::deps_list_command(args, &fix_config);
+                deps::deps_list_command(args, &fix_config);
             }
             _ => deps_subc.print_help().unwrap(),
         },
@@ -761,29 +769,29 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             launch_language_server();
         }
         Some(("clean", _args)) => {
-            commands::clean::clean_command();
+            clean::clean_command();
         }
         Some(("docs", args)) => {
             // Create the configuration.
             let mut config = panic_if_err(Configuration::docs_mode());
             panic_if_err(read_docs_options(args, &mut config));
-            panic_if_err(commands::docs::generate_docs_for_files(config));
+            panic_if_err(docs::generate_docs_for_files(config));
         }
         Some(("init", args)) => {
-            let prj_name = args
+            let project_name = args
                 .value_of("project-name")
                 .unwrap_or("myproject")
                 .to_string();
-            panic_if_err(ProjectFile::validate_project_name(&prj_name, None));
-            panic_if_err(ProjectFile::create_example_file(prj_name));
+            panic_if_err(ProjectFile::validate_project_name(&project_name, None));
+            panic_if_err(ProjectFile::create_example_file(project_name));
         }
         Some(("check", _args)) => {
             let config = panic_if_err(Configuration::check_mode());
-            panic_if_err(commands::check::check(config));
+            panic_if_err(check::check(config));
         }
         Some(("edit", args)) => match args.subcommand() {
             Some(("explicit-import", _args)) => {
-                panic_if_err(edit::edit_explict_import::run_explicit_import_command());
+                panic_if_err(edit_explict_import::run_explicit_import_command());
             }
             _ => edit_subc.print_help().unwrap(),
         },
