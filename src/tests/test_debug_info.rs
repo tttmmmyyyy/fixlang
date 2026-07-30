@@ -77,7 +77,7 @@ mod debug_info_tests {
     // the symbol's type and the definition takes its own from the function that implements it, and
     // the two disagreeing across modules links quietly.
     #[test]
-    fn test_build_g_succeeds_at_every_optimization_level() {
+    fn test_build_g_succeeds_at_every_optimization_level_and_threading() {
         const SOURCE: &str = r#"
             module Main;
 

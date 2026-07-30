@@ -502,9 +502,9 @@ pub struct Generator<'c, 'm> {
     /// where the code being generated has no known source.
     debug_location: Vec<Option<Span>>,
     /// The value of each global symbol the module has reached so far, by name. A global enters this
-    /// map when code generation first asks for it (`global_value`), which is also where it is
-    /// declared, so the module declares the globals it uses and no others.
-    global: Map<FullName, ScopedValue<'c>>,
+    /// map when code generation first asks for it (`get_or_declare_global`), which is also where it
+    /// is declared, so the module declares the globals it uses and no others.
+    declared_globals: Map<FullName, ScopedValue<'c>>,
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Map<FullName, Arc<TypeNode>>,
@@ -675,7 +675,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_scope: Arc::new(RefCell::new(vec![])),
             debug_info: Default::default(),
             debug_location: vec![],
-            global: Default::default(),
+            declared_globals: Default::default(),
             global_types,
             type_env,
             target_data: target_data,
@@ -743,13 +743,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         function: FunctionValue<'c>,
         ty: Arc<TypeNode>,
     ) {
-        if self.global.contains_key(&name) {
+        if self.declared_globals.contains_key(&name) {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
             // its own reference, so reading it must retain its boxed subobjects.
             let retain_on_read = !ty.is_box(self.type_env());
-            self.global.insert(
+            self.declared_globals.insert(
                 name.clone(),
                 ScopedValue {
                     accessor: ValueAccessor::Global(function, ty),
@@ -786,15 +786,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
-            self.global_value(var)
+            self.get_or_declare_global(var)
         }
     }
 
     // The value the global `var` is reached through, declared here on the module's first use of it.
     // Declaring on use is what keeps a module's declarations to the globals its code reaches: the
     // program's globals number in the hundreds and a module calls a handful of them.
-    fn global_value(&mut self, var: &FullName) -> ScopedValue<'c> {
-        if let Some(value) = self.global.get(var).cloned() {
+    fn get_or_declare_global(&mut self, var: &FullName) -> ScopedValue<'c> {
+        if let Some(value) = self.declared_globals.get(var).cloned() {
             return value;
         }
         let ty = self
@@ -803,7 +803,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()))
             .clone();
         self.declare_global(var, &ty);
-        self.global[var].clone()
+        self.declared_globals[var].clone()
     }
 
     // Get an object on the scope (or global).
@@ -2113,7 +2113,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Attaching the subprogram here, where the body is created, is what keeps it off a function that
     // has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a module
     // declares every global it refers to but defines only its own.
-    pub fn attach_debug_subprogram(
+    pub fn push_debug_subprogram(
         &mut self,
         func: FunctionValue<'c>,
         span: Option<Span>,
@@ -2314,7 +2314,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // attached to a function this module only declares, reporting every offending function at once
     // and naming no cause; this says which function took a subprogram it should not have, at the
     // point the attachment is still attributable to the code that made it. See
-    // `attach_debug_subprogram`, which is where a subprogram is attached.
+    // `push_debug_subprogram`, which is where a subprogram is attached.
     fn assert_no_subprogram_on_declaration(&self) {
         for func in self.module.get_functions() {
             if func.count_basic_blocks() == 0 && func.get_subprogram().is_some() {

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use inkwell::context::Context;
 use crate::ast::name::FullName;
 use crate::ast::types::{tycon, type_tyapp, type_tycon, TypeNode};
 use crate::build::build_object_files::get_target_machine;
@@ -13,6 +11,8 @@ use crate::fixstd::builtin::{
 use crate::generator::Generator;
 use crate::misc::Map;
 use crate::object::ty_to_object_ty;
+use inkwell::context::Context;
+use std::sync::Arc;
 
 // `Option a = union { none : (), some : a }`, applied as `Option a`.
 fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {

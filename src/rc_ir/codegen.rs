@@ -76,7 +76,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let bb = self.context.append_basic_block(fn_val, "entry");
         self.builder().position_at_end(bb);
 
-        let _di_scope_guard = self.attach_debug_subprogram(fn_val, func.source.clone());
+        let _di_scope_guard = self.push_debug_subprogram(fn_val, func.source.clone());
 
         let _scope_guard = self.push_scope();
 
@@ -605,7 +605,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
-        let _di_scope_guard = self.attach_debug_subprogram(acc_fn, global_init.init.source.clone());
+        let _di_scope_guard = self.push_debug_subprogram(acc_fn, global_init.init.source.clone());
 
         // Branch to the initialization code only on the first access.
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
@@ -646,7 +646,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
             self.builder().build_unconditional_branch(end_bb).unwrap();
             let init_bb = self.context.append_basic_block(init_fn, "init_bb");
-            let guard = self.attach_debug_subprogram(init_fn, global_init.init.source.clone());
+            let guard = self.push_debug_subprogram(init_fn, global_init.init.source.clone());
             (init_bb, end_bb, guard)
         };
 
