@@ -10,6 +10,43 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 87649b1914a230ade36083b5c693b2f531313578
+
+Runs LLVM's `default<O3>` pipeline to a fixpoint — once at `-O basic`, three times at `-O max` and
+`-O experimental` — in place of the twelve hand-picked passes that used to follow a single run. The
+whole suite comes to **-2.50%** on the geometric mean of the instruction counts, 22 of the 46 cases
+falling and 3 rising.
+
+| case | change | | case | change |
+|---|--:|---|---|--:|
+| nbody | -21.44% | | sort | -2.15% |
+| fannkuch_scratch | -14.47% | | cp_lib_scc | -1.90% |
+| fill, fill_from_map | -12.31% | | cp_lib_dijkstra | -1.43% |
+| fannkuch | -8.63% | | cp_lib_segtree | -1.31% |
+| mandelbrot, mandelbrot_fold | -6.47% | | cp_lib_lsegtree | -1.13% |
+| nbody_fold | -5.29% | | arrayrw, arrayrw_fn, struct_field_mod | -0.66% |
+| cp_lib_unionfind | -4.08% | | levenshtein | -0.29% |
+| random_state | -3.32% | | cp_lib_bipartite | +0.92% |
+| option_plumbing | -3.09% | | cp_lib_conv_zp | +0.26% |
+| gen_random_array | -2.64% | | cp_lib_prime_list | +0.21% |
+
+A fourth run of the pipeline changes no case by a single instruction, which is what fixes the count
+at three.
+
+**These figures are an upper bound on what a machine with avx512 gets.** The suite disables avx512
+so that cachegrind can simulate the program, and the extra runs earn much more without it: `nbody`
+falls 21.4% here and 6.6% when the same change is measured with avx512 enabled.
+
+**Cycles move far less than instructions.** Over the nine cases of `benchmark/crosslang`, measured
+by interleaving the two builds within one run and taking the minimum of thirty rounds, instructions
+come to 0.956x and cycles to 0.987x. `nbody` loses 6.6% of its instructions there and no cycles at
+all — those instructions were issuing in slots that were going empty. Compile time rises about 14%
+at `-O experimental` and stays level at `-O basic`.
+
+This row is also the first that another pipeline can be measured against in the same directory: the
+pass pipeline now takes part in the object-file cache key, where before a second build returned the
+objects the first had cached, whatever pipeline it was given.
+
 ## a9a1b1a2bd93952205e127f3cbe603d2e6a6c2c0
 
 Starts a large array's elements on a 32-byte boundary (PR #128), so that a vectorized loop over them
