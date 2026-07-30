@@ -102,6 +102,85 @@ mod debug_info_tests {
         }
     }
 
+    // Splitting the program into the smallest compilation units puts a module boundary on nearly
+    // every reference a body makes: a unit defines one symbol and declares every other symbol its
+    // code reaches. Debug information is on as well, because a subprogram belongs on a function the
+    // module defines, and which functions those are is what the split decides. The levels above
+    // `basic` compile the whole program as one unit whatever the split asks for, so the two that
+    // separate compilation applies to are the ones swept here.
+    //
+    // The answer is checked as well as the build succeeding: a declaration takes its signature from
+    // the symbol's type and the definition takes its own from the function that implements it, and
+    // the two disagreeing across units links quietly.
+    #[test]
+    fn test_build_g_with_smallest_compilation_units() {
+        const SOURCE: &str = r#"
+            module Main;
+
+            table : Array I64;
+            table = Array::from_map(8, |i| i * i);
+
+            total : I64;
+            total = table.to_iter.fold(0, |acc, x| acc + x);
+
+            greeting : String;
+            greeting = "hello";
+
+            twice : I64 -> I64;
+            twice = |x| x * 2;
+
+            shifted : I64 -> Array I64;
+            shifted = |n| table.to_iter.map(|x| x + n).to_array;
+
+            main : IO ();
+            main = println(
+                greeting + " " + (total + twice(3)).to_string + " " + shifted(3).to_string
+            );
+        "#;
+        const EXPECTED: &str = "hello 146 [3, 4, 7, 12, 19, 28, 39, 52]\n";
+        for opt_level in ["none", "basic"] {
+            let dir = build_with_g(SOURCE, opt_level, &["--max-cu-size", "1"]);
+            assert_eq!(
+                run_built_program(dir.path()),
+                EXPECTED,
+                "built with -g -O {} --max-cu-size 1",
+                opt_level,
+            );
+        }
+    }
+
+    // A program that exports a function to C must build with `-g` at every optimization level and
+    // still compute the right answer. The wrapper an export compiles into is emitted in the main
+    // compilation unit, which under separated compilation owns no symbol of its own, so the Fix
+    // value the wrapper forwards to is a global of another unit that the main unit reaches only
+    // while generating that wrapper. The wrapper itself is a function body that carries no
+    // debug-information subprogram, unlike every other body the back end emits.
+    #[test]
+    fn test_build_g_exported_c_function_succeeds_at_every_optimization_level() {
+        const SOURCE: &str = r#"
+            module Main;
+
+            offset : I64;
+            offset = 100;
+
+            plus : I64 -> I64 -> I64;
+            plus = |x, y| x + y + offset;
+            FFI_EXPORT[plus, c_plus];
+
+            main : IO ();
+            main = println(plus(1, 2).to_string);
+        "#;
+        for opt_level in ["none", "basic", "max", "experimental"] {
+            let dir = build_with_g(SOURCE, opt_level, &[]);
+            assert_eq!(
+                run_built_program(dir.path()),
+                "103\n",
+                "built with -g -O {}",
+                opt_level,
+            );
+        }
+    }
+
     // Building with `-g` must succeed for a recursive type. A type's debug information is emitted by
     // following its field references, and a recursive type refers back to itself; describing it once
     // and sharing that record keeps the emission finite, where expanding it afresh at every
