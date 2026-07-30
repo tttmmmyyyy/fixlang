@@ -34,6 +34,27 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// The argument `x + 10` of `(let x = ..; ..)(x + 10)` denotes the outer `x` after the
+    /// application is moved inside the `let`, where the name `x` denotes the bound lambda. An
+    /// argument that has something to evaluate is bound to a fresh name, and that binding lands
+    /// inside the `let` as well.
+    #[test]
+    fn test_computed_argument_pushed_into_a_let_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        apply_shadowing_let : I64 -> I64;
+        apply_shadowing_let = |x| (let x = |v : I64| v + 1; x)(x + 10);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `x`", apply_shadowing_let(10), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// The argument `a` of `(match o { some(a) => a, .. })(a)` denotes the outer `a` after the
     /// application is moved into the arms, where the name `a` denotes what the pattern binds.
     #[test]
@@ -50,6 +71,119 @@ mod tests {
         main : IO ();
         main = (
             assert_eq(|_|"the argument denotes the function bound by the arm", apply_arm_binding_the_argument(20), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A `let` whose pattern destructures a tuple binds the name the argument mentions, and the
+    /// argument keeps denoting the outer one after the application moves inside the `let`.
+    #[test]
+    fn test_computed_argument_pushed_into_a_tuple_pattern_let_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        apply_tuple_pattern_let : I64 -> I64;
+        apply_tuple_pattern_let = |a| (let (a, b) = (|v : I64| v + 1, 2); a)(a + 10);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `a`", apply_tuple_pattern_let(10), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A `let` whose pattern destructures a struct binds the name the argument mentions.
+    #[test]
+    fn test_computed_argument_pushed_into_a_struct_pattern_let_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        type Fns = struct { f : I64 -> I64, k : I64 };
+
+        apply_struct_pattern_let : I64 -> I64;
+        apply_struct_pattern_let = |f| (
+            (let Fns { f : f, k : k } = Fns { f : |v : I64| v + 1, k : 2 }; f)(f + 10)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `f`", apply_struct_pattern_let(10), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A nested pattern binds the name the argument mentions at a depth below the outermost one.
+    #[test]
+    fn test_computed_argument_pushed_into_a_nested_pattern_let_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        apply_nested_pattern_let : I64 -> I64;
+        apply_nested_pattern_let = |a| (
+            (let ((a, b), c) = ((|v : I64| v + 1, 2), 3); a)(a + 10)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the argument denotes the outer `a`", apply_nested_pattern_let(10), 21);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A chain of `let`s in the function position each bind a name the argument mentions, and the
+    /// argument is a lambda that rebinds one of them.
+    #[test]
+    fn test_computed_argument_pushed_into_a_chain_of_lets_keeps_its_meaning() {
+        let source = r#"
+        module Main;
+
+        apply_chain_of_lets : I64 -> I64;
+        apply_chain_of_lets = |a| (
+            let b = 7;
+            let c = 11;
+            (
+                let a = 2;
+                let b = 3;
+                let c = 5;
+                |g : I64 -> I64| g(a) + b * c
+            )(|b| b + a + c)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"each name denotes what it did where it was written", apply_chain_of_lets(10), 38);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A two-argument call whose function inlines to a `let`: both arguments mention names the
+    /// `let` binds, and land under it in written order.
+    #[test]
+    fn test_arguments_of_a_call_to_a_let_returning_global_keep_their_meaning() {
+        let source = r#"
+        module Main;
+
+        scaled_add : I64 -> I64 -> I64;
+        scaled_add = (
+            let n = 3;
+            |x, y| (x + y) * n
+        );
+
+        main : IO ();
+        main = (
+            let n = 100;
+            assert_eq(|_|"the arguments denote the outer `n`", scaled_add(n + 1, n + 2), 609);;
+            assert_eq(|_|"the same through a dot call", (n + 1).scaled_add(n + 2), 609);;
             pure()
         );
         "#;
