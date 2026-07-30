@@ -39,7 +39,7 @@ mod tests {
     /// argument that has something to evaluate is bound to a fresh name, and that binding lands
     /// inside the `let` as well.
     #[test]
-    fn test_bound_argument_pushed_into_a_let_keeps_its_meaning() {
+    fn test_computed_argument_pushed_into_a_let_keeps_its_meaning() {
         let source = r#"
         module Main;
 

@@ -143,7 +143,7 @@ fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
 
 /// Transformation (3): `(let {pat} = {expr0}; {expr1})({expr2})` to
 /// `let {pat'} = {expr0}; {expr1'}({expr2})`.
-fn hoist_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+fn pull_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let fun = app.get_app_func();
     let arg = app.get_app_args()[0].clone();
 
@@ -244,7 +244,7 @@ impl ExprVisitor for PullLet {
         // `f(y)(x)`, which puts the argument written first on this application.
         if expr.app_order == AppSourceCodeOrderType::FX {
             if fun.is_let() {
-                return StartVisitResult::ReplaceAndRevisit(hoist_let_out_of_function(expr));
+                return StartVisitResult::ReplaceAndRevisit(pull_let_out_of_function(expr));
             }
             if has_something_to_pull(&fun) {
                 return StartVisitResult::VisitChildren;
@@ -256,7 +256,7 @@ impl ExprVisitor for PullLet {
         }
 
         if fun.is_let() {
-            return StartVisitResult::ReplaceAndRevisit(hoist_let_out_of_function(expr));
+            return StartVisitResult::ReplaceAndRevisit(pull_let_out_of_function(expr));
         }
 
         StartVisitResult::VisitChildren

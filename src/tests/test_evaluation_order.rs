@@ -15,11 +15,11 @@ mod tests {
         let source = r#"
         module Main;
 
-        pair_up : I64 -> I64 -> I64;
-        pair_up = |a, b| a + b;
+        add_two : I64 -> I64 -> I64;
+        add_two = |a, b| a + b;
 
         main : IO ();
-        main = println $ pair_up(undefined("first argument"), undefined("second argument")).to_string;
+        main = println $ add_two(undefined("first argument"), undefined("second argument")).to_string;
         "#;
         test_source_fail(source, Configuration::develop_mode(), "first argument");
     }
@@ -31,11 +31,11 @@ mod tests {
         let source = r#"
         module Main;
 
-        triple : I64 -> I64 -> I64 -> I64;
-        triple = |a, b, c| if a <= 0 { b + c } else { triple(a - 1, b, c) };
+        add_three_counting_down : I64 -> I64 -> I64 -> I64;
+        add_three_counting_down = |a, b, c| if a <= 0 { b + c } else { add_three_counting_down(a - 1, b, c) };
 
         main : IO ();
-        main = println $ triple(undefined("first"), undefined("second"), undefined("third")).to_string;
+        main = println $ add_three_counting_down(undefined("first"), undefined("second"), undefined("third")).to_string;
         "#;
         test_source_fail(source, Configuration::develop_mode(), "first");
     }
@@ -46,11 +46,11 @@ mod tests {
         let source = r#"
         module Main;
 
-        pick : I64 -> I64;
-        pick = |n| if n <= 0 { undefined("first operand") + undefined("second operand") } else { pick(n - 1) };
+        after_countdown : I64 -> I64;
+        after_countdown = |n| if n <= 0 { undefined("first operand") + undefined("second operand") } else { after_countdown(n - 1) };
 
         main : IO ();
-        main = println $ pick(1).to_string;
+        main = println $ after_countdown(1).to_string;
         "#;
         test_source_fail(source, Configuration::develop_mode(), "first operand");
     }
