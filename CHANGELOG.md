@@ -24,7 +24,7 @@
 
 #### Language
 
-- A function call now evaluates its arguments in the order they are written. `f(x, y)` evaluated `y` before `x` at `-O max`, which disagreed with `x.f(y)`, where the receiver goes first; a binary operator, being a call written in prefix form, evaluated its right operand first. The order is observable in a program where more than one argument can stop it, through `Debug::assert` or `undefined`: such a program now stops at the argument written first.
+- `f(x, y)` and `x + y` -- a binary operator being a call written in prefix form -- now evaluate their arguments in the order they are written, where `-O max` used to evaluate them backwards. Only a program in which more than one argument can stop it, through `Debug::assert` or `undefined`, can observe the order, and the compiler still does not order every call this way.
 - `FFI_EXPORT` now rejects a value whose type the C ABI cannot carry, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which the foreign language receives as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected, because how C passes one depends on the target; `Bool` is rejected because C leaves the width of `_Bool` to the implementation. To exchange an aggregate, take a `Ptr` to memory the foreign language owns and copy through it; see the FFI section of `Document.md`.
 
 #### Std

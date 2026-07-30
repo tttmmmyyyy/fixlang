@@ -111,7 +111,9 @@ Transformations (2) and (3) also set the order in which a call evaluates its arg
 leave an application from the outside in, and the argument bound by the outermost `let` is evaluated
 first. A call written `f(x, y)` nests as `f(x)(y)` and one written `x.f(y)` nests as `f(y)(x)`, so
 `ExprNode::app_order` is what says whether the function position or the argument carries the
-argument written first. Both forms evaluate their arguments in the order they are written.
+argument written first. This pass takes that one first, so the `let` chain it leaves behind holds the
+arguments in the order they are written. A pass that moves an expression afterwards can still change
+the order the program ends up evaluating them in.
 
 */
 
@@ -119,10 +121,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::{
-        expr::{
-            expr_app_typed, expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr,
-            ExprNode,
-        },
+        expr::{expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr, ExprNode},
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
@@ -139,11 +138,7 @@ fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
     let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
 
-    expr_let_typed(
-        f_pat,
-        arg,
-        expr_app_typed(fun, vec![f_var]).set_app_order(app.app_order.clone()),
-    )
+    expr_let_typed(f_pat, arg, app.set_app_args(vec![f_var]))
 }
 
 /// Transformation (3): `(let {pat} = {expr0}; {expr1})({expr2})` to
@@ -160,11 +155,7 @@ fn hoist_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let ng_names = arg.free_vars();
     let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
 
-    expr_let_typed(
-        pat,
-        expr0,
-        expr_app_typed(expr1, vec![arg]).set_app_order(app.app_order.clone()),
-    )
+    expr_let_typed(pat, expr0, app.set_app_func(expr1))
 }
 
 /// Whether the function position of an application still holds a `let` for this pass to pull out:

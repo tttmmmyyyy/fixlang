@@ -47,8 +47,8 @@ use super::rename::{
 };
 use crate::ast::{
     expr::{
-        expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var,
-        var_var, AppSourceCodeOrderType, Expr, ExprNode,
+        expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var,
+        AppSourceCodeOrderType, Expr, ExprNode,
     },
     pattern::PatternNode,
     program::Symbol,
@@ -180,7 +180,7 @@ impl ExprVisitor for AppInliner {
                 // Which of the two comes first is the order the call evaluates its arguments in.
                 // `f(x, y)` nests as `f(x)(y)`, which leaves the argument written first inside
                 // `{bound}`; `x.f(y)` nests as `f(y)(x)`, where the argument written first is
-                // `{a}`. Both then evaluate their arguments in the order they are written.
+                // `{a}`. Either way the pair of `let`s holds them in the order they are written.
                 let bound_first = expr.app_order == AppSourceCodeOrderType::FX;
 
                 // `{a}` lands under `{pat}`, so a name `{pat}` binds and `{a}` mentions is renamed
@@ -191,9 +191,9 @@ impl ExprVisitor for AppInliner {
                 }
                 let func = rename_let_pattern_avoiding(&black_list, func.clone());
 
-                let applied =
-                    expr_app_typed(func.get_let_value().clone(), vec![pushed.value.clone()])
-                        .set_app_order(expr.app_order.clone()); // {value}(x)
+                let applied = expr
+                    .set_app_func(func.get_let_value().clone())
+                    .set_app_args(vec![pushed.value.clone()]); // {value}(x)
                 let expr = if bound_first {
                     expr_let_typed(
                         func.get_let_pat().clone(),
@@ -214,10 +214,12 @@ impl ExprVisitor for AppInliner {
                 // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
                 let pushed = PushedArg::new(&arg, &func);
 
-                let then = expr_app_typed(then.clone(), vec![pushed.value.clone()])
-                    .set_app_order(expr.app_order.clone()); // {then}(x)
-                let else_ = expr_app_typed(else_.clone(), vec![pushed.value.clone()])
-                    .set_app_order(expr.app_order.clone()); // {else}(x)
+                let then = expr
+                    .set_app_func(then.clone())
+                    .set_app_args(vec![pushed.value.clone()]); // {then}(x)
+                let else_ = expr
+                    .set_app_func(else_.clone())
+                    .set_app_args(vec![pushed.value.clone()]); // {else}(x)
                 let expr = expr_if_typed(cond.clone(), then, else_); // if {cond} then {then}(x) else {else}(x)
                 let expr = pushed.wrap(expr); // let x = {a} in if {cond} then {then}(x) else {else}(x)
                 return EndVisitResult::changed(expr).revisit();
@@ -230,8 +232,9 @@ impl ExprVisitor for AppInliner {
 
                 let mut pats_vals = func.get_match_pat_vals();
                 for (_pat, val) in &mut pats_vals {
-                    let new_val = expr_app_typed(val.clone(), vec![pushed.value.clone()])
-                        .set_app_order(expr.app_order.clone());
+                    let new_val = expr
+                        .set_app_func(val.clone())
+                        .set_app_args(vec![pushed.value.clone()]);
                     *val = new_val;
                 }
                 let expr = expr_match_typed(func.get_match_cond().clone(), pats_vals);
@@ -243,8 +246,9 @@ impl ExprVisitor for AppInliner {
                 // Replace it with `let x = {a} in eval {side} in {main}(x)`.
                 let pushed = PushedArg::new(&arg, &func);
 
-                let main_x = expr_app_typed(main.clone(), vec![pushed.value.clone()])
-                    .set_app_order(expr.app_order.clone()); // {main}(x)
+                let main_x = expr
+                    .set_app_func(main.clone())
+                    .set_app_args(vec![pushed.value.clone()]); // {main}(x)
                 let eval_expr = expr_eval_typed(side.clone(), main_x); // eval {side} in {main}(x)
                 let expr = pushed.wrap(eval_expr); // let x = {a} in eval {side} in {main}(x)
                 return EndVisitResult::changed(expr).revisit();
