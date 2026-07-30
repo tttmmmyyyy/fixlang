@@ -681,10 +681,10 @@ impl Configuration {
             data.push_str(&format!("{:x}", md5::compute(disabled_cpu_feature)));
         }
 
-        // The LLVM passes. The optimization level above does not determine them, because
-        // `--llvm-passes-file` replaces them; objects generated under one pipeline would
-        // otherwise be reused under another, and a comparison of two pipelines would measure
-        // whichever one compiled first.
+        // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
+        // implies, so the pipeline is hashed in full: were it left out, objects generated under
+        // one pipeline would be reused under another, and a comparison of two pipelines would
+        // measure whichever one compiled first.
         for pass in self.llvm_passes() {
             data.push_str(&format!("{:x}", md5::compute(&pass)));
         }

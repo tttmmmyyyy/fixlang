@@ -474,9 +474,9 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
-// The hash naming the cache of "build_object_files", or `None` after reporting why it could not be
-// calculated. A cache the compiler cannot name is one it can neither read nor write, so both users
-// of the hash skip the cache in that case.
+// The hash naming the cache of "build_object_files", or `None` after warning that it could not be
+// calculated. The hash is the cache's file name, so without it the cache can be neither read nor
+// written.
 fn build_object_files_cache_hash_or_warn(
     program: &Program,
     config: &Configuration,
@@ -581,6 +581,8 @@ fn optimize_and_verify<'c>(
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
+    // Hand each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if
+    // LLVM rejects one.
     fn run_passes_or_panic(
         module: &Module,
         passes: &[impl AsRef<str>],

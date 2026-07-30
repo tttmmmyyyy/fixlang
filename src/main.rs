@@ -548,6 +548,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ))
     }
 
+    // The set of project-file declarations the invocation applies to: `--test` selects the test
+    // dependencies and test source files, and its absence the build ones.
     fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
         if args.contains_id("test") {
             BuildConfigType::Test
@@ -559,12 +561,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     // Apply the options of one invocation on top of `config`, which already carries what the
     // project file declares.
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
-        // Files passed via `--source` are user code — append to both
+        // Files passed via `--file` are user code — append to both
         // `source_files` and `root_source_files`. Note that this runs
         // *after* the root `set_config` in `create_config`, so inside a
-        // project directory `--source foo.fix` adds `foo.fix` on top of
-        // whatever `fixproj.toml` already declared, rather than replacing
-        // it.
+        // project directory `--file foo.fix` adds `foo.fix` on top of
+        // whatever `fixproj.toml` already declared.
         for file in read_path_list_option(args, "source-files") {
             config.add_user_source_file(file);
         }
@@ -646,9 +647,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
 
         // Set `llvm_passes_override`.
-        // The file is read here rather than at code generation, so that the passes reach
-        // `Configuration::object_generation_hash` and a change to them invalidates the objects
-        // compiled under the previous ones.
+        // Reading the file here puts the passes into `Configuration::object_generation_hash`, so
+        // that a change to them invalidates the objects compiled under the previous ones.
         if let Some(passes) = read_llvm_passes_file_option(args)? {
             config.llvm_passes_override = Some(passes);
         }
