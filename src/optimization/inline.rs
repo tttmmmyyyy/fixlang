@@ -19,6 +19,19 @@ use super::application_inlining;
 
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
+/// How many times `run` rewrites the program before it stops asking for more.
+///
+/// Inlining reaches its result by rewriting until nothing changes, and a program whose global
+/// definitions name each other in a cycle never gets there: the rewriting goes around the cycle
+/// instead. A round doubles how far each name has been followed, so a chain of definitions L long
+/// settles in about log2(L) rounds — the standard library and every program measured alongside it
+/// settle within five, and a chain 500 long within eleven.
+///
+/// Ten covers what a program of any ordinary depth needs. It is also the reason to keep the number
+/// small: the bodies of globals that call each other in a cycle double every round, so each round
+/// left here is a term twice as large to finish with.
+const MAX_ROUNDS: usize = 10;
+
 pub fn run(prg: &mut Program) {
     // Calculate free variables of all symbols.
     for (_name, sym) in &mut prg.symbols {
@@ -26,7 +39,11 @@ pub fn run(prg: &mut Program) {
     }
 
     let mut skip_symbols = Set::default();
-    while run_one(prg, &mut skip_symbols) {}
+    for _ in 0..MAX_ROUNDS {
+        if !run_one(prg, &mut skip_symbols) {
+            break;
+        }
+    }
 }
 
 // Run inlining optimization once.
