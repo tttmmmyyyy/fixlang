@@ -10,6 +10,33 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 185782645f6d21c6db867f46eda12884e64a8a50
+
+The first row carrying both of the two rows below it. Those two — `87649b19` (the LLVM pipeline) and
+`423e50e1` (the order a call's arguments are evaluated in) — were measured on branches that both
+grew from `865cefea`, so they are siblings rather than steps: the difference between them is one
+change undone and another applied, and only this row holds both.
+
+Reading each against the sibling that lacks it separates them.
+
+**The argument order is worth -0.17% over the suite** (this row against `87649b19`): `levenshtein`
+-4.04%, `fib` -2.42%, `binary_trees` -1.07%, and nothing else past 0.2%. Its value is in cycles
+rather than instructions — on `fib` it removes 0.86 taken branches per call, which is what the
+instruction count cannot show.
+
+**The pipeline is worth -2.45%** (this row against `423e50e1`), with the same cases moving as in
+`87649b19`'s own row.
+
+**The two interact on `fib`, and only there.** Alone, the argument order takes it to -6.35% and the
+pipeline leaves it where it was; together they reach -2.42%, so the pipeline gives back 4.19 points
+of the order's win once the order is fixed. Everything else is additive (`nbody` -21.44% from the
+pipeline alone, `binary_trees` -1.07% from the order alone) or slightly better than additive
+(`levenshtein`, -2.87% and -0.29% apart, -4.32% together).
+
+Whether `fib` is actually slower for those instructions is open: its gap to Rust is front-end, made
+of taken branches rather than of instructions retired, so this rise has to be read in cycles before
+it means anything.
+
 ## 87649b1914a230ade36083b5c693b2f531313578
 
 Runs LLVM's `default<O3>` pipeline to a fixpoint — once at `-O basic`, three times at `-O max` and
