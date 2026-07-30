@@ -440,14 +440,14 @@ fn save_build_object_files_cache(
     );
 }
 
-// The value `result` carries, or `None` after warning that the step `description` names failed. The
-// object files cache is an optimization, so a step of reading or writing it that fails gives up on
-// the cache instead of failing the build.
-fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, description: &str) -> Option<T> {
+// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
+// The object files cache is an optimization, so a step of reading or writing it that fails gives up
+// on the cache instead of failing the build.
+fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) -> Option<T> {
     match result {
         Ok(value) => Some(value),
         Err(e) => {
-            warn_msg(&format!("{}: {}.", description, e));
+            warn_msg(&format!("{}: {}.", failure_msg, e));
             None
         }
     }
