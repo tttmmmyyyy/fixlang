@@ -503,9 +503,8 @@ pub struct Generator<'c, 'm> {
     /// map when code generation first asks for it (`global_value`), which is also where it is
     /// declared, so the module declares the globals it uses and no others.
     global: Map<FullName, ScopedValue<'c>>,
-    /// The type of every global symbol of the program, by name — the whole program, not just this
-    /// compilation unit, since a unit's code calls into the others. It is what a global is declared
-    /// from on first use.
+    /// The type of every global symbol of the program, by name — every compilation unit's, since a
+    /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Map<FullName, Arc<TypeNode>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
@@ -2060,8 +2059,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
     // A funptr function is reachable from another compilation unit when compilation is separated;
-    // a closure function is internal, so that LLVM renames one whose name collides rather than
-    // rejecting the module.
+    // a closure function is internal, so LLVM resolves a collision between two such names by
+    // renaming one of them.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,

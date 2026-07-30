@@ -75,9 +75,9 @@ mod debug_info_tests {
     // across modules, and whether a global's initializer is guarded for threads all vary with the
     // optimization level and with `--threaded`, so one combination working says nothing about another.
     //
-    // The answer is checked rather than the build's exit status alone: a declaration takes its
-    // signature from the symbol's type and the definition takes its own from the function that
-    // implements it, and the two disagreeing across modules links quietly.
+    // The answer is checked as well as the build succeeding: a declaration takes its signature from
+    // the symbol's type and the definition takes its own from the function that implements it, and
+    // the two disagreeing across modules links quietly.
     #[test]
     fn test_build_g_succeeds_at_every_optimization_level() {
         const SOURCE: &str = r#"

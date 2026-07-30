@@ -442,7 +442,7 @@ fn save_build_object_files_cache(
 
 // The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
 // The object files cache is an optimization, so a step of reading or writing it that fails gives up
-// on the cache instead of failing the build.
+// on the cache and lets the build go on.
 fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) -> Option<T> {
     match result {
         Ok(value) => Some(value),
