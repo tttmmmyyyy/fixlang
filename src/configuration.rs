@@ -430,12 +430,16 @@ impl Configuration {
         Ok(config)
     }
 
-    // Create configuration for check subcommand.
-    // Uses Diagnostics internally; target files are set later in the check command.
+    /// The configuration for the `check` subcommand, which type-checks the project — test code
+    /// included — and reports the diagnostics it collects. The set of files to check starts empty,
+    /// and is filled in once the project file has been read.
     pub fn check_mode() -> Result<Configuration, Errors> {
         Self::diagnostics_mode(DiagnosticsConfig::default())
     }
 
+    /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
+    /// unavailable the request is dropped with a warning. Any tool also disables the AVX-512
+    /// features valgrind cannot interpret (#41).
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -633,10 +637,14 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
+    /// Discard the global values that nothing reachable from `main` or from an exported function
+    /// uses. Runs at `Max` and above.
     pub fn enable_dead_symbol_elimination(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Build the program so that it prints a backtrace when it aborts: define the runtime's
+    /// `BACKTRACE` macro, and on Linux link the backtrace library it then calls into.
     pub fn set_backtrace(&mut self) {
         self.backtrace = true;
         self.runtime_c_macro.push("BACKTRACE".to_string());
@@ -943,6 +951,8 @@ int main() {
         Ok(sizes)
     }
 
+    /// Write these sizes as JSON to `C_TYPES_JSON_PATH`, from where a later compiler run reads them
+    /// back.
     fn save_to_file(&self) -> Result<(), Errors> {
         // Open json file.
         let path = C_TYPES_JSON_PATH;

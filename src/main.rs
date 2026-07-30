@@ -449,6 +449,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         paths.map(PathBuf::from).collect()
     }
 
+    // The kind of file the `--output-type` option asks the build to produce, if the invocation
+    // gives that option.
     fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
         match m.get_one::<String>("output-file-type") {
             None => return Ok(None),
@@ -485,6 +487,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
+    // The path the `--output` option names for the built file, if the invocation gives that option.
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
         m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
     }
@@ -499,6 +502,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect()
     }
 
+    // Every library the invocation links, each paired with how it is bound: `--static-link` names
+    // the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
     fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
@@ -514,6 +519,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         options
     }
 
+    // The directories the `--library-paths` option adds to the linker's search path for libraries.
     fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
         read_string_list_option(m, "library-paths")
             .into_iter()
@@ -521,6 +527,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect()
     }
 
+    // The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
+    // against the host's feature names, checked here for valid regex syntax.
     fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
         let features = read_string_list_option(m, "disable-cpu-feature");
         ProjectFile::validate_disable_cpu_features(&features)?;

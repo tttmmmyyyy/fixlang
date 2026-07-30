@@ -493,6 +493,9 @@ fn build_object_files_cache_hash_or_warn(
     }
 }
 
+// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
+// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
+// position-independent.
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
@@ -528,6 +531,9 @@ pub(crate) fn get_target_machine(
     }
 }
 
+// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
+// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
+// once it holds a complete object.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
     // Create directory if it doesn't exist.
     let dir_path = obj_path.parent().unwrap();
@@ -568,6 +574,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
+// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
+// optimization pipeline has already run over it.
 fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
@@ -576,6 +584,8 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
+// Verify `module`, run the LLVM optimization pipeline the configuration selects over it, then
+// verify it again. A module LLVM rejects, or a pipeline it cannot build, aborts the compilation.
 fn optimize_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,
@@ -615,6 +625,8 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
+// Implement the C `main` function of the program: store `argc` and `argv` into the global variables
+// the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return 0.
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
