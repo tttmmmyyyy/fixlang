@@ -21,7 +21,6 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use inkwell::basic_block::BasicBlock;
-use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
 use inkwell::{AddressSpace, IntPredicate};
@@ -77,10 +76,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         };
         let fn_val = self.module.add_function(&name, fn_ty, Some(linkage));
         fn_val.set_call_conventions(self.lambda_calling_convention());
-        if self.has_di() {
-            let fn_name = fn_val.get_name().to_str().unwrap().to_string();
-            fn_val.set_subprogram(self.create_debug_subprogram(&fn_name, func.source.clone()));
-        }
         if func.fn_ty.is_funptr() {
             self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
         }
@@ -101,14 +96,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let bb = self.context.append_basic_block(fn_val, "entry");
         self.builder().position_at_end(bb);
 
-        let _di_scope_guard = if self.has_di() {
-            let subprogram = fn_val
-                .get_subprogram()
-                .expect("a function implemented with debug info has a subprogram");
-            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-        } else {
-            None
-        };
+        let _di_scope_guard = self.attach_debug_subprogram(fn_val, func.source.clone());
 
         let _scope_guard = self.push_scope();
 
@@ -602,13 +590,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             .module
             .get_function(&format!("Get#{}", global_init.symbol.to_string()))
             .expect("a global has an accessor, declared with its symbol");
-        if self.has_di() {
-            let fn_name = acc_fn.get_name().to_str().unwrap().to_string();
-            acc_fn.set_subprogram(
-                self.create_debug_subprogram(&fn_name, global_init.init.source.clone()),
-            );
-        }
-
         let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
 
         // The storage for the initialized value, and the call-once flag.
@@ -642,14 +623,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
-        let _di_scope_guard = if self.has_di() {
-            let subprogram = acc_fn
-                .get_subprogram()
-                .expect("a function implemented with debug info has a subprogram");
-            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-        } else {
-            None
-        };
+        let _di_scope_guard = self.attach_debug_subprogram(acc_fn, global_init.init.source.clone());
 
         // Branch to the initialization code only on the first access.
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
@@ -680,11 +654,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.context.void_type().fn_type(&[], false),
                 Some(Linkage::Internal),
             );
-            if self.has_di() {
-                init_fn.set_subprogram(
-                    self.create_debug_subprogram(&init_fn_name, global_init.init.source.clone()),
-                );
-            }
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
@@ -695,14 +664,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
             self.builder().build_unconditional_branch(end_bb).unwrap();
             let init_bb = self.context.append_basic_block(init_fn, "init_bb");
-            let guard = if self.has_di() {
-                let subprogram = init_fn
-                    .get_subprogram()
-                    .expect("a function implemented with debug info has a subprogram");
-                Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-            } else {
-                None
-            };
+            let guard = self.attach_debug_subprogram(init_fn, global_init.init.source.clone());
             (init_bb, end_bb, guard)
         };
 

@@ -2058,12 +2058,30 @@ impl<'c, 'm> Generator<'c, 'm> {
         };
         let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
         lam_fn.set_call_conventions(self.lambda_calling_convention());
-        // Create and set debug info subprogram.
-        if self.has_di() {
-            let fn_name = lam_fn.get_name().to_str().unwrap();
-            lam_fn.set_subprogram(self.create_debug_subprogram(fn_name, lam.source.clone()));
-        }
         lam_fn
+    }
+
+    // Give `func`, whose body is about to be emitted, its debug-info subprogram and open that
+    // subprogram as the debug scope the body is generated under. The returned guard closes the scope
+    // when it is dropped; it is `None` when the build carries no debug info.
+    //
+    // Attaching the subprogram here, where the body is created, is what keeps it off a function that
+    // has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a module
+    // declares every global it refers to but defines only its own.
+    pub fn attach_debug_subprogram(
+        &mut self,
+        func: FunctionValue<'c>,
+        span: Option<Span>,
+    ) -> Option<PopDebugScopeGuard<'c>> {
+        if !self.has_di() {
+            return None;
+        }
+        let fn_name = func.get_name().to_str().unwrap().to_string();
+        func.set_subprogram(self.create_debug_subprogram(&fn_name, span));
+        let subprogram = func
+            .get_subprogram()
+            .expect("the subprogram just attached is readable back");
+        Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
     }
 
     // Create debug info subprogram.
@@ -2247,7 +2265,24 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Finalize all debug infos.
     pub fn finalize_di(&self) {
         if self.has_di() {
+            self.assert_no_subprogram_on_declaration();
             self.get_di_builder().finalize();
+        }
+    }
+
+    // A debug-info subprogram belongs to a function this module defines. LLVM's verifier rejects one
+    // attached to a function this module only declares, reporting every offending function at once
+    // and naming no cause; this says which function took a subprogram it should not have, at the
+    // point the attachment is still attributable to the code that made it. See
+    // `attach_debug_subprogram`, which is where a subprogram is attached.
+    fn assert_no_subprogram_on_declaration(&self) {
+        for func in self.module.get_functions() {
+            if func.count_basic_blocks() == 0 && func.get_subprogram().is_some() {
+                panic_with_msg(&format!(
+                    "the declaration of `{}` carries a debug info subprogram",
+                    func.get_name().to_str().unwrap()
+                ));
+            }
         }
     }
 
