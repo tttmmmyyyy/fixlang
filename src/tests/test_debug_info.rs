@@ -25,48 +25,82 @@ mod debug_info_tests {
     };
     use tempfile::TempDir;
 
-    // Build an inline Fix `source` with `-g` at optimization level `opt_level` and assert the build
-    // succeeds. The checks below need only that the build completes, so they assert its status
-    // rather than drive a debugger.
-    fn assert_build_g_succeeds(source: &str, opt_level: &str) {
+    // Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
+    // to `fix build` as well, assert the build succeeds, and return the directory holding the built
+    // `prog`. `FIX_MAX_OPT_LEVEL` is pinned to the level asked for, because the suite runs under a
+    // level taken from that variable and it caps the `-O` given here.
+    fn build_with_g(source: &str, opt_level: &str, extra_args: &[&str]) -> TempDir {
         let temp = TempDir::new().expect("Failed to create temp directory");
         fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
         let build = fix_command()
             .args([
                 "build", "-g", "-O", opt_level, "-f", "main.fix", "-o", "prog",
             ])
+            .args(extra_args)
+            .env("FIX_MAX_OPT_LEVEL", opt_level)
             .current_dir(temp.path())
             .output()
             .expect("Failed to execute `fix build`");
         assert!(
             build.status.success(),
-            "`fix build -g -O {}` failed:\nstdout:\n{}\nstderr:\n{}",
+            "`fix build -g -O {} {}` failed:\nstdout:\n{}\nstderr:\n{}",
             opt_level,
+            extra_args.join(" "),
             String::from_utf8_lossy(&build.stdout),
             String::from_utf8_lossy(&build.stderr),
         );
+        temp
     }
 
-    // Building with `-g` must succeed at every optimization level. A module declares every global it
-    // refers to but defines only the ones it owns, and a debug-information subprogram attached to a
-    // function the module merely declares is rejected by LLVM's verifier. Both which globals become
-    // LLVM functions and how the program is split across modules vary with the optimization level,
-    // so one level building says nothing about another.
+    // Run the `prog` built into `dir` and return what it wrote to stdout.
+    fn run_built_program(dir: &TempDir) -> String {
+        let run = Command::new("./prog")
+            .current_dir(dir.path())
+            .output()
+            .expect("Failed to execute the built program");
+        assert!(
+            run.status.success(),
+            "the built program exited with {}:\nstdout:\n{}\nstderr:\n{}",
+            run.status,
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr),
+        );
+        String::from_utf8_lossy(&run.stdout).to_string()
+    }
+
+    // Building with `-g` must succeed at every optimization level, and the program it produces must
+    // compute the right answer. A module declares every global it refers to but defines only the ones
+    // it owns, and a debug-information subprogram attached to a function the module merely declares is
+    // rejected by LLVM's verifier. Which globals become LLVM functions, how the program is split
+    // across modules, and whether a global's initializer is guarded for threads all vary with the
+    // optimization level and with `--threaded`, so one combination working says nothing about another.
+    //
+    // The answer is checked rather than the build's exit status alone: a declaration takes its
+    // signature from the symbol's type and the definition takes its own from the function that
+    // implements it, and the two disagreeing across modules links quietly.
     #[test]
     fn test_build_g_succeeds_at_every_optimization_level() {
-        for opt_level in ["none", "basic", "max"] {
-            assert_build_g_succeeds(
-                r#"
-                module Main;
+        const SOURCE: &str = r#"
+            module Main;
 
-                greeting : String;
-                greeting = "hello";
+            greeting : String;
+            greeting = "hello";
 
-                main : IO ();
-                main = println(greeting + [1, 2, 3].to_iter.map(|x| x + 1).to_array.to_string);
-            "#,
-                opt_level,
-            );
+            main : IO ();
+            main = println(greeting + [1, 2, 3].to_iter.map(|x| x + 1).to_array.to_string);
+        "#;
+        const EXPECTED: &str = "hello[2, 3, 4]\n";
+        for opt_level in ["none", "basic", "max", "experimental"] {
+            for extra_args in [&[][..], &["--threaded"][..]] {
+                let dir = build_with_g(SOURCE, opt_level, extra_args);
+                assert_eq!(
+                    run_built_program(&dir),
+                    EXPECTED,
+                    "built with -g -O {} {}",
+                    opt_level,
+                    extra_args.join(" "),
+                );
+            }
         }
     }
 
@@ -77,7 +111,7 @@ mod debug_info_tests {
     // the debug-information path — without it the same program builds.
     #[test]
     fn test_build_g_recursive_type_succeeds() {
-        assert_build_g_succeeds(
+        build_with_g(
             r#"
             module Main;
 
@@ -93,6 +127,7 @@ mod debug_info_tests {
             main = println(size(Tree::node $ (Tree::leaf(), Tree::leaf())).to_string);
         "#,
             "none",
+            &[],
         );
     }
 
@@ -102,7 +137,7 @@ mod debug_info_tests {
     // self-recursive type does not exercise.
     #[test]
     fn test_build_g_mutually_recursive_types_succeeds() {
-        assert_build_g_succeeds(
+        build_with_g(
             r#"
             module Main;
 
@@ -124,6 +159,7 @@ mod debug_info_tests {
             main = println(count(Tree::branch $ Forest::tree $ Tree::leaf(7)).to_string);
         "#,
             "none",
+            &[],
         );
     }
 
