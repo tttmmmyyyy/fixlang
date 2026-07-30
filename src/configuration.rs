@@ -35,6 +35,17 @@ const LLVM_O3_PIPELINE: &str = "default<O3>";
 /// sync with it.
 const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 
+/// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
+///
+/// The count comes first so that a list's items cannot be read as the next list's, and each item is
+/// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
+fn push_list_hash(data: &mut String, items: &[String]) {
+    data.push_str(&items.len().to_string());
+    for item in items {
+        data.push_str(&format!("{:x}", md5::compute(item)));
+    }
+}
+
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -224,7 +235,7 @@ pub struct Configuration {
     // Source files.
     pub source_files: Vec<PathBuf>,
     /// The subset of `source_files` that is user-authored: the root
-    /// project's own files, files passed via `--source`, and files pushed
+    /// project's own files, files passed via `--file`, and files pushed
     /// by unit-test entry points. Excludes files contributed by
     /// dependencies. Used to scope deprecation warnings to user code,
     /// mirroring how Rust/Swift/Kotlin/etc. only flag deprecated uses in
@@ -465,7 +476,7 @@ impl Configuration {
     }
 
     /// Register a user-authored source file: the root project's own files,
-    /// a path passed via `--source`, or a file pushed by a unit-test entry
+    /// a path passed via `--file`, or a file pushed by a unit-test entry
     /// point. The file lands in `source_files` (so it is parsed alongside
     /// dependencies) and additionally in `root_source_files`, which scopes
     /// deprecation diagnostics to user code.
@@ -684,18 +695,13 @@ impl Configuration {
         data.push_str(&self.backtrace.to_string());
         data.push_str(&self.no_runtime_check.to_string());
         data.push_str(&self.c_type_sizes.to_string());
-        for disabled_cpu_feature in &self.disable_cpu_features_regex {
-            // To ensure that the arrays ["xy", "x"] and ["x", "xy"] produce different hash values, we hash each element before concatenation instead of simply joining them.
-            data.push_str(&format!("{:x}", md5::compute(disabled_cpu_feature)));
-        }
+        push_list_hash(&mut data, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        for pass in self.llvm_passes() {
-            data.push_str(&format!("{:x}", md5::compute(&pass)));
-        }
+        push_list_hash(&mut data, &self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.

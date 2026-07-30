@@ -231,7 +231,9 @@ class BenchmarkResult:
 
 
 def get_all_passes():
-    passes = []
+    # The whole O3 pipeline is a candidate alongside the individual passes: the minimize phase can
+    # drop one of the runs the search starts from, so the add phase has to be able to put one back.
+    passes = list(INITIAL_PASSES[:1])
     for p in PASSES.split('\n'):
         if len(p.strip()) > 0:
             passes.append(p)

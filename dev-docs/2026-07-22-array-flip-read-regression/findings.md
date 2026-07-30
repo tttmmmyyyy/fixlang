@@ -110,6 +110,6 @@ cp_lib code.
   <pre-pass>.ll -S -o out.ll`, then grep `fixruntime_index_out_of_range` (checks) and `<N x i64>` /
   `vector.body` (vectorization). Vectorization-failure remarks: add
   `-pass-remarks-missed=loop-vectorize -pass-remarks-analysis=loop-vectorize`.
-- The pass pipeline lives in `src/build/build_object_files.rs` `optimize_and_verify`; `--llvm-passes-file`
-  replaces the post-`default<O3>` passes, so a file of `reg2mem,sroa,mem2reg,default<O3>` reproduces
-  the read fix (and the test22 overflow).
+- The pass pipeline lives in `Configuration::llvm_passes`; `--llvm-passes-file` replaces it, so a
+  file of `default<O3>,reg2mem,sroa,mem2reg,default<O3>` reproduces the read fix (and the test22
+  overflow).
