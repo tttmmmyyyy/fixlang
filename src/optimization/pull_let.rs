@@ -152,8 +152,8 @@ fn hoist_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let pat = fun.get_let_pat();
 
     // Rename `pat` and `expr1` to avoid conflicts with free variables in the argument.
-    let ng_names = arg.free_vars();
-    let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
+    let black_list = arg.free_vars();
+    let (pat, expr1) = rename_pattern_value_avoiding(&black_list, pat, expr1);
 
     expr_let_typed(pat, expr0, app.set_app_func(expr1))
 }

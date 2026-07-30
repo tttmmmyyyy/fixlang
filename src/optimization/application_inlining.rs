@@ -191,20 +191,20 @@ impl ExprVisitor for AppInliner {
                 }
                 let func = rename_let_pattern_avoiding(&black_list, func.clone());
 
-                let applied = expr
+                let value_x = expr
                     .set_app_func(func.get_let_value().clone())
                     .set_app_args(vec![pushed.value.clone()]); // {value}(x)
                 let expr = if bound_first {
                     expr_let_typed(
                         func.get_let_pat().clone(),
                         func.get_let_bound().clone(),
-                        pushed.wrap(applied),
+                        pushed.wrap(value_x),
                     )
                 } else {
                     pushed.wrap(expr_let_typed(
                         func.get_let_pat().clone(),
                         func.get_let_bound().clone(),
-                        applied,
+                        value_x,
                     ))
                 };
                 return EndVisitResult::changed(expr).revisit();
