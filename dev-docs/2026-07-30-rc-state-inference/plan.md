@@ -34,6 +34,25 @@ which removes the state load, the compare and the branch from tens of millions o
 `Threaded` cannot arise at all in a build with `threaded = false`, since `Std::mark_threaded` is
 rejected there.
 
+### The shape that would need `Global`
+
+A table held in a global and read from a hot loop — the Project Euler shape — is the one the issue
+expects to dominate the global arm. It does not, at the level that matters. A million-iteration loop
+over a global `Array I64`, in the three ways the table can be reached:
+
+| -O | referenced directly | passed to a function | bound to a local first |
+| --- | --: | --: | --: |
+| none | 4,000,012 | 8,000,012 | — |
+| basic | 4,000,012 | 6,000,012 | — |
+| max | 3 | 3 | 3 |
+
+(retain plus release on the global arm.)
+
+At `-O max` all three are the same three dispatches for the whole program: borrow inference and
+cancellation remove the operations themselves, so a `Global` specialization would have nothing left
+to specialize. The global arm is only hot at `-O none` and `-O basic`, which are the levels the
+project keeps deliberately weak.
+
 ## What proving `Local` is worth
 
 A compiler that emits only the local arm, unconditionally — unsound, but it bounds the payoff.
