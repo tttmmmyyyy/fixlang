@@ -40,6 +40,7 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
     panic::panic_any,
@@ -394,24 +395,14 @@ fn load_build_object_files_cache(
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = File::open(&cache_path);
-    if let Err(e) = file {
-        warn_msg(&format!(
-            "Failed to open object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return None;
-    }
-    let file = file.ok().unwrap();
-    let result = serde_json::from_reader(file);
-    if let Err(e) = result {
-        warn_msg(&format!(
-            "Failed to read object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return None;
-    }
-    let cache: BuildObjFilesResult = result.ok().unwrap();
+    let file = cache_step_or_warn(
+        File::open(&cache_path),
+        &format!("Failed to open object files cache \"{}\"", cache_path),
+    )?;
+    let cache: BuildObjFilesResult = cache_step_or_warn(
+        serde_json::from_reader(file),
+        &format!("Failed to read object files cache \"{}\"", cache_path),
+    )?;
     // Check all files in the cache exist.
     for path in &cache.obj_paths {
         if !path.exists() {
@@ -430,30 +421,35 @@ fn save_build_object_files_cache(
     let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
     };
-    if let Err(e) = create_dir_all(UNITS_CACHE_PATH) {
-        warn_msg(&format!(
-            "Failed to create directory for object files cache: {}.",
-            e
-        ));
+    let Some(()) = cache_step_or_warn(
+        create_dir_all(UNITS_CACHE_PATH),
+        "Failed to create directory for object files cache",
+    ) else {
         return;
-    }
+    };
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = File::create(&cache_path);
-    if let Err(e) = file {
-        warn_msg(&format!(
-            "Failed to create object files cache \"{}\": {}.",
-            cache_path, e
-        ));
+    let Some(file) = cache_step_or_warn(
+        File::create(&cache_path),
+        &format!("Failed to create object files cache \"{}\"", cache_path),
+    ) else {
         return;
-    }
-    let file = file.ok().unwrap();
-    let write_result = serde_json::to_writer_pretty(file, result);
-    if let Err(e) = write_result {
-        warn_msg(&format!(
-            "Failed to write object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return;
+    };
+    cache_step_or_warn(
+        serde_json::to_writer_pretty(file, result),
+        &format!("Failed to write object files cache \"{}\"", cache_path),
+    );
+}
+
+// The value `result` carries, or `None` after warning that the step `description` names failed. The
+// object files cache is an optimization, so a step of reading or writing it that fails gives up on
+// the cache instead of failing the build.
+fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, description: &str) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(e) => {
+            warn_msg(&format!("{}: {}.", description, e));
+            None
+        }
     }
 }
 
@@ -481,16 +477,10 @@ fn build_object_files_cache_hash_or_warn(
     program: &Program,
     config: &Configuration,
 ) -> Option<String> {
-    match build_object_files_cache_hash(program, config) {
-        Ok(hash) => Some(hash),
-        Err(e) => {
-            warn_msg(&format!(
-                "Failed to calculate hash of object files cache: {}.",
-                e
-            ));
-            None
-        }
-    }
+    cache_step_or_warn(
+        build_object_files_cache_hash(program, config),
+        "Failed to calculate hash of object files cache",
+    )
 }
 
 // The LLVM target machine to compile for: the host's CPU with the features it supports, minus the

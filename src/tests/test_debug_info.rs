@@ -198,22 +198,11 @@ mod debug_info_tests {
         }
     }
 
-    // Build `sample` with debug information into a fresh temp directory and return it. `-g` also
-    // forces `-O none`, so the locals are not optimized away.
+    // Build the Fix source file `sample` with debug information into a fresh temp directory and
+    // return it. The build is at `-O none`, so the locals are not optimized away.
     fn build_debuggee(sample: PathBuf) -> TempDir {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        fs::copy(sample, temp.path().join("main.fix")).expect("Failed to copy main.fix");
-        let build = fix_command()
-            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
-            .current_dir(temp.path())
-            .output()
-            .expect("Failed to execute `fix build`");
-        assert!(
-            build.status.success(),
-            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr)
-        );
+        let source = fs::read_to_string(sample).expect("Failed to read the sample main.fix");
+        let temp = build_with_g(&source, "none", &[]);
         assert!(
             temp.path().join("prog").exists(),
             "output binary `prog` was not produced by `fix build -g`"
@@ -262,15 +251,10 @@ mod debug_info_tests {
         );
     }
 
-    fn sample_main_fix() -> PathBuf {
+    // The `main.fix` of the sample program `cases/<case>/`.
+    fn case_main_fix(case: &str) -> PathBuf {
         let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push("src/tests/test_debug_info/cases/debug_baseline/main.fix");
-        p
-    }
-
-    fn array_main_fix() -> PathBuf {
-        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push("src/tests/test_debug_info/cases/debug_array/main.fix");
+        p.push(format!("src/tests/test_debug_info/cases/{}/main.fix", case));
         p
     }
 
@@ -283,7 +267,7 @@ mod debug_info_tests {
     // carries per-frame line info up the Fix call chain (wrap's call site and main's call site),
     // independent of frame names.
     fn baseline_impl(debugger: Debugger) {
-        let temp = build_debuggee(sample_main_fix());
+        let temp = build_debuggee(case_main_fix("debug_baseline"));
         let commands = match debugger {
             Debugger::Gdb => vec![
                 format!("break main.fix:{}", LINE_COMPUTE_BODY),
@@ -338,12 +322,6 @@ mod debug_info_tests {
         baseline_impl(Debugger::Lldb);
     }
 
-    fn sample_debug_vars() -> PathBuf {
-        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push("src/tests/test_debug_info/cases/debug_vars/main.fix");
-        p
-    }
-
     // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
     const LINE_VARS_BREAK: u32 = 10; // "    eval i;"
 
@@ -352,7 +330,7 @@ mod debug_info_tests {
     // `DW_ATE_boolean`, not a union struct). An `Array` / `String` local carries its Fix type name
     // (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
     fn variable_values_impl(debugger: Debugger) {
-        let temp = build_debuggee(sample_debug_vars());
+        let temp = build_debuggee(case_main_fix("debug_vars"));
         let commands: Vec<String> = match debugger {
             Debugger::Gdb => [
                 format!("break main.fix:{}", LINE_VARS_BREAK).as_str(),
@@ -427,12 +405,6 @@ mod debug_info_tests {
         variable_values_impl(Debugger::Lldb);
     }
 
-    fn sample_debug_destructure() -> PathBuf {
-        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push("src/tests/test_debug_info/cases/debug_destructure/main.fix");
-        p
-    }
-
     // Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
     // are live.
     const LINE_DESTRUCTURE_BREAK: u32 = 9; // "    eval a;"
@@ -441,7 +413,7 @@ mod debug_info_tests {
     // must let a debugger inspect every one by its source name. `a` and `n` are the unboxed `I64`
     // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
     fn destructure_impl(debugger: Debugger) {
-        let temp = build_debuggee(sample_debug_destructure());
+        let temp = build_debuggee(case_main_fix("debug_destructure"));
         let commands: Vec<String> = match debugger {
             Debugger::Gdb => [
                 format!("break main.fix:{}", LINE_DESTRUCTURE_BREAK).as_str(),
@@ -519,7 +491,7 @@ mod debug_info_tests {
     // all of them, so the debugger shows 100 elements whose first `<array size>` ones are the valid
     // values, without "access outside bounds" errors.
     fn array_elements_impl(debugger: Debugger) {
-        let temp = build_debuggee(array_main_fix());
+        let temp = build_debuggee(case_main_fix("debug_array"));
         // Break while the arrays are still alive (they are used after the breakpoint line; Fix
         // releases locals at their last use), then print them. A flipped `Array` value prints its
         // size directly, but its elements live in the `#ArrayStorage` behind `_storage`, so the
