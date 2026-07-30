@@ -321,7 +321,7 @@ def optimize(work_dir, start):
 
     with open(LOG_FILE, "a") as f:
         f.write(f"Start optimization at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-    print("Starting from:", ", ".join(optimum))
+    print("Starting from:", ", ".join(optimum), flush=True)
 
     phase = 0
     while not interrupted():
@@ -331,13 +331,13 @@ def optimize(work_dir, start):
         if phase % 2 == 1:
             added = [random.choice(pool) for _ in range(random.randint(1, ADDED_PASSES_NUM))]
             candidate = optimum + added
-            print(f"\nPhase {phase}: adding {', '.join(added)}")
+            print(f"\nPhase {phase}: adding {', '.join(added)}", flush=True)
         else:
             if len(optimum) <= 1:
                 continue
             dropped = random.randrange(len(optimum))
             candidate = optimum[:dropped] + optimum[dropped + 1:]
-            print(f"\nPhase {phase}: dropping {optimum[dropped]}")
+            print(f"\nPhase {phase}: dropping {optimum[dropped]}", flush=True)
 
         candidate_dir = work_dir / f"candidate{phase}"
         candidate_binaries = build(candidate, SEARCH_CASES, candidate_dir)
@@ -388,7 +388,7 @@ def main():
             start = [line.strip() for line in start_file.read_text().splitlines()
                      if line.strip()]
         print(f"Type a line and press enter to stop. Load is {os.getloadavg()[0]:.2f}; "
-              f"cycles are worth measuring on a quiet machine.")
+              f"cycles are worth measuring on a quiet machine.", flush=True)
         optimize(work_dir, start)
 
 
