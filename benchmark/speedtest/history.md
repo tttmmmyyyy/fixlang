@@ -10,6 +10,73 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 87649b1914a230ade36083b5c693b2f531313578
+
+Runs LLVM's `default<O3>` pipeline to a fixpoint — once at `-O basic`, three times at `-O max` and
+`-O experimental` — in place of the twelve hand-picked passes that used to follow a single run. The
+whole suite comes to **-2.49%** on the geometric mean of the instruction counts, 22 of the 46 cases
+falling and 3 rising.
+
+| case | change | | case | change |
+|---|--:|---|---|--:|
+| nbody | -21.44% | | sort | -2.15% |
+| fannkuch_scratch | -14.47% | | cp_lib_scc | -1.90% |
+| fill, fill_from_map | -12.31% | | cp_lib_dijkstra | -1.43% |
+| fannkuch | -8.63% | | cp_lib_segtree | -1.31% |
+| mandelbrot, mandelbrot_fold | -6.47% | | cp_lib_lsegtree | -1.13% |
+| nbody_fold | -5.29% | | arrayrw, arrayrw_fn, struct_field_mod | -0.66% |
+| cp_lib_unionfind | -4.08% | | levenshtein | -0.29% |
+| random_state | -3.32% | | cp_lib_bipartite | +0.92% |
+| option_plumbing | -3.09% | | cp_lib_conv_zp | +0.26% |
+| gen_random_array | -2.64% | | cp_lib_prime_list | +0.21% |
+
+A fourth run of the pipeline changes no case by a single instruction, which is what fixes the count
+at three.
+
+**These figures are an upper bound on what a machine with avx512 gets.** The suite disables avx512
+so that cachegrind can simulate the program, and the extra runs earn much more without it: `nbody`
+falls 21.4% here and 6.6% when the same change is measured with avx512 enabled.
+
+**Cycles move far less than instructions.** Over the nine cases of `benchmark/crosslang`, measured
+by interleaving the two builds within one run and taking the minimum of thirty rounds, instructions
+come to 0.956x and cycles to 0.987x. `nbody` loses 6.6% of its instructions there and no cycles at
+all — those instructions were issuing in slots that were going empty. Compile time rises about 14%
+at `-O experimental` and stays level at `-O basic`.
+
+This row is also the first that another pipeline can be measured against in the same directory: the
+pass pipeline now takes part in the object-file cache key, where before a second build returned the
+objects the first had cached, whatever pipeline it was given.
+
+## 423e50e1538e9f4f75708dac436869be871539c7
+
+Evaluates a call's arguments in the order they are written (PR #140), where a prefix call used to
+evaluate them backwards at `-O max`. The percentages are against the `a9a1b1a2` row, measured with
+the same compiler sources on both sides.
+
+| case | instructions | memory accesses |
+|---|--:|--:|
+| fib | -6.35% | -4.80% |
+| levenshtein | -2.87% | -2.57% |
+| binary_trees | -1.07% | +0.35% |
+| cp_lib_unionfind | -0.37% | -0.31% |
+| sort | +0.05% | 0.00% |
+| cp_lib_bipartite | +0.35% | +0.15% |
+| cp_lib_conv_zp | +0.74% | +1.00% |
+
+Every other case moves less than 0.05%; the 46 together retire 0.26% fewer instructions. `fib` is the
+case the order decides: LLVM's tail-recursion elimination folds the *last* call into a loop, so which
+of `fib(n - 1)` and `fib(n - 2)` goes last picks the decomposition, and the written order picks the
+one with fewer leaf calls.
+
+**The splits column of the `a9a1b1a2` row is not comparable with this one.** It reads as a 90% fall on 41
+of the 46 cases, including `startup`, whose instruction count is identical in the two rows — a program
+that does nothing cannot have lost 152 split accesses to an evaluation-order change. Measured
+back-to-back at one path, the two compilers give the same count: `startup` 16 and 16, `arrayrw` 17 and
+17, `sum_by_fold` 23 and 23. The counter is repeatable within a run (five runs, one value) and perf
+reports it 100% enabled. `perf_counters.py` reads the count and ignores the enabled percentage perf
+prints beside it, so a run whose events the PMU time-sliced enters the log as a scaled estimate that
+looks like any other measurement -- which is the condition that produces a tenfold column.
+
 ## d51e4a2eeaf179d01e5a918974b3a28e40dfbb3f
 
 Removes two latent defects from the substitutor that rewrites free names (PR #127): a rewrite the

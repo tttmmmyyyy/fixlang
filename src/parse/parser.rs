@@ -1672,6 +1672,14 @@ fn parse_binary_operator_sequence(
             if next_operation.reverse {
                 swap(&mut lhs, &mut rhs);
             }
+            // A reversed operator hands the method its operands the other way round, which puts the
+            // operand written first in the outer application's argument position -- the shape
+            // `XDotF` denotes.
+            let outer_order = if next_operation.reverse {
+                AppSourceCodeOrderType::XDotF
+            } else {
+                AppSourceCodeOrderType::FX
+            };
             let span = unite_span(&unite_span(&next_op_span, &lhs.source), &rhs.source);
             expr = expr_app(
                 expr_app(
@@ -1681,7 +1689,8 @@ fn parse_binary_operator_sequence(
                 ),
                 vec![rhs],
                 span.clone(),
-            );
+            )
+            .set_app_order(outer_order);
             match next_operation.post_unary.as_ref() {
                 Some(op) => {
                     expr = expr_app(

@@ -105,28 +105,82 @@ it.fold(s0, |i, s| s + n)
 
 After applying the pull-let transformation (2) and (3), the second code can be transformed into a form that can be applied with decapturing optimization.
 
-*/
+# Evaluation order
 
-use std::sync::Arc;
+Transformations (2) and (3) also set the order in which a call evaluates its arguments: the `let`s
+leave an application from the outside in, and the argument bound by the outermost `let` is evaluated
+first. A call written `f(x, y)` nests as `f(x)(y)` and one written `x.f(y)` nests as `f(y)(x)`, so
+`ExprNode::app_order` is what says whether the function position or the argument carries the
+argument written first. This pass takes that one first, so the `let` chain it leaves behind holds the
+arguments in the order they are written. A pass that moves an expression afterwards can still change
+the order the program ends up evaluating them in.
+
+*/
 
 use crate::{
     ast::{
-        expr::{expr_app_typed, expr_let_typed, expr_var, var_var, ExprNode},
+        expr::{expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr, ExprNode},
         pattern::PatternNode,
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
+use std::sync::Arc;
 
+/// Transformation (2): `{expr0}({non-variable-expr})` to `let f = {non-variable-expr}; {expr0}(f)`.
+fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+    let fun = app.get_app_func();
+    let arg = app.get_app_args()[0].clone();
+
+    let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
+    let arg_ty = arg.type_.as_ref().unwrap();
+    let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
+    let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
+
+    expr_let_typed(f_pat, arg, app.set_app_args(vec![f_var]))
+}
+
+/// Transformation (3): `(let {pat} = {expr0}; {expr1})({expr2})` to
+/// `let {pat'} = {expr0}; {expr1'}({expr2})`.
+fn pull_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+    let fun = app.get_app_func();
+    let arg = app.get_app_args()[0].clone();
+
+    let expr0 = fun.get_let_bound();
+    let expr1 = fun.get_let_value();
+    let pat = fun.get_let_pat();
+
+    // Rename `pat` and `expr1` to avoid conflicts with free variables in the argument.
+    let black_list = arg.free_vars();
+    let (pat, expr1) = rename_pattern_value_avoiding(&black_list, pat, expr1);
+
+    expr_let_typed(pat, expr0, app.set_app_func(expr1))
+}
+
+/// Whether the function position of an application still holds a `let` for this pass to pull out:
+/// an application on its spine whose argument is not a variable yet, or a `let` that transformation
+/// (3) hoists.
+fn has_something_to_pull(fun: &Arc<ExprNode>) -> bool {
+    match fun.expr.as_ref() {
+        Expr::App(inner_fun, args) => {
+            args.iter().any(|arg| !arg.is_var()) || has_something_to_pull(inner_fun)
+        }
+        Expr::Let(_, _, _) => true,
+        _ => false,
+    }
+}
+
+/// Applies the transformations to a fixpoint, repeating the traversal for as long as it keeps
+/// rewriting.
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut expr = expr.clone();
     while run_on_expr_once(&mut expr) {}
     expr
 }
 
-// Run pull-let transformation once on the given expression.
-//
-// If any transformation is applied, returns true.
+/// Run pull-let transformation once on the given expression.
+///
+/// If any transformation is applied, returns true.
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     let mut pull_let = PullLet {};
     let res = pull_let.traverse(expr);
@@ -134,111 +188,96 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     res.changed
 }
 
+/// The visitor that carries out the three transformations. It acts on an application and on a `let`
+/// before their subexpressions are visited, and leaves every other kind of expression as it is.
 struct PullLet {}
 
 impl ExprVisitor for PullLet {
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_llvm(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let fun = expr.get_app_func();
         let args = expr.get_app_args();
-        assert_eq!(args.len(), 1);
+        assert_eq!(
+            args.len(),
+            1,
+            "an application of {} arguments reached the pull-let transformation",
+            args.len()
+        );
         let arg = &args[0];
 
+        // The `let`s leave an application in the order the call evaluates its arguments in, so
+        // which of the function position and this argument is taken first is what sets that order.
+        // `f(x, y)` nests as `f(x)(y)`, which puts the argument written first on the inner
+        // application: settle the function position, then pull this one. `x.f(y)` nests as
+        // `f(y)(x)`, which puts the argument written first on this application.
+        if expr.app_order == AppSourceCodeOrderType::FX {
+            if fun.is_let() {
+                return StartVisitResult::ReplaceAndRevisit(pull_let_out_of_function(expr));
+            }
+            if has_something_to_pull(&fun) {
+                return StartVisitResult::VisitChildren;
+            }
+        }
+
         if !arg.is_var() {
-            // Apply the transformation (2).
-            let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
-            let arg_ty = arg.type_.as_ref().unwrap();
-            let f_pat =
-                PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
-            let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
-            let expr = expr_let_typed(f_pat, arg.clone(), expr_app_typed(fun, vec![f_var]));
-            return StartVisitResult::ReplaceAndRevisit(expr);
+            return StartVisitResult::ReplaceAndRevisit(pull_argument_into_let(expr));
         }
 
         if fun.is_let() {
-            // Apply the transformation (3).
-            let expr0 = fun.get_let_bound();
-            let expr1 = fun.get_let_value();
-            let pat = fun.get_let_pat();
-            let expr2 = arg.clone();
-
-            // Rename `pat` and `expr1` to avoid conflicts with free variables in `expr2`.
-            let ng_names = expr2.free_vars();
-            let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
-
-            // Construct the new expression.
-            let expr = expr_let_typed(pat, expr0, expr_app_typed(expr1, vec![expr2]));
-
-            return StartVisitResult::ReplaceAndRevisit(expr);
+            return StartVisitResult::ReplaceAndRevisit(pull_let_out_of_function(expr));
         }
 
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Check if the transformation (1) can be applied.
         let bound = expr.get_let_bound();
         if !bound.is_let() {
@@ -253,8 +292,8 @@ impl ExprVisitor for PullLet {
         let expr2 = expr.get_let_value();
 
         // Rename `pat1` and `expr1` to avoid conflicts with free variables in `expr2`.
-        let ng_names = expr2.free_vars();
-        let (pat1, expr1) = rename_pattern_value_avoiding(&ng_names, pat1, expr1);
+        let black_list = expr2.free_vars();
+        let (pat1, expr1) = rename_pattern_value_avoiding(&black_list, pat1, expr1);
 
         // Construct the new expression.
         let expr = expr_let_typed(pat1, expr0, expr_let_typed(pat0, expr1, expr2));
@@ -262,123 +301,107 @@ impl ExprVisitor for PullLet {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_if(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_eval(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

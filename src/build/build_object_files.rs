@@ -6,7 +6,7 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
-    configuration::{Configuration, FixOptimizationLevel, OutputFileType},
+    configuration::{Configuration, OutputFileType},
     constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     error::{panic_with_msg, Errors},
     fixstd::{
@@ -15,7 +15,7 @@ use crate::{
     },
     generator::Generator,
     misc::{info_msg, spawn_compiler_thread, warn_msg, Set},
-    optimization,
+    optimization::optimization,
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
@@ -25,6 +25,7 @@ use crate::{
         rc_insert::insert_rc,
         simplify::simplify,
         unique_check_elim::specialize,
+        validate,
     },
     tool::stopwatch::StopWatch,
 };
@@ -36,10 +37,11 @@ use inkwell::{
     values::BasicValue,
     AddressSpace, OptimizationLevel,
 };
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, create_dir_all},
+    fs::{self, create_dir_all, File},
+    mem,
     panic::panic_any,
     path::{Path, PathBuf},
     sync::Arc,
@@ -97,7 +99,7 @@ fn optimize_rc_program(
     };
     let validate = |prog: &RcProgram, stage: &str| {
         if config.develop_mode {
-            crate::rc_ir::validate::validate(prog, &symbol_names, type_env, stage);
+            validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
 
@@ -196,10 +198,10 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
         return;
     };
     let type_env = program.type_env();
-    let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms, config);
+    let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+    let base = lower_and_insert_rc(&type_env, &all_symbols, &all_symbols, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, &all_syms, config);
+    let optimized = optimize_rc_program(base, &type_env, &all_symbols, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
@@ -220,7 +222,7 @@ pub fn build_object_files<'c>(
     }
 
     // Run optimizations.
-    optimization::optimization::run(&mut program, &config);
+    optimization::run(&mut program, &config);
 
     dump_rc_ir_stages(&program, config);
 
@@ -285,7 +287,7 @@ pub fn build_object_files<'c>(
 
         let export_statements = if is_main_unit {
             // Export statements are only needed for the main unit.
-            std::mem::replace(&mut program.export_statements, vec![])
+            mem::replace(&mut program.export_statements, vec![])
         } else {
             vec![]
         };
@@ -387,20 +389,12 @@ fn load_build_object_files_cache(
     program: &Program,
     config: &Configuration,
 ) -> Option<BuildObjFilesResult> {
-    let hash = build_object_files_cache_hash(program, config);
-    if let Err(e) = hash {
-        warn_msg(&format!(
-            "Failed to calculate hash of object files cache: {}.",
-            e
-        ));
-        return None;
-    }
-    let hash = hash.ok().unwrap();
+    let hash = build_object_files_cache_hash_or_warn(program, config)?;
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = fs::File::open(&cache_path);
+    let file = File::open(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to open object files cache \"{}\": {}.",
@@ -433,15 +427,9 @@ fn save_build_object_files_cache(
     config: &Configuration,
     result: &BuildObjFilesResult,
 ) {
-    let hash = build_object_files_cache_hash(program, config);
-    if let Err(e) = hash {
-        warn_msg(&format!(
-            "Failed to calculate hash of object files cache: {}.",
-            e
-        ));
+    let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
-    }
-    let hash = hash.ok().unwrap();
+    };
     if let Err(e) = create_dir_all(UNITS_CACHE_PATH) {
         warn_msg(&format!(
             "Failed to create directory for object files cache: {}.",
@@ -450,7 +438,7 @@ fn save_build_object_files_cache(
         return;
     }
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = fs::File::create(&cache_path);
+    let file = File::create(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to create object files cache \"{}\": {}.",
@@ -459,8 +447,8 @@ fn save_build_object_files_cache(
         return;
     }
     let file = file.ok().unwrap();
-    let res = serde_json::to_writer_pretty(file, result);
-    if let Err(e) = res {
+    let write_result = serde_json::to_writer_pretty(file, result);
+    if let Err(e) = write_result {
         warn_msg(&format!(
             "Failed to write object files cache \"{}\": {}.",
             cache_path, e
@@ -486,6 +474,28 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
+// The hash naming the cache of "build_object_files", or `None` after warning that it could not be
+// calculated. The hash is the cache's file name, so without it the cache can be neither read nor
+// written.
+fn build_object_files_cache_hash_or_warn(
+    program: &Program,
+    config: &Configuration,
+) -> Option<String> {
+    match build_object_files_cache_hash(program, config) {
+        Ok(hash) => Some(hash),
+        Err(e) => {
+            warn_msg(&format!(
+                "Failed to calculate hash of object files cache: {}.",
+                e
+            ));
+            None
+        }
+    }
+}
+
+// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
+// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
+// position-independent.
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
@@ -521,6 +531,9 @@ pub(crate) fn get_target_machine(
     }
 }
 
+// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
+// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
+// once it holds a complete object.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
     // Create directory if it doesn't exist.
     let dir_path = obj_path.parent().unwrap();
@@ -535,8 +548,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
         Ok(_) => {}
     }
     // Write to a temporary file.
-    let tmp_file_path =
-        obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
+    let tmp_file_path = obj_path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
     target_machine
         .write_to_file(&module, FileType::Object, &tmp_file_path)
         .map_err(|e| {
@@ -562,6 +574,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
+// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
+// optimization pipeline has already run over it.
 fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
@@ -570,13 +584,22 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
+// Verify `module`, run the LLVM optimization pipeline the configuration selects over it, then
+// verify it again. A module LLVM rejects, or a pipeline it cannot build, aborts the compilation.
 fn optimize_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
-    fn run_passes_or_panic(module: &Module, passes: &[&str], target_machine: &TargetMachine) {
+    // Hand each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if
+    // LLVM rejects one.
+    fn run_passes_or_panic(
+        module: &Module,
+        passes: &[impl AsRef<str>],
+        target_machine: &TargetMachine,
+    ) {
         for pass in passes {
+            let pass = pass.as_ref();
             if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
                 panic_with_msg(&format!(
                     "Failed to run pass \"{}\": {}",
@@ -587,33 +610,8 @@ fn optimize_and_verify<'c>(
         }
     }
 
-    // Get passes.
-    let passes = match &config.llvm_passes_file {
-        None => include_str!("llvm_passes.txt").to_string(),
-        Some(file) => fs::read_to_string(file).unwrap(),
-    };
-    let passes = passes
-        .lines()
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
-
-    // Run optimization
     run_passes_or_panic(module, &["verify"], target_machine);
-
-    match config.fix_opt_level() {
-        FixOptimizationLevel::None => {}
-        FixOptimizationLevel::Basic => {
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-        FixOptimizationLevel::Max => {
-            run_passes_or_panic(module, &["default<O3>"], target_machine);
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-        FixOptimizationLevel::Experimental => {
-            run_passes_or_panic(module, &["default<O3>"], target_machine);
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-    }
+    run_passes_or_panic(module, &config.llvm_passes(), target_machine);
     run_passes_or_panic(module, &["verify"], target_machine);
 }
 
@@ -627,6 +625,8 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
+// Implement the C `main` function of the program: store `argc` and `argv` into the global variables
+// the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return 0.
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
@@ -640,14 +640,14 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
     gc.builder().position_at_end(entry_bb);
 
     // Save argc and argv to global variables.
-    for (i, arg) in [GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV]
+    for (i, global_var_name) in [GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV]
         .iter()
         .enumerate()
     {
         let arg_val = main_function.get_nth_param(i as u32).unwrap();
         let gv_ptr = gc
             .module
-            .get_global(arg)
+            .get_global(global_var_name)
             .unwrap()
             .as_basic_value_enum()
             .into_pointer_value();
