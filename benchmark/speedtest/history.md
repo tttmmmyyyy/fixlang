@@ -10,6 +10,20 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## daebd8de1544fe7ae2f50abc578980955edb98b7
+
+Bounds how many times inlining rewrites the program (PR #145), so that globals naming each other in
+a cycle stop the pass instead of holding it forever.
+
+**Nothing in this row is that change.** The bound is reached only by a program that would not have
+finished, and an assertion that it is ever reached was run over all 46 cases here: none reached it,
+so the pass performed exactly the rounds it performed before and emitted the same code.
+
+The row is not comparable with the one above it either. Thirty commits landed in between, among them
+the LLVM pass pipeline run to a fixpoint (#147) and the change that evaluates a call's arguments in
+the order they are written (#140). That is where `levenshtein` (-4.0%), `fib` (-2.4%) and
+`binary_trees` (-1.1%) come from.
+
 ## 87649b1914a230ade36083b5c693b2f531313578
 
 Runs LLVM's `default<O3>` pipeline to a fixpoint — once at `-O basic`, three times at `-O max` and
