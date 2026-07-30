@@ -1,7 +1,5 @@
 use std::sync::Arc;
-
 use inkwell::context::Context;
-
 use crate::ast::name::FullName;
 use crate::ast::types::{tycon, type_tyapp, type_tycon, TypeNode};
 use crate::build::build_object_files::get_target_machine;
