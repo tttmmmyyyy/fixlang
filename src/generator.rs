@@ -20,7 +20,7 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
-use crate::constants::REFCNT_STATE_GLOBAL;
+use crate::constants::PERMANENT_REFCNT;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
 use crate::error::panic_with_msg;
@@ -1795,7 +1795,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Mark the object itself.
         if work == TraverserWorkType::mark_global() {
-            self.mark_global_one(obj_ptr);
+            self.mark_permanent_one(obj_ptr);
         } else {
             self.mark_threaded_one(obj_ptr);
         }
@@ -1893,14 +1893,28 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    // Mark object as global so that it will not be retained or released.
-    fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
-        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
+    /// Give the object at `ptr` a permanent reference count: `PERMANENT_REFCNT` is `2^31` decrements
+    /// away from the one count that matters, so no run of the program drives it to 1. The object is
+    /// therefore never destructed and never answers a uniqueness test with "unique", which is what a
+    /// value reachable from a global needs — every other reference to it is counted as usual.
+    fn mark_permanent_one(&mut self, ptr: PointerValue<'c>) {
+        let state = if self.config.threaded {
+            REFCNT_STATE_THREADED
+        } else {
+            REFCNT_STATE_LOCAL
+        };
+        let ptr_refcnt_state = self.get_refcnt_state_ptr(ptr);
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                refcnt_state_type(self.context).const_int(state as u64, false),
+            )
+            .unwrap();
+        let ptr_refcnt = self.get_refcnt_ptr(ptr);
+        self.builder()
+            .build_store(
+                ptr_refcnt,
+                refcnt_type(self.context).const_int(PERMANENT_REFCNT, false),
             )
             .unwrap();
     }

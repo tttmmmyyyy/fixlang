@@ -150,6 +150,12 @@ pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that 
 pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
 pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
 
+/// The reference count of an object reachable from a global value. Every decision a reference count
+/// drives is an equality against 1 — a release destructs when the count it read was 1, and a
+/// uniqueness test calls 1 unique — so a count this far from 1 makes an object permanent: 2^31
+/// releases would have to outnumber its retains before it could be freed or mutated in place.
+pub const PERMANENT_REFCNT: u64 = 1 << 31;
+
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // How far the object sits above the base of its allocation. Nonzero where the object was placed
