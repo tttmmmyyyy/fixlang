@@ -118,6 +118,36 @@ answered. Either way, **the inference the issue asks for is what matters there**
 replaces an atomic operation with a non-atomic one, which is a far larger saving than removing a
 predictable branch.
 
+### A boxed global drains, and the mark alone does not stop it
+
+`add_global_object` gives a global of a **boxed** type `retain_on_read = false`, on the reasoning
+that "a boxed global is moved out when read, so it needs no retain", and the accessor
+`implement_rc_global` emits loads the value and returns it without retaining. The consumer then owns
+it and releases it. So **each read of a boxed global is a net decrement**, and what makes a global
+survive being read at all today is `GLOBAL` turning that release into a no-op.
+
+Measured: a `box struct` global read a million times, counting the global arm.
+
+| -O | retain | release |
+| --- | --: | --: |
+| none | 6 | 1,000,006 |
+| basic | 6 | 1,000,006 |
+| max | 1 | 2 |
+
+One net release per read at the low levels; at `-O max` borrow inference removes the operations, as
+everywhere else.
+
+A large mark does not survive that. The drain is not bounded by how many references are live at
+once — the reasoning that makes 2^31 look unreachable — but by how many times the program reads the
+global, cumulatively, which a loop reaches in seconds. **Stage 1 therefore has to retain a boxed
+global on read**, making its accessor behave like every other shared value. At `-O max` borrow
+inference removes that retain along with the release it balances, which is why the corpus counts
+above are what they are; at `-O none` and `-O basic` it replaces a skipped branch with a real
+increment, which belongs in the measurement that section already calls for.
+
+That the "moved out when read" convention works at all is a consequence of `GLOBAL`, not something
+independent of it. Removing one requires removing the other.
+
 ### Headroom
 
 **One count is dangerous, and it is 1.** `build_release_boxed_with` destructs when the count it read
@@ -129,8 +159,12 @@ signedness of `refcnt_type` never enters.
 The mark therefore wants to sit as far from 1 as the 32 bits allow in both directions, which is
 `2^31`: reaching 1 from there takes 2^31 - 1 more releases than retains, or 2^31 + 1 more retains
 than releases before the count wraps around to it. As an `i32` that bit pattern is negative, which
-nothing observes. Both distances are out of reach of a program that fits in memory, since every live
-reference occupies a machine word somewhere.
+nothing observes.
+
+With reads balanced by the retain the previous section requires, the count then drifts only by the
+number of references live at once, each of which occupies a machine word somewhere, so neither
+distance is reachable. Without that retain the distance is a count of reads rather than of live
+references, and 2^31 buys only seconds.
 
 The constant belongs beside `refcnt_type`, so that widening or narrowing the counter moves it too.
 
@@ -164,18 +198,21 @@ static-memory work starts, not after.
 2. `mark_global_one` writes that count into the refcount instead of `REFCNT_STATE_GLOBAL` into the
    state byte. It keeps its traversal and its already-marked check — an object whose count is
    already large needs no second visit, which is what stops a cycle.
-3. In a `threaded = false` build, `build_branch_by_refcnt_state` emits an unconditional branch to
+3. Give a global of a boxed type `retain_on_read = true`, so that reading it balances the release
+   the consumer performs. Without this the count drains by one per read.
+4. In a `threaded = false` build, `build_branch_by_refcnt_state` emits an unconditional branch to
    the local arm, and `is_unique` reaches `shared_bb` through the refcount compare it already does.
-4. `RcState::Global` stops being produced. It can stay in the enum for threaded builds.
+5. `RcState::Global` stops being produced. It can stay in the enum for threaded builds.
 
 Verification: the full suite at three optimization levels; development-mode valgrind memcheck, where
 a global freed by mistake shows up as an invalid free; `benchmark/speedtest`, against the ceiling
 above; and the `-O none` / `-O basic` measurement named under *What it costs*.
 
-A test worth writing first, because it is the one thing that changes behaviour rather than speed: a
-global holding a boxed value, released more times than it is retained in a loop, and still readable
-afterwards. It fails today by construction (the state byte makes the releases no-ops), so it pins
-the large count rather than the old mechanism.
+A test worth writing first, because it is where the design fails if the retain in step 3 is
+forgotten: a global of a boxed type read in a long loop, and still readable afterwards. Reaching the
+mark takes 2^31 reads, which is too slow for the suite, so make the mark a constant the test can
+lower — a build with a mark of a few thousand turns the same program into a fast test, and the same
+knob shows the test failing when step 3 is reverted.
 
 ### Stage 2 — infer `Local` in threaded builds
 
@@ -229,6 +266,4 @@ in a single-threaded build.
 
 - Moving the empty-array and string-literal storages to static memory, beyond recording above what
   stage 1 requires of them.
-- A changelog entry. The observable behaviour does not change, except that a global value now
-  survives 2^31 unbalanced releases rather than being immune to release, which no program can rely
-  on.
+- A changelog entry. The observable behaviour does not change.
