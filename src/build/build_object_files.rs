@@ -387,15 +387,7 @@ fn load_build_object_files_cache(
     program: &Program,
     config: &Configuration,
 ) -> Option<BuildObjFilesResult> {
-    let hash = build_object_files_cache_hash(program, config);
-    if let Err(e) = hash {
-        warn_msg(&format!(
-            "Failed to calculate hash of object files cache: {}.",
-            e
-        ));
-        return None;
-    }
-    let hash = hash.ok().unwrap();
+    let hash = build_object_files_cache_hash_or_warn(program, config)?;
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
     if !Path::new(&cache_path).exists() {
         return None;
@@ -433,15 +425,9 @@ fn save_build_object_files_cache(
     config: &Configuration,
     result: &BuildObjFilesResult,
 ) {
-    let hash = build_object_files_cache_hash(program, config);
-    if let Err(e) = hash {
-        warn_msg(&format!(
-            "Failed to calculate hash of object files cache: {}.",
-            e
-        ));
+    let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
-    }
-    let hash = hash.ok().unwrap();
+    };
     if let Err(e) = create_dir_all(UNITS_CACHE_PATH) {
         warn_msg(&format!(
             "Failed to create directory for object files cache: {}.",
@@ -484,6 +470,25 @@ fn build_object_files_cache_hash(
     }
 
     Ok(format!("{:x}", md5::compute(hash_source)))
+}
+
+// The hash naming the cache of "build_object_files", or `None` after reporting why it could not be
+// calculated. A cache the compiler cannot name is one it can neither read nor write, so both users
+// of the hash skip the cache in that case.
+fn build_object_files_cache_hash_or_warn(
+    program: &Program,
+    config: &Configuration,
+) -> Option<String> {
+    match build_object_files_cache_hash(program, config) {
+        Ok(hash) => Some(hash),
+        Err(e) => {
+            warn_msg(&format!(
+                "Failed to calculate hash of object files cache: {}.",
+                e
+            ));
+            None
+        }
+    }
 }
 
 pub(crate) fn get_target_machine(

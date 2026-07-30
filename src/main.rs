@@ -438,30 +438,12 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(edit_subc.clone())
         .subcommand(check_subc);
 
-    fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
-        let files = m.get_many::<String>("source-files");
-        if files.is_none() {
-            return Ok(vec![]);
-        }
-        let files = files.unwrap();
-        let mut pathbufs = vec![];
-        for file in files {
-            pathbufs.push(PathBuf::from(file));
-        }
-        Ok(pathbufs)
-    }
-
-    fn read_object_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
-        let files = m.get_many::<String>("object-files");
-        if files.is_none() {
-            return Ok(vec![]);
-        }
-        let files = files.unwrap();
-        let mut pathbufs = vec![];
-        for file in files {
-            pathbufs.push(PathBuf::from(file));
-        }
-        Ok(pathbufs)
+    // Every path the option `opt_id` collects, across all of its occurrences.
+    fn read_path_list_option(m: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
+        let Some(paths) = m.get_many::<String>(opt_id) else {
+            return vec![];
+        };
+        paths.map(PathBuf::from).collect()
     }
 
     fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
@@ -478,12 +460,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         };
 
         // `modules` option
-        let modules = m
-            .get_many::<String>("modules")
-            .unwrap_or_default()
-            .map(|f| f.to_string())
-            .collect::<Vec<_>>();
-        docs_config.modules = modules;
+        docs_config.modules = read_string_list_option(m, "modules");
 
         // `with-compiler-defined-methods` option
         docs_config.include_compiler_defined_methods =
@@ -509,47 +486,40 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
     }
 
+    // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
+    // has no such option yields an empty list.
+    fn read_string_list_option(m: &ArgMatches, opt_id: &str) -> Vec<String> {
+        m.try_get_many::<String>(opt_id)
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .cloned()
+            .collect()
+    }
+
     fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
             ("static-link-library", LinkType::Static),
             ("dynamic-link-library", LinkType::Dynamic),
         ] {
-            options.append(
-                &mut m
-                    .try_get_many::<String>(opt_id)
-                    .unwrap_or_default()
-                    .unwrap_or_default()
-                    .map(|v| (v.clone(), link_type))
-                    .collect::<Vec<_>>(),
+            options.extend(
+                read_string_list_option(m, opt_id)
+                    .into_iter()
+                    .map(|name| (name, link_type)),
             );
         }
         options
     }
 
     fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
-        m.try_get_many::<String>("library-paths")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .map(|v| PathBuf::from(v))
-            .collect::<Vec<_>>()
-    }
-
-    fn read_ld_flags_option(m: &ArgMatches) -> Vec<String> {
-        m.try_get_many::<String>("ld-flags")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>()
+        read_string_list_option(m, "library-paths")
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
     }
 
     fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
-        let features = m
-            .try_get_many::<String>("disable-cpu-feature")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>();
+        let features = read_string_list_option(m, "disable-cpu-feature");
         metafiles::project_file::ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
@@ -592,14 +562,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // project directory `--source foo.fix` adds `foo.fix` on top of
         // whatever `fixproj.toml` already declared, rather than replacing
         // it.
-        for file in read_source_files_options(args)? {
+        for file in read_path_list_option(args, "source-files") {
             config.add_user_source_file(file);
         }
 
         // Set `object_files`.
         config
             .object_files
-            .append(&mut read_object_files_options(args)?);
+            .append(&mut read_path_list_option(args, "object-files"));
 
         // Set `linked_libraries`.
         config
@@ -612,7 +582,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .append(&mut read_library_paths_option(args));
 
         // Set `ld_flags`.
-        config.ld_flags.append(&mut read_ld_flags_option(args));
+        config
+            .ld_flags
+            .append(&mut read_string_list_option(args, "ld-flags"));
 
         // Set `emit_llvm`.
         config.emit_llvm = args.contains_id("emit-llvm");

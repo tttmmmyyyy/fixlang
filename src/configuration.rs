@@ -431,9 +431,7 @@ impl Configuration {
     // Create configuration for check subcommand.
     // Uses Diagnostics internally; target files are set later in the check command.
     pub fn check_mode() -> Result<Configuration, Errors> {
-        let mut config = Self::new(SubCommand::Diagnostics(DiagnosticsConfig::default()))?;
-        config.num_worker_thread = num_cpus::get();
-        Ok(config)
+        Self::diagnostics_mode(DiagnosticsConfig::default())
     }
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
