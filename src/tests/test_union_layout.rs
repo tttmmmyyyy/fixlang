@@ -13,6 +13,7 @@ use crate::fixstd::builtin::{
     make_bool_ty, make_i64_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
 };
 use crate::generator::Generator;
+use crate::misc::Map;
 use crate::object::ty_to_object_ty;
 
 fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {
@@ -48,12 +49,15 @@ fn test_union_memory_layout() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("union_layout_test", &context, &target_machine);
+    // The layouts below are read off the types alone, so this generator resolves no global and is
+    // given none.
     let mut gc = Generator::new(
         &context,
         &module,
         target_machine.get_target_data(),
         config.clone(),
         type_env,
+        Map::default(),
     );
 
     // A union's payload buffer takes the ABI alignment of its payloads, so a small or empty
