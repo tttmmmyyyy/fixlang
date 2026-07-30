@@ -7,7 +7,7 @@ use crate::constants::{
     CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
     DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
     DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    TRAVERSER_WORK_MARK_PERMANENT, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
     UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
@@ -1937,7 +1937,7 @@ pub fn get_traverser_ptr<'c, 'm>(
 // Traverser function is a function that traverses all fields of an object and does some work on them.
 // Traverser function takes the pointer to the object as an argument.
 // If `work` is Some(0), then traverser function works as destructor of an object. This is called as `destructor`.
-// If `work` is Some(1), then traverser function marks all reachable objects as global. This is called as `mark_global`.
+// If `work` is Some(1), then traverser function gives all reachable objects a permanent reference count. This is called as `mark_permanent`.
 // If `work` is Some(2), then traverser function marks all reachable objects as threaded. This is called as `mark_threaded`.
 // If `work` is None, then traverser function takes the second argument of as a work type. This is called as `(dynamic_)traverser`.
 // This function returns `None` if traverser function is empty.
@@ -2001,12 +2001,12 @@ pub fn create_traverser<'c, 'm>(
 
             // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
-            let mark_global_bb = gc
+            let mark_permanent_bb = gc
                 .context
-                .append_basic_block(func, "mark_global_bb@traverser");
+                .append_basic_block(func, "mark_permanent_bb@traverser");
             let mut work_bbs = vec![
                 (TRAVERSER_WORK_RELEASE, release_bb),
-                (TRAVERSER_WORK_MARK_GLOBAL, mark_global_bb),
+                (TRAVERSER_WORK_MARK_PERMANENT, mark_permanent_bb),
             ];
             if gc.config.threaded {
                 let mark_threaded_bb = gc

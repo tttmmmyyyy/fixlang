@@ -713,7 +713,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let obj = self
                 .eval_rc_expr(&global_init.init, false, func_vals)
                 .expect("an expression evaluated outside tail position yields a value");
-            self.mark_global(obj.clone());
+            self.mark_permanent(obj.clone());
             let obj_val = obj.value(self);
             self.builder().build_store(global_var_ptr, obj_val).unwrap();
         }

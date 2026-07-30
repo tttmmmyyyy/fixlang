@@ -9,7 +9,7 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
     TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_PERMANENT,
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U16_NAME,
     U32_NAME, U64_NAME, U8_NAME,
 };
@@ -1636,7 +1636,7 @@ impl TypeNode {
             None => "trav_dyn_",
             Some(work) => match work.0 {
                 TRAVERSER_WORK_RELEASE => "trav_release_",
-                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
+                TRAVERSER_WORK_MARK_PERMANENT => "trav_mark_permanent_",
                 TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
                 _ => unreachable!(),
             },

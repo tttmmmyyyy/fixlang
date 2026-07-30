@@ -821,7 +821,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
 
         // Branch by refcnt_state.
-        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
@@ -887,23 +887,24 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
         }
 
-        // Implement global_bb.
-        self.builder().position_at_end(global_bb);
-        // Jump to shared_bb.
-        self.builder()
-            .build_unconditional_branch(shared_bb)
-            .unwrap();
-
         (unique_bb, shared_bb)
     }
 
-    // Load refcnt state and branch by the value.
-    // Returns three building blocks (local_bb, threaded_bb, global_bb).
+    /// Branch on the object's reference-count state, returning the block to build each state's
+    /// handling in. A `threaded = false` build produces one state, so it needs no branch and no load:
+    /// the local block is the one being built, and there is no threaded block.
     pub fn build_branch_by_refcnt_state(
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
-    ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
-        // Load refcnt_state.
+    ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>) {
+        if !self.config.threaded {
+            let current_bb = self
+                .builder()
+                .get_insert_block()
+                .expect("the builder is positioned in a block");
+            return (current_bb, None);
+        }
+
         let current_func = self.current_function();
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
@@ -916,64 +917,23 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
             .into_int_value();
 
-        // Add three basic blocks.
         let local_bb = self.context.append_basic_block(current_func, "local_bb");
-        let mut threaded_bb: Option<BasicBlock<'_>> = None;
-        let global_bb = self.context.append_basic_block(current_func, "global_bb");
+        let threaded_bb = self.context.append_basic_block(current_func, "threaded_bb");
 
-        if !self.config.threaded {
-            // In single-threaded program,
+        let is_refcnt_state_local = self
+            .builder()
+            .build_int_compare(
+                IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                "is_refcnt_state_local",
+            )
+            .unwrap();
+        self.builder()
+            .build_conditional_branch(is_refcnt_state_local, local_bb, threaded_bb)
+            .unwrap();
 
-            // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
-            self.builder()
-                .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
-                .unwrap();
-        } else {
-            // In multi-threaded program,
-            let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
-            threaded_bb = Some(th_bb);
-            let threaded_bb = threaded_bb.clone().unwrap();
-
-            let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
-
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
-            self.builder()
-                .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
-                .unwrap();
-
-            // Implement nonlocal_bb.
-            self.builder().position_at_end(nonlocal_bb);
-            let is_refcnt_state_threaded = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-                    "is_refcnt_state_threaded",
-                )
-                .unwrap();
-            self.builder()
-                .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
-                .unwrap();
-        }
-        (local_bb, threaded_bb, global_bb)
+        (local_bb, Some(threaded_bb))
     }
 
     // Get pointer to state of reference counter of a given object.
@@ -1474,7 +1434,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_int_truncate(amount, refcnt_type(self.context), "retain_amount")
             .unwrap();
         // Branch by refcnt_state.
-        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
         // In `local_bb`, increment refcnt and jump to `cont_bb`.
         self.builder().position_at_end(local_bb);
@@ -1505,10 +1465,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             self.builder().build_unconditional_branch(cont_bb).unwrap();
         }
-
-        // In `global_bb`, there is no refcount to update; jump to `cont_bb`.
-        self.builder().position_at_end(global_bb);
-        self.builder().build_unconditional_branch(cont_bb).unwrap();
 
         self.builder().position_at_end(cont_bb);
     }
@@ -1672,7 +1628,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Branch by refcnt_state.
         let current_func = self.current_function();
-        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
         let destruction_bb = self
             .context
             .append_basic_block(current_func, "destruction_bb");
@@ -1768,10 +1724,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         build_free_boxed(self, obj_ptr, &obj.ty);
         self.builder().build_unconditional_branch(end_bb).unwrap();
 
-        // Implement global_bb.
-        self.builder().position_at_end(global_bb);
-        self.builder().build_unconditional_branch(end_bb).unwrap();
-
         self.builder().position_at_end(end_bb);
     }
 
@@ -1784,7 +1736,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         traverse_refs: impl FnOnce(&mut Self),
     ) {
         assert!(
-            work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
+            work == TraverserWorkType::mark_permanent()
+                || work == TraverserWorkType::mark_threaded()
         );
 
         // Get pointer to the object.
@@ -1794,7 +1747,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         traverse_refs(self);
 
         // Mark the object itself.
-        if work == TraverserWorkType::mark_global() {
+        if work == TraverserWorkType::mark_permanent() {
             self.mark_permanent_one(obj_ptr);
         } else {
             self.mark_threaded_one(obj_ptr);
@@ -1814,9 +1767,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Mark all objects reachable from `obj` as global.
-    pub fn mark_global(&mut self, obj: Object<'c>) {
-        self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_global());
+    pub fn mark_permanent(&mut self, obj: Object<'c>) {
+        self.emit_rc_helper_call(obj, "mark_permanent", "call_mark_permanent", |gc, obj| {
+            gc.build_release_mark(obj, TraverserWorkType::mark_permanent());
         });
     }
 
