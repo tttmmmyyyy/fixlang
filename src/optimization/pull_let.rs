@@ -170,15 +170,17 @@ fn has_something_to_pull(fun: &Arc<ExprNode>) -> bool {
     }
 }
 
+/// Applies the transformations to a fixpoint, repeating the traversal for as long as it keeps
+/// rewriting.
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut expr = expr.clone();
     while run_on_expr_once(&mut expr) {}
     expr
 }
 
-// Run pull-let transformation once on the given expression.
-//
-// If any transformation is applied, returns true.
+/// Run pull-let transformation once on the given expression.
+///
+/// If any transformation is applied, returns true.
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     let mut pull_let = PullLet {};
     let res = pull_let.traverse(expr);
@@ -186,6 +188,8 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     res.changed
 }
 
+/// The visitor that carries out the three transformations. It acts on an application and on a `let`
+/// before their subexpressions are visited, and leaves every other kind of expression as it is.
 struct PullLet {}
 
 impl ExprVisitor for PullLet {

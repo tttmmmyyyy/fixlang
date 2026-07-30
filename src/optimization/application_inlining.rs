@@ -183,8 +183,11 @@ impl ExprVisitor for AppInliner {
                 // `{a}`. Either way the pair of `let`s holds them in the order they are written.
                 let bound_first = expr.app_order == AppSourceCodeOrderType::FX;
 
-                // `{a}` lands under `{pat}`, so a name `{pat}` binds and `{a}` mentions is renamed
-                // away first, leaving that name denoting in `{a}` what it denoted outside.
+                // The expression standing for the argument is mentioned under `{pat}`, so a name
+                // `{pat}` binds and that expression mentions is renamed away first, leaving the
+                // name denoting there what it denoted outside. Where `{bound}` comes first, `{a}`
+                // itself is evaluated under `{pat}` as well, so the names free in `{a}` join the
+                // list.
                 let mut black_list = pushed.value.free_vars();
                 if bound_first {
                     black_list.extend(arg.free_vars());
