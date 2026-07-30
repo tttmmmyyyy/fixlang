@@ -110,4 +110,41 @@ mod tests {
         "#;
         test_source_fail(source, Configuration::develop_mode(), "first operand");
     }
+
+    // The two tests below hold at `-O max` and `-O experimental` alone. `>` and `==` desugar with
+    // their operands the other way round, so the operand written second stands in the callee, and
+    // `lower_app` -- which every level goes through -- evaluates the callee first. GH issue #143 is
+    // where that lives.
+
+    /// A comparison the parser desugars with its operands the other way round evaluates the operand
+    /// written first.
+    #[test]
+    fn test_reversed_comparison_evaluates_the_operand_written_first() {
+        let source = r#"
+        module Main;
+
+        after_countdown : I64 -> Bool;
+        after_countdown = |n| if n <= 0 { (undefined("first operand") : I64) > undefined("second operand") } else { after_countdown(n - 1) };
+
+        main : IO ();
+        main = println $ after_countdown(1).to_string;
+        "#;
+        test_source_fail(source, Configuration::develop_mode(), "first operand");
+    }
+
+    /// Equality, which the parser also desugars with its operands the other way round, evaluates the
+    /// operand written first.
+    #[test]
+    fn test_equality_evaluates_the_operand_written_first() {
+        let source = r#"
+        module Main;
+
+        after_countdown : I64 -> Bool;
+        after_countdown = |n| if n <= 0 { (undefined("first operand") : I64) == undefined("second operand") } else { after_countdown(n - 1) };
+
+        main : IO ();
+        main = println $ after_countdown(1).to_string;
+        "#;
+        test_source_fail(source, Configuration::develop_mode(), "first operand");
+    }
 }
