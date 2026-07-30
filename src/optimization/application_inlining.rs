@@ -263,17 +263,16 @@ impl ExprVisitor for AppInliner {
                 return EndVisitResult::unchanged(expr);
             }
             Expr::TyAnno(_, _) => {
-                // If remove tyanno optimization is done, this case should not happen.
-                return EndVisitResult::unchanged(expr);
+                unreachable!(
+                    "a type annotation stands in the function position of an application, which `remove_tyanno` rules out before this pass runs: {}",
+                    func.expr.stringify().to_string()
+                );
             }
-            Expr::ArrayLit(_) => {
-                return EndVisitResult::unchanged(expr);
-            }
-            Expr::MakeStruct(_, _) => {
-                return EndVisitResult::unchanged(expr);
-            }
-            Expr::FFICall(_, _, _, _, _, _) => {
-                return EndVisitResult::unchanged(expr);
+            Expr::ArrayLit(_) | Expr::MakeStruct(_, _) | Expr::FFICall(_, _, _, _, _, _) => {
+                unreachable!(
+                    "an expression whose type is never a function stands in the function position of an application: {}",
+                    func.expr.stringify().to_string()
+                );
             }
         }
     }
