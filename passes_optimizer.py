@@ -19,8 +19,13 @@ Cycles are not deterministic, so the measurement is built to survive that:
 Perf costs about as much as running the program, where cachegrind costs fifty times that, so the
 search covers far more candidates per hour than the instruction-count version did.
 
-    python3 passes_optimizer.py            # search until a line is typed on stdin
-    python3 passes_optimizer.py --noise    # measure the noise floor and exit
+    python3 passes_optimizer.py                 # search until a line is typed on stdin
+    python3 passes_optimizer.py --noise         # measure the noise floor and exit
+    python3 passes_optimizer.py --start <file>  # search from the pipeline in <file>
+
+Starting from a pipeline that is already known to win lets the drop phases say which of its
+passes carry that win, which is what a search from the shipped pipeline cannot reach: adding
+passes at random on top of a full `default<O3>` almost never moves anything.
 
 The pipeline the compiler ships lives in `Configuration::llvm_passes`; adopting a result means
 editing that. The file this hands to `--llvm-passes-file` is the complete pipeline — it replaces the
@@ -306,9 +311,9 @@ def interrupted():
     return bool(readable and sys.stdin.readline().strip())
 
 
-def optimize(work_dir):
+def optimize(work_dir, start):
     pool = all_passes()
-    optimum = list(INITIAL_PASSES)
+    optimum = list(start)
     optimum_dir = work_dir / "optimum"
     optimum_binaries = build(optimum, SEARCH_CASES, optimum_dir)
     if optimum_binaries is None:
@@ -377,9 +382,14 @@ def main():
         if "--noise" in sys.argv:
             measure_noise(work_dir)
             return
+        start = list(INITIAL_PASSES)
+        if "--start" in sys.argv:
+            start_file = Path(sys.argv[sys.argv.index("--start") + 1])
+            start = [line.strip() for line in start_file.read_text().splitlines()
+                     if line.strip()]
         print(f"Type a line and press enter to stop. Load is {os.getloadavg()[0]:.2f}; "
               f"cycles are worth measuring on a quiet machine.")
-        optimize(work_dir)
+        optimize(work_dir, start)
 
 
 main()

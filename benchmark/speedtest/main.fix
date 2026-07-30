@@ -163,7 +163,10 @@ main = (
         if line.get_bytes.@(0) == '_' { none() };
         some(line)
     );
-    let log = *dirs.fold_m(log, |dir, log|
+    // The highest load seen while the hardware counters were read, carried alongside the log
+    // so that the row can say what the machine was doing: the cycle columns mean nothing
+    // without it.
+    let (log, max_load) = *dirs.fold_m((log, 0.0), |dir, (log, max_load)|
         ez_cd(config, dir);;
         let command = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*", "--allow-preliminary-commands"];
         let command = if args.@llvm_passes_file != "" {
@@ -189,18 +192,30 @@ main = (
         // Add to the log.
         let log = log.set(inst, log.@size - 1, bench.@(0));
         let log = log.set(mem, log.@size - 1, bench.@(1));
-        // Accesses split across a cache line, which cachegrind's cache model cannot express
-        // and which cost real time. Only this counter is recorded: it is deterministic, as
-        // every column of this log must be, while the cycle count the same tool reports
-        // rises with whatever else the machine is doing and a run takes an hour, over which
-        // that is not constant. Read cycles by hand on an idle machine instead.
-        // On a machine without the counter the column stays empty and the run carries on.
+        // Two things the instruction count cannot express. `-splits` counts loads and stores
+        // that crossed a cache-line boundary, which cost real time and which cachegrind's
+        // cache model has no notion of. `-cycles` counts what the machine actually took, so
+        // that a change to code layout or branch density -- where the instruction count and
+        // the time diverge -- shows up somewhere in this log.
+        //
+        // The split count is deterministic like every cachegrind column here. **The cycle
+        // count is not**: it is the lowest of several runs, and it rises with whatever else
+        // the machine is doing, so two rows are comparable on it only when both were taken on
+        // a quiet machine. The `load` column below is how a reader tells.
+        // On a machine without the counters both columns stay empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
-        let log = if perf_code != 0_U8 { log } else {
+        let (log, case_load) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@(0) == "" { log };
-            log.set(case_name + "-splits", log.@size - 1, perf.@(0))
+            if perf.@(0) == "" { (log, 0.0) };
+            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
+            let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(1));
+            // A load the harness cannot read leaves the row's `load` at whatever the other
+            // cases reported, which is the honest reading: this case contributed nothing.
+            let parsed : Result _ F64 = perf.@(2).from_string;
+            let case_load = if parsed.is_err { 0.0 } else { parsed.as_ok };
+            (log, case_load)
         };
+        let max_load = max(max_load, case_load);
         // A case may carry `ref.c` and `ref.rs`: the same program on the same input,
         // measured the same way, so the chart can show how far the Fix line is from C and
         // Rust. The column name keeps the language last, which is what holds these out of
@@ -216,10 +231,12 @@ main = (
         );
         // Change back to the parent directory.
         ez_cd(config, "..");;
-        log.pure
+        (log, max_load).pure
     );
 
     ez_cd(config, "..");;
+
+    let log = log.set("load", log.@size - 1, max_load.to_string_precision(2_U8));
 
     // Save the log to the log file.
     unless(args.@no_save,
