@@ -163,7 +163,9 @@ fn hoist_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
 /// (3) hoists.
 fn has_something_to_pull(fun: &Arc<ExprNode>) -> bool {
     match fun.expr.as_ref() {
-        Expr::App(fun, args) => args.iter().any(|arg| !arg.is_var()) || has_something_to_pull(fun),
+        Expr::App(inner_fun, args) => {
+            args.iter().any(|arg| !arg.is_var()) || has_something_to_pull(inner_fun)
+        }
         Expr::Let(_, _, _) => true,
         _ => false,
     }
@@ -227,7 +229,12 @@ impl ExprVisitor for PullLet {
     ) -> crate::ast::traverse::StartVisitResult {
         let fun = expr.get_app_func();
         let args = expr.get_app_args();
-        assert_eq!(args.len(), 1);
+        assert_eq!(
+            args.len(),
+            1,
+            "an application of {} arguments reached the pull-let transformation",
+            args.len()
+        );
         let arg = &args[0];
 
         // The `let`s leave an application in the order the call evaluates its arguments in, so
