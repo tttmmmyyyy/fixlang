@@ -90,9 +90,33 @@ In a `threaded = false` build the state byte then has one value, `LOCAL`, and no
 the compare. That is the "assume local" compiler measured above — **-2.4% to -13.9%** — obtained by
 construction rather than by an analysis that has to be proved sound.
 
-In a `threaded = true` build `GLOBAL` keeps earning its keep, and the state inference the issue asks
-for is what matters there: proving `Local` replaces an atomic operation with a non-atomic one, which
-is a far larger saving than removing a predictable branch.
+### Does `GLOBAL` earn anything in a threaded build?
+
+The argument for keeping it is that an atomic increment on one hot global would serialize every
+thread on one cache line, which is the reason it was introduced. That argument needs the operations
+to exist, and the measurement says they mostly do not: compiling the loops above **with
+`--threaded`** gives counts identical to the single-threaded build, three global dispatches for the
+whole program. Borrow inference removes the operations, and it does not consult the threading
+setting.
+
+That is not proof that `GLOBAL` earns nothing there. Fix's threading is FFI plus `mark_threaded`,
+and no program in the corpus shares a global across threads and works it, so the case the argument is
+about cannot be measured with what exists today. What can be said is that the argument is unsupported
+by any measurement, and that a program would have to defeat borrow inference on a global before it
+started paying.
+
+Dropping `GLOBAL` from a threaded build is not simply the same change, either. A global left in the
+state `create_obj` gives it would be `LOCAL`, so several threads would increment its count
+non-atomically — a data race, undefined rather than merely imprecise, and one a race detector
+reports. Dropping it there means marking globals `THREADED` instead, paying an atomic operation
+where today there is none.
+
+So the end state to aim at is: the state byte survives only in threaded builds, holding two values,
+for the one decision it is good for — atomic or not. Whether globals in such a build are `THREADED`
+or keep a `GLOBAL` of their own is the open question, and it wants a threaded benchmark before it is
+answered. Either way, **the inference the issue asks for is what matters there**: proving `Local`
+replaces an atomic operation with a non-atomic one, which is a far larger saving than removing a
+predictable branch.
 
 ### Headroom
 
