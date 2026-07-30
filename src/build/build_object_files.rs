@@ -196,10 +196,10 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
         return;
     };
     let type_env = program.type_env();
-    let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms, config);
+    let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+    let base = lower_and_insert_rc(&type_env, &all_symbols, &all_symbols, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, &all_syms, config);
+    let optimized = optimize_rc_program(base, &type_env, &all_symbols, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
@@ -445,8 +445,8 @@ fn save_build_object_files_cache(
         return;
     }
     let file = file.ok().unwrap();
-    let res = serde_json::to_writer_pretty(file, result);
-    if let Err(e) = res {
+    let write_result = serde_json::to_writer_pretty(file, result);
+    if let Err(e) = write_result {
         warn_msg(&format!(
             "Failed to write object files cache \"{}\": {}.",
             cache_path, e
@@ -625,14 +625,14 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
     gc.builder().position_at_end(entry_bb);
 
     // Save argc and argv to global variables.
-    for (i, arg) in [GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV]
+    for (i, global_var_name) in [GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV]
         .iter()
         .enumerate()
     {
         let arg_val = main_function.get_nth_param(i as u32).unwrap();
         let gv_ptr = gc
             .module
-            .get_global(arg)
+            .get_global(global_var_name)
             .unwrap()
             .as_basic_value_enum()
             .into_pointer_value();

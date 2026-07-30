@@ -620,8 +620,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `output_file_type`. The `--output-type` argument exists only on
         // the `build` subcommand; `run` and `test` always build an executable.
         if matches!(config.subcommand, SubCommand::Build) {
-            if let Some(type_) = read_output_file_type_option(args)? {
-                config.output_file_type = type_;
+            if let Some(output_file_type) = read_output_file_type_option(args)? {
+                config.output_file_type = output_file_type;
             }
         }
 
@@ -674,28 +674,28 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
 
         // Set deprecation handling mode.
-        let allow_dep = args.contains_id("allow-deprecated");
-        let deny_dep = args.contains_id("deny-deprecated");
-        if allow_dep && deny_dep {
+        let allow_deprecated = args.contains_id("allow-deprecated");
+        let deny_deprecated = args.contains_id("deny-deprecated");
+        if allow_deprecated && deny_deprecated {
             return Err(Errors::from_msg(
                 "`--allow-deprecated` and `--deny-deprecated` cannot be used together.".to_string(),
             ));
         }
-        if allow_dep {
+        if allow_deprecated {
             config.deprecation_mode = DeprecationMode::Allow;
-        } else if deny_dep {
+        } else if deny_deprecated {
             config.deprecation_mode = DeprecationMode::Deny;
         }
 
         // Set `run_program_args`.
         match config.subcommand {
             SubCommand::Run | SubCommand::Test => {
-                let mut args = args
+                let mut program_args = args
                     .get_many::<String>("program-args")
                     .unwrap_or_default()
                     .cloned()
                     .collect::<Vec<_>>();
-                config.run_program_args.append(&mut args);
+                config.run_program_args.append(&mut program_args);
             }
             _ => {}
         }
@@ -767,12 +767,12 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             panic_if_err(commands::docs::generate_docs_for_files(config));
         }
         Some(("init", args)) => {
-            let prj_name = args
+            let project_name = args
                 .value_of("project-name")
                 .unwrap_or("myproject")
                 .to_string();
-            panic_if_err(ProjectFile::validate_project_name(&prj_name, None));
-            panic_if_err(ProjectFile::create_example_file(prj_name));
+            panic_if_err(ProjectFile::validate_project_name(&project_name, None));
+            panic_if_err(ProjectFile::create_example_file(project_name));
         }
         Some(("check", _args)) => {
             let config = panic_if_err(Configuration::check_mode());

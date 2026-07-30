@@ -422,8 +422,10 @@ impl Configuration {
     }
 
     // Create configuration for diagnostics subcommand.
-    pub fn diagnostics_mode(config: DiagnosticsConfig) -> Result<Configuration, Errors> {
-        let mut config = Self::new(SubCommand::Diagnostics(config))?;
+    pub fn diagnostics_mode(
+        diagnostics_config: DiagnosticsConfig,
+    ) -> Result<Configuration, Errors> {
+        let mut config = Self::new(SubCommand::Diagnostics(diagnostics_config))?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
@@ -706,8 +708,8 @@ impl Configuration {
     /// configuration and for the errors the Fix runtime's memory management can produce.
     pub fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
-        let check = Command::new("which").arg("valgrind").output();
-        if check.is_err() || !check.unwrap().status.success() {
+        let which_output = Command::new("which").arg("valgrind").output();
+        if which_output.is_err() || !which_output.unwrap().status.success() {
             return Err(Errors::from_msg(
                 "valgrind is not installed on this system. Please install valgrind to use this feature.".to_string()
             ));
@@ -928,7 +930,7 @@ int main() {
         let size_t = lines.next().unwrap().parse().unwrap();
         let float = lines.next().unwrap().parse().unwrap();
         let double = lines.next().unwrap().parse().unwrap();
-        let res = CTypeSizes {
+        let sizes = CTypeSizes {
             char,
             short,
             int,
@@ -938,7 +940,7 @@ int main() {
             float,
             double,
         };
-        Ok(res)
+        Ok(sizes)
     }
 
     fn save_to_file(&self) -> Result<(), Errors> {
