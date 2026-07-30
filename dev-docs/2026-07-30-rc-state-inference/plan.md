@@ -77,13 +77,12 @@ operations, against a branch paid by every operation in the program.
 So: **stop marking objects `GLOBAL`, and give a global value a large reference count instead.**
 
 `mark_global` walks the graph a global initializer's value reaches. Instead of writing
-`REFCNT_STATE_GLOBAL` into each object's state byte, it writes a large count — `i32::MAX / 2`, since
-`refcnt_type` is `i32` — into each object's refcount. A global then behaves as a permanently shared
-object:
+`REFCNT_STATE_GLOBAL` into each object's state byte, it writes `2^31` into each object's refcount. A
+global then behaves as a permanently shared object:
 
 - it is never unique, because `refcnt == 1` is false, which is what `is_unique`'s `global_bb` arm
   already forces by jumping straight to `shared_bb`;
-- it is never freed, because a decrement never reaches zero;
+- it is never freed, because the count a release reads is never 1;
 - it is retained and released like anything else, with no state to consult.
 
 In a `threaded = false` build the state byte then has one value, `LOCAL`, and nothing reads it:
@@ -97,11 +96,19 @@ is a far larger saving than removing a predictable branch.
 
 ### Headroom
 
-`refcnt_type` is `i32`, so a mark of `i32::MAX / 2` leaves 2^30 in each direction. Overflowing needs
-2^30 references to one global live at once, each of which occupies a machine word somewhere;
-underflowing needs 2^30 more releases than retains. Both are out of reach of a program that fits in
-memory. The constant belongs beside `refcnt_type`, so that widening or narrowing the counter moves
-it too.
+**One count is dangerous, and it is 1.** `build_release_boxed_with` destructs when the count it read
+*before* decrementing is 1, and `build_branch_by_is_unique` calls a count of 1 unique; zero is never
+tested. Every comparison the compiler makes on a refcount is an equality against 1 — there is no
+ordering comparison on one anywhere in the tree — so the counter is used as a bit pattern and the
+signedness of `refcnt_type` never enters.
+
+The mark therefore wants to sit as far from 1 as the 32 bits allow in both directions, which is
+`2^31`: reaching 1 from there takes 2^31 - 1 more releases than retains, or 2^31 + 1 more retains
+than releases before the count wraps around to it. As an `i32` that bit pattern is negative, which
+nothing observes. Both distances are out of reach of a program that fits in memory, since every live
+reference occupies a machine word somewhere.
+
+The constant belongs beside `refcnt_type`, so that widening or narrowing the counter moves it too.
 
 ### What it costs
 
@@ -129,7 +136,7 @@ static-memory work starts, not after.
 
 ### Stage 1 — drop `GLOBAL` from non-threaded builds
 
-1. Add the large-count constant beside `refcnt_type`.
+1. Add the mark constant `2^31` beside `refcnt_type`.
 2. `mark_global_one` writes that count into the refcount instead of `REFCNT_STATE_GLOBAL` into the
    state byte. It keeps its traversal and its already-marked check — an object whose count is
    already large needs no second visit, which is what stops a cycle.
@@ -199,4 +206,5 @@ in a single-threaded build.
 - Moving the empty-array and string-literal storages to static memory, beyond recording above what
   stage 1 requires of them.
 - A changelog entry. The observable behaviour does not change, except that a global value now
-  survives an unbalanced release rather than being immune to release, which no program can rely on.
+  survives 2^31 unbalanced releases rather than being immune to release, which no program can rely
+  on.
