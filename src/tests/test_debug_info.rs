@@ -11,9 +11,7 @@
 //
 // Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
 // macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
-// host that has lldb installed. A scenario skips when its debugger is absent. The AST and RC IR
-// back ends must emit identical debug information; these tests guard that it stays correct under
-// both.
+// host that has lldb installed. A scenario skips when its debugger is absent.
 
 #[cfg(test)]
 mod debug_info_tests {
@@ -304,6 +302,7 @@ mod debug_info_tests {
         }
     }
 
+    // A source breakpoint resolves and the backtrace carries per-frame line info, as gdb reads them.
     #[test]
     fn test_debug_info_baseline_gdb() {
         if !Debugger::Gdb.is_available() {
@@ -313,6 +312,8 @@ mod debug_info_tests {
         baseline_impl(Debugger::Gdb);
     }
 
+    // A source breakpoint resolves and the backtrace carries per-frame line info, as lldb reads
+    // them. lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_baseline_lldb() {
         if !Debugger::Lldb.is_available() {
@@ -341,10 +342,10 @@ mod debug_info_tests {
                 "whatis arr",
                 "print arr",
                 "whatis s",
-                // A String's characters are the bytes of its `_data` array. After the flip those
-                // elements live in the `#ArrayStorage` behind `_data._storage`, beginning right
-                // after its 8-byte control block. The debug info cannot bound the flexible element
-                // array, so read them as a C string from that offset.
+                // A String's characters are the bytes of its `_data` array, which live in the
+                // `#ArrayStorage` behind `_data._storage`, beginning right after its 8-byte control
+                // block. The debug info cannot bound the flexible element array, so read them as a
+                // C string from that offset.
                 "x/s (char*)s._data._storage + 8",
                 "continue",
             ]
@@ -493,9 +494,9 @@ mod debug_info_tests {
     fn array_elements_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_array"));
         // Break while the arrays are still alive (they are used after the breakpoint line; Fix
-        // releases locals at their last use), then print them. A flipped `Array` value prints its
-        // size directly, but its elements live in the `#ArrayStorage` behind `_storage`, so the
-        // size and the elements come from two separate prints.
+        // releases locals at their last use), then print them. An `Array` value prints its size
+        // directly, but its elements live in the `#ArrayStorage` behind `_storage`, so the size and
+        // the elements come from two separate prints.
         let commands: Vec<String> = match debugger {
             Debugger::Gdb => [
                 "set print elements unlimited",

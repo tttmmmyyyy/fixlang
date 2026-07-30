@@ -14,6 +14,7 @@ use crate::generator::Generator;
 use crate::misc::Map;
 use crate::object::ty_to_object_ty;
 
+// `Option a = union { none : (), some : a }`, applied as `Option a`.
 fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyapp(
         type_tycon(&tycon(FullName::from_strs(&[STD_NAME], "Option"))),
@@ -39,6 +40,9 @@ fn layout<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: Arc<TypeNode>) -> (u64, u64) {
     (gc.sizeof(&llvm), gc.abi_alignment(&llvm))
 }
 
+// The size and alignment of a union are those of its payload buffer plus its tag, and the buffer
+// takes the size and ABI alignment of the largest payload. A union of small or empty payloads
+// therefore stays small: `Bool` is one byte, and `Option U8` two.
 #[test]
 fn test_union_memory_layout() {
     let config = panic_if_err(Configuration::check_mode());

@@ -559,8 +559,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Implement a global initializer: a lazily-initialized accessor that computes the value once
-    /// (call-once), marks it and its reachable graph global, and stores it. Mirrors
-    /// `implement_symbol`'s global branch, with the initializer evaluated from the RC IR.
+    /// (call-once), marks it and its reachable graph global, and stores it.
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,

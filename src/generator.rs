@@ -473,6 +473,8 @@ impl<'c> Scope<'c> {
         }
     }
 
+    // The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
+    // binding is seen again once the binding shadowing it is popped.
     pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
@@ -627,8 +629,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_bit_size(ty) / 8
     }
 
-    // The minimum alignment required to store/load a value of this type. Unlike the preferred
-    // alignment, this does not over-align: an empty aggregate is 1, not 8.
+    // The minimum alignment required to store or load a value of this type; an empty aggregate is 1.
     pub fn abi_alignment(&mut self, ty: &dyn AnyType<'c>) -> u64 {
         self.target_data.get_abi_alignment(ty) as u64
     }
@@ -642,6 +643,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr_size
     }
 
+    // An empty LLVM module called `name`, carrying the triple and data layout of `target_machine`
+    // so that the types built in it get that target's sizes, alignments and offsets.
     pub fn create_module(
         name: &str,
         ctx: &'c Context,
@@ -2284,6 +2287,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
+    // Whether this module is being built with debug information.
     pub fn has_di(&self) -> bool {
         self.debug_info.is_some()
     }
@@ -2322,6 +2326,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    // The debug info record of the file `src` lives in. A source that is unknown is recorded as the
+    // file `<unknown source>`, so every debug entity has a file to point at.
     pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile<'c> {
         if let Some(src) = src {
             self.get_di_builder()
