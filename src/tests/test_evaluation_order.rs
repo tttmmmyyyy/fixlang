@@ -1,8 +1,8 @@
 // A call whose arguments can each stop the program -- through `Debug::assert` or `undefined` --
 // makes the order they are evaluated in observable: the argument evaluated first is the one that
 // stops it. Each test below pins one call shape at whatever optimization level the suite is given.
-// The shapes are ones the compiler orders by how the call is written; it does not order every call
-// that way.
+// The shapes are the ones the compiler orders by how the call is written; the order of other calls
+// is left unspecified.
 
 #[cfg(test)]
 mod tests {
