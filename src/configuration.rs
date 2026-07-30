@@ -22,6 +22,16 @@ use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
 
+/// The pass-pipeline string for one full LLVM optimization run.
+const LLVM_O3_PIPELINE: &str = "default<O3>";
+
+/// How many times `LLVM_O3_PIPELINE` runs at the optimization levels built for speed.
+///
+/// One run leaves work that a second and a third still find: over `benchmark/speedtest`, the
+/// second run takes 2.2% of the instructions off and the third another 0.8%, reaching 21% on
+/// `nbody`. A fourth run changes no case by a single instruction.
+const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
+
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -268,9 +278,9 @@ pub struct Configuration {
     pub num_worker_thread: usize,
     // The arguments which are passed to the program in `run` mode.
     pub run_program_args: Vec<String>,
-    // File containing LLVM passes.
+    // LLVM passes to run in place of the ones the optimization level implies.
     // Used only for compiler development.
-    pub llvm_passes_file: Option<PathBuf>,
+    pub llvm_passes_override: Option<Vec<String>>,
     // Emit symbols at each step of optimization.
     // Used only for compiler development.
     pub emit_symbols: bool,
@@ -365,7 +375,7 @@ impl Configuration {
             allow_preliminary_commands: false,
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
-            llvm_passes_file: None,
+            llvm_passes_override: None,
             run_program_args: vec![],
             emit_symbols: false,
             emit_rc_ir: None,
@@ -638,6 +648,22 @@ impl Configuration {
         self.backtrace && env::consts::OS == "macos"
     }
 
+    /// The LLVM passes to run over each generated module, in order. Each entry is a
+    /// pass-pipeline string for LLVM's pass builder.
+    pub fn llvm_passes(&self) -> Vec<String> {
+        if let Some(passes) = &self.llvm_passes_override {
+            return passes.clone();
+        }
+        let runs = match self.fix_opt_level {
+            FixOptimizationLevel::None => 0,
+            FixOptimizationLevel::Basic => 1,
+            FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
+                LLVM_O3_RUNS_FOR_SPEED
+            }
+        };
+        vec![LLVM_O3_PIPELINE.to_string(); runs]
+    }
+
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
@@ -650,6 +676,14 @@ impl Configuration {
         for disabled_cpu_feature in &self.disable_cpu_features_regex {
             // To ensure that the arrays ["xy", "x"] and ["x", "xy"] produce different hash values, we hash each element before concatenation instead of simply joining them.
             data.push_str(&format!("{:x}", md5::compute(disabled_cpu_feature)));
+        }
+
+        // The LLVM passes. The optimization level above does not determine them, because
+        // `--llvm-passes-file` replaces them; objects generated under one pipeline would
+        // otherwise be reused under another, and a comparison of two pipelines would measure
+        // whichever one compiled first.
+        for pass in self.llvm_passes() {
+            data.push_str(&format!("{:x}", md5::compute(&pass)));
         }
 
         // Command type.

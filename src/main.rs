@@ -67,6 +67,7 @@ use git_version::git_version;
 use metafiles::config_file::ConfigFile;
 use metafiles::project_file::ProjectFile;
 use mimalloc::MiMalloc;
+use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
@@ -202,7 +203,7 @@ fn run_cli() {
         .long("llvm-passes-file")
         .takes_value(true)
         .help(
-            "Path to a file which contains a list of LLVM passes (intended for compiler development).",
+            "Path to a file listing LLVM passes, one pass-pipeline string per line, to run in place of the ones the optimization level implies (intended for compiler development).\n",
         );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
@@ -648,9 +649,24 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .get_one::<usize>("max-cu-size")
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
 
-        // Set `llvm_passes_file`.
+        // Set `llvm_passes_override`.
+        // The file is read here rather than at code generation, so that the passes reach
+        // `Configuration::object_generation_hash` and a change to them invalidates the objects
+        // compiled under the previous ones.
         if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
-            config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
+            let passes = fs::read_to_string(llvm_passes_file).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to read the LLVM passes file \"{}\": {}.",
+                    llvm_passes_file, e
+                ))
+            })?;
+            config.llvm_passes_override = Some(
+                passes
+                    .lines()
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect(),
+            );
         }
 
         // Set `emit_symbols`.

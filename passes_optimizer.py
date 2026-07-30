@@ -10,8 +10,16 @@ import numpy as np
 import math
 import datetime
 
-LLVM_PASSES_MAIN_FILE = 'src/llvm_passes.txt'
+# The file handed to `--llvm-passes-file` is the complete pipeline: it replaces the passes the
+# optimization level implies, so a candidate has to list every pass it wants run.
 LLVM_PASSES_TMP_FILE = 'llvm_passes_tmp.txt'
+
+# Where the best sequence found so far is recorded. The compiler's own pipeline lives in
+# `Configuration::llvm_passes`, so adopting a result means editing that.
+LLVM_PASSES_BEST_FILE = 'llvm_passes_best.txt'
+
+# The pipeline the compiler ships, which the search starts from.
+INITIAL_PASSES = ['default<O3>'] * 3
 
 LOG_FILE = 'passes_optimizer.log'
 
@@ -230,8 +238,8 @@ def get_all_passes():
 
 
 def write_llvm_passes_file(passes, file_type):
-    if file_type == 'main':
-        path = LLVM_PASSES_MAIN_FILE
+    if file_type == 'best':
+        path = LLVM_PASSES_BEST_FILE
     elif file_type == 'tmp':
         path = LLVM_PASSES_TMP_FILE
     else:
@@ -291,12 +299,7 @@ def optimize():
 
     all_passes = get_all_passes()
 
-    # Read the initial passes from the source file
-    with open(LLVM_PASSES_MAIN_FILE, 'r') as f:
-        initial_passes = f.readlines()
-        initial_passes = [line.strip() for line in initial_passes]
-
-    optimum_passes = initial_passes
+    optimum_passes = list(INITIAL_PASSES)
 
     # Add the date and time to the log file
     with open(LOG_FILE, 'a') as f:
@@ -341,8 +344,8 @@ def optimize():
             optimum_time = time
             print('New optimum passes found!')
             add_log(phase, time, passes)
-            # Write the optimum passes to the main file
-            write_llvm_passes_file(passes, 'main')
+            # Record the best sequence found so far
+            write_llvm_passes_file(passes, 'best')
         else:
             print('No improvement found.')
 
@@ -369,8 +372,8 @@ def optimize():
             optimum_time = time
             print('Minimize success!')
             add_log(phase, time, passes)
-            # Write the optimum passes to the main file
-            write_llvm_passes_file(passes, 'main')
+            # Record the best sequence found so far
+            write_llvm_passes_file(passes, 'best')
         else:
             print('Minimize failed.')
 

@@ -6,7 +6,7 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
-    configuration::{Configuration, FixOptimizationLevel, OutputFileType},
+    configuration::{Configuration, OutputFileType},
     constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     error::{panic_with_msg, Errors},
     fixstd::{
@@ -575,8 +575,13 @@ fn optimize_and_verify<'c>(
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
-    fn run_passes_or_panic(module: &Module, passes: &[&str], target_machine: &TargetMachine) {
+    fn run_passes_or_panic(
+        module: &Module,
+        passes: &[impl AsRef<str>],
+        target_machine: &TargetMachine,
+    ) {
         for pass in passes {
+            let pass = pass.as_ref();
             if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
                 panic_with_msg(&format!(
                     "Failed to run pass \"{}\": {}",
@@ -587,33 +592,8 @@ fn optimize_and_verify<'c>(
         }
     }
 
-    // Get passes.
-    let passes = match &config.llvm_passes_file {
-        None => include_str!("llvm_passes.txt").to_string(),
-        Some(file) => fs::read_to_string(file).unwrap(),
-    };
-    let passes = passes
-        .lines()
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
-
-    // Run optimization
     run_passes_or_panic(module, &["verify"], target_machine);
-
-    match config.fix_opt_level() {
-        FixOptimizationLevel::None => {}
-        FixOptimizationLevel::Basic => {
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-        FixOptimizationLevel::Max => {
-            run_passes_or_panic(module, &["default<O3>"], target_machine);
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-        FixOptimizationLevel::Experimental => {
-            run_passes_or_panic(module, &["default<O3>"], target_machine);
-            run_passes_or_panic(module, &passes, target_machine);
-        }
-    }
+    run_passes_or_panic(module, &config.llvm_passes(), target_machine);
     run_passes_or_panic(module, &["verify"], target_machine);
 }
 
