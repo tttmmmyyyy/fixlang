@@ -53,8 +53,10 @@ LOG_FILE = REPO / "passes_optimizer.log"
 LLVM_PASSES_BEST_FILE = REPO / "llvm_passes_best.txt"
 
 # The pipeline the compiler ships, which the search starts from. Must stay in sync with
-# `LLVM_O3_PIPELINE` x `LLVM_O3_RUNS_FOR_SPEED` in `src/configuration.rs`.
-INITIAL_PASSES = ["default<O3>"] * 3
+# `LLVM_O3_PIPELINE`, `LLVM_O3_RUNS_FOR_SPEED` and `LLVM_TAIL_PASSES` in `src/configuration.rs`.
+INITIAL_PASSES = ["default<O3>"] * 3 + [
+    "speculative-execution", "loop-vectorize", "pseudo-probe",
+]
 
 # The cases the search optimizes. Each runs long enough that process start-up is lost in it, and
 # together they cover array loops, allocation, recursion, floating point and string work.
