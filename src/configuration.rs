@@ -573,6 +573,13 @@ impl Configuration {
         }
     }
 
+    /// Whether every optimization the compiler performs itself runs regardless of the optimization
+    /// level. Return `true` here to turn them all on with one edit, which is how a pass is exercised
+    /// at a level that would otherwise skip it.
+    ///
+    /// The scope is the compiler's own passes. LLVM's pipeline follows the optimization level alone
+    /// (`llvm_passes`), so that a build made to exercise a Fix pass keeps the LLVM effort its level
+    /// asks for.
     pub fn force_all_optimizations(&self) -> bool {
         false
     }
