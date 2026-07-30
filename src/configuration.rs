@@ -22,6 +22,30 @@ use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
 
+/// The pass-pipeline string for one full LLVM optimization run.
+const LLVM_O3_PIPELINE: &str = "default<O3>";
+
+/// How many times `LLVM_O3_PIPELINE` runs at the optimization levels built for speed.
+///
+/// One run leaves work that a second and a third still find: over `benchmark/speedtest`, the
+/// second run takes 2.2% of the instructions off and the third another 0.8%, reaching 21% on
+/// `nbody`. A fourth run changes no case by a single instruction.
+///
+/// `INITIAL_PASSES` in `passes_optimizer.py` starts its search from this pipeline, and must stay in
+/// sync with it.
+const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
+
+/// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
+///
+/// The count comes first so that a list's items cannot be read as the next list's, and each item is
+/// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
+fn push_list_hash(data: &mut String, items: &[String]) {
+    data.push_str(&items.len().to_string());
+    for item in items {
+        data.push_str(&format!("{:x}", md5::compute(item)));
+    }
+}
+
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -211,7 +235,7 @@ pub struct Configuration {
     // Source files.
     pub source_files: Vec<PathBuf>,
     /// The subset of `source_files` that is user-authored: the root
-    /// project's own files, files passed via `--source`, and files pushed
+    /// project's own files, files passed via `--file`, and files pushed
     /// by unit-test entry points. Excludes files contributed by
     /// dependencies. Used to scope deprecation warnings to user code,
     /// mirroring how Rust/Swift/Kotlin/etc. only flag deprecated uses in
@@ -268,9 +292,9 @@ pub struct Configuration {
     pub num_worker_thread: usize,
     // The arguments which are passed to the program in `run` mode.
     pub run_program_args: Vec<String>,
-    // File containing LLVM passes.
+    // LLVM passes to run in place of the ones the optimization level implies.
     // Used only for compiler development.
-    pub llvm_passes_file: Option<PathBuf>,
+    pub llvm_passes_override: Option<Vec<String>>,
     // Emit symbols at each step of optimization.
     // Used only for compiler development.
     pub emit_symbols: bool,
@@ -365,7 +389,7 @@ impl Configuration {
             allow_preliminary_commands: false,
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
-            llvm_passes_file: None,
+            llvm_passes_override: None,
             run_program_args: vec![],
             emit_symbols: false,
             emit_rc_ir: None,
@@ -409,20 +433,24 @@ impl Configuration {
     }
 
     // Create configuration for diagnostics subcommand.
-    pub fn diagnostics_mode(config: DiagnosticsConfig) -> Result<Configuration, Errors> {
-        let mut config = Self::new(SubCommand::Diagnostics(config))?;
+    pub fn diagnostics_mode(
+        diagnostics_config: DiagnosticsConfig,
+    ) -> Result<Configuration, Errors> {
+        let mut config = Self::new(SubCommand::Diagnostics(diagnostics_config))?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
 
-    // Create configuration for check subcommand.
-    // Uses Diagnostics internally; target files are set later in the check command.
+    /// The configuration for the `check` subcommand, which type-checks the project — test code
+    /// included — and reports the diagnostics it collects. The set of files to check starts empty,
+    /// and is filled in once the project file has been read.
     pub fn check_mode() -> Result<Configuration, Errors> {
-        let mut config = Self::new(SubCommand::Diagnostics(DiagnosticsConfig::default()))?;
-        config.num_worker_thread = num_cpus::get();
-        Ok(config)
+        Self::diagnostics_mode(DiagnosticsConfig::default())
     }
 
+    /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
+    /// unavailable the request is dropped with a warning. Any tool also disables the AVX-512
+    /// features valgrind cannot interpret (#41).
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -448,7 +476,7 @@ impl Configuration {
     }
 
     /// Register a user-authored source file: the root project's own files,
-    /// a path passed via `--source`, or a file pushed by a unit-test entry
+    /// a path passed via `--file`, or a file pushed by a unit-test entry
     /// point. The file lands in `source_files` (so it is parsed alongside
     /// dependencies) and additionally in `root_source_files`, which scopes
     /// deprecation diagnostics to user code.
@@ -545,6 +573,13 @@ impl Configuration {
         }
     }
 
+    /// Whether every optimization the compiler performs itself runs regardless of the optimization
+    /// level. Return `true` here to turn them all on with one edit, which is how a pass is exercised
+    /// at a level that would otherwise skip it.
+    ///
+    /// The scope is the compiler's own passes. LLVM's pipeline follows the optimization level alone
+    /// (`llvm_passes`), so that a build made to exercise a Fix pass keeps the LLVM effort its level
+    /// asks for.
     pub fn force_all_optimizations(&self) -> bool {
         false
     }
@@ -620,10 +655,14 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
+    /// Discard the global values that nothing reachable from `main` or from an exported function
+    /// uses. Runs at `Max` and above.
     pub fn enable_dead_symbol_elimination(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Build the program so that it prints a backtrace when it aborts: define the runtime's
+    /// `BACKTRACE` macro, and on Linux link the backtrace library it then calls into.
     pub fn set_backtrace(&mut self) {
         self.backtrace = true;
         self.runtime_c_macro.push("BACKTRACE".to_string());
@@ -638,6 +677,22 @@ impl Configuration {
         self.backtrace && env::consts::OS == "macos"
     }
 
+    /// The LLVM passes to run over each generated module, in order. Each entry is a
+    /// pass-pipeline string for LLVM's pass builder.
+    pub fn llvm_passes(&self) -> Vec<String> {
+        if let Some(passes) = &self.llvm_passes_override {
+            return passes.clone();
+        }
+        let runs = match self.fix_opt_level {
+            FixOptimizationLevel::None => 0,
+            FixOptimizationLevel::Basic => 1,
+            FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
+                LLVM_O3_RUNS_FOR_SPEED
+            }
+        };
+        vec![LLVM_O3_PIPELINE.to_string(); runs]
+    }
+
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
@@ -647,10 +702,13 @@ impl Configuration {
         data.push_str(&self.backtrace.to_string());
         data.push_str(&self.no_runtime_check.to_string());
         data.push_str(&self.c_type_sizes.to_string());
-        for disabled_cpu_feature in &self.disable_cpu_features_regex {
-            // To ensure that the arrays ["xy", "x"] and ["x", "xy"] produce different hash values, we hash each element before concatenation instead of simply joining them.
-            data.push_str(&format!("{:x}", md5::compute(disabled_cpu_feature)));
-        }
+        push_list_hash(&mut data, &self.disable_cpu_features_regex);
+
+        // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
+        // implies, so the pipeline is hashed in full: were it left out, objects generated under
+        // one pipeline would be reused under another, and a comparison of two pipelines would
+        // measure whichever one compiled first.
+        push_list_hash(&mut data, &self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
@@ -671,8 +729,8 @@ impl Configuration {
     /// configuration and for the errors the Fix runtime's memory management can produce.
     pub fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
-        let check = Command::new("which").arg("valgrind").output();
-        if check.is_err() || !check.unwrap().status.success() {
+        let which_output = Command::new("which").arg("valgrind").output();
+        if which_output.is_err() || !which_output.unwrap().status.success() {
             return Err(Errors::from_msg(
                 "valgrind is not installed on this system. Please install valgrind to use this feature.".to_string()
             ));
@@ -893,7 +951,7 @@ int main() {
         let size_t = lines.next().unwrap().parse().unwrap();
         let float = lines.next().unwrap().parse().unwrap();
         let double = lines.next().unwrap().parse().unwrap();
-        let res = CTypeSizes {
+        let sizes = CTypeSizes {
             char,
             short,
             int,
@@ -903,9 +961,11 @@ int main() {
             float,
             double,
         };
-        Ok(res)
+        Ok(sizes)
     }
 
+    /// Write these sizes as JSON to `C_TYPES_JSON_PATH`, from where a later compiler run reads them
+    /// back.
     fn save_to_file(&self) -> Result<(), Errors> {
         // Open json file.
         let path = C_TYPES_JSON_PATH;
