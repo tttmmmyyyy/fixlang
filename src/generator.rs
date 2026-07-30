@@ -502,7 +502,7 @@ pub struct Generator<'c, 'm> {
     /// The value of each global symbol the module has reached so far, by name. A global enters this
     /// map when code generation first asks for it (`global_value`), which is also where it is
     /// declared, so the module declares the globals it uses and no others.
-    pub global: Map<FullName, ScopedValue<'c>>,
+    global: Map<FullName, ScopedValue<'c>>,
     /// The type of every global symbol of the program, by name — the whole program, not just this
     /// compilation unit, since a unit's code calls into the others. It is what a global is declared
     /// from on first use.
@@ -2087,7 +2087,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let func = if ty.is_funptr() {
             self.declare_lambda_function(ty, name)
         } else {
-            let acc_fn_name = format!("Get#{}", name.to_string());
+            let acc_fn_name = global_accessor_name(name);
             let embedded_ty = ty.get_embedded_type(self, &vec![]);
             let acc_fn_ty = if self.sizeof(&embedded_ty) == 0 {
                 self.context.void_type().fn_type(&[], false)
@@ -2120,19 +2120,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             return None;
         }
         let fn_name = func.get_name().to_str().unwrap().to_string();
-        func.set_subprogram(self.create_debug_subprogram(&fn_name, span));
-        let subprogram = func
-            .get_subprogram()
-            .expect("the subprogram just attached is readable back");
+        let subprogram = self.create_debug_subprogram(&fn_name, span);
+        func.set_subprogram(subprogram);
         Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
     }
 
     // Create debug info subprogram.
-    pub fn create_debug_subprogram<'a>(
-        &'a self,
-        fn_name: &str,
-        span: Option<Span>,
-    ) -> DISubprogram<'a> {
+    fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram<'c> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
             span.start_line_no()
@@ -2470,4 +2464,11 @@ impl<'c, 'm> Generator<'c, 'm> {
 // single retain when the amount is exactly 1, so that path stays byte-identical.
 pub(crate) fn is_const_one(v: IntValue) -> bool {
     v.get_zero_extended_constant() == Some(1)
+}
+
+// The name of the LLVM function through which the global `name`, of a type other than funptr, is
+// obtained. It is the name every module — the one defining the global and the ones calling into it —
+// declares and looks the accessor up under.
+pub(crate) fn global_accessor_name(name: &FullName) -> String {
+    format!("Get#{}", name.to_string())
 }

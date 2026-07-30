@@ -14,7 +14,7 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{Generator, Object};
+use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -566,7 +566,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         global_init: &RcGlobalInit,
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
-        let acc_fn_name = format!("Get#{}", global_init.symbol.to_string());
+        let acc_fn_name = global_accessor_name(&global_init.symbol);
+        // The accessor is already declared when a function body generated before this point reads
+        // the global, and is declared here when none does.
         let acc_fn = match self.module.get_function(&acc_fn_name) {
             Some(acc_fn) => acc_fn,
             None => self.declare_global(&global_init.symbol, &global_init.ty),

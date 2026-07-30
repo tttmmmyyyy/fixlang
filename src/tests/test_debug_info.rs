@@ -53,9 +53,9 @@ mod debug_info_tests {
     }
 
     // Run the `prog` built into `dir` and return what it wrote to stdout.
-    fn run_built_program(dir: &TempDir) -> String {
+    fn run_built_program(dir: &Path) -> String {
         let run = Command::new("./prog")
-            .current_dir(dir.path())
+            .current_dir(dir)
             .output()
             .expect("Failed to execute the built program");
         assert!(
@@ -94,7 +94,7 @@ mod debug_info_tests {
             for extra_args in [&[][..], &["--threaded"][..]] {
                 let dir = build_with_g(SOURCE, opt_level, extra_args);
                 assert_eq!(
-                    run_built_program(&dir),
+                    run_built_program(dir.path()),
                     EXPECTED,
                     "built with -g -O {} {}",
                     opt_level,
