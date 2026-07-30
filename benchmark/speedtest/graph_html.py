@@ -37,6 +37,12 @@ METRICS = [
     ("mem", "Cachegrind memory",
      "Weighted memory-access estimate from cachegrind's cache model (l1 + 5*l3 + 35*ram).",
      "ratio", "cachegrind"),
+    ("cycles", "perf cycles",
+     "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
+     "several runs. This is the only column here that is not deterministic: it rises with whatever "
+     "else the machine is doing, so it is read only on runs taken while the machine is free and the "
+     "series is sparse. Two points are comparable only when both rows report a low load.",
+     "ratio", "perf"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "
      "model has no notion of these, and they cost real time; the count is deterministic and reaches "
@@ -97,6 +103,7 @@ def build_data(log_path, history_path, latest_n):
 
     index = {name.strip(): i for i, name in enumerate(header)}
     cpu_col = index.get("cpu")
+    load_col = index.get("load")
 
     commits = []
     for row in body:
@@ -110,7 +117,9 @@ def build_data(log_path, history_path, latest_n):
             matches = [k for k in history if h.startswith(k) or k.startswith(h)]
             entry = history[max(matches, key=len)] if matches else None
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
-        commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry, "cpu": cpu})
+        load = row[load_col].strip() if load_col is not None and load_col < len(row) else ""
+        commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry,
+                        "cpu": cpu, "load": load})
 
     # Split each "<case>-<metric>" column apart, and each "<case>-<metric>-<language>"
     # reference beside it. A reference does not move with a Fix commit, so the last value
@@ -149,9 +158,9 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,a-inst,a-mem,a-splits,b-inst,a-inst-c,a-inst-rust\n"
-            "1111111111111111111111111111111111111111,Zen,100,200,4,50,90,\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,150,,0,,90,120\n",
+            "commit,cpu,load,a-inst,a-mem,a-splits,a-cycles,b-inst,a-inst-c,a-inst-rust\n"
+            "1111111111111111111111111111111111111111,Zen,0.10,100,200,4,7,50,90,\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,,150,,0,,,90,120\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
@@ -159,13 +168,16 @@ def self_check():
         data = build_data(log, history, 40)
 
     first, second = data["commits"]
-    assert first["cpu"] == "Zen" and not first["dirty"], first
+    assert first["cpu"] == "Zen" and first["load"] == "0.10" and not first["dirty"], first
+    assert second["load"] == "", second
     assert second["dirty"] and "second commit" in second["history"], second
     assert first["history"] is None, first
     series = {k: v["series"] for k, v in data["metrics"].items()}
     assert series["inst"] == {"a": [100, 150], "b": [50, None]}, series["inst"]
     assert series["mem"] == {"a": [200, None]}, series["mem"]
     assert series["splits"] == {"a": [4, 0]}, series["splits"]
+    # Cycles are read only on the runs taken while the machine was free, so the series has gaps.
+    assert series["cycles"] == {"a": [7, None]}, series["cycles"]
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]
     assert data["metrics"]["mem"]["refs"] == {}, data["metrics"]["mem"]["refs"]
@@ -371,6 +383,14 @@ function render() {
       }
     }
     el("path", { class: "series-line", stroke: s.color, d, "data-name": s.name }, lines);
+    // Mark where the series was actually measured. A metric read on only some of the commits
+    // draws a line across the gaps, which would otherwise read as a continuous measurement.
+    if (pts.length < s.values.length) {
+      s.values.forEach((v, i) => {
+        if (v !== null) el("circle", { class: "point", cx: xAt(i), cy: toY(v), r: 2.5,
+                                       fill: s.color }, lines);
+      });
+    }
     const hit = el("path", { class: "hit", d, "data-name": s.name }, lines);
     hit.addEventListener("mousemove", (ev) => hoverPoint(ev, s, xAt));
     hit.addEventListener("mouseleave", clearHover);
@@ -460,7 +480,8 @@ function clearHover() {
 function showHistory(i) {
   const c = DATA.commits[i];
   document.getElementById("history").innerHTML =
-    `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}${c.cpu ? "<br>" + c.cpu : ""}</p>`
+    `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}${c.cpu ? "<br>" + c.cpu : ""}`
+    + `${c.load ? ` at load ${c.load}` : ""}</p>`
     + (c.history || `<p class="placeholder">No note recorded for this commit.</p>`);
 }
 

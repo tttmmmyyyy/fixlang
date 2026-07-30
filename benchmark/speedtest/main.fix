@@ -85,6 +85,10 @@ namespace CSV {
 type Args = struct {
     no_save : Bool,
     llvm_passes_file: String,
+    // Whether to read the cycle counter as well. Off by default: a cycle count taken while the
+    // machine is busy is not comparable with one taken while it is idle, so the column is filled
+    // only on the runs whose operator knows the machine is free, and the series is sparse.
+    cycles : Bool,
 };
 
 namespace Args {
@@ -92,6 +96,7 @@ namespace Args {
     default = Args {
         no_save: false,
         llvm_passes_file: "",
+        cycles: false,
     };
 }
 
@@ -104,6 +109,8 @@ main = (
         if i >= raw_args.@size { break $ args };
         if raw_args.@(i) == "--no-save" {
             continue $ (i + 1, args.set_no_save(true))
+        } else if raw_args.@(i) == "--cycles" {
+            continue $ (i + 1, args.set_cycles(true))
         } else if raw_args.@(i) == "--llvm-passes-file" {
             if i + 1 >= raw_args.@size {
                 undefined("error: --llvm-passes-file requires a file path argument")
@@ -198,17 +205,20 @@ main = (
         // that a change to code layout or branch density -- where the instruction count and
         // the time diverge -- shows up somewhere in this log.
         //
-        // The split count is deterministic like every cachegrind column here. **The cycle
-        // count is not**: it is the lowest of several runs, and it rises with whatever else
-        // the machine is doing, so two rows are comparable on it only when both were taken on
-        // a quiet machine. The `load` column below is how a reader tells.
+        // The split count is deterministic like every cachegrind column here, so it is read on
+        // every run. **The cycle count is not**, so it is read only under `--cycles`, and the
+        // `load` column records what the machine was doing while it was: two rows are
+        // comparable on cycles only when both were taken on a quiet machine.
         // On a machine without the counters both columns stay empty and the run carries on.
-        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "./a.out"].ez_run_oec(config);
+        let repeat = if args.@cycles { "5" } else { "1" };
+        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--repeat", repeat, "./a.out"].ez_run_oec(config);
         let (log, case_load) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
             if perf.@(0) == "" { (log, 0.0) };
             let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
-            let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(1));
+            let log = if args.@cycles {
+                log.set(case_name + "-cycles", log.@size - 1, perf.@(1))
+            } else { log };
             // A load the harness cannot read leaves the row's `load` at whatever the other
             // cases reported, which is the honest reading: this case contributed nothing.
             let parsed : Result _ F64 = perf.@(2).from_string;
