@@ -59,7 +59,7 @@ fn test_union_memory_layout() {
         target_machine.get_target_data(),
         config.clone(),
         type_env,
-        Map::default(),
+        Arc::new(Map::default()),
     );
 
     // A union's payload buffer takes the ABI alignment of its payloads, so a small or empty

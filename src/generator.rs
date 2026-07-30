@@ -507,7 +507,7 @@ pub struct Generator<'c, 'm> {
     declared_globals: Map<FullName, ScopedValue<'c>>,
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
-    global_types: Map<FullName, Arc<TypeNode>>,
+    global_types: Arc<Map<FullName, Arc<TypeNode>>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -664,7 +664,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         target_data: TargetData,
         config: Configuration,
         type_env: TypeEnv,
-        global_types: Map<FullName, Arc<TypeNode>>,
+        global_types: Arc<Map<FullName, Arc<TypeNode>>>,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let gc = Self {

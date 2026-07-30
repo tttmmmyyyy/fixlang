@@ -4,6 +4,7 @@ use crate::{
         expr::ExprNode,
         name::FullName,
         program::{Program, Symbol, TypeEnv},
+        types::TypeNode,
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, OutputFileType},
@@ -14,7 +15,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, spawn_compiler_thread, warn_msg, Set},
+    misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -59,18 +60,16 @@ pub struct BuildObjFilesResult {
 // Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
 // code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
 //
-// The two symbol sets play different roles. `symbols` is the set to lower and generate code for — one
-// compilation unit, or the whole program. `all_symbols` is every symbol in the program; lowering
-// consults it only to type a global that a lowered function references as an LLVM operand, which under
-// separated compilation may be defined in another unit. So `all_symbols` must cover every symbol
-// anything in `symbols` can reference (`symbols` is a subset of it), while only `symbols` becomes code.
+// `symbols` is the set to lower and generate code for — one compilation unit, or the whole program.
+// `global_types` types a global that a lowered function references as an LLVM operand, which under
+// separated compilation may be defined in another unit, so it covers the whole program.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
-    all_symbols: &[Symbol],
+    global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
 ) -> RcProgram {
-    let mut prog = lower_program(type_env, symbols, all_symbols);
+    let mut prog = lower_program(type_env, symbols, global_types);
     // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
     // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
     if config.enable_simplify() {
@@ -88,13 +87,13 @@ fn lower_and_insert_rc(
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
-    all_symbols: &[Symbol],
+    global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
 ) -> RcProgram {
     // The whole program's symbol names, for the debug-only validator to recognize global references
     // (a unit may reference a symbol another unit defines). Built only when the validator runs.
     let symbol_names: Set<FullName> = if config.develop_mode {
-        all_symbols.iter().map(|s| s.name.clone()).collect()
+        global_types.keys().cloned().collect()
     } else {
         Set::default()
     };
@@ -200,9 +199,10 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     };
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let base = lower_and_insert_rc(&type_env, &all_symbols, &all_symbols, config);
+    let global_types = program.global_types();
+    let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, &all_symbols, config);
+    let optimized = optimize_rc_program(base, &type_env, &global_types, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
@@ -231,7 +231,8 @@ pub fn build_object_files<'c>(
     let mut units = vec![];
     let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
     symbols.sort_by(|a, b| a.name.cmp(&b.name));
-    let all_symbols = symbols.clone();
+    // Every unit needs the types of the whole program's globals, so build them once and share.
+    let global_types = Arc::new(program.global_types());
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
@@ -282,7 +283,7 @@ pub fn build_object_files<'c>(
             info_msg(&format!("Generating object file for {}.", unit.to_string()));
         }
 
-        let all_symbols = all_symbols.clone();
+        let global_types = global_types.clone();
         let config = config.clone();
         let type_env = program.type_env();
 
@@ -303,17 +304,13 @@ pub fn build_object_files<'c>(
                 &context,
                 &target_machine,
             );
-            let global_types = all_symbols
-                .iter()
-                .map(|symbol| (symbol.name.clone(), symbol.ty.clone()))
-                .collect();
             let mut gc = Generator::new(
                 &context,
                 &module,
                 target_machine.get_target_data(),
                 config.clone(),
                 type_env,
-                global_types,
+                global_types.clone(),
             );
 
             // In debug mode, create debug infos.
@@ -329,8 +326,8 @@ pub fn build_object_files<'c>(
             // one calls is declared where code generation first reaches it, from the types of the
             // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols, &config);
-            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &all_symbols, &config);
+            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, &config);
+            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
