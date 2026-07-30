@@ -55,7 +55,8 @@ use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
 use configuration::{
-    Configuration, DeprecationMode, FixOptimizationLevel, LinkType, OutputFileType, SubCommand,
+    BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
+    OutputFileType, SubCommand,
 };
 use constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
@@ -520,7 +521,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
         let features = read_string_list_option(m, "disable-cpu-feature");
-        metafiles::project_file::ProjectFile::validate_disable_cpu_features(&features)?;
+        ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 
@@ -545,11 +546,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ))
     }
 
-    fn get_build_mode(args: &ArgMatches) -> configuration::BuildConfigType {
+    fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
         if args.contains_id("test") {
-            configuration::BuildConfigType::Test
+            BuildConfigType::Test
         } else {
-            configuration::BuildConfigType::Build
+            BuildConfigType::Build
         }
     }
 
