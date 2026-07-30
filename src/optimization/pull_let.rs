@@ -305,8 +305,8 @@ impl ExprVisitor for PullLet {
         let expr2 = expr.get_let_value();
 
         // Rename `pat1` and `expr1` to avoid conflicts with free variables in `expr2`.
-        let ng_names = expr2.free_vars();
-        let (pat1, expr1) = rename_pattern_value_avoiding(&ng_names, pat1, expr1);
+        let black_list = expr2.free_vars();
+        let (pat1, expr1) = rename_pattern_value_avoiding(&black_list, pat1, expr1);
 
         // Construct the new expression.
         let expr = expr_let_typed(pat1, expr0, expr_let_typed(pat0, expr1, expr2));
