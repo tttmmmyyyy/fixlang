@@ -52,8 +52,9 @@ use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::PossibleValue;
-use clap::{App, AppSettings, Arg};
+use clap::{value_parser, App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
+use commands::{check, clean, deps, docs, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
     OutputFileType, SubCommand,
@@ -63,6 +64,7 @@ use constants::{
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
     OPTIMIZATION_LEVEL_NONE, PROJECT_FILE_PATH,
 };
+use edit::edit_explict_import;
 use error::panic_if_err;
 use git_version::git_version;
 use metafiles::config_file::ConfigFile;
@@ -194,7 +196,7 @@ fn run_cli() {
         .long("max-cu-size")
         .takes_value(true)
         .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
-        .value_parser(clap::value_parser!(usize))
+        .value_parser(value_parser!(usize))
         .help(
             "Maximum size of compilation units created by separate compilation.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
@@ -735,23 +737,23 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             )));
         }
         Some(("run", args)) => {
-            commands::run::run_command(&create_config(SubCommand::Run, args));
+            run::run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            commands::run::run_command(&create_config(SubCommand::Test, args));
+            run::run_command(&create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {
-                commands::deps::deps_install_command(args);
+                deps::deps_install_command(args);
             }
             Some(("update", args)) => {
-                commands::deps::deps_update_command(args);
+                deps::deps_update_command(args);
             }
             Some(("add", args)) => {
-                commands::deps::deps_add_command(args, &fix_config);
+                deps::deps_add_command(args, &fix_config);
             }
             Some(("list", args)) => {
-                commands::deps::deps_list_command(args, &fix_config);
+                deps::deps_list_command(args, &fix_config);
             }
             _ => deps_subc.print_help().unwrap(),
         },
@@ -759,13 +761,13 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             launch_language_server();
         }
         Some(("clean", _args)) => {
-            commands::clean::clean_command();
+            clean::clean_command();
         }
         Some(("docs", args)) => {
             // Create the configuration.
             let mut config = panic_if_err(Configuration::docs_mode());
             panic_if_err(read_docs_options(args, &mut config));
-            panic_if_err(commands::docs::generate_docs_for_files(config));
+            panic_if_err(docs::generate_docs_for_files(config));
         }
         Some(("init", args)) => {
             let project_name = args
@@ -777,11 +779,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
         Some(("check", _args)) => {
             let config = panic_if_err(Configuration::check_mode());
-            panic_if_err(commands::check::check(config));
+            panic_if_err(check::check(config));
         }
         Some(("edit", args)) => match args.subcommand() {
             Some(("explicit-import", _args)) => {
-                panic_if_err(edit::edit_explict_import::run_explicit_import_command());
+                panic_if_err(edit_explict_import::run_explicit_import_command());
             }
             _ => edit_subc.print_help().unwrap(),
         },

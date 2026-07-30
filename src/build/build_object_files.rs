@@ -15,7 +15,7 @@ use crate::{
     },
     generator::Generator,
     misc::{info_msg, spawn_compiler_thread, warn_msg, Set},
-    optimization,
+    optimization::optimization,
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
@@ -25,6 +25,7 @@ use crate::{
         rc_insert::insert_rc,
         simplify::simplify,
         unique_check_elim::specialize,
+        validate,
     },
     tool::stopwatch::StopWatch,
 };
@@ -36,10 +37,11 @@ use inkwell::{
     values::BasicValue,
     AddressSpace, OptimizationLevel,
 };
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, create_dir_all},
+    fs::{self, create_dir_all, File},
+    mem,
     panic::panic_any,
     path::{Path, PathBuf},
     sync::Arc,
@@ -97,7 +99,7 @@ fn optimize_rc_program(
     };
     let validate = |prog: &RcProgram, stage: &str| {
         if config.develop_mode {
-            crate::rc_ir::validate::validate(prog, &symbol_names, type_env, stage);
+            validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
 
@@ -220,7 +222,7 @@ pub fn build_object_files<'c>(
     }
 
     // Run optimizations.
-    optimization::optimization::run(&mut program, &config);
+    optimization::run(&mut program, &config);
 
     dump_rc_ir_stages(&program, config);
 
@@ -285,7 +287,7 @@ pub fn build_object_files<'c>(
 
         let export_statements = if is_main_unit {
             // Export statements are only needed for the main unit.
-            std::mem::replace(&mut program.export_statements, vec![])
+            mem::replace(&mut program.export_statements, vec![])
         } else {
             vec![]
         };
@@ -392,7 +394,7 @@ fn load_build_object_files_cache(
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = fs::File::open(&cache_path);
+    let file = File::open(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to open object files cache \"{}\": {}.",
@@ -436,7 +438,7 @@ fn save_build_object_files_cache(
         return;
     }
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = fs::File::create(&cache_path);
+    let file = File::create(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to create object files cache \"{}\": {}.",
@@ -540,8 +542,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
         Ok(_) => {}
     }
     // Write to a temporary file.
-    let tmp_file_path =
-        obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
+    let tmp_file_path = obj_path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
     target_machine
         .write_to_file(&module, FileType::Object, &tmp_file_path)
         .map_err(|e| {
