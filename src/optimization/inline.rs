@@ -90,6 +90,9 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 
 pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
+    // The global each alias refers to, from which `aliases_with_an_end` decides which of them can be
+    // expanded.
+    let mut alias_targets: Map<FullName, FullName> = Map::default();
     for (name, sym) in &prg.symbols {
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
         cost_calculator.traverse(&sym.expr.as_ref().unwrap());
@@ -110,14 +113,59 @@ pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
         costs.costs.get_mut(name).unwrap().is_std_fix = is_std_fix(name);
 
-        // If the expression is an alias to another global value, set as `is_alias`.
+        // If the expression is an alias to another global value, record what it aliases.
         if expr.is_var() {
             let var_name = &expr.get_var().name;
             assert!(var_name.is_global());
-            costs.costs.get_mut(name).unwrap().is_alias = true;
+            alias_targets.insert(name.clone(), var_name.clone());
         }
     }
+    for name in aliases_with_an_end(&alias_targets) {
+        costs.costs.get_mut(&name).unwrap().is_expandable_alias = true;
+    }
     costs
+}
+
+/// The aliases whose chain of aliases ends: following it from one of these reaches a definition that
+/// is not an alias, which is the definition expanding the alias arrives at. Following it from any
+/// other alias comes back to a name it has already passed.
+/// The aliases whose chain of aliases ends: following it from one of these reaches a definition that
+/// is not an alias, which is the definition expanding the alias arrives at. Following it from any
+/// other alias comes back to a name it has already passed.
+fn aliases_with_an_end(alias_targets: &Map<FullName, FullName>) -> Set<FullName> {
+    let mut with_an_end = Set::default();
+    let mut settled: Set<FullName> = Set::default();
+    for start in alias_targets.keys() {
+        if settled.contains(start) {
+            continue;
+        }
+        // Walk the chain until it reaches a definition that is not an alias, a name whose answer is
+        // already known, or a name this walk has already passed.
+        let mut path = vec![];
+        let mut on_path: Set<FullName> = Set::default();
+        let mut name = start.clone();
+        let ends = loop {
+            if on_path.contains(&name) {
+                break false;
+            }
+            if settled.contains(&name) {
+                break with_an_end.contains(&name);
+            }
+            let Some(target) = alias_targets.get(&name) else {
+                break true;
+            };
+            on_path.insert(name.clone());
+            path.push(name);
+            name = target.clone();
+        };
+        for name in path {
+            settled.insert(name.clone());
+            if ends {
+                with_an_end.insert(name);
+            }
+        }
+    }
+    with_an_end
 }
 
 // A struct to store information about the cost of inlining a symbol.
@@ -134,13 +182,18 @@ pub struct InlineCost {
     is_llvm_lam: bool,
     // Is the expression primitive literal?
     is_primitive_literal: bool,
-    // Is this expression an alias to another value?
+    // Is this expression an alias to another value whose own chain of aliases ends at a definition
+    // that is not an alias?
     //
     // Example:
     // ```
     // x = y;
     // ```
-    is_alias: bool,
+    //
+    // An alias whose chain runs into a cycle is excluded. Expanding one replaces its body with the
+    // next name around the cycle, which is a change every round, so the inlining fixpoint would
+    // never converge.
+    is_expandable_alias: bool,
     // Is the expression instantiated by Std::fix?
     is_std_fix: bool,
 }
@@ -155,7 +208,7 @@ impl InlineCost {
             is_llvm_lam: false,
             is_primitive_literal: false,
             is_std_fix: false,
-            is_alias: false,
+            is_expandable_alias: false,
         }
     }
 
@@ -174,7 +227,7 @@ impl InlineCost {
         if self.is_llvm_lam {
             return true;
         }
-        if !self.is_self_recursive && self.is_alias {
+        if self.is_expandable_alias {
             return true;
         }
         return false;
@@ -694,5 +747,65 @@ impl<'c> ExprVisitor for Inliner<'c> {
 
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn global(name: &str) -> FullName {
+        FullName::from_strs(&["Main"], name)
+    }
+
+    /// An alias graph, given as the pairs `(alias, the name it refers to)`.
+    fn alias_targets(pairs: &[(&str, &str)]) -> Map<FullName, FullName> {
+        pairs
+            .iter()
+            .map(|(alias, target)| (global(alias), global(target)))
+            .collect()
+    }
+
+    /// The names `aliases_with_an_end` finds in that graph, in alphabetical order.
+    fn ends(pairs: &[(&str, &str)]) -> Vec<String> {
+        let mut names = aliases_with_an_end(&alias_targets(pairs))
+            .iter()
+            .map(|name| name.name.clone())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn a_chain_of_aliases_ends_at_the_definition_it_names() {
+        // `a` refers to `b`, `b` to `real`, and `real` is a definition of its own.
+        assert_eq!(ends(&[("a", "b"), ("b", "real")]), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn a_cycle_of_aliases_has_no_end() {
+        assert!(ends(&[("a", "b"), ("b", "c"), ("c", "a")]).is_empty());
+        assert!(ends(&[("a", "b"), ("b", "a")]).is_empty());
+    }
+
+    #[test]
+    fn a_chain_leading_into_a_cycle_has_no_end() {
+        // `x` and `y` are outside the cycle and still arrive nowhere.
+        assert!(ends(&[("x", "y"), ("y", "a"), ("a", "b"), ("b", "a")]).is_empty());
+    }
+
+    #[test]
+    fn a_chain_that_ends_and_a_cycle_are_told_apart_in_one_pass() {
+        // Whichever of the two the walk reaches first, both answers have to come out right.
+        assert_eq!(
+            ends(&[
+                ("a", "b"),
+                ("b", "real"),
+                ("p", "q"),
+                ("q", "r"),
+                ("r", "p")
+            ]),
+            vec!["a", "b"]
+        );
     }
 }
