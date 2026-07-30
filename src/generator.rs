@@ -83,16 +83,6 @@ use inkwell::{
 };
 use std::{cell::RefCell, env, sync::Arc};
 
-// A value bound to a name in the current scope.
-#[derive(Clone)]
-pub struct ScopedValue<'c> {
-    accessor: ValueAccessor<'c>,
-    /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
-    /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
-    /// global is moved out on read, and local values are reference-counted by explicit RC-IR nodes.
-    retain_on_read: bool,
-}
-
 // How a scoped value's `Object` is obtained: an in-register local object, or a global read through
 // its getter function.
 #[derive(Clone)]
@@ -451,7 +441,7 @@ impl<'c> Object<'c> {
 pub struct Scope<'c> {
     // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
     // shadows the outer bindings of the same name for as long as it lives.
-    data: Map<FullName, Vec<ScopedValue<'c>>>,
+    data: Map<FullName, Vec<ValueAccessor<'c>>>,
 }
 
 impl<'c> Scope<'c> {
@@ -461,10 +451,10 @@ impl<'c> Scope<'c> {
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
         }
-        self.data.get_mut(var).unwrap().push(ScopedValue {
-            accessor: ValueAccessor::Local(obj.clone()),
-            retain_on_read: false,
-        });
+        self.data
+            .get_mut(var)
+            .unwrap()
+            .push(ValueAccessor::Local(obj.clone()));
     }
 
     fn pop_local(&mut self, var: &FullName) {
@@ -475,7 +465,7 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
+    pub fn get(&self, var: &FullName) -> ValueAccessor<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 }
@@ -502,7 +492,7 @@ pub struct Generator<'c, 'm> {
     /// where the code being generated has no known source.
     debug_location: Vec<Option<Span>>,
     /// The value of each global symbol of the program, by name.
-    pub global: Map<FullName, ScopedValue<'c>>,
+    pub global: Map<FullName, ValueAccessor<'c>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -737,16 +727,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.global.contains_key(&name) {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
-            // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
-            // its own reference, so reading it must retain its boxed subobjects.
-            let retain_on_read = !ty.is_box(self.type_env());
-            self.global.insert(
-                name.clone(),
-                ScopedValue {
-                    accessor: ValueAccessor::Global(function, ty),
-                    retain_on_read,
-                },
-            );
+            self.global
+                .insert(name.clone(), ValueAccessor::Global(function, ty));
         }
     }
 
@@ -773,7 +755,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get a variable.
-    pub fn get_scoped_value(&self, var: &FullName) -> ScopedValue<'c> {
+    pub fn get_scoped_value(&self, var: &FullName) -> ValueAccessor<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
@@ -785,26 +767,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get an object on the scope (or global).
-    // This function does not retain the object.
-    pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
-        self.get_scoped_value(name).accessor.get(self)
-    }
-
-    // Get an object on the scope (or global).
-    // Retains the object's boxed subobjects when the value's `retain_on_read` is set, i.e. when
-    // reading an unboxed global (which keeps its own reference); other reads are plain.
-    pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
-        let val = self.get_scoped_value(var_name);
-        let obj = val.accessor.get(self);
-        if val.retain_on_read {
-            let one = self.context.i64_type().const_int(1, false);
-            self.build_retain(obj.clone(), one);
-        }
-        obj
+    // Reading performs no reference-count operation: every retain and release is an explicit RC IR
+    // node.
+    pub fn get_scoped_obj(&mut self, name: &FullName) -> Object<'c> {
+        self.get_scoped_value(name).get(self)
     }
 
     // Get field of object on the scope.
-    // This function retains the object if it will be used later.
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -2219,7 +2188,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         cap_tys: &Vec<Arc<TypeNode>>,
         result_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        let cap_obj = self.get_scoped_obj_noretain(cap_name);
+        let cap_obj = self.get_scoped_obj(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
         let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
         let cap_val =

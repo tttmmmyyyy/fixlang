@@ -525,14 +525,20 @@ impl<'a> Interpreter<'a> {
                 self.interpret(cont, env)
             }
             RcExpr::Retain(var, path, _, cont) => {
-                // Reference counting is inserted for locals only, so the retained value is in scope.
-                let demoted = env
-                    .get(&var.name)
-                    .unwrap_or_else(|| {
-                        unreachable!("retained local `{}` is not in scope", var.name.to_string())
-                    })
-                    .demote(path);
-                env.insert(var.name.clone(), demoted);
+                // A global is not in the environment: its provenance is `Unknown` (`prov_of`), which
+                // demoting leaves unchanged.
+                if var.name.is_local() {
+                    let demoted = env
+                        .get(&var.name)
+                        .unwrap_or_else(|| {
+                            unreachable!(
+                                "retained local `{}` is not in scope",
+                                var.name.to_string()
+                            )
+                        })
+                        .demote(path);
+                    env.insert(var.name.clone(), demoted);
+                }
                 // A retain is how a second reference to a value comes into existence, so it ends what
                 // an `is_unique` established: the count it read is no longer the count that holds. The
                 // retain may name an alias of the tested value rather than the value itself, and

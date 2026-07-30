@@ -192,7 +192,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     RcState::Unknown,
                     "reference-count state dispatch is not implemented"
                 );
-                let obj = self.get_scoped_obj_noretain(&x.name);
+                let obj = self.get_scoped_obj(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): retain
@@ -226,7 +226,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     RcState::Unknown,
                     "reference-count state dispatch is not implemented"
                 );
-                let obj = self.get_scoped_obj_noretain(&x.name);
+                let obj = self.get_scoped_obj(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): release
@@ -248,7 +248,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // runs its call-once initializer; a local is already computed. No reference-count
                 // operation and no value are produced here — a preceding `Retain` or following
                 // `Release` carries any reference counting.
-                let _ = self.get_scoped_obj_noretain(&x.name);
+                let _ = self.get_scoped_obj(&x.name);
                 self.eval_rc_expr(k, tail, func_vals)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
@@ -302,7 +302,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // node iff it is used afterward). `get_struct_fields` performs the whole-container
                 // reference counting: a boxed container retains the fields and releases itself, an
                 // unboxed container moves the fields out and releases the fields not named here.
-                let container_obj = self.get_scoped_obj_noretain(&container.name);
+                let container_obj = self.get_scoped_obj(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
                 let field_objs =
                     ObjectFieldType::get_struct_fields(self, &container_obj, &field_indices);
@@ -475,7 +475,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         tail: bool,
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
-        let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
+        let scrut_obj = self.get_scoped_obj(&scrut.name);
         let scrut_is_boxed = scrut_obj.ty.is_box(self.type_env());
 
         let current_func = self.current_function();
@@ -530,7 +530,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // variant value; a catch-all arm binds the whole scrutinee.
             let payload_obj = match arm.tag {
                 Some(_) => {
-                    let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
+                    let scrut_obj = self.get_scoped_obj(&scrut.name);
                     let value = ObjectFieldType::get_union_value_noretain_norelease(
                         self,
                         scrut_obj,
@@ -542,7 +542,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     }
                     value
                 }
-                None => self.get_scoped_obj_noretain(&scrut.name),
+                None => self.get_scoped_obj(&scrut.name),
             };
             self.scope_push(&arm.payload.name, &payload_obj);
             self.emit_debug_local_variable(&arm.payload, &payload_obj);
