@@ -1,16 +1,17 @@
-# Static reference-count state: what to build, and in what order
+# Reference-count state: drop `Global` where it earns nothing, infer `Local` where it pays
 
 Issue #122. `RcState` has four values and lowering emits only `Unknown`, so every `Retain`,
 `Release` and `is_unique` loads the object's `refcnt_state` byte and branches on it. This document
-records what the branch actually costs, which of the three known states is worth inferring, and the
-staging that follows from those two answers.
+records what that branch costs, what each of the three known states is worth, and the design the
+measurements point to — which is not the state inference the issue first proposed.
 
-Measured on `18578264` (main), `-O experimental`, the 46 `benchmark/speedtest` cases.
+Measured on `18578264` (main), the 46 `benchmark/speedtest` cases.
 
 ## What the dispatch costs
 
 A compiler with a counter on each arm of `Generator::build_branch_by_refcnt_state`, at all three
-sites that call it (`build_branch_by_is_unique`, `retain_nonnull_boxed`, `build_release_boxed_with`).
+sites that call it (`build_branch_by_is_unique`, `retain_nonnull_boxed`, `build_release_boxed_with`),
+run at `-O experimental`.
 
 **The global arm is taken 0 to 3 times per program. The threaded arm is never taken. Everything
 else is the local arm.**
@@ -28,17 +29,14 @@ else is the local arm.**
 | sort | 0 | 2,559,622 | 2,569,817 | 5,129,439 | 0 |
 | cp_lib_bipartite | 363,330 | 1,844,249 | 1,901,546 | 4,109,125 | 5 |
 
-The largest global count in the corpus is 3, in `cp_lib_dijkstra`. So **`Global` is worth nothing to
-infer** — it removes single-digit branches from a program — and the whole prize is proving `Local`,
-which removes the state load, the compare and the branch from tens of millions of operations.
-`Threaded` cannot arise at all in a build with `threaded = false`, since `Std::mark_threaded` is
-rejected there.
+The largest global count in the corpus is 3, in `cp_lib_dijkstra`.
 
 ### The shape that would need `Global`
 
 A table held in a global and read from a hot loop — the Project Euler shape — is the one the issue
 expects to dominate the global arm. It does not, at the level that matters. A million-iteration loop
-over a global `Array I64`, in the three ways the table can be reached:
+over a global `Array I64`, counting retain plus release on the global arm, in the three ways the
+table can be reached:
 
 | -O | referenced directly | passed to a function | bound to a local first |
 | --- | --: | --: | --: |
@@ -46,17 +44,14 @@ over a global `Array I64`, in the three ways the table can be reached:
 | basic | 4,000,012 | 6,000,012 | — |
 | max | 3 | 3 | 3 |
 
-(retain plus release on the global arm.)
-
 At `-O max` all three are the same three dispatches for the whole program: borrow inference and
-cancellation remove the operations themselves, so a `Global` specialization would have nothing left
-to specialize. The global arm is only hot at `-O none` and `-O basic`, which are the levels the
-project keeps deliberately weak.
+cancellation remove the operations themselves. The global arm is only hot at `-O none` and
+`-O basic`, the levels the project keeps deliberately weak.
 
-## What proving `Local` is worth
+### What removing the dispatch is worth
 
-A compiler that emits only the local arm, unconditionally — unsound, but it bounds the payoff.
-Cachegrind instruction counts, same build path for both sides.
+A compiler that emits only the local arm, unconditionally — unsound as it stands, but it bounds the
+payoff. Cachegrind instruction counts, same build path for both sides.
 
 | case | baseline | assume local | change |
 | --- | --: | --: | --: |
@@ -72,24 +67,123 @@ Cachegrind instruction counts, same build path for both sides.
 different output under the unsound compiler — they are exactly the cases whose global arm is
 reachable — so their figures bound the payoff only loosely.
 
-So the ceiling on a reference-counting program is a few per cent, reaching 14% where the operations
-are dense. That is the budget the analysis has to earn back.
+## The design the measurements point to
+
+`GLOBAL` exists to keep reference counting off objects a whole program shares: with threads, an
+atomic increment on one hot global would serialize every thread on one cache line. That reason is a
+threading reason. In a build with `threaded = false` it buys the numbers above: single-digit skipped
+operations, against a branch paid by every operation in the program.
+
+So: **stop marking objects `GLOBAL`, and give a global value a large reference count instead.**
+
+`mark_global` walks the graph a global initializer's value reaches. Instead of writing
+`REFCNT_STATE_GLOBAL` into each object's state byte, it writes a large count — `i32::MAX / 2`, since
+`refcnt_type` is `i32` — into each object's refcount. A global then behaves as a permanently shared
+object:
+
+- it is never unique, because `refcnt == 1` is false, which is what `is_unique`'s `global_bb` arm
+  already forces by jumping straight to `shared_bb`;
+- it is never freed, because a decrement never reaches zero;
+- it is retained and released like anything else, with no state to consult.
+
+In a `threaded = false` build the state byte then has one value, `LOCAL`, and nothing reads it:
+`build_branch_by_refcnt_state` becomes an unconditional jump and disappears, along with the load and
+the compare. That is the "assume local" compiler measured above — **-2.4% to -13.9%** — obtained by
+construction rather than by an analysis that has to be proved sound.
+
+In a `threaded = true` build `GLOBAL` keeps earning its keep, and the state inference the issue asks
+for is what matters there: proving `Local` replaces an atomic operation with a non-atomic one, which
+is a far larger saving than removing a predictable branch.
+
+### Headroom
+
+`refcnt_type` is `i32`, so a mark of `i32::MAX / 2` leaves 2^30 in each direction. Overflowing needs
+2^30 references to one global live at once, each of which occupies a machine word somewhere;
+underflowing needs 2^30 more releases than retains. Both are out of reach of a program that fits in
+memory. The constant belongs beside `refcnt_type`, so that widening or narrowing the counter moves
+it too.
+
+### What it costs
+
+A retain or release of a global now writes the control block where today it skips a branch. At
+`-O max` that is the three operations per program measured above. At `-O none` and `-O basic` it is
+millions — but those levels also pay the branch on every other operation, and there are far more of
+those. **Measure both levels before committing to the change**: the corpus counts above give the
+number of operations on each side, and the ceiling measurement gives the saving per operation.
+
+## Consequences for the static-memory plan
+
+Putting the empty-array and string-literal storages in static memory (issue #122's addendum, and PR
+#129, which is closed) interacts with this directly.
+
+Today a `GLOBAL` object is never written, which is what would let such a storage live in a read-only
+LLVM `constant`. Wave 10 of the bug hunt found that a stray write to one is IR-level undefined
+behaviour that the optimizer *deletes* rather than faults on, so read-only is a weak guarantee
+already. Under this design the interaction is sharper: **a retain or release does write the control
+block, so a statically allocated storage has to be a mutable global with its refcount initialized to
+the large value, not a constant.** That is a straightforward initializer to emit, and it removes the
+need for the storage to be special-cased at every RC site — but it has to be decided before the
+static-memory work starts, not after.
+
+## Stages
+
+### Stage 1 — drop `GLOBAL` from non-threaded builds
+
+1. Add the large-count constant beside `refcnt_type`.
+2. `mark_global_one` writes that count into the refcount instead of `REFCNT_STATE_GLOBAL` into the
+   state byte. It keeps its traversal and its already-marked check — an object whose count is
+   already large needs no second visit, which is what stops a cycle.
+3. In a `threaded = false` build, `build_branch_by_refcnt_state` emits an unconditional branch to
+   the local arm, and `is_unique` reaches `shared_bb` through the refcount compare it already does.
+4. `RcState::Global` stops being produced. It can stay in the enum for threaded builds.
+
+Verification: the full suite at three optimization levels; development-mode valgrind memcheck, where
+a global freed by mistake shows up as an invalid free; `benchmark/speedtest`, against the ceiling
+above; and the `-O none` / `-O basic` measurement named under *What it costs*.
+
+A test worth writing first, because it is the one thing that changes behaviour rather than speed: a
+global holding a boxed value, released more times than it is retained in a loop, and still readable
+afterwards. It fails today by construction (the state byte makes the releases no-ops), so it pins
+the large count rather than the old mechanism.
+
+### Stage 2 — infer `Local` in threaded builds
+
+Only here does the issue's state inference pay, and only against `Threaded`. A lattice over boxed
+leaves, kept **separate from `provenance`'s**:
+
+- `Local` — the leaf cannot have been marked threaded.
+- `MaybeThreaded` — top.
+
+`create_obj`'s result is `Local`. `Std::mark_threaded`'s argument, and everything its traversal
+reaches, is `MaybeThreaded`; so is anything read out of a container, since a local container can hold
+a threaded object. A join takes the top.
+
+Across function boundaries, extend `unique_check_elim::specialize`: its `SpecializationKey` is
+`Vec<Uniqueness>` today, and `Vec<(Uniqueness, State)>` reuses the clone naming, the worklist, the
+caching and the call rerouting whole. Watch the clone count — the key's cardinality doubles per
+parameter, and that pass already governs how many functions reach code generation.
+
+Do not fold this into `provenance`. `LeafOrigin::Fresh` answers a different question, and issue #122
+records what happens to code that conflates them.
+
+A wrong `Local` here is a data race, which a single-threaded test cannot see, so this stage waits for
+the race-detection work in #96. Before it starts, add under `config.develop_mode` a check at every
+specialized operation that reads the state byte and aborts unless it is what the specialization
+claimed — and show it fires on a deliberate mis-specialization.
 
 ## Where the states come from
 
+For reference, the transitions this design changes:
+
 - `create_obj` initializes every boxed object to refcount 1, `REFCNT_STATE_LOCAL`.
-- LOCAL to GLOBAL: `mark_global`, called from `implement_rc_global` on a global initializer's value.
-  It marks the whole graph the value reaches.
+- LOCAL to GLOBAL: `mark_global`, from `implement_rc_global` on a global initializer's value; it
+  marks the whole graph the value reaches. **Stage 1 replaces this with the large count.**
 - LOCAL to THREADED: `Std::mark_threaded`, which a `threaded = false` build rejects.
 - THREADED to LOCAL: `mark_local_one`, on `build_branch_by_is_unique`'s unique-threaded path.
 - Nothing leaves GLOBAL.
 
-In a build with `threaded = false`, therefore: **an object is GLOBAL exactly when it is reachable
-from a global initializer's value, and LOCAL otherwise.**
-
-`mark_global` goes through `emit_rc_helper_call`, which emits nothing for a value with no boxed
-leaf, so a global of a fully unboxed type produces no GLOBAL object at all. Counting the global
-initializers that do:
+`mark_global` goes through `emit_rc_helper_call`, which emits nothing for a value with no boxed leaf,
+so a global of a fully unboxed type produces no marked object at all:
 
 | case | global initializers with a boxed leaf |
 | --- | --- |
@@ -97,112 +191,12 @@ initializers that do:
 | nbody_fold | 1 (`Main::init`) |
 | cp_lib_lsegtree, cp_lib_unionfind, cp_lib_bipartite | 2 (`Random::_mag01`, `Std::IO::stdout`) |
 
-Programs that create no GLOBAL object at all are common, and they are most of the corpus.
-
-## The direction that has to be right
-
-The two mistakes are not symmetric.
-
-- Widening to `Unknown` is always safe: it is what lowering emits today.
-- Narrowing to `Local` wrongly is a heap corruption. A release specialized to `Local` decrements
-  without reading the state byte and frees at zero, so a GLOBAL object reaching it frees a global
-  initializer's block — and, once the empty-array and string-literal storages move to static memory,
-  a block that `free` has no business seeing.
-
-The state byte is the **only** thing guarding `free` today: `build_release_boxed_with` dispatches on
-it and the GLOBAL arm returns without touching the refcount. Specializing a release removes that
-guard, so the design has to say what replaces it. This plan's answer is the development-mode
-assertion in stage 0 — the analysis is the guarantee, and the assertion is what tests the guarantee.
-
-## Stages
-
-### Stage 0 — the assertion that makes the rest testable
-
-Add, under `config.develop_mode`, a check at every operation the later stages specialize: read the
-state byte and abort unless it is what the specialization claimed. Costs a load and a compare in
-development builds and nothing in a user's build, and it turns a wrong `Local` from a silent heap
-corruption into a stop at the operation that was mis-specialized.
-
-Build this first, with a deliberate mis-specialization to show it fires. Every later stage is
-verified by running the suite with it armed.
-
-### Stage 1 — the whole-program rule
-
-If the program emits no `mark_global` — no global initializer has a boxed leaf — then no GLOBAL
-object exists, and in a `threaded = false` build no THREADED object can, so **every** `Retain`,
-`Release` and `is_unique` in the program is `Local`.
-
-The condition is a scan of `prog.globals` for a type with a boxed leaf (`boxed_leaf_paths` already
-answers this), computed once. There is no lattice, no fixpoint, and no specialization: the pass
-rewrites every `RcState::Unknown` in the program to `RcState::Local`.
-
-This captures the full ceiling on 6 of the 10 measured cases, including `sort` at -13.87%. It also
-delivers the codegen for `RcState::Local`, which stages 2 and 3 then reuse.
-
-Its weakness is that it is all-or-nothing: one boxed global anywhere — `Std::IO::stdout` is enough —
-turns it off for the whole program. The cp_lib cases, which hold the densest reference counting in
-the corpus, are exactly the ones it misses.
-
-### Stage 2 — per-value, for the programs stage 1 rejects
-
-A lattice over boxed leaves, **separate from `provenance`'s**:
-
-- `Local` — the value's leaf cannot be reachable from a global initializer.
-- `MaybeGlobal` — top; it may be.
-
-`create_obj`'s result is `Local`. A reference to a global symbol is `MaybeGlobal`. A read out of a
-container is `MaybeGlobal`, because a LOCAL container can hold a GLOBAL object — the containment
-implication runs one way only, from `mark_global` marking a whole reachable graph. A join takes the
-top.
-
-Across function boundaries, extend `unique_check_elim::specialize`: its `SpecializationKey` is
-`Vec<Uniqueness>` today, and becoming `Vec<(Uniqueness, State)>` reuses the clone naming, the
-worklist, the caching and the call rerouting whole, instead of standing up a second specializer.
-Watch the clone count — the key's cardinality doubles per parameter, and that pass already governs
-how many functions reach codegen.
-
-Do not fold this into `provenance`. `LeafOrigin::Fresh` answers a different question, and issue #122
-records what happens to code that conflates them: once the empty-array storage moves to a module
-constant, a `Fresh` value can be GLOBAL, and a release specialized off `Fresh` would free it. Today
-`Fresh` does imply `Local`, so the two agree — which is precisely why keeping them apart has to be
-deliberate rather than discovered later.
-
-The container read is what decides whether stage 2 is worth its cost. Before building it, measure:
-instrument the analysis to report, per case, how many of the dispatches stage 1 misses would be
-proved `Local` by "`Fresh`-derived is `Local`, everything else `MaybeGlobal`". If that number is
-small on the cp_lib cases, the container read has to be refined — for instance by a whole-program
-check that no value derived from a boxed global is ever stored into a container — and that
-refinement should be priced separately.
-
-### Stage 3 — `Threaded`, later
-
-Needs a build with `threaded = true`, where the lattice gains a third element and the THREADED to
-LOCAL edge in `build_branch_by_is_unique` has to be modelled. A wrong `Local` on a threaded object
-is a data race, which a single-threaded test cannot see, so this stage waits for the race-detection
-work in #96.
-
-`Global` stays unimplemented. The measurement says it is worth single-digit branches per program.
-
-## Verification
-
-For each stage:
-
-- The full suite at `-O none`, `-O basic` and `-O max`, with the stage-0 assertion armed.
-- Development-mode valgrind memcheck, which `test_source` runs automatically — a wrong `Local` on a
-  release shows up there as an invalid free rather than as a wrong answer.
-- `benchmark/speedtest`, against the ceiling above. A stage that does not move a case whose ceiling
-  says it should has not fired, and the reason is a finding.
-- `--emit-rc-ir` reads back the inferred state directly: `print.rs` already tags `@local`,
-  `@threaded` and `@global`, so a spot check needs no new tooling.
-
-The RC IR validator's balance checking (#105) does not depend on the state, so it cannot catch a
-mis-specialization; the stage-0 assertion is what covers this class.
+Most of the corpus creates no marked object at all — which is also why the state byte earns so little
+in a single-threaded build.
 
 ## Not in this work
 
-- Moving the empty-array and string-literal storages to static memory. Today a string literal's
-  bytes are a private LLVM constant but its `Array U8` storage is allocated and copied at run time,
-  and PR #129 (one shared storage for empty arrays) is closed. When that changes, `Fresh` stops
-  implying `Local` and the release path loses the state byte that guards `free` — which is why
-  stage 0 comes first.
-- A changelog entry. The observable behaviour does not change.
+- Moving the empty-array and string-literal storages to static memory, beyond recording above what
+  stage 1 requires of them.
+- A changelog entry. The observable behaviour does not change, except that a global value now
+  survives an unbalanced release rather than being immune to release, which no program can rely on.
