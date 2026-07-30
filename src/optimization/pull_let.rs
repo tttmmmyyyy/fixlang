@@ -117,8 +117,6 @@ the order the program ends up evaluating them in.
 
 */
 
-use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr, ExprNode},
@@ -127,6 +125,7 @@ use crate::{
     },
     optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
+use std::sync::Arc;
 
 /// Transformation (2): `{expr0}({non-variable-expr})` to `let f = {non-variable-expr}; {expr0}(f)`.
 fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
