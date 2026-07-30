@@ -1,5 +1,7 @@
 use crate::tests::test_util::fix_build_source_command;
 use std::fs;
+use std::path::Path;
+use std::process::Output;
 use tempfile::TempDir;
 
 const SOURCE: &str = r#"
@@ -17,6 +19,18 @@ main = (
 );
 "#;
 
+/// Builds `SOURCE` in `dir` with `passes` as the LLVM pass pipeline, written to a file named
+/// `passes_file_name`, and returns the output of the build.
+fn build_with_passes(dir: &Path, passes_file_name: &str, passes: &str) -> Output {
+    let passes_file = dir.join(passes_file_name);
+    fs::write(&passes_file, passes).expect("Failed to write the passes file");
+    fix_build_source_command(dir, SOURCE, "basic")
+        .arg("--llvm-passes-file")
+        .arg(&passes_file)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run the build with \"{}\": {}", passes.trim(), e))
+}
+
 /// A build whose LLVM pass pipeline differs from the previous build's must generate its object
 /// files again, rather than reuse the ones compiled under the previous pipeline.
 ///
@@ -27,28 +41,15 @@ main = (
 #[test]
 fn test_pass_pipeline_change_regenerates_objects() {
     let dir = TempDir::new().expect("Failed to create a temporary directory");
-    let existing_pass = dir.path().join("existing_pass.txt");
-    fs::write(&existing_pass, "default<O3>\n").expect("Failed to write the passes file");
-    let missing_pass = dir.path().join("missing_pass.txt");
-    fs::write(&missing_pass, "this-pass-does-not-exist\n")
-        .expect("Failed to write the passes file");
 
-    let first = fix_build_source_command(dir.path(), SOURCE, "basic")
-        .arg("--llvm-passes-file")
-        .arg(&existing_pass)
-        .output()
-        .expect("Failed to run the first build");
+    let first = build_with_passes(dir.path(), "existing_pass.txt", "default<O3>\n");
     assert!(
         first.status.success(),
         "the build with an existing pass should succeed, but it failed:\n{}",
         String::from_utf8_lossy(&first.stderr)
     );
 
-    let second = fix_build_source_command(dir.path(), SOURCE, "basic")
-        .arg("--llvm-passes-file")
-        .arg(&missing_pass)
-        .output()
-        .expect("Failed to run the second build");
+    let second = build_with_passes(dir.path(), "missing_pass.txt", "this-pass-does-not-exist\n");
     assert!(
         !second.status.success(),
         "the build naming a pass that does not exist should fail; that it succeeded means the \

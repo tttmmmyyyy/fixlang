@@ -18,7 +18,8 @@ LLVM_PASSES_TMP_FILE = 'llvm_passes_tmp.txt'
 # `Configuration::llvm_passes`, so adopting a result means editing that.
 LLVM_PASSES_BEST_FILE = 'llvm_passes_best.txt'
 
-# The pipeline the compiler ships, which the search starts from.
+# The pipeline the compiler ships, which the search starts from. Must stay in sync with
+# `LLVM_O3_PIPELINE` and `LLVM_O3_RUNS_FOR_SPEED` in `src/configuration.rs`.
 INITIAL_PASSES = ['default<O3>'] * 3
 
 LOG_FILE = 'passes_optimizer.log'

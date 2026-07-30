@@ -554,6 +554,27 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(features)
     }
 
+    // The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
+    // per line.
+    fn read_llvm_passes_file_option(m: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
+        let Some(path) = m.get_one::<String>("llvm-passes-file") else {
+            return Ok(None);
+        };
+        let content = fs::read_to_string(path).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to read the LLVM passes file \"{}\": {}.",
+                path, e
+            ))
+        })?;
+        Ok(Some(
+            content
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect(),
+        ))
+    }
+
     fn get_build_mode(args: &ArgMatches) -> configuration::BuildConfigType {
         if args.contains_id("test") {
             configuration::BuildConfigType::Test
@@ -653,20 +674,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // The file is read here rather than at code generation, so that the passes reach
         // `Configuration::object_generation_hash` and a change to them invalidates the objects
         // compiled under the previous ones.
-        if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
-            let passes = fs::read_to_string(llvm_passes_file).map_err(|e| {
-                Errors::from_msg(format!(
-                    "Failed to read the LLVM passes file \"{}\": {}.",
-                    llvm_passes_file, e
-                ))
-            })?;
-            config.llvm_passes_override = Some(
-                passes
-                    .lines()
-                    .map(|line| line.trim().to_string())
-                    .filter(|line| !line.is_empty())
-                    .collect(),
-            );
+        if let Some(passes) = read_llvm_passes_file_option(args)? {
+            config.llvm_passes_override = Some(passes);
         }
 
         // Set `emit_symbols`.

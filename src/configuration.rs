@@ -30,6 +30,9 @@ const LLVM_O3_PIPELINE: &str = "default<O3>";
 /// One run leaves work that a second and a third still find: over `benchmark/speedtest`, the
 /// second run takes 2.2% of the instructions off and the third another 0.8%, reaching 21% on
 /// `nbody`. A fourth run changes no case by a single instruction.
+///
+/// `INITIAL_PASSES` in `passes_optimizer.py` starts its search from this pipeline, and must stay in
+/// sync with it.
 const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 
 /// How a linked library is bound to the program.
