@@ -10,6 +10,35 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 423e50e1538e9f4f75708dac436869be871539c7
+
+Evaluates a call's arguments in the order they are written (PR #140), where a prefix call used to
+evaluate them backwards at `-O max`.
+
+| case | instructions | memory accesses |
+|---|--:|--:|
+| fib | -6.35% | -4.80% |
+| levenshtein | -2.87% | -2.57% |
+| binary_trees | -1.07% | +0.35% |
+| cp_lib_unionfind | -0.37% | -0.31% |
+| sort | +0.05% | 0.00% |
+| cp_lib_bipartite | +0.35% | +0.15% |
+| cp_lib_conv_zp | +0.74% | +1.00% |
+
+Every other case moves less than 0.05%; the 46 together retire 0.26% fewer instructions. `fib` is the
+case the order decides: LLVM's tail-recursion elimination folds the *last* call into a loop, so which
+of `fib(n - 1)` and `fib(n - 2)` goes last picks the decomposition, and the written order picks the
+one with fewer leaf calls.
+
+**The splits column of the row above is not comparable with this one.** It reads as a 90% fall on 41
+of the 46 cases, including `startup`, whose instruction count is identical in both rows — a program
+that does nothing cannot have lost 152 split accesses to an evaluation-order change. Measured
+back-to-back at one path, the two compilers give the same count: `startup` 16 and 16, `arrayrw` 17 and
+17, `sum_by_fold` 23 and 23. The counter is repeatable within a run (five runs, one value) and perf
+reports it 100% enabled. `perf_counters.py` reads the count and ignores the enabled percentage perf
+prints beside it, so a run whose events the PMU time-sliced enters the log as a scaled estimate that
+looks like any other measurement -- which is the condition that produces a tenfold column.
+
 ## a9a1b1a2bd93952205e127f3cbe603d2e6a6c2c0
 
 Starts a large array's elements on a 32-byte boundary (PR #128), so that a vectorized loop over them
