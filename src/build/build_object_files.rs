@@ -302,12 +302,17 @@ pub fn build_object_files<'c>(
                 &context,
                 &target_machine,
             );
+            let global_types = all_symbols
+                .iter()
+                .map(|symbol| (symbol.name.clone(), symbol.ty.clone()))
+                .collect();
             let mut gc = Generator::new(
                 &context,
                 &module,
                 target_machine.get_target_data(),
                 config.clone(),
                 type_env,
+                global_types,
             );
 
             // In debug mode, create debug infos.
@@ -318,15 +323,10 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-            // Declare all symbols in this program.
-            // TODO: Optimize so that only necessary symbols are declared.
-            for symbol in &all_symbols {
-                gc.declare_symbol(symbol);
-            }
-
             // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
-            // LLVM. Every symbol is already declared above (prototypes + global registration, in
-            // every unit), so only this unit's symbols are implemented and none is defined twice.
+            // LLVM. Only this unit's symbols are implemented; a symbol of another unit that this
+            // one calls is declared where code generation first reaches it, from the types of the
+            // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
             let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &all_symbols, &config);

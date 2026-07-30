@@ -2,10 +2,8 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::name::Name;
-use crate::ast::program::Symbol;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
@@ -501,8 +499,14 @@ pub struct Generator<'c, 'm> {
     /// Stack of source spans; the innermost is the location instructions are attributed to. `None`
     /// where the code being generated has no known source.
     debug_location: Vec<Option<Span>>,
-    /// The value of each global symbol of the program, by name.
+    /// The value of each global symbol the module has reached so far, by name. A global enters this
+    /// map when code generation first asks for it (`global_value`), which is also where it is
+    /// declared, so the module declares the globals it uses and no others.
     pub global: Map<FullName, ScopedValue<'c>>,
+    /// The type of every global symbol of the program, by name — the whole program, not just this
+    /// compilation unit, since a unit's code calls into the others. It is what a global is declared
+    /// from on first use.
+    global_types: Map<FullName, Arc<TypeNode>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -650,13 +654,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         module
     }
 
-    // Create new gc.
+    // Create new gc. `global_types` gives the type of every global symbol of the program, from which
+    // a global is declared the first time this module reaches it.
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
         target_data: TargetData,
         config: Configuration,
         type_env: TypeEnv,
+        global_types: Map<FullName, Arc<TypeNode>>,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let gc = Self {
@@ -668,6 +674,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_info: Default::default(),
             debug_location: vec![],
             global: Default::default(),
+            global_types,
             type_env,
             target_data: target_data,
             return_registers: return_registers_of_target(&triple),
@@ -773,15 +780,28 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get a variable.
-    pub fn get_scoped_value(&self, var: &FullName) -> ScopedValue<'c> {
+    pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
-            self.global
-                .get(var)
-                .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()))
-                .clone()
+            self.global_value(var)
         }
+    }
+
+    // The value the global `var` is reached through, declared here on the module's first use of it.
+    // Declaring on use is what keeps a module's declarations to the globals its code reaches: the
+    // program's globals number in the hundreds and a module calls a handful of them.
+    fn global_value(&mut self, var: &FullName) -> ScopedValue<'c> {
+        if let Some(value) = self.global.get(var).cloned() {
+            return value;
+        }
+        let ty = self
+            .global_types
+            .get(var)
+            .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()))
+            .clone();
+        self.declare_global(var, &ty);
+        self.global[var].clone()
     }
 
     // Get an object on the scope (or global).
@@ -2038,27 +2058,50 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_leaves(leaves, ret_ty, self)
     }
 
-    // Declare function of lambda expression
+    // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
+    // A funptr function is reachable from another compilation unit when compilation is separated;
+    // a closure function is internal, so that LLVM renames one whose name collides rather than
+    // rejecting the module.
     pub fn declare_lambda_function(
         &mut self,
-        lam: Arc<ExprNode>,
-        name: Option<&FullName>,
+        fn_ty: &Arc<TypeNode>,
+        name: &FullName,
     ) -> FunctionValue<'c> {
-        let lam_ty = lam.type_.clone().unwrap();
-        let lam_fn_ty = lambda_function_type(&lam_ty, self);
-        let name = if name.is_some() {
-            name.unwrap().to_string()
-        } else {
-            format!("closure[{}]", lam_ty.to_string_normalize())
-        };
-        let linkage = if lam_ty.is_funptr() && self.config.enable_separated_compilation() {
+        let llvm_fn_ty = lambda_function_type(fn_ty, self);
+        let linkage = if fn_ty.is_funptr() && self.config.enable_separated_compilation() {
             Linkage::External
         } else {
-            Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.
+            Linkage::Internal
         };
-        let lam_fn = self.module.add_function(&name, lam_fn_ty, Some(linkage));
-        lam_fn.set_call_conventions(self.lambda_calling_convention());
-        lam_fn
+        let func = self
+            .module
+            .add_function(&name.to_string(), llvm_fn_ty, Some(linkage));
+        func.set_call_conventions(self.lambda_calling_convention());
+        func
+    }
+
+    // Declare the function the global `name` of type `ty` is obtained through, register it as that
+    // global's value, and return it. A global of funptr type is the lambda's own function; any other
+    // global is reached through an accessor function taking no argument and returning its value.
+    pub fn declare_global(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FunctionValue<'c> {
+        let func = if ty.is_funptr() {
+            self.declare_lambda_function(ty, name)
+        } else {
+            let acc_fn_name = format!("Get#{}", name.to_string());
+            let embedded_ty = ty.get_embedded_type(self, &vec![]);
+            let acc_fn_ty = if self.sizeof(&embedded_ty) == 0 {
+                self.context.void_type().fn_type(&[], false)
+            } else {
+                embedded_ty.fn_type(&[], false)
+            };
+            self.module.add_function(
+                &acc_fn_name,
+                acc_fn_ty,
+                Some(self.config.external_if_separated()),
+            )
+        };
+        self.add_global_object(name.clone(), func, ty.clone());
+        func
     }
 
     // Give `func`, whose body is about to be emitted, its debug-info subprogram and open that
@@ -2353,39 +2396,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().get_current_debug_location().unwrap(),
             self.builder().get_insert_block().unwrap(),
         );
-    }
-
-    pub fn declare_symbol(&mut self, sym: &Symbol) -> FunctionValue<'c> {
-        let name = &sym.name;
-        let obj_ty = &sym.ty;
-        if obj_ty.is_funptr() {
-            // Declare lambda function.
-            let lam = sym.expr.as_ref().unwrap().clone();
-            let lam = lam.set_type(obj_ty.clone());
-            let lam_fn = self.declare_lambda_function(lam, Some(name));
-            self.add_global_object(name.clone(), lam_fn, obj_ty.clone());
-            lam_fn
-        } else {
-            // Declare accessor function.
-            let acc_fn_name = format!("Get#{}", name.to_string());
-            let ty = obj_ty.get_embedded_type(self, &vec![]);
-            let acc_fn_type = if self.sizeof(&ty) == 0 {
-                self.context.void_type().fn_type(&[], false)
-            } else {
-                ty.fn_type(&[], false)
-            };
-            let acc_fn = self.module.add_function(
-                &acc_fn_name,
-                acc_fn_type,
-                Some(self.config.external_if_separated()),
-            );
-
-            // Register the accessor function to gc.
-            self.add_global_object(name.clone(), acc_fn, obj_ty.clone());
-
-            // Return the accessor function.
-            acc_fn
-        }
     }
 
     // Bit cast between two types.

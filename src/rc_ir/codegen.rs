@@ -16,7 +16,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_function_type, lambda_return_leaf_types, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
@@ -28,17 +28,19 @@ use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
-    /// unit's worth. Every top-level symbol has already been declared (by `declare_symbol`, run for
-    /// all symbols in every unit), so those declarations are reused; only the functions synthesized
-    /// after that — lifted lambdas, and at higher optimization levels the borrow and specialization
-    /// versions — are declared here, and only `prog`'s functions and globals are implemented.
+    /// unit's worth. A function this module already declared (because its body refers to it) is
+    /// reused; the rest are declared here, and every one of them is implemented.
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
-            let fn_val = self
-                .module
-                .get_function(&func.name.name.to_string())
-                .unwrap_or_else(|| self.declare_rc_function(func));
+            let fn_val = match self.module.get_function(&func.name.name.to_string()) {
+                Some(fn_val) => fn_val,
+                // A funptr function is a global of the program, callable by name from another
+                // module; a closure function is reached only through the closure value that carries
+                // its address, so it is not registered as a global.
+                None if func.fn_ty.is_funptr() => self.declare_global(&func.name.name, &func.fn_ty),
+                None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
+            };
             // A function is implemented once. A name minted here that collides with one already
             // implemented would take a second body, appended after the first `entry` block and never
             // reached, dropping one of the two.
@@ -58,28 +60,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
         }
-    }
-
-    /// Declare the LLVM function for an `RcFunc` (signature from its arrow type) and, for a funptr
-    /// function, register its global accessor so a direct call by name resolves it. This is the
-    /// funptr analogue of `declare_symbol` for the functions born after declaration — lifted lambdas,
-    /// and the borrow and specialization versions synthesized while optimizing — which `declare_symbol`
-    /// never saw. Funptr functions get external linkage under separated compilation; closure functions
-    /// are always internal.
-    fn declare_rc_function(&mut self, func: &RcFunc) -> FunctionValue<'c> {
-        let fn_ty = lambda_function_type(&func.fn_ty, self);
-        let name = func.name.name.to_string();
-        let linkage = if func.fn_ty.is_funptr() && self.config.enable_separated_compilation() {
-            Linkage::External
-        } else {
-            Linkage::Internal
-        };
-        let fn_val = self.module.add_function(&name, fn_ty, Some(linkage));
-        fn_val.set_call_conventions(self.lambda_calling_convention());
-        if func.fn_ty.is_funptr() {
-            self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
-        }
-        fn_val
     }
 
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
@@ -586,10 +566,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         global_init: &RcGlobalInit,
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
-        let acc_fn = self
-            .module
-            .get_function(&format!("Get#{}", global_init.symbol.to_string()))
-            .expect("a global has an accessor, declared with its symbol");
+        let acc_fn_name = format!("Get#{}", global_init.symbol.to_string());
+        let acc_fn = match self.module.get_function(&acc_fn_name) {
+            Some(acc_fn) => acc_fn,
+            None => self.declare_global(&global_init.symbol, &global_init.ty),
+        };
         let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
 
         // The storage for the initialized value, and the call-once flag.
