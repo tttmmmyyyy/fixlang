@@ -14,8 +14,18 @@ For a binding `x` and a boxed-leaf path `π` of its type:
 > non-`LOCAL` reference-count state at some point while the binding is live.
 
 A `Retain`/`Release` on unit path `π` of `x` may emit `RcState::Local` iff `shared(x.σ)` is false
-for every boxed leaf `σ` at or under `π`. The reachability closure is deliberate: it makes the
-property compositional. Projecting out of a value, injecting into a fresh aggregate, and reading an
+for every boxed leaf `σ` at or under `π`.
+
+"At some point while the binding is live" makes the property temporal: an object that a later
+operation will mark non-`LOCAL` counts as shared even at sites executed before the mark. A retain
+before the mark would in fact read `LOCAL` at run time, but proving that a site always runs before
+the mark is ordering reasoning about the program's flow; one annotation per site has to hold
+whenever the site runs, so the definition prices the whole live range in. In a `threaded = false`
+build the distinction is empty — no operation transitions a live binding's object (argued below) —
+which is why a forward dataflow computes this property exactly there, and why the threaded stage
+needs escape reasoning instead.
+
+The reachability closure is deliberate: it makes the property compositional. Projecting out of a value, injecting into a fresh aggregate, and reading an
 element out of a boxed container all become unions of operand taints, with no aliasing questions —
 the closure of "what this value can reach" is exactly what survives every one of those operations.
 
