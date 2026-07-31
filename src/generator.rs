@@ -797,12 +797,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         if let Some(value) = self.declared_globals.get(var).cloned() {
             return value;
         }
-        let ty = self
-            .global_types
-            .get(var)
-            .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()))
-            .clone();
-        self.declare_global(var, &ty);
+        self.declare_program_global(var)
+            .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()));
         self.declared_globals[var].clone()
     }
 
@@ -2064,6 +2060,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     // A funptr function is reachable from another compilation unit when compilation is separated;
     // a closure function is internal, so LLVM resolves a collision between two such names by
     // renaming one of them.
+    //
+    // A funptr function is also registered as the value of `name`, because the bodies that call it
+    // read it by name. Registering here is what leaves no way to declare one and reach it through a
+    // name that resolves to nothing.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,
@@ -2079,31 +2079,42 @@ impl<'c, 'm> Generator<'c, 'm> {
             .module
             .add_function(&name.to_string(), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
+        if fn_ty.is_funptr() {
+            self.add_global_object(name.clone(), func, fn_ty.clone());
+        }
         func
     }
 
-    // Declare the function the global `name` of type `ty` is obtained through, register it as that
-    // global's value, and return it. A global of funptr type is the lambda's own function; any other
-    // global is reached through an accessor function taking no argument and returning its value.
-    pub fn declare_global(&mut self, name: &FullName, ty: &Arc<TypeNode>) -> FunctionValue<'c> {
-        let func = if ty.is_funptr() {
-            self.declare_lambda_function(ty, name)
+    // Declare the function the program's global `name` is obtained through, register it as that
+    // global's value, and return it — or `None` where the program has no global of that name. A
+    // global of funptr type is the lambda's own function; any other global is reached through an
+    // accessor function taking no argument and returning its value.
+    //
+    // The signature is built from the program's global types, which is what makes this the only way
+    // to declare a global: the module that defines one and every module that calls into it read the
+    // same entry, so a global has one signature everywhere it is declared. That agreement is load
+    // bearing and unchecked — an accessor is reached by a direct call, so a module that declared it
+    // to return a value while the defining module returns none reads an undefined value, and neither
+    // the LLVM verifier nor the linker looks at it.
+    pub fn declare_program_global(&mut self, name: &FullName) -> Option<FunctionValue<'c>> {
+        let ty = self.global_types.get(name).cloned()?;
+        if ty.is_funptr() {
+            return Some(self.declare_lambda_function(&ty, name));
+        }
+        let acc_fn_name = global_accessor_name(name);
+        let embedded_ty = ty.get_embedded_type(self, &vec![]);
+        let acc_fn_ty = if self.sizeof(&embedded_ty) == 0 {
+            self.context.void_type().fn_type(&[], false)
         } else {
-            let acc_fn_name = global_accessor_name(name);
-            let embedded_ty = ty.get_embedded_type(self, &vec![]);
-            let acc_fn_ty = if self.sizeof(&embedded_ty) == 0 {
-                self.context.void_type().fn_type(&[], false)
-            } else {
-                embedded_ty.fn_type(&[], false)
-            };
-            self.module.add_function(
-                &acc_fn_name,
-                acc_fn_ty,
-                Some(self.config.external_if_separated()),
-            )
+            embedded_ty.fn_type(&[], false)
         };
-        self.add_global_object(name.clone(), func, ty.clone());
-        func
+        let func = self.module.add_function(
+            &acc_fn_name,
+            acc_fn_ty,
+            Some(self.config.external_if_separated()),
+        );
+        self.add_global_object(name.clone(), func, ty);
+        Some(func)
     }
 
     // Give `func`, whose body is about to be emitted, its debug-info subprogram and open that

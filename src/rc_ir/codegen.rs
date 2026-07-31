@@ -35,11 +35,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         for (fref, func) in prog.funcs.iter() {
             let fn_val = match self.module.get_function(&func.name.name.to_string()) {
                 Some(fn_val) => fn_val,
-                // A funptr function is a global of the program, callable by name from another
-                // module; a closure function is reached only through the closure value that carries
-                // its address, so it is not registered as a global.
-                None if func.fn_ty.is_funptr() => self.declare_global(&func.name.name, &func.fn_ty),
-                None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
+                // A function of the program is declared from the program's global types, so that this
+                // module and every module calling into it build the same signature. A version the
+                // optimizer synthesized after those were fixed is not one of them, so its own type
+                // is all there is to declare it from.
+                None => match self.declare_program_global(&func.name.name) {
+                    Some(fn_val) => fn_val,
+                    None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
+                },
             };
             // A function is implemented once. A name minted here that collides with one already
             // implemented would take a second body, appended after the first `entry` block and never
@@ -570,7 +573,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         // the global, and is declared here when none does.
         let acc_fn = match self.module.get_function(&acc_fn_name) {
             Some(acc_fn) => acc_fn,
-            None => self.declare_global(&global_init.symbol, &global_init.ty),
+            None => self
+                .declare_program_global(&global_init.symbol)
+                .expect("a global initializer's symbol is a global of the program"),
         };
         let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
 
