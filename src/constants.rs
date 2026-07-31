@@ -145,16 +145,10 @@ pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
-// REFCNT_STATE_* values are stored to a field of the control block of each boxed object. A
-// `threaded = false` build produces only `REFCNT_STATE_LOCAL`, so it reads the field nowhere.
-pub const REFCNT_STATE_LOCAL: u8 = 0; // This object is reached from one thread, so its count is updated non-atomically.
+// REFCNT_STATE_* values are stored to a field of the control block of each boxed object.
+pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that it is not shared with other threads but should be released since it is not global.
 pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
-
-/// The reference count of an object reachable from a global value. Every decision a reference count
-/// drives is an equality against 1 — a release destructs when the count it read was 1, and a
-/// uniqueness test calls 1 unique — so a count this far from 1 makes an object permanent: 2^31
-/// releases would have to outnumber its retains before it could be freed or mutated in place.
-pub const PERMANENT_REFCNT: u64 = 1 << 31;
+pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
 
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
@@ -214,10 +208,10 @@ impl TraverserWorkType {
     pub fn release() -> Self {
         Self(TRAVERSER_WORK_RELEASE)
     }
-    /// Give each object reached a permanent reference count, so that no retain or release it later
-    /// takes part in can free it or make it unique.
-    pub fn mark_permanent() -> Self {
-        Self(TRAVERSER_WORK_MARK_PERMANENT)
+    /// Put each object reached into the global reference counting state, in which retains and
+    /// releases leave it alone.
+    pub fn mark_global() -> Self {
+        Self(TRAVERSER_WORK_MARK_GLOBAL)
     }
     /// Put each object reached into the threaded reference counting state, in which retains and
     /// releases update its counter atomically.
@@ -227,14 +221,14 @@ impl TraverserWorkType {
     // pub fn runtime_function(&self) -> &str {
     //     match self.0 {
     //         TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
-    //         TRAVERSER_WORK_MARK_PERMANENT => RUNTIME_MARK_PERMANENT_BOXED_OBJECT,
+    //         TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
     //         TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
     //         _ => unreachable!(),
     //     }
     // }
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
-pub const TRAVERSER_WORK_MARK_PERMANENT: u32 = 1;
+pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
 pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;
 
 #[allow(unused)]

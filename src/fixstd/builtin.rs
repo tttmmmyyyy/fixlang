@@ -1716,7 +1716,7 @@ pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
 impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
-        let array = gc.get_scoped_obj(&self.arr_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
 
         // Get array buffer
@@ -3386,7 +3386,7 @@ pub struct InlineLLVMArrayGetPtrBody {
 impl LLVMGen for InlineLLVMArrayGetPtrBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argment
-        let array = gc.get_scoped_obj(&self.arr_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
         // Get pointer
         let ptr = get_array_storage_buf(gc, &array);
@@ -3456,7 +3456,7 @@ pub struct InlineLLVMArrayGetSizeBody {
 impl LLVMGen for InlineLLVMArrayGetSizeBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_scoped_obj(&self.arr_name);
+        let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
@@ -3509,7 +3509,7 @@ pub struct InlineLLVMArrayGetCapacityBody {
 impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_scoped_obj(&self.arr_name);
+        let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let cap = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
@@ -3581,7 +3581,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         if Self::borrows_container(ty, gc.type_env()) {
-            let str = gc.get_scoped_obj(&self.var_name);
+            let str = gc.get_scoped_obj_noretain(&self.var_name);
             return ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
         }
         let str = gc.get_scoped_obj(&self.var_name);
@@ -3677,7 +3677,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         let mut str_obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_MakeStruct"));
         let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
         for (i, name) in self.field_names.iter().enumerate() {
-            let field_obj = gc.get_scoped_obj(name);
+            let field_obj = gc.get_scoped_obj_noretain(name);
             str_obj = str_obj.insert_field_object(gc, i as u32 + offset, &field_obj);
         }
         str_obj
@@ -3742,7 +3742,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
         let buffer = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
-            let value = gc.get_scoped_obj(name);
+            let value = gc.get_scoped_obj_noretain(name);
             let idx = gc.context.i64_type().const_int(i as u64, false);
             ObjectFieldType::write_to_array_buf(gc, None, buffer, idx, value, false);
         }
@@ -3805,7 +3805,7 @@ impl LLVMGen for InlineLLVMFFICallBody {
         };
         let arg_objs = self.arg_names[..c_arg_count]
             .iter()
-            .map(|name| gc.get_scoped_obj(name))
+            .map(|name| gc.get_scoped_obj_noretain(name))
             .collect::<Vec<_>>();
         gc.build_ffi_call_core(
             obj,
@@ -5250,7 +5250,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         // The value of `as` is the variant payload, so `ty` is the payload's type.
         let borrows = Self::borrows_union(ty, gc.type_env());
         let obj = if borrows {
-            gc.get_scoped_obj(&self.union_arg_name)
+            gc.get_scoped_obj_noretain(&self.union_arg_name)
         } else {
             gc.get_scoped_obj(&self.union_arg_name)
         };
@@ -5365,7 +5365,7 @@ pub struct InlineLLVMUnionIsBody {
 impl LLVMGen for InlineLLVMUnionIsBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get union object.
-        let obj = gc.get_scoped_obj(&self.union_arg_name);
+        let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         // Create specified tag value.
         let expected_tag = ObjectFieldType::UnionTag
@@ -6269,7 +6269,7 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
-        let arg = gc.get_scoped_obj(&self.var_name);
+        let arg = gc.get_scoped_obj_noretain(&self.var_name);
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -6371,7 +6371,7 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
-        let arg = gc.get_scoped_obj(&self.var_name);
+        let arg = gc.get_scoped_obj_noretain(&self.var_name);
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -6472,7 +6472,7 @@ pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
 impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument.
-        let obj = gc.get_scoped_obj(&self.var_name);
+        let obj = gc.get_scoped_obj_noretain(&self.var_name);
         assert!(obj.ty.is_box(gc.type_env()));
 
         // Get data pointer.
@@ -6862,7 +6862,7 @@ impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // The array is borrowed: its pointer stays valid through the callback without a retain here.
         let borrower = gc.get_scoped_obj(&self.borrower_name);
-        let array = gc.get_scoped_obj(&self.arr_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
         assert!(array.ty.is_array());
 
         // Pass a pointer to the first element to the callback.

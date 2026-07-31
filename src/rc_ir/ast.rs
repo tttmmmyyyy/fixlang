@@ -172,13 +172,14 @@ pub enum RcRhs {
 /// which is always sound; later state inference can specialize it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RcState {
-    /// Read the object's refcount state at run time and dispatch on it. A `threaded = false` build
-    /// has one state, so there the dispatch costs nothing.
+    /// Read the object's refcount state at run time and dispatch three ways.
     Unknown,
     /// Known local: non-atomic increment/decrement, no state check.
     Local,
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
+    /// Known global: a no-op, emitting no code.
+    Global,
 }
 
 /// The ownership of a single reference-counting unit. `Own` receives ownership: the callee consumes it (by

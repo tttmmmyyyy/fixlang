@@ -14,10 +14,6 @@
 //! `LLVMGen::borrows_operand`); everything else owns. `RcState` is `Unknown` (always sound).
 //! Reference counting is skipped for fully-unboxed values (they have no boxed leaf, so
 //! `Retain`/`Release` would generate no code).
-//!
-//! A global is live everywhere (`is_live`), so the same three rules give it a retain before an owned
-//! use and no release after a borrowed one — the reference a caller passes to a consuming callee is
-//! the one it just took, and the global keeps its own.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -170,8 +166,8 @@ impl<'a> RcInserter<'a> {
     }
 
     /// An `eval x; cont`. `Eval` observes `x` without consuming it (a borrow), so — like a borrowed
-    /// operand at its last use — `x` is released after the eval iff it needs reference counting and is
-    /// dead in the continuation.
+    /// operand at its last use — `x` is released after the eval iff it is a local that needs reference
+    /// counting and is dead in the continuation.
     fn insert_into_eval(
         &self,
         x: RcVar,
@@ -180,7 +176,7 @@ impl<'a> RcInserter<'a> {
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
         let (cont, live_cont) = self.insert_into_expr(cont, live_after);
-        let cont = if !is_live(&x.name, &live_cont) && self.needs_rc(&x) {
+        let cont = if x.name.is_local() && !live_cont.contains(&x.name) && self.needs_rc(&x) {
             build_releases(vec![x.clone()], cont)
         } else {
             cont
@@ -216,15 +212,17 @@ impl<'a> RcInserter<'a> {
         let mut retains_before = vec![]; // Own operand used later -> retain before the statement.
         let mut releases_after = vec![]; // Borrow operand at its last use -> release after it.
         for (v, ownership) in operands.iter().rev() {
-            let used_later = is_live(&v.name, &live_after_operand);
-            if *ownership == Ownership::Borrow {
-                if !used_later && self.needs_rc(v) {
-                    releases_after.push(v.clone());
+            if v.name.is_local() {
+                let used_later = live_after_operand.contains(&v.name);
+                if *ownership == Ownership::Borrow {
+                    if !used_later && self.needs_rc(v) {
+                        releases_after.push(v.clone());
+                    }
+                } else if used_later && self.needs_rc(v) {
+                    retains_before.push(v.clone());
                 }
-            } else if used_later && self.needs_rc(v) {
-                retains_before.push(v.clone());
+                live_after_operand.insert(v.name.clone());
             }
-            insert_if_local(&mut live_after_operand, &v.name);
         }
 
         // After-statement releases: the borrowed operands at their last use, then `x` if it is a
@@ -414,11 +412,11 @@ impl<'a> RcInserter<'a> {
         !var.ty.is_fully_unboxed(self.type_env)
     }
 
-    /// Wrap `node` in a `Retain` of `var` iff `var` needs reference counting and is live in `live` —
-    /// the owned-operand rule for a variable a consuming construct (a `Ret`, a `Destructure`, or a
-    /// `Match` scrutinee) uses, when it is still live afterward.
+    /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
+    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
+    /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
-        if is_live(&var.name, live) && self.needs_rc(var) {
+        if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)
         } else {
             node
@@ -486,14 +484,6 @@ fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
     if name.is_local() {
         set.insert(name.clone());
     }
-}
-
-/// Whether `name` is live at a point whose live locals are `live`. A global is live everywhere: its
-/// value outlives every function, so a use of it is never a last use. Hence an owned use of a global
-/// retains it, and a borrowed use never releases it — the accounting a local gets when it is used
-/// again later.
-fn is_live(name: &FullName, live: &Set<FullName>) -> bool {
-    !name.is_local() || live.contains(name)
 }
 
 /// Returns the free local variables of `node`: the local names it references but does not itself

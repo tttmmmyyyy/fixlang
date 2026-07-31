@@ -18,7 +18,7 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
-use crate::constants::PERMANENT_REFCNT;
+use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
 use crate::error::panic_with_msg;
@@ -80,6 +80,16 @@ use inkwell::{
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
 use std::{cell::RefCell, env, sync::Arc};
+
+// A value bound to a name in the current scope.
+#[derive(Clone)]
+pub struct ScopedValue<'c> {
+    accessor: ValueAccessor<'c>,
+    /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
+    /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
+    /// global is moved out on read, and local values are reference-counted by explicit RC-IR nodes.
+    retain_on_read: bool,
+}
 
 // How a scoped value's `Object` is obtained: an in-register local object, or a global read through
 // its getter function.
@@ -439,7 +449,7 @@ impl<'c> Object<'c> {
 pub struct Scope<'c> {
     // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
     // shadows the outer bindings of the same name for as long as it lives.
-    data: Map<FullName, Vec<ValueAccessor<'c>>>,
+    data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
@@ -449,10 +459,10 @@ impl<'c> Scope<'c> {
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
         }
-        self.data
-            .get_mut(var)
-            .unwrap()
-            .push(ValueAccessor::Local(obj.clone()));
+        self.data.get_mut(var).unwrap().push(ScopedValue {
+            accessor: ValueAccessor::Local(obj.clone()),
+            retain_on_read: false,
+        });
     }
 
     fn pop_local(&mut self, var: &FullName) {
@@ -465,7 +475,7 @@ impl<'c> Scope<'c> {
 
     // The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
     // binding is seen again once the binding shadowing it is popped.
-    pub fn get(&self, var: &FullName) -> ValueAccessor<'c> {
+    pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 }
@@ -494,7 +504,7 @@ pub struct Generator<'c, 'm> {
     /// The value of each global symbol the module has reached so far, by name. A global enters this
     /// map when code generation first asks for it (`get_or_declare_global`), which is also where it
     /// is declared, so the module declares the globals it uses and no others.
-    declared_globals: Map<FullName, ValueAccessor<'c>>,
+    declared_globals: Map<FullName, ScopedValue<'c>>,
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Arc<Map<FullName, Arc<TypeNode>>>,
@@ -736,8 +746,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.declared_globals.contains_key(&name) {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
-            self.declared_globals
-                .insert(name.clone(), ValueAccessor::Global(function, ty));
+            // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
+            // its own reference, so reading it must retain its boxed subobjects.
+            let retain_on_read = !ty.is_box(self.type_env());
+            self.declared_globals.insert(
+                name.clone(),
+                ScopedValue {
+                    accessor: ValueAccessor::Global(function, ty),
+                    retain_on_read,
+                },
+            );
         }
     }
 
@@ -764,7 +782,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get a variable.
-    pub fn get_scoped_value(&mut self, var: &FullName) -> ValueAccessor<'c> {
+    pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
@@ -775,7 +793,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // The value the global `var` is reached through, declared here on the module's first use of it.
     // Declaring on use is what keeps a module's declarations to the globals its code reaches: the
     // program's globals number in the hundreds and a module calls a handful of them.
-    fn get_or_declare_global(&mut self, var: &FullName) -> ValueAccessor<'c> {
+    fn get_or_declare_global(&mut self, var: &FullName) -> ScopedValue<'c> {
         if let Some(value) = self.declared_globals.get(var).cloned() {
             return value;
         }
@@ -785,13 +803,26 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get an object on the scope (or global).
-    // Reading performs no reference-count operation: every retain and release is an explicit RC IR
-    // node.
-    pub fn get_scoped_obj(&mut self, name: &FullName) -> Object<'c> {
-        self.get_scoped_value(name).get(self)
+    // This function does not retain the object.
+    pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
+        self.get_scoped_value(name).accessor.get(self)
+    }
+
+    // Get an object on the scope (or global).
+    // Retains the object's boxed subobjects when the value's `retain_on_read` is set, i.e. when
+    // reading an unboxed global (which keeps its own reference); other reads are plain.
+    pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
+        let val = self.get_scoped_value(var_name);
+        let obj = val.accessor.get(self);
+        if val.retain_on_read {
+            let one = self.context.i64_type().const_int(1, false);
+            self.build_retain(obj.clone(), one);
+        }
+        obj
     }
 
     // Get field of object on the scope.
+    // This function retains the object if it will be used later.
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -839,7 +870,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
 
         // Branch by refcnt_state.
-        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
@@ -905,24 +936,23 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
         }
 
+        // Implement global_bb.
+        self.builder().position_at_end(global_bb);
+        // Jump to shared_bb.
+        self.builder()
+            .build_unconditional_branch(shared_bb)
+            .unwrap();
+
         (unique_bb, shared_bb)
     }
 
-    /// Branch on the object's reference-count state, returning the block to build each state's
-    /// handling in. A `threaded = false` build produces one state, so it needs no branch and no load:
-    /// the local block is the one being built, and there is no threaded block.
+    // Load refcnt state and branch by the value.
+    // Returns three building blocks (local_bb, threaded_bb, global_bb).
     pub fn build_branch_by_refcnt_state(
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
-    ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>) {
-        if !self.config.threaded {
-            let current_bb = self
-                .builder()
-                .get_insert_block()
-                .expect("the builder is positioned in a block");
-            return (current_bb, None);
-        }
-
+    ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
+        // Load refcnt_state.
         let current_func = self.current_function();
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
@@ -935,23 +965,64 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
             .into_int_value();
 
+        // Add three basic blocks.
         let local_bb = self.context.append_basic_block(current_func, "local_bb");
-        let threaded_bb = self.context.append_basic_block(current_func, "threaded_bb");
+        let mut threaded_bb: Option<BasicBlock<'_>> = None;
+        let global_bb = self.context.append_basic_block(current_func, "global_bb");
 
-        let is_refcnt_state_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
-            )
-            .unwrap();
-        self.builder()
-            .build_conditional_branch(is_refcnt_state_local, local_bb, threaded_bb)
-            .unwrap();
+        if !self.config.threaded {
+            // In single-threaded program,
 
-        (local_bb, Some(threaded_bb))
+            // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
+            let is_refcnt_state_local = self
+                .builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    "is_refcnt_state_local",
+                )
+                .unwrap();
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
+                .unwrap();
+        } else {
+            // In multi-threaded program,
+            let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
+            threaded_bb = Some(th_bb);
+            let threaded_bb = threaded_bb.clone().unwrap();
+
+            let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
+
+            let is_refcnt_state_local = self
+                .builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    "is_refcnt_state_local",
+                )
+                .unwrap();
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
+                .unwrap();
+
+            // Implement nonlocal_bb.
+            self.builder().position_at_end(nonlocal_bb);
+            let is_refcnt_state_threaded = self
+                .builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+                    "is_refcnt_state_threaded",
+                )
+                .unwrap();
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
+                .unwrap();
+        }
+        (local_bb, threaded_bb, global_bb)
     }
 
     // Get pointer to state of reference counter of a given object.
@@ -1452,7 +1523,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_int_truncate(amount, refcnt_type(self.context), "retain_amount")
             .unwrap();
         // Branch by refcnt_state.
-        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
         // In `local_bb`, increment refcnt and jump to `cont_bb`.
         self.builder().position_at_end(local_bb);
@@ -1483,6 +1554,10 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             self.builder().build_unconditional_branch(cont_bb).unwrap();
         }
+
+        // In `global_bb`, there is no refcount to update; jump to `cont_bb`.
+        self.builder().position_at_end(global_bb);
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
 
         self.builder().position_at_end(cont_bb);
     }
@@ -1646,7 +1721,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Branch by refcnt_state.
         let current_func = self.current_function();
-        let (local_bb, threaded_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
         let destruction_bb = self
             .context
             .append_basic_block(current_func, "destruction_bb");
@@ -1742,6 +1817,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         build_free_boxed(self, obj_ptr, &obj.ty);
         self.builder().build_unconditional_branch(end_bb).unwrap();
 
+        // Implement global_bb.
+        self.builder().position_at_end(global_bb);
+        self.builder().build_unconditional_branch(end_bb).unwrap();
+
         self.builder().position_at_end(end_bb);
     }
 
@@ -1754,8 +1833,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         traverse_refs: impl FnOnce(&mut Self),
     ) {
         assert!(
-            work == TraverserWorkType::mark_permanent()
-                || work == TraverserWorkType::mark_threaded()
+            work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
         );
 
         // Get pointer to the object.
@@ -1765,8 +1843,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         traverse_refs(self);
 
         // Mark the object itself.
-        if work == TraverserWorkType::mark_permanent() {
-            self.mark_permanent_one(obj_ptr);
+        if work == TraverserWorkType::mark_global() {
+            self.mark_global_one(obj_ptr);
         } else {
             self.mark_threaded_one(obj_ptr);
         }
@@ -1785,9 +1863,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Mark all objects reachable from `obj` as global.
-    pub fn mark_permanent(&mut self, obj: Object<'c>) {
-        self.emit_rc_helper_call(obj, "mark_permanent", "call_mark_permanent", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_permanent());
+    pub fn mark_global(&mut self, obj: Object<'c>) {
+        self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
+            gc.build_release_mark(obj, TraverserWorkType::mark_global());
         });
     }
 
@@ -1864,28 +1942,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    /// Give the object at `ptr` a permanent reference count: `PERMANENT_REFCNT` is `2^31` decrements
-    /// away from the one count that matters, so no run of the program drives it to 1. The object is
-    /// therefore never destructed and never answers a uniqueness test with "unique", which is what a
-    /// value reachable from a global needs — every other reference to it is counted as usual.
-    fn mark_permanent_one(&mut self, ptr: PointerValue<'c>) {
-        let state = if self.config.threaded {
-            REFCNT_STATE_THREADED
-        } else {
-            REFCNT_STATE_LOCAL
-        };
-        let ptr_refcnt_state = self.get_refcnt_state_ptr(ptr);
+    // Mark object as global so that it will not be retained or released.
+    fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
+        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
+        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(state as u64, false),
-            )
-            .unwrap();
-        let ptr_refcnt = self.get_refcnt_ptr(ptr);
-        self.builder()
-            .build_store(
-                ptr_refcnt,
-                refcnt_type(self.context).const_int(PERMANENT_REFCNT, false),
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
             )
             .unwrap();
     }
@@ -2223,7 +2287,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         cap_tys: &Vec<Arc<TypeNode>>,
         result_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        let cap_obj = self.get_scoped_obj(cap_name);
+        let cap_obj = self.get_scoped_obj_noretain(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
         let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
         let cap_val =
