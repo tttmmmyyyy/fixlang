@@ -64,44 +64,40 @@ the road not taken.
 
 In a `threaded = false` build an object is `GLOBAL` if and only if `mark_global` reached it, which
 happens once per global value, over the graph its initializer's value reaches. Every other object is
-`LOCAL`. So proving `Local` is proving *this object is not reachable from a global*.
+`LOCAL`. So proving `Local` is proving *this object is not reachable from a non-`LOCAL` source*.
 
-**By type.** `mark_global` traverses by type, so an object whose type does not occur in the type
-closure of any global's value is never marked. Collect the globals whose initializers carry a
-reference-counting unit, close their types under the traverser's reachability (fields, array
-elements, union variants, a closure's capture object), and every reference-count operation on a type
-outside that closure emits `Local`.
+**The proof is a value-level taint analysis** — the sources of non-`LOCAL` objects (reading a
+global, `mark_threaded`, `boxed_from_retained_ptr`) taint the values read from them, the taint
+propagates along value flow, and an operation on an untainted value emits `Local`. The full design
+is `design.md` beside this file. Two earlier shapes of the proof were considered and rejected:
 
-This is the whole proof for a program with no such global — the closure is empty — but it does not
-turn into a cliff when one appears: a global of type `Array U64` puts `Array U64` and what it reaches
-into the closure and leaves every other type proved. What it does not survive is a global holding a
-**closure**, whose capture is a `#DynamicObject` — one such global puts every capture object in the
-closure. How much that costs is for the measurement to say.
+- **A whole-program type closure** ("no global's graph contains this type") proves everything for a
+  program with no boxed global, but a single boxed global de-proves its whole type — placing one
+  `Array I64` global would slow every `Array I64` operation in the program, a cliff a language
+  should not have.
+- **Reusing `provenance`'s `Fresh`** conflates two questions: provenance tracks where a value came
+  from for *uniqueness*, deliberately dropping to `Unknown` at every boxed-container read, which is
+  the wrong default for locality (a value read out of a local-only container is local). Measured
+  coverage under that reuse: 0% on `index_syntax`, 56% on `cp_lib_lsegtree` — the misses were
+  exactly the container reads.
 
-**By provenance.** For the types the closure does contain, `provenance` already computes what is
-needed: a leaf whose origin is `Fresh` was allocated by the code being compiled and so is not
-reachable from a global. `Fresh` implies `Local` today; it stops implying it if a `Fresh` value can
-ever be statically allocated (issue #122's addendum), which is a reason for the two pieces of work to
-know about each other. A leaf that is `Arg(i, path)` resolves against the caller, which
-`unique_check_elim::specialize` already has the machinery for — its `SpecializationKey` is
-`Vec<Uniqueness>`, and widening it carries the clone naming, the worklist, the caching and the call
-rerouting along.
+Measured ceiling for the taint approach (the probe classified every executed reference-count
+operation by whether its operand's leaves resolve to allocations or arguments): with argument
+resolution, `sort`/`levenshtein`/`fannkuch`/`nbody_fold`/`cp_lib_dijkstra`/`cp_lib_conv_zp` reach
+~100%, `cp_lib_scc` 95%, `cp_lib_bipartite` 92%, `cp_lib_unionfind` 68%, `cp_lib_lsegtree` 56%
+(container reads recover the rest under the taint rules), `index_syntax` 0% → recovered entirely by
+container reads. Without argument resolution the coverage collapses (0–18%), so the interprocedural
+part is not optional.
 
 ### Stages
 
-1. **Prove by type.** Compute the closure, thread it to the three dispatch sites, emit `Local` where
-   the type is outside it. Measure what fraction of the corpus's operations it proves — in
-   particular whether `cp_lib_lsegtree`'s 149 million are inside or outside.
-2. **Prove by provenance.** `Fresh` leaves, then argument leaves through specialization. Only worth
-   starting once stage 1's measurement says what is left to win.
-3. **Prove `Local` in threaded builds.** The same analysis, against `Threaded` rather than `Global`,
-   where it replaces an atomic operation with a non-atomic one rather than removing a predictable
-   branch. A wrong answer here is a data race, which a single-threaded test cannot see, so it waits
-   for the race detection in #96, and wants a `develop_mode` check that reads the state byte at every
-   specialized operation and aborts unless it is what the specialization claimed.
-
-`RcState::Local` has to be implemented in code generation before any of this: today the `Retain` and
-`Release` arms of `implement_rc_program` assert that the state is `Unknown`.
+1. **Value-level taint, non-threaded builds, `Retain`/`Release` sites** — `design.md`.
+2. **The `is_unique` sites**, reached as a co-located op attribute (the `unique_check_elim`
+   pattern); `fannkuch`'s dispatches are 57% `is_unique`.
+3. **Prove `Local` in threaded builds.** The same lattice, but `mark_threaded` breaks the
+   assign-once model through aliases (an object already bound can be marked through another
+   reference), so this needs escape reasoning and the race detection in #96 before a wrong proof
+   can even be observed. Deferred.
 
 ## Dropping `GLOBAL`: the road not taken
 
