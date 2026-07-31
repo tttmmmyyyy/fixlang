@@ -80,6 +80,7 @@
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
         - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
+    - [Multithreading](#multithreading)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2429,6 +2430,22 @@ contains_byte = |c, arr| (
     found != nullptr
 );
 ```
+
+## Multithreading
+
+Fix has no function that starts a thread or creates a lock. A multi-threaded program uses the [FFI](#foreign-function-interface-ffi) to drive a threading library such as pthread. [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation, providing asynchronous tasks and a shared variable on top of pthread.
+
+Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, so leave it off for a single-threaded program. A library whose project file sets `threaded` turns it on for every project that depends on it.
+
+A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
+
+- Call `Std::mark_threaded` on the value. It puts the reference counters of all values reachable from it into multi-threaded mode, in which they are updated atomically.
+- Call `Std::FFI::boxed_to_retained_ptr` to get a pointer to the value, and pass the pointer to the threading library with `FFI_CALL_IO`.
+- From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. An exported function receives a boxed parameter as such a pointer, and `Std::FFI::boxed_from_retained_ptr` turns a `Ptr` back into a boxed value.
+
+The pointer carries the responsibility for the reference count described in [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language).
+
+While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
 
 ## `eval` syntax
 
