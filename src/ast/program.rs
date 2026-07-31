@@ -831,6 +831,16 @@ impl Program {
         self.type_env.clone()
     }
 
+    /// The type of every top-level symbol of the program, by name. Compiling one unit under separated
+    /// compilation needs the types of the symbols the other units define as well, since this unit's
+    /// code refers to them, so this covers the whole program rather than any one unit.
+    pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
+        self.symbols
+            .iter()
+            .map(|(name, symbol)| (name.clone(), symbol.ty.clone()))
+            .collect()
+    }
+
     // Get of list of tycons that can be used for namespace resolution.
     pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
         let mut res: Set<FullName> = Default::default();

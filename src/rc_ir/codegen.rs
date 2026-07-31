@@ -14,14 +14,13 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{Generator, Object};
+use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_function_type, lambda_return_leaf_types, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use inkwell::basic_block::BasicBlock;
-use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
 use inkwell::{AddressSpace, IntPredicate};
@@ -29,17 +28,22 @@ use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
-    /// unit's worth. Every top-level symbol has already been declared (by `declare_symbol`, run for
-    /// all symbols in every unit), so those declarations are reused; only the functions synthesized
-    /// after that — lifted lambdas, and at higher optimization levels the borrow and specialization
-    /// versions — are declared here, and only `prog`'s functions and globals are implemented.
+    /// unit's worth. A function this module already declared (because its body refers to it) is
+    /// reused; the rest are declared here, and every one of them is implemented.
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
-            let fn_val = self
-                .module
-                .get_function(&func.name.name.to_string())
-                .unwrap_or_else(|| self.declare_rc_function(func));
+            let fn_val = match self.module.get_function(&func.name.name.to_string()) {
+                Some(fn_val) => fn_val,
+                // A function of the program is declared from the program's global types, so that this
+                // module and every module calling into it build the same signature. A version the
+                // optimizer synthesized after those were fixed is not one of them, so its own type
+                // is all there is to declare it from.
+                None => match self.declare_program_global(&func.name.name) {
+                    Some(fn_val) => fn_val,
+                    None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
+                },
+            };
             // A function is implemented once. A name minted here that collides with one already
             // implemented would take a second body, appended after the first `entry` block and never
             // reached, dropping one of the two.
@@ -61,32 +65,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Declare the LLVM function for an `RcFunc` (signature from its arrow type) and, for a funptr
-    /// function, register its global accessor so a direct call by name resolves it. This is the
-    /// funptr analogue of `declare_symbol` for the functions born after declaration — lifted lambdas,
-    /// and the borrow and specialization versions synthesized while optimizing — which `declare_symbol`
-    /// never saw. Funptr functions get external linkage under separated compilation; closure functions
-    /// are always internal.
-    fn declare_rc_function(&mut self, func: &RcFunc) -> FunctionValue<'c> {
-        let fn_ty = lambda_function_type(&func.fn_ty, self);
-        let name = func.name.name.to_string();
-        let linkage = if func.fn_ty.is_funptr() && self.config.enable_separated_compilation() {
-            Linkage::External
-        } else {
-            Linkage::Internal
-        };
-        let fn_val = self.module.add_function(&name, fn_ty, Some(linkage));
-        fn_val.set_call_conventions(self.lambda_calling_convention());
-        if self.has_di() {
-            let fn_name = fn_val.get_name().to_str().unwrap().to_string();
-            fn_val.set_subprogram(self.create_debug_subprogram(&fn_name, func.source.clone()));
-        }
-        if func.fn_ty.is_funptr() {
-            self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
-        }
-        fn_val
-    }
-
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
     /// the scope as plain objects, then evaluate the body in tail position. Capture read-back and the
     /// release of unused parameters/captures are already explicit in the body, so nothing extra is
@@ -101,14 +79,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let bb = self.context.append_basic_block(fn_val, "entry");
         self.builder().position_at_end(bb);
 
-        let _di_scope_guard = if self.has_di() {
-            let subprogram = fn_val
-                .get_subprogram()
-                .expect("a function implemented with debug info has a subprogram");
-            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-        } else {
-            None
-        };
+        let _di_scope_guard = self.push_debug_subprogram(fn_val, func.source.clone());
 
         let _scope_guard = self.push_scope();
 
@@ -591,24 +562,21 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Implement a global initializer: a lazily-initialized accessor that computes the value once
-    /// (call-once), marks it and its reachable graph global, and stores it. Mirrors
-    /// `implement_symbol`'s global branch, with the initializer evaluated from the RC IR.
+    /// (call-once), marks it and its reachable graph global, and stores it.
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
-        let acc_fn = self
-            .module
-            .get_function(&format!("Get#{}", global_init.symbol.to_string()))
-            .expect("a global has an accessor, declared with its symbol");
-        if self.has_di() {
-            let fn_name = acc_fn.get_name().to_str().unwrap().to_string();
-            acc_fn.set_subprogram(
-                self.create_debug_subprogram(&fn_name, global_init.init.source.clone()),
-            );
-        }
-
+        let acc_fn_name = global_accessor_name(&global_init.symbol);
+        // The accessor is already declared when a function body generated before this point reads
+        // the global, and is declared here when none does.
+        let acc_fn = match self.module.get_function(&acc_fn_name) {
+            Some(acc_fn) => acc_fn,
+            None => self
+                .declare_program_global(&global_init.symbol)
+                .expect("a global initializer's symbol is a global of the program"),
+        };
         let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
 
         // The storage for the initialized value, and the call-once flag.
@@ -642,14 +610,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
-        let _di_scope_guard = if self.has_di() {
-            let subprogram = acc_fn
-                .get_subprogram()
-                .expect("a function implemented with debug info has a subprogram");
-            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-        } else {
-            None
-        };
+        let _di_scope_guard = self.push_debug_subprogram(acc_fn, global_init.init.source.clone());
 
         // Branch to the initialization code only on the first access.
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
@@ -680,11 +641,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.context.void_type().fn_type(&[], false),
                 Some(Linkage::Internal),
             );
-            if self.has_di() {
-                init_fn.set_subprogram(
-                    self.create_debug_subprogram(&init_fn_name, global_init.init.source.clone()),
-                );
-            }
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
@@ -695,14 +651,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
             self.builder().build_unconditional_branch(end_bb).unwrap();
             let init_bb = self.context.append_basic_block(init_fn, "init_bb");
-            let guard = if self.has_di() {
-                let subprogram = init_fn
-                    .get_subprogram()
-                    .expect("a function implemented with debug info has a subprogram");
-                Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
-            } else {
-                None
-            };
+            let guard = self.push_debug_subprogram(init_fn, global_init.init.source.clone());
             (init_bb, end_bb, guard)
         };
 

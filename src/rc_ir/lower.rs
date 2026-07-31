@@ -40,16 +40,15 @@ enum LoweredSymbol {
 }
 
 /// Lower `symbols` to an `RcProgram`. Symbols reference one another by name, so the set need not be
-/// closed; passing a subset (e.g. one compilation unit) lowers just those. `all_symbols` is the full
-/// program's symbols, used only to type a global referenced as an LLVM operand — it must cover every
-/// symbol any lowered function might reference, even from another unit.
-pub fn lower_program(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symbol]) -> RcProgram {
-    let mut lowerer = Lowerer::new(type_env);
-    for sym in all_symbols {
-        lowerer
-            .symbol_types
-            .insert(sym.name.clone(), sym.ty.clone());
-    }
+/// closed; passing a subset (e.g. one compilation unit) lowers just those. `global_types` types a
+/// global referenced as an LLVM operand, so it must cover every symbol any lowered function might
+/// reference, including one another unit defines (`Program::global_types`).
+pub fn lower_program(
+    type_env: &TypeEnv,
+    symbols: &[Symbol],
+    global_types: &Map<FullName, Arc<TypeNode>>,
+) -> RcProgram {
+    let mut lowerer = Lowerer::new(type_env, global_types);
     let mut globals = vec![];
     for sym in symbols {
         match lowerer.lower_symbol(sym) {
@@ -94,8 +93,9 @@ struct Lowerer<'a> {
     funcs: Map<FuncRef, RcFunc>,
     // A shadow stack per AST name; the last entry is the current binding.
     scope: Map<FullName, Vec<RcVar>>,
-    // The type of each top-level symbol, to type a global referenced as an LLVM operand.
-    symbol_types: Map<FullName, Arc<TypeNode>>,
+    // The type of each top-level symbol of the program, to type a global referenced as an LLVM
+    // operand.
+    global_types: &'a Map<FullName, Arc<TypeNode>>,
     // The top-level symbol currently being lowered, with a per-symbol counter: each lifted lambda is
     // named `<symbol>::closure{N}` so it carries its source module (like a top-level function's name).
     current_symbol: Option<FullName>,
@@ -103,13 +103,13 @@ struct Lowerer<'a> {
 }
 
 impl<'a> Lowerer<'a> {
-    fn new(type_env: &'a TypeEnv) -> Self {
+    fn new(type_env: &'a TypeEnv, global_types: &'a Map<FullName, Arc<TypeNode>>) -> Self {
         Lowerer {
             type_env,
             fresh_counter: 0,
             funcs: Map::default(),
             scope: Map::default(),
-            symbol_types: Map::default(),
+            global_types,
             current_symbol: None,
             closure_counter: 0,
         }
@@ -417,7 +417,7 @@ impl<'a> Lowerer<'a> {
             let var = match self.resolve(&name) {
                 Some(var) => var,
                 None => {
-                    let ty = self.symbol_types.get(&name).cloned().unwrap_or_else(|| {
+                    let ty = self.global_types.get(&name).cloned().unwrap_or_else(|| {
                         panic!(
                             "LLVM operand `{}` is not bound in scope during RC IR lowering",
                             name.to_string()

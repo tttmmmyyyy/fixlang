@@ -10406,3 +10406,53 @@ fn test_annotation_stripping_is_value_neutral() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// Under separated compilation the unit that defines a global and the unit that reads it are
+// generated apart: the defining unit builds the accessor from the type of the initializer it
+// implements, while a reading unit builds the declaration from the type recorded for the program's
+// globals. One symbol per unit puts a unit boundary on every read. The shapes cover a zero-sized
+// global (whose accessor returns nothing rather than a value), a boxed global, an unboxed global of
+// several leaves, an array global, a global whose initializer reads other globals, a global of
+// function type referred to by name, and a global read from inside a lifted lambda.
+#[test]
+fn test_global_accessors_across_compilation_units() {
+    let source = r#"
+    module Main;
+
+    nothing : ();
+    nothing = ();
+
+    name : String;
+    name = "fixlang";
+
+    triple : (I64, F64, U8);
+    triple = (7, 2.5, 9_U8);
+
+    squares : Array I64;
+    squares = Array::from_map(5, |i| i * i);
+
+    digest : I64;
+    digest = triple.@0 + squares.@(4) + name.@size;
+
+    twice : I64 -> I64;
+    twice = |n| n * 2;
+
+    shift_all : Array I64 -> Array I64;
+    shift_all = |xs| xs.to_iter.map(|x| twice(x) + triple.@0).to_array;
+
+    main : IO ();
+    main = (
+        eval nothing;
+        assert_eq(|_|"name", name, "fixlang");;
+        assert_eq(|_|"triple", triple.@0 + (triple.@1 * 2.0).to_I64 + triple.@2.to_I64, 7 + 5 + 9);;
+        assert_eq(|_|"digest", digest, 7 + 16 + 7);;
+        assert_eq(|_|"twice", twice(21), 42);;
+        let ys = shift_all(squares);
+        assert_eq(|_|"read from a closure", ys.to_iter.fold(0, Add::add), (0 + 1 + 4 + 9 + 16) * 2 + 7 * 5);;
+        pure()
+    );
+    "#;
+    let mut config = Configuration::develop_mode();
+    config.max_cu_size = 1;
+    test_source(source, config);
+}

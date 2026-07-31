@@ -4,6 +4,7 @@ use crate::{
         expr::ExprNode,
         name::FullName,
         program::{Program, Symbol, TypeEnv},
+        types::TypeNode,
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, OutputFileType},
@@ -14,7 +15,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, spawn_compiler_thread, warn_msg, Set},
+    misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -40,6 +41,7 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
     panic::panic_any,
@@ -58,18 +60,16 @@ pub struct BuildObjFilesResult {
 // Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
 // code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
 //
-// The two symbol sets play different roles. `symbols` is the set to lower and generate code for — one
-// compilation unit, or the whole program. `all_symbols` is every symbol in the program; lowering
-// consults it only to type a global that a lowered function references as an LLVM operand, which under
-// separated compilation may be defined in another unit. So `all_symbols` must cover every symbol
-// anything in `symbols` can reference (`symbols` is a subset of it), while only `symbols` becomes code.
+// `symbols` is the set to lower and generate code for — one compilation unit, or the whole program.
+// `global_types` types a global that a lowered function references as an LLVM operand, which under
+// separated compilation may be defined in another unit, so it covers the whole program.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
-    all_symbols: &[Symbol],
+    global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
 ) -> RcProgram {
-    let mut prog = lower_program(type_env, symbols, all_symbols);
+    let mut prog = lower_program(type_env, symbols, global_types);
     // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
     // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
     if config.enable_simplify() {
@@ -87,13 +87,13 @@ fn lower_and_insert_rc(
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
-    all_symbols: &[Symbol],
+    global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
 ) -> RcProgram {
     // The whole program's symbol names, for the debug-only validator to recognize global references
     // (a unit may reference a symbol another unit defines). Built only when the validator runs.
     let symbol_names: Set<FullName> = if config.develop_mode {
-        all_symbols.iter().map(|s| s.name.clone()).collect()
+        global_types.keys().cloned().collect()
     } else {
         Set::default()
     };
@@ -199,9 +199,10 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     };
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let base = lower_and_insert_rc(&type_env, &all_symbols, &all_symbols, config);
+    let global_types = program.global_types();
+    let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, &all_symbols, config);
+    let optimized = optimize_rc_program(base, &type_env, &global_types, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
@@ -230,7 +231,8 @@ pub fn build_object_files<'c>(
     let mut units = vec![];
     let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
     symbols.sort_by(|a, b| a.name.cmp(&b.name));
-    let all_symbols = symbols.clone();
+    // Every unit needs the types of the whole program's globals, so build them once and share.
+    let global_types = Arc::new(program.global_types());
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
@@ -281,7 +283,7 @@ pub fn build_object_files<'c>(
             info_msg(&format!("Generating object file for {}.", unit.to_string()));
         }
 
-        let all_symbols = all_symbols.clone();
+        let global_types = global_types.clone();
         let config = config.clone();
         let type_env = program.type_env();
 
@@ -308,6 +310,7 @@ pub fn build_object_files<'c>(
                 target_machine.get_target_data(),
                 config.clone(),
                 type_env,
+                global_types.clone(),
             );
 
             // In debug mode, create debug infos.
@@ -318,18 +321,13 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-            // Declare all symbols in this program.
-            // TODO: Optimize so that only necessary symbols are declared.
-            for symbol in &all_symbols {
-                gc.declare_symbol(symbol);
-            }
-
             // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
-            // LLVM. Every symbol is already declared above (prototypes + global registration, in
-            // every unit), so only this unit's symbols are implemented and none is defined twice.
+            // LLVM. Only this unit's symbols are implemented; a symbol of another unit that this
+            // one calls is declared where code generation first reaches it, from the types of the
+            // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols, &config);
-            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &all_symbols, &config);
+            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, &config);
+            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
@@ -394,24 +392,14 @@ fn load_build_object_files_cache(
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = File::open(&cache_path);
-    if let Err(e) = file {
-        warn_msg(&format!(
-            "Failed to open object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return None;
-    }
-    let file = file.ok().unwrap();
-    let result = serde_json::from_reader(file);
-    if let Err(e) = result {
-        warn_msg(&format!(
-            "Failed to read object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return None;
-    }
-    let cache: BuildObjFilesResult = result.ok().unwrap();
+    let file = cache_step_or_warn(
+        File::open(&cache_path),
+        &format!("Failed to open object files cache \"{}\"", cache_path),
+    )?;
+    let cache: BuildObjFilesResult = cache_step_or_warn(
+        serde_json::from_reader(file),
+        &format!("Failed to read object files cache \"{}\"", cache_path),
+    )?;
     // Check all files in the cache exist.
     for path in &cache.obj_paths {
         if !path.exists() {
@@ -430,30 +418,35 @@ fn save_build_object_files_cache(
     let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
     };
-    if let Err(e) = create_dir_all(UNITS_CACHE_PATH) {
-        warn_msg(&format!(
-            "Failed to create directory for object files cache: {}.",
-            e
-        ));
+    let Some(()) = cache_step_or_warn(
+        create_dir_all(UNITS_CACHE_PATH),
+        "Failed to create directory for object files cache",
+    ) else {
         return;
-    }
+    };
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = File::create(&cache_path);
-    if let Err(e) = file {
-        warn_msg(&format!(
-            "Failed to create object files cache \"{}\": {}.",
-            cache_path, e
-        ));
+    let Some(file) = cache_step_or_warn(
+        File::create(&cache_path),
+        &format!("Failed to create object files cache \"{}\"", cache_path),
+    ) else {
         return;
-    }
-    let file = file.ok().unwrap();
-    let write_result = serde_json::to_writer_pretty(file, result);
-    if let Err(e) = write_result {
-        warn_msg(&format!(
-            "Failed to write object files cache \"{}\": {}.",
-            cache_path, e
-        ));
-        return;
+    };
+    cache_step_or_warn(
+        serde_json::to_writer_pretty(file, result),
+        &format!("Failed to write object files cache \"{}\"", cache_path),
+    );
+}
+
+// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
+// The object files cache is an optimization, so a step of reading or writing it that fails gives up
+// on the cache and lets the build go on.
+fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(e) => {
+            warn_msg(&format!("{}: {}.", failure_msg, e));
+            None
+        }
     }
 }
 
@@ -481,16 +474,10 @@ fn build_object_files_cache_hash_or_warn(
     program: &Program,
     config: &Configuration,
 ) -> Option<String> {
-    match build_object_files_cache_hash(program, config) {
-        Ok(hash) => Some(hash),
-        Err(e) => {
-            warn_msg(&format!(
-                "Failed to calculate hash of object files cache: {}.",
-                e
-            ));
-            None
-        }
-    }
+    cache_step_or_warn(
+        build_object_files_cache_hash(program, config),
+        "Failed to calculate hash of object files cache",
+    )
 }
 
 // The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
