@@ -1209,6 +1209,10 @@ impl ExprNode {
                 for arg in args {
                     free_vars.remove(&arg.name);
                 }
+                // A lambda expression binds `CAP_NAME` implicitly, so it goes here along with the
+                // parameters. `FreeOccurrenceProbe` of the let-elimination pass leans on this: it
+                // rejects `CAP_NAME` as a target name, since free variables locate every name but
+                // that one.
                 free_vars.remove(&FullName::local(CAP_NAME));
                 free_vars
             }
@@ -1377,14 +1381,13 @@ impl ExprNode {
     // Get the names which are captured by a lambda expressions.
     pub fn lambda_cap_names(&self) -> Vec<FullName> {
         assert!(self.is_lam());
-        let mut cap_names = self.free_vars().clone();
-        cap_names.remove(&FullName::local(CAP_NAME));
 
         // We need not and should not capture global variable:
         // If we capture global variable, then global recursive function such as
         // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
         // So we remove global variable from the captured names.
-        let mut cap_names = cap_names
+        let mut cap_names = self
+            .free_vars()
             .into_iter()
             .filter(|name| name.is_local())
             .collect::<Vec<_>>();

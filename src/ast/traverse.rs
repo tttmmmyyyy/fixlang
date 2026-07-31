@@ -12,16 +12,7 @@ pub enum StartVisitResult {
     Return,
     ReplaceAndRevisit(Arc<ExprNode>),
     ReplaceAndReturn(Arc<ExprNode>),
-    // Skip, // to be implemented
-    // ReplaceAndSkipChildren(Arc<ExprNode>), // to be implemented
-    // ReplaceAndVisitChildren(Arc<ExprNode>), // to be implemented
 }
-
-// pub enum EndVisitResult {
-//     NoReplace,
-//     Replace(Arc<ExprNode>),
-//     // ReplaceAndRevisit(Arc<ExprNode>), // to be implemented
-// }
 
 pub struct EndVisitResult {
     pub expr: Arc<ExprNode>,
