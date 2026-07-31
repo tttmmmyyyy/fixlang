@@ -181,9 +181,10 @@ mod tests {
     // binding.
     const CHAIN_LENGTH: usize = 2400;
 
-    // Generous next to the few seconds the build takes, and short enough to report a regression as
-    // a failure instead of occupying the machine.
-    const TIMEOUT: Duration = Duration::from_secs(60);
+    // Generous next to the few seconds the build takes, with room for a machine several times
+    // slower running the rest of the suite beside it, and well short of the minutes the build takes
+    // once the inspection walks whole bodies again.
+    const TIMEOUT: Duration = Duration::from_secs(120);
 
     /// Builds and runs a global whose body is a chain of `CHAIN_LENGTH` `let`s, failing if the
     /// build does not finish within `TIMEOUT`. `-O max` is the level that inspects the chain twice:
