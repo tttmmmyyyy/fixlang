@@ -189,16 +189,28 @@ fn test_passes_file_replaces_the_level_pipeline() {
     );
 }
 
-/// The optimization levels built for speed run LLVM's pipeline more than once, and `-O none` runs
-/// nothing, so that a level change is visible in the pipeline rather than only in the timings.
+/// The optimization levels built for speed run LLVM's pipeline three times and follow it with the
+/// passes measured to earn their place, `-O basic` runs it once, and `-O none` runs nothing, so
+/// that a level change is visible in the pipeline rather than only in the timings.
 #[test]
-fn test_pass_pipeline_runs_per_optimization_level() {
+fn test_pass_pipeline_per_optimization_level() {
     // `set_fix_opt_level` clamps to `FIX_MAX_OPT_LEVEL`, which the test suite's matrix varies, so
     // the expectation is read off the level the configuration ended up at.
-    let expected_runs = |level: FixOptimizationLevel| match level {
-        FixOptimizationLevel::None => 0,
-        FixOptimizationLevel::Basic => 1,
-        FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => 3,
+    let expected = |level: FixOptimizationLevel| -> Vec<String> {
+        let full_pipeline = "default<O3>".to_string();
+        match level {
+            FixOptimizationLevel::None => vec![],
+            FixOptimizationLevel::Basic => vec![full_pipeline],
+            FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
+                let mut passes = vec![full_pipeline; 3];
+                passes.extend(
+                    ["speculative-execution", "loop-vectorize", "pseudo-probe"]
+                        .iter()
+                        .map(|pass| pass.to_string()),
+                );
+                passes
+            }
+        }
     };
     for level in [
         FixOptimizationLevel::None,
@@ -208,18 +220,11 @@ fn test_pass_pipeline_runs_per_optimization_level() {
     ] {
         let mut config = Configuration::develop_mode();
         config.set_fix_opt_level(level);
-        let passes = config.llvm_passes();
         assert_eq!(
-            passes.len(),
-            expected_runs(config.fix_opt_level()),
-            "unexpected number of pipeline runs at -O {}",
+            config.llvm_passes(),
+            expected(config.fix_opt_level()),
+            "unexpected pipeline at -O {}",
             config.fix_opt_level()
-        );
-        assert!(
-            passes.iter().all(|pass| pass == "default<O3>"),
-            "the pipeline at -O {} should be LLVM's full pipeline, but it is {:?}",
-            config.fix_opt_level(),
-            passes
         );
     }
 }

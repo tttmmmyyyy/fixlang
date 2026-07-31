@@ -30,10 +30,19 @@ const LLVM_O3_PIPELINE: &str = "default<O3>";
 /// One run leaves work that a second and a third still find: over `benchmark/speedtest`, the
 /// second run takes 2.2% of the instructions off and the third another 0.8%, reaching 21% on
 /// `nbody`. A fourth run changes no case by a single instruction.
-///
-/// `INITIAL_PASSES` in `passes_optimizer.py` starts its search from this pipeline, and must stay in
-/// sync with it.
 const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
+
+/// Passes run after the `default<O3>` rounds at the optimization levels built for speed.
+///
+/// The three together take 0.80% off the cycle counts of the fifteen benchmark cases —
+/// `get_sub` 4.4%, `fib` 4.4%, `cp_lib_dijkstra` 2.8%, `levenshtein` 2.2% — against 2.0% back on
+/// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
+/// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
+/// code rather than the work it does, which is why the instruction count barely moves.
+///
+/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there
+/// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
+const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
 /// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
 ///
@@ -683,14 +692,15 @@ impl Configuration {
         if let Some(passes) = &self.llvm_passes_override {
             return passes.clone();
         }
-        let runs = match self.fix_opt_level {
-            FixOptimizationLevel::None => 0,
-            FixOptimizationLevel::Basic => 1,
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => vec![],
+            FixOptimizationLevel::Basic => vec![LLVM_O3_PIPELINE.to_string()],
             FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
-                LLVM_O3_RUNS_FOR_SPEED
+                let mut passes = vec![LLVM_O3_PIPELINE.to_string(); LLVM_O3_RUNS_FOR_SPEED];
+                passes.extend(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()));
+                passes
             }
-        };
-        vec![LLVM_O3_PIPELINE.to_string(); runs]
+        }
     }
 
     // Get hash value of the configurations that affect the object file generation.
