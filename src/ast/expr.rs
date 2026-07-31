@@ -1381,10 +1381,9 @@ impl ExprNode {
     pub fn lambda_cap_names(&self) -> Vec<FullName> {
         assert!(self.is_lam());
 
-        // We need not and should not capture global variable:
-        // If we capture global variable, then global recursive function such as
-        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
-        // So we remove global variable from the captured names.
+        // A lambda captures local names alone. Capturing a global would make a global recursive
+        // function such as "main = |x| if x == 0 then 0 else x + main(x-1)" recur forever at its
+        // initialization.
         let mut cap_names = self
             .free_vars()
             .into_iter()
