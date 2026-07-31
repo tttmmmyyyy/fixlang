@@ -1,7 +1,3 @@
-use std::sync::Arc;
-
-use inkwell::context::Context;
-
 use crate::ast::name::FullName;
 use crate::ast::types::{tycon, type_tyapp, type_tycon, TypeNode};
 use crate::build::build_object_files::get_target_machine;
@@ -13,8 +9,12 @@ use crate::fixstd::builtin::{
     make_bool_ty, make_i64_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
 };
 use crate::generator::Generator;
+use crate::misc::Map;
 use crate::object::ty_to_object_ty;
+use inkwell::context::Context;
+use std::sync::Arc;
 
+// `Option a = union { none : (), some : a }`, applied as `Option a`.
 fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyapp(
         type_tycon(&tycon(FullName::from_strs(&[STD_NAME], "Option"))),
@@ -40,6 +40,9 @@ fn layout<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: Arc<TypeNode>) -> (u64, u64) {
     (gc.sizeof(&llvm), gc.abi_alignment(&llvm))
 }
 
+// The size and alignment of a union are those of its payload buffer plus its tag, and the buffer
+// takes the size and ABI alignment of the largest payload. A union of small or empty payloads
+// therefore stays small: `Bool` is one byte, and `Option U8` two.
 #[test]
 fn test_union_memory_layout() {
     let config = panic_if_err(Configuration::check_mode());
@@ -48,12 +51,15 @@ fn test_union_memory_layout() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("union_layout_test", &context, &target_machine);
+    // The layouts below are read off the types alone, so this generator resolves no global and is
+    // given none.
     let mut gc = Generator::new(
         &context,
         &module,
         target_machine.get_target_data(),
         config.clone(),
         type_env,
+        Arc::new(Map::default()),
     );
 
     // A union's payload buffer takes the ABI alignment of its payloads, so a small or empty
