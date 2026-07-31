@@ -1,11 +1,10 @@
-# Reference-count state: drop `Global` where it earns nothing, infer `Local` where it pays
+# Reference-count state: keep the runtime flag, prove `Local` where it can be proved
 
 Issue #122. `RcState` has four values and lowering emits only `Unknown`, so every `Retain`,
 `Release` and `is_unique` loads the object's `refcnt_state` byte and branches on it. This document
-records what that branch costs, what each of the three known states is worth, and the design the
-measurements point to — which is not the state inference the issue first proposed.
+records what that branch costs, what removing it is worth, and the design that reaches for it.
 
-Measured on `18578264` (main), the 46 `benchmark/speedtest` cases.
+Measured on the 46 `benchmark/speedtest` cases.
 
 ## What the dispatch costs
 
@@ -29,24 +28,8 @@ else is the local arm.**
 | sort | 0 | 2,559,622 | 2,569,817 | 5,129,439 | 0 |
 | cp_lib_bipartite | 363,330 | 1,844,249 | 1,901,546 | 4,109,125 | 5 |
 
-The largest global count in the corpus is 3, in `cp_lib_dijkstra`.
-
-### The shape that would need `Global`
-
-A table held in a global and read from a hot loop — the Project Euler shape — is the one the issue
-expects to dominate the global arm. It does not, at the level that matters. A million-iteration loop
-over a global `Array I64`, counting retain plus release on the global arm, in the three ways the
-table can be reached:
-
-| -O | referenced directly | passed to a function | bound to a local first |
-| --- | --: | --: | --: |
-| none | 4,000,012 | 8,000,012 | — |
-| basic | 4,000,012 | 6,000,012 | — |
-| max | 3 | 3 | 3 |
-
-At `-O max` all three are the same three dispatches for the whole program: borrow inference and
-cancellation remove the operations themselves. The global arm is only hot at `-O none` and
-`-O basic`, the levels the project keeps deliberately weak.
+The largest global count in the corpus is 3, in `cp_lib_dijkstra`. So the state byte is read tens of
+millions of times to answer a question whose answer is "local" every time but a handful.
 
 ### What removing the dispatch is worth
 
@@ -67,185 +50,104 @@ payoff. Cachegrind instruction counts, same build path for both sides.
 different output under the unsound compiler — they are exactly the cases whose global arm is
 reachable — so their figures bound the payoff only loosely.
 
-## The design the measurements point to
+## The design
 
-`GLOBAL` exists to keep reference counting off objects a whole program shares: with threads, an
-atomic increment on one hot global would serialize every thread on one cache line. That reason is a
-threading reason. In a build with `threaded = false` it buys the numbers above: single-digit skipped
-operations, against a branch paid by every operation in the program.
+**Keep the runtime state byte. Prove `Local` where it can be proved, and fall back to the runtime
+dispatch everywhere else.** A proof that is missed costs the dispatch that is paid today, so the
+analysis is free to be partial, and no program can be made wrong by an analysis that gives up.
 
-So: **stop marking objects `GLOBAL`, and give a global value a large reference count instead.**
+The alternative — dropping the `GLOBAL` state and keeping a global's object alive by a permanent
+reference count — was implemented and measured, and is recorded below under *Dropping `GLOBAL`* as
+the road not taken.
 
-`mark_global` walks the graph a global initializer's value reaches. Instead of writing
-`REFCNT_STATE_GLOBAL` into each object's state byte, it writes `2^31` into each object's refcount. A
-global then behaves as a permanently shared object:
+### What has to be proved
 
-- it is never unique, because `refcnt == 1` is false, which is what `is_unique`'s `global_bb` arm
-  already forces by jumping straight to `shared_bb`;
-- it is never freed, because the count a release reads is never 1;
-- it is retained and released like anything else, with no state to consult.
+In a `threaded = false` build an object is `GLOBAL` if and only if `mark_global` reached it, which
+happens once per global value, over the graph its initializer's value reaches. Every other object is
+`LOCAL`. So proving `Local` is proving *this object is not reachable from a global*.
 
-In a `threaded = false` build the state byte then has one value, `LOCAL`, and nothing reads it:
-`build_branch_by_refcnt_state` becomes an unconditional jump and disappears, along with the load and
-the compare. That is the "assume local" compiler measured above — **-2.4% to -13.9%** — obtained by
-construction rather than by an analysis that has to be proved sound.
+**By type.** `mark_global` traverses by type, so an object whose type does not occur in the type
+closure of any global's value is never marked. Collect the globals whose initializers carry a
+reference-counting unit, close their types under the traverser's reachability (fields, array
+elements, union variants, a closure's capture object), and every reference-count operation on a type
+outside that closure emits `Local`.
 
-### Does `GLOBAL` earn anything in a threaded build?
+This is the whole proof for a program with no such global — the closure is empty — but it does not
+turn into a cliff when one appears: a global of type `Array U64` puts `Array U64` and what it reaches
+into the closure and leaves every other type proved. What it does not survive is a global holding a
+**closure**, whose capture is a `#DynamicObject` — one such global puts every capture object in the
+closure. How much that costs is for the measurement to say.
 
-The argument for keeping it is that an atomic increment on one hot global would serialize every
-thread on one cache line, which is the reason it was introduced. That argument needs the operations
-to exist, and the measurement says they mostly do not: compiling the loops above **with
-`--threaded`** gives counts identical to the single-threaded build, three global dispatches for the
-whole program. Borrow inference removes the operations, and it does not consult the threading
-setting.
+**By provenance.** For the types the closure does contain, `provenance` already computes what is
+needed: a leaf whose origin is `Fresh` was allocated by the code being compiled and so is not
+reachable from a global. `Fresh` implies `Local` today; it stops implying it if a `Fresh` value can
+ever be statically allocated (issue #122's addendum), which is a reason for the two pieces of work to
+know about each other. A leaf that is `Arg(i, path)` resolves against the caller, which
+`unique_check_elim::specialize` already has the machinery for — its `SpecializationKey` is
+`Vec<Uniqueness>`, and widening it carries the clone naming, the worklist, the caching and the call
+rerouting along.
 
-That is not proof that `GLOBAL` earns nothing there. Fix's threading is FFI plus `mark_threaded`,
-and no program in the corpus shares a global across threads and works it, so the case the argument is
-about cannot be measured with what exists today. What can be said is that the argument is unsupported
-by any measurement, and that a program would have to defeat borrow inference on a global before it
-started paying.
+### Stages
 
-Dropping `GLOBAL` from a threaded build is not simply the same change, either. A global left in the
-state `create_obj` gives it would be `LOCAL`, so several threads would increment its count
-non-atomically — a data race, undefined rather than merely imprecise, and one a race detector
-reports. Dropping it there means marking globals `THREADED` instead, paying an atomic operation
-where today there is none.
+1. **Prove by type.** Compute the closure, thread it to the three dispatch sites, emit `Local` where
+   the type is outside it. Measure what fraction of the corpus's operations it proves — in
+   particular whether `cp_lib_lsegtree`'s 149 million are inside or outside.
+2. **Prove by provenance.** `Fresh` leaves, then argument leaves through specialization. Only worth
+   starting once stage 1's measurement says what is left to win.
+3. **Prove `Local` in threaded builds.** The same analysis, against `Threaded` rather than `Global`,
+   where it replaces an atomic operation with a non-atomic one rather than removing a predictable
+   branch. A wrong answer here is a data race, which a single-threaded test cannot see, so it waits
+   for the race detection in #96, and wants a `develop_mode` check that reads the state byte at every
+   specialized operation and aborts unless it is what the specialization claimed.
 
-So the end state to aim at is: the state byte survives only in threaded builds, holding two values,
-for the one decision it is good for — atomic or not. Whether globals in such a build are `THREADED`
-or keep a `GLOBAL` of their own is the open question, and it wants a threaded benchmark before it is
-answered. Either way, **the inference the issue asks for is what matters there**: proving `Local`
-replaces an atomic operation with a non-atomic one, which is a far larger saving than removing a
-predictable branch.
+`RcState::Local` has to be implemented in code generation before any of this: today the `Retain` and
+`Release` arms of `implement_rc_program` assert that the state is `Unknown`.
 
-### A boxed global drains, and the mark alone does not stop it
+## Dropping `GLOBAL`: the road not taken
 
-`add_global_object` gives a global of a **boxed** type `retain_on_read = false`, on the reasoning
-that "a boxed global is moved out when read, so it needs no retain", and the accessor
-`implement_rc_global` emits loads the value and returns it without retaining. The consumer then owns
-it and releases it. So **each read of a boxed global is a net decrement**, and what makes a global
-survive being read at all today is `GLOBAL` turning that release into a no-op.
+The first design dropped the `GLOBAL` state and wrote a permanent count (`2^31`) into a global's
+objects instead, on the reasoning that the state buys single-digit skipped operations against a
+branch paid by every operation. It was implemented, measured over the whole corpus, and reverted.
+What it ran into is worth keeping.
 
-Measured: a `box struct` global read a million times, counting the global arm.
+**The exemption was covering an unbalanced count.** Reference-count insertion skips a global operand,
+while a function it is passed to releases the argument it received. A boxed global therefore loses
+one count per read that reaches a consuming callee — measured at 6 retains against 1,000,006
+releases for a million reads — and what keeps it alive is `GLOBAL` turning that release into a no-op.
+Drop `GLOBAL` and the read has to retain.
 
-| -O | retain | release |
-| --- | --: | --: |
-| none | 6 | 1,000,006 |
-| basic | 6 | 1,000,006 |
-| max | 1 | 2 |
+**The retain costs nothing to execute and 24% to emit.** In `nbody` the added retain is one node,
+executed once, before a two-million-step loop; the program ran 234 million instructions more.
+Uniqueness checks, allocations and copies were identical; what changed is that the array's length
+stopped being the constant 5.
 
-One net release per read at the low levels; at `-O max` borrow inference removes the operations, as
-everywhere else.
+The accessor of a global reads a "was it initialized" flag and branches. LLVM's `GlobalOpt` splits
+the global's value into pieces and encodes the length as `select(flag, 5, 0)`; `SimplifyCFG` then
+turns that select into a **branch**, specializing the path where the length is 5, which is what lets
+the loops over the five bodies unroll completely — nine complete unrollings become two without it.
+The retain's store has to live at the block where the two paths merge, which pins the merge and
+leaves the length a `phi`.
 
-A large mark does not survive that. The drain is not bounded by how many references are live at
-once — the reasoning that makes 2^31 look unreachable — but by how many times the program reads the
-global, cumulatively, which a loop reaches in seconds. **Stage 1 therefore has to retain a boxed
-global on read**, making its accessor behave like every other shared value. At `-O max` borrow
-inference removes that retain along with the release it balances, which is why the corpus counts
-above are what they are; at `-O none` and `-O basic` it replaces a skipped branch with a real
-increment, which belongs in the measurement that section already calls for.
+Two ways out were measured and both were worse:
 
-That the "moved out when read" convention works at all is a consequence of `GLOBAL`, not something
-independent of it. Removing one requires removing the other.
+- **Saturate the release at the mark** (so no retain is needed): geometric mean **+1.33%** against
+  the retain design's -1.11%, with `random_state` +54%, `gen_random_array` +43% and
+  `cp_lib_segtree` +10% — the `select` the saturation adds blocks more than the branch it removes.
+- **Re-assert the mark inside the accessor's already-initialized path** (so the store is off the
+  merge): `nbody` recovers fully, but every read of a global writes to it, which a global read in a
+  hot loop pays for, and in a threaded build it is a non-atomic store to a shared object.
 
-### Headroom
-
-**One count is dangerous, and it is 1.** `build_release_boxed_with` destructs when the count it read
-*before* decrementing is 1, and `build_branch_by_is_unique` calls a count of 1 unique; zero is never
-tested. Every comparison the compiler makes on a refcount is an equality against 1 — there is no
-ordering comparison on one anywhere in the tree — so the counter is used as a bit pattern and the
-signedness of `refcnt_type` never enters.
-
-The mark therefore wants to sit as far from 1 as the 32 bits allow in both directions, which is
-`2^31`: reaching 1 from there takes 2^31 - 1 more releases than retains, or 2^31 + 1 more retains
-than releases before the count wraps around to it. As an `i32` that bit pattern is negative, which
-nothing observes.
-
-With reads balanced by the retain the previous section requires, the count then drifts only by the
-number of references live at once, each of which occupies a machine word somewhere, so neither
-distance is reachable. Without that retain the distance is a count of reads rather than of live
-references, and 2^31 buys only seconds.
-
-The constant belongs beside `refcnt_type`, so that widening or narrowing the counter moves it too.
-
-### What it costs
-
-A retain or release of a global now writes the control block where today it skips a branch. At
-`-O max` that is the three operations per program measured above. At `-O none` and `-O basic` it is
-millions — but those levels also pay the branch on every other operation, and there are far more of
-those. **Measure both levels before committing to the change**: the corpus counts above give the
-number of operations on each side, and the ceiling measurement gives the saving per operation.
-
-## Consequences for the static-memory plan
-
-Putting the empty-array and string-literal storages in static memory (issue #122's addendum, and PR
-#129, which is closed) interacts with this directly.
-
-Today a `GLOBAL` object is never written, which is what would let such a storage live in a read-only
-LLVM `constant`. Wave 10 of the bug hunt found that a stray write to one is IR-level undefined
-behaviour that the optimizer *deletes* rather than faults on, so read-only is a weak guarantee
-already. Under this design the interaction is sharper: **a retain or release does write the control
-block, so a statically allocated storage has to be a mutable global with its refcount initialized to
-the large value, not a constant.** That is a straightforward initializer to emit, and it removes the
-need for the storage to be special-cased at every RC site — but it has to be decided before the
-static-memory work starts, not after.
-
-## Stages
-
-### Stage 1 — drop `GLOBAL` from non-threaded builds
-
-1. Add the mark constant `2^31` beside `refcnt_type`.
-2. `mark_global_one` writes that count into the refcount instead of `REFCNT_STATE_GLOBAL` into the
-   state byte. It keeps its traversal and its already-marked check — an object whose count is
-   already large needs no second visit, which is what stops a cycle.
-3. Give a global of a boxed type `retain_on_read = true`, so that reading it balances the release
-   the consumer performs. Without this the count drains by one per read.
-4. In a `threaded = false` build, `build_branch_by_refcnt_state` emits an unconditional branch to
-   the local arm, and `is_unique` reaches `shared_bb` through the refcount compare it already does.
-5. `RcState::Global` stops being produced. It can stay in the enum for threaded builds.
-
-Verification: the full suite at three optimization levels; development-mode valgrind memcheck, where
-a global freed by mistake shows up as an invalid free; `benchmark/speedtest`, against the ceiling
-above; and the `-O none` / `-O basic` measurement named under *What it costs*.
-
-A test worth writing first, because it is where the design fails if the retain in step 3 is
-forgotten: a global of a boxed type read in a long loop, and still readable afterwards. Reaching the
-mark takes 2^31 reads, which is too slow for the suite, so make the mark a constant the test can
-lower — a build with a mark of a few thousand turns the same program into a fast test, and the same
-knob shows the test failing when step 3 is reverted.
-
-### Stage 2 — infer `Local` in threaded builds
-
-Only here does the issue's state inference pay, and only against `Threaded`. A lattice over boxed
-leaves, kept **separate from `provenance`'s**:
-
-- `Local` — the leaf cannot have been marked threaded.
-- `MaybeThreaded` — top.
-
-`create_obj`'s result is `Local`. `Std::mark_threaded`'s argument, and everything its traversal
-reaches, is `MaybeThreaded`; so is anything read out of a container, since a local container can hold
-a threaded object. A join takes the top.
-
-Across function boundaries, extend `unique_check_elim::specialize`: its `SpecializationKey` is
-`Vec<Uniqueness>` today, and `Vec<(Uniqueness, State)>` reuses the clone naming, the worklist, the
-caching and the call rerouting whole. Watch the clone count — the key's cardinality doubles per
-parameter, and that pass already governs how many functions reach code generation.
-
-Do not fold this into `provenance`. `LeafOrigin::Fresh` answers a different question, and issue #122
-records what happens to code that conflates them.
-
-A wrong `Local` here is a data race, which a single-threaded test cannot see, so this stage waits for
-the race-detection work in #96. Before it starts, add under `config.develop_mode` a check at every
-specialized operation that reads the state byte and aborts unless it is what the specialization
-claimed — and show it fires on a deliberate mis-specialization.
+**The finding worth keeping** is about the accessor, not about reference counting: a global's value
+is constant-folded only because LLVM converts that `select` into a branch, and one instruction at the
+merge is enough to lose it. Emitting a global whose initializer is a compile-time constant as static
+data — no flag, no accessor, no merge — would make the folding unconditional. That is issue #122's
+addendum and PR #129 seen from a new angle, and it is worth doing on its own.
 
 ## Where the states come from
 
-For reference, the transitions this design changes:
-
 - `create_obj` initializes every boxed object to refcount 1, `REFCNT_STATE_LOCAL`.
 - LOCAL to GLOBAL: `mark_global`, from `implement_rc_global` on a global initializer's value; it
-  marks the whole graph the value reaches. **Stage 1 replaces this with the large count.**
+  marks the whole graph the value reaches. This is the transition stage 1 proves the absence of.
 - LOCAL to THREADED: `Std::mark_threaded`, which a `threaded = false` build rejects.
 - THREADED to LOCAL: `mark_local_one`, on `build_branch_by_is_unique`'s unique-threaded path.
 - Nothing leaves GLOBAL.
@@ -259,11 +161,12 @@ so a global of a fully unboxed type produces no marked object at all:
 | nbody_fold | 1 (`Main::init`) |
 | cp_lib_lsegtree, cp_lib_unionfind, cp_lib_bipartite | 2 (`Random::_mag01`, `Std::IO::stdout`) |
 
-Most of the corpus creates no marked object at all — which is also why the state byte earns so little
-in a single-threaded build.
+Most of the corpus creates no marked object at all, which is why the type closure is expected to
+prove most of it.
 
 ## Not in this work
 
-- Moving the empty-array and string-literal storages to static memory, beyond recording above what
-  stage 1 requires of them.
+- Moving the empty-array and string-literal storages to static memory. Stage 1's proof reads
+  `Fresh` as "not reachable from a global", which that work would break; the two have to be
+  sequenced.
 - A changelog entry. The observable behaviour does not change.
