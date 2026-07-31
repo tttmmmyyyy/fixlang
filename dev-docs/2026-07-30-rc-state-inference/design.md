@@ -1,9 +1,12 @@
 # Locality 推論の設計: 非 LOCAL の発生源からの値レベル汚染
 
-`plan.md` の段階 1 の設計。実行時の参照カウント状態バイトは残し、RC IR 上の may 解析で
+`plan.md` の測定を受けた設計。実行時の参照カウント状態バイトは残し、RC IR 上の may 解析で
 参照カウント操作ごとに `RcState::Local` を証明する。証明できなかった操作は今日の実行時
 ディスパッチのままなので、諦める証明は何のコストも生まない。不正確さでプログラムが壊れる
 ことはなく、壊れうるのは不健全さだけである。この文書はその不健全さが無いことを論証する。
+
+本文は段階 1（非 threaded ビルドの `Retain`/`Release`）を詳細化し、末尾の 2 節が段階 2
+（`is_unique` サイト）と段階 3（threaded ビルド）を設計する。
 
 ## 性質
 
@@ -127,48 +130,57 @@ RC IR ノードごとに、各ローカル束縛を leaf ごとの汚染に写�
 - `Retain`/`Release`/`Eval`: 環境は不変。
 - `ret x`: 関数の結果汚染に `x` を join。
 
-## 手続き間: 単一の具体的不動点、monovariant
+## 手続き間: `specialize` のキー拡張による複製
 
-2 つの写像を、単位内の全関数の上で一緒に不動点まで回す:
+2 相に分ける。
 
-- `input_taint[f]` — 入力 leaf ごとに、これまでに見た `f` の*直接*呼び出し site の引数汚染の
-  join。下の保守的シードを加える。
-- `result_taint[f]` — 現在の `input_taint[f]` の下での `f` の結果汚染。
+**相 1 — 記号的サマリ。** 関数ごとに、結果の各 leaf の origin 集合（`Ext` / `Arg(i, σ)`）を、
+プログラム全体の不動点まで計算する。provenance の phase 1 と同型（有限束・単調 join・直接
+呼び出しは callee のサマリを代入・間接と単位外は全 leaf `Ext`）。
 
-各ラウンドで全関数の本体を現在の `input_taint` の下で解釈し、直接呼び出し site では
-`result_taint` を使い、site の引数汚染を callee の `input_taint` へ join する。両写像は有限
-束の中で単調に育つので停止する。記号的サマリは持たない: provenance が記号的なのは
-uniqueness が特殊化で call site ごとに解決されるからで、locality は monovariant — 関数入力
-ごとに 1 つの汚染を、呼び出し元全体で join する。
+**相 2 — 既存の `specialize`（`unique_check_elim`）のキーを広げる。** `SpecializationKey` は
+今 `Vec<Uniqueness>`（パラメータごと）である。これを uniqueness と leaf ごとの locality の
+組に広げる。specialize の構造はそのまま使える:
 
-`input_taint` の保守的シード:
+- 全関数の canonical 版（uniqueness は全 `Dynamic`、locality は全 `Ext`）を残す。間接呼び出し
+  と単位外呼び出しの受け皿で、今日と同じく全部ディスパッチする。
+- クローンの実体化が call site を歩き、引数の locality（呼び出し元クローンの具体的入力 +
+  相 1 のサマリで解決）から callee のキーを組んで worklist に積む — uniqueness が今やって
+  いるのと同じ流れ。
+- `reaches_unique_check` に対応するゲートも同じ形で作る: RC site の汚染がどれも入力に依存
+  しない関数（サマリに `Arg` が現れない）はキーで結果が変わらないので複製しない。
 
-- 間接呼び出しで到達しうる関数 — どこかの `Closure(f, …)` が名指す関数 — は*パラメータ*
-  leaf に `Ext`（capture leaf は閉包を作った site の汚染の join で、これは見える）。
-- 単位の外から呼ばれうる関数は全入力 leaf に `Ext`。単一単位のビルドではその集合はエントリ
-  ポイントと FFI エクスポート関数で、どちらの入力も boxed leaf を持たない（`main` は引数
-  なし、エクスポートはスカラーのみ）ので、シードは空。複数単位のビルドではプログラムシンボル
-  全部がシードされるが、単位ローカルなクローン — specialized・borrow・uncurry・decap 版、
-  つまり hot loop が住む関数 — はプログラムシンボルではないので精度を保つ。これが分離
-  コンパイルの正直な代償で、単位間サマリの保存は測定が要求したときの将来課題。
+クローンの中では入力の汚染が**具体値**なので、1 つのヘルパが汚染された引数と綺麗な引数の
+両方で呼ばれても、それぞれのクローンが別々に証明される。monovariant（関数入力ごとに全呼び
+出し元の join を 1 つ持つ）も検討したが、この混合文脈で丸ごと de-prove する弱点があり、
+段階 2 が specialize の中で op を書き換える（後述）ことを考えると、locality も同じパスに
+載っている方が接続が素直なので、複製を採る。クローン数は locality キーが実際に異なる関数
+でしか増えない見込みで、実測で確かめる。
 
-speedtest corpus は全ケース 1 単位でコンパイルされ、`-O max` の hot 経路は最後まで直接呼び
-出しである — decapturing がループ本体の識別を specialized `fold` クローンに焼き込み、その
-本体はループ本体を**名前で**呼ぶ（RC IR ダンプで確認: `fold#…#specialized_…` が
-`main#…#decap_lam1#funptr3#borrow` を直接呼ぶ）。よって monovariant で重要な site に届き、
-間接呼び出しの機構は不要。monovariance が負ける形（1 つのヘルパが汚染された引数と綺麗な
-引数の両方で呼ばれる）への備えは、`unique_check_elim::specialize` のキーを広げる
-polyvariance — まず測り、必要になってから作る。
+hot 経路がキーで届くことは確認済み: `-O max` では decapturing がループ本体の識別を
+specialized `fold` クローンに焼き込み、その本体はループ本体を**名前で**直接呼ぶ（RC IR
+ダンプで確認: `fold#…#specialized_…` が `main#…#decap_lam1#funptr3#borrow` を直接呼ぶ）。
+また uncurry/decap で capture は普通のパラメータになっているので、closure 由来の値もキーの
+対象に入る（specialize のキーが capture を除外するのは closure-ABI 版だけで、そちらは
+canonical のまま — 今日の uniqueness と同じ扱い）。
+
+単位の外から呼ばれうる関数（プログラムシンボル）は canonical しか参照されようがないので
+自然に `Ext` 側に落ちる。単一単位のビルド（speedtest corpus は全ケースこれ）ではエントリ
+ポイントと FFI エクスポートだけが外部から届き、どちらの入力も boxed leaf を持たないので、
+何も失わない。単位間サマリの保存は測定が要求したときの将来課題。
 
 ## 注釈
 
-不動点の後、各関数と各 global 初期化子本体をもう 1 回解釈し、各
+クローンの実体化のとき、入力の具体的汚染の下で本体を 1 回解釈し、各
 `Retain(x, π, Unknown)` / `Release(x, π, Unknown)` で `π` 以下の全 leaf が無汚染なら状態を
-`RcState::Local` にする。それ以外は `Unknown` のまま。
+`RcState::Local` に書き換える。それ以外は `Unknown` のまま。global 初期化子本体は入力なしで
+同様に解釈する（specialize が今 `&[]` でやっているのと同じ形）。
 
-パイプラインでの位置: 最後の RC IR パス。`specialize` の後、`implement_rc_program` の直前 —
-クローンが出揃い、参照カウント操作が最終形である必要がある。他の Max 以上のパスと同じゲート
-に加えて `!config.threaded`。
+パイプラインでの位置: 相 1 のサマリ計算を `cancel` の後に足し、相 2 と注釈は**既存の
+`specialize` の中**で行う。つまり
+`… → borrow_ify → cancel → [locality サマリ] → specialize（キー拡張 + 注釈） → implement`。
+ゲートは他の Max 以上のパスと同じものに加えて、locality 成分だけ `!config.threaded`
+（threaded ではキーの locality を常に全 `Ext` にし、注釈もしない）。
 
 ## コード生成
 
@@ -184,11 +196,8 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 型 traverser の内部ディスパッチは `Unknown` のまま — 状態ごとの traverser 一族は生成コードを
 倍にするので段階 1 ではやらない。
 
-`is_unique` のディスパッチ（状態バイトの 3 番目の読み手、unique-check op の中）は**段階 2**:
-読みは `LLVMGen::generate` の中で起きるので、注釈は op の属性として届ける必要がある —
-`unique_check_elim` が証明済み unique オペランドのチェックを畳み込むのに既に使っている
-共置属性のパターン。やる価値はある: `fannkuch` のディスパッチは 57% が `is_unique`、
-`cp_lib_lsegtree` は 15%。段階 1 はこれ抜きで出して測る。
+`is_unique` のディスパッチ（状態バイトの 3 番目の読み手、unique-check op の中）は段階 2
+（後述）。段階 1 はこれ抜きで出して測る。
 
 ## コードだけでなく解析を検証する
 
@@ -198,8 +207,8 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
   主張を検査する」項目を、後からでなく段階と同時に納品する。わざと 1 site を誤注釈して
   スイートが落ちることを一度示し、その破壊を戻す。
 - **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
-  `Local` / `Unknown` 操作を数え、`plan.md` の上限表（`arg`+`local` 行）と突き合わせる —
-  monovariant の不動点が解決し損ねた割合が、数字付きの polyvariance 案件になる。
+  `Local` / `Unknown` 操作を数え、`plan.md` の上限表（`arg`+`local` 行）と突き合わせる。
+  併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
 - **全スイート** 3 水準、**`benchmark/speedtest`** を現 `main` の行と比較。捨てた設計で
   裏返ったナイフエッジ（`nbody`、`nbody_fold`）を注視する。
 
@@ -207,19 +216,48 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 
 | ファイル | 変更 |
 | --- | --- |
-| `src/rc_ir/locality.rs`（新規） | 束、転送、不動点、注釈 |
+| `src/rc_ir/locality.rs`（新規） | 束、転送、相 1 の記号的サマリ |
 | `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（合併デフォルト） |
 | `src/fixstd/builtin.rs` | 扉のオーバーライドと集約配管のオーバーライド |
+| `src/rc_ir/unique_check_elim.rs` | キー拡張、クローン実体化時の注釈 |
 | `src/rc_ir/codegen.rs` | `Retain`/`Release` の `Local` アーム、`develop_mode` assert |
 | `src/generator.rs` | 状態を見る retain/release 生成ヘルパ |
-| `src/build/build_object_files.rs` | `specialize` の後に注釈を実行（Max 以上、非 threaded） |
+| `src/build/build_object_files.rs` | `cancel` の後にサマリ計算を差し込む |
 
 `RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
 
+## 段階 2 — `is_unique` サイト
+
+状態バイトの 3 番目の読み手は uniqueness チェック（`build_branch_by_is_unique`。配列の `set`
+が in-place 更新できるか調べる所など）で、読みは unique-check op の `LLVMGen::generate` の
+**中**で起きる。`Retain`/`Release` と違って RC IR ノードに `RcState` フィールドが無いので、
+注釈の結果は op インスタンスの属性フィールドとして届ける — `unique_check_elim` が証明済み
+unique オペランドのチェックを畳み込むのに使っているのと同じ、対象 op の struct にフィールド
+を足して書き込むパターン。書き込む場所も同じクローン実体化の中なので、段階 1 が specialize
+に載っていればここは配管だけになる。
+
+やる価値: `fannkuch` のディスパッチは 57% が `is_unique`、`cp_lib_lsegtree` は 15%。段階 1 の
+実測を見てから足す。
+
+## 段階 3 — threaded ビルド
+
+同じ束を `THREADED` に向ける。証明が通れば atomic RMW が非 atomic の増減になり、分岐 1 個を
+消すより 1 操作あたりの取り分が大きい。追加で要るのは「性質」の節で述べた時間性への対処 —
+`mark_threaded` は束縛済みオブジェクトをエイリアス越しに遷移させるので、**`mark_threaded` に
+流れ込みうる値は生まれた時点から `Ext`** にする escape 推論が要る。
+
+その機構は `borrow_ify` の `infer_ownership` の第 3 の実例として作れる: あちらは consume
+site を種に、`origin`（本体内の逆向き値追跡）でパラメータまで遡り、own フラグをプログラム
+全体の不動点まで単調に育てる。こちらは種を `mark_threaded` op のオペランドに、フラグを
+「mark_threaded に流れ込みうる」に替える。`origin` の遡り先にはパラメータ（手続き間の伝播）と
+ローカルの確保束縛（そこが `Ext` の付け先）の両方が出る。到達閉包ぶんの配線（コンテナに
+入れてからコンテナごと渡す形）は `locality_flow` の転置で、詳細は着手時に決める。
+
+誤証明はデータ競合で単スレッドのテストには見えないので、#96 の競合検出を待つ。
+`develop_mode` の assert（状態バイトの検査）はそのままここでも安全網になる。
+
 ## 対象外
 
-- threaded ビルド（plan の段階 3。上のエイリアス論証が理由）。
-- `is_unique` site（段階 2、属性の配管）。
 - 単位間サマリ。
 - 状態ごとの traverser 一族。
 - changelog: 観測可能な振る舞いは変わらない。
