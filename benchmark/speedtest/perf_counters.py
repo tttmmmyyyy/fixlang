@@ -9,8 +9,9 @@ count says nothing about how fast the machine gets through those instructions, w
 where a change to code layout or branch density shows up.
 
 The split count is deterministic; the cycle count is not, so it is the minimum over
-`--repeat` runs and the load is reported beside it. **Two cycle figures are comparable only
-when both were taken on a quiet machine**, which the load column is there to show.
+`--repeat` runs, and it is reported only when the machine stayed quiet throughout. A run that
+saw a higher load leaves the cycle field empty rather than logging a figure that says more
+about the rest of the machine than about the program.
 
 Exits non-zero when the counters are unavailable (no hardware PMU, or
 `kernel.perf_event_paranoid` above 2) or when the PMU had to time-slice them, so a caller
@@ -28,6 +29,11 @@ import sys
 # PMU has counters makes perf time-slice them and report scaled estimates.
 SPLIT_EVENTS = ["mem_inst_retired.split_loads", "mem_inst_retired.split_stores"]
 CYCLE_EVENT = "cycles:u"
+
+# A one-minute load average above this means something else was running, and a cycle count taken
+# then says more about that than about the program. The cycle field comes back empty instead, so
+# every count that reaches the log is one worth comparing. One is the harness itself.
+QUIET_LOAD = 2.0
 
 ARCH = subprocess.check_output(["uname", "-m"], text=True).strip()
 
@@ -123,7 +129,9 @@ def main():
         sys.exit("usage: perf_counters.py [--repeat N] <program> [args...]\n"
                  "       perf_counters.py --cpu")
     splits, cycles, load = measure(argv, repeat)
-    print(f"{splits},{cycles},{load:.2f}")
+    # The split count is deterministic, so it is reported whatever the machine was doing.
+    reported_cycles = "" if load > QUIET_LOAD else str(cycles)
+    print(f"{splits},{reported_cycles},{load:.2f}")
 
 
 main()
