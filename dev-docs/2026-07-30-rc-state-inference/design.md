@@ -1,236 +1,225 @@
-# Locality inference: value-level taint from the sources of non-LOCAL objects
+# Locality 推論の設計: 非 LOCAL の発生源からの値レベル汚染
 
-The design for stage 1 of `plan.md`: keep the runtime reference-count state byte, and prove
-`RcState::Local` per reference-count operation by a may-analysis over the RC IR. An operation the
-analysis cannot prove keeps today's runtime dispatch, so a proof that gives up costs nothing and a
-program cannot be made wrong by imprecision — only by unsoundness, which is what this document
-argues away.
+`plan.md` の段階 1 の設計。実行時の参照カウント状態バイトは残し、RC IR 上の may 解析で
+参照カウント操作ごとに `RcState::Local` を証明する。証明できなかった操作は今日の実行時
+ディスパッチのままなので、諦める証明は何のコストも生まない。不正確さでプログラムが壊れる
+ことはなく、壊れうるのは不健全さだけである。この文書はその不健全さが無いことを論証する。
 
-## The property
+## 性質
 
-For a binding `x` and a boxed-leaf path `π` of its type:
+束縛 `x` とその型の boxed leaf パス `π` について:
 
-> `shared(x.π)` — the object `x.π` points at, **or any object reachable from it**, may be in a
-> non-`LOCAL` reference-count state at some point while the binding is live.
+> `shared(x.π)` — `x.π` が指すオブジェクト、**またはそこから到達可能な任意のオブジェクト**が、
+> この束縛の生存中のどこかの時点で非 `LOCAL` 状態にありうる。
 
-A `Retain`/`Release` on unit path `π` of `x` may emit `RcState::Local` iff `shared(x.σ)` is false
-for every boxed leaf `σ` at or under `π`.
+unit パス `π` に対する `Retain`/`Release` が `RcState::Local` を出せるのは、`π` 以下のすべての
+boxed leaf `σ` で `shared(x.σ)` が偽のとき。
 
-"At some point while the binding is live" makes the property temporal: an object that a later
-operation will mark non-`LOCAL` counts as shared even at sites executed before the mark. A retain
-before the mark would in fact read `LOCAL` at run time, but proving that a site always runs before
-the mark is ordering reasoning about the program's flow; one annotation per site has to hold
-whenever the site runs, so the definition prices the whole live range in. In a `threaded = false`
-build the distinction is empty — no operation transitions a live binding's object (argued below) —
-which is why a forward dataflow computes this property exactly there, and why the threaded stage
-needs escape reasoning instead.
+「生存中のどこかの時点で」により、この性質は時間的である: 後の操作が非 `LOCAL` にマークする
+オブジェクトは、マークより前に実行される site でも shared と数える。マーク前の retain は実行時
+には実際 `LOCAL` を読むのだが、「この site は必ずマークより前に走る」の証明はプログラムの
+フローについての順序推論であり、site ごとの注釈 1 個は「その site がいつ走っても」成り立つ
+必要があるので、定義は生存期間全体を織り込む。`threaded = false` のビルドではこの区別は空 —
+生きている束縛のオブジェクトを遷移させる操作が無い（後述の論証）— なので前方データフローが
+この性質を正確に計算でき、threaded の段階に escape 推論が要るのもこれが理由である。
 
-The reachability closure is deliberate: it makes the property compositional. Projecting out of a value, injecting into a fresh aggregate, and reading an
-element out of a boxed container all become unions of operand taints, with no aliasing questions —
-the closure of "what this value can reach" is exactly what survives every one of those operations.
+到達閉包を取るのは意図的で、これが性質を合成的に
+する。値からの射影、新しい集約への注入、boxed コンテナからの要素読み出しが、どれも
+「オペランドの汚染の合併」になり、エイリアスの問いが消える。
 
-The cost of the closure is that a fresh container holding a shared element is itself reported
-shared (`let a = [g.@(0)]` — `a`'s storage is provably local, but the analysis taints it). That
-imprecision is the price of never asking an aliasing question, and it errs on the sound side.
+閉包の代償は、共有された要素を保持する新品のコンテナが自身も共有扱いになること
+（`let a = [g.@(0)]` — `a` のストレージは証明可能に local だが、解析は `a` を汚染する）。
+エイリアスの問いを一切立てないことの対価であり、安全側に倒れる。
 
-## The sources
+## 発生源
 
-An object leaves the `LOCAL` state through exactly three doors. The state byte has four writers —
-`create_obj` (initializes to `LOCAL`), `mark_global_one`, `mark_threaded_one`, and `mark_local_one`
-(a `THREADED`-to-`LOCAL` narrowing on the unique-threaded path, which removes sharedness rather
-than adding it) — so enumerating the callers of the two marking writers enumerates the doors:
+オブジェクトが `LOCAL` を離れる扉はちょうど 3 つ。状態バイトの書き手は 4 つ —
+`create_obj`（`LOCAL` で初期化）、`mark_global_one`、`mark_threaded_one`、`mark_local_one`
+（unique-threaded 経路での `THREADED` から `LOCAL` への絞り込み。共有を増やす側ではない）—
+なので、マークする 2 つの書き手の呼び出し元を数え上げれば扉は尽きる:
 
-1. **Reading a global value.** `implement_rc_global` runs `mark_global` over the whole graph the
-   initializer's value reaches, after evaluating it. Every use of a global symbol as a value is a
-   read of that marked graph.
-2. **`Std::mark_threaded`.** Marks its argument's graph `THREADED`. A `threaded = false` build
-   rejects it at compile time, so in such builds this door does not exist.
-3. **`Std::boxed_from_retained_ptr`.** Reconstructs a value from a raw pointer, about whose state
-   nothing is known — the pointer may have crossed threads or come from a global's graph.
+1. **global 値の読み出し。** `implement_rc_global` は初期化子の値を評価し終えた後、その値が
+   到達するグラフ全体に `mark_global` を掛ける。global シンボルを値として使う場所はすべて、
+   そのマーク済みグラフの読み出しである。
+2. **`Std::mark_threaded`。** 引数のグラフを `THREADED` にマークする。`threaded = false` の
+   ビルドはコンパイル時に拒否するので、そこにはこの扉が存在しない。
+3. **`Std::boxed_from_retained_ptr`。** 生ポインタから値を復元する。状態は何も分からない —
+   スレッドを跨いだかもしれないし、global のグラフ由来かもしれない。
 
-Checked and rejected as sources: `String::unsafe_from_c_str_ptr` copies into a fresh array;
-`FFI_EXPORT` admits only non-aggregate scalars (#114), so no boxed value enters through an exported
-function's arguments; the C runtime constructs no reference-counted objects; `argc`/`argv` are raw
-scalars, and `Std::get_args` builds fresh strings; `boxed_to_retained_ptr` lends a pointer out
-without changing any state (the value's return trip is door 3). A future fourth door is the
-static-memory work (issue #122's addendum): a statically allocated storage never passes through
-`create_obj`, so that work must declare its state and revisit this list.
+発生源でないことを確認したもの: `String::unsafe_from_c_str_ptr` は新しい配列へ複製する。
+`FFI_EXPORT` は非集約スカラーしか許さない（#114）ので、エクスポート関数の引数から boxed 値は
+入ってこない。C ランタイムは参照カウント対象を作らない。`argc`/`argv` は生スカラーで、
+`Std::get_args` は新しい文字列を作る。`boxed_to_retained_ptr` は状態を変えずにポインタを
+貸し出すだけで、値の帰り道は扉 3。将来の 4 つ目の扉は静的メモリの作業（issue #122 の追記）:
+静的に確保されたストレージは `create_obj` を通らないので、その作業は状態を宣言し、この一覧を
+見直す必要がある。
 
-**Timing makes the global door a read-side door.** `mark_global` runs after the initializer's value
-is fully built, so every reference-count operation that executes *during* initialization — inside
-the initializer's own body and inside every function it calls — operates on objects still `LOCAL`.
-The taint therefore attaches to *reads of the global symbol*, not to the code that built the value,
-and initializer bodies are analyzed and annotated like any other code. A global read inside another
-global's initializer is already marked by then (its accessor completed first), and the ordinary
-read rule taints it.
+**タイミングにより、global の扉は「読み出し側」の扉になる。** `mark_global` は初期化子の値が
+完成した後に走るので、初期化の*最中*に実行される参照カウント操作 — 初期化子の本体とそこから
+呼ばれるすべての関数の中 — はまだ `LOCAL` なオブジェクトに対して行われる。よって汚染は
+「global シンボルの読み出し」に付き、値を作ったコードには付かない。初期化子の本体も他のコードと
+同じように解析・注釈できる。別の global の初期化子の中で global を読む場合、そのアクセサは先に
+完走しているのでマーク済みであり、通常の読み出し規則が汚染する。
 
-## Soundness depends on `threaded = false`
+## 健全性は `threaded = false` に依存する
 
-The analysis assigns a binding's taint once. That is sound only if no operation can transition an
-*already-bound, aliased* object out of `LOCAL`:
+この解析は束縛の汚染を 1 回だけ決める。それが健全なのは、**既に束縛されエイリアスされた
+オブジェクトを `LOCAL` から遷移させる操作が存在しない**場合だけである:
 
-- In a `threaded = false` build, the only marking transition is `mark_global`, and its subject is an
-  initializer's result graph. An initializer takes no arguments and reads only globals, so no object
-  a live local binding points at can be swept into the marking — the graph consists of objects the
-  initializer built (which no one else holds; even a raw pointer stashed via FFI during
-  initialization re-enters through door 3) and objects of other globals (already marked, already
-  tainted at their read).
-- With `mark_threaded` the argument breaks: `retain a; eval a.mark_threaded; ... use a` marks the
-  object `a` still points at, while `a`'s taint was assigned before the call. Proving `Local` in a
-  threaded build therefore needs escape reasoning about what may flow into a `mark_threaded`
-  call — deferred with the rest of the threaded stage (plan stage 3, gated on #96).
+- `threaded = false` のビルドでは、マークする遷移は `mark_global` だけで、その対象は初期化子の
+  結果グラフ。初期化子は引数を取らず global しか読めないので、生きているローカル束縛が指す
+  オブジェクトがマークに巻き込まれることはない — グラフは初期化子が自分で作ったオブジェクト
+  （他の誰も保持していない。初期化中に FFI へ生ポインタを退避しても、戻りは扉 3 を通る）と、
+  他の global のオブジェクト（その時点でマーク済み、読み出しで汚染済み）から成る。
+- `mark_threaded` は引数で壊す: `retain a; eval a.mark_threaded; ... a を使う` は `a` がまだ
+  指しているオブジェクトをマークするが、`a` の汚染は呼び出しの前に決まっている。threaded
+  ビルドで `Local` を証明するには「何が `mark_threaded` に流れ込みうるか」の escape 推論が
+  必要 — threaded の段階（plan の段階 3、#96 待ち）ごと先送りする。
 
-**Stage 1 runs the annotation only when `config.threaded` is false.** Threaded builds keep every
-dispatch, exactly as today.
+**段階 1 の注釈は `config.threaded` が偽のときだけ走る。** threaded ビルドは今日のまま全部
+ディスパッチする。
 
-## The lattice
+## 束
 
-Per boxed leaf: a set of origins, `Origin ∈ { Ext, Arg(input, σ) }`.
+boxed leaf ごとに origin の集合。`Origin ∈ { Ext, Arg(input, σ) }`。
 
-- The empty set proves the leaf local.
-- `Ext` — tainted by one of the doors, or by anything the analysis does not track (an indirect
-  call's result, a cross-unit call's result, a function callable from outside the unit).
-- `Arg(i, σ)` — as tainted as leaf `σ` of input `i` (parameters, then the capture). Present only
-  transiently: the interprocedural pass resolves it against concrete caller taints.
+- 空集合 = その leaf は local と証明された。
+- `Ext` — 扉のどれかで汚染された、または解析が追わないもの（間接呼び出しの結果、単位外呼び出しの
+  結果、単位の外から呼ばれうる関数）。
+- `Arg(i, σ)` — 入力 `i`（パラメータ列、その後に capture）の leaf `σ` と同じだけ汚染。
+  過渡的にのみ存在し、手続き間パスが呼び出し元の具体的な汚染に対して解決する。
 
-Join is set union. Leaf paths are bounded by the type and inputs are finite, so the lattice is
-finite and the fixpoint terminates.
+join は合併。leaf パスは型で、入力は有限で抑えられるので、束は有限で不動点は停止する。
 
-## Transfer
+## 転送
 
-Per RC IR node, over an environment mapping each local binding to its per-leaf taint. A use of a
-global symbol as a value ("global atom") taints every leaf of the read value `Ext` — this is door 1
-and it is the *only* rule that consults whether a name is local.
+RC IR ノードごとに、各ローカル束縛を leaf ごとの汚染に写す環境の上で。global シンボルを値と
+して使う場所（「global アトム」）は読んだ値の全 leaf を `Ext` にする — これが扉 1 であり、
+名前が local かどうかを見る**唯一の**規則である。
 
-- `let x = y` (move): copy.
-- `let x = <global atom>`: all leaves `{Ext}`. (A funptr-typed global has no boxed leaf and taints
-  nothing; a closure-typed global's capture leaf is `Ext`, which is correct — its capture object is
-  marked.)
-- `let x = Closure(f, caps)`: the capture leaf gets the union of the captures' full taints.
+- `let x = y`（move）: コピー。
+- `let x = <global アトム>`: 全 leaf `{Ext}`。（funptr 型の global は boxed leaf を持たず何も
+  汚染しない。closure 型の global は capture leaf が `Ext` — その capture object はマーク
+  されているので正しい。）
+- `let x = Closure(f, caps)`: capture leaf に caps の全汚染の合併。
 - `let x = App(callee, args)`:
-  - callee names a function of this unit's `RcProgram` — a direct call; see interprocedural below.
-  - anything else (a closure-valued variable, a function of another unit, a global closure value):
-    all result leaves `{Ext}`.
-- `let x = Llvm(op, args)`: by the op's *locality flow*, a new `LLVMGen` method:
-  - **Default: every result leaf gets the union of every operand's every leaf-taint, and no `Ext`.**
-    This is sound for any operation that can only allocate fresh objects and rearrange objects
-    reachable from its operands — which is every builtin except the doors. Reads out of boxed
-    containers (`array_get`, getters on boxed structs) are correct under the default by the
-    reachability closure: the element was reachable from the container.
-  - Overrides, co-located with each op in `builtin.rs` (the same pattern as the op-specific
-    attributes):
-    - `boxed_from_retained_ptr` (and `mark_threaded`, for completeness): all leaves `{Ext}`.
-    - The unboxed-aggregate plumbing ops — struct/tuple make, get, set, mod, punch/plug-in, union
-      make/as/mod, capture projection — route per leaf (result leaf `.i.σ` from operand leaf `σ`
-      and so on), so that a tuple carrying a tainted and an untainted component keeps them apart.
-      This is where loop states (`(tree, rng, sum)`) live, so this precision is what the hot loops
-      see. The set is enumerated, small, and each override is a few lines.
-  - The flow is a method of its own rather than a reading of `result_prov`: provenance answers a
-    different question (`Unknown` there marks untracked sharing, not sharedness of state), and
-    deriving one from the other would let a uniqueness-motivated edit silently change a soundness
-    argument.
-- `Destructure`: boxed container — every field gets the container leaf's taint; unboxed — project
-  per field.
-- `Match`: payload as in `Destructure` (per variant); the arm results join.
-- `Retain`/`Release`/`Eval`: no change to the environment.
-- `ret x`: the function's result taint joins `x`'s.
+  - callee がこの単位の `RcProgram` の関数を名指す — 直接呼び出し。手続き間の節へ。
+  - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `{Ext}`。
+- `let x = Llvm(op, args)`: op の *locality flow*（`LLVMGen` の新メソッド）で:
+  - **デフォルト: 結果の各 leaf に、全オペランドの全 leaf 汚染の合併。`Ext` は加えない。**
+    これは「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを並べ替える
+    ことしかできない」操作すべてに対して健全 — つまり扉を除くすべての builtin。boxed
+    コンテナからの読み出し（`array_get`、boxed struct の getter）は到達閉包によりデフォルトで
+    正しい: 要素はコンテナから到達可能だった。
+  - オーバーライド（各 op と同じ場所、`builtin.rs` に共置。op 固有属性と同じパターン）:
+    - `boxed_from_retained_ptr`（と、念のため `mark_threaded`）: 全 leaf `{Ext}`。
+    - unboxed 集約の配管 op — struct/tuple の make・get・set・mod・punch/plug-in、union の
+      make/as/mod、capture projection — は leaf ごとに配線する（結果 leaf `.i.σ` ←
+      オペランド leaf `σ` など）。汚染された成分と無汚染の成分を持つタプルを分けて保てる。
+      ループ状態（`(tree, rng, sum)`）はここに住むので、hot loop が見る精度はこれで決まる。
+      集合は列挙されていて小さく、各オーバーライドは数行。
+  - flow を `result_prov` の読み替えにせず独立のメソッドにするのは、provenance が別の問いに
+    答えているから（あちらの `Unknown` は「追跡していない共有」であって状態の共有ではない）。
+    片方から導出すると、uniqueness の都合の編集が健全性の論証を静かに変える。
+- `Destructure`: boxed コンテナ — 各フィールドにコンテナ leaf の汚染。unboxed — フィールド
+  ごとに射影。
+- `Match`: payload は `Destructure` と同様（variant ごと）。arm の結果は join。
+- `Retain`/`Release`/`Eval`: 環境は不変。
+- `ret x`: 関数の結果汚染に `x` を join。
 
-## Interprocedural: one concrete fixpoint, monovariant
+## 手続き間: 単一の具体的不動点、monovariant
 
-Two maps, iterated together to a fixpoint over the unit's functions:
+2 つの写像を、単位内の全関数の上で一緒に不動点まで回す:
 
-- `input_taint[f]` — per input leaf, the join of the argument taints over every *direct* call site
-  of `f` seen so far, plus the conservative seeds below.
-- `result_taint[f]` — `f`'s result taint under the current `input_taint[f]`.
+- `input_taint[f]` — 入力 leaf ごとに、これまでに見た `f` の*直接*呼び出し site の引数汚染の
+  join。下の保守的シードを加える。
+- `result_taint[f]` — 現在の `input_taint[f]` の下での `f` の結果汚染。
 
-Each round interprets every function body under its current `input_taint`, using `result_taint` at
-direct call sites and joining the visited call sites' argument taints into the callees'
-`input_taint`. Both maps grow monotonically in a finite lattice, so the iteration terminates. No
-symbolic summaries: provenance needs them because uniqueness resolves per call site through
-specialization; locality here is monovariant — one taint per function input, joined over callers.
+各ラウンドで全関数の本体を現在の `input_taint` の下で解釈し、直接呼び出し site では
+`result_taint` を使い、site の引数汚染を callee の `input_taint` へ join する。両写像は有限
+束の中で単調に育つので停止する。記号的サマリは持たない: provenance が記号的なのは
+uniqueness が特殊化で call site ごとに解決されるからで、locality は monovariant — 関数入力
+ごとに 1 つの汚染を、呼び出し元全体で join する。
 
-Conservative seeds for `input_taint`:
+`input_taint` の保守的シード:
 
-- A function reachable by indirect call — one that some `Closure(f, …)` names — takes `Ext` on its
-  *parameter* leaves (its capture leaf joins the taints of the closure sites, which are visible).
-- A function callable from outside the unit takes `Ext` on every input leaf. In a single-unit build
-  that set is the entry point and the FFI-exported functions, whose inputs carry no boxed leaf
-  (`main` takes none; exports are scalar-only), so nothing is seeded. In a multi-unit build every
-  program symbol is externally callable and gets seeded; the unit-local clones — the specialized,
-  borrow, uncurried and decapturated versions, which are where the hot loops live — are not program
-  symbols and stay precise. This is the honest cost of separated compilation; a cross-unit summary
-  store is future work if measurement ever demands it.
+- 間接呼び出しで到達しうる関数 — どこかの `Closure(f, …)` が名指す関数 — は*パラメータ*
+  leaf に `Ext`（capture leaf は閉包を作った site の汚染の join で、これは見える）。
+- 単位の外から呼ばれうる関数は全入力 leaf に `Ext`。単一単位のビルドではその集合はエントリ
+  ポイントと FFI エクスポート関数で、どちらの入力も boxed leaf を持たない（`main` は引数
+  なし、エクスポートはスカラーのみ）ので、シードは空。複数単位のビルドではプログラムシンボル
+  全部がシードされるが、単位ローカルなクローン — specialized・borrow・uncurry・decap 版、
+  つまり hot loop が住む関数 — はプログラムシンボルではないので精度を保つ。これが分離
+  コンパイルの正直な代償で、単位間サマリの保存は測定が要求したときの将来課題。
 
-The whole speedtest corpus compiles as one unit, and at `-O max` the hot path is direct calls all
-the way down — decapturing bakes the loop body's identity into the specialized `fold` clone, whose
-body calls the loop body *by name* (verified on the RC IR dump: `fold#…#specialized_…` calls
-`main#…#decap_lam1#funptr3#borrow` directly). So the monovariant analysis reaches the sites that
-matter without any indirect-call machinery. Where monovariance does lose (one helper called with
-both tainted and clean arguments), the fallback is polyvariance by widening
-`unique_check_elim::specialize`'s key — measured first, built only if needed.
+speedtest corpus は全ケース 1 単位でコンパイルされ、`-O max` の hot 経路は最後まで直接呼び
+出しである — decapturing がループ本体の識別を specialized `fold` クローンに焼き込み、その
+本体はループ本体を**名前で**呼ぶ（RC IR ダンプで確認: `fold#…#specialized_…` が
+`main#…#decap_lam1#funptr3#borrow` を直接呼ぶ）。よって monovariant で重要な site に届き、
+間接呼び出しの機構は不要。monovariance が負ける形（1 つのヘルパが汚染された引数と綺麗な
+引数の両方で呼ばれる）への備えは、`unique_check_elim::specialize` のキーを広げる
+polyvariance — まず測り、必要になってから作る。
 
-## Annotation
+## 注釈
 
-After the fixpoint, one more interpretation of each function and each global-initializer body
-records, at every `Retain(x, π, Unknown)` / `Release(x, π, Unknown)`, whether every leaf at or
-under `π` is untainted; if so the state becomes `RcState::Local`. Nodes stay `Unknown` otherwise.
+不動点の後、各関数と各 global 初期化子本体をもう 1 回解釈し、各
+`Retain(x, π, Unknown)` / `Release(x, π, Unknown)` で `π` 以下の全 leaf が無汚染なら状態を
+`RcState::Local` にする。それ以外は `Unknown` のまま。
 
-Placement in the pipeline: the last RC IR pass, after `specialize`, immediately before
-`implement_rc_program` — the clones must exist and the reference-count operations must be final.
-Gated like the other Max-and-above passes, and additionally on `!config.threaded`.
+パイプラインでの位置: 最後の RC IR パス。`specialize` の後、`implement_rc_program` の直前 —
+クローンが出揃い、参照カウント操作が最終形である必要がある。他の Max 以上のパスと同じゲート
+に加えて `!config.threaded`。
 
-## Code generation
+## コード生成
 
-`implement_rc_program`'s `Retain`/`Release` arms currently assert `Unknown`. They gain the `Local`
-arm:
+`implement_rc_program` の `Retain`/`Release` アームは今 `Unknown` を assert している。`Local`
+アームを足す:
 
-- `Retain(Local)`: non-atomic increment, no state load, no branch (the body of today's `local_bb`).
-- `Release(Local)`: non-atomic decrement, destruct when the count read was 1 — again today's local
-  arm without the dispatch around it.
+- `Retain(Local)`: 非 atomic インクリメント。状態ロードなし、分岐なし（今日の `local_bb` の
+  本体）。
+- `Release(Local)`: 非 atomic デクリメント、読んだカウントが 1 なら破棄 — こちらも今日の
+  local アームからディスパッチを外したもの。
 
-The null-check wrapping (`skip_null_check`, dynamic-object checks) is orthogonal and unchanged. The
-type traverser functions that destruction calls keep their internal `Unknown` dispatches — a
-per-state traverser family would double the emitted traverser code and is not stage 1.
+null チェックの包み（`skip_null_check`、dynamic object のチェック）は直交で不変。破棄が呼ぶ
+型 traverser の内部ディスパッチは `Unknown` のまま — 状態ごとの traverser 一族は生成コードを
+倍にするので段階 1 ではやらない。
 
-The `is_unique` dispatch (the third reader of the state byte, inside the unique-check ops) is
-**stage 2**: those reads happen inside `LLVMGen::generate` bodies, so the annotation has to reach
-them as an op attribute — the same co-located-attribute pattern `unique_check_elim` already uses to
-constant-fold checks on proven-unique operands. Worth doing: `fannkuch`'s dispatch count is 57%
-`is_unique`, `cp_lib_lsegtree`'s 15%. Stage 1 ships without it and measures.
+`is_unique` のディスパッチ（状態バイトの 3 番目の読み手、unique-check op の中）は**段階 2**:
+読みは `LLVMGen::generate` の中で起きるので、注釈は op の属性として届ける必要がある —
+`unique_check_elim` が証明済み unique オペランドのチェックを畳み込むのに既に使っている
+共置属性のパターン。やる価値はある: `fannkuch` のディスパッチは 57% が `is_unique`、
+`cp_lib_lsegtree` は 15%。段階 1 はこれ抜きで出して測る。
 
-## Verifying the analysis, not just the code
+## コードだけでなく解析を検証する
 
-- **A `develop_mode` runtime assertion**: at every operation annotated `Local`, load the state byte
-  and abort unless it is `REFCNT_STATE_LOCAL`. The whole test suite runs under `develop_mode`, so
-  every annotated site is dynamically checked on every test program — this is the plan's
-  "specialized operation checks its claim" item, delivered with the stage instead of after it.
-  Demonstrate once that it fires, by deliberately mis-annotating a site and watching the suite
-  fail; then remove the sabotage.
-- **Coverage measurement** (temporary probe, reverted after reading): count executed `Local` vs
-  `Unknown` operations over the speedtest corpus and set it against the ceiling table in `plan.md`
-  (`arg`+`local` row) — the fraction the monovariant fixpoint failed to resolve is the polyvariance
-  case, with numbers.
-- **The full suite** at all three levels, and **`benchmark/speedtest`** against the current `main`
-  row, watching the knife-edge cases (`nbody`, `nbody_fold`) that flipped under the abandoned
-  design.
+- **`develop_mode` の実行時 assert**: `Local` と注釈されたすべての操作で状態バイトを読み、
+  `REFCNT_STATE_LOCAL` でなければ abort。テストスイート全体が `develop_mode` で走るので、
+  注釈された全 site が全テストプログラムで動的に検査される — plan の「特殊化された操作が
+  主張を検査する」項目を、後からでなく段階と同時に納品する。わざと 1 site を誤注釈して
+  スイートが落ちることを一度示し、その破壊を戻す。
+- **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
+  `Local` / `Unknown` 操作を数え、`plan.md` の上限表（`arg`+`local` 行）と突き合わせる —
+  monovariant の不動点が解決し損ねた割合が、数字付きの polyvariance 案件になる。
+- **全スイート** 3 水準、**`benchmark/speedtest`** を現 `main` の行と比較。捨てた設計で
+  裏返ったナイフエッジ（`nbody`、`nbody_fold`）を注視する。
 
-## Files
+## ファイル
 
-| file | change |
+| ファイル | 変更 |
 | --- | --- |
-| `src/rc_ir/locality.rs` (new) | lattice, transfer, fixpoint, annotation |
-| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow` with the union default |
-| `src/fixstd/builtin.rs` | the door overrides and the aggregate-plumbing overrides |
-| `src/rc_ir/codegen.rs` | `Local` arms in `Retain`/`Release`; the `develop_mode` assertion |
-| `src/generator.rs` | state-aware retain/release emission helpers |
-| `src/build/build_object_files.rs` | run the annotation after `specialize` (Max+, non-threaded) |
+| `src/rc_ir/locality.rs`（新規） | 束、転送、不動点、注釈 |
+| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（合併デフォルト） |
+| `src/fixstd/builtin.rs` | 扉のオーバーライドと集約配管のオーバーライド |
+| `src/rc_ir/codegen.rs` | `Retain`/`Release` の `Local` アーム、`develop_mode` assert |
+| `src/generator.rs` | 状態を見る retain/release 生成ヘルパ |
+| `src/build/build_object_files.rs` | `specialize` の後に注釈を実行（Max 以上、非 threaded） |
 
-`RcState::Local` and the `@local` dump form already exist; `validate` is state-agnostic.
+`RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
 
-## Out of scope
+## 対象外
 
-- Threaded builds (plan stage 3; the aliasing argument above is why).
-- The `is_unique` sites (stage 2, attribute plumbing).
-- Cross-unit summaries.
-- Per-state traverser variants.
-- A changelog entry: observable behaviour does not change.
+- threaded ビルド（plan の段階 3。上のエイリアス論証が理由）。
+- `is_unique` site（段階 2、属性の配管）。
+- 単位間サマリ。
+- 状態ごとの traverser 一族。
+- changelog: 観測可能な振る舞いは変わらない。
