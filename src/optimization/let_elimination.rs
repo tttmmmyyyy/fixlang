@@ -338,9 +338,8 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 //
 // Everything it reports is a property of those occurrences, so a subexpression the name does not
 // occur free in leaves all of them as they stand. The traversal skips such subexpressions, which
-// keeps the cost of a probe proportional to the region where the name is used rather than to the
-// size of the expression it is run on. That region ends at a binder giving the name to another
-// binding, so no occurrence of another binding is ever reached.
+// keeps the cost of a probe proportional to the region where the name is used. That region ends at
+// a binder giving the name to another binding, so no occurrence of another binding is ever reached.
 struct FreeOccurrenceProbe {
     // The name to count occurrences of.
     target_name: FullName,

@@ -1210,9 +1210,8 @@ impl ExprNode {
                     free_vars.remove(&arg.name);
                 }
                 // A lambda expression binds `CAP_NAME` implicitly, so it goes here along with the
-                // parameters. `FreeOccurrenceProbe` of the let-elimination pass leans on this: it
-                // rejects `CAP_NAME` as a target name, since free variables locate every name but
-                // that one.
+                // parameters. `CAP_NAME` is therefore the one name the free variables of an
+                // expression do not locate.
                 free_vars.remove(&FullName::local(CAP_NAME));
                 free_vars
             }
