@@ -1112,8 +1112,8 @@ impl ExprNode {
                 t.walk_var_uses(f);
                 e.walk_var_uses(f);
             }
-            Expr::Match(scrut, arms) => {
-                scrut.walk_var_uses(f);
+            Expr::Match(cond, arms) => {
+                cond.walk_var_uses(f);
                 for (_pat, e) in arms {
                     e.walk_var_uses(f);
                 }
@@ -1163,8 +1163,8 @@ impl ExprNode {
                 t.walk_patterns(f);
                 e.walk_patterns(f);
             }
-            Expr::Match(scrut, arms) => {
-                scrut.walk_patterns(f);
+            Expr::Match(cond, arms) => {
+                cond.walk_patterns(f);
                 for (pat, e) in arms {
                     f(pat);
                     e.walk_patterns(f);
@@ -1236,10 +1236,10 @@ impl ExprNode {
             Expr::Match(cond, pat_vals) => {
                 let mut free_vars = cond.free_vars();
                 for (pat, val) in pat_vals {
-                    let mut fvs = val.free_vars();
+                    let mut val_free_vars = val.free_vars();
                     let pat_vars = pat.pattern.vars();
-                    fvs.retain(|v| !pat_vars.contains(v));
-                    free_vars.extend(fvs);
+                    val_free_vars.retain(|v| !pat_vars.contains(v));
+                    free_vars.extend(val_free_vars);
                 }
                 free_vars
             }

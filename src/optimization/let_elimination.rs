@@ -64,8 +64,8 @@ pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> 
     for (name, sym) in &prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
         if expr.is_lam() {
-            let args = expr.destructure_lam_sequence().0;
-            let arity = args.iter().map(|args| args.len()).sum();
+            let param_lists = expr.destructure_lam_sequence().0;
+            let arity = param_lists.iter().map(|params| params.len()).sum();
             global_lambda_to_arity.insert(name.clone(), arity);
         }
     }
@@ -81,10 +81,10 @@ pub fn run_on_expr_once(
     expr: &mut Arc<ExprNode>,
     global_lambda_to_arity: &Map<FullName, usize>,
 ) -> bool {
-    let mut remover = LetEliminator {
+    let mut eliminator = LetEliminator {
         global_lambda_to_arity,
     };
-    let res = remover.traverse(expr);
+    let res = eliminator.traverse(expr);
     *expr = res.expr;
     res.changed
 }
@@ -152,8 +152,8 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Check if the expression is of the form `let x = {e0} in {e1}`.
-        let x = expr.get_let_pat();
-        if !x.is_var() {
+        let pat = expr.get_let_pat();
+        if !pat.is_var() {
             return EndVisitResult::unchanged(expr);
         }
         // The pattern is just a name.
@@ -163,14 +163,14 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
             // Case 1 of the documentation at the top.
 
             // Replace all occurrences of `x` in `{e1}` with `{e0}`.
-            let x = &x.get_var().name;
+            let x = &pat.get_var().name;
             let e0 = &e0.get_var().name;
             let e1 = expr.get_let_value();
             let expr = rename_free_name(&e1, x, e0);
             return EndVisitResult::changed(expr);
         }
         // Inspect occurrences of `x` in `{e1}`.
-        let x = &x.get_var().name;
+        let x = &pat.get_var().name;
         let e1 = expr.get_let_value();
         let mut probe = FreeOccurrenceProbe::new(x.clone());
         probe.traverse(&e1);
@@ -250,10 +250,10 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
             return EndVisitResult::unchanged(expr);
         }
 
-        // Replace all occurrences of `pat` in `expr` with `cond`.
-        let pat = &pat.get_var().name;
-        let cond = &cond.get_var().name;
-        let expr = rename_free_name(&val, pat, cond);
+        // Replace, in `{val}`, all occurrences of the name `{pat}` binds with the name `{cond}` reads.
+        let pat_name = &pat.get_var().name;
+        let cond_name = &cond.get_var().name;
+        let expr = rename_free_name(&val, pat_name, cond_name);
         EndVisitResult::changed(expr)
     }
 
