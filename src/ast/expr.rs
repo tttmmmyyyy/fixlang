@@ -1266,13 +1266,23 @@ impl ExprNode {
         }
     }
 
-    // Get the set of free vars.
-    pub fn free_vars(&self) -> Set<FullName> {
+    // Call `f` on the set of free vars, calculating it on the first call and reusing it afterwards.
+    fn with_free_vars<T>(&self, f: impl FnOnce(&Set<FullName>) -> T) -> T {
         let mut lock = self.free_vars.lock().unwrap();
         if lock.is_none() {
             *lock = Some(self.calc_free_vars());
         }
-        lock.as_ref().unwrap().clone()
+        f(lock.as_ref().unwrap())
+    }
+
+    // Get the set of free vars.
+    pub fn free_vars(&self) -> Set<FullName> {
+        self.with_free_vars(|free_vars| free_vars.clone())
+    }
+
+    // Does the given name occur free in this expression?
+    pub fn has_free_var(&self, name: &FullName) -> bool {
+        self.with_free_vars(|free_vars| free_vars.contains(name))
     }
 
     // Convert all global FullNames to absolute paths.
