@@ -514,7 +514,7 @@ impl DecapturingVisitor {
         }
 
         let body = expr.get_lam_body();
-        if body.free_vars().contains(&FullName::local(CAP_NAME)) {
+        if body.has_free_var(&FullName::local(CAP_NAME)) {
             return false;
         }
 

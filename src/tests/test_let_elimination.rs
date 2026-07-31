@@ -7,7 +7,11 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::test_source;
+    use crate::tests::test_util::{fix_build_source_command, test_source, wait_within};
+    use std::fs::{self, File};
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+    use tempfile::TempDir;
 
     /// The only occurrence of `x` is inside a lambda, which captures the binding.
     #[test]
@@ -99,6 +103,54 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// The bound expression of a `let` is evaluated in the enclosing scope, so it reaches the outer
+    /// binding even when the pattern gives the same name to what it binds.
+    #[test]
+    fn test_name_read_by_the_bound_expression_of_a_rebinding_let_keeps_its_binding() {
+        let source = r#"
+        module Main;
+
+        rebinding_let_reads_the_outer_name : I64 -> I64;
+        rebinding_let_reads_the_outer_name = |a| (
+            let x = a + 1;
+            let x = x * 2;
+            x + x
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the bound expression doubles what the outer `x` is bound to", rebinding_let_reads_the_outer_name(5), 24);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// The expression a match inspects is evaluated in the enclosing scope, so it reaches the outer
+    /// binding even when every arm gives the same name to what its pattern binds.
+    #[test]
+    fn test_name_read_by_a_match_condition_keeps_its_binding() {
+        let source = r#"
+        module Main;
+
+        match_condition_reads_the_outer_name : I64 -> I64;
+        match_condition_reads_the_outer_name = |a| (
+            let x = a + 1;
+            match Option::some(x) {
+                some(x) => x * 3,
+                none(_) => 0
+            }
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the match inspects what the outer `x` is bound to", match_condition_reads_the_outer_name(5), 18);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// A match pattern of the same name gives `x` in that arm to the pattern, while the arm whose
     /// pattern binds another name reaches the outer binding.
     #[test]
@@ -122,5 +174,90 @@ mod tests {
         );
         "#;
         test_source(source, Configuration::develop_mode());
+    }
+
+    // A chain this long builds in a few seconds while the inspection of a binding is proportional
+    // to where its name is read, and in several minutes while it walks the whole body of every
+    // binding.
+    const CHAIN_LENGTH: usize = 2400;
+
+    // Generous next to the few seconds the build takes, and short enough to report a regression as
+    // a failure instead of occupying the machine.
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    /// Builds and runs a global whose body is a chain of `CHAIN_LENGTH` `let`s, failing if the
+    /// build does not finish within `TIMEOUT`. `-O max` is the level that inspects the chain twice:
+    /// once for the local inlining that eliminates `let`s, and again for the eta expansion that
+    /// uncurrying runs the same pass on.
+    ///
+    /// Each binding calls a global of one parameter rather than writing the arithmetic out, which
+    /// keeps type checking a small part of the budget: an operator resolved through a trait carries
+    /// a predicate per occurrence, and a chain of those spends most of the build before the
+    /// inspection under test even runs.
+    #[test]
+    fn test_long_let_chain_compiles_in_reasonable_time() {
+        let mut body = String::from("    let a0 = succ(x);\n");
+        for i in 1..CHAIN_LENGTH {
+            body.push_str(&format!("    let a{} = succ(a{});\n", i, i - 1));
+        }
+        body.push_str(&format!("    a{}\n", CHAIN_LENGTH - 1));
+        let source = format!(
+            "module Main;\n\
+             \n\
+             succ : I64 -> I64;\n\
+             succ = |x| x + 1;\n\
+             \n\
+             seq : I64 -> I64;\n\
+             seq = |x| (\n{body});\n\
+             \n\
+             main : IO ();\n\
+             main = println(seq(0).to_string);\n"
+        );
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let program_path = temp_dir.path().join("long_let_chain");
+
+        // The compiler's diagnostics go to a file, which the test reads once the child has exited.
+        // A pipe left unread that long fills its buffer and blocks the very build being timed.
+        let log_path = temp_dir.path().join("build.log");
+        let log = File::create(&log_path).expect("Failed to create the build log");
+        let log_for_stderr = log
+            .try_clone()
+            .expect("Failed to clone the build log handle");
+
+        let mut command = fix_build_source_command(temp_dir.path(), &source, "max");
+        command
+            .arg("-o")
+            .arg(&program_path)
+            .stdout(Stdio::from(log))
+            .stderr(Stdio::from(log_for_stderr));
+        let mut child = command.spawn().expect("Failed to execute fix build");
+        let status = wait_within(
+            &mut child,
+            TIMEOUT,
+            &format!("compiling a chain of {} `let`s", CHAIN_LENGTH),
+        );
+        assert!(
+            status.success(),
+            "compiling a chain of {} `let`s failed: {}\n{}",
+            CHAIN_LENGTH,
+            status,
+            fs::read_to_string(&log_path).expect("Failed to read the build log")
+        );
+
+        let output = Command::new(&program_path)
+            .output()
+            .expect("Failed to run the compiled program");
+        assert!(
+            output.status.success(),
+            "the compiled program exited with {}",
+            output.status
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            CHAIN_LENGTH.to_string(),
+            "the chain of {} `let`s returned a wrong value",
+            CHAIN_LENGTH
+        );
     }
 }

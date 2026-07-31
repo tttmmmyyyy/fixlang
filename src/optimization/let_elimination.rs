@@ -371,26 +371,18 @@ impl FreeOccurrenceProbe {
     fn target_occurs_in(&self, expr: &Arc<ExprNode>) -> bool {
         expr.has_free_var(&self.target_name)
     }
-
-    fn contains_local_name(expr: &Arc<ExprNode>) -> bool {
-        for name in expr.free_vars() {
-            if name.is_local() {
-                return true;
-            }
-        }
-        false
-    }
 }
 
 impl ExprVisitor for FreeOccurrenceProbe {
+    fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
+        self.target_occurs_in(expr)
+    }
+
     fn start_visit_var(
         &mut self,
-        expr: &Arc<ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
         StartVisitResult::VisitChildren
     }
 
@@ -402,12 +394,9 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_llvm(
         &mut self,
-        expr: &Arc<ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
         StartVisitResult::VisitChildren
     }
 
@@ -430,16 +419,13 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // Function application expression {f}({x}).
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
 
         // If {x} contains the target name, and {f} contains local name, then set `used_before_any_other_local_names` to false.
         if expr
             .get_app_args()
             .iter()
             .any(|arg| self.target_occurs_in(arg))
-            && FreeOccurrenceProbe::contains_local_name(&expr.get_app_func())
+            && expr.get_app_func().has_free_local_var()
         {
             self.used_before_any_other_local_names = false;
         }
@@ -458,13 +444,9 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_lam(
         &mut self,
-        expr: &Arc<ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
-
         // A lambda expression is entered only when the target name is free in it, i.e., captured by
         // it. Its parameters are therefore names other than the target name, and the body is
         // visited with the target name still standing for the same binding.
@@ -483,9 +465,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // Let expression `let {pat} = {bound} in {value}`.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
         let target_rebound = expr
             .get_let_pat()
             .pattern
@@ -495,7 +474,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         // If {value} contains the target name, and {bound} contains local name, then set `used_before_any_other_local_names` to false.
         if !target_rebound
             && self.target_occurs_in(&expr.get_let_value())
-            && FreeOccurrenceProbe::contains_local_name(&expr.get_let_bound())
+            && expr.get_let_bound().has_free_local_var()
         {
             self.used_before_any_other_local_names = false;
         }
@@ -521,14 +500,11 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // If expression `if {cond} { {then} } else { {else} }`.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
 
         // if the target name appears in {then} or {else}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
         if (self.target_occurs_in(&expr.get_if_then())
             || self.target_occurs_in(&expr.get_if_else()))
-            && FreeOccurrenceProbe::contains_local_name(&expr.get_if_cond())
+            && expr.get_if_cond().has_free_local_var()
         {
             self.used_before_any_other_local_names = false;
         }
@@ -546,9 +522,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // Match expression `match {cond} { pat1 => {val1}; pat2 => {val2}; ... }`.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
         // The value expressions of the arms whose {pat} leaves the target name standing for the
         // binding under inspection.
         let vals = expr
@@ -560,7 +533,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
         // If the target name appears in any such {val}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
         if vals.iter().any(|val| self.target_occurs_in(val))
-            && FreeOccurrenceProbe::contains_local_name(&expr.get_match_cond())
+            && expr.get_match_cond().has_free_local_var()
         {
             self.used_before_any_other_local_names = false;
         }
@@ -582,12 +555,9 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_tyanno(
         &mut self,
-        expr: &Arc<ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
         StartVisitResult::VisitChildren
     }
 
@@ -605,13 +575,10 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // A struct expression is entered only when the target name appears in some field.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
 
         // If any other field contains local name, then set `used_before_any_other_local_names` to false.
         for (_, _, field) in &expr.get_make_struct_fields() {
-            if !self.target_occurs_in(field) && FreeOccurrenceProbe::contains_local_name(field) {
+            if !self.target_occurs_in(field) && field.has_free_local_var() {
                 // A field contains local name other than the target name.
                 self.used_before_any_other_local_names = false;
                 break;
@@ -635,15 +602,10 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // An array literal is entered only when the target name appears in some element.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
 
         // If any other element contains local name, then set `used_before_any_other_local_names` to false.
         for element in expr.get_array_lit_elements() {
-            if !self.target_occurs_in(&element)
-                && FreeOccurrenceProbe::contains_local_name(&element)
-            {
+            if !self.target_occurs_in(&element) && element.has_free_local_var() {
                 // An element contains local name other than the target name.
                 self.used_before_any_other_local_names = false;
                 break;
@@ -666,13 +628,10 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // An FFI call is entered only when the target name appears in some argument.
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
 
         // If any other argument contains local name, then set `used_before_any_other_local_names` to false.
         for arg in expr.get_ffi_call_args() {
-            if !self.target_occurs_in(&arg) && FreeOccurrenceProbe::contains_local_name(&arg) {
+            if !self.target_occurs_in(&arg) && arg.has_free_local_var() {
                 // An argument contains local name other than the target name.
                 self.used_before_any_other_local_names = false;
                 break;
@@ -694,13 +653,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if !self.target_occurs_in(expr) {
-            return StartVisitResult::Return;
-        }
-
         // If the main expression contains the target name, and the sub-expression contains local name, then set `used_before_any_other_local_names` to false.
-        if self.target_occurs_in(&expr.get_eval_main())
-            && FreeOccurrenceProbe::contains_local_name(&expr.get_eval_side())
+        if self.target_occurs_in(&expr.get_eval_main()) && expr.get_eval_side().has_free_local_var()
         {
             self.used_before_any_other_local_names = false;
         }

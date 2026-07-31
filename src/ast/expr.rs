@@ -26,6 +26,9 @@ pub enum AppSourceCodeOrderType {
 #[derive(Serialize, Deserialize)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
+    // The free variables of `expr`, calculated when first asked for and kept for later requests.
+    // Building a node around a different `expr` goes through `clone_except_fvs`, which leaves the
+    // set to be calculated again.
     #[serde(skip)]
     free_vars: Arc<Mutex<Option<Set<FullName>>>>,
     pub source: Option<Span>,
@@ -1283,6 +1286,11 @@ impl ExprNode {
     // Does the given name occur free in this expression?
     pub fn has_free_var(&self, name: &FullName) -> bool {
         self.with_free_vars(|free_vars| free_vars.contains(name))
+    }
+
+    // Does any local name occur free in this expression?
+    pub fn has_free_local_var(&self) -> bool {
+        self.with_free_vars(|free_vars| free_vars.iter().any(|name| name.is_local()))
     }
 
     // Convert all global FullNames to absolute paths.

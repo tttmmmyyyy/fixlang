@@ -780,7 +780,7 @@ mod tests {
         map.insert(local("x"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "#v0"]));
         assert!(
-            res.expr.free_vars().contains(&local("#v0")),
+            res.expr.has_free_var(&local("#v0")),
             "`#v0` of the enclosing scope was captured"
         );
     }
@@ -796,7 +796,7 @@ mod tests {
         map.insert(local("z"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
-            res.expr.free_vars().contains(&local("z")),
+            res.expr.has_free_var(&local("z")),
             "`z` of the enclosing scope was captured"
         );
     }
@@ -812,7 +812,7 @@ mod tests {
         map.insert(local("z"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
-            res.expr.free_vars().contains(&local("z")),
+            res.expr.has_free_var(&local("z")),
             "`z` of the enclosing scope was captured"
         );
     }
