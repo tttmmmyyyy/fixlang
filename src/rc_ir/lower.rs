@@ -330,7 +330,7 @@ impl<'a> Lowerer<'a> {
         let ty = expr.type_.clone().unwrap();
         let source = expr.source.clone();
         match expr.expr.as_ref() {
-            Expr::Var(v) => self.lower_var(v, &ty, &source),
+            Expr::Var(v) => self.lower_var(v, &ty, &source, bindings),
             Expr::LLVM(inline) => self.lower_llvm(inline, ty, source, bindings),
             Expr::App(fun, args) => self.lower_app(fun, args, ty, source, bindings),
             Expr::Lam(_, _) => self.lower_lam(expr, ty, source, bindings),
@@ -347,7 +347,13 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
+    fn lower_var(
+        &mut self,
+        v: &Arc<Var>,
+        ty: &Arc<TypeNode>,
+        source: &Option<Span>,
+        bindings: &mut Vec<PendingBinding>,
+    ) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
             Some(var) => var,
@@ -360,15 +366,39 @@ impl<'a> Lowerer<'a> {
                     "local variable `{}` is not bound during RC IR lowering",
                     v.name.to_string()
                 );
-                RcVar {
-                    name: v.name.clone(),
-                    ty: ty.clone(),
-                    source: source.clone(),
-                    debug_name: None,
-                    skip_null_check: false,
-                }
+                self.global_atom(&v.name, ty.clone(), source.clone(), bindings)
             }
         }
+    }
+
+    /// The atom for a reference to the global `name`. A global carrying a reference-counting unit is
+    /// read into a local and the local is the atom, so that the read the reference comes from and the
+    /// read the use consumes are one: code generation materializes a global by calling its accessor,
+    /// and two calls yield two values the optimizer cannot tell apart — enough to lose the alias
+    /// information a loop over the value needs. Reference-count insertion hangs the retain on that
+    /// binding, so it is also what makes the reference a consuming callee receives one somebody took.
+    ///
+    /// A global with no unit is the atom itself: code generation materializes it from its name.
+    fn global_atom(
+        &mut self,
+        name: &FullName,
+        ty: Arc<TypeNode>,
+        source: Option<Span>,
+        bindings: &mut Vec<PendingBinding>,
+    ) -> RcVar {
+        let global = RcVar {
+            name: name.clone(),
+            ty: ty.clone(),
+            source: source.clone(),
+            debug_name: None,
+            skip_null_check: false,
+        };
+        if ty.is_fully_unboxed(self.type_env) {
+            return global;
+        }
+        let x = self.fresh_var("global", ty, source.clone());
+        bindings.push(PendingBinding::Let(x.clone(), RcRhs::Var(global), source));
+        x
     }
 
     fn lower_llvm(
@@ -381,29 +411,23 @@ impl<'a> Lowerer<'a> {
         let mut llvm_gen = inline.generator.clone();
         // The generator's free variables are its operands, in a fixed order. A local operand reuses
         // the variable already bound to it; an operand that is not a local is a reference to a global
-        // value or function, materialized by code generation from its (unchanged) name.
-        let operand_vars: Vec<RcVar> = llvm_gen
-            .free_vars()
-            .iter()
-            .map(|name| match self.resolve(name) {
+        // value or function, which `global_atom` turns into an atom.
+        let mut operand_vars: Vec<RcVar> = vec![];
+        for name in llvm_gen.free_vars() {
+            let var = match self.resolve(&name) {
                 Some(var) => var,
                 None => {
-                    let ty = self.symbol_types.get(name).cloned().unwrap_or_else(|| {
+                    let ty = self.symbol_types.get(&name).cloned().unwrap_or_else(|| {
                         panic!(
                             "LLVM operand `{}` is not bound in scope during RC IR lowering",
                             name.to_string()
                         )
                     });
-                    RcVar {
-                        name: name.clone(),
-                        ty,
-                        source: None,
-                        debug_name: None,
-                        skip_null_check: false,
-                    }
+                    self.global_atom(&name, ty, None, bindings)
                 }
-            })
-            .collect();
+            };
+            operand_vars.push(var);
+        }
         // Rewrite the generator's embedded operand names to the fresh local names, so code
         // generation resolves them from scope.
         let slots = llvm_gen.free_vars_mut();

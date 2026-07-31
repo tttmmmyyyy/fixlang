@@ -262,6 +262,23 @@ impl<'a> Validator<'a> {
         }
     }
 
+    /// A use in any position but the right-hand side of a `let`. A global carrying a reference-counting
+    /// unit is barred from those positions: lowering reads such a global into a local, and reference
+    /// counting hangs on that binding. Were one to reach here, code generation would materialize the
+    /// global a second time — a value the optimizer cannot tell from the first — and the reference the
+    /// use consumes would be one nothing retained.
+    fn use_operand(&self, var: &RcVar) {
+        self.use_var(&var.name);
+        if !var.name.is_local() && !rc_units(&var.ty, self.type_env).is_empty() {
+            panic!(
+                "[RC IR validate] {}: global `{}` carries a reference-counting unit and is used outside a `let` right-hand side, in `{}`",
+                self.stage,
+                var.name.to_string(),
+                self.location
+            );
+        }
+    }
+
     /// Check an expression and everything under it, holding a binding in scope for exactly the
     /// continuation or arm body it covers.
     fn check_expr(&mut self, node: &RcExprNode) {
@@ -278,17 +295,17 @@ impl<'a> Validator<'a> {
                 self.scope.remove(&x.name);
             }
             RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
-                self.use_var(&v.name);
+                self.use_operand(v);
                 self.check_rc_unit(v, path);
                 self.check_expr(k);
             }
             // `Eval` names no RC unit — it only observes its variable — so there is no path to check.
             RcExpr::Eval(v, k) => {
-                self.use_var(&v.name);
+                self.use_operand(v);
                 self.check_expr(k);
             }
             RcExpr::Destructure(container, fields, k) => {
-                self.use_var(&container.name);
+                self.use_operand(container);
                 for (_, field) in fields {
                     self.bind(&field.name);
                 }
@@ -297,7 +314,7 @@ impl<'a> Validator<'a> {
                     self.scope.remove(&field.name);
                 }
             }
-            RcExpr::Ret(v) => self.use_var(&v.name),
+            RcExpr::Ret(v) => self.use_operand(v),
         }
     }
 
@@ -308,9 +325,9 @@ impl<'a> Validator<'a> {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
             RcRhs::App(callee, args) => {
-                self.use_var(&callee.name);
+                self.use_operand(callee);
                 for a in args {
-                    self.use_var(&a.name);
+                    self.use_operand(a);
                 }
             }
             RcRhs::Closure(fref, caps) => {
@@ -343,7 +360,7 @@ impl<'a> Validator<'a> {
                     }
                 }
                 for c in caps {
-                    self.use_var(&c.name);
+                    self.use_operand(c);
                 }
             }
             RcRhs::Llvm(llvm_gen, args) => {
@@ -364,11 +381,11 @@ impl<'a> Validator<'a> {
                     );
                 }
                 for a in args {
-                    self.use_var(&a.name);
+                    self.use_operand(a);
                 }
             }
             RcRhs::Match(scrutinee, arms) => {
-                self.use_var(&scrutinee.name);
+                self.use_operand(scrutinee);
                 // A match has at least one arm, and a catch-all arm (`tag == None`) — which code
                 // generation compiles as the tag switch's default case — is the last arm, so every
                 // earlier arm names a variant. A rewrite that moved a catch-all before another arm
