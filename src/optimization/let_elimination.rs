@@ -377,7 +377,7 @@ impl FreeOccurrenceProbe {
         }
     }
 
-    // Does the target name occur free in `expr`? The traversal enters `expr` only if it does.
+    // Does the target name occur free in `expr`? The traversal visits `expr` only if it does.
     fn target_occurs_in(&self, expr: &Arc<ExprNode>) -> bool {
         expr.has_free_var(&self.target_name)
     }
@@ -397,7 +397,7 @@ impl FreeOccurrenceProbe {
     // Is the target name read in one of `later` while `earlier`, evaluated ahead of them, reads a
     // local name? That is the shape in which the target name stops being the first local name the
     // expression evaluates.
-    fn read_after_a_local_name<'a>(
+    fn target_is_read_after_a_local_name<'a>(
         &self,
         earlier: &Arc<ExprNode>,
         later: impl IntoIterator<Item = &'a Arc<ExprNode>>,
@@ -420,11 +420,11 @@ impl ExprVisitor for FreeOccurrenceProbe {
     }
 
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // A variable expression is entered only when it is an occurrence of the target name.
+        // A variable expression is visited only when it is an occurrence of the target name.
         let var = expr.get_var();
         assert!(
             var.name == self.target_name,
-            "entered a variable expression of `{}` while probing `{}`",
+            "visited a variable expression of `{}` while probing `{}`",
             var.name.to_string(),
             self.target_name.to_string()
         );
@@ -441,9 +441,9 @@ impl ExprVisitor for FreeOccurrenceProbe {
     }
 
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // An LLVM expression is entered only when it takes the target name as an argument, which it
+        // An LLVM expression is visited only when it takes the target name as an argument, which it
         // may do more than once.
-        let occurrences = expr
+        let occurrence_count = expr
             .get_llvm()
             .generator
             .free_vars()
@@ -451,12 +451,12 @@ impl ExprVisitor for FreeOccurrenceProbe {
             .filter(|fv| **fv == self.target_name)
             .count();
         assert!(
-            occurrences > 0,
-            "entered an LLVM expression taking no `{}` as an argument",
+            occurrence_count > 0,
+            "visited an LLVM expression taking no `{}` as an argument",
             self.target_name.to_string()
         );
         self.is_argument_to_llvm = true;
-        self.count += occurrences;
+        self.count += occurrence_count;
 
         EndVisitResult::unchanged(expr)
     }
@@ -469,7 +469,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
         // Function application expression {f}({x}).
 
         // If {x} contains the target name, and {f} contains local name, then set `used_before_any_other_local_names` to false.
-        if self.read_after_a_local_name(&expr.get_app_func(), expr.get_app_args().iter()) {
+        if self.target_is_read_after_a_local_name(&expr.get_app_func(), expr.get_app_args().iter())
+        {
             self.used_before_any_other_local_names = false;
         }
 
@@ -490,7 +491,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // A lambda expression is entered only when the target name is free in it, i.e., captured by
+        // A lambda expression is visited only when the target name is free in it, i.e., captured by
         // it. Its parameters are therefore names other than the target name, and the body is
         // visited with the target name still standing for the same binding.
         self.is_captured_by_lambda = true;
@@ -516,7 +517,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
         // If {value} contains the target name, and {bound} contains local name, then set `used_before_any_other_local_names` to false.
         if !target_rebound
-            && self.read_after_a_local_name(&expr.get_let_bound(), [&expr.get_let_value()])
+            && self
+                .target_is_read_after_a_local_name(&expr.get_let_bound(), [&expr.get_let_value()])
         {
             self.used_before_any_other_local_names = false;
         }
@@ -544,7 +546,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         // If expression `if {cond} { {then} } else { {else} }`.
 
         // if the target name appears in {then} or {else}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
-        if self.read_after_a_local_name(
+        if self.target_is_read_after_a_local_name(
             &expr.get_if_cond(),
             [&expr.get_if_then(), &expr.get_if_else()],
         ) {
@@ -566,7 +568,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         // Match expression `match {cond} { pat1 => {val1}; pat2 => {val2}; ... }`.
         // The value expressions of the arms whose {pat} leaves the target name standing for the
         // binding under inspection.
-        let vals = expr
+        let vals_not_rebinding_target = expr
             .get_match_pat_vals()
             .into_iter()
             .filter(|(pat, _val)| !pat.pattern.vars().contains(&self.target_name))
@@ -574,15 +576,18 @@ impl ExprVisitor for FreeOccurrenceProbe {
             .collect::<Vec<_>>();
 
         // If the target name appears in any such {val}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
-        if self.read_after_a_local_name(&expr.get_match_cond(), vals.iter()) {
+        if self.target_is_read_after_a_local_name(
+            &expr.get_match_cond(),
+            vals_not_rebinding_target.iter(),
+        ) {
             self.used_before_any_other_local_names = false;
         }
 
         // Visit the condition expression first
         self.traverse(&expr.get_match_cond());
 
-        // Visit the value expression of each arm
-        for val in vals {
+        // Visit the value expression of each such arm
+        for val in vals_not_rebinding_target {
             self.traverse(&val);
         }
 
@@ -614,7 +619,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // A struct expression is entered only when the target name appears in some field.
+        // A struct expression is visited only when the target name appears in some field.
 
         // If any other field contains local name, then set `used_before_any_other_local_names` to false.
         if self.another_local_name_is_read_in(
@@ -641,7 +646,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // An array literal is entered only when the target name appears in some element.
+        // An array literal is visited only when the target name appears in some element.
 
         // If any other element contains local name, then set `used_before_any_other_local_names` to false.
         if self.another_local_name_is_read_in(expr.get_array_lit_elements().iter()) {
@@ -663,7 +668,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // An FFI call is entered only when the target name appears in some argument.
+        // An FFI call is visited only when the target name appears in some argument.
 
         // If any other argument contains local name, then set `used_before_any_other_local_names` to false.
         if self.another_local_name_is_read_in(expr.get_ffi_call_args().iter()) {
@@ -686,7 +691,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // If the main expression contains the target name, and the sub-expression contains local name, then set `used_before_any_other_local_names` to false.
-        if self.read_after_a_local_name(&expr.get_eval_side(), [&expr.get_eval_main()]) {
+        if self.target_is_read_after_a_local_name(&expr.get_eval_side(), [&expr.get_eval_main()]) {
             self.used_before_any_other_local_names = false;
         }
         StartVisitResult::VisitChildren

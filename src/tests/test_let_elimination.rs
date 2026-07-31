@@ -207,11 +207,11 @@ mod tests {
              succ : I64 -> I64;\n\
              succ = |x| x + 1;\n\
              \n\
-             seq : I64 -> I64;\n\
-             seq = |x| (\n{body});\n\
+             let_chain : I64 -> I64;\n\
+             let_chain = |x| (\n{body});\n\
              \n\
              main : IO ();\n\
-             main = println(seq(0).to_string);\n"
+             main = println(let_chain(0).to_string);\n"
         );
 
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
