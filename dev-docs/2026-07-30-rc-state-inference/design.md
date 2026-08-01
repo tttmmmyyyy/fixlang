@@ -110,8 +110,8 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 **扉は根の話である。** コンテナに何を入れても、コンテナ自身のオブジェクトの状態バイトは
 動かない。`a.set(0, g)` も、生ポインタ経由の `mutate_boxed` / `mutate_elements` も、汚すのは
 `deep` だけで `root` は `RootLocal` のまま — 前者はオペランドから見えるので普通の転送規則で、後者は
-「要素型・payload 型に boxed leaf があれば結果の `deep` を `Always`」という 1 行の規則で覆える。
-どちらも扉ではない。（`borrow_boxed` / `borrow_elements` は「借りたポインタを通して変更しては
+「要素型・payload 型に boxed leaf があれば、結果の下に非 LOCAL が居るものとして扱う」という
+1 行の規則で覆える（記号的な書き方は「束と用語」）。どちらも扉ではない。（`borrow_boxed` / `borrow_elements` は「借りたポインタを通して変更しては
 ならない」と `std.fix` が定めているので、`deep` すら汚さない。）
 
 **内部ポインタを渡す公開 API は既に塞がっている。** `borrow_boxed` と
@@ -873,29 +873,58 @@ enum RcTarget {
 
 ## コード生成
 
-`implement_rc_program` の `Retain`/`Release` アームは今 `Unknown` を assert している。
+**site が出すのはインラインの参照カウント操作ではなく、型ごとの補助関数への呼び出しである。**
+`Generator::retain` / `release` は `emit_rc_helper_call` を通り、`retain_<型のハッシュ>` /
+`release_<型のハッシュ>` をモジュールに 1 個だけ定義して呼ぶ。さらに `Array a` のような unboxed
+の値では、その補助関数の中身が型ごとの traverser（`trav_release_(Array a)`）の呼び出しで、
+**状態ディスパッチはそのまた中**にある。したがって注釈を効かせるには、**状態でキーした補助関数
+と traverser を足す**ことになる。
 
-`RcState` に `DeepLocal` を足す。注釈は leaf の解決値に対応させ、`DeepLocal` なら
-`RcState::DeepLocal`、`RootLocal` なら `RcState::Local` を出す。コード生成は当面この 2 つを
-同じアームに落とす — 区別が要るのは traverser の精密化（後述）だけだが、**注釈の時点で潰すと
-後から復元できない**ので、ここで分けたまま持つ。
+```
+release_<hash>              Unknown（今日のもの）
+release_local_<hash>        Local
+release_deeplocal_<hash>    DeepLocal
+trav_release_local_(T)      unboxed の値が経由する traverser も同様
+```
 
-- `Retain(RcState::Local)` / `Retain(RcState::DeepLocal)`: 非 atomic インクリメント。状態
-  ロードなし、分岐なし（今日の `local_bb` の本体）。
-- `Release(RcState::Local)` / `Release(RcState::DeepLocal)`: 非 atomic デクリメント、読んだ
-  カウントが 1 なら破棄 — こちらも
-  今日の local アームからディスパッチを外したもの。**差し替えるのは
+`create_traverser` は既に work ごとに名前を分けており（`trav_release_` / `trav_mark_global_` /
+`trav_mark_threaded_`）、`emit_rc_helper_call` も `create_traverser` も**名前で memoize して、
+最初に必要になった呼び出し地点で初めて生成する**。キーに状態を足すだけで、注釈が実際に出た
+(型, 状態) の組だけが生成される。
+
+**3 版の違いと、同一になる条件。**
+
+| 版 | 根のディスパッチ | 子孫のディスパッチ |
+| --- | --- | --- |
+| `Unknown` | する | する |
+| `Local` | しない | する |
+| `DeepLocal` | しない | しない |
+
+**根の下に boxed な子を持たない型では `Local` 版と `DeepLocal` 版が一致する** — 子孫の
+ディスパッチが存在しないので違いの出る場所が無い。`Array I64`、スカラーだけの boxed struct が
+これに当たる。1 本だけ生成して両方の注釈から指す。判定は「この型の traverser が子の release を
+出すか」で静的にできる。boxed leaf を持たない型にはそもそも補助関数も traverser も生成されない
+（`create_traverser` が `is_fully_unboxed` で `None` を返す）。
+
+各版の中身:
+
+- `Retain`: 非 atomic インクリメント。状態ロードなし、分岐なし（今日の `local_bb` の本体）。
+- `Release`: 非 atomic デクリメント、読んだカウントが 1 なら破棄。**差し替えるのは
   `build_release_boxed_with` の中のディスパッチだけで、その呼び出し元
   `build_release_mark_nonnull_boxed_with` が持つ `Std::FFI::Destructor` の前段（カウント 1 の
   ときに dtor を走らせる）はそのまま通す。** 別ヘルパとして書き起こすと FFI の destructor が
   黙って発火しなくなる。
-- `Destructure(RcState::Local)`: `get_struct_fields` が呼ぶ retain/release を上の 2 つに
-  差し替える。
+- `Destructure`: `get_struct_fields` が呼ぶ retain/release を上の 2 つに差し替える。
 - unique-check op（対象が `LOCAL` 版）: `build_branch_by_is_unique` の状態ディスパッチを外し、
   参照カウントを 1 と比べる分岐だけを出す（今日の `local_bb` の本体）。
 
+`RcState` に `DeepLocal` を足す。注釈は leaf の解決値に対応させ、`DeepLocal` なら
+`RcState::DeepLocal`、`RootLocal` なら `RcState::Local` を出す。`implement_rc_program` の
+`Retain`/`Release` アームは今 `Unknown` を assert しているので、両方を受けるようにする。
+
 null チェックの包み（`skip_null_check`、dynamic object のチェック）は直交で不変。破棄が呼ぶ
-型 traverser は**ディスパッチしたままにする**（前提 P4）。
+型 traverser の**子ごとのディスパッチは残す**（前提 P4）。`DeepLocal` 版でそれも外すのは
+「着地と検証」の精密化。
 
 ## 着地と検証
 
