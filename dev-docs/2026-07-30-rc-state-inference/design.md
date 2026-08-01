@@ -712,11 +712,30 @@ C から届くのは常に canonical 版であり、そのキーは全 leaf `May
 | `Retain` / `Release` | `retain_nonnull_boxed` / `build_release_boxed_with` | ノードの `RcState` フィールド（既存） |
 | `is_unique` チェック | `build_branch_by_is_unique`。unique-check op の `generate` の中 | op インスタンスの属性フィールド |
 | `Destructure` | `get_struct_fields`。ノード自身が retain/release する | ノードに `RcState` を足す |
+| 破棄の traverser | `build_traverse`。カウントが 0 になったとき子を release する | site ごとの置き場が無い（traverser は型ごとの関数） |
 
-**3 つを一緒に出す。** `plan.md` の上限表（`sort` -13.87%、`levenshtein` -6.25% など）は
-3 種類すべてのディスパッチを外して測ったものなので、比較できるのは 3 つを覆った実装だけで
-ある。`is_unique` はディスパッチの過半を占めることがあり（`fannkuch` 57%、`cp_lib_lsegtree`
-15%）、これを落とすと `fannkuch` の測定は上限のごく一部しか動かない。
+**上の 3 つは一緒に出す。** `plan.md` の上限表（`sort` -13.87%、`levenshtein` -6.25% など）は
+`build_branch_by_refcnt_state` のディスパッチを全部外して測ったものなので、比較できるのは
+覆った実装だけである。`is_unique` はディスパッチの過半を占めることがあり（`fannkuch` 57%、
+`cp_lib_lsegtree` 15%）、これを落とすと `fannkuch` の測定は上限のごく一部しか動かない。
+
+**4 番目の traverser は、まず健全性の前提として押さえる。** `Release` が 0 に到達したとき
+呼ぶ型 traverser は、子ごとに状態バイトを読んでディスパッチする（`build_traverse` ->
+`build_release_mark_nonnull_boxed_with` -> `build_release_boxed_with` ->
+`build_branch_by_refcnt_state`）。**根だけ `Local` な値の release を `Local` と注釈できるのは、
+このディスパッチが子を正しく捌くからである。** `[g, g]` のような値は自分のストレージが LOCAL
+なので根の非 atomic デクリメントは正しく、GLOBAL な子は traverser の `global_bb` で no-op に
+なる。traverser をディスパッチなしに変えると、この注釈がそのまま壊れる。局所健全性 (P1) の
+`Release` のケースはこの性質に寄りかかっている。
+
+そのうえで、**`DeepLocal` は状態なし traverser を呼んでよい条件そのもの**である。`DeepLocal`
+は「ここから到達できる任意のオブジェクトが LOCAL」なので、破棄が辿る先は定義上すべて LOCAL で、
+子の状態を読む理由が無い。traverser は call site ごとではなく**型ごと**の関数なので site に
+属性を付ける方式が使えず、実体としては型ごとに 2 本目（状態なし版）を出して `Release(DeepLocal)`
+から呼び分けることになる。一族はちょうど 2 本で、`Release(DeepLocal)` が実際に出た型についてだけ
+生成すればよい。上限表は traverser 内部の release も含めて測っているので、これを外したままでは
+破棄が再帰する形（`binary_trees` の木の解体など）で上限に届かない。段階 1 の実測で、`Local` と
+`DeepLocal` の内訳と traverser 経由の release の割合を数えてから足す。
 
 ### 注釈のしかた
 
@@ -759,8 +778,8 @@ C から届くのは常に canonical 版であり、そのキーは全 leaf `May
   参照カウントを 1 と比べる分岐だけを出す（今日の `local_bb` の本体）。
 
 null チェックの包み（`skip_null_check`、dynamic object のチェック）は直交で不変。破棄が呼ぶ
-型 traverser の内部ディスパッチは `Unknown` のまま — 状態ごとの traverser 一族は生成コードを
-倍にするので対象外。
+型 traverser は**ディスパッチしたままにする** — 上で述べたとおり、根だけ `Local` な値の release
+の健全性がこれに寄りかかっている。`DeepLocal` 専用の状態なし版を足すのは後段の精密化。
 
 ## コードだけでなく解析を検証する
 
@@ -805,6 +824,6 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 ## 対象外
 
 - 単位間サマリ。
-- 状態ごとの traverser 一族。
+- `DeepLocal` 用の状態なし traverser（前述。実測で内訳を見てから）。
 - threaded ビルド（`threaded.md`）。
 - changelog: 観測可能な振る舞いは変わらない。
