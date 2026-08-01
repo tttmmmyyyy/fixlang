@@ -68,10 +68,19 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
    ビルドはコンパイル時に拒否するので、そこにはこの扉が存在しない。
 3. **`Std::boxed_from_retained_ptr`。** 生ポインタから値を復元する。状態は何も分からない —
    スレッドを跨いだかもしれないし、global のグラフ由来かもしれない。
+4. **生ポインタ経由の書き込み（`mutate_boxed` / `mutate_elements` とその IOS 版）。** コール
+   バックに payload や要素バッファへの `Ptr` を渡す。要素型・payload 型に boxed leaf があると、
+   コールバックは扉 3 で得た参照をそこへ**書き込める**ため、既に `Local` と証明された容器が
+   非 LOCAL なオブジェクトへ到達するようになる。`borrow_boxed` / `borrow_elements` は
+   「借りたポインタを通して変更してはならない」と `std.fix` が定めているので扉ではない。
+
+扉 4 は転送で塞ぐ: 4 つの mutate op の `locality_flow` は、**要素型・payload 型に boxed leaf が
+1 つでもあれば結果の全 leaf を `Always`** にする。無ければ書き込めるのはスカラーだけなので
+現在の配線でよく、バイト列と C の相互運用（`Array U8` など）は精度を失わない。型を見る判断
+なので `locality_flow` が `arg_tys` と `type_env` を取る形がそのまま使える。
 
 発生源でないことを確認したもの: `String::unsafe_from_c_str_ptr` は新しい配列へ複製する。
-`FFI_EXPORT` は非集約スカラーしか許さない（#114）ので、エクスポート関数の引数から boxed 値は
-入ってこない。C ランタイムは参照カウント対象を作らない。`argc`/`argv` は生スカラーで、
+C ランタイムは参照カウント対象を作らない。`argc`/`argv` は生スカラーで、
 `Std::get_args` は新しい文字列を作る。`boxed_to_retained_ptr` は状態を変えずにポインタを
 貸し出すだけで、値の帰り道は扉 3。将来の 4 つ目の扉は静的メモリの作業（issue #122 の追記）:
 静的に確保されたストレージは `create_obj` を通らないので、その作業は状態を宣言し、この一覧を
@@ -90,10 +99,16 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 オブジェクトを `LOCAL` から遷移させる操作が存在しない**場合だけである:
 
 - `threaded = false` のビルドでは、マークする遷移は `mark_global` だけで、その対象は初期化子の
-  結果グラフ。初期化子は引数を取らず global しか読めないので、生きているローカル束縛が指す
-  オブジェクトがマークに巻き込まれることはない — グラフは初期化子が自分で作ったオブジェクト
-  （他の誰も保持していない。初期化中に FFI へ生ポインタを退避しても、戻りは扉 3 を通る）と、
-  他の global のオブジェクト（その時点でマーク済みで、読み出し規則が `MayExt` にする）から成る。
+  結果グラフ。初期化子は引数を取らず global しか読めないので、そのグラフは初期化子が自分で
+  作ったオブジェクトと、他の global のオブジェクト（その時点でマーク済みで、読み出し規則が
+  `MayExt` にする）から成る。
+
+  **ただしこれには契約が要る。** global の初期化子は遅延実行なので、生きているローカル束縛が
+  ある状態で走りうる。その初期化子が扉 3（`boxed_from_retained_ptr`）や扉 4 で外から
+  オブジェクトを取り込み、それを結果グラフに含めると、`mark_global` が**既に `Local` と
+  証明された束縛が指すオブジェクト**をマークしてしまう。よって「**global の初期化子は、外部が
+  保持している Fix オブジェクトを結果グラフに取り込んではならない**」を契約として課し、
+  `boxed_from_retained_ptr` のドキュメントにも書く。P2 を担保しているのはこの契約である。
 - `mark_threaded : a -> a` は引数で壊す。引数を消費して物理的に同一のオブジェクトへの
   ハンドルを返す op なので、マーク後も元の束縛を使うコードは
 
@@ -167,11 +182,17 @@ RC IR ノードごとに、各ローカル束縛を `ExtShape` に写す環境�
 ある — 入力が具体値なので、環境の値は各 leaf `Always`（= `MayExt`）か `IfAny(∅)`（= `Local`）
 のどちらかに潰れ、実装上は 2 値の走査になる。
 
-global シンボルを値として使う場所（「global アトム」）は読んだ値の全 leaf を `Always` にする —
-これが扉 1 であり、名前が local かどうかを見る**唯一の**規則である。
+**変数の参照はすべて名前の局所性を見る。** 環境は局所束縛だけを持ち、**環境に無い名前
+（global シンボル）は全 leaf `Always` に解決する**。これが扉 1 であり、名前が local かどうかを
+見る唯一の規則である。global は `let` の右辺に限らず、Llvm/App のオペランド、`Match` の
+被検査値、`Destructure` のコンテナ、`Ret` のどこにでも現れる（`lower_var` は global を束縛せず
+アトムのまま渡す。RC IR ダンプで `destructure Main::gpair#… { .0 -> … }` と
+`array_lit(Main::garr#…, Main::garr#…)` を確認済み）ので、規則はノード種別ごとではなく
+**参照の解決 1 か所**に置く。`Retain`/`Release` の対象が局所であることは `insert_rc` が保証
+しているが、解決規則はそれを覚えていなくても安全な側に倒れる形にする。
 
 - `let x = y`（move）: コピー。
-- `let x = <global アトム>`: 全 leaf `Always`。（funptr 型の global は boxed leaf を持たないので
+- global アトムの参照: 全 leaf `Always`。（funptr 型の global は boxed leaf を持たないので
   何も起きない。closure 型の global は capture leaf が `Always` — その capture object はマーク
   されているので正しい。）
 - `let x = Closure(f, caps)`: capture leaf に caps の全 leaf の join。
@@ -203,6 +224,8 @@ impl ExtShape {
     fn merge(result_ty, arg_tys, type_env) -> ExtShape;
     /// 結果の全 leaf が `Always`。
     fn always(result_ty, type_env) -> ExtShape;
+    /// 結果の全 leaf が `IfAny(∅)`。発散して値を返さない op 用。
+    fn bottom(result_ty, type_env) -> ExtShape;
     /// 結果 leaf ごとに指定する。`Provenance::build_shape` と同じ形で、結果型の boxed leaf
     /// を全部歩いて呼ぶので、leaf の書き落としが起こらない。
     fn build_shape(result_ty, type_env, f: &dyn Fn(&FieldPath) -> ExtCond) -> ExtShape;
@@ -230,7 +253,8 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 
 ### 全 op の値
 
-`impl LLVMGen` は 77 個。構成子で分類すると `always` 8 個、`build_shape` 13 個、`merge` 56 個。
+`impl LLVMGen` は 77 個。構成子で分類すると `always` 7 個、`bottom` 2 個、`build_shape` 13 個、
+`merge` 55 個。
 
 **`always`（8）** — 結果が解析の外から来る。
 
@@ -243,7 +267,17 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 | `InlineLLVMArrayBorrowElementsBody` | 同上 |
 | `InlineLLVMUnionModBody` | payload に関数を適用し、その結果を union に入れる |
 | `InlineLLVMFFICallBody` | C を呼ぶ |
-| `InlineLLVMHoleBody` | `unreachable` を出す。値は存在しない |
+
+**`bottom`（2）** — 発散するので結果の値が存在しない。`unreachable` を出すか abort するので、
+何を主張しても空虚に真であり、束の底（全 leaf `IfAny(∅)`）が健全かつ最も精密である。頂に
+すると、`if bad { undefined(msg) } else { v }` のようなガードで arm の join が汚染され、
+`msg` の leaf が `v` に伝わってしまう。`result_prov` が `undefined` に `uniform_bottom` を
+使っているのと同じ理由。
+
+| op | |
+| --- | --- |
+| `InlineLLVMUndefinedInternalBody` | abort する |
+| `InlineLLVMHoleBody` | `unreachable` を出す |
 
 関数オペランドを呼ぶ op がこの表の半分を占める。呼ばれる関数は別の `RcFunc` として解析される
 が、この op から見ると結果は間接呼び出しの結果であり、関数本体が global を読んで返すことを
@@ -254,17 +288,17 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 | op | 配線 |
 | --- | --- |
 | `InlineLLVMStructGetBody` | unboxed コンテナ: 結果 `σ` <- 引数 0 の `[field_idx]++σ`。boxed コンテナ: 結果の全 leaf <- 引数 0 の `[]` |
-| `InlineLLVMMakeStructBody` | 結果 `[i]++σ` <- 引数 `i` の `σ`。boxed 結果は全 leaf にコンテナの join |
-| `InlineLLVMStructSetBody` | 結果 `[field_idx]++σ` <- 引数 0（値）の `σ`、他の leaf <- 引数 1（struct）の同じパス。boxed 結果は全 leaf にコンテナの join |
-| `InlineLLVMStructPlugInBody` | 結果 `[field_idx]++σ` <- 引数 1（field）の `σ`、他 <- 引数 0（punched）。boxed 結果は全 leaf にコンテナの join |
-| `InlineLLVMStructPunchBody` | 結果は `(field, punched_struct)`。`[0]++σ` <- 引数 0 の `[field_idx]++σ`、`[1]` 以下 <- 引数 0 の残り |
-| `InlineLLVMArrayPunchBody` | 結果は `(elem, punched_array)`。両成分 <- 引数の配列 leaf |
-| `InlineLLVMMakeUnionBody` | 結果 `[variant]++σ` <- 引数 0 の `σ`。他の variant は底（`IfAny(∅)`） |
+| `InlineLLVMMakeStructBody` | 結果 `[i]++σ` <- 引数 `i` の `σ`。boxed 結果は `merge` と同じ（全オペランドの join） |
+| `InlineLLVMStructSetBody` | 結果 `[field_idx]++σ` <- 引数 0（値）の `σ`、他の leaf <- 引数 1（struct）の同じパス。boxed 結果は `merge` と同じ（全オペランドの join。値の側を落とさない） |
+| `InlineLLVMStructPlugInBody` | 結果 `[field_idx]++σ` <- 引数 1（field）の `σ`、他 <- 引数 0（punched）。boxed 結果は `merge` と同じ（全オペランドの join） |
+| `InlineLLVMStructPunchBody` | 結果は `(field, punched_struct)`（`PUNCHED_STRUCT_FIELD = 1`）。unboxed コンテナ: `[0]++σ` <- 引数 0 の `[field_idx]++σ`、`[1]` 以下 <- 引数 0 の残り。boxed コンテナ: 両成分 <- 引数 0 の `[]` |
+| `InlineLLVMArrayPunchBody` | 結果は `(PunchedArray a, a)`（`PUNCHED_ARRAY_FIELD = 0`。`StructPunch` とは順序が逆）。両成分 <- 引数の配列 leaf |
+| `InlineLLVMMakeUnionBody` | unboxed union: 結果 `[variant]++σ` <- 引数 0 の `σ`、他の variant は底（`IfAny(∅)`）。boxed union: 結果の唯一の leaf `[]` <- 引数 0 の全 leaf |
 | `InlineLLVMUnionAsBody` | unboxed union: 結果 `σ` <- 引数 0 の `[variant]++σ`。boxed union: 結果の全 leaf <- 引数 0 の `[]` |
 | `InlineLLVMCaptureProjectBody` | capture object から 1 個取り出す。boxed capture: 結果の全 leaf <- capture の `[]`。unboxed `#CapList`: 射影 |
-| `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` | `[0]`（値）以下 <- 引数の値。残り（コールバックの結果）は `Always` |
+| `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` | payload 型に boxed leaf があれば全 leaf `Always`（扉 4）。無ければ `[0]`（値）以下 <- 引数の値、残り（コールバックの結果）は `Always` |
 | `InlineLLVMUnsafeMutateBoxedIOSInternalBody` | 同上、値の位置は `[1, 0]` |
-| `InlineLLVMArrayMutateElementsInternalBody` | `[0]`（配列）<- 引数の配列。残りは `Always` |
+| `InlineLLVMArrayMutateElementsInternalBody` | 要素型に boxed leaf があれば全 leaf `Always`（扉 4）。無ければ `[0]`（配列）<- 引数の配列、残りは `Always` |
 | `InlineLLVMArrayMutateElementsIosInternalBody` | 同上、配列の位置は `[1, 0]` |
 
 配線の位置は `result_prov` が使っている定数と同じもの（`STRUCT_SET_VALUE_ARG`,
@@ -283,9 +317,9 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
   `InlineLLVMFloatMulBody`, `InlineLLVMIntDivBody`, `InlineLLVMFloatDivBody`,
   `InlineLLVMIntRemBody`, `InlineLLVMIntNegBody`, `InlineLLVMFloatNegBody`,
   `InlineLLVMBoolNegBody`
-- 確保のみ（オペランドの leaf を join する。オペランドに leaf が無ければ `IfAny(∅)` = `Local`。6）:
+- 確保のみ（オペランドの leaf を join する。オペランドに leaf が無ければ `IfAny(∅)` = `Local`。5）:
   `InlineLLVMStringBuf`, `InlineLLVMArrayUnsafeEmpty`, `InlineLLVMArrayLitBody`,
-  `InlineLLVMIOStateUnsafeCreate`, `InlineLLVMUndefinedInternalBody`, `InlineLLVMDestructorMake`
+  `InlineLLVMIOStateUnsafeCreate`, `InlineLLVMDestructorMake`
 - 配列を通す・配列を読む（結果はオペランドの配列から到達可能。14）:
   `InlineLLVMArrayUnsafeGetBoundsUnchecked`, `InlineLLVMArrayTruncateBoundsUnchecked`,
   `InlineLLVMArrayAppendValueCapacityUnchecked`, `InlineLLVMArraySetCapacityBoundsUnchecked`,
@@ -350,6 +384,9 @@ let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている
    `summary[g]` を取り、その各 leaf の `ExtCond` に現れる `(j, σ)` を `env[args[j]][σ]` で
    置き換える（`Always` はそのまま）。`locality_flow` の代入と同じ操作。callee がこの単位に
    無い、または間接呼び出しなら、結果の全 leaf を `Always` にする。
+   **`j` が callee の capture の添字（`g.params.len()`）のときは `Always` に解決する** — 直接
+   呼び出しは capture を引数として渡さないので `args` に対応物が無い。`CaptureProject` の配線が
+   capture leaf を本体へ流すので、closure-ABI 関数のサマリには実際に capture 添字が現れうる。
 3. 走査の終端 `ret` の値の `ExtShape` が候補。`summary[f] = summary[f] ⊔ 候補` と join する。
 
 1 つでも動いたらもう 1 周。何も動かなくなったら収束。
@@ -518,8 +555,11 @@ site で状態バイトを読んで検査する）を実装と同時に入れ、
   今日と同じく全部ディスパッチする。
 - クローンの実体化が call site を歩き、引数の locality（呼び出し元クローンの具体的入力 +
   相 1 のサマリで解決）から callee のキーを組んで worklist に積む。
-- ゲート: RC site の値がどれも入力に依存しない関数（サマリの `IfAny` がどれも空）はキーで
-  結果が変わらないので複製しない。
+- ゲート: 複製するのは「自分の RC site が入力に依存する関数」と「入力依存の leaf を、ゲートを
+  通った callee へ直接呼び出しで渡す関数」。`funcs_reaching_unique_check` と同じく直接呼び出し
+  グラフ上の最小不動点で閉じる。推移的に閉じないと、自分では RC site を持たない転送関数
+  （`h(x) = g(x)`）が canonical のままになり、その中で組む `g` のキーが全 `MayExt` に落ちて、
+  `h` を経由する呼び出し元すべてで `g` の証明が黙って失われる。
 
 クローンの中では入力が**具体値**なので、1 つのヘルパが `MayExt` な引数と `Local` な引数の
 両方で呼ばれても、それぞれのクローンが別々に証明される。monovariant（関数入力ごとに全呼び
@@ -560,9 +600,12 @@ specialized `fold` クローンに焼き込み、その本体はループ本体�
 canonical のまま — 今日の uniqueness と同じ扱い）。
 
 単位の外から呼ばれうる関数（プログラムシンボル）は canonical しか参照されようがないので
-自然に `MayExt` 側に落ちる。単一単位のビルド（speedtest corpus は全ケースこれ）ではエントリ
-ポイントと FFI エクスポートだけが外部から届き、どちらの入力も boxed leaf を持たないので、
-何も失わない。単位間サマリの保存は測定が要求したときの将来課題。
+自然に `MayExt` 側に落ちる。**`FFI_EXPORT` は boxed 値を不透明ポインタとして受け渡せる**
+（`has_c_abi` は `is_box` を許す。#114 が禁じたのは集約型）ので、エクスポート関数の引数には
+状態の分からない boxed 値が入ってくるが、C から届くのは元のシンボル名すなわち canonical 版
+だけであり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を担っているのは
+「入力に boxed leaf が無いこと」ではなく「外部からは canonical にしか届かないこと」である。
+単位間サマリの保存は測定が要求したときの将来課題。
 
 ## 注釈する site
 
@@ -592,8 +635,8 @@ canonical のまま — 今日の uniqueness と同じ扱い）。
 - `Destructure`: ノードが行う参照カウント操作**すべて**が `LOCAL` なオブジェクトに対するもの
   なら `RcState::Local`。boxed コンテナならフィールドの retain とコンテナの release で、到達
   閉包によりコンテナ leaf の値が両方を決める。unboxed コンテナなら名前の付かなかったフィールド
-  の release で、それらの meet を取る。フィールドごとに状態を分ける精密化は、実測が要求したら
-  足す。
+  の release で、**そのすべてが `Local` のときに限り** `Local`。フィールドごとに状態を分ける
+  精密化は、実測が要求したら足す。
 
 それ以外は `Unknown` のまま。global 初期化子本体は入力なしで同様に解釈する（specialize が今
 `&[]` でやっているのと同じ形）。
@@ -629,9 +672,17 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
   同時に入れる（後追いにしない）。テストスイート全体が `develop_mode` で走るので、注釈された全
   site が全テストプログラムで動的に検査される。わざと 1 site を誤注釈してスイートが落ちる
   ことを一度示し、その破壊を戻す。
+- **ダンプ水準の回帰テスト**（`--emit-rc-ir`）: 実行時 assert は「誤注釈した site を非 LOCAL な
+  オブジェクトに対して実行するテストがある」ときしか鳴らない。コーパスの大半は marked object を
+  1 つも作らない（`plan.md`）ので、global の近くでしか誤らない分類ミスは動的検査を素通りする。
+  扉の形ごとに、ダンプが `Always`（ディスパッチ維持）になることを静的に固定する:
+  `destructure <global>`、`let a = [g, g]; a.set(0, g)`、`boxed_from_retained_ptr` の流れ、
+  コンテナ経由の global 読み出し、boxed 要素型に対する `mutate_elements`。
 - **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
   `Local` / `Unknown` 操作を site の種類ごとに数え、`plan.md` の上限表（`arg`+`local` 行）と
   突き合わせる。併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
+- **コンパイル時間**: 全プログラムの不動点 1 本と 2 本目の複製パスが増えるので、パス自体の
+  所要時間を測る。RC パイプラインはコンパイル時間に敏感な履歴がある（#144、#76）。
 - **全スイート** 3 水準、**`benchmark/speedtest`** を現 `main` の行と比較。捨てた設計で
   裏返ったナイフエッジ（`nbody`、`nbody_fold`）を注視する。
 
@@ -643,12 +694,13 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 | `src/rc_ir/specialize.rs`（新規） | `unique_check_elim` から括り出した複製 skeleton |
 | `src/rc_ir/ast.rs` | `Destructure` に `RcState` |
 | `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（既定実装なし）、`assuming_local` |
-| `src/fixstd/builtin.rs` | 全 77 op の `locality_flow`、unique-check を持つ 19 op の属性と `assuming_local` |
+| `src/fixstd/builtin.rs` | 全 77 op の `locality_flow`、unique-check を持つ 18 op の属性と `assuming_local` |
 | `src/rc_ir/unique_check_elim.rs` | skeleton を括り出し、uniqueness 固有部分だけ残す |
 | `src/rc_ir/codegen.rs` | `Retain`/`Release`/`Destructure` の `Local` アーム、`develop_mode` assert |
 | `src/generator.rs` | 状態を見る retain/release/is_unique 生成ヘルパ |
-| `src/rc_ir/print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `cancel` | `Destructure` のフィールド追加に追従 |
+| `src/rc_ir/` の `lower.rs`, `print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `ownership.rs`, `provenance.rs`, `rename.rs`, `unique_check_elim.rs` | `Destructure` のフィールド追加に追従（`RcExpr::Destructure` を触る全 11 ファイルから `codegen.rs` を除いたもの） |
 | `src/build/build_object_files.rs` | `specialize` の後に locality パスを差し込む |
+| `src/rc_ir/mod.rs` | 新規 2 モジュールの宣言 |
 
 `RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
 
