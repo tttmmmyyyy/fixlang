@@ -401,7 +401,9 @@ impl ExtShape {
     fn merge(result_ty, arg_tys, type_env) -> ExtShape;
     /// 結果の全 leaf が `root = deep = Always`。
     fn always(result_ty, type_env) -> ExtShape;
-    /// 結果の全 leaf が `root = deep = IfAny(∅)`。発散して値を返さない op 用。
+    /// 結果の全 leaf が `root = deep = IfAny(∅)`。**オペランドを見ない**のが要点で、発散して
+    /// 値を返さない op 用。新しく確保するだけの op は `merge` でよい（boxed leaf を持つ
+    /// オペランドが無ければ join する相手が無く、結果は同じになる）。
     fn bottom(result_ty, type_env) -> ExtShape;
     /// 結果 leaf ごとに指定する。`Provenance::build_shape` と同じ形で、結果型の boxed leaf
     /// を全部歩いて呼ぶので、leaf の書き落としが起こらない。取り出し規則
@@ -450,10 +452,13 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 | `InlineLLVMFFICallBody` | C を呼ぶ |
 
 **`bottom`（2）** — 発散するので結果の値が存在しない。`unreachable` を出すか abort するので、
-何を主張しても空虚に真であり、束の底（全 leaf `IfAny(∅)`）が健全かつ最も精密である。頂に
-すると、`if bad { undefined(msg) } else { v }` のようなガードで arm の join が汚染され、
-`msg` の leaf が `v` に伝わってしまう。`result_prov` が `undefined` に `uniform_bottom` を
-使っているのと同じ理由。
+何を主張しても空虚に真であり、束の底（全 leaf `IfAny(∅)`）が健全かつ最も精密である。
+
+**`merge` では駄目な理由はオペランドにある。** `undefined : String -> a` は
+`String = unbox struct { _data : Array U8 }` を受け取るので、オペランドが boxed leaf を持つ。
+`merge` を当てると結果の `deep` にメッセージ文字列の条件が入り、
+`if bad { undefined(msg) } else { v }` のようなガードで arm の join が汚染されて、存在しない値の
+条件が `v` に伝わる。`result_prov` が `undefined` に `uniform_bottom` を使っているのと同じ理由。
 
 | op | |
 | --- | --- |
