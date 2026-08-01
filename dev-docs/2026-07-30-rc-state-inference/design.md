@@ -333,9 +333,49 @@ let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている
 
 2 相に分ける。
 
-**相 1 — 記号的サマリ。** 関数ごとに、結果の各 leaf の `ExtCond` を、プログラム
-全体の不動点まで計算する。provenance の phase 1 と同型（有限束・単調 join・直接呼び出しは
-callee のサマリを代入・間接と単位外は全 leaf `Always`）。
+**相 1 — 記号的サマリ。** `provenance.rs` の `analyze_program` の phase 1 と同じ形。
+
+状態は `summary : Map<FuncRef, ExtShape>` の 1 本だけ。`summary[f]` は「`f` の**結果**の各 leaf
+の `ExtCond`」で、条件は `f` の入力（パラメータ列、その後に capture）の leaf を指す。
+
+**初期値は束の底。** 全関数について、結果型の全 boxed leaf を `IfAny(∅)`（入力に関わらず
+`Local`）に置く。
+
+**1 回の更新**は「全関数の本体を 1 回ずつ走査して `summary` を上げる」:
+
+1. 環境を恒等サマリで初期化する — パラメータ `i` の leaf `σ` に `IfAny({(i, σ)})`、capture
+   （添字は `params.len()`）も同様。
+2. 本体を転送規則（「転送」の節）で前から走査する。直接呼び出し `let x = App(g, args)` では
+   `summary[g]` を取り、その各 leaf の `ExtCond` に現れる `(j, σ)` を `env[args[j]][σ]` で
+   置き換える（`Always` はそのまま）。`locality_flow` の代入と同じ操作。callee がこの単位に
+   無い、または間接呼び出しなら、結果の全 leaf を `Always` にする。
+3. 走査の終端 `ret` の値の `ExtShape` が候補。`summary[f] = summary[f] ⊔ 候補` と join する。
+
+1 つでも動いたらもう 1 周。何も動かなくなったら収束。
+
+**停止する**のは昇鎖が有限だから。1 leaf の `ExtCond` は
+`IfAny(∅) ⊑ … ⊑ IfAny(全入力 leaf) ⊑ Always` の高さ ≤ |入力 leaf| + 2 で、leaf 数も関数数も
+有限、更新は join なので単調にしか動かない。
+
+**繰り返しが要るのは直接呼び出しのグラフに循環があるから。** Fix にループは無いが再帰はあり、
+`-O max` の specialized `fold` クローンはループ本体を名前で直接呼ぶ。循環が無ければ逆トポロジ
+順の 1 パスで済む。
+
+**底から始めるのが要点。** 頂から始めると、再帰関数が「自分はまだ `MayExt` かもしれない」を
+自分に食わせて `Always` に落ち着く:
+
+```
+k() = if c { 新規確保 } else { k() }
+```
+
+底から始めれば両アームとも `IfAny(∅)` で `Local`。頂から始めると 2 番目のアームが `Always` に
+なって join も `Always` になる。底から始めても健全なのは、`Always` が「まだ見ていない」では
+なく明示的な発生源（扉・間接呼び出し・単位外呼び出し）からしか入らないからで、未知を頂にする
+のは初期値ではなく転送規則の仕事である。
+
+**収束後にもう 1 周**して、各関数と各 global 初期化子の本体を走査し、RC site ごとの `ExtCond`
+を記録する。これが相 2 のゲートの判定材料になる。global 初期化子は呼ばれる側ではないので
+不動点には参加せず、この 1 周でだけ扱う。
 
 **相 2 — locality をキーにした複製。** キーは「パラメータごと x leaf ごとの `Local`/`MayExt`」。
 
