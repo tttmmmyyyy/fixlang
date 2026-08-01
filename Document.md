@@ -2435,7 +2435,7 @@ contains_byte = |c, arr| (
 
 Fix has no function that starts a thread or creates a lock. A multi-threaded program uses the [FFI](#foreign-function-interface-ffi) to drive a threading library such as pthread. [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation, providing asynchronous tasks and a shared variable on top of pthread.
 
-Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, so leave it off for a single-threaded program. A library whose project file sets `threaded` turns it on for every project that depends on it.
+Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, which lowers the run-time performance of the program. Leave it off for a single-threaded program. A library whose project file sets `threaded` turns it on for every project that depends on it.
 
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
