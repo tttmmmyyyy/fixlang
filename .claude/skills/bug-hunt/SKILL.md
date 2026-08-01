@@ -149,6 +149,14 @@ The class this exposes is a false neutrality claim, and it costs twice. A change
 
 The verdict is not "identical or broken". "Not identical, and measured to cost nothing" is the common and useful answer, and it is only available to a hunt that looked.
 
+#### Run the old code beside the new one and diff the decisions, not the outputs
+
+When what changed is an *analysis* — something that computes answers a rewrite then acts on — an artifact diff is the weak form of the check. It compares the end of a long chain, so it only sees a disagreement that survives every stage after it, and it says nothing about where one came from. Copy the pre-change implementation in verbatim under another name, run it beside the new one at every point an answer is produced, and assert every field of the two answers agrees. Now a disagreement is caught at the decision that made it, on the input that made it, whether or not it would have changed the output.
+
+This is cheap in a way an artifact diff is not: one compiler instead of two, no corpus to keep in step, and the standard library alone drives thousands of decisions per build. It is also the strongest neutrality evidence available, because equal decisions imply equal rewrites imply equal output, while equal output implies nothing about the decisions.
+
+Two things to hold onto. Prove it fires — break the new implementation in the way you are afraid of and confirm the assertion catches it — because a differential wired to the wrong object is silent for the same reason a correct one is. And remember what it cannot see: a differential is blind by construction to anything the old code got wrong too, so pair it with at least one oracle derived from something other than the old code — the semantics the rewrite is supposed to preserve, or an independent recomputation of the same answer.
+
 #### Check a transformation against a property it must preserve, over a corpus
 
 A transformation that has to leave some computable property of its input alone — the free names of a term, the scalar leaves of a value, an arity, the set of cases a dispatch covers — can be checked with no expected output and no baseline: derive the property from the input and from the output inside the transformation itself, assert the two agree, and compile everything available (the standard library alone puts a compiler pass through thousands of shapes per build). The oracle comes from the code under test, which is what makes it cheap enough to run over a whole corpus, and the failures it catches are the silent ones. Variable capture is the clearest case — moving an expression under a binder, or renaming a binder that the expression mentions, makes a free name disappear, and the wrong value that results carries no diagnostic — and the same probe catches a dropped subexpression, a leaf count that stopped matching its type, and an argument list that lost an entry.
