@@ -220,11 +220,9 @@ Fix のオブジェクト参照を書き込まない」を std 側の不変条�
 
 ## 束と用語
 
-**leaf パスの記法。** `FieldPath = Vec<usize>` は値の unboxed 構造をたどる添字の列で
-（`rc_ir/ast.rs`）、boxed leaf か部分木を指す。空パス `[]` は値そのもの。`[i] ++ σ` は
-「添字 `i` の後ろにパス `σ` を継いだパス」で、`++` は列の連結である。たとえば
-`(Array I64, Array I64)` の boxed leaf は `[0]` と `[1]`、`Array I64` 自身の boxed leaf は
-`[]` の 1 個だけ（配列は分割不能な 1 単位）。
+**パスの記法。** `[i] ++ σ` は「添字 `i` の後ろにパス `σ` を継いだパス」（`++` は `FieldPath`
+の連結）。たとえば `(Array I64, Array I64)` の boxed leaf は `[0]` と `[1]` で、`Array I64`
+自身の boxed leaf は `[]` の 1 個だけである。
 
 **層が 2 つある。** 解決後の層（クローンの中。呼び出し元が決まっていて、値が具体的）と、
 記号的な層（相 1 のサマリと `locality_flow`。まだ呼び出し元が決まっていない）。既存の
@@ -356,9 +354,13 @@ leaf ごとに 3 値を運ぶ走査になる。
   - callee がこの単位の `RcProgram` の関数を名指す — 直接呼び出し。手続き間の節へ。
   - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `Always`。
 - `let x = Llvm(op, args)`: op の `locality_flow`。次節。
-- `Destructure`: boxed コンテナ — **取り出し規則**。各フィールドの全 leaf に
-  `root = deep = コンテナ leaf の deep`。unboxed — フィールドごとに射影（結果 leaf `σ` <-
-  コンテナ leaf `[i]++σ`、`root`/`deep` ともそのまま）。
+- `Destructure`: コンテナが boxed か unboxed かで分かれる。
+  - **boxed** — leaf は `[]` の 1 個だけで、フィールドはヒープ上のオブジェクトの中にある。
+    **取り出し規則**を当てる: 各フィールドの全 leaf に `root = deep =` コンテナの `[]` の `deep`。
+  - **unboxed** — leaf はフィールドの中まで届いている。**射影**する: フィールド `i` に取り出した
+    値の leaf `σ` は、コンテナの leaf `[i] ++ σ` の値を成分ごとそのまま受け取る。
+    `(Array I64, Array I64)` をフィールド 0 に `a`、1 に `b` と分解するなら、`a : Array I64` の
+    leaf は `[]` なので `a` の `[]` はコンテナの `[0]` を、`b` の `[]` は `[1]` を受け取る。
 - `Match`: variant アーム（`tag = Some`）の payload は `Destructure` と同様。catch-all アーム
   （`tag = None`）の payload は**被検査値そのもの**なので、その値をコピーする。arm の結果は join。
 - `Retain`/`Release`/`Eval`: 環境は不変。
