@@ -782,8 +782,11 @@ specialized `fold` クローンに焼き込み、その本体はループ本体�
 対象に入る（specialize のキーが capture を除外するのは closure-ABI 版だけで、そちらは
 canonical のまま — 今日の uniqueness と同じ扱い）。
 
-単位の外から呼ばれうる関数（プログラムシンボル）は canonical しか参照されようがないので
-自然に `MayExt` 側に落ちる。
+**このパスが走るビルドには単位が 1 つしかない。** 分割コンパイルは
+`Configuration::enable_separated_compilation` が `None` / `Basic` でだけ真を返すので、`Max` 以上
+では全シンボルが 1 つの main unit に入る。したがって外から届く経路はエントリポイントと
+`FFI_EXPORT` だけである。単位の外から呼ばれうる関数を canonical で受ける規則は、`Basic` 以下へ
+降ろす日のために残してある形になる。
 
 **`FFI_EXPORT` の入口も同じ受け皿で足りる。** エクスポート関数は boxed 値を不透明ポインタと
 して受け取れる（`has_c_abi` が `is_box` を許す。#114 が禁じたのは集約型と `Bool`）ので、C から
@@ -793,8 +796,6 @@ closure 値**を読み、`apply_lambda` で適用する（`export_statement.rs`�
 （`g.capture.is_some()` なら retarget しない）、間接呼び出しを retarget することもないので、
 C から届くのは常に canonical 版であり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を
 担っているのは「入力に boxed leaf が無いこと」ではなく、この経路である。
-
-単位間サマリの保存は測定が要求したときの将来課題。
 
 ## 注釈する site
 
@@ -1050,7 +1051,7 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 
 ## 対象外
 
-- 単位間サマリ。
+- 単位間サマリ（`Max` 以上には単位が 1 つしかないので、`Basic` 以下へ降ろすときに要る）。
 - `DeepLocal` 用の状態なし traverser（前述。実測で内訳を見てから）。
 - threaded ビルド（`threaded.md`）。
 - changelog: 観測可能な振る舞いは変わらない。
