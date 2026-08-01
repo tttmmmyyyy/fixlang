@@ -91,13 +91,14 @@ part is not optional.
 
 ### Stages
 
-1. **Value-level taint, non-threaded builds, `Retain`/`Release` sites** — `design.md`.
-2. **The `is_unique` sites**, reached as a co-located op attribute (the `unique_check_elim`
-   pattern); `fannkuch`'s dispatches are 57% `is_unique`.
-3. **Prove `Local` in threaded builds.** The same lattice, but `mark_threaded` breaks the
+1. **Non-threaded builds, every site that reads the state byte** — `Retain`/`Release`, the
+   `is_unique` checks, and `Destructure`'s own reference counting. The ceiling table above was
+   measured with all three removed, so only an implementation covering all three is comparable to
+   it. Designed in `design.md`.
+2. **Threaded builds** — `threaded.md`. The same lattice, but `mark_threaded` breaks the
    assign-once model through aliases (an object already bound can be marked through another
-   reference), so this needs escape reasoning and the race detection in #96 before a wrong proof
-   can even be observed. Deferred.
+   reference), so this needs escape reasoning. No threaded program exists in the repository, so
+   the first task is a benchmark to measure against.
 
 ## Dropping `GLOBAL`: the road not taken
 
