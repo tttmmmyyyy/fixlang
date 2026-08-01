@@ -370,6 +370,8 @@ will be compiled, but the name `x` in the right hand side of `let x = x + 3` is 
 
 This means that you cannot define a local recursive function by let-expression naively. To do this, use `fix` built-in function.
 
+The order in which consecutive `let`-expressions evaluate their bound expressions is not guaranteed. A program that observes that order — two bindings that each abort, or that each print — can behave differently at different optimization levels. Sequence effects in `IO` to fix the order they happen in.
+
 ## If-expressions
 
 The syntax of `if` is the following: `if cond { expr_0 } (else|;) { expr_1 }` where curly braces around `expr_1` is optional.
