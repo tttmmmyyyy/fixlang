@@ -18,8 +18,8 @@
 既定（転送）・手続き間の受け皿（`specialize`）は、どれもその向きを保つために書かれている。
 以下、各所でその向きを明示する。
 
-本文は段階 1（非 threaded ビルドの `Retain`/`Release`）を詳細化し、末尾の 2 節が段階 2
-（注釈の置き場が無い site）と段階 3（threaded ビルド）を設計する。
+本文は段階 1（非 threaded ビルドの全 RC site）を詳細化し、末尾の 1 節が段階 2
+（threaded ビルド）を設計する。
 
 ## 性質
 
@@ -30,8 +30,10 @@
 >
 > `MayExt` — 証明できなかった。
 
-`Local` ⊑ `MayExt` の 2 点束で、join は `MayExt` 側。unit パス `π` に対する `Retain`/`Release`
-が `RcState::Local` を出せるのは、`π` 以下のすべての boxed leaf が `Local` のとき。
+`Local` ⊑ `MayExt` の 2 点束で、join は `MayExt` 側。site が状態ディスパッチを外せるのは、
+その site が触る leaf がすべて `Local` のとき — `Retain`/`Release` なら unit パス `π` 以下の
+全 leaf、`is_unique` ならチェック対象の leaf、`Destructure` ならノードが retain/release する
+leaf 全部（「注釈する site」の節）。
 
 非 threaded ビルドでは、あるオブジェクトが global から到達可能かどうかは**そのオブジェクトが
 できた時点で決まり、後から変わらない**（`mark_global` は global 初期化子の結果グラフに 1 回
@@ -104,7 +106,7 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 
   という形になる。`b` を `MayExt` にするだけでは足りず、同じオブジェクトを指す `a` が
   取り残される。threaded ビルドで `Local` を証明するには「何が `mark_threaded` に流れ込み
-  うるか」の escape 推論が必要 — threaded の段階（plan の段階 3、#96 待ち）ごと先送りする。
+  うるか」の escape 推論が必要 — 段階 2（#96 待ち）ごと先送りする。
 
 **段階 1 の注釈は `config.threaded` が偽のときだけ走る。** threaded ビルドは今日のまま全部
 ディスパッチする。
@@ -327,7 +329,7 @@ let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている
 ただしそれは根 1 個の事実であって、この解析が leaf に持たせている「グラフ全体」の事実ではない
 ので、`IfAny(∅)` として書くことはできない。根だけの事実を別に持つ設計（注釈は根の事実で足りる
 一方、コンテナ読み出しの伝播にはグラフの事実が要る）は精度を上げうるが、束とキーが 2 倍になる
-ので、段階 1 の実測が要求してから検討する。
+ので、実測が要求してから検討する。
 
 ## 手続き間: 独立した specialize パス
 
@@ -453,7 +455,7 @@ post-fixpoint である。具体側は「実行中に現れる活性化の (関�
 
 **寄りかかっているのは (P1) と (P2) である。** 77 個の手書き宣言のどれか 1 つが誤っていれば
 局所健全性が破れ、結論が崩れる。だから `develop_mode` の実行時 assert（`Local` と注釈した
-site で状態バイトを読んで検査する）を段階 1 と同時に入れ、結論そのものを全テストプログラムで
+site で状態バイトを読んで検査する）を実装と同時に入れ、結論そのものを全テストプログラムで
 直接検査する。
 
 **相 2 — locality をキーにした複製。** キーは「パラメータごと x leaf ごとの `Local`/`MayExt`」。
@@ -486,8 +488,8 @@ site で状態バイトを読んで検査する）を段階 1 と同時に入れ
 で、provenance はそれを読まない。よってどちらの順でも各本体に付く注釈は同じで、到達する
 (uniqueness, locality) の組も同じなのでクローン総数も変わらない。
 
-**順序は `unique_check_elim` の後。** 結果が同じなら、決め手は段階 2 になる。段階 2 が注釈
-するのは `is_unique` の**実行時チェックが残っている** site だけで、uniqueness に畳まれて
+**順序は `unique_check_elim` の後。** 結果が同じなら、決め手は `is_unique` の注釈になる。
+locality が注釈するのは**実行時チェックが残っている** site だけで、uniqueness に畳まれて
 `array_set[unique]` になった site には読む状態バイトがもう無い。畳み込みを先に済ませておけば、
 locality パスは残った site だけを見ればよく、ゲートも「実行時チェックにまだ到達する関数」で
 組める。逆順にすると、消える運命の site のためにキーを分ける。
@@ -508,12 +510,39 @@ canonical のまま — 今日の uniqueness と同じ扱い）。
 ポイントと FFI エクスポートだけが外部から届き、どちらの入力も boxed leaf を持たないので、
 何も失わない。単位間サマリの保存は測定が要求したときの将来課題。
 
-## 注釈
+## 注釈する site
 
-クローンの実体化のとき、入力の具体値の下で本体を前向きに 1 回走査し、各
-`Retain(x, π, Unknown)` / `Release(x, π, Unknown)` で `π` 以下の全 leaf が `Local` なら状態を
-`RcState::Local` に書き換える。それ以外は `Unknown` のまま。global 初期化子本体は入力なしで
-同様に解釈する（specialize が今 `&[]` でやっているのと同じ形）。
+状態バイトを読む site は 3 種類あり、**段階 1 は 3 つとも注釈する**。
+
+| site | 状態バイトを読む所 | 注釈の置き場 |
+| --- | --- | --- |
+| `Retain` / `Release` | `retain_nonnull_boxed` / `build_release_boxed_with` | ノードの `RcState` フィールド（既存） |
+| `is_unique` チェック | `build_branch_by_is_unique`。unique-check op の `generate` の中 | op インスタンスの属性フィールド |
+| `Destructure` | `get_struct_fields`。ノード自身が retain/release する | ノードに `RcState` を足す |
+
+**3 つを一緒に出す。** `plan.md` の上限表（`sort` -13.87%、`levenshtein` -6.25% など）は
+3 種類すべてのディスパッチを外して測ったものなので、比較できるのは 3 つを覆った実装だけで
+ある。`is_unique` はディスパッチの過半を占めることがあり（`fannkuch` 57%、`cp_lib_lsegtree`
+15%）、これを落とすと `fannkuch` の測定は上限のごく一部しか動かない。
+
+### 注釈のしかた
+
+クローンの実体化のとき、入力の具体値の下で本体を前向きに 1 回走査する。
+
+- `Retain(x, π, Unknown)` / `Release(x, π, Unknown)`: `π` 以下の全 leaf が `Local` なら
+  `RcState::Local` に書き換える。
+- unique-check op: `unique_check_operand` が指す leaf が `Local` なら、op を「対象は `LOCAL`」
+  版に差し替える。差し替えは `assuming_unique` と同じパターン — 対象 op の struct にフィールドを
+  足し、それを立てたクローンを返すメソッドを生やす。`unique_check_elim` を先に走らせてあるので
+  （後述の順序）、ここで見るのは実行時チェックが残った site だけである。
+- `Destructure`: ノードが行う参照カウント操作**すべて**が `LOCAL` なオブジェクトに対するもの
+  なら `RcState::Local`。boxed コンテナならフィールドの retain とコンテナの release で、到達
+  閉包によりコンテナ leaf の値が両方を決める。unboxed コンテナなら名前の付かなかったフィールド
+  の release で、それらの meet を取る。フィールドごとに状態を分ける精密化は、実測が要求したら
+  足す。
+
+それ以外は `Unknown` のまま。global 初期化子本体は入力なしで同様に解釈する（specialize が今
+`&[]` でやっているのと同じ形）。
 
 パイプラインでの位置:
 `… → borrow_ify → cancel → unique_check_elim::specialize → locality::specialize → implement`。
@@ -530,25 +559,25 @@ canonical のまま — 今日の uniqueness と同じ扱い）。
   本体）。
 - `Release(Local)`: 非 atomic デクリメント、読んだカウントが 1 なら破棄 — こちらも今日の
   local アームからディスパッチを外したもの。
+- `Destructure(Local)`: `get_struct_fields` が呼ぶ retain/release を上の 2 つに差し替える。
+- unique-check op（対象が `LOCAL` 版）: `build_branch_by_is_unique` の状態ディスパッチを外し、
+  参照カウントを 1 と比べる分岐だけを出す（今日の `local_bb` の本体）。
 
 null チェックの包み（`skip_null_check`、dynamic object のチェック）は直交で不変。破棄が呼ぶ
 型 traverser の内部ディスパッチは `Unknown` のまま — 状態ごとの traverser 一族は生成コードを
-倍にするので段階 1 ではやらない。
-
-`is_unique` のディスパッチ（状態バイトの 3 番目の読み手、unique-check op の中）は段階 2
-（後述）。段階 1 はこれ抜きで出して測る。
+倍にするので対象外。
 
 ## コードだけでなく解析を検証する
 
-- **`develop_mode` の実行時 assert**: `Local` と注釈されたすべての操作で状態バイトを読み、
-  `REFCNT_STATE_LOCAL` でなければ abort。冒頭の「壊れる側」の誤りを、静かなメモリ破壊から
-  その場の abort に変えるもので、解析の穴に対する唯一の実効的な防御なので、段階 1 と同時に
-  入れる（後追いにしない）。テストスイート全体が `develop_mode` で走るので、注釈された全
+- **`develop_mode` の実行時 assert**: `Local` と注釈された**3 種類すべての** site で状態バイトを
+  読み、`REFCNT_STATE_LOCAL` でなければ abort。「壊れる側」の誤りを、静かなメモリ破壊から
+  その場の abort に変えるもので、局所健全性 (P1) の穴に対する唯一の実効的な防御なので、実装と
+  同時に入れる（後追いにしない）。テストスイート全体が `develop_mode` で走るので、注釈された全
   site が全テストプログラムで動的に検査される。わざと 1 site を誤注釈してスイートが落ちる
   ことを一度示し、その破壊を戻す。
 - **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
-  `Local` / `Unknown` 操作を数え、`plan.md` の上限表（`arg`+`local` 行）と突き合わせる。
-  併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
+  `Local` / `Unknown` 操作を site の種類ごとに数え、`plan.md` の上限表（`arg`+`local` 行）と
+  突き合わせる。併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
 - **全スイート** 3 水準、**`benchmark/speedtest`** を現 `main` の行と比較。捨てた設計で
   裏返ったナイフエッジ（`nbody`、`nbody_fold`）を注視する。
 
@@ -558,40 +587,18 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 | --- | --- |
 | `src/rc_ir/locality.rs`（新規） | `Locality` / `ExtCond` / `ExtShape` / `LocalityKey`、転送、相 1 の記号的サマリ、相 2 と注釈 |
 | `src/rc_ir/specialize.rs`（新規） | `unique_check_elim` から括り出した複製 skeleton |
-| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（既定実装なし） |
-| `src/fixstd/builtin.rs` | 全 77 op の `locality_flow` |
+| `src/rc_ir/ast.rs` | `Destructure` に `RcState` |
+| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（既定実装なし）、`assuming_local` |
+| `src/fixstd/builtin.rs` | 全 77 op の `locality_flow`、unique-check を持つ 19 op の属性と `assuming_local` |
 | `src/rc_ir/unique_check_elim.rs` | skeleton を括り出し、uniqueness 固有部分だけ残す |
-| `src/rc_ir/codegen.rs` | `Retain`/`Release` の `Local` アーム、`develop_mode` assert |
-| `src/generator.rs` | 状態を見る retain/release 生成ヘルパ |
+| `src/rc_ir/codegen.rs` | `Retain`/`Release`/`Destructure` の `Local` アーム、`develop_mode` assert |
+| `src/generator.rs` | 状態を見る retain/release/is_unique 生成ヘルパ |
+| `src/rc_ir/print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `cancel` | `Destructure` のフィールド追加に追従 |
 | `src/build/build_object_files.rs` | `specialize` の後に locality パスを差し込む |
 
 `RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
 
-## 段階 2 — 注釈の置き場が無い site
-
-段階 1 が注釈できるのは `Retain`/`Release` ノードだけである。参照カウント操作はほかに 2 か所
-から出ていて、どちらも `RcState` を書くフィールドを持たない。
-
-**`is_unique` のチェック。** 状態バイトの 3 番目の読み手（`build_branch_by_is_unique`。配列の
-`set` が in-place 更新できるか調べる所など）で、読みは unique-check op の `LLVMGen::generate`
-の**中**で起きる。注釈の結果は op インスタンスの属性フィールドとして届ける — `assuming_unique`
-が使っているのと同じ、対象 op の struct にフィールドを足して書き込むパターン。
-`unique_check_elim` を先に走らせてあるので、ここで見るのは実行時チェックが残った site だけ。
-
-**`Destructure`。** このノードは自分で参照カウント操作をする（`get_struct_fields`）。boxed
-コンテナならフィールドを 1 個ずつ retain してコンテナを release し、unboxed コンテナなら
-名前の付かなかったフィールドを release する。いずれもノード内部なので、段階 1 の注釈は届かず
-実行時ディスパッチのままになる。届かせるならノードに状態を持たせる:
-
-- boxed コンテナ: 状態は 1 個で足りる。到達閉包により、コンテナが `Local` ならフィールドも
-  `Local` なので、コンテナ leaf の値が retain 側と release 側の両方を決める。
-- unboxed コンテナ: release される非名前フィールドごとに状態が要る。同じ環境の中に `Local` な
-  成分と `MayExt` な成分が並びうるため。
-
-やる価値: `fannkuch` のディスパッチは 57% が `is_unique`、`cp_lib_lsegtree` は 15%。
-`Destructure` の取り分は未計測。段階 1 の実測を見てから、どちらを足すか決める。
-
-## 段階 3 — threaded ビルド
+## 段階 2 — threaded ビルド
 
 同じ束を `THREADED` に向ける。証明が通れば atomic RMW が非 atomic の増減になり、分岐 1 個を
 消すより 1 操作あたりの取り分が大きい。追加で要るのは「性質」の節で述べた時間性への対処で、
