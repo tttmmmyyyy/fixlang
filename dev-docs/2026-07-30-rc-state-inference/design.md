@@ -253,6 +253,13 @@ struct LeafCond {
     root: ExtCond,   // この leaf のオブジェクト自身が非 LOCAL になる条件
     deep: ExtCond,   // この leaf から到達できる先に非 LOCAL が居る条件
 }
+
+/// 値 1 個ぶんの記号的な値。その型の boxed leaf パスごとに条件を持つ。
+/// 関数のサマリと `locality_flow` の戻り値が同じこの型で、`IfAny` の添字が指す先だけが違う。
+struct ExtShape(Map<FieldPath, LeafCond>);
+
+/// 値 1 個ぶんの解決後の値。specialize のキーの成分になる。
+struct LocalityKey(Map<FieldPath, Locality>);
 ```
 
 **この文書では、`DeepLocal`/`RootLocal`/`MayExt` は解決後の層でだけ、`Always`/`IfAny` は記号的な
