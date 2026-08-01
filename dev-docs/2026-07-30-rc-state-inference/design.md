@@ -1,9 +1,22 @@
 # Locality 推論の設計: global 由来の値を前向きに追う
 
 `plan.md` の測定を受けた設計。実行時の参照カウント状態バイトは残し、RC IR 上の may 解析で
-参照カウント操作ごとに `RcState::Local` を証明する。証明できなかった操作は今日の実行時
-ディスパッチのままなので、諦める証明は何のコストも生まない。不正確さでプログラムが壊れる
-ことはなく、壊れうるのは不健全さだけである。この文書はその不健全さが無いことを論証する。
+参照カウント操作ごとに `RcState::Local` を証明する。
+
+**誤りの 2 方向は対称ではない。** 証明を諦めて `MayExt` に倒すのは無害で、その操作は今日の
+実行時ディスパッチのまま — だから精度はいくら落としても正しさは動かない。逆向きの誤り、
+実際には global から到達できる値を `Local` と言う方は、その場でメモリを壊す。global
+オブジェクトの参照カウントは維持されていない（`build_retain` の `global_bb` は何もしない）
+一方で、`insert_rc` は global の読み出しに retain を入れず callee は release するので、
+`plan.md` で測ったとおり読むたびにカウントが 1 ずつ減る勘定になっている。今はその release が
+`global_bb` へ落ちて何もしないので釣り合っているが、`Local` と注釈された release は
+ディスパッチせず直接デクリメントするため、最初の消費読み出しでカウントが 0 に落ち、global
+オブジェクトが解放される。以後の読み出しは use-after-free になる。
+
+したがってこの設計は全体として、**証明できたと明示的に言えるときだけ `Local`、それ以外は
+すべて `MayExt`** という向きに倒れていなければならない。扉の数え上げ（発生源）・転送の
+既定（転送）・手続き間の受け皿（`specialize`）は、どれもその向きを保つために書かれている。
+以下、各所でその向きを明示する。
 
 本文は段階 1（非 threaded ビルドの `Retain`/`Release`）を詳細化し、末尾の 2 節が段階 2
 （`is_unique` サイト）と段階 3（threaded ビルド）を設計する。
@@ -118,19 +131,27 @@ RC IR ノードごとに、各ローカル束縛を leaf ごとの値に写す�
 - `let x = App(callee, args)`:
   - callee がこの単位の `RcProgram` の関数を名指す — 直接呼び出し。手続き間の節へ。
   - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `{Ext}`。
-- `let x = Llvm(op, args)`: op の *locality flow*（`LLVMGen` の新メソッド）で:
-  - **デフォルト: 結果の各 leaf に、全オペランドの全 leaf の join。`Ext` は加えない。**
-    これは「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを並べ替える
-    ことしかできない」操作すべてに対して健全 — つまり扉を除くすべての builtin。boxed
-    コンテナからの読み出し（`array_get`、boxed struct の getter）は到達閉包によりデフォルトで
-    正しい: 要素はコンテナから到達可能だった。
-  - オーバーライド（各 op と同じ場所、`builtin.rs` に共置。op 固有属性と同じパターン）:
-    - `boxed_from_retained_ptr`（と、念のため `mark_threaded`）: 全 leaf `{Ext}`。
-    - unboxed 集約の配管 op — struct/tuple の make・get・set・mod・punch/plug-in、union の
-      make/as/mod、capture projection — は leaf ごとに配線する（結果 leaf `.i.σ` ←
-      オペランド leaf `σ` など）。`MayExt` な成分と `Local` な成分を持つタプルを分けて保てる。
-      ループ状態（`(tree, rng, sum)`）はここに住むので、hot loop が見る精度はこれで決まる。
-      集合は列挙されていて小さく、各オーバーライドは数行。
+- `let x = Llvm(op, args)`: op の *locality flow*（`LLVMGen` の新メソッド、各 op と同じ場所に
+  `builtin.rs` で共置。op 固有属性と同じパターン）。3 つの答えのどれかを返す:
+  - **`Merge` — 結果の各 leaf に、全オペランドの全 leaf の join。`Ext` は加えない。**
+    「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを並べ替える
+    ことしかできない」操作に対して健全で、現在の builtin では扉 3 を除く全部がこれに当たる。
+    boxed コンテナからの読み出し（`array_get`、boxed struct の getter）も `Merge` で正しい —
+    到達閉包を取っているので、要素はコンテナから到達可能だった。
+  - **`Ext` — 結果の全 leaf `{Ext}`。** `boxed_from_retained_ptr`（扉 3）と、念のため
+    `mark_threaded`。
+  - **`Wired` — leaf ごとに配線。** unboxed 集約の配管 op — struct/tuple の make・get・set・
+    mod・punch/plug-in、union の make/as/mod、capture projection — は結果 leaf `.i.σ` ←
+    オペランド leaf `σ` のように結ぶ。`MayExt` な成分と `Local` な成分を持つタプルを分けて
+    保てる。ループ状態（`(tree, rng, sum)`）はここに住むので、hot loop が見る精度はこれで
+    決まる。集合は列挙されていて小さく、各配線は数行。
+
+  **このメソッドに既定実装を置かない。** `Merge` を既定にすると、オペランドから到達できない
+  boxed オブジェクトを作る op を将来足したときに、何も書かなくても `Local` が通る — 冒頭で
+  述べた「壊れる側」の誤りが黙って入ることになる。`Ext` を既定にすれば安全側だが、今度は
+  書き忘れが黙って精度を殺し、しかも症状が出ないので気付けない。どちらの黙り方も避けたいので
+  `LLVMGen` の必須メソッドにして、op を足す人に 3 つから必ず選ばせる。既存の 77 個の
+  `impl LLVMGen` は大半が 1 行の `Merge` になる。
   - flow を `result_prov` の読み替えにせず独立のメソッドにするのは、provenance が別の問いに
     答えているから（あちらの `Unknown` は「追跡していない共有」であって状態の共有ではない）。
     片方から導出すると、uniqueness の都合の編集が健全性の論証を静かに変える。
@@ -212,10 +233,11 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 ## コードだけでなく解析を検証する
 
 - **`develop_mode` の実行時 assert**: `Local` と注釈されたすべての操作で状態バイトを読み、
-  `REFCNT_STATE_LOCAL` でなければ abort。テストスイート全体が `develop_mode` で走るので、
-  注釈された全 site が全テストプログラムで動的に検査される — plan の「特殊化された操作が
-  主張を検査する」項目を、後からでなく段階と同時に納品する。わざと 1 site を誤注釈して
-  スイートが落ちることを一度示し、その破壊を戻す。
+  `REFCNT_STATE_LOCAL` でなければ abort。冒頭の「壊れる側」の誤りを、静かなメモリ破壊から
+  その場の abort に変えるもので、解析の穴に対する唯一の実効的な防御なので、段階 1 と同時に
+  入れる（後追いにしない）。テストスイート全体が `develop_mode` で走るので、注釈された全
+  site が全テストプログラムで動的に検査される。わざと 1 site を誤注釈してスイートが落ちる
+  ことを一度示し、その破壊を戻す。
 - **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
   `Local` / `Unknown` 操作を数え、`plan.md` の上限表（`arg`+`local` 行）と突き合わせる。
   併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
