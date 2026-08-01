@@ -188,9 +188,11 @@ Fix のオブジェクト参照を書き込まない」を std 側の不変条�
   実カウントを減らす。
 
   そこで「**global の初期化子は、外部が保持している Fix オブジェクトを結果グラフに取り込んでは
-  ならない**」を契約として課し、`boxed_from_retained_ptr` のドキュメントにも書く。純粋な Fix
-  では表現できないことを禁じるだけなので、書けるプログラムは 1 つも失われない。健全性の節の
-  前提 P2 を担保しているのは、上の数え上げとこの契約である。
+  ならない**」を契約として課す。`boxed_from_retained_ptr` は既に「引数が本当にその型への
+  ポインタでなければ UB」と定めている公開の unsafe プリミティブなので、その UB 条件に 1 つ
+  足す形でドキュメントに書く。純粋な Fix では表現できないことを禁じるだけなので、書ける
+  プログラムは 1 つも失われない。健全性の節の前提 P2 を担保しているのは、上の数え上げと
+  この契約である。
 
   **「扉は読み出し側に付く」の論証はここを覆わない。** あちらは *初期化子の中で* 実行される
   操作の話（マークより前なのでまだ `LOCAL` を見る）で、ここで問題になるのは *初期化子の外で*、
@@ -995,8 +997,11 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 | `src/rc_ir/` の `lower.rs`, `print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `ownership.rs`, `provenance.rs`, `rename.rs`, `unique_check_elim.rs` | `Destructure` のフィールド追加に追従（`RcExpr::Destructure` を触る全 12 ファイルから、別行に挙げた `ast.rs` と `codegen.rs` を除いたもの） |
 | `src/build/build_object_files.rs` | `specialize` の後に locality パスを差し込む |
 | `src/rc_ir/mod.rs` | 新規 2 モジュールの宣言 |
+| `src/fixstd/std.fix` | `boxed_from_retained_ptr` のドキュメントに初期化子の契約を追記 |
 
 `RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
+`retain_<hash>` / `release_<hash>` と `trav_release_(T)` は名前で memoize されるので、状態を
+キーに足せば生成の重複は起きない（コード生成）。
 
 ## 対象外
 
