@@ -288,9 +288,8 @@ struct LocalityKey(Map<FieldPath, Locality>);
 ### `Always` は吸収元
 
 `Always` を含む条件は入力が何であっても成り立つので、そこに並ぶ入力 leaf は結果を一切変え
-ない。これを不変条件として手で保つのではなく、`ExtCond` の形で持つ。join は
-`Always ⊔ _ = Always`、`IfAny(a) ⊔ IfAny(b) = IfAny(a ∪ b)`。`LeafCond` の join は成分ごと。
-原子の合併は `Aspect` 込みで行う。
+ない。これを不変条件として手で保つのではなく、`ExtCond` の形で持つ。join（`⊔`）は `Always ⊔ _ = Always`、`IfAny(a) ⊔ IfAny(b) = IfAny(a ∪ b)` — `Always` の吸収を
+除けば集合の合併で計算する。原子の合併は `Aspect` 込み。`LeafCond` の join は成分ごと。
 
 **順序が意味するのは含意である。** `c ⊑ c'` は「どの入力に対しても、`c` が成り立つなら `c'` も
 成り立つ」。条件が成り立つとは非 LOCAL でありうることなので、小さい条件ほど `Local` を主張し、
@@ -304,7 +303,9 @@ struct LocalityKey(Map<FieldPath, Locality>);
             deep = IfAny({(i, σ, Deep), (i, σ, Root)})
 ```
 
-こうすれば不変条件が部分集合順のまま成り立ち、順序を 2 つ持たずに済む。`deep` に入れた `Root`
+こうすれば不変条件が部分集合順のまま成り立ち、順序を 2 つ持たずに済む。おまけに
+**`root ⊔ deep` が `deep` に等しくなる**ので、値を「下に非 LOCAL が居るか」で扱う場所は
+`deep` を見るだけでよくなる。`deep` に入れた `Root`
 原子は「入力が `MayExt`」を判定するが、それが成り立つときは `root` 側も成り立つので、解決結果は
 変わらず精度も落ちない。代入も通る — `Root` 原子は入力の `root` に、`Deep` 原子は入力の `deep`
 に置き換わるので、`deep` は `root` の置換結果を含んだままになる。
@@ -344,7 +345,7 @@ leaf ごとに 3 値を運ぶ走査になる。
   何も起きない。closure 型の global は capture leaf が `Always` — その capture object はマーク
   されているので正しい。）
 - `let x = Closure(f, caps)`: capture leaf は `root = IfAny(∅)`（capture object は新規確保）、
-  `deep` は caps の全 leaf の `root ⊔ deep` の join。
+  `deep` は caps の全 leaf の `deep` の join。
 - `let x = App(callee, args)`:
   - callee がこの単位の `RcProgram` の関数を名指す — 直接呼び出し。手続き間の節へ。
   - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `Always`。
@@ -385,8 +386,8 @@ fn locality_flow(
 ) -> ExtShape;
 
 impl ExtShape {
-    /// 結果の全 leaf は `root = IfAny(∅)`、`deep` は全オペランドの全 leaf の
-    /// `root ⊔ deep` の join。**契約**: この op が返すコンテナは、新しく確保したもの、
+    /// 結果の全 leaf は `root = IfAny(∅)`、`deep` は全オペランドの全 leaf の `deep` の join。
+    /// **契約**: この op が返すコンテナは、新しく確保したもの、
     /// この op が直前に unique 化したもの、または呼び出し側が uniqueness を保証したうえで
     /// in-place 更新したもの、のいずれかである（健全性の節の前提 P5）。
     fn merge(result_ty, arg_tys, type_env) -> ExtShape;
