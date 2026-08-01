@@ -410,10 +410,21 @@ G(R)_f = { (a, v) | f の本体を a で走らせ、直接呼び出し g では 
 発散するので負の `n` の対は最後まで現れない。発散の扱いはこの定義に吸収されていて、後で
 場合分けする必要がない。
 
-**抽象側**（コンパイラが実際に持って計算するもの）。`F` は「全関数の本体を 1 回走査する」
-写像で、状態は `summary : Map<FuncRef, ExtShape>`。有限束の上で単調 (P3)。
+**抽象側**（コンパイラが実際に持って計算するもの）。`summary` の住む束を `A` とする:
 
-**つなぎ。** `γ(S)_f` を、`S` が主張することを実際に満たす対の集合とする:
+```
+A          = Π_f ExtShape_f                          -- Map<FuncRef, ExtShape>
+ExtShape_f = Π_{π ∈ leaves(ret_f)} ExtCond_f         -- Map<FieldPath, ExtCond>
+ExtCond_f  = P(InputLeaves(f)) に頂 Always を付け足した束
+InputLeaves(f) = { (i, σ) | i は f の入力の添字、σ は入力 i の型の boxed leaf パス }
+```
+
+`⊥_A` は全 leaf `IfAny(∅)`、`⊤_A` は全 leaf `Always`。`ExtCond_f` の高さは
+`|InputLeaves(f)| + 2` で、`leaves(ret_f)` も関数の数も有限なので `A` は有限、したがって完備。
+`F : A -> A` は「全関数の本体を 1 回走査する」写像で、単調 (P3)。
+
+**つなぎ。** `γ : A -> C`。成分ごとには
+`γ_f : ExtShape_f -> P(In_f x Out_f)` で、`S` が主張することを実際に満たす対の集合を返す:
 
 ```
 γ(S)_f = { (a, v) | 結果の各 leaf π について、
@@ -421,8 +432,8 @@ G(R)_f = { (a, v) | f の本体を a で走らせ、直接呼び出し g では 
                     v.π から到達できるオブジェクトがすべて REFCNT_STATE_LOCAL }
 ```
 
-`S` が大きいほど（`Always` が多いほど）主張が弱く集合が広いので、`γ` は単調。`α` は要らない —
-concretization だけの枠組みで足りる。
+`S` が大きいほど（`Always` が多いほど）主張が弱く集合が広いので、`γ` は単調。逆向きの
+`α : C -> A` は要らない — concretization だけの枠組みで足りる。
 
 **局所健全性（手で確かめるのはここだけ）。**
 
@@ -475,17 +486,22 @@ Tarski が出すのは健全性だけで、計算手続きは別である。抽�
 
 **注釈の健全性はもう 1 つの不動点で言う。** 上はサマリ（後ろ向き・表示的）の話で、注釈は
 クローンの中で「キーが `Local` を証明する site に印を付ける」ので、キーが実際に満たされて
-いることが要る。これは前向きの到達可能性で、同じ型の議論になる:
+いることが要る。これは前向きの到達可能性で、束をもう 1 組立てて同じ型の議論をする:
 
 ```
-Reach ⊆ FuncRef x LocalityKey
+C_R = P( ⋃_f {f} x In_f )        -- 実行中に現れる活性化（関数と実引数）の集合。具体側
+A_R = P( FuncRef x LocalityKey ) -- 到達しうる (関数, キー) の対。抽象側。有限
+γ_R : A_R -> C_R
+γ_R(Reach) = { (f, a) | ある (f, k) ∈ Reach について a が k を満たす }
+
 H(Reach) = { エントリと global 初期化子の (f, canonical) }
          ∪ { (g, k) | (f, k') ∈ Reach かつ f のクローン k' の中の call site が g を k で呼ぶ }
 ```
 
-`specialize` の worklist はこの `H` の Kleene 反復そのもので、キューが空になった時点が
-post-fixpoint である。具体側は「実行中に現れる活性化の (関数, 実引数の locality)」の集合で、
-その最小不動点が `γ(Reach)` に収まることが同じ 2 行で出る。局所健全性にあたるのは
+`LocalityKey` は leaf パスから 2 値への有限写像なので `A_R` は有限のべき集合束、`C_R` も
+べき集合束で完備。`specialize` の worklist はこの `H` の Kleene 反復そのもので、キューが空に
+なった時点が post-fixpoint である。具体側の 1 段展開の最小不動点が `γ_R(Reach)` に収まる
+ことが同じ 2 行で出る。局所健全性にあたるのは
 「call site がキーを組むときに使う `ExtCond` の解決が正しい」で、これはサマリ側の局所健全性の
 系である。
 
