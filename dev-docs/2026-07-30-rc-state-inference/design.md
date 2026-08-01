@@ -98,7 +98,10 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 ならない」と `std.fix` が定めているので、`deep` すら汚さない。）
 
 発生源でないことを確認したもの: `String::unsafe_from_c_str_ptr` は新しい配列へ複製する。
-C ランタイムは参照カウント対象を作らない。`argc`/`argv` は生スカラーで、
+`FFI_EXPORT` は boxed 値を不透明ポインタとして受け渡せる（`has_c_abi` が `is_box` を許す。
+#114 が禁じたのは集約型と `Bool`）ので、エクスポート関数の引数には状態の分からない boxed 値が
+入ってくるが、**どのオブジェクトの状態も変えない**ので扉ではない。未知の状態は手続き間の節で
+受ける。C ランタイムは参照カウント対象を作らない。`argc`/`argv` は生スカラーで、
 `Std::get_args` は新しい文字列を作る。`boxed_to_retained_ptr` は状態を変えずにポインタを
 貸し出すだけで、値の帰り道は扉 3。将来の 4 つ目の扉は静的メモリの作業（issue #122 の追記）:
 静的に確保されたストレージは `create_obj` を通らないので、その作業は状態を宣言し、この一覧を
@@ -608,7 +611,11 @@ A_R = P( FuncRef x LocalityKey ) -- 到達しうる (関数, キー) の対。�
 γ_R : A_R -> C_R
 γ_R(Reach) = { (f, a) | ある (f, k) ∈ Reach について a が k を満たす }
 
-H(Reach) = { エントリと global 初期化子の (f, canonical) }
+H(Reach) = { (f, canonical) | f は単位の関数すべて }   -- specialize が実際に全関数の
+                                                      -- canonical を要求するのと同じ。
+                                                      -- エントリ・global 初期化子・
+                                                      -- FFI エクスポート・間接呼び出しの
+                                                      -- 受け皿を一括で覆う
          ∪ { (g, k) | (f, k') ∈ Reach かつ f のクローン k' の中の call site が g を k で呼ぶ }
 ```
 
@@ -619,7 +626,9 @@ H(Reach) = { エントリと global 初期化子の (f, canonical) }
 「call site がキーを組むときに使う `ExtCond` の解決が正しい」で、これはサマリ側の局所健全性の
 系である。
 
-基底は canonical 版（全 leaf `MayExt`）で、何も主張しないキーなので無条件に満たされる。
+基底は全関数の canonical 版（全 leaf `MayExt`）で、何も主張しないキーなので無条件に満たされる。
+外部から届く経路 — エントリポイント、`FFI_EXPORT`、間接呼び出し、単位外呼び出し — はすべて
+ここに落ちる。
 
 **寄りかかっているのは (P1) と (P2) である。** 77 個の手書き宣言のどれか 1 つが誤っていれば
 局所健全性が破れ、結論が崩れる。だから `develop_mode` の実行時 assert（`Local` と注釈した
@@ -681,11 +690,17 @@ specialized `fold` クローンに焼き込み、その本体はループ本体�
 canonical のまま — 今日の uniqueness と同じ扱い）。
 
 単位の外から呼ばれうる関数（プログラムシンボル）は canonical しか参照されようがないので
-自然に `MayExt` 側に落ちる。**`FFI_EXPORT` は boxed 値を不透明ポインタとして受け渡せる**
-（`has_c_abi` は `is_box` を許す。#114 が禁じたのは集約型）ので、エクスポート関数の引数には
-状態の分からない boxed 値が入ってくるが、C から届くのは元のシンボル名すなわち canonical 版
-だけであり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を担っているのは
-「入力に boxed leaf が無いこと」ではなく「外部からは canonical にしか届かないこと」である。
+自然に `MayExt` 側に落ちる。
+
+**`FFI_EXPORT` の入口も同じ受け皿で足りる。** エクスポート関数は boxed 値を不透明ポインタと
+して受け取れる（`has_c_abi` が `is_box` を許す。#114 が禁じたのは集約型と `Bool`）ので、C から
+状態の分からない boxed 値が入ってくる。生成されるラッパは、エクスポートされた**global の
+closure 値**を読み、`apply_lambda` で適用する（`export_statement.rs`）— すなわち
+**global アトムの読み出しと間接呼び出し**である。specialize は closure を特殊化せず
+（`g.capture.is_some()` なら retarget しない）、間接呼び出しを retarget することもないので、
+C から届くのは常に canonical 版であり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を
+担っているのは「入力に boxed leaf が無いこと」ではなく、この経路である。
+
 単位間サマリの保存は測定が要求したときの将来課題。
 
 ## 注釈する site
