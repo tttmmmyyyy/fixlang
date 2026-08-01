@@ -109,54 +109,74 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 **段階 1 の注釈は `config.threaded` が偽のときだけ走る。** threaded ビルドは今日のまま全部
 ディスパッチする。
 
-## 束
+## 束と用語
 
-**クローンの中**（注釈をする場所）では、boxed leaf ごとに `Local` / `MayExt` の 2 値。入力の
-値はクローンのキーから来る具体値で、本体の走査で伝播する。
+**層が 2 つある。** 解決後の層（クローンの中。呼び出し元が決まっていて、値が具体的）と、
+記号的な層（相 1 のサマリと `locality_flow`。まだ呼び出し元が決まっていない）。既存の
+provenance / uniqueness と同じ 2 層構造で、名前も層ごとに分ける:
 
-**記号的サマリ**（相 1、まだ呼び出し元が決まっていない段階）では、leaf ごとに「この leaf が
-`MayExt` になりうる理由」を持つ。理由は 2 種類しかない。
-
-- `Ext` — 扉のどれかから来た、または解析が追わないもの（間接呼び出しの結果、単位外呼び出しの
-  結果）。呼び出し元が何であっても `MayExt`。
-- `Arg(i, σ)` — 入力 `i`（パラメータ列、その後に capture）の leaf `σ` 次第。クローンのキーが
-  具体値を与えると解決する。
-
-`Ext` は吸収元である。`Ext` を含む集合は入力が何であっても `MayExt` に解決するので、
-そこに並ぶ `Arg` は結果を一切変えない。これを不変条件として手で保つのではなく、形で持つ:
+| | leaf 1 個 | 値 1 個 | 対応する既存の型 |
+| --- | --- | --- | --- |
+| **解決後** | `Locality` = `Local` / `MayExt` | `LocalityKey(Map<FieldPath, Locality>)` | `SharingVerdict` / `Uniqueness` |
+| **記号的** | `ExtCond` = `Always` / `IfAny(集合)` | `ExtShape(Map<FieldPath, ExtCond>)` | `LeafOrigins` / `Provenance` |
 
 ```
-enum LeafOrigins {
-    Ext,                            // 入力に関わらず MayExt。束の頂
-    Args(Set<(usize, FieldPath)>),  // この入力 leaf のどれかが MayExt なら MayExt
+enum Locality { Local, MayExt }
+
+/// leaf が `MayExt` になる条件。
+enum ExtCond {
+    /// 入力に関わらず `MayExt`。束の頂。
+    Always,
+    /// 挙げた入力 leaf のどれかが `MayExt` なら `MayExt`。
+    /// 空集合が束の底で、入力に関わらず `Local`。
+    IfAny(Set<(usize, FieldPath)>),
 }
 ```
 
-join は `Ext ⊔ _ = Ext`、`Args(a) ⊔ Args(b) = Args(a ∪ b)`。**`Args(∅)` が束の底 = `Local`**
-で、その場で確保した値がこれになる — `create_obj` は `LOCAL` で初期化するので、理由が 1 つも
-無い。確保したコンテナに `MayExt` な値を入れた場合は、その値の理由が転送規則（`merge`）で
-入ってくるので `Args(∅)` にはならない。leaf パスは型で、入力は有限で抑えられるので、束は
-有限で不動点は停止する。
+**この文書では、`MayExt` は解決後の層でだけ、`Always`/`IfAny` は記号的な層でだけ使う。**
+`ExtCond::Always` は「無条件に `MayExt` になる」の意味であって、`MayExt` の別名ではない。
+
+`IfAny` の添字 `(i, σ)` は、サマリでは関数の入力 `i`（パラメータ列、その後に capture）の
+leaf `σ`、`locality_flow` では op のオペランド `i` の leaf `σ` を指す。`Provenance` が
+`LeafOrigin::Arg(i, path)` を 2 つの索引空間で使い回しているのと同じ。
+
+解決は `resolve(ExtCond, inputs: &[LocalityKey]) -> Locality`: `Always` は `MayExt`、
+`IfAny(s)` は `s` のどれかの入力 leaf が `MayExt` なら `MayExt`、でなければ `Local`。
+
+### `Always` は吸収元
+
+`Always` を含む値は入力が何であっても `MayExt` に解決するので、そこに並ぶ入力 leaf は結果を
+一切変えない。これを不変条件として手で保つのではなく、`ExtCond` の形で持つ。join は
+`Always ⊔ _ = Always`、`IfAny(a) ⊔ IfAny(b) = IfAny(a ∪ b)`。
+
+`IfAny(∅)` になるのはその場で確保した値である — `create_obj` は `LOCAL` で初期化するので、
+`MayExt` になる条件が 1 つも無い。確保したコンテナに `MayExt` な値を入れた場合は、その値の
+条件が転送規則（`merge`）で入ってくるので `IfAny(∅)` にはならない。leaf パスは型で、入力は
+有限で抑えられるので、束は有限で不動点は停止する。
 
 吸収を形で持つことは、複製のゲートの精度にそのまま効く。ゲートは「RC site が入力に依存しない
-関数は複製しない」で、依存の判定は `Args(s)` の `s` が空でないこと。集合を素朴に合併すると
-`{Ext, Arg(0, σ)}` が `Arg` を含むので「依存する」と読まれ、キーを変えても結果が動かない関数
-が複製されてしまう。`Ext` に潰しておけばそれが起きない。
+関数は複製しない」で、依存の判定は `IfAny(s)` の `s` が空でないこと。原始的に「条件の集合」
+として持って合併すると、`{Always, (0, σ)}` が入力への言及を含むので「依存する」と読まれ、
+キーを変えても結果が動かない関数が複製されてしまう。`Always` に潰しておけばそれが起きない。
 
 ## 転送
 
-RC IR ノードごとに、各ローカル束縛を leaf ごとの値に写す環境の上で。global シンボルを値と
-して使う場所（「global アトム」）は読んだ値の全 leaf を `Ext` にする — これが扉 1 であり、
-名前が local かどうかを見る**唯一の**規則である。
+RC IR ノードごとに、各ローカル束縛を `ExtShape` に写す環境の上で。**規則は記号的な層で 1 回だけ
+定義する。** クローンの中の走査は同じ規則を走らせて、入力の `ExtCond` をキーで解決したもので
+ある — 入力が具体値なので、環境の値は各 leaf `Always`（= `MayExt`）か `IfAny(∅)`（= `Local`）
+のどちらかに潰れ、実装上は 2 値の走査になる。
+
+global シンボルを値として使う場所（「global アトム」）は読んだ値の全 leaf を `Always` にする —
+これが扉 1 であり、名前が local かどうかを見る**唯一の**規則である。
 
 - `let x = y`（move）: コピー。
-- `let x = <global アトム>`: 全 leaf `{Ext}`。（funptr 型の global は boxed leaf を持たないので
-  何も起きない。closure 型の global は capture leaf が `Ext` — その capture object はマーク
+- `let x = <global アトム>`: 全 leaf `Always`。（funptr 型の global は boxed leaf を持たないので
+  何も起きない。closure 型の global は capture leaf が `Always` — その capture object はマーク
   されているので正しい。）
 - `let x = Closure(f, caps)`: capture leaf に caps の全 leaf の join。
 - `let x = App(callee, args)`:
   - callee がこの単位の `RcProgram` の関数を名指す — 直接呼び出し。手続き間の節へ。
-  - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `{Ext}`。
+  - それ以外（closure 値の変数、他単位の関数、global な closure 値）: 結果の全 leaf `Always`。
 - `let x = Llvm(op, args)`: op の `locality_flow`。次節。
 - `Destructure`: boxed コンテナ — 各フィールドの全 leaf にコンテナ leaf の値。unboxed —
   フィールドごとに射影（結果 leaf `σ` <- コンテナ leaf `[i]++σ`）。
@@ -175,27 +195,23 @@ fn locality_flow(
     result_ty: &Arc<TypeNode>,
     arg_tys: &[Arc<TypeNode>],
     type_env: &TypeEnv,
-) -> LocalityFlow;
+) -> ExtShape;
 
-/// 結果の boxed leaf ごとに、その locality の出どころ。
-/// 関数の記号的サマリと同じ形で、`Args` の添字が関数の入力ではなく op のオペランドを指す。
-pub struct LocalityFlow(Map<FieldPath, LeafOrigins>);
-
-impl LocalityFlow {
-    /// 結果の全 leaf に、全オペランドの全 leaf。
-    fn merge(result_ty, arg_tys, type_env) -> LocalityFlow;
-    /// 結果の全 leaf が `Ext`。
-    fn ext(result_ty, type_env) -> LocalityFlow;
+impl ExtShape {
+    /// 結果の全 leaf に、全オペランドの全 leaf を挙げた `IfAny`。
+    fn merge(result_ty, arg_tys, type_env) -> ExtShape;
+    /// 結果の全 leaf が `Always`。
+    fn always(result_ty, type_env) -> ExtShape;
     /// 結果 leaf ごとに指定する。`Provenance::build_shape` と同じ形で、結果型の boxed leaf
     /// を全部歩いて呼ぶので、leaf の書き落としが起こらない。
-    fn build_shape(result_ty, type_env, f: &dyn Fn(&FieldPath) -> LeafOrigins) -> LocalityFlow;
+    fn build_shape(result_ty, type_env, f: &dyn Fn(&FieldPath) -> ExtCond) -> ExtShape;
 }
 ```
 
-**サマリと同じ型を返すことに意味がある。** `Llvm` ノードの転送は「op が宣言した写像に
-オペランドの値を代入する」で、直接呼び出しの転送は「callee のサマリに引数の値を代入する」。
-添字の指す先が違うだけで操作は同一なので、代入は 1 つ書けば両方が使う。`merge` / `ext` は
-その写像を作る構成子であって、別扱いの分岐ではない。
+**サマリと同じ `ExtShape` を返すことに意味がある。** `Llvm` ノードの転送は「op が宣言した
+写像にオペランドの値を代入する」で、直接呼び出しの転送は「callee のサマリに引数の値を代入
+する」。`IfAny` の添字が指す先が違うだけで操作は同一なので、代入は 1 つ書けば両方が使う。
+`merge` / `always` はその写像を作る構成子であって、別扱いの分岐ではない。
 
 `merge` が健全なのは「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを
 並べ替えることしかできない」op に対してだけである。boxed コンテナからの読み出し（`array_get`、
@@ -204,7 +220,7 @@ boxed struct の getter）も `merge` で正しい — 到達閉包を取って�
 
 **既定実装を置かない。** `merge` を既定にすると、オペランドから到達できない boxed オブジェクト
 を作る op を将来足したときに、何も書かなくても `Local` が通る — 冒頭で述べた「壊れる側」の誤りが
-黙って入ることになる。`ext` を既定にすれば安全側だが、今度は書き忘れが黙って精度を殺し、症状が
+黙って入ることになる。`always` を既定にすれば安全側だが、今度は書き忘れが黙って精度を殺し、症状が
 出ないので気付けない。どちらの黙り方も避けたいので必須メソッドにして、op を足す人に必ず選ばせる。
 
 `result_prov` の読み替えにせず独立のメソッドにするのは、provenance が別の問いに答えているから
@@ -213,9 +229,9 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 
 ### 全 op の値
 
-`impl LLVMGen` は 77 個。構成子で分類すると `ext` 8 個、`build_shape` 13 個、`merge` 56 個。
+`impl LLVMGen` は 77 個。構成子で分類すると `always` 8 個、`build_shape` 13 個、`merge` 56 個。
 
-**`ext`（8）** — 結果が解析の外から来る。
+**`always`（8）** — 結果が解析の外から来る。
 
 | op | 理由 |
 | --- | --- |
@@ -242,12 +258,12 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 | `InlineLLVMStructPlugInBody` | 結果 `[field_idx]++σ` <- 引数 1（field）の `σ`、他 <- 引数 0（punched）。boxed 結果は全 leaf にコンテナの join |
 | `InlineLLVMStructPunchBody` | 結果は `(field, punched_struct)`。`[0]++σ` <- 引数 0 の `[field_idx]++σ`、`[1]` 以下 <- 引数 0 の残り |
 | `InlineLLVMArrayPunchBody` | 結果は `(elem, punched_array)`。両成分 <- 引数の配列 leaf |
-| `InlineLLVMMakeUnionBody` | 結果 `[variant]++σ` <- 引数 0 の `σ`。他の variant は底（`Args(∅)`） |
+| `InlineLLVMMakeUnionBody` | 結果 `[variant]++σ` <- 引数 0 の `σ`。他の variant は底（`IfAny(∅)`） |
 | `InlineLLVMUnionAsBody` | unboxed union: 結果 `σ` <- 引数 0 の `[variant]++σ`。boxed union: 結果の全 leaf <- 引数 0 の `[]` |
 | `InlineLLVMCaptureProjectBody` | capture object から 1 個取り出す。boxed capture: 結果の全 leaf <- capture の `[]`。unboxed `#CapList`: 射影 |
-| `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` | `[0]`（値）以下 <- 引数の値。残り（コールバックの結果）はエントリ無し = `Ext` |
+| `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` | `[0]`（値）以下 <- 引数の値。残り（コールバックの結果）は `Always` |
 | `InlineLLVMUnsafeMutateBoxedIOSInternalBody` | 同上、値の位置は `[1, 0]` |
-| `InlineLLVMArrayMutateElementsInternalBody` | `[0]`（配列）<- 引数の配列。残りは `Ext` |
+| `InlineLLVMArrayMutateElementsInternalBody` | `[0]`（配列）<- 引数の配列。残りは `Always` |
 | `InlineLLVMArrayMutateElementsIosInternalBody` | 同上、配列の位置は `[1, 0]` |
 
 配線の位置は `result_prov` が使っている定数と同じもの（`STRUCT_SET_VALUE_ARG`,
@@ -266,7 +282,7 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
   `InlineLLVMFloatMulBody`, `InlineLLVMIntDivBody`, `InlineLLVMFloatDivBody`,
   `InlineLLVMIntRemBody`, `InlineLLVMIntNegBody`, `InlineLLVMFloatNegBody`,
   `InlineLLVMBoolNegBody`
-- 確保のみ（オペランドの leaf を join する。オペランドに leaf が無ければ `Args(∅)` = `Local`。6）:
+- 確保のみ（オペランドの leaf を join する。オペランドに leaf が無ければ `IfAny(∅)` = `Local`。6）:
   `InlineLLVMStringBuf`, `InlineLLVMArrayUnsafeEmpty`, `InlineLLVMArrayLitBody`,
   `InlineLLVMIOStateUnsafeCreate`, `InlineLLVMUndefinedInternalBody`, `InlineLLVMDestructorMake`
 - 配列を通す・配列を読む（結果はオペランドの配列から到達可能。14）:
@@ -294,13 +310,13 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 g : Array I64;
 g = [1, 2, 3];          -- 初期化後 GLOBAL にマークされる
 
-let a = [g, g];         -- Array (Array I64)。新規確保なので統計的に Unique
+let a = [g, g];         -- Array (Array I64)。新規確保なので静的に Unique
                         -- a 自身のストレージは LOCAL、要素は GLOBAL
 let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている）
 ```
 
 ここで `array_set[unique]` の flow を「空集合（`Local` 証明済み）」にすると、`merge` が
-`[g, g]` から正しく付けた `Ext` が上書きされて消える。そのあと `a.@(0)` を読むと、`merge` に
+`[g, g]` から正しく付けた `MayExt` が上書きされて消える。そのあと `a.@(0)` を読むと、`merge` に
 より結果も `Local` になり、その `Release` が非 atomic デクリメントとして出る — 対象は `g` の
 ストレージで、GLOBAL オブジェクトの参照カウントは維持されていないから、最初の release で解放
 される。冒頭の「壊れる側」の誤りそのものである。
@@ -309,7 +325,7 @@ let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている
 `create_obj` は `LOCAL` で初期化し、`mark_global` は初期化子の本体が終わってから走る。実行時
 にも `is_unique` の `global_bb` は `shared_bb` へ行くので GLOBAL は決して unique にならない）。
 ただしそれは根 1 個の事実であって、この解析が leaf に持たせている「グラフ全体」の事実ではない
-ので、`Args(∅)` として書くことはできない。根だけの事実を別に持つ設計（注釈は根の事実で足りる
+ので、`IfAny(∅)` として書くことはできない。根だけの事実を別に持つ設計（注釈は根の事実で足りる
 一方、コンテナ読み出しの伝播にはグラフの事実が要る）は精度を上げうるが、束とキーが 2 倍になる
 ので、段階 1 の実測が要求してから検討する。
 
@@ -317,9 +333,9 @@ let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている
 
 2 相に分ける。
 
-**相 1 — 記号的サマリ。** 関数ごとに、結果の各 leaf の origin（`Ext` / `Args`）を、プログラム
+**相 1 — 記号的サマリ。** 関数ごとに、結果の各 leaf の `ExtCond` を、プログラム
 全体の不動点まで計算する。provenance の phase 1 と同型（有限束・単調 join・直接呼び出しは
-callee のサマリを代入・間接と単位外は全 leaf `Ext`）。
+callee のサマリを代入・間接と単位外は全 leaf `Always`）。
 
 **相 2 — locality をキーにした複製。** キーは「パラメータごと x leaf ごとの `Local`/`MayExt`」。
 
@@ -327,7 +343,7 @@ callee のサマリを代入・間接と単位外は全 leaf `Ext`）。
   今日と同じく全部ディスパッチする。
 - クローンの実体化が call site を歩き、引数の locality（呼び出し元クローンの具体的入力 +
   相 1 のサマリで解決）から callee のキーを組んで worklist に積む。
-- ゲート: RC site の値がどれも入力に依存しない関数（サマリの `Args` がどれも空）はキーで
+- ゲート: RC site の値がどれも入力に依存しない関数（サマリの `IfAny` がどれも空）はキーで
   結果が変わらないので複製しない。
 
 クローンの中では入力が**具体値**なので、1 つのヘルパが `MayExt` な引数と `Local` な引数の
@@ -369,7 +385,7 @@ specialized `fold` クローンに焼き込み、その本体はループ本体�
 canonical のまま — 今日の uniqueness と同じ扱い）。
 
 単位の外から呼ばれうる関数（プログラムシンボル）は canonical しか参照されようがないので
-自然に `Ext` 側に落ちる。単一単位のビルド（speedtest corpus は全ケースこれ）ではエントリ
+自然に `MayExt` 側に落ちる。単一単位のビルド（speedtest corpus は全ケースこれ）ではエントリ
 ポイントと FFI エクスポートだけが外部から届き、どちらの入力も boxed leaf を持たないので、
 何も失わない。単位間サマリの保存は測定が要求したときの将来課題。
 
@@ -421,9 +437,9 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 
 | ファイル | 変更 |
 | --- | --- |
-| `src/rc_ir/locality.rs`（新規） | 束、転送、相 1 の記号的サマリ、相 2 と注釈 |
+| `src/rc_ir/locality.rs`（新規） | `Locality` / `ExtCond` / `ExtShape` / `LocalityKey`、転送、相 1 の記号的サマリ、相 2 と注釈 |
 | `src/rc_ir/specialize.rs`（新規） | `unique_check_elim` から括り出した複製 skeleton |
-| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（既定実装なし）、`LocalityFlow` |
+| `src/ast/inline_llvm.rs` | `LLVMGen::locality_flow`（既定実装なし） |
 | `src/fixstd/builtin.rs` | 全 77 op の `locality_flow` |
 | `src/rc_ir/unique_check_elim.rs` | skeleton を括り出し、uniqueness 固有部分だけ残す |
 | `src/rc_ir/codegen.rs` | `Retain`/`Release` の `Local` アーム、`develop_mode` assert |
@@ -465,19 +481,19 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 ```
 let a = ...;              -- a の値はここで決まる（Local）
 retain a;
-let b = a.mark_threaded;  -- b は Ext。だがオブジェクトは THREADED になった
+let b = a.mark_threaded;  -- b は MayExt。だがオブジェクトは THREADED になった
 release a;                -- a は Local のまま → Local 注釈 → 非 atomic release。不健全
 ```
 
-結果だけを `Ext` にする forward 伝播では、マークされたオブジェクトに届く既存の束縛
+結果だけを `MayExt` にする forward 伝播では、マークされたオブジェクトに届く既存の束縛
 （エイリアス）が漏れる。エイリアスはオリジン（確保点・パラメータ）を共有するので、
-**オリジンを `Ext` にする**のがエイリアス解析なしで漏れなく覆う最も粗い過大近似
-（「mark_threaded に流れ込みうる値は生まれた時点から `Ext`」）。機構は `borrow_ify` の
+**オリジンを `Always` にする**のがエイリアス解析なしで漏れなく覆う最も粗い過大近似
+（「mark_threaded に流れ込みうる値は生まれた時点から `Always`」）。機構は `borrow_ify` の
 `infer_ownership` の第 3 の実例として作れる: あちらは consume site を種に、`origin`
 （本体内の逆向き値追跡）でパラメータまで遡り、own フラグをプログラム全体の不動点まで単調に
 育てる。こちらは種を `mark_threaded` op のオペランドに、フラグを「mark_threaded に流れ込み
 うる」に替える。`origin` の遡り先にはパラメータ（手続き間の伝播）とローカルの確保束縛
-（`Ext` の付け先）の両方が出る。
+（`Always` の付け先）の両方が出る。
 
 ただしオリジン汚染は保守的すぎる面がある: マークより**前**に実行される操作は実行時には
 LOCAL を見るので、本当は Local にできる。とくに「単スレッドで構築してから公開する」形では
@@ -487,7 +503,7 @@ LOCAL を見るので、本当は Local にできる。とくに「単スレッ�
 窓が閉じるのはマークの時点ではなく「公開されうる値に取り込まれた時点」（コンテナ経由の
 間接マークがあるため）。ループ・再帰でマークを跨ぐ site — ある反復でマークされ次の反復で
 同じ site が触る形 — は、再帰呼び出しがパラメータに「公開済みかもしれない」を join する
-ことで自動的に `Ext` 側へ落ちる。
+ことで自動的に `MayExt` 側へ落ちる。
 
 ベースライン = オリジン汚染、精密化 = 未 escape 窓、の 2 層で設計し、精密化は構築フェーズの
 実測が要求してから足す。誤証明はデータ競合で単スレッドのテストには見えないので、#96 の競合
