@@ -247,10 +247,8 @@ enum ExtCond {
     IfAny(Set<(usize, FieldPath, Aspect)>),
 }
 
-/// leaf 1 個の記号的な値。不変条件は `root ⊑ deep`。
-/// `ExtCond` の順序は原子ごとで、`(i, σ, Root) ⊑ (i, σ, Deep)` とする
-/// （入力が `MayExt` なら `DeepLocal` でもないので、Root の成立は Deep の成立を含む）。
-/// この順序のもとで恒等サマリ `root = {(i,σ,Root)}`, `deep = {(i,σ,Deep)}` は不変条件を満たす。
+/// leaf 1 個の記号的な値。不変条件 `root ⊑ deep` は、`deep` を作るときに `root` の原子も
+/// 入れることで構成で保つ（「`Always` は吸収元」）。
 struct LeafCond {
     root: ExtCond,   // この leaf のオブジェクト自身が非 LOCAL になる条件
     deep: ExtCond,   // この leaf から到達できる先に非 LOCAL が居る条件
@@ -268,7 +266,8 @@ struct LeafCond {
 **原子は自分がどちらの事実を見るかを持つ。** 条件が `root` と `deep` のどちらのフィールドに
 置かれているかで判定基準を決めてはならない — 取り出し規則がコンテナの `deep` 条件を結果の
 `root` フィールドへ**移す**ので、置き場所で判定すると移した先で意味が変わる。`Aspect` を原子に
-持たせておけば、どこへ移しても意味が保たれる。
+持たせておけば、どこへ移しても意味が保たれる。恒等サマリは
+`root = IfAny({(i, σ, Root)})`、`deep = IfAny({(i, σ, Deep), (i, σ, Root)})`。
 
 解決は `resolve(LeafCond, inputs: &[LocalityKey]) -> Locality`。原子は自分の `Aspect` に従って
 判定する（`Root` なら入力が `MayExt` か、`Deep` なら入力が `DeepLocal` でないか）:
@@ -288,26 +287,25 @@ struct LeafCond {
 
 **順序が意味するのは含意である。** `c ⊑ c'` は「どの入力に対しても、`c` が成り立つなら `c'` も
 成り立つ」。条件が成り立つとは非 LOCAL でありうることなので、小さい条件ほど `Local` を主張し、
-底が `Local`、頂が `MayExt` になる。
+底が `Local`、頂が `MayExt` になる。判定に使うのは**部分集合順**で、`a ⊆ b` なら `IfAny(a)` は
+`IfAny(b)` を含意する。join が合併、収束判定が等号で済む。
 
-**この含意を、目的の違う 2 つの構文的な近似で使い分ける。**
+**`root ⊑ deep` は構成で保つ。** `deep` を作るときは常に `root` の原子も入れる:
 
-- **部分集合順** — `a ⊆ b` なら `IfAny(a)` は `IfAny(b)` を含意する。**不動点の反復と停止性は
-  これで回す**（join が合併、収束判定が等号で済む）。
-- **原子ごとの順序** — 上に、原子レベルの含意 `(i, σ, Root) ⊑ (i, σ, Deep)`（入力が `MayExt`
-  なら `DeepLocal` でもない）を 1 つ足したもの。集合へは Hoare 順序で持ち上げる:
+```
+恒等サマリ  root = IfAny({(i, σ, Root)})
+            deep = IfAny({(i, σ, Deep), (i, σ, Root)})
+```
 
-  ```
-  IfAny(a) ⊑ IfAny(b)  iff  ∀ α ∈ a. ∃ β ∈ b. α ⊑ β
-  ```
+こうすれば不変条件が部分集合順のまま成り立ち、順序を 2 つ持たずに済む。`deep` に入れた `Root`
+原子は「入力が `MayExt`」を判定するが、それが成り立つときは `root` 側も成り立つので、解決結果は
+変わらず精度も落ちない。代入も通る — `Root` 原子は入力の `root` に、`Deep` 原子は入力の `deep`
+に置き換わるので、`deep` は `root` の置換結果を含んだままになる。
 
-  `Always` はすべての上、`IfAny(∅)` はすべての下（空集合には全称が空虚に真）。
-  **`root ⊑ deep` の不変条件はこちらで検査する。** `root ⊆ deep` のような素の集合包含で検査
-  すると、恒等サマリ `root = {(i,σ,Root)}`, `deep = {(i,σ,Deep)}` が即座に落ちる。
-
-原子ごとの順序は前順序であって半順序ではない — `{(i,σ,Root), (i,σ,Deep)}` と `{(i,σ,Deep)}` は
-互いに ⊑ で、意味としても同じ条件である。支配される原子を落とした反鎖が正規形になるが、
-正規化は集合を小さくするだけで、正しさには要らない。
+**この不変条件は取り出し規則の健全性を支えている。** 取り出しは `結果の root = 結果の deep =
+コンテナの deep` なので、「コンテナの根は非 LOCAL かもしれないが中身は綺麗」という組み合わせを
+許すと、GLOBAL なコンテナから取り出した要素が `DeepLocal` と証明されてしまう。`mark_global` は
+グラフ全体をマークするので、その要素も GLOBAL である。
 
 `root = IfAny(∅)` になるのはその場で確保した値と、確保済みのコンテナを並べ替えただけの値
 である — `create_obj` は `LOCAL` で初期化し、扉以外は状態バイトを動かさない。
@@ -550,7 +548,7 @@ GLOBAL は決して unique にならない）。そしてこの解析は `root` 
 **1 回の更新**は「全関数の本体を 1 回ずつ走査して `summary` を上げる」:
 
 1. 環境を恒等サマリで初期化する — パラメータ `i` の leaf `σ` に
-   `root = IfAny({(i, σ, Root)})`、`deep = IfAny({(i, σ, Deep)})`。capture
+   `root = IfAny({(i, σ, Root)})`、`deep = IfAny({(i, σ, Deep), (i, σ, Root)})`。capture
    （添字は `params.len()`）も同様。
 2. 本体を転送規則（「転送」の節）で前から走査する。直接呼び出し `let x = App(g, args)` では
    `summary[g]` を取り、その各 `ExtCond` に現れる原子を代入する — `(j, σ, Root)` は
