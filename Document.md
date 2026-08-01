@@ -2439,8 +2439,8 @@ Enable multi-threading with the `--threaded` compiler option or the `threaded` f
 
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
-- Call `Std::mark_threaded` on the value. It puts the reference counters of all values reachable from it into multi-threaded mode, in which they are updated atomically.
-- Call `Std::FFI::boxed_to_retained_ptr` to get a pointer to the value, and pass the pointer to the threading library with `FFI_CALL_IO`.
+- `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically. Call it on the value, and carry on with the value it returns.
+- Call `Std::FFI::boxed_to_retained_ptr` on the returned value to get a pointer to it, and pass the pointer to the threading library with `FFI_CALL_IO`.
 - From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. An exported function receives a boxed parameter as such a pointer, and `Std::FFI::boxed_from_retained_ptr` turns a `Ptr` back into a boxed value.
 
 The pointer carries the responsibility for the reference count described in [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language).
