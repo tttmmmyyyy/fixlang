@@ -12,16 +12,7 @@ pub enum StartVisitResult {
     Return,
     ReplaceAndRevisit(Arc<ExprNode>),
     ReplaceAndReturn(Arc<ExprNode>),
-    // Skip, // to be implemented
-    // ReplaceAndSkipChildren(Arc<ExprNode>), // to be implemented
-    // ReplaceAndVisitChildren(Arc<ExprNode>), // to be implemented
 }
-
-// pub enum EndVisitResult {
-//     NoReplace,
-//     Replace(Arc<ExprNode>),
-//     // ReplaceAndRevisit(Arc<ExprNode>), // to be implemented
-// }
 
 pub struct EndVisitResult {
     pub expr: Arc<ExprNode>,
@@ -177,6 +168,14 @@ pub trait ExprVisitor {
         self.visit_expr(expr, &mut state)
     }
 
+    // Whether to visit `expr`. An expression this answers `false` for is left as it is, together
+    // with everything under it: its `start_visit_*` and `end_visit_*` methods are skipped and its
+    // subexpressions are not reached. The default answer visits the whole expression, which is what
+    // a visitor with something to say about every node wants.
+    fn should_visit(&self, _expr: &Arc<ExprNode>) -> bool {
+        true
+    }
+
     fn revisit_if_changed(
         &mut self,
         end_res: EndVisitResult,
@@ -190,6 +189,9 @@ pub trait ExprVisitor {
     }
 
     fn visit_expr(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+        if !self.should_visit(expr) {
+            return EndVisitResult::unchanged(expr);
+        }
         match &*expr.expr {
             Expr::Var(_var) => {
                 let res = self.start_visit_var(&expr, state);

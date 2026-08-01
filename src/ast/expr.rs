@@ -26,6 +26,9 @@ pub enum AppSourceCodeOrderType {
 #[derive(Serialize, Deserialize)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
+    // The free variables of `expr`, calculated when first asked for and kept for later requests.
+    // Building a node around a different `expr` goes through `clone_except_fvs`, which leaves the
+    // set to be calculated again.
     #[serde(skip)]
     free_vars: Arc<Mutex<Option<Set<FullName>>>>,
     pub source: Option<Span>,
@@ -1109,8 +1112,8 @@ impl ExprNode {
                 t.walk_var_uses(f);
                 e.walk_var_uses(f);
             }
-            Expr::Match(scrut, arms) => {
-                scrut.walk_var_uses(f);
+            Expr::Match(cond, arms) => {
+                cond.walk_var_uses(f);
                 for (_pat, e) in arms {
                     e.walk_var_uses(f);
                 }
@@ -1160,8 +1163,8 @@ impl ExprNode {
                 t.walk_patterns(f);
                 e.walk_patterns(f);
             }
-            Expr::Match(scrut, arms) => {
-                scrut.walk_patterns(f);
+            Expr::Match(cond, arms) => {
+                cond.walk_patterns(f);
                 for (pat, e) in arms {
                     f(pat);
                     e.walk_patterns(f);
@@ -1206,6 +1209,9 @@ impl ExprNode {
                 for arg in args {
                     free_vars.remove(&arg.name);
                 }
+                // A lambda expression binds `CAP_NAME` implicitly, so it goes here along with the
+                // parameters. `CAP_NAME` is therefore the one name the free variables of an
+                // expression do not locate.
                 free_vars.remove(&FullName::local(CAP_NAME));
                 free_vars
             }
@@ -1229,10 +1235,10 @@ impl ExprNode {
             Expr::Match(cond, pat_vals) => {
                 let mut free_vars = cond.free_vars();
                 for (pat, val) in pat_vals {
-                    let mut fvs = val.free_vars();
+                    let mut val_free_vars = val.free_vars();
                     let pat_vars = pat.pattern.vars();
-                    fvs.retain(|v| !pat_vars.contains(v));
-                    free_vars.extend(fvs);
+                    val_free_vars.retain(|v| !pat_vars.contains(v));
+                    free_vars.extend(val_free_vars);
                 }
                 free_vars
             }
@@ -1266,13 +1272,28 @@ impl ExprNode {
         }
     }
 
-    // Get the set of free vars.
-    pub fn free_vars(&self) -> Set<FullName> {
+    // Call `f` on the set of free vars, calculating it on the first call and reusing it afterwards.
+    fn with_free_vars<T>(&self, f: impl FnOnce(&Set<FullName>) -> T) -> T {
         let mut lock = self.free_vars.lock().unwrap();
         if lock.is_none() {
             *lock = Some(self.calc_free_vars());
         }
-        lock.as_ref().unwrap().clone()
+        f(lock.as_ref().unwrap())
+    }
+
+    // Get the set of free vars.
+    pub fn free_vars(&self) -> Set<FullName> {
+        self.with_free_vars(|free_vars| free_vars.clone())
+    }
+
+    // Does the given name occur free in this expression?
+    pub fn has_free_var(&self, name: &FullName) -> bool {
+        self.with_free_vars(|free_vars| free_vars.contains(name))
+    }
+
+    // Does any local name occur free in this expression?
+    pub fn has_free_local_var(&self) -> bool {
+        self.with_free_vars(|free_vars| free_vars.iter().any(|name| name.is_local()))
     }
 
     // Convert all global FullNames to absolute paths.
@@ -1359,14 +1380,12 @@ impl ExprNode {
     // Get the names which are captured by a lambda expressions.
     pub fn lambda_cap_names(&self) -> Vec<FullName> {
         assert!(self.is_lam());
-        let mut cap_names = self.free_vars().clone();
-        cap_names.remove(&FullName::local(CAP_NAME));
 
-        // We need not and should not capture global variable:
-        // If we capture global variable, then global recursive function such as
-        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
-        // So we remove global variable from the captured names.
-        let mut cap_names = cap_names
+        // A lambda captures local names alone. Capturing a global would make a global recursive
+        // function such as "main = |x| if x == 0 then 0 else x + main(x-1)" recur forever at its
+        // initialization.
+        let mut cap_names = self
+            .free_vars()
             .into_iter()
             .filter(|name| name.is_local())
             .collect::<Vec<_>>();
