@@ -5,7 +5,8 @@
 実行時の参照カウント状態バイト（LOCAL / THREADED / GLOBAL）は残したまま、RC IR 上の前向き
 may 解析で「この site が触るオブジェクトは LOCAL」を site ごとに証明し、証明できた site だけ
 状態ロードと分岐を落とす。`plan.md` の測定では実行される参照カウント操作のほぼ全部が LOCAL で、
-ディスパッチを全部外した上限は命令数 -13.87%（`sort`）に達する。
+ディスパッチを全部外した上限は命令数 -13.87%（`sort`）に達する。**site** とは状態バイトを読む
+箇所のことで、その一覧は「注釈する site」にある。
 
 - **性質**: 束縛の boxed leaf ごとに `DeepLocal ⊑ RootLocal ⊑ MayExt` の 3 値（「性質」）。
 - **機構**: `unique_check_elim` と同じ骨格 — 記号的サマリの不動点と、キーごとの関数複製。
@@ -38,7 +39,8 @@ use-after-free になる。
 
 ## 性質
 
-束縛 `x` とその型の boxed leaf パス `π` について、**3 点鎖**の値を割り当てる:
+束縛 `x` とその型の **boxed leaf** パス `π` — 型を unboxed 構造に沿って展開したとき boxed 型が
+現れる位置（`boxed_leaf_paths`）— について、**3 点鎖**の値を割り当てる:
 
 > `DeepLocal` — `x.π` が指すオブジェクトも、**そこから到達可能な任意のオブジェクト**も
 > `REFCNT_STATE_LOCAL` であることが証明できた。
@@ -73,10 +75,11 @@ site が状態ディスパッチを外せるのは、**その site が触る lea
 
 非 threaded ビルドでは、あるオブジェクトが global から到達可能かどうかは**そのオブジェクトが
 できた時点で決まり、後から変わらない**（`mark_global` は global 初期化子の結果グラフに 1 回
-掛かるだけで、生きている束縛のオブジェクトを巻き込まないことを次節で論証する）。よって性質は
+掛かるだけで、生きている束縛のオブジェクトを巻き込まない。論証は「前提」の「P2 の論証」）。
+よって性質は
 時間を量化せず、値のフローを前から追うだけの may 解析で正確に計算できる。Fix にループは無く、
 本体は直線とパターン分岐の木なので、1 本体の走査は前向き 1 パスで済む（分岐の合流は join、
-再帰は次節のクローンのキーが受け持つ）。
+再帰は「手続き間」の相 2 のクローンのキーが受け持つ）。
 
 **根が非 LOCAL になる道はちょうど 3 つ（次節の扉）で、それ以外の操作は根を `RootLocal` に保つ。**
 新規確保は `create_obj` が `LOCAL` で初期化し、in-place 更新も clone も根を動かさない。一方
@@ -87,7 +90,8 @@ site が状態ディスパッチを外せるのは、**その site が触る lea
 **`unique_check_elim` と同じ形である。** あちらは provenance の記号的サマリを不動点で求め、
 uniqueness をキーに関数を複製し、キーが証明するチェックをクローンの中で畳み込む。こちらは
 locality の記号的サマリを不動点で求め、locality をキーに複製し、キーが証明する site を
-クローンの中で `RootLocal` に印を付ける。同じ骨格の、別のパスになる（後述）。
+クローンの中で `RootLocal` に印を付ける。同じ骨格の、別のパスになる
+（「`unique_check_elim` とは別のパスにする」）。
 
 ## 発生源
 
@@ -107,18 +111,15 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
 3. **`Std::boxed_from_retained_ptr`。** 生ポインタから値を復元する。状態は何も分からない —
    スレッドを跨いだかもしれないし、global のグラフ由来かもしれない。
 
-**扉は根の話である。** コンテナに何を入れても、コンテナ自身のオブジェクトの状態バイトは
-動かない。`a.set(0, g)` も、生ポインタ経由の `mutate_boxed` / `mutate_elements` も、汚すのは
-`deep` だけで `root` は `RootLocal` のまま — 前者はオペランドから見えるので普通の転送規則で、後者は
+**扉は根の話であり、内部ポインタを渡す公開 API も根を動かさない。** コンテナに何を入れても、
+コンテナ自身のオブジェクトの状態バイトは動かない。`a.set(0, g)` はオペランドから見えるので
+普通の転送規則が `deep` を汚し、生ポインタ経由の `mutate_boxed` / `mutate_elements` は
 「要素型・payload 型に boxed leaf があれば、結果の下に非 LOCAL が居るものとして扱う」という
-1 行の規則で覆える（記号的な書き方は「束と用語」）。どちらも扉ではない。（`borrow_boxed` / `borrow_elements` は「借りたポインタを通して変更しては
-ならない」と `std.fix` が定めているので、`deep` すら汚さない。）
-
-**内部ポインタを渡す公開 API は既に塞がっている。** `borrow_boxed` と
-`Array::borrow_elements` は「借りたポインタを通して変更してはならない」と `std.fix` が定める。
-`mutate_boxed` / `mutate_elements` は書き込めるが、汚すのは `deep` だけで転送規則が受ける
-（前述）。`boxed_to_retained_ptr` が返すのは制御ブロックへのポインタで、payload が要るなら
-`borrow_boxed` を使えとドキュメントが指している。
+1 行の規則が受ける（記号的な書き方は「`locality_flow`」の `build_shape` の表）。どちらも汚すのは
+`deep` だけで `root` は `RootLocal` のまま — 扉ではない。`borrow_boxed` と
+`Array::borrow_elements` は「借りたポインタを通して変更してはならない」と `std.fix` が定めるので
+`deep` すら汚さない。`boxed_to_retained_ptr` が返すのは制御ブロックへのポインタで、payload が
+要るなら `borrow_boxed` を使えとドキュメントが指している。
 
 `_` で始まる内部関数（`_get_boxed_ptr`、`Array::_get_ptr`、`String::_get_c_str`）は書き込み
 禁止を明示していない。`_` で始まる名前は生成ドキュメントから除外される（`commands/docs.rs`）
@@ -138,7 +139,10 @@ Fix のオブジェクト参照を書き込まない」を std 側の不変条�
 呼ばれるすべての関数の中 — はまだ `LOCAL` なオブジェクトに対して行われる。よって `MayExt` は
 「global シンボルの読み出し」に付き、値を作ったコードには付かない。初期化子の本体も他のコードと
 同じように解析・注釈できる。別の global の初期化子の中で global を読む場合、そのアクセサは先に
-完走しているのでマーク済みであり、通常の読み出し規則が `MayExt` にする。
+完走しているのでマーク済みであり、通常の読み出し規則が `MayExt` にする。初期化子が循環して
+いれば（`implement_rc_global` は評価を終えてからフラグを立てるので）再入して停止しないが、
+停止しない以上マークも起きず、そこまでに実行される注釈済みの操作はすべて `LOCAL` な
+オブジェクトを見ている。
 
 ## 前提
 
@@ -147,15 +151,15 @@ Fix のオブジェクト参照を書き込まない」を std 側の不変条�
 | | 言明 | 担保する場所 | 崩す変更 |
 | --- | --- | --- | --- |
 | P1 | 各 op の `locality_flow` が健全 — 宣言した条件が `RootLocal` 以下に解決するならその leaf のオブジェクトが `LOCAL`、`DeepLocal` なら到達先もすべて `LOCAL` | 「発生源」の扉の数え上げと、「`locality_flow`」の 77 op の列挙 | 宣言を 1 つ誤る |
-| P2 | 束縛の生存中にオブジェクトの `LOCAL` 性が変わらない | 次節（非 threaded ビルドでのみ成立し、global 初期化子への契約に寄りかかる） | threaded ビルド、初期化子が外部保持のオブジェクトを取り込む |
+| P2 | 束縛の生存中にオブジェクトの `LOCAL` 性が変わらない | 「P2 の論証」（非 threaded ビルドでのみ成立し、global 初期化子への契約に寄りかかる） | threaded ビルド、初期化子が外部保持のオブジェクトを取り込む |
 | P3 | 転送が単調 | join と代入で組み立てているので構造的 | — |
 | P4 | 破棄の traverser が子ごとにディスパッチする | 「注釈する site」（根だけ `RootLocal` な値の `Release` に `RcState::Local` を出せる根拠） | traverser を状態なしにする（`DeepLocal` を条件にしない限り） |
 | P5 | `merge` の契約が守られている — 返すコンテナは (a) 新しく確保したもの、(b) この op が直前に unique 化したもの、(c) 呼び出し側が uniqueness を保証したうえで in-place 更新したもの、のいずれか | 「`locality_flow`」（`build_branch_by_is_unique` の `global_bb` が `shared_bb` へ行くので、unique なオブジェクトは `LOCAL`） | uniqueness の裏付けなしにオペランドをそのまま返す op に `merge` を宣言する |
 
 (c) に当たるのは、`assuming_unique` 版、`struct_act` が実行時 `unsafe_is_unique` の下で呼ぶ
-非 force-unique な `#punch_`、そして `struct_mod` が `#punch_fu_` の後で呼ぶ非 force-unique な
-`#plug_in_` である。これらは op の外側にある呼び出し形の不変条件なので、そこを崩す変更は P5 を
-崩す。
+非 force-unique な `#punch_`、そして `struct_mod` / `struct_act_tuple2` / `struct_act_identity`
+が `#punch_fu_` の後で呼ぶ非 force-unique な `#plug_in_` である。これらは op の外側にある
+呼び出し形の不変条件なので、そこを崩す変更は P5 を崩す。
 
 ### P2 の論証: 非 threaded ビルドに依存する
 
@@ -183,9 +187,10 @@ Fix のオブジェクト参照を書き込まない」を std 側の不変条�
   直接返すことはできない）と、`mutate_boxed` / `mutate_elements` のコールバックが渡した生
   ポインタ経由で C 側に参照を書き込ませることである。どちらも形としては
   「`main` が `x.boxed_to_retained_ptr` で C にポインタを預け、その後で読まれた global の
-  初期化子がそれを取り込む」。壊れ方は冒頭と同じで、しかも**対が混ざる** — op 内部の retain は
-  実行時にディスパッチして GLOBAL になった今は no-op になる一方、`Release` ノードは注釈のまま
-  実カウントを減らす。
+  初期化子がそれを取り込む」。壊れ方は冒頭と同じだが、ここでは retain と release の釣り合いも
+  崩れる。束縛の生存中にオブジェクトが GLOBAL にマークされると、ディスパッチのまま残っている
+  retain はその時点から no-op に落ちる一方、`RcState::Local` と注釈済みの `Release` は実カウントを
+  減らし続ける。増える側だけが止まるので、カウントは操作のたびに一方的に減る。
 
   そこで「**global の初期化子は、外部が保持している Fix オブジェクトを結果グラフに取り込んでは
   ならない**」を契約として課す。`boxed_from_retained_ptr` は既に「引数が本当にその型への
@@ -242,8 +247,7 @@ enum Aspect { Root, Deep }
 /// 1 つの条件。「これが成り立つと非 LOCAL」。
 enum ExtCond {
     /// 入力に関わらず成り立つ。条件の束の頂。
-    /// 「常に成り立つ原子」を 1 つ置いて `IfAny` に混ぜる表現も採れるが、
-    /// 別ヴァリアントにすることで吸収を構造で保つ（「`Always` は吸収元」）。
+    /// 別ヴァリアントにすることで吸収を構造で保つ: `Always` を含む join は `Always`。
     Always,
     /// 挙げた原子のどれかが成り立てば成り立つ。空集合が底で、決して成り立たない。
     /// 原子 `(i, σ, Root)` は「入力 i の leaf σ が `MayExt`」、
@@ -252,7 +256,7 @@ enum ExtCond {
 }
 
 /// leaf 1 個の記号的な値。不変条件 `root ⊑ deep` は、`deep` を作るときに `root` の原子も
-/// 入れることで構成で保つ（「`Always` は吸収元」）。
+/// 入れることで構成で保つ。
 struct LeafCond {
     root: ExtCond,   // この leaf のオブジェクト自身が非 LOCAL になる条件
     deep: ExtCond,   // この leaf から到達できる先に非 LOCAL が居る条件
@@ -274,11 +278,18 @@ struct LocalityKey(Map<FieldPath, Locality>);
 `locality_flow` では op のオペランドを指す。`Provenance` が `LeafOrigin::Arg(i, path)` を
 2 つの索引空間で使い回しているのと同じ。
 
-**原子は自分がどちらの事実を見るかを持つ。** 条件が `root` と `deep` のどちらのフィールドに
-置かれているかで判定基準を決めてはならない — 取り出し規則がコンテナの `deep` 条件を結果の
-`root` フィールドへ**移す**ので、置き場所で判定すると移した先で意味が変わる。`Aspect` を原子に
-持たせておけば、どこへ移しても意味が保たれる。恒等サマリは
-`root = IfAny({(i, σ, Root)})`、`deep = IfAny({(i, σ, Deep), (i, σ, Root)})`。
+**原子は自分がどちらの事実を見るかを持つ。** 判定基準を決めるのは原子の `Aspect` であって、
+条件が `root` と `deep` のどちらのフィールドに置かれているかではない。取り出し規則（「転送」）が
+コンテナの `deep` 条件を結果の `root` フィールドへ**移す**ため、置き場所で判定すると移した先で
+意味が変わるからである。
+
+> 例: コンテナ leaf の `deep = IfAny({(0, [], Deep)})` のとき、そこから取り出した要素の `root` は
+> この条件をそのまま受け取る。原子が `Deep` を持つので、`root` フィールドへ移っても判定は
+> 「入力 0 の leaf `[]` が `DeepLocal` でないか」のままである。置き場所で判定すると移った先で
+> 「入力 0 が `MayExt` か」と読まれ、`RootLocal` なコンテナでは成り立たなくなって、GLOBAL な
+> 中身を取り出した値が根まで LOCAL と誤証明される。
+
+恒等サマリは `root = IfAny({(i, σ, Root)})`、`deep = IfAny({(i, σ, Deep), (i, σ, Root)})`。
 
 解決は `resolve(LeafCond, inputs: &[LocalityKey]) -> Locality`。原子は自分の `Aspect` に従って
 判定する（`Root` なら入力が `MayExt` か、`Deep` なら入力が `DeepLocal` でないか）:
@@ -336,13 +347,31 @@ RC IR ノードごとに、各ローカル束縛を `ExtShape` に写す環境�
 ある — 入力が具体値なので、環境の各条件は「成り立つ」か「成り立たない」に潰れ、実装上は
 leaf ごとに 3 値を運ぶ走査になる。
 
+**取り出し規則**（boxed コンテナからの読み出し）は独立の規則で、以下の各所から名前で参照する。
+`RootLocal` は**根だけ**の主張（このオブジェクト自身は `LOCAL`、下は不明）なので、`RootLocal` な
+コンテナの中身については何も分かっていない。取り出した値の**根**は、コンテナの `deep`
+（コンテナの下に非 LOCAL が居るか）で決まる:
+
+```
+DeepLocal なコンテナから取り出す  ->  DeepLocal
+RootLocal なコンテナから取り出す  ->  MayExt
+MayExt なコンテナから取り出す     ->  MayExt
+```
+
+記号的には `結果の root = 結果の deep = コンテナ leaf の deep`。取り出しは合流ではなく
+**下から根への昇格**なので、join では書けない。該当するのは `array_get`、boxed コンテナに対する
+`Destructure` / `struct_get` / `union_as` / capture projection、boxed union の `Match` payload。
+
 **変数の参照はすべて名前の局所性を見る。** 環境は局所束縛だけを持ち、**環境に無い名前
 （global シンボル）は全 leaf `Always` に解決する**。これが扉 1 であり、名前が local かどうかを
 見る唯一の規則である。global は `let` の右辺に限らず、Llvm/App のオペランド、`Match` の
 被検査値、`Destructure` のコンテナ、`Ret` のどこにでも現れる（`lower_var` は global を束縛せず
-アトムのまま渡す）ので、規則はノード種別ごとではなく
-**参照の解決 1 か所**に置く。`Retain`/`Release` の対象が局所であることは `insert_rc` が保証
-しているが、解決規則はそれを覚えていなくても安全な側に倒れる形にする。
+アトムのまま渡す）ので、規則はノード種別ごとではなく**参照の解決 1 か所**に置く。
+
+**この解決規則が `Retain`/`Release` の唯一の防御である。** 対象が局所束縛に限られるのは
+`insert_rc` の直後までで、`borrow_ify` は global を名指す `Release` を作る — `borrow.rs` の
+`owns_object` はパラメータ表に無い root（producer か global）を own 扱いにするので、borrow 版の
+callee の借用位置に global を渡すと、呼び出しの後に release が積まれる。
 
 - `let x = y`（move）: コピー。
 - global アトムの参照: 全 leaf `Always`。（funptr 型の global は boxed leaf を持たないので
@@ -366,20 +395,6 @@ leaf ごとに 3 値を運ぶ走査になる。
 - `Retain`/`Release`/`Eval`: 環境は不変。
 - `ret x`: 関数の結果に `x` を join。
 
-**boxed コンテナからの取り出しは独立の規則である。** `RootLocal` は**根だけ**の主張（このオブジェクト
-自身は `LOCAL`、下は不明）なので、`RootLocal` なコンテナの中身については何も分かっていない。取り出
-した値の**根**は、コンテナの `deep`（コンテナの下に非 LOCAL が居るか）で決まる:
-
-```
-DeepLocal なコンテナから取り出す  ->  DeepLocal
-RootLocal なコンテナから取り出す      ->  MayExt
-MayExt なコンテナから取り出す     ->  MayExt
-```
-
-記号的には `結果の root = 結果の deep = コンテナ leaf の deep`。取り出しは合流ではなく
-**下から根への昇格**なので、join では書けない。該当するのは `array_get`、boxed コンテナに対する
-`Destructure` / `struct_get` / `union_as` / capture projection、boxed union の `Match` payload。
-
 ## `locality_flow`
 
 `LLVMGen` に足すメソッド。`result_prov` と同じ引数を取る — 配線が型に依存する（コンテナが
@@ -395,9 +410,8 @@ fn locality_flow(
 
 impl ExtShape {
     /// 結果の全 leaf は `root = IfAny(∅)`、`deep` は全オペランドの全 leaf の `deep` の join。
-    /// **契約**: この op が返すコンテナは、新しく確保したもの、
-    /// この op が直前に unique 化したもの、または呼び出し側が uniqueness を保証したうえで
-    /// in-place 更新したもの、のいずれかである（健全性の節の前提 P5）。
+    /// **契約（前提 P5）**: この op が返すコンテナは、新規確保・この op が直前に unique 化
+    /// したもの・呼び出し側が uniqueness を保証した in-place 更新、のいずれかである。
     fn merge(result_ty, arg_tys, type_env) -> ExtShape;
     /// 結果の全 leaf が `root = deep = Always`。
     fn always(result_ty, type_env) -> ExtShape;
@@ -451,23 +465,25 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 | `InlineLLVMUnionModBody` | payload に関数を適用し、その結果を union に入れる。tag が合わない経路では**引数の union をそのまま返す**ので、`always` は保守的な選択ではなく必須である |
 | `InlineLLVMFFICallBody` | C を呼ぶ |
 
-**`bottom`（2）** — 発散するので結果の値が存在しない。`unreachable` を出すか abort するので、
-何を主張しても空虚に真であり、束の底（全 leaf `IfAny(∅)`）が健全かつ最も精密である。
+`always` の 7 個のうち 4 個（`InlineLLVMFixBody`、`InlineLLVMWithRetainedFunctionBody`、
+`InlineLLVMArrayBorrowElementsBody`、`InlineLLVMUnionModBody`）は関数オペランドを呼ぶ op である。
+呼ばれる関数は別の `RcFunc` として解析されるが、この op から見ると結果は間接呼び出しの結果で
+あり、関数本体が global を読んで返すことを `merge` は捉えられない。**`merge` を既定にして
+いたら、この 4 個が黙って `RootLocal` を通していた。**
 
-**`merge` では駄目な理由はオペランドにある。** `undefined : String -> a` は
-`String = unbox struct { _data : Array U8 }` を受け取るので、オペランドが boxed leaf を持つ。
-`merge` を当てると結果の `deep` にメッセージ文字列の条件が入り、
+**`bottom`（2）** — 発散するので結果の値が存在しない。何を主張しても空虚に真であり、束の底
+（全 leaf `IfAny(∅)`）が健全かつ最も精密である。
+
+**`merge` では駄目な理由はオペランドにある。** `undefined : String -> a` の op が受け取る
+オペランドは `Array U8`（`String = unbox struct { _data : Array U8 }` の中身）なので、boxed leaf を
+持つ。`merge` を当てると結果の `deep` にメッセージ文字列の条件が入り、
 `if bad { undefined(msg) } else { v }` のようなガードで arm の join が汚染されて、存在しない値の
 条件が `v` に伝わる。`result_prov` が `undefined` に `uniform_bottom` を使っているのと同じ理由。
 
 | op | |
 | --- | --- |
-| `InlineLLVMUndefinedInternalBody` | abort する |
+| `InlineLLVMUndefinedInternalBody` | abort する（`--no-runtime-check` では `unreachable`） |
 | `InlineLLVMHoleBody` | `unreachable` を出す |
-
-関数オペランドを呼ぶ op がこの表の半分を占める。呼ばれる関数は別の `RcFunc` として解析される
-が、この op から見ると結果は間接呼び出しの結果であり、関数本体が global を読んで返すことを
-`merge` は捉えられない。**`merge` を既定にしていたら、この 4 個が黙って `RootLocal` を通していた。**
 
 **`build_shape`（16）** — 集約の配管と、コンテナからの取り出し。成分ごとに別の値を保つ。
 
@@ -558,7 +574,9 @@ GLOBAL は決して unique にならない）。そしてこの解析は `root` 
 
 2 相に分ける。
 
-**相 1 — 記号的サマリ。** `provenance.rs` の `analyze_program` の phase 1 と同じ形。
+### 相 1 — 記号的サマリ
+
+`provenance.rs` の `analyze_program` の phase 1 と同じ形。
 
 状態は `summary : Map<FuncRef, ExtShape>` の 1 本だけ。`summary[f]` は「`f` の**結果**の各 leaf
 の `ExtCond`」で、条件は `f` の入力（パラメータ列、その後に capture）の leaf を指す。
@@ -609,10 +627,11 @@ k() = if c { 新規確保 } else { k() }
 join）。これが相 2 のゲートの判定材料になる。global 初期化子は呼ばれる側ではないので
 不動点には参加せず、この 1 周でだけ扱う。
 
-### 健全性
+### サマリの健全性
 
-抽象解釈の標準形で言う。具体側の意味論を最小不動点として定め、`γ` で抽象側とつなぎ、
-**局所健全性**だけを手で確かめる。あとは Knaster-Tarski が結論を出す。
+**この節は前提 P1-P5（「前提」の節）を仮定する。** 抽象解釈の標準形で言う。具体側の意味論を
+最小不動点として定め、`γ` で抽象側とつなぎ、**局所健全性**だけを手で確かめる。あとは
+Knaster-Tarski が結論を出す。
 
 **具体側**（プログラムが実際に何をするかを近似なしに述べた対象。計算はしない）。関数ごとに
 「引数の組と、それを与えたとき返る値」の対の集合を取る:
@@ -659,8 +678,12 @@ Atoms(f)   = { (i, σ, α) | i は f の入力の添字、σ は入力 i の型�
 `⊥_A` は全 leaf 両成分 `IfAny(∅)`、`⊤_A` は全 leaf 両成分 `Always`。`ExtCond_f` の高さは `|Atoms(f)| + 2`、`LeafCond_f` の高さはその 2 倍以下、`leaves(ret_f)` も関数の数も有限なので `A` は有限、したがって完備。
 `F : A -> A` は「全関数の本体を 1 回走査する」写像で、単調 (P3)。
 
-**つなぎ。** `γ : A -> C`。成分ごとには
-`γ_f : ExtShape_f -> P(In_f x Out_f)` で、`S` が主張することを実際に満たす対の集合を返す:
+**つなぎ。** `γ : A -> C`。条件を解決するには入力側の具体値を `LocalityKey` に読み取る必要が
+あるので、それを先に定める: 具体値 `a` の各入力 leaf について、指すオブジェクトが
+`REFCNT_STATE_LOCAL` でなければ `MayExt`、それ自身は LOCAL だが到達先に非 LOCAL が居れば
+`RootLocal`、到達先まですべて LOCAL なら `DeepLocal` としたものを **`a` の実 locality** と呼ぶ。
+成分ごとには `γ_f : ExtShape_f -> P(In_f x Out_f)` で、`S` が主張することを実際に満たす対の
+集合を返す:
 
 ```
 γ(S)_f = { (a, v) | 結果の各 leaf π について、r = resolve(S_f[π], a の実 locality) とおくと
@@ -670,8 +693,6 @@ Atoms(f)   = { (i, σ, α) | i は f の入力の添字、σ は入力 i の型�
 
 `S` が大きいほど（`Always` が多いほど）主張が弱く集合が広いので、`γ` は単調。逆向きの
 `α : C -> A` は要らない — concretization だけの枠組みで足りる。
-
-この節は前提 P1-P5（「前提」の節）を仮定する。
 
 **局所健全性（手で確かめるのはここだけ）。**
 
@@ -713,7 +734,9 @@ G(γ(S)) ⊆ γ(F(S))     -- 局所健全性
 site で状態バイトを読んで検査する）を実装と同時に入れ、結論そのものを全テストプログラムで
 直接検査する。
 
-**相 2 — locality をキーにした複製。** キーは「パラメータごと x leaf ごとの 3 値」。
+### 相 2 — locality をキーにした複製
+
+キーは「パラメータごと x leaf ごとの 3 値」。
 
 - 全関数の canonical 版（全 leaf `MayExt`）を残す。間接呼び出し・単位外呼び出し・`FFI_EXPORT`・
   エントリポイントの受け皿である。**canonical の本体も他のクローンと同じ手順で注釈する** —
@@ -730,14 +753,35 @@ site で状態バイトを読んで検査する）を実装と同時に入れ、
 
 クローンの中では入力が**具体値**なので、1 つのヘルパが `MayExt` な引数と `DeepLocal` な引数の
 両方で呼ばれても、それぞれのクローンが別々に証明される。monovariant（関数入力ごとに全呼び
-出し元の join を 1 つ持つ）も検討したが、この混合文脈で丸ごと de-prove する弱点があるので
-複製を採る。キーの値が 2 から 3 に増えるぶんクローン数は原理上ふくらむが、`RootLocal`（根だけ）
-が `DeepLocal` と分かれるのは「global 由来の値をコンテナに入れた」場合だけで、`plan.md` の
-測定ではコーパスの大半が marked object を 1 つも作らない。実測で確かめる。
+出し元の join を 1 つ持つ）は、混合文脈の呼び出し元が 1 つあるだけで全呼び出し元の証明を
+落とすので、採らない。キーの値が 2 から 3 に増えるぶんクローン数は原理上ふくらむが、
+`RootLocal`（根だけ）が `DeepLocal` と分かれるのは「global 由来の値をコンテナに入れた」場合
+だけで、`plan.md` の測定ではコーパスの大半が marked object を 1 つも作らない。実測で確かめる。
+
+**hot 経路はキーで届く。** `-O max` では decapturing がループ本体の識別を
+specialized `fold` クローンに焼き込み、その本体はループ本体を**名前で**直接呼ぶ。
+また uncurry/decap で capture は普通のパラメータになっているので、closure 由来の値もキーの
+対象に入る（specialize のキーが capture を除外するのは closure-ABI 版だけで、そちらは
+canonical のまま — 今日の uniqueness と同じ扱い）。
+
+**このパスが走るビルドには単位が 1 つしかない。** 分割コンパイルは
+`Configuration::enable_separated_compilation` が `None` / `Basic` でだけ真を返すので、`Max` 以上
+では全シンボルが 1 つの main unit に入る。したがって外から届く経路はエントリポイントと
+`FFI_EXPORT` だけである。単位の外から呼ばれうる関数を canonical で受ける規則は、`Basic` 以下へ
+降ろす日のために残してある形になる。
+
+**`FFI_EXPORT` の入口も同じ受け皿で足りる。** エクスポート関数は boxed 値を不透明ポインタと
+して受け取れる（`has_c_abi` が `is_box` を許す。#114 が禁じたのは集約型と `Bool`）ので、C から
+状態の分からない boxed 値が入ってくる。生成されるラッパは、エクスポートされた**global の
+closure 値**を読み、`apply_lambda` で適用する（`export_statement.rs`）— すなわち
+**global アトムの読み出しと間接呼び出し**である。specialize は closure を特殊化せず
+（`g.capture.is_some()` なら retarget しない）、間接呼び出しを retarget することもないので、
+C から届くのは常に canonical 版であり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を
+担っているのはこの経路である。
 
 ### 注釈の健全性
 
-サマリの健全性（前節）とは別に、注釈には「クローン `(f, k)` の本体が実行されるとき、その活性化
+「サマリの健全性」とは別に、注釈には「クローン `(f, k)` の本体が実行されるとき、その活性化
 の実引数は `k` を満たす」が要る。`specialize` の worklist は、全関数の canonical を基底とし
 「クローンの中の call site が組んだ (callee, キー)」で閉じる Kleene 反復であり、基底が canonical
 であることがエントリポイント・`FFI_EXPORT`・間接呼び出し・単位外呼び出しを一括で受ける。
@@ -768,34 +812,13 @@ op を `array_set` -> `array_set[unique]` に差し替えるが、両モード�
 
 **順序は `unique_check_elim` の後。** 結果が同じなら、決め手は `is_unique` の注釈になる。
 locality が注釈するのは**実行時チェックが残っている** site だけで、uniqueness に畳まれて
-`array_set[unique]` になった site には読む状態バイトがもう無い。畳み込みを先に済ませておけば、
-locality パスは残った site だけを見ればよく、ゲートも「実行時チェックにまだ到達する関数」で
-組める。逆順にすると、消える運命の site のためにキーを分ける。
+`array_set[unique]` になった op では宣言されたチェックが消えている。畳み込みを先に済ませて
+おけば、locality パスは残った site だけを見ればよく、ゲートも「実行時チェックにまだ到達する
+関数」で組める。逆順にすると、消える運命の site のためにキーを分ける。
 
 skeleton（worklist、クローン命名、canonical 版、call の retarget、`borrowed_units` の
 renaming 追従）は 2 つのパスで同一なので、`unique_check_elim` から括り出して
 「キー型・callee キーの算出・本体の書き換え・ゲート」で径数化し、2 回インスタンス化する。
-
-hot 経路はキーで届く: `-O max` では decapturing がループ本体の識別を
-specialized `fold` クローンに焼き込み、その本体はループ本体を**名前で**直接呼ぶ。
-また uncurry/decap で capture は普通のパラメータになっているので、closure 由来の値もキーの
-対象に入る（specialize のキーが capture を除外するのは closure-ABI 版だけで、そちらは
-canonical のまま — 今日の uniqueness と同じ扱い）。
-
-**このパスが走るビルドには単位が 1 つしかない。** 分割コンパイルは
-`Configuration::enable_separated_compilation` が `None` / `Basic` でだけ真を返すので、`Max` 以上
-では全シンボルが 1 つの main unit に入る。したがって外から届く経路はエントリポイントと
-`FFI_EXPORT` だけである。単位の外から呼ばれうる関数を canonical で受ける規則は、`Basic` 以下へ
-降ろす日のために残してある形になる。
-
-**`FFI_EXPORT` の入口も同じ受け皿で足りる。** エクスポート関数は boxed 値を不透明ポインタと
-して受け取れる（`has_c_abi` が `is_box` を許す。#114 が禁じたのは集約型と `Bool`）ので、C から
-状態の分からない boxed 値が入ってくる。生成されるラッパは、エクスポートされた**global の
-closure 値**を読み、`apply_lambda` で適用する（`export_statement.rs`）— すなわち
-**global アトムの読み出しと間接呼び出し**である。specialize は closure を特殊化せず
-（`g.capture.is_some()` なら retarget しない）、間接呼び出しを retarget することもないので、
-C から届くのは常に canonical 版であり、そのキーは全 leaf `MayExt` で何も主張しない。健全性を
-担っているのは「入力に boxed leaf が無いこと」ではなく、この経路である。
 
 ## 注釈する site
 
@@ -804,13 +827,33 @@ C から届くのは常に canonical 版であり、そのキーは全 leaf `May
 | site | 状態バイトを読む所 | 注釈の置き場 |
 | --- | --- | --- |
 | `Retain` / `Release` | `retain_nonnull_boxed` / `build_release_boxed_with` | ノードの `RcState` フィールド（既存） |
-| `is_unique` チェック | `build_branch_by_is_unique`。unique-check op の `generate` の中 | op インスタンスの属性フィールド |
+| `is_unique` チェック | `build_branch_by_is_unique`。unique-check op の `generate` の中、`unique_check_operand` が宣言したもの（下記） | op インスタンスの属性フィールド |
 | `Destructure` | `get_struct_fields`。ノード自身が retain/release する | ノードに `RcState` を足す |
 | boxed union の `Match` | `eval_rc_match`。variant アームが payload を retain する | `MatchArm` に `RcState` を足す |
 | op が内部で行う RC | 下記 | op インスタンスの属性フィールド |
 | 破棄の traverser | `build_traverse`。カウントが 0 になったとき子を release する | **残す**。型ごとの関数なので site ごとの置き場が無く、しかも根だけ `RootLocal` な値の健全性がこのディスパッチに寄りかかる（前提 P4） |
 | `Destructor` の前段 | `build_release_mark_nonnull_boxed_with`。`Std::FFI::Destructor` 型なら release の前にカウント 1 かを調べる | **残す**。原理的には注釈できる（対象は `Release` と同じオブジェクト）が、まずは通す |
 | unboxed global の読み出し | `get_scoped_obj` の `retain_on_read`。unboxed global を読むたびに boxed 部分を retain する | **残す**。対象は常に GLOBAL なので、ディスパッチは no-op アームに落ちて実質的に最適である |
+
+**畳めるのは宣言された uniqueness チェックだけである。** `unique_check_operand` は 1 op につき
+1 つのチェックを宣言するが、`generate` が出すチェックが 1 つとは限らない。
+`InlineLLVMArrayAppendCapacityBoundsUnchecked` は、`dst` を unique 化するチェック
+（`force_unique` のときだけ。宣言しているのはこちら）に加えて、**`force_unique` と無関係に
+無条件で** `src` のストレージに対するチェックを出す — 全範囲を append するとき、要素を retain
+せず memcpy で移せるのは `src` が unique なときに限るからである。したがって「対象は `LOCAL`」版が
+外してよいのは**宣言されたチェックだけ**で、`generate` は属性を読んでそのチェックだけを
+差し替える。
+
+宣言外のチェックまで外すと壊れる。`Array::empty(6).append(g)`（`g` は global）は `dst` が新規
+確保なので注釈が付くが、`src` は GLOBAL である。GLOBAL なオブジェクトの参照カウントは維持
+されない（retain も release も `global_bb` で何もしない）ので 1 のまま残り、状態を見ずに
+カウントだけ比べれば unique と判定される。すると global の要素を retain 抜きで持ち出し、
+ストレージを解放する経路に入る。
+
+**`unique_check_operand` の不変条件**: 宣言は、`generate` が出す `build_branch_by_is_unique` を
+覆うか、覆わないものをディスパッチのまま残すかのどちらかでなければならない。前提 P1 と同じ
+性質の、手書き宣言への依存である。宣言を複数持てるようにして `src` 側も畳むのは、`unique_check_elim` にも
+共通する拡張なので別途 issue にしてある（#162）。
 
 **op が内部で行う RC。** 一部の op は `LLVMGen::generate` の中で retain/release を出す。取り出し
 系（`array_get` の要素 retain — `read_from_array_buf`、`struct_get` / `union_as` /
@@ -823,8 +866,8 @@ capture projection のコンテナからの取り出し）と、書き込み系�
 不一致経路で modifier を release する、など）が、それらは対象を宣言せず、ディスパッチのまま
 残る。
 
-**対と不変条件**: op の `generate` が属性を読むのは、その op が `internal_rc_targets` を宣言
-しているときに限る。そして**宣言は `generate` が出す retain/release を漏れなく覆わなければ
+**`internal_rc_targets` の対と不変条件**: op の `generate` が属性を読むのは、その op が
+`internal_rc_targets` を宣言しているときに限る。そして**宣言は `generate` が出す retain/release を漏れなく覆わなければ
 ならない**。宣言し損ねた操作が 1 つでもあると、注釈が「対象はすべて `LOCAL`」と言いながら
 その操作が非 LOCAL なオブジェクトに当たる — 冒頭の「壊れる側」の誤りである。前提 P1 と同じ
 性質の、手書き宣言への依存になる。
@@ -861,17 +904,26 @@ enum RcTarget {
 注釈は `Destructure` と同じく op あたり 1 つの `RcState` で、**挙がった対象がすべて
 `RootLocal` 以下のときだけ**付く。対象ごとに状態を分ける精密化は、実測が要求したら足す。
 
-**op ごとの宣言値は段階 4 の着手時に書く。** 段階 1-3 の実測を見てから段階 4 をやるかを決める
-ので、ここでは対象になる op の顔ぶれだけ挙げておく（`builtin.rs` を機械的に走査して、
-`generate` が retain/release を出すもの）:
+**clone 経路の対象は宣言から導出する。** force-unique な op は共有時にコンテナを複製し、その中で
+要素・フィールドを retain-copy して旧オブジェクトを release する（`make_array_unique` /
+`make_struct_unique` / `make_struct_union_unique` / `force_unique_boxed`）。この経路は op ごとに
+違わず、対象はどれも「`unique_check_operand` が宣言した容器と、その中身」である。そこで
+**宣言があれば `Operand(i, π)` と `Contents(i, π)` を対象に足す**を `internal_rc_targets` の既定
+合成にして、手書きを取り出し系・書き込み系の残りだけにする。clone 経路を持つ op は
+`unique_check_operand` を宣言する 18 op と一致するので、手で列挙すれば必ず落ちる面が、これで
+消える。
+
+**op ごとの宣言値は段 4（「着地と検証」）の着手時に書く。** 段 1-3 の実測を見てから段 4 を
+やるかを決めるので、ここでは手書きが要る op の顔ぶれだけ挙げておく（`builtin.rs` を機械的に
+走査して、既定合成で覆われない retain/release を `generate` が出すもの）:
 
 | 内部 RC の実体 | op |
 | --- | --- |
 | コンテナから取り出した値を retain | `ArrayUnsafeGetBoundsUnchecked`（`read_from_array_buf`）、`StructGetBody`（`get_struct_fields`）、`UnionAsBody`（`get_union_value`）、`CaptureProjectBody` |
 | コンテナを release | `StructGetBody`、`UnionAsBody`（boxed のとき） |
 | 上書きした旧値を release | `ArraySetBody`（`write_to_array_buf(…, true)`）、`StructSetBody`、`StructPlugInBody` |
-| 落とした要素を release | `ArrayTruncateBoundsUnchecked`（`release_or_mark_array_slice`）、`ArrayAppendCapacityBoundsUnchecked` |
-| 共有時の clone 経路（要素を retain-copy し、旧ストレージを release） | `ArraySetCapacityBoundsUnchecked`（`clone_array_buf` + `build_release_mark`）、`ArrayGrowSizeBody`、`ArraySwapBody`、`PunchedArrayPlugBody`（`make_array_unique` 系） |
+| 落とした要素を release | `ArrayTruncateBoundsUnchecked`（`release_or_mark_array_slice`）、`ArrayAppendCapacityBoundsUnchecked`（copy 経路の `clone_array_buf` と `src` の release も） |
+| 足した値を retain | `ArrayAppendValueCapacityUnchecked`（`append_value_into_array_buf` が個数分 retain し、渡された値を release する） |
 | 対象にしない | `WithRetainedFunctionBody`、`UnionModBody`（どちらも `always` 分類なので注釈が付かない）、`GetRetainFunctionOfBoxedValue` / `GetReleaseFunctionOfBoxedValue`（生成する補助関数の中の RC で、対象が呼び出し時に決まらない）、`ArrayLitBody` と `DestructorMake`（新品への書き込みだけで、release する旧値が無い） |
 
 **取り出し系を落とすと、3 点鎖の狙いが半分しか実現しない。** `DeepLocal` な配列に対する
@@ -893,12 +945,16 @@ enum RcTarget {
 クローンの実体化のとき、入力の具体値の下で本体を前向きに 1 回走査する。
 
 - `Retain(x, π, Unknown)` / `Release(x, π, Unknown)`: `π` 以下の**全** leaf が `DeepLocal` なら
-  `RcState::DeepLocal`、そうでなく全 leaf が `RootLocal` 以下なら `RcState::Local` に書き換える。
+  `RcState::DeepLocal`（新設。「コード生成」）、そうでなく全 leaf が `RootLocal` 以下なら
+  `RcState::Local` に書き換える。
   `π` が複数の leaf を覆う（unboxed union の unit、部分木）ときは、その全部で判定する。
 - unique-check op: `unique_check_operand` が指す leaf が `RootLocal` 以下なら、op を「対象は `LOCAL`」
-  版に差し替える。差し替えは `assuming_unique` と同じパターン — 対象 op の struct にフィールドを
+  版に差し替える。外れるのは宣言されたチェックだけで、同じ op が出す宣言外のチェックは
+  ディスパッチのまま残る（「注釈する site」）。差し替えは `assuming_unique` と同じパターン —
+  対象 op の struct にフィールドを
   足し、それを立てたクローンを返すメソッドを生やす。`unique_check_elim` を先に走らせてあるので
-  （後述の順序）、ここで見るのは実行時チェックが残った site だけである。
+  （「`unique_check_elim` とは別のパスにする」）、ここで見るのは実行時チェックが残った site
+  だけである。
 - boxed union の `Match`: variant アームは payload を retain するので、取り出し規則により
   **被検査値の leaf が `DeepLocal` のときに限り** `MatchArm` に印を付ける。catch-all アームは
   被検査値そのものを束縛するだけで retain しない。
@@ -914,7 +970,7 @@ enum RcTarget {
 `&[]` でやっているのと同じ形）。
 
 パイプラインでの位置:
-`… → borrow_ify → cancel → unique_check_elim::specialize → locality::specialize → implement`。
+`… -> borrow_ify -> cancel -> unique_check_elim::specialize -> locality::specialize -> implement`。
 相 1 のサマリ計算は locality パスの入口で、`unique_check_elim` の出力に対して行う。ゲートは
 他の Max 以上のパスと同じものに加えて `!config.threaded`（threaded ビルドではパスごと走らせ
 ない）。
@@ -963,8 +1019,9 @@ trav_release_local_(T)      unboxed の値が経由する traverser も同様
   ときに dtor を走らせる）はそのまま通す。** 別ヘルパとして書き起こすと FFI の destructor が
   黙って発火しなくなる。
 - `Destructure`: `get_struct_fields` が呼ぶ retain/release を上の 2 つに差し替える。
-- unique-check op（対象が `LOCAL` 版）: `build_branch_by_is_unique` の状態ディスパッチを外し、
-  参照カウントを 1 と比べる分岐だけを出す（今日の `local_bb` の本体）。
+- unique-check op（対象が `LOCAL` 版）: `unique_check_operand` が宣言したチェックについて
+  `build_branch_by_is_unique` の状態ディスパッチを外し、参照カウントを 1 と比べる分岐だけを出す
+  （今日の `local_bb` の本体）。同じ `generate` が出す宣言外のチェックはそのまま。
 
 `RcState` に `DeepLocal` を足す。注釈は leaf の解決値に対応させ、`DeepLocal` なら
 `RcState::DeepLocal`、`RootLocal` なら `RcState::Local` を出す。`implement_rc_program` の
@@ -977,7 +1034,7 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 ## 着地と検証
 
 **設計は 1 つ、着地は site の種類ごとに分ける。** 解析も転送規則も site の種類で変わらないので
-設計は割らない。一方で実装は次の順で入れ、各段で `benchmark/speedtest` を測る:
+設計は割らない。一方で実装は次の順で入れ（以下、段 1-4）、各段で `benchmark/speedtest` を測る:
 
 1. `Retain` / `Release`（RC IR ノード。`RcState` は既にある）
 2. `is_unique`（op 属性）
@@ -1017,10 +1074,11 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
   1 つも作らない（`plan.md`）ので、global の近くでしか誤らない分類ミスは動的検査を素通りする。
   扉の形ごとに、注釈が付かないこと（ダンプに `@local` が出ないこと）を静的に固定する:
   `destructure <global>`、`let a = [g, g]; a.set(0, g)`、`boxed_from_retained_ptr` の流れ、
+  borrow 版の呼び出しに global を渡した後に `borrow_ify` が積む `Release`、
   コンテナ経由の global 読み出し、boxed 要素型に対する `mutate_elements`。
 - **カバレッジ測定**（一時プローブ、読んだら revert）: speedtest corpus で実行された
   `RcState::Local` / `RcState::DeepLocal` / `RcState::Unknown` の操作を site の種類ごとに数え、
-  `plan.md` の上限表（`arg`+`local` 行）と
+  `plan.md` の上限測定（オペランドの leaf が確保・引数に解決される割合）と
   突き合わせる。併せてクローン数（specialize の出力関数数）を拡張の前後で比べる。
 - **コンパイル時間**: 全プログラムの不動点 1 本と 2 本目の複製パスが増えるので、パス自体の
   所要時間を測る。RC パイプラインはコンパイル時間に敏感な履歴がある（#144、#76）。
@@ -1054,4 +1112,6 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 - 単位間サマリ（`Max` 以上には単位が 1 つしかないので、`Basic` 以下へ降ろすときに要る）。
 - `DeepLocal` 用の状態なし traverser（前述。実測で内訳を見てから）。
 - threaded ビルド（`threaded.md`）。
-- changelog: 観測可能な振る舞いは変わらない。
+- 複数の uniqueness チェックを宣言できるようにする拡張（#162）。
+- changelog: 最適化そのものは観測可能な振る舞いを変えない。`boxed_from_retained_ptr` に足す
+  初期化子の契約は公開ドキュメントの変更なので、そちらは載せる。
