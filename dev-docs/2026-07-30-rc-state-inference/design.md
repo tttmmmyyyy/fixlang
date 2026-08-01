@@ -19,7 +19,7 @@
 以下、各所でその向きを明示する。
 
 本文は段階 1（非 threaded ビルドの `Retain`/`Release`）を詳細化し、末尾の 2 節が段階 2
-（`is_unique` サイト）と段階 3（threaded ビルド）を設計する。
+（注釈の置き場が無い site）と段階 3（threaded ビルド）を設計する。
 
 ## 性質
 
@@ -134,7 +134,7 @@ enum LeafOrigins {
 
 join は `Ext ⊔ _ = Ext`、`Args(a) ⊔ Args(b) = Args(a ∪ b)`。**`Args(∅)` が束の底 = `Local`**
 で、その場で確保した値がこれになる — `create_obj` は `LOCAL` で初期化するので、理由が 1 つも
-無い。確保したコンテナに `MayExt` な値を入れた場合は、その値の理由が転送規則（`Merge`）で
+無い。確保したコンテナに `MayExt` な値を入れた場合は、その値の理由が転送規則（`merge`）で
 入ってくるので `Args(∅)` にはならない。leaf パスは型で、入力は有限で抑えられるので、束は
 有限で不動点は停止する。
 
@@ -177,27 +177,34 @@ fn locality_flow(
     type_env: &TypeEnv,
 ) -> LocalityFlow;
 
-/// 結果の各 boxed leaf が、どのオペランド leaf から locality を受け取るか。
-pub enum LocalityFlow {
-    /// 結果の全 leaf に、全オペランドの全 leaf の join。
-    Merge,
+/// 結果の boxed leaf ごとに、その locality の出どころ。
+/// 関数の記号的サマリと同じ形で、`Args` の添字が関数の入力ではなく op のオペランドを指す。
+pub struct LocalityFlow(Map<FieldPath, LeafOrigins>);
+
+impl LocalityFlow {
+    /// 結果の全 leaf に、全オペランドの全 leaf。
+    fn merge(result_ty, arg_tys, type_env) -> LocalityFlow;
     /// 結果の全 leaf が `Ext`。
-    Ext,
-    /// 結果 leaf ごとに、由来するオペランド leaf を明示する。
-    /// エントリの無い結果 leaf は `Ext`。
-    Wired(Vec<(FieldPath, Vec<(usize, FieldPath)>)>),
+    fn ext(result_ty, type_env) -> LocalityFlow;
+    /// 結果 leaf ごとに指定する。`Provenance::build_shape` と同じ形で、結果型の boxed leaf
+    /// を全部歩いて呼ぶので、leaf の書き落としが起こらない。
+    fn build_shape(result_ty, type_env, f: &dyn Fn(&FieldPath) -> LeafOrigins) -> LocalityFlow;
 }
 ```
 
-`Merge` が健全なのは「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを
-並べ替えることしかできない」op に対してだけである。boxed コンテナからの読み出し（`array_get`、
-boxed struct の getter）も `Merge` で正しい — 到達閉包を取っているので、要素はコンテナから
-到達可能だった。`Wired` でエントリの無い leaf を `Ext` にするのも同じ向きで、配線の書き忘れは
-精度を落とすだけで健全性を壊さない。
+**サマリと同じ型を返すことに意味がある。** `Llvm` ノードの転送は「op が宣言した写像に
+オペランドの値を代入する」で、直接呼び出しの転送は「callee のサマリに引数の値を代入する」。
+添字の指す先が違うだけで操作は同一なので、代入は 1 つ書けば両方が使う。`merge` / `ext` は
+その写像を作る構成子であって、別扱いの分岐ではない。
 
-**既定実装を置かない。** `Merge` を既定にすると、オペランドから到達できない boxed オブジェクト
+`merge` が健全なのは「新しいオブジェクトを確保するか、オペランドから到達可能なオブジェクトを
+並べ替えることしかできない」op に対してだけである。boxed コンテナからの読み出し（`array_get`、
+boxed struct の getter）も `merge` で正しい — 到達閉包を取っているので、要素はコンテナから
+到達可能だった。
+
+**既定実装を置かない。** `merge` を既定にすると、オペランドから到達できない boxed オブジェクト
 を作る op を将来足したときに、何も書かなくても `Local` が通る — 冒頭で述べた「壊れる側」の誤りが
-黙って入ることになる。`Ext` を既定にすれば安全側だが、今度は書き忘れが黙って精度を殺し、症状が
+黙って入ることになる。`ext` を既定にすれば安全側だが、今度は書き忘れが黙って精度を殺し、症状が
 出ないので気付けない。どちらの黙り方も避けたいので必須メソッドにして、op を足す人に必ず選ばせる。
 
 `result_prov` の読み替えにせず独立のメソッドにするのは、provenance が別の問いに答えているから
@@ -206,9 +213,9 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 
 ### 全 op の値
 
-`impl LLVMGen` は 77 個。`Ext` 8 個、`Wired` 13 個、残り 56 個が `Merge`。
+`impl LLVMGen` は 77 個。構成子で分類すると `ext` 8 個、`build_shape` 13 個、`merge` 56 個。
 
-**`Ext`（8）** — 結果が解析の外から来る。
+**`ext`（8）** — 結果が解析の外から来る。
 
 | op | 理由 |
 | --- | --- |
@@ -223,16 +230,16 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 
 関数オペランドを呼ぶ op がこの表の半分を占める。呼ばれる関数は別の `RcFunc` として解析される
 が、この op から見ると結果は間接呼び出しの結果であり、関数本体が global を読んで返すことを
-`Merge` は捉えられない。**`Merge` を既定にしていたら、この 5 個が黙って `Local` を通していた。**
+`merge` は捉えられない。**`merge` を既定にしていたら、この 5 個が黙って `Local` を通していた。**
 
-**`Wired`（13）** — 集約の配管。`MayExt` な成分と `Local` な成分を分けて保つ。
+**`build_shape`（13）** — 集約の配管。`MayExt` な成分と `Local` な成分を分けて保つ。
 
 | op | 配線 |
 | --- | --- |
 | `InlineLLVMStructGetBody` | unboxed コンテナ: 結果 `σ` <- 引数 0 の `[field_idx]++σ`。boxed コンテナ: 結果の全 leaf <- 引数 0 の `[]` |
-| `InlineLLVMMakeStructBody` | 結果 `[i]++σ` <- 引数 `i` の `σ`。boxed 結果は `Merge` |
-| `InlineLLVMStructSetBody` | 結果 `[field_idx]++σ` <- 引数 0（値）の `σ`、他の leaf <- 引数 1（struct）の同じパス。boxed 結果は `Merge` |
-| `InlineLLVMStructPlugInBody` | 結果 `[field_idx]++σ` <- 引数 1（field）の `σ`、他 <- 引数 0（punched）。boxed 結果は `Merge` |
+| `InlineLLVMMakeStructBody` | 結果 `[i]++σ` <- 引数 `i` の `σ`。boxed 結果は全 leaf にコンテナの join |
+| `InlineLLVMStructSetBody` | 結果 `[field_idx]++σ` <- 引数 0（値）の `σ`、他の leaf <- 引数 1（struct）の同じパス。boxed 結果は全 leaf にコンテナの join |
+| `InlineLLVMStructPlugInBody` | 結果 `[field_idx]++σ` <- 引数 1（field）の `σ`、他 <- 引数 0（punched）。boxed 結果は全 leaf にコンテナの join |
 | `InlineLLVMStructPunchBody` | 結果は `(field, punched_struct)`。`[0]++σ` <- 引数 0 の `[field_idx]++σ`、`[1]` 以下 <- 引数 0 の残り |
 | `InlineLLVMArrayPunchBody` | 結果は `(elem, punched_array)`。両成分 <- 引数の配列 leaf |
 | `InlineLLVMMakeUnionBody` | 結果 `[variant]++σ` <- 引数 0 の `σ`。他の variant は底（`Args(∅)`） |
@@ -246,7 +253,7 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 配線の位置は `result_prov` が使っている定数と同じもの（`STRUCT_SET_VALUE_ARG`,
 `PLUG_IN_PUNCHED_ARG`, `PUNCHED_STRUCT_FIELD`, `MUTATE_BOXED_VALUE_FIELD` など）を読む。
 
-**`Merge`（56）**
+**`merge`（56）**
 
 - スカラーのみ（オペランドにも結果にも boxed leaf が無いので配線は空。29）:
   `InlineLLVMIntLit`, `InlineLLVMFloatLit`, `InlineLLVMNullPtrLit`,
@@ -277,7 +284,7 @@ uniqueness の都合の編集が健全性の論証を静かに変える。
 ### uniqueness のモードは locality を動かさない
 
 いくつかの op は `assuming_unique` で「チェックしない版」に差し替わる（`array_set` ->
-`array_set[unique]` など）。この 2 つの版の `locality_flow` は同じ `Merge` である。
+`array_set[unique]` など）。この 2 つの版の `locality_flow` は同じ `merge` である。
 
 チェック無し版が呼ばれている時点で uniqueness が証明されている、という事実を locality に
 使うことはできない。**uniqueness は根オブジェクトの参照カウントの話で、locality はそこから
@@ -292,8 +299,8 @@ let a = [g, g];         -- Array (Array I64)。新規確保なので統計的に
 let a = a.set(0, g);    -- array_set[unique]（チェックは畳まれている）
 ```
 
-ここで `array_set[unique]` の flow を「空集合（`Local` 証明済み）」にすると、`Merge` が
-`[g, g]` から正しく付けた `Ext` が上書きされて消える。そのあと `a.@(0)` を読むと、`Merge` に
+ここで `array_set[unique]` の flow を「空集合（`Local` 証明済み）」にすると、`merge` が
+`[g, g]` から正しく付けた `Ext` が上書きされて消える。そのあと `a.@(0)` を読むと、`merge` に
 より結果も `Local` になり、その `Release` が非 atomic デクリメントとして出る — 対象は `g` の
 ストレージで、GLOBAL オブジェクトの参照カウントは維持されていないから、最初の release で解放
 される。冒頭の「壊れる側」の誤りそのものである。
@@ -339,7 +346,7 @@ callee のサマリを代入・間接と単位外は全 leaf `Ext`）。
 生まれる。パスを分ければゲートは各パスのものがそのまま働く。
 
 分けられるのは**2 つのパスが可換**だからである。uniqueness の畳み込みは op を
-`array_set` -> `array_set[unique]` に差し替えるが、両モードの `locality_flow` は同じ `Merge`
+`array_set` -> `array_set[unique]` に差し替えるが、両モードの `locality_flow` は同じ `merge`
 なので locality のサマリは変わらない（前節）。locality の注釈は `RcState` フィールドを書くだけ
 で、provenance はそれを読まない。よってどちらの順でも各本体に付く注釈は同じで、到達する
 (uniqueness, locality) の組も同じなのでクローン総数も変わらない。
