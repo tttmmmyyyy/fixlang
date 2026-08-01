@@ -815,11 +815,22 @@ enum RcTarget {
     Result(FieldPath),
     /// オペランドの leaf（`struct_get` が release するコンテナなど）。
     Operand(usize, FieldPath),
-    /// オペランド `i` のコンテナの中身（`array_set` が release する旧値など）。
-    /// 判定にはそのオペランド leaf の `deep` を使う。
-    Contents(usize),
+    /// オペランド `i` の leaf `σ` の中身（`array_set` が release する旧値など）。
+    /// その値は IR のどの変数でもないので、判定にはオペランド leaf の `deep` を使う。
+    Contents(usize, FieldPath),
 }
 ```
+
+使う場所は 3 つある。
+
+- **サマリの走査**: `internal_rc_targets` が空でない op を RC site として数える。RC site が
+  op の中にしかない関数もあるので、複製のゲートはこれを見る。
+- **クローンの実体化**: 各対象を解決し（`Result(π)` は結果の leaf `π`、`Operand(i, π)` は
+  `env[args[i]]` の leaf `π`、`Contents(i, π)` はその `deep`）、全部が `RootLocal` 以下なら
+  op を「対象は `LOCAL`」版に差し替える。差し替えは `assuming_unique` と同じパターンで、
+  uniqueness の属性とは独立に立つ。
+- **コード生成**: op の `generate` が自分の属性を読み、内部の retain/release をディスパッチ
+  なしで出す。
 
 注釈は `Destructure` と同じく op あたり 1 つの `RcState` で、**挙がった対象がすべて
 `RootLocal` 以下のときだけ**付く。対象ごとに状態を分ける精密化は、実測が要求したら足す。
