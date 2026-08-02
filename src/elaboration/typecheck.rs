@@ -424,9 +424,11 @@ pub struct TypeCheckContext {
     // Names that should be imported in the current module.
     pub import_required: Vec<FullName>,
     // Equalities assumed.
-    pub assumed_eqs: Map<AssocType, Vec<EqualityScheme>>,
+    // Arc for sharing them among the contexts cloned for speculative type checking.
+    pub assumed_eqs: Arc<Map<AssocType, Vec<EqualityScheme>>>,
     // Predicates assumed.
-    pub assumed_preds: Map<TraitId, Vec<QualPredScheme>>,
+    // Arc for sharing them among the contexts cloned for speculative type checking.
+    pub assumed_preds: Arc<Map<TraitId, Vec<QualPredScheme>>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
     // NOTE: We use `Vec` instead of `Set` because the expected size is small.
@@ -489,8 +491,8 @@ impl TypeCheckContext {
             substitution: Substitution::default(),
             predicates: vec![],
             equalities: vec![],
-            assumed_preds,
-            assumed_eqs,
+            assumed_preds: Arc::new(assumed_preds),
+            assumed_eqs: Arc::new(assumed_eqs),
             fixed_tyvars: vec![],
             local_assumed_eqs: vec![],
             import_required: vec![],
@@ -952,7 +954,11 @@ impl TypeCheckContext {
                             predicate: pred,
                         },
                     };
-                    insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
+                    insert_to_map_vec(
+                        Arc::make_mut(&mut self.assumed_preds),
+                        &trait_id,
+                        qual_pred_scm,
+                    );
                 }
                 for eq in eqs {
                     let assoc_ty = eq.assoc_type.clone();
@@ -960,7 +966,7 @@ impl TypeCheckContext {
                         gen_vars: vec![],
                         equality: eq.clone(),
                     };
-                    insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
+                    insert_to_map_vec(Arc::make_mut(&mut self.assumed_eqs), &assoc_ty, eq_scm);
                     self.local_assumed_eqs.push(eq);
                 }
                 return Ok(scheme.ty.clone());
@@ -1870,7 +1876,8 @@ impl TypeCheckContext {
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
-                for assumed_eq in &self.assumed_eqs.get(assoc_ty).cloned().unwrap_or(vec![]) {
+                let assumed_eqs = self.assumed_eqs.clone();
+                for assumed_eq in assumed_eqs.get(assoc_ty).map_or(&[][..], Vec::as_slice) {
                     // Instantiate `assumed_eq`.
                     let mut subst = Substitution::default();
                     for tv in &assumed_eq.gen_vars {
@@ -2062,11 +2069,10 @@ impl TypeCheckContext {
         skip.insert(pred_str);
         pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
         let mut unifiable = false;
-        for qual_pred_scm in &self
-            .assumed_preds
+        let assumed_preds = self.assumed_preds.clone();
+        for qual_pred_scm in assumed_preds
             .get(&pred.trait_id)
-            .unwrap_or(&vec![])
-            .clone()
+            .map_or(&[][..], Vec::as_slice)
         {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
