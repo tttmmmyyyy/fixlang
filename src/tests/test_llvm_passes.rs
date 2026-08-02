@@ -167,10 +167,6 @@ fn test_passes_file_replaces_the_level_pipeline() {
     // file is the one that shows what the pipeline did.
     let emitted = emitted_llvm_ir(dir.path(), EmittedIr::AfterOptimization);
     assert!(
-        !emitted.is_empty(),
-        "the build should have emitted the post-pipeline LLVM IR beside the source"
-    );
-    assert!(
         emitted.contains("alloca"),
         "an unoptimized module should still hold its values in stack slots; the emitted IR has \
          none, so the passes file did not replace the pipeline the optimization level implies"

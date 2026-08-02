@@ -73,11 +73,33 @@ fn emit_and_run_threaded(opt_level: &str) -> String {
     emitted_llvm_ir(dir, EmittedIr::All)
 }
 
-/// The lines of `ir` on which `instruction` appears.
-fn lines_with<'a>(ir: &'a str, instruction: &str) -> Vec<&'a str> {
-    ir.lines()
+/// Asserts that `ir` accesses a multi-threaded reference count with `instruction`, and that every
+/// such access carries `ordering`. `where_` names the build the IR came from, and is what a failure
+/// reports.
+fn assert_every_access_carries_ordering(ir: &str, instruction: &str, ordering: &str, where_: &str) {
+    let accesses = ir
+        .lines()
         .filter(|line| line.contains(instruction))
-        .collect()
+        .collect::<Vec<_>>();
+    assert!(
+        !accesses.is_empty(),
+        "the build should emit `{}` on a multi-threaded reference count {}",
+        instruction,
+        where_
+    );
+    let ordering_token = format!(" {}", ordering);
+    let without_ordering = accesses
+        .iter()
+        .filter(|line| !line.contains(&ordering_token))
+        .collect::<Vec<_>>();
+    assert!(
+        without_ordering.is_empty(),
+        "every `{}` on a multi-threaded reference count should be `{}` {}, but these are not: {:?}",
+        instruction,
+        ordering,
+        where_,
+        without_ordering
+    );
 }
 
 /// Verifies the orderings the threaded reference counting is built from: the decrement acquires as
@@ -91,62 +113,15 @@ fn assert_orderings_are_checkable(opt_level: &str) {
 
     // The thread that brings the count to zero has to see every write the other holders made, so
     // the decrement carries the acquire.
-    let decrements = lines_with(&ir, "atomicrmw sub");
-    assert!(
-        !decrements.is_empty(),
-        "the build should decrement a multi-threaded reference count {}",
-        where_
-    );
-    let without_acq_rel = decrements
-        .iter()
-        .filter(|line| !line.contains(" acq_rel"))
-        .collect::<Vec<_>>();
-    assert!(
-        without_acq_rel.is_empty(),
-        "every decrement of a multi-threaded reference count should acquire and release {}, but \
-         these do not: {:?}",
-        where_,
-        without_acq_rel
-    );
+    assert_every_access_carries_ordering(&ir, "atomicrmw sub", "acq_rel", &where_);
 
     // A thread that finds itself the only holder goes on to write through the value, and those
     // writes come after the reads the releasing threads did.
-    let reads = lines_with(&ir, "load atomic");
-    assert!(
-        !reads.is_empty(),
-        "the build should read a multi-threaded reference count {}",
-        where_
-    );
-    let without_acquire = reads
-        .iter()
-        .filter(|line| !line.contains(" acquire"))
-        .collect::<Vec<_>>();
-    assert!(
-        without_acquire.is_empty(),
-        "every read of a multi-threaded reference count should acquire {}, but these do not: {:?}",
-        where_,
-        without_acquire
-    );
+    assert_every_access_carries_ordering(&ir, "load atomic", "acquire", &where_);
 
     // An increment hands nothing over and reads nothing another thread wrote, so it stays relaxed.
     // Strengthening it would cost every retain of a shared value and buy nothing.
-    let increments = lines_with(&ir, "atomicrmw add");
-    assert!(
-        !increments.is_empty(),
-        "the build should increment a multi-threaded reference count {}",
-        where_
-    );
-    let ordered = increments
-        .iter()
-        .filter(|line| !line.contains(" monotonic"))
-        .collect::<Vec<_>>();
-    assert!(
-        ordered.is_empty(),
-        "an increment of a multi-threaded reference count needs no ordering {}, but these carry \
-         one: {:?}",
-        where_,
-        ordered
-    );
+    assert_every_access_carries_ordering(&ir, "atomicrmw add", "monotonic", &where_);
 
     // A standalone fence is invisible to ThreadSanitizer, so an acquire moved into one would turn
     // the threaded path into a stream of false reports.

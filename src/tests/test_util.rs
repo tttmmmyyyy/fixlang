@@ -105,7 +105,8 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
     command
 }
 
-/// Which of a build's emitted LLVM IR files to read.
+/// Which of a build's emitted LLVM IR files to read. The selection reads the file names
+/// `Configuration::get_output_llvm_ir_path` gives them.
 pub enum EmittedIr {
     /// Every module, as the code generator wrote it and as the pass pipeline left it.
     All,
