@@ -33,8 +33,7 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
 };
-use crate::rc_ir::rename::fresh_rename_function;
-use std::collections::VecDeque;
+use crate::rc_ir::specialize::{specializable_callee, CloneRegistry};
 use std::sync::Arc;
 
 /// What identifies one clone of a function: the uniqueness of each of its parameters. A closure
@@ -49,10 +48,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         type_env,
         analysis,
         reaches_unique_check: funcs_reaching_unique_check(prog, type_env),
-        clone_names: Map::default(),
-        requested: Set::default(),
-        worklist: VecDeque::new(),
-        fresh_name_counter: 0,
+        clones: CloneRegistry::new("u"),
         output_funcs: Map::default(),
     };
 
@@ -61,7 +57,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let frefs: Vec<FuncRef> = prog.funcs.keys().cloned().collect();
     for fref in &frefs {
         let ck = spec.canonical_key(fref);
-        spec.request_clone(fref, ck);
+        spec.clones.request(fref, ck, true);
     }
     // A global initializer has no parameters, so its body resolves against no inputs.
     let globals: Vec<RcGlobalInit> = prog
@@ -75,7 +71,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         .collect();
 
     // Materialize every requested clone; each materialization may request further clones.
-    while let Some((fref, key)) = spec.worklist.pop_front() {
+    while let Some((fref, key)) = spec.clones.pop() {
         let clone = spec.materialize_clone(&fref, &key);
         spec.output_funcs.insert(clone.name.clone(), clone);
     }
@@ -98,12 +94,7 @@ struct Specializer<'a> {
     /// function) is the same under every key, so specializing it would only make redundant clones; its
     /// calls route to its canonical version.
     reaches_unique_check: Set<FuncRef>,
-    /// The fresh name of each non-canonical clone `(function, key)`.
-    clone_names: Map<(FuncRef, SpecializationKey), FuncRef>,
-    /// Every `(function, key)` already enqueued, so each is materialized once.
-    requested: Set<(FuncRef, SpecializationKey)>,
-    worklist: VecDeque<(FuncRef, SpecializationKey)>,
-    fresh_name_counter: u64,
+    clones: CloneRegistry<SpecializationKey>,
     /// The materialized clones, keyed by their output name.
     output_funcs: Map<FuncRef, RcFunc>,
 }
@@ -134,77 +125,20 @@ impl<'a> Specializer<'a> {
         inputs
     }
 
-    /// The output name of the clone `(fref, key)`: the original name for the canonical (all-`Dynamic`)
-    /// key, otherwise a fresh name minted (and memoized) once per key.
-    fn clone_name(&mut self, fref: &FuncRef, key: &SpecializationKey) -> FuncRef {
-        if *key == self.canonical_key(fref) {
-            return fref.clone();
-        }
-        if let Some(n) = self.clone_names.get(&(fref.clone(), key.clone())) {
-            return n.clone();
-        }
-        self.fresh_name_counter += 1;
-        let mut n = fref.name.clone();
-        n.name = format!("{}#u{}", n.name, self.fresh_name_counter);
-        let nref = FuncRef { name: n };
-        self.clone_names
-            .insert((fref.clone(), key.clone()), nref.clone());
-        nref
-    }
-
-    /// Request the clone `(fref, key)`: return its output name and, the first time, enqueue it for
-    /// materialization.
+    /// Request the clone `(fref, key)`, returning its output name.
     fn request_clone(&mut self, fref: &FuncRef, key: SpecializationKey) -> FuncRef {
-        let name = self.clone_name(fref, &key);
-        if self.requested.insert((fref.clone(), key.clone())) {
-            self.worklist.push_back((fref.clone(), key));
-        }
-        name
+        let is_canonical = key == self.canonical_key(fref);
+        self.clones.request(fref, key, is_canonical)
     }
 
-    /// Materialize one clone: rewrite the original body under the clone's inputs (flipping the checks
-    /// its key makes provable and routing its direct calls), then, for a fresh clone, give every local
-    /// a fresh name so its names do not collide with the original's.
+    /// Materialize one clone: rewrite the original body under the clone's inputs, flipping the checks
+    /// its key makes provable and routing its direct calls.
     fn materialize_clone(&mut self, fref: &FuncRef, key: &SpecializationKey) -> RcFunc {
         let func = self.prog.funcs[fref].clone();
         let inputs = self.input_uniqueness(&func, key);
         let body = self.rewrite_expr(&func.body, &inputs);
-        let name = self.clone_name(fref, key);
-        if name == *fref {
-            return RcFunc { body, ..func };
-        }
-        let (params, capture, body, rename) = fresh_rename_function(
-            &func.params,
-            &func.capture,
-            &body,
-            "u",
-            &mut self.fresh_name_counter,
-        );
-        RcFunc {
-            name,
-            fn_ty: func.fn_ty.clone(),
-            params,
-            capture,
-            ret_ty: func.ret_ty.clone(),
-            body,
-            source: func.source.clone(),
-            // Carry the ownership annotation, remapping its parameter keys through the same renaming.
-            borrowed_units: func
-                .borrowed_units
-                .iter()
-                .map(|(n, unit)| {
-                    // Every `borrowed_units` key is a parameter or capture name, and
-                    // `fresh_rename_function` renames all of those, so the lookup always hits.
-                    let renamed = rename.get(n).cloned().unwrap_or_else(|| {
-                        unreachable!(
-                            "borrowed_units key {:?} is not a renamed parameter/capture",
-                            n
-                        )
-                    });
-                    (renamed, unit.clone())
-                })
-                .collect(),
-        }
+        let name = self.request_clone(fref, key.clone());
+        self.clones.finish_clone(&func, name, body)
     }
 
     /// Rewrite a function body under `inputs` (the uniqueness of the enclosing clone's inputs),
@@ -285,17 +219,10 @@ impl<'a> Specializer<'a> {
     /// passes, requesting that clone. An indirect call (the callee is a closure value, not a function
     /// name) is left as is. A funptr function is specialized; a closure named directly is not.
     fn retarget_call(&mut self, call: &RcVar, callee: &RcVar, inputs: &[Uniqueness]) -> RcVar {
-        let cref = FuncRef {
-            name: callee.name.clone(),
-        };
-        let Some(g) = self.prog.funcs.get(&cref) else {
+        let Some(cref) = specializable_callee(self.prog, callee, &self.reaches_unique_check) else {
             return callee.clone();
         };
-        // Only funptr functions worth specializing are cloned; a closure named directly (unusual) and
-        // a read-only function keep their always-present all-`Dynamic` version.
-        if g.capture.is_some() || !self.reaches_unique_check.contains(&cref) {
-            return callee.clone();
-        }
+        let g = &self.prog.funcs[&cref];
         let key = self.callee_key(call, g, inputs);
         let name = self.request_clone(&cref, key);
         let mut c = callee.clone();

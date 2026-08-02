@@ -956,10 +956,14 @@ namespace FFI {
     boxed_to_retained_ptr = |val| IO::from_runner $ _boxed_to_retained_ptr_ios(val);
 
     // Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
-    // 
-    // NOTE: 
+    //
+    // NOTE:
     // It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
-    // 
+    //
+    // NOTE:
+    // The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to, so bringing a value restored here into such an initializer's result causes undefined behavior.
+    // A global value's whole result graph is made exempt from reference counting once the initializer finishes, and the compiler counts references to the objects a running program holds on the assumption that this exemption cannot reach them.
+    //
     // # Parameters
     // 
     // * `retained_ptr` - The pointer to the value.

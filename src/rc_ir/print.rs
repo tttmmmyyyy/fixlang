@@ -259,12 +259,13 @@ fn path_to_string(path: &FieldPath) -> String {
     path.iter().map(|i| format!(".{}", i)).collect::<String>()
 }
 
-/// A known reference-counting state renders as a trailing `@local` / `@threaded` / `@global` tag;
-/// `Unknown` renders as the empty string.
+/// A known reference-counting state renders as a trailing `@local` / `@deeplocal` / `@threaded` /
+/// `@global` tag; `Unknown` renders as the empty string.
 fn state_to_string(state: &RcState) -> String {
     match state {
         RcState::Unknown => String::new(),
         RcState::Local => " @local".to_string(),
+        RcState::DeepLocal => " @deeplocal".to_string(),
         RcState::Threaded => " @threaded".to_string(),
         RcState::Global => " @global".to_string(),
     }

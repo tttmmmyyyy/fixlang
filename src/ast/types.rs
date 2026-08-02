@@ -29,6 +29,7 @@ use crate::misc::Map;
 use crate::misc::Set;
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
+use crate::rc_ir::ast::RcState;
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
@@ -1631,17 +1632,23 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
         work: Option<TraverserWorkType>,
+        state: RcState,
     ) -> String {
-        let prefix = match work {
-            None => "trav_dyn_",
+        let work_name = match work {
+            None => "trav_dyn",
             Some(work) => match work.0 {
-                TRAVERSER_WORK_RELEASE => "trav_release_",
-                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
-                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
+                TRAVERSER_WORK_RELEASE => "trav_release",
+                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global",
+                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded",
                 _ => unreachable!(),
             },
         };
-        prefix.to_string() + self.hash_with_capture(capture).as_str()
+        format!(
+            "{}{}_{}",
+            work_name,
+            state.name_suffix(),
+            self.hash_with_capture(capture)
+        )
     }
 
     // Get the hash value of the type with the given capturing types (used for dynamic objects).

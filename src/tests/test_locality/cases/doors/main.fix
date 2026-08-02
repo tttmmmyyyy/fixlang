@@ -1,0 +1,35 @@
+module Main;
+
+// A global array. Its whole graph is marked global once the initializer finishes, so reading it —
+// directly, out of a container, or out of a global struct — yields an object no annotated
+// reference-counting operation may touch.
+g : Array I64;
+g = [10, 20, 30];
+
+gpair : (Array I64, Array I64);
+gpair = ([1, 2], [3, 4]);
+
+main : IO ();
+main = (
+    // A field taken out of a global unboxed struct.
+    let (p, q) = gpair;
+    let dp = p.@(0) + q.@(0);
+
+    // A freshly allocated array whose elements are the global: its own storage is local, what it
+    // holds is not.
+    let mixed : Array (Array I64) = Array::fill(2, g);
+    let elem = mixed.@(0);
+    let de = elem.@(0);
+
+    // A value rebuilt from a retained pointer, which says nothing about the graph it names.
+    let ptr = *Box::make([7, 8]).boxed_to_retained_ptr;
+    let boxed : Box (Array I64) = *boxed_from_retained_ptr(ptr);
+    let restored = boxed.@value;
+    let dr = restored.@(0);
+
+    // An array built here out of nothing but numbers: local all the way down.
+    let fresh : Array I64 = Array::fill(3, 5);
+    let df = fresh.@(0);
+
+    println $ (dp + de + dr + df).to_string
+);

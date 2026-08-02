@@ -20,13 +20,13 @@ use crate::{
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
         simplify::simplify,
-        unique_check_elim::specialize,
-        validate,
+        unique_check_elim, validate,
     },
     tool::stopwatch::StopWatch,
 };
@@ -111,8 +111,15 @@ fn optimize_rc_program(
         validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
-        prog = specialize(&prog, type_env);
+        prog = unique_check_elim::specialize(&prog, type_env);
         validate(&prog, "after specialize");
+        // Locality inference rests on nothing moving a live object out of the local state, which a
+        // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
+        // reaches. A threaded build keeps the runtime dispatch everywhere.
+        if !config.threaded {
+            prog = locality::specialize(&prog, type_env);
+            validate(&prog, "after locality");
+        }
     }
     prog
 }

@@ -246,26 +246,30 @@ mod integration_tests {
             n.split('#').count() == 3 && n.ends_with("#funptr1")
         });
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
-        // The tuple binding has no source name, so match the retains by their field paths.
-        let retains: Vec<&&str> = main
+        // The tuple binding has no source name, so match the retains by their field paths. A retain
+        // may carry a trailing reference-counting state tag, which is not part of the target.
+        let target = |l: &str| {
+            l.trim()
+                .trim_start_matches("retain ")
+                .split(" @")
+                .next()
+                .unwrap()
+                .to_string()
+        };
+        let retains: Vec<String> = main
             .iter()
             .filter(|l| l.trim_start().starts_with("retain "))
+            .map(|l| target(l))
             .collect();
-        let field0 = retains.iter().find(|l| l.trim_end().ends_with(".0"));
-        let field1 = retains.iter().find(|l| l.trim_end().ends_with(".1"));
+        let field0 = retains.iter().find(|t| t.ends_with(".0"));
+        let field1 = retains.iter().find(|t| t.ends_with(".1"));
         assert!(
             field0.is_some() && field1.is_some(),
             "the pair retain should be split into `.0` and `.1` retains of the same variable:\n{}",
             main.join("\n")
         );
         // Both name the same tuple variable (the text before the field path).
-        let var_of = |l: &str| {
-            l.trim()
-                .trim_start_matches("retain ")
-                .trim_end_matches(".0")
-                .trim_end_matches(".1")
-                .to_string()
-        };
+        let var_of = |t: &String| t.trim_end_matches(".0").trim_end_matches(".1").to_string();
         assert_eq!(
             var_of(field0.unwrap()),
             var_of(field1.unwrap()),

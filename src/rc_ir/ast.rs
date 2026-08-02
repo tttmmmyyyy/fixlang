@@ -169,17 +169,47 @@ pub enum RcRhs {
 }
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
-/// which is always sound; later state inference can specialize it.
+/// which is always sound; locality inference specializes it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
     Unknown,
-    /// Known local: non-atomic increment/decrement, no state check.
+    /// Known local: non-atomic increment/decrement on the object itself, no state check. What it
+    /// reaches is unknown, so the traverser a release runs at zero still dispatches per child.
     Local,
+    /// Known local, and so is everything reachable from it.
+    DeepLocal,
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
     /// Known global: a no-op, emitting no code.
     Global,
+}
+
+impl RcState {
+    /// Whether code generation must read the object's state byte to decide how to count it.
+    pub fn dispatches(self) -> bool {
+        match self {
+            RcState::Unknown => true,
+            RcState::Local | RcState::DeepLocal => false,
+            RcState::Threaded | RcState::Global => unreachable!(
+                "no pass produces {:?}; code generation for it is not implemented",
+                self
+            ),
+        }
+    }
+
+    /// The suffix a reference-counting helper generated under this state carries in its name. The
+    /// helpers and traversers are memoized by name, so this is what keys one per (type, state) and
+    /// gives the states that generate the same code a single definition.
+    pub fn name_suffix(self) -> &'static str {
+        if self.dispatches() {
+            ""
+        } else {
+            // A `DeepLocal` release could also drop the dispatch on the objects it reaches; until
+            // the stateless traverser exists it emits the `Local` code, so the two share a helper.
+            "_local"
+        }
+    }
 }
 
 /// The ownership of a single reference-counting unit. `Own` receives ownership: the callee consumes it (by

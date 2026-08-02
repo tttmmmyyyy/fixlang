@@ -20,6 +20,7 @@ use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
+use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
@@ -405,7 +406,7 @@ impl ObjectFieldType {
                 .unwrap();
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
-            gc.build_release_mark(obj, work_type);
+            gc.build_release_mark(obj, work_type, RcState::Unknown);
         };
 
         // After loop, do nothing.
@@ -479,7 +480,7 @@ impl ObjectFieldType {
                              _size: IntValue<'c>,
                              buf_ptr: PointerValue<'c>| {
                 let value_ty = value.ty.get_embedded_type(gc, &vec![]);
-                gc.retain(value.clone());
+                gc.retain(value.clone(), RcState::Unknown);
                 let elm_ptr = unsafe {
                     gc.builder()
                         .build_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
@@ -492,7 +493,7 @@ impl ObjectFieldType {
             let after_loop = |gc: &mut Generator<'c, 'm>,
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {
-                gc.release(value.clone());
+                gc.release(value.clone(), RcState::Unknown);
             };
 
             // Generate loop.
@@ -514,7 +515,7 @@ impl ObjectFieldType {
         value: Object<'c>,
     ) {
         // One reference per slot, in a single reference-count add.
-        gc.build_retain(value.clone(), count);
+        gc.build_retain(value.clone(), count, RcState::Unknown);
 
         let value_ty = value.ty.get_embedded_type(gc, &vec![]);
         let dst = unsafe {
@@ -539,7 +540,7 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, dst, loop_body, after_loop);
 
         // Hand off the op's own reference.
-        gc.release(value);
+        gc.release(value, RcState::Unknown);
     }
 
     // Panic if idx is out_of_range for the array.
@@ -635,7 +636,7 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
     ) -> Object<'c> {
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx);
-        gc.retain(elem.clone());
+        gc.retain(elem.clone(), RcState::Unknown);
         elem
     }
 
@@ -670,7 +671,7 @@ impl ObjectFieldType {
                 .build_load(elm_basic_ty, elm_ptr, "elem")
                 .unwrap();
             let elem_obj = Object::new(elm_val, elem_ty, gc);
-            gc.release(elem_obj);
+            gc.release(elem_obj, RcState::Unknown);
         }
 
         // Insert the given value to the place.
@@ -708,7 +709,7 @@ impl ObjectFieldType {
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
             let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-            gc.retain(src_obj);
+            gc.retain(src_obj, RcState::Unknown);
         };
 
         // After loop, do nothing.
@@ -759,7 +760,7 @@ impl ObjectFieldType {
 
             // Retain the field.
             let field = ObjectFieldType::move_out_struct_field(gc, src, i as u32);
-            gc.retain(field.clone());
+            gc.retain(field.clone(), RcState::Unknown);
 
             // Clone the field.
             dst = ObjectFieldType::move_into_struct_field(gc, dst, i as u32, &field);
@@ -790,7 +791,7 @@ impl ObjectFieldType {
 
         // Retain the value.
         let one = gc.context.i64_type().const_int(1, false);
-        ObjectFieldType::retain_union(gc, dst.clone(), one);
+        ObjectFieldType::retain_union(gc, dst.clone(), one, RcState::Unknown);
 
         dst
     }
@@ -801,6 +802,7 @@ impl ObjectFieldType {
         union: Object<'c>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
         amount: IntValue<'c>, // How many times to retain (retain path only); a constant 1 for release/mark.
+        state: RcState,       // What is known about the payload's reference-counting state.
     ) {
         let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
@@ -839,12 +841,12 @@ impl ObjectFieldType {
                 ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
             if work_type.is_none() {
                 if is_const_one(amount) {
-                    gc.retain(subobj);
+                    gc.retain(subobj, state);
                 } else {
-                    gc.build_retain(subobj, amount);
+                    gc.build_retain(subobj, amount, state);
                 }
             } else {
-                gc.build_release_mark(subobj, work_type.unwrap());
+                gc.build_release_mark(subobj, work_type.unwrap(), state);
             }
             gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -865,8 +867,9 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         amount: IntValue<'c>,
+        state: RcState,
     ) {
-        ObjectFieldType::retain_release_mark_union(gc, union, None, amount);
+        ObjectFieldType::retain_release_mark_union(gc, union, None, amount, state);
     }
 
     // The tag of a union value: the index, among the union's variants, of the variant it holds.
@@ -916,8 +919,8 @@ impl ObjectFieldType {
         let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
-            gc.retain(value.clone());
-            gc.release(union);
+            gc.retain(value.clone(), RcState::Unknown);
+            gc.release(union, RcState::Unknown);
         } else {
             // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
         }
@@ -1034,9 +1037,9 @@ impl ObjectFieldType {
         if str.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
             for field in &ret {
-                gc.retain(field.clone());
+                gc.retain(field.clone(), RcState::Unknown);
             }
-            gc.release(str.clone());
+            gc.release(str.clone(), RcState::Unknown);
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
@@ -1044,7 +1047,7 @@ impl ObjectFieldType {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
                     let field = ObjectFieldType::move_out_struct_field(gc, str, field_idx);
-                    gc.release(field);
+                    gc.release(field, RcState::Unknown);
                 }
             }
         }
@@ -1903,7 +1906,9 @@ pub fn get_traverser_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
-    match create_traverser(ty, capture, gc, work) {
+    // The pointer is stored in a dynamic object and called indirectly at reference count zero, so
+    // nothing is known about the state of what it traverses.
+    match create_traverser(ty, capture, gc, work, RcState::Unknown) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => {
             let is_dynamic = work.is_none();
@@ -1946,6 +1951,7 @@ pub fn create_traverser<'c, 'm>(
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
+    state: RcState,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
@@ -1957,7 +1963,7 @@ pub fn create_traverser<'c, 'm>(
     }
 
     // If the function already exists, return it.
-    let trav_name = ty.traverser_name(capture, work);
+    let trav_name = ty.traverser_name(capture, work, state);
     if let Some(fv) = gc.module.get_function(&trav_name) {
         return Some(fv);
     }
@@ -1987,7 +1993,7 @@ pub fn create_traverser<'c, 'm>(
     match work {
         Some(work) => {
             // Static traverser case.
-            build_traverse(obj, capture, work, gc);
+            build_traverse(obj, capture, work, gc, state);
             gc.builder().build_return(None).unwrap();
         }
         None => {
@@ -2026,7 +2032,7 @@ pub fn create_traverser<'c, 'm>(
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
-                build_traverse(obj.clone(), capture, work, gc);
+                build_traverse(obj.clone(), capture, work, gc, state);
                 gc.builder().build_return(None).unwrap();
             }
         }
@@ -2040,6 +2046,7 @@ fn build_traverse<'c, 'm>(
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     work: TraverserWorkType,
     gc: &mut Generator<'c, 'm>,
+    state: RcState, // What is known about the state of the boxed leaves this traverser reaches.
 ) {
     // `Array a` = unbox { SubObject(#ArrayStorage a), size, cap }: the storage's own destructor is
     // free-only, so the array value drives element release. Release / mark the storage through its
@@ -2051,7 +2058,7 @@ fn build_traverse<'c, 'm>(
         let size = obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let storage = get_array_storage(gc, &obj);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
             ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, None);
         });
         return;
@@ -2072,7 +2079,7 @@ fn build_traverse<'c, 'm>(
             .into_int_value();
         let storage = get_array_storage(gc, &inner_array);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
             ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
         });
         return;
@@ -2094,7 +2101,7 @@ fn build_traverse<'c, 'm>(
                     obj.extract_field_as(gc, struct_type, i as u32)
                 };
                 let subobj = Object::new(subval, subty.clone(), gc);
-                gc.build_release_mark(subobj, work);
+                gc.build_release_mark(subobj, work, state);
             }
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}
@@ -2119,7 +2126,7 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::UnionBuf(_) => {
                 // The amount is unused on the release/mark path; pass a constant 1.
                 let one = gc.context.i64_type().const_int(1, false);
-                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work), one);
+                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work), one, state);
             }
             ObjectFieldType::TraverseFunction => {}
         }

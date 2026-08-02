@@ -156,13 +156,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.build_tail(obj, tail)
             }
             RcExpr::Retain(x, path, state, k) => {
-                // Only the runtime three-way dispatch is implemented; whoever adds the state
-                // inference must implement the states it produces here.
-                assert_eq!(
-                    *state,
-                    RcState::Unknown,
-                    "reference-count state dispatch is not implemented"
-                );
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
@@ -182,21 +175,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                     // release-side skip, which fires wherever a non-empty capture is released. It
                     // is kept for that symmetry and for the rare code that does retain a capture.
                     let one = self.context.i64_type().const_int(1, false);
-                    self.retain_nonnull_boxed(&obj, one);
+                    self.retain_nonnull_boxed(&obj, one, *state);
                 } else {
                     let one = self.context.i64_type().const_int(1, false);
-                    self.build_retain(obj, one);
+                    self.build_retain(obj, one, *state);
                 }
                 self.eval_rc_expr(k, tail, func_vals)
             }
             RcExpr::Release(x, path, state, k) => {
-                // Only the runtime three-way dispatch is implemented; whoever adds the state
-                // inference must implement the states it produces here.
-                assert_eq!(
-                    *state,
-                    RcState::Unknown,
-                    "reference-count state dispatch is not implemented"
-                );
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
                 if x.skip_null_check {
@@ -208,9 +194,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                         path.is_empty(),
                         "`skip_null_check` describes the whole variable, not a projection of it"
                     );
-                    self.release_nonnull_boxed(&obj);
+                    self.release_nonnull_boxed(&obj, *state);
                 } else {
-                    self.release(obj);
+                    self.release(obj, *state);
                 }
                 self.eval_rc_expr(k, tail, func_vals)
             }
@@ -509,7 +495,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     );
                     if scrut_is_boxed {
                         let one = self.context.i64_type().const_int(1, false);
-                        self.build_retain(value.clone(), one);
+                        self.build_retain(value.clone(), one, RcState::Unknown);
                     }
                     value
                 }
