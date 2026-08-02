@@ -100,8 +100,6 @@ pub const DECAP_NAME: &str = "#decap";
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
 pub const WRAP_OPAQUE_FUNC_NAME: &str = "#wrap_opaque";
 
-// pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
-
 // Struct layout constants.
 pub const CONTROL_BLOCK_IDX: u32 = 0;
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
@@ -220,14 +218,6 @@ impl TraverserWorkType {
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
-    // pub fn runtime_function(&self) -> &str {
-    //     match self.0 {
-    //         TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
-    //         TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
-    //         TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
-    //         _ => unreachable!(),
-    //     }
-    // }
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;

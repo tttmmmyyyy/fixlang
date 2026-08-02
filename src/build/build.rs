@@ -64,6 +64,14 @@ fn check_multithreading_requirement(
     ))
 }
 
+// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
+fn run_gcc(com: &mut Command) {
+    let output = com.output().expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+}
+
 // Build the program specified in the configuration.
 pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
@@ -155,11 +163,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com = com.arg("-fPIC");
         }
-        let output = com.output().expect("Failed to run gcc.");
-
-        if output.stderr.len() > 0 {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-        }
+        run_gcc(com);
 
         // Rename the temporary file to the final file.
         fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
@@ -191,10 +195,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     com.arg(runtime_obj_path.to_str().unwrap())
         .args(library_search_path_opts)
         .args(libs_opts);
-    let output = com.output().expect("Failed to run gcc.");
-    if output.stderr.len() > 0 {
-        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    }
+    run_gcc(&mut com);
 
     Ok(())
 }
