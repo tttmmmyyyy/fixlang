@@ -345,9 +345,9 @@ struct LocalityKey(LeafKey<Locality>);
 ## 転送
 
 RC IR ノードごとに、各ローカル束縛を `ExtShape` に写す環境の上で。**規則は記号的な層で 1 回だけ
-定義する。** クローンの中の走査は同じ規則を走らせて、入力の `ExtCond` をキーで解決したもので
-ある — 入力が具体値なので、環境の各条件は「成り立つ」か「成り立たない」に潰れ、実装上は
-leaf ごとに 3 値を運ぶ走査になる。
+定義する。** クローンの中の走査も同じ環境を持ち回り、site に来たところでその leaf の `ExtCond`
+をキーで解決して 3 値にする。解決を site まで遅らせるのは、`join` も取り出し規則も代入も解決と
+可換なので答えが変わらず、走査を 1 本に保てるからである。
 
 **取り出し規則**（boxed コンテナからの読み出し）は独立の規則で、以下の各所から名前で参照する。
 `RootLocal` は**根だけ**の主張（このオブジェクト自身は `LOCAL`、下は不明）なので、`RootLocal` な
@@ -425,6 +425,10 @@ impl ExtShape {
     /// を全部歩いて呼ぶので、leaf の書き落としが起こらない。取り出し規則
     /// （`root = deep = コンテナの deep`）もここで書く。
     fn build_shape(result_ty, type_env, f: &dyn Fn(&FieldPath) -> LeafCond) -> ExtShape;
+    /// 結果の全 leaf が同じ条件。`build_shape` の定数版で、これも全 leaf を歩く。
+    fn uniform(result_ty, type_env, cond: LeafCond) -> ExtShape;
+    /// 結果の全 leaf が入力 `i` の同じパスの leaf。パラメータの種として使う。
+    fn identity(ty, type_env, input: usize) -> ExtShape;
 }
 ```
 
@@ -858,11 +862,12 @@ locality が注釈するのは**実行時チェックが残っている** site �
 外してよいのは**宣言されたチェックだけ**で、`generate` は属性を読んでそのチェックだけを
 差し替える。
 
-宣言外のチェックまで外すと壊れる。`Array::empty(6).append(g)`（`g` は global）は `dst` が新規
-確保なので注釈が付くが、`src` は GLOBAL である。GLOBAL なオブジェクトの参照カウントは維持
-されない（retain も release も `global_bb` で何もしない）ので 1 のまま残り、状態を見ずに
-カウントだけ比べれば unique と判定される。すると global の要素を retain 抜きで持ち出し、
-ストレージを解放する経路に入る。
+宣言外のチェックまで外すと壊れる。GLOBAL なオブジェクトの参照カウントは維持されない
+（retain も release も `global_bb` で何もしない）ので 1 のまま残り、状態を見ずにカウントだけ
+比べれば unique と判定される。global な `src` を渡した append がそうなれば、要素を retain 抜きで
+持ち出し、ストレージを解放する経路に入る。この op は `src` を `internal_rc_targets` にも挙げる
+ので、global を渡した呼び出しにはそもそも注釈が付かない — その宣言を落とせば付いてしまうので、
+`generate` 側でも無条件チェックを `RcState::Unknown` に固定して二重に塞ぐ。
 
 **`unique_check_operand` の不変条件**: 宣言は、`generate` が出す `build_branch_by_is_unique` を
 覆うか、覆わないものをディスパッチのまま残すかのどちらかでなければならない。前提 P1 と同じ
@@ -946,7 +951,7 @@ enum RcTarget {
 | 足した値を retain | `ArrayAppendValueCapacityUnchecked`（`append_value_into_array_buf` が個数分 retain し、渡された値を release する） |
 | 既定合成だけで足りる | `StructPlugInBody`、`PunchedArrayPlugBody`（穴に move するだけで、旧値は `#punch_` が持ち出し済み。残るのは clone 経路）ほか、clone 経路しか持たない force-unique op すべて |
 | 対象にしない | `WithRetainedFunctionBody`（オペランドを retain/release する）、`UnionModBody`（modifier を release し、boxed union では payload も retain/release する）。どちらも宣言すれば注釈できるが、まず宣言せずに置き、実測が要求したら足す |
-| 内部 RC が無い | `GetRetainFunctionOfBoxedValue` / `GetReleaseFunctionOfBoxedValue`（生成する補助関数の中の RC で、対象が呼び出し時に決まらない）、`ArrayLitBody`、`DestructorMake`（新品への書き込みだけ） |
+| データフロー上に内部 RC が無い | `GetRetainFunctionOfBoxedValue` / `GetReleaseFunctionOfBoxedValue`（RC を出すのは生成する補助関数の本体の中で、この op のオペランドに対してではない）、`ArrayLitBody`、`DestructorMake`（新品への書き込みだけ） |
 
 **取り出し系を落とすと、3 点鎖の狙いが半分しか実現しない。** `DeepLocal` な配列に対する
 `a.@(0)` は、後続の `Release` ノードには注釈が付くが、**op 内部の retain は `array_get` の中で
@@ -1006,7 +1011,7 @@ enum RcTarget {
 
 | 経路 | site | ディスパッチの場所 | 注釈の届け方 |
 | --- | --- | --- | --- |
-| インライン | boxed 値の `Retain`（`build_retain`）、`skip_null_check` の `Retain`/`Release`（`retain_nonnull_boxed` / `release_nonnull_boxed`）、boxed union の `Match` の payload retain | site の位置に直接展開される | `build_retain` / `retain_nonnull_boxed` / `build_release_mark_nonnull_boxed_with` に `RcState` を通し、`Local` 以下では `local_bb` の本体だけを出す |
+| インライン | boxed 値の `Retain`（`build_retain`）、`skip_null_check` の `Retain`/`Release`（`retain_nonnull_boxed` / `release_nonnull_boxed`）、boxed union の `Match` の payload retain（payload が boxed leaf を持つ unboxed 値なら `build_retain` が降下して補助関数側へ回る） | site の位置に直接展開される | `build_retain` / `retain_nonnull_boxed` / `build_release_mark_nonnull_boxed_with` に `RcState` を通し、`Local` 以下では `local_bb` の本体だけを出す |
 | 補助関数 | `Release`（`Generator::release`）、unboxed 値の子孫への降下（`build_retain` が `Generator::retain` を呼ぶ）、`Destructure`（`get_struct_fields`） | 型ごとの `retain_<型のハッシュ>` / `release_<型のハッシュ>` の中。unboxed の値ではさらにその中の traverser（`trav_release_(Array a)`） | **状態でキーした補助関数と traverser を足す** |
 
 補助関数側の名前:
@@ -1050,6 +1055,7 @@ boxed leaf を持たない型にはそもそも補助関数も traverser も生�
 各版の中身:
 
 - `Retain`: 非 atomic インクリメント。状態ロードなし、分岐なし（今日の `local_bb` の本体）。
+  develop モードでは代わりに「検証」の assert が 1 つ入るので、状態ロードと分岐が 1 組残る。
 - `Release`: 非 atomic デクリメント、読んだカウントが 1 なら破棄。**差し替えるのは
   `build_release_boxed_with` の中のディスパッチだけで、その呼び出し元
   `build_release_mark_nonnull_boxed_with` が持つ `Std::FFI::Destructor` の前段（カウント 1 の

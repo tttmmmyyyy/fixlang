@@ -340,19 +340,24 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("global_release");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let release_of_global: Vec<&str> = dump
+        let named_global: Vec<&str> = dump
             .lines()
             .filter(|l| {
                 let t = l.trim_start();
                 t.starts_with("release Main::g#") || t.starts_with("retain Main::g#")
             })
             .collect();
+        // The release is what the borrow rewrite leaves, so it has to be there in its own right:
+        // a retain alone would satisfy a check for "some reference counting on the global" while
+        // the shape this case exists for had disappeared.
         assert!(
-            !release_of_global.is_empty(),
+            named_global
+                .iter()
+                .any(|l| l.trim_start().starts_with("release Main::g#")),
             "borrow-ification should leave a release naming the global, but the dump has none:\n{}",
             dump
         );
-        for line in &release_of_global {
+        for line in &named_global {
             assert!(
                 !line.contains('@'),
                 "the reference counting on a global must keep its runtime dispatch:\n{}",

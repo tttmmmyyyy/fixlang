@@ -3563,6 +3563,9 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
 const PUNCHED_ARRAY_FIELD: usize = 0;
 
+/// The index of the array a `PunchedArray a` holds, in `unbox struct { _arr, _idx }`.
+const PUNCHED_ARRAY_ARR_FIELD: usize = 0;
+
 /// The locality of the result of a punch — the punched container, at `container_field` of the
 /// result, beside the value moved out of it — given the operand position of the container.
 ///
@@ -3678,7 +3681,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_FIELD], arg_tys, type_env)
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARR_FIELD], arg_tys, type_env)
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {

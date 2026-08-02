@@ -39,6 +39,10 @@ head_and_tail = |pair| (
 plant_global : Array (Array I64) -> Array (Array I64);
 plant_global = |arr| arr.mutate_elements(|_| pure()).@0;
 
+// The same write over a payload of scalars, which holds no reference at all.
+plant_scalars : Array I64 -> Array I64;
+plant_scalars = |arr| arr.mutate_elements(|_| pure()).@0;
+
 main : IO ();
 main = (
     let local_pair = Pair { head : [10, 20], tail : [30, 40] };
@@ -49,8 +53,14 @@ main = (
     let from_global = gpair.sum_pair + gholder.sum_holder
                     + gpair.head_and_tail + gholder.head_of_holder;
 
-    let planted = [[70], gpair.@head].plant_global;
+    // Every element is built here, so what the array holds turns on the write alone.
+    let planted = [[70], [80]].plant_global;
     let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
 
-    println $ (from_local + from_global + from_planted).to_string
+    // The same write over a payload of scalars, which holds no reference for the callback to
+    // overwrite and so keeps both facts.
+    let scalars = [90, 100].plant_scalars;
+    let from_scalars = scalars.@(0);
+
+    println $ (from_local + from_global + from_planted + from_scalars).to_string
 );

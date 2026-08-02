@@ -503,6 +503,10 @@ Do not perform any IO operations other than mutating the elements of `arr`.
 
 This function first clones the array if it is shared. The pointer is valid only while `io` runs.
 
+NOTE:
+The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
+If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
+
 ##### Parameters
 
 * `act` - The action to perform on the pointer to the first element.
@@ -1514,6 +1518,10 @@ Do not perform any IO operations other than mutating the value of `x`.
 For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
 
 This function first clones the value if `x` is not unique.
+
+NOTE:
+The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
+If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
 
 See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
 
