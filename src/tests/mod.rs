@@ -46,6 +46,7 @@ mod test_punched_array;
 mod test_shared_boxed_swap;
 mod test_signal;
 mod test_simplify;
+mod test_skip_eval;
 mod test_string;
 mod test_struct_destructure;
 mod test_struct_rmw;

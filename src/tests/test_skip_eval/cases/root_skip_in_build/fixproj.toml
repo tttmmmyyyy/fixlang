@@ -1,0 +1,11 @@
+[general]
+name = "root-skip-in-build"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+skip_eval = true
+
+[build.test]
+files = ["test.fix"]

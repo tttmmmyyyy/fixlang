@@ -84,6 +84,8 @@ pub struct ProjectFileBuild {
     disable_cpu_features: Vec<String>,
     #[serde(default)]
     no_runtime_check: bool,
+    #[serde(default)]
+    skip_eval: bool,
 
     test: Option<ProjectFileBuildTest>,
 }
@@ -111,6 +113,8 @@ pub struct ProjectFileBuildTest {
     disable_cpu_features: Vec<String>,
     #[serde(default)]
     no_runtime_check: bool,
+    #[serde(default)]
+    skip_eval: bool,
 
     memcheck: Option<bool>,
 }
@@ -844,15 +848,17 @@ impl ProjectFile {
             );
         }
 
-        // Set no_runtime_check. A test build reads the `build.test` section alone, so that a
-        // project which turns the checks off for its program still runs its tests with them.
-        config.no_runtime_check = if mode == BuildConfigType::Test {
-            self.build
-                .test
-                .as_ref()
-                .map_or(false, |test| test.no_runtime_check)
+        // Set no_runtime_check and skip_eval. A test build reads the `build.test` section alone, so
+        // that a project which turns the run-time checks off for its program, or leaves its `eval`
+        // expressions out of it, still runs its tests with them.
+        (config.no_runtime_check, config.skip_eval) = if mode == BuildConfigType::Test {
+            let test = self.build.test.as_ref();
+            (
+                test.map_or(false, |test| test.no_runtime_check),
+                test.map_or(false, |test| test.skip_eval),
+            )
         } else {
-            self.build.no_runtime_check
+            (self.build.no_runtime_check, self.build.skip_eval)
         };
 
         Ok(())

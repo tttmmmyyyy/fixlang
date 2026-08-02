@@ -136,14 +136,14 @@ unsafe_perform : IO a -> a = |io| (
 - コンパイラオプションは後から適用されるので、`--no-runtime-check` / `--skip-eval` はどのサブコマンドでも効く。
 
 ```rust
-// Set no_runtime_check.
-config.no_runtime_check = if mode == BuildConfigType::Test {
-    self.build
-        .test
-        .as_ref()
-        .map_or(false, |test| test.no_runtime_check)
+(config.no_runtime_check, config.skip_eval) = if mode == BuildConfigType::Test {
+    let test = self.build.test.as_ref();
+    (
+        test.map_or(false, |test| test.no_runtime_check),
+        test.map_or(false, |test| test.skip_eval),
+    )
 } else {
-    self.build.no_runtime_check
+    (self.build.no_runtime_check, self.build.skip_eval)
 };
 ```
 
@@ -203,8 +203,8 @@ let skip_eval = Arg::new("skip-eval")
 
 - `[build] no_runtime_check = true` だけを書いたプロジェクトの `fix test` が中断する。`[build]` の値がテストに届かないことを固定する。
 - `[build.test] no_runtime_check = true` を書いたプロジェクトの `fix test` が完走する。テストセクションから立てられることを固定する。
-- 同じプロジェクトの `fix test --no-runtime-check` が完走する。オプションがどのサブコマンドでも効くことを固定する。
-- `skip_eval` についても、`[build]` と `[build.test]` の同じ 3 通りを、デバッグ出力が出るかどうかで固定する。
+- 同じプロジェクトディレクトリで `fix test` を走らせてから `fix test --no-runtime-check` を走らせ、後者が完走する。オプションがどのサブコマンドでも効くことと、設定がオブジェクトファイルのキャッシュの同一性に入っていることを、同時に固定する。
+- `skip_eval` についても、`[build]` と `[build.test]` の同じ組み合わせを、デバッグ出力が出るかどうかで固定する。
 
 ## ドキュメント
 

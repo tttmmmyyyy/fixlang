@@ -99,9 +99,16 @@ fn test_test_section_leaves_the_checks_on_for_the_program() {
 }
 
 /// `--no-runtime-check` turns the checks off for a test build whose project file keeps them.
+///
+/// The two runs share a project directory, so the second one meets the object files the first one
+/// cached. The setting therefore has to be part of what identifies them.
 #[test]
 fn test_option_disables_the_checks_for_a_test() {
     let (_temp_dir, project_dir) = setup_test_env("root_check_off_in_build");
+    assert_rejected_by_the_check(
+        &run_fix(&project_dir, &["test"]),
+        "`fix test` should abort, because the test build keeps the checks.",
+    );
     assert_succeeded(
         &run_fix(&project_dir, &["test", "--no-runtime-check"]),
         "`--no-runtime-check` should turn the checks off, whichever subcommand it is given to.",

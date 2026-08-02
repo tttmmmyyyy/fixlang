@@ -12,6 +12,7 @@
 #### Tool
 
 - LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
+- Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which compile `eval {expr0}; {expr1}` as `{expr1}`. Use it to take a debugging `eval debug_println(...)` out of a build without editing the source.
 
 #### Std
 

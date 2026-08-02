@@ -1,6 +1,6 @@
 use super::{
     dead_symbol_elimination, decapturing, defunctionalize_fix, inline, remove_tyanno,
-    simplify_symbol_names, uncurry, unwrap_newtype,
+    simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
 };
 use crate::{
     ast::program::Program,
@@ -15,6 +15,18 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", prg.optimization_step));
         prg.optimization_step += 1;
+    }
+
+    // Drop the side expressions of `eval`, before any pass looks at them. Type checking and
+    // instantiation are done by now, so the setting does not decide whether the program compiles;
+    // and every pass below sees the simplified tree.
+    if config.skip_eval {
+        let _sw = StopWatch::new("skip_eval::run", config.show_build_times);
+        skip_eval::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.skip_eval", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
     }
 
     // Perform act optimization.

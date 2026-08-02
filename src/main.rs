@@ -236,6 +236,13 @@ fn run_cli() {
             "Disable runtime checks that would abort the program.\n\
             This includes disabling array bounds checks, union variant checks in `as_` functions, and `Std::undefined`, etc."
         );
+    let skip_eval = Arg::new("skip-eval")
+        .long("skip-eval")
+        .takes_value(false)
+        .help(
+            "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
+            Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
+        );
     let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
         .long("allow-preliminary-commands")
         .help(
@@ -277,6 +284,7 @@ fn run_cli() {
         .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
+        .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
@@ -305,6 +313,7 @@ fn run_cli() {
         .arg(program_args.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
+        .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
@@ -333,6 +342,7 @@ fn run_cli() {
         .arg(program_args.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
+        .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
@@ -677,6 +687,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `no_runtime_check`.
         if args.contains_id("no-runtime-check") {
             config.no_runtime_check = true;
+        }
+
+        // Set `skip_eval`.
+        if args.contains_id("skip-eval") {
+            config.skip_eval = true;
         }
 
         // Set `allow_preliminary_commands`.

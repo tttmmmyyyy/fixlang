@@ -316,6 +316,9 @@ pub struct Configuration {
     pub backtrace: bool,
     // Disable runtime checks such as array bounds check.
     pub no_runtime_check: bool,
+    /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
+    /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
+    pub skip_eval: bool,
     /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
     pub deprecation_mode: DeprecationMode,
 }
@@ -405,6 +408,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
+            skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
     }
@@ -711,6 +715,7 @@ impl Configuration {
         data.push_str(&self.threaded.to_string());
         data.push_str(&self.backtrace.to_string());
         data.push_str(&self.no_runtime_check.to_string());
+        data.push_str(&self.skip_eval.to_string());
         data.push_str(&self.c_type_sizes.to_string());
         push_list_hash(&mut data, &self.disable_cpu_features_regex);
 
