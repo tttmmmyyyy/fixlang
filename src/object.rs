@@ -1109,7 +1109,7 @@ struct ElementBufferLayout {
     header_size: u64,
     /// The bytes one element takes in the buffer, which is the stride every read and write of it
     /// uses.
-    elem_size: u64,
+    elem_stride: u64,
 }
 
 #[derive(Eq, PartialEq, Clone)]
@@ -1179,7 +1179,7 @@ impl ObjectType {
                 .target_data
                 .offset_of_element(&struct_ty, buf_field_idx)
                 .unwrap(),
-            elem_size: elem_stride(gc, &elem_ty),
+            elem_stride: elem_stride(gc, &elem_ty),
         }
     }
 
@@ -1187,7 +1187,7 @@ impl ObjectType {
     /// buffer, whose size takes a capacity the program computes at run time.
     ///
     /// The capacity is taken as one whose byte count fits in the address space;
-    /// `panic_if_capacity_exceeds_address_space` is what establishes that.
+    /// `build_capacity_check` is what establishes that.
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
@@ -1210,7 +1210,7 @@ impl ObjectType {
             let elems_size = gc
                 .builder()
                 .build_int_mul(
-                    ptr_int_ty.const_int(layout.elem_size, false),
+                    ptr_int_ty.const_int(layout.elem_stride, false),
                     cap,
                     "elems_size",
                 )
@@ -1630,7 +1630,7 @@ pub fn alloc_array_storage<'c, 'm>(
     cap: IntValue<'c>,
     capacity_check: CapacityCheck,
 ) -> Object<'c> {
-    panic_if_capacity_exceeds_address_space(gc, &elem_ty, cap, capacity_check);
+    build_capacity_check(gc, &elem_ty, cap, capacity_check);
     let storage_ty = make_array_storage_ty(elem_ty);
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
@@ -1748,8 +1748,8 @@ pub fn build_storage_is_aligned<'c, 'm>(
         .unwrap()
 }
 
-/// Abort the program unless an `#ArrayStorage` holding `cap` elements of `elem_ty` fits in the
-/// address space.
+/// Emit the check `capacity_check` asks for: the program aborts unless an `#ArrayStorage` holding
+/// `cap` elements of `elem_ty` fits in the address space.
 ///
 /// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
 /// one, and leaves an object claiming a capacity its block has no room for; the first write past the
@@ -1765,7 +1765,7 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// invariant that an array's capacity field is within the bound. `capacity_check` says whether this
 /// allocation is one of those; `CapacityCheck::Skip` is for the capacities that invariant already
 /// covers.
-pub fn panic_if_capacity_exceeds_address_space<'c, 'm>(
+pub fn build_capacity_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: &Arc<TypeNode>,
     cap: IntValue<'c>,
@@ -1779,13 +1779,13 @@ pub fn panic_if_capacity_exceeds_address_space<'c, 'm>(
         .get_object_type(&vec![], gc.type_env())
         .element_buffer_layout(gc);
     // A buffer of elements of no size is no bytes long, however many of them the capacity asks for.
-    if layout.elem_size == 0 {
+    if layout.elem_stride == 0 {
         return;
     }
     // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
     // of that width.
     assert_eq!(cap.get_type().get_bit_width(), 64);
-    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - layout.header_size) / layout.elem_size;
+    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - layout.header_size) / layout.elem_stride;
     let is_capacity_overflow = gc
         .builder()
         .build_int_compare(

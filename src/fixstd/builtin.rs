@@ -35,7 +35,7 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, panic_if_capacity_exceeds_address_space,
+    create_obj, get_array_storage, get_array_storage_buf, build_capacity_check,
     read_alloc_offset, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
@@ -2290,7 +2290,7 @@ fn realloc_array<'c, 'm>(
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
-    panic_if_capacity_exceeds_address_space(gc, &elem_ty, new_cap, capacity_check);
+    build_capacity_check(gc, &elem_ty, new_cap, capacity_check);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
     let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
@@ -2467,7 +2467,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
-        panic_if_capacity_exceeds_address_space(gc, &elem_ty, new_cap, CapacityCheck::Run);
+        build_capacity_check(gc, &elem_ty, new_cap, CapacityCheck::Run);
         let (unique_bb, shared_bb) =
             gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
         let current_func = unique_bb.get_parent().unwrap();
