@@ -52,6 +52,13 @@ impl PartialEq for TyVar {
 
 impl Eq for TyVar {}
 
+impl Hash for TyVar {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.kind.hash(state);
+    }
+}
+
 impl TyVar {
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
         let mut ret = self.clone();
@@ -117,7 +124,7 @@ impl AssocType {
     }
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Kind {
     Star,
     Arrow(Arc<Kind>, Arc<Kind>),
@@ -424,6 +431,12 @@ impl PartialEq for TypeNode {
 }
 
 impl Eq for TypeNode {}
+
+impl Hash for TypeNode {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ty.hash(state);
+    }
+}
 
 impl Debug for TypeNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -1327,19 +1340,15 @@ impl TypeNode {
     pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
     ) -> StructType<'c> {
-        self.get_object_type(capture, gc.type_env())
-            .to_struct_type(gc, vec![])
+        gc.struct_type_of(self, &[])
     }
 
     pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
-        self.get_object_type(capture, gc.type_env())
-            .to_embedded_type(gc, vec![])
+        gc.embedded_type_of(self, &[])
     }
 
     // Check if the type takes the form of the definition of associated type.
@@ -1490,7 +1499,7 @@ impl Clone for TypeNode {
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),

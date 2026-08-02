@@ -177,7 +177,7 @@ impl ExportStatement {
 // The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar leaf,
 // which is the type a C declaration of the same function names.
 fn c_leaf_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
-    let embedded_ty = ty.get_embedded_type(gc, &vec![]);
+    let embedded_ty = ty.get_embedded_type(gc);
     let leaves = gc.flatten_to_scalar_leaves(embedded_ty);
     assert_eq!(
         leaves.len(),

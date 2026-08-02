@@ -36,7 +36,7 @@ fn result_ty(err: Arc<TypeNode>, ok: Arc<TypeNode>) -> Arc<TypeNode> {
 // The (size, alignment) in bytes of a type's in-memory (embedded) representation.
 fn layout<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: Arc<TypeNode>) -> (u64, u64) {
     let obj = ty_to_object_ty(&ty, &vec![], gc.type_env());
-    let llvm = obj.to_embedded_type(gc, vec![]);
+    let llvm = obj.to_embedded_type(gc, &[]);
     (gc.sizeof(&llvm), gc.abi_alignment(&llvm))
 }
 

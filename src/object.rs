@@ -1,4 +1,4 @@
-use crate::ast::name::Name;
+use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
@@ -21,6 +21,7 @@ use crate::fixstd::runtime::{
     RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
+use crate::misc::Map;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{
@@ -33,7 +34,7 @@ use inkwell::{
     types::{BasicMetadataTypeEnum, BasicType},
 };
 use inkwell::{AddressSpace, IntPredicate};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 // One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
 // block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
@@ -70,13 +71,12 @@ pub enum ObjectFieldType {
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     field_tys: &[Arc<TypeNode>],
-    unboxed_path: &[String],
+    unboxed_path: &[Arc<TypeNode>],
 ) -> BasicTypeEnum<'c> {
     let mut max_size = 0;
     let mut max_align = 1;
     for field_ty in field_tys {
-        let struct_ty = ty_to_object_ty(field_ty, &vec![], gc.type_env())
-            .to_embedded_type(gc, unboxed_path.to_vec());
+        let struct_ty = gc.embedded_type_of(field_ty, unboxed_path);
         max_size = max_size.max(gc.sizeof(&struct_ty));
         // The buffer needs the payloads' ABI alignment, not the preferred alignment: the
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
@@ -100,7 +100,7 @@ impl ObjectFieldType {
     pub fn to_basic_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        unboxed_path: Vec<String>,
+        unboxed_path: &[Arc<TypeNode>],
     ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
@@ -108,10 +108,7 @@ impl ObjectFieldType {
             ObjectFieldType::LambdaFunction(_ty) => {
                 gc.context.ptr_type(AddressSpace::from(0)).into()
             }
-            ObjectFieldType::SubObject(ty, _is_punched) => {
-                ty_to_object_ty(ty, &vec![], gc.type_env())
-                    .to_embedded_type(gc, unboxed_path.clone())
-            }
+            ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty, unboxed_path),
             ObjectFieldType::Ptr => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::U8 => gc.context.i8_type().into(),
@@ -124,11 +121,9 @@ impl ObjectFieldType {
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
-            ObjectFieldType::ArrayStorageBuf(ty) => ty
-                .get_object_type(&vec![], gc.type_env())
-                .to_embedded_type(gc, unboxed_path.clone()),
+            ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty, unboxed_path),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
-            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, &unboxed_path),
+            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, unboxed_path),
         }
     }
 
@@ -190,13 +185,13 @@ impl ObjectFieldType {
                 .as_type(),
             ObjectFieldType::SubObject(ty, _is_punched) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
-                let basic_ty = self.to_basic_type(gc, vec![]);
+                let basic_ty = self.to_basic_type(gc, &[]);
                 let size_in_bits = gc.target_data.get_bit_size(&basic_ty);
                 let align_in_bits = gc.target_data.get_abi_alignment(&basic_ty) * 8;
 
                 let mut elements = vec![];
                 for (i, ty) in tys.iter().enumerate() {
-                    let variant_ty = ty.get_embedded_type(gc, &vec![]);
+                    let variant_ty = ty.get_embedded_type(gc);
                     let variant_debug_ty = ty_to_debug_embedded_ty(ty.clone(), gc);
                     let size_in_bits = gc.target_data.get_bit_size(&variant_ty);
                     let align_in_bits = gc.target_data.get_abi_alignment(&variant_ty) * 8;
@@ -253,7 +248,7 @@ impl ObjectFieldType {
                 // elements. `#ArrayStorage`'s own declared size is stretched to cover them in
                 // `ty_to_debug_struct_ty`, which builds the enclosing struct's debug layout.
                 let element_ty =
-                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, vec![]);
+                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, &[]);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
                 let element_size_in_bits = gc.target_data.get_bit_size(&element_ty);
                 let element_align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
@@ -390,7 +385,7 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
-        let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let value_ty = elem_ty.get_embedded_type(gc);
 
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut Generator<'c, 'm>,
@@ -432,7 +427,7 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
-        let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let value_ty = elem_ty.get_embedded_type(gc);
         let slice_begin = unsafe {
             gc.builder()
                 .build_gep(value_ty, buffer, &[begin], "array_buf_slice_begin")
@@ -458,7 +453,7 @@ impl ObjectFieldType {
         match hole {
             None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type),
             Some(hole) => {
-                let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+                let value_ty = elem_ty.get_embedded_type(gc);
                 Self::release_or_mark_array_range(gc, buffer, hole, elem_ty.clone(), work_type);
                 let (tail_buffer, tail_count) =
                     Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
@@ -481,7 +476,7 @@ impl ObjectFieldType {
                              idx: IntValue<'c>,
                              _size: IntValue<'c>,
                              buf_ptr: PointerValue<'c>| {
-                let value_ty = value.ty.get_embedded_type(gc, &vec![]);
+                let value_ty = value.ty.get_embedded_type(gc);
                 gc.retain(value.clone());
                 let elm_ptr = unsafe {
                     gc.builder()
@@ -519,7 +514,7 @@ impl ObjectFieldType {
         // One reference per slot, in a single reference-count add.
         gc.build_retain(value.clone(), count);
 
-        let value_ty = value.ty.get_embedded_type(gc, &vec![]);
+        let value_ty = value.ty.get_embedded_type(gc);
         let dst = unsafe {
             gc.builder()
                 .build_gep(value_ty, buffer, &[begin], "array_append_begin")
@@ -604,7 +599,7 @@ impl ObjectFieldType {
         }
 
         // Get element.
-        let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elm_basic_ty = elem_ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
             gc.builder()
                 .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
@@ -663,7 +658,7 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let elm_basic_ty = value.ty.get_embedded_type(gc, &vec![]);
+        let elm_basic_ty = value.ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
             gc.builder()
                 .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
@@ -693,7 +688,7 @@ impl ObjectFieldType {
         count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
     ) {
-        let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elm_basic_ty = elem_ty.get_embedded_type(gc);
         // In loop body, retain value and store it at idx.
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
@@ -739,7 +734,7 @@ impl ObjectFieldType {
         match hole {
             None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty),
             Some(hole) => {
-                let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+                let elm_basic_ty = elem_ty.get_embedded_type(gc);
                 Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone());
                 let (tail_src, tail_count) =
                     Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
@@ -824,7 +819,7 @@ impl ObjectFieldType {
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
             let expect_tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(gc, vec![])
+                .to_basic_type(gc, &[])
                 .into_int_type()
                 .const_int(i as u64, false);
             let is_match = gc
@@ -948,7 +943,7 @@ impl ObjectFieldType {
         buf: BasicValueEnum<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
-        let elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elem_ty = elem_ty.get_embedded_type(gc);
         gc.bit_cast(buf, elem_ty)
     }
 
@@ -958,7 +953,7 @@ impl ObjectFieldType {
         value: Object<'c>,
     ) -> Object<'c> {
         let union_buf_idx = ObjectFieldType::get_union_buf_idx(gc, &union);
-        let union_struct_ty = union.ty.get_struct_type(gc, &vec![]);
+        let union_struct_ty = union.ty.get_struct_type(gc);
         let union_data_ty = union_struct_ty
             .get_field_type_at_index(union_buf_idx)
             .unwrap();
@@ -1064,30 +1059,37 @@ impl ObjectFieldType {
 pub struct ObjectType {
     pub field_types: Vec<ObjectFieldType>,
     pub is_unbox: bool,
-    pub name: Name,
+    /// The Fix type this is the layout of.
+    pub ty: Arc<TypeNode>,
 }
 
 impl ObjectType {
-    // Convert ObjectType to inkwell's StructType.
-    // * `unboxed_path` - When unboxed types are used recursively in each definition, this function can fall into infinite recursion. `unboxed_path` is an argument to detect this infinite loop and to generate a good error message. When you call to_struct_type from outside, specify an empty Vec. When to_struct_type calls itself (possibly via another function), unboxed_path contains the sequence of unboxed types that to_struct_type has been called on so far.
+    /// The LLVM struct a value of this object type is laid out as.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first. An
+    ///   unboxed type that reaches itself through unboxed fields has no finite layout, and comparing
+    ///   against this path is what detects it. Pass an empty slice from outside; the recursion
+    ///   extends it, and a boxed type on the way clears it, since a pointer bounds the layout there.
     pub fn to_struct_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        mut unboxed_path: Vec<String>,
+        unboxed_path: &[Arc<TypeNode>],
     ) -> StructType<'c> {
-        if self.is_unbox {
-            if unboxed_path.contains(&self.name) {
-                // There is a loop of unboxed types.
-                panic_with_msg(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", &self.name));
+        let unboxed_path = if self.is_unbox {
+            if unboxed_path.contains(&self.ty) {
+                panic_with_msg(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", self.ty.to_string()));
             }
-            unboxed_path.push(self.name.clone());
+            let mut extended = unboxed_path.to_vec();
+            extended.push(self.ty.clone());
+            extended
         } else {
-            unboxed_path.clear();
-        }
+            vec![]
+        };
 
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for (i, field_type) in self.field_types.iter().enumerate() {
-            fields.push(field_type.to_basic_type(gc, unboxed_path.clone()));
+            fields.push(field_type.to_basic_type(gc, &unboxed_path));
             match field_type {
                 ObjectFieldType::Array(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
@@ -1098,11 +1100,7 @@ impl ObjectType {
                     // - to get the pointer to the first element by gep of this struct type.
                     // - used in implementation of size_of method.
                     // - in to_debug_type function.
-                    fields.push(
-                        ty.get_object_type(&vec![], gc.type_env())
-                            .to_embedded_type(gc, unboxed_path.clone())
-                            .into(),
-                    );
+                    fields.push(gc.embedded_type_of(ty, &unboxed_path));
                 }
                 _ => {}
             }
@@ -1134,7 +1132,7 @@ impl ObjectType {
                 _ => panic!(),
             };
             let elem_size = elem_stride(gc, &elem_ty);
-            let struct_ty = self.to_struct_type(gc, vec![]);
+            let struct_ty = self.to_struct_type(gc, &[]);
             let buf_field_idx = struct_ty.count_fields() - 1;
             let header_size = gc
                 .target_data
@@ -1162,7 +1160,7 @@ impl ObjectType {
                 )
                 .unwrap();
         } else {
-            self.to_struct_type(gc, vec![]).size_of().unwrap()
+            self.to_struct_type(gc, &[]).size_of().unwrap()
         }
     }
 
@@ -1174,7 +1172,7 @@ impl ObjectType {
     pub fn to_embedded_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
-        unboxed_path: Vec<String>,
+        unboxed_path: &[Arc<TypeNode>],
     ) -> BasicTypeEnum<'c> {
         if self.is_unbox {
             let str_ty = self.to_struct_type(gc, unboxed_path);
@@ -1221,7 +1219,7 @@ pub fn traverser_type<'c, 'm>(
     // object is a single pointer leaf, an unbox struct is its leaf fields spread out. This keeps the
     // "materialize the aggregate only at memory / foreign-ABI boundaries" invariant intact across
     // the release / mark path.
-    let embedded = ty.get_embedded_type(gc, &vec![]);
+    let embedded = ty.get_embedded_type(gc);
     let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = gc
         .flatten_to_scalar_leaves(embedded)
         .into_iter()
@@ -1324,7 +1322,7 @@ pub fn lambda_return_leaf_types<'c, 'm>(
     if ret_ty.is_box(gc.type_env()) {
         return vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
     }
-    let embedded = ret_ty.get_embedded_type(gc, &vec![]);
+    let embedded = ret_ty.get_embedded_type(gc);
     gc.flatten_to_scalar_leaves(embedded)
 }
 
@@ -1350,7 +1348,7 @@ pub fn lambda_function_type<'c, 'm>(
         .get_lambda_srcs()
         .iter()
         .flat_map(|src| {
-            let embedded = src.get_embedded_type(gc, &vec![]);
+            let embedded = src.get_embedded_type(gc);
             gc.flatten_to_scalar_leaves(embedded)
         })
         .map(|t| t.into())
@@ -1393,6 +1391,34 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
     }
 }
 
+/// The fields a primitive type is laid out as, by the primitive's name: one scalar, except for
+/// `IOState`, which carries nothing.
+fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
+    static FIELDS_BY_NAME: OnceLock<Map<FullName, Vec<ObjectFieldType>>> = OnceLock::new();
+    let fields_by_name = FIELDS_BY_NAME.get_or_init(|| {
+        [
+            (make_iostate_ty(), vec![]),
+            (make_ptr_ty(), vec![ObjectFieldType::Ptr]),
+            (make_i8_ty(), vec![ObjectFieldType::I8]),
+            (make_u8_ty(), vec![ObjectFieldType::U8]),
+            (make_i16_ty(), vec![ObjectFieldType::I16]),
+            (make_u16_ty(), vec![ObjectFieldType::U16]),
+            (make_i32_ty(), vec![ObjectFieldType::I32]),
+            (make_u32_ty(), vec![ObjectFieldType::U32]),
+            (make_i64_ty(), vec![ObjectFieldType::I64]),
+            (make_u64_ty(), vec![ObjectFieldType::U64]),
+            (make_f32_ty(), vec![ObjectFieldType::F32]),
+            (make_f64_ty(), vec![ObjectFieldType::F64]),
+        ]
+        .into_iter()
+        .map(|(ty, fields)| (ty.toplevel_tycon().unwrap().name.clone(), fields))
+        .collect()
+    });
+    fields_by_name
+        .get(name)
+        .unwrap_or_else(|| panic!("`{}` has no primitive layout", name.to_string()))
+}
+
 pub fn ty_to_object_ty(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,
@@ -1403,7 +1429,7 @@ pub fn ty_to_object_ty(
     let mut ret = ObjectType {
         field_types: vec![],
         is_unbox: true,
-        name: ty.to_string_normalize(),
+        ty: ty.clone(),
     };
     if ty.is_closure() {
         assert!(capture.is_empty());
@@ -1425,33 +1451,8 @@ pub fn ty_to_object_ty(
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
                 ret.is_unbox = ti.is_unbox;
-                if ty == &make_iostate_ty() {
-                    // There are no fields in IOState.
-                } else if ty == &make_ptr_ty() {
-                    ret.field_types.push(ObjectFieldType::Ptr);
-                } else if ty == &make_i8_ty() {
-                    ret.field_types.push(ObjectFieldType::I8);
-                } else if ty == &make_u8_ty() {
-                    ret.field_types.push(ObjectFieldType::U8);
-                } else if ty == &make_i16_ty() {
-                    ret.field_types.push(ObjectFieldType::I16);
-                } else if ty == &make_u16_ty() {
-                    ret.field_types.push(ObjectFieldType::U16);
-                } else if ty == &make_i32_ty() {
-                    ret.field_types.push(ObjectFieldType::I32);
-                } else if ty == &make_u32_ty() {
-                    ret.field_types.push(ObjectFieldType::U32);
-                } else if ty == &make_i64_ty() {
-                    ret.field_types.push(ObjectFieldType::I64);
-                } else if ty == &make_u64_ty() {
-                    ret.field_types.push(ObjectFieldType::U64);
-                } else if ty == &make_f32_ty() {
-                    ret.field_types.push(ObjectFieldType::F32);
-                } else if ty == &make_f64_ty() {
-                    ret.field_types.push(ObjectFieldType::F64);
-                } else {
-                    unreachable!()
-                }
+                ret.field_types
+                    .extend_from_slice(primitive_field_types(&tc.name));
             }
             TyConVariant::Array => {
                 assert!(capture.is_empty());
@@ -1591,7 +1592,7 @@ fn build_malloc<'c, 'm>(
 /// The buffer holds elements as they are embedded -- a pointer where the element type is boxed --
 /// which is the stride every read and write of it uses.
 fn elem_stride<'c, 'm>(gc: &mut Generator<'c, 'm>, elem_ty: &Arc<TypeNode>) -> u64 {
-    let embedded_elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+    let embedded_elem_ty = elem_ty.get_embedded_type(gc);
     gc.target_data.get_abi_size(&embedded_elem_ty)
 }
 
@@ -1908,7 +1909,7 @@ pub fn create_obj<'c, 'm>(
 
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, vec![]);
+    let struct_type = object_type.to_struct_type(gc, &[]);
 
     // Allocate object. An array storage can be placed above the base of its allocation, so it
     // carries the distance it was placed by; every other object starts at the base.
@@ -2087,7 +2088,7 @@ pub fn create_traverser<'c, 'm>(
 
     // Reassemble the object from its leaf parameters (see `traverser_type`).
     let leaf_count = {
-        let embedded = ty.get_embedded_type(gc, &vec![]);
+        let embedded = ty.get_embedded_type(gc);
         gc.scalar_leaf_count(embedded)
     };
     let leaves = (0..leaf_count)
@@ -2191,7 +2192,7 @@ fn build_traverse<'c, 'm>(
 
     // In this function, we need to access captured fields, which is not possible by `obj` only.
     let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, vec![]);
+    let struct_type = object_type.to_struct_type(gc, &[]);
 
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
@@ -2319,7 +2320,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         }
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-        let str_type = obj_type.to_struct_type(gc, vec![]);
+        let str_type = obj_type.to_struct_type(gc, &[]);
         let size_in_bits = gc.target_data.get_bit_size(&str_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
 
@@ -2376,7 +2377,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             }
 
             let element_di_ty = field.to_debug_type(gc);
-            let elemet_ty = field.to_basic_type(gc, vec![]);
+            let elemet_ty = field.to_basic_type(gc, &[]);
             let size_in_bits = element_di_ty.get_size_in_bits();
             let align_in_bits = gc.target_data.get_abi_alignment(&elemet_ty) * 8;
             let offset_in_bits = gc

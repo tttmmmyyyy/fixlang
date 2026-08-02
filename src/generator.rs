@@ -116,7 +116,7 @@ impl<'c> ValueAccessor<'c> {
                     match call {
                         Left(val) => val,
                         Right(_) => {
-                            let ty = ty.get_embedded_type(gc, &vec![]);
+                            let ty = ty.get_embedded_type(gc);
                             Generator::get_undef(&ty)
                         }
                     }
@@ -152,7 +152,7 @@ impl<'c> Object<'c> {
     ) -> Self {
         assert!(ty.free_vars().is_empty());
         if gc.config.develop_mode && ty.is_unbox(gc.type_env()) && !ty.is_funptr() {
-            let embed_ty = ty.get_embedded_type(gc, &vec![]);
+            let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
         }
         let data = gc.explode_to_scalar_leaves(value);
@@ -169,7 +169,7 @@ impl<'c> Object<'c> {
     ) -> Self {
         assert!(ty.free_vars().is_empty());
         if gc.config.develop_mode {
-            let embed_ty = ty.get_embedded_type(gc, &vec![]);
+            let embed_ty = ty.get_embedded_type(gc);
             let leaf_tys = gc.flatten_to_scalar_leaves(embed_ty);
             assert_eq!(
                 data.len(),
@@ -205,7 +205,7 @@ impl<'c> Object<'c> {
         if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
             return self.data[0];
         }
-        let embedded = self.ty.get_embedded_type(gc, &vec![]);
+        let embedded = self.ty.get_embedded_type(gc);
         let mut leaves = self.data.iter().copied();
         gc.assemble_from_scalar_leaves(embedded, &mut leaves)
     }
@@ -214,9 +214,7 @@ impl<'c> Object<'c> {
     // produce a value of the type.
     pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
-            ty.get_struct_type(gc, &vec![])
-                .get_undef()
-                .as_basic_value_enum()
+            ty.get_struct_type(gc).get_undef().as_basic_value_enum()
         } else {
             gc.context
                 .ptr_type(AddressSpace::from(0))
@@ -252,7 +250,7 @@ impl<'c> Object<'c> {
 
     pub fn struct_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         assert!(!self.is_funptr());
-        ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
+        self.ty.get_struct_type(gc)
     }
 
     // Get the pointer to the field of an boxed object.
@@ -278,7 +276,7 @@ impl<'c> Object<'c> {
             // The object's leaves already hold the field, spread across a contiguous range; slice
             // that range and reassemble the field's value. The field lives directly in the leaves,
             // so they stay independent for LLVM.
-            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
             let mut leaves = self.data[off..off + cnt].iter().copied();
@@ -321,7 +319,7 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             Object::from_leaves(self.data[off..off + cnt].to_vec(), field_ty, gc)
         } else {
@@ -348,7 +346,7 @@ impl<'c> Object<'c> {
             // Swap the field's leaves in place: explode the new field value into its own leaves and
             // splice them over the range this field occupies, leaving every other field's leaves
             // untouched and never materializing an aggregate.
-            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             let new_leaves = gc.explode_to_scalar_leaves(val.as_basic_value_enum());
             assert_eq!(new_leaves.len(), cnt);
@@ -373,7 +371,7 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc, &vec![]).into_struct_type();
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
             assert_eq!(field.leaves().len(), cnt);
             self.data
@@ -531,6 +529,12 @@ pub struct Generator<'c, 'm> {
     /// placeholder, which is replaced by the finished type once construction completes. Without it,
     /// describing a recursive type would recurse forever.
     di_type_placeholders: Map<String, DIDerivedType<'c>>,
+    /// The LLVM struct each Fix type is laid out as, and the type it takes where it is embedded in
+    /// another value. Laying a type out walks every type it is built from, so a type reached from
+    /// many places -- a field type repeated across a struct, a struct nested several levels deep --
+    /// would otherwise be laid out once per path that reaches it.
+    struct_types: Map<Arc<TypeNode>, StructType<'c>>,
+    embedded_types: Map<Arc<TypeNode>, BasicTypeEnum<'c>>,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -624,6 +628,43 @@ impl<'c, 'm> Generator<'c, 'm> {
         &self.type_env
     }
 
+    /// The LLVM struct a value of `ty` is laid out as.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
+    pub fn struct_type_of(
+        &mut self,
+        ty: &Arc<TypeNode>,
+        unboxed_path: &[Arc<TypeNode>],
+    ) -> StructType<'c> {
+        if let Some(struct_ty) = self.struct_types.get(ty) {
+            return *struct_ty;
+        }
+        let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
+        let struct_ty = object_ty.to_struct_type(self, unboxed_path);
+        self.struct_types.insert(ty.clone(), struct_ty);
+        struct_ty
+    }
+
+    /// The LLVM type a value of `ty` takes where it is embedded in another value: the struct it is
+    /// laid out as when it is unboxed, a pointer when it is boxed.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
+    pub fn embedded_type_of(
+        &mut self,
+        ty: &Arc<TypeNode>,
+        unboxed_path: &[Arc<TypeNode>],
+    ) -> BasicTypeEnum<'c> {
+        if let Some(embedded_ty) = self.embedded_types.get(ty) {
+            return *embedded_ty;
+        }
+        let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
+        let embedded_ty = object_ty.to_embedded_type(self, unboxed_path);
+        self.embedded_types.insert(ty.clone(), embedded_ty);
+        embedded_ty
+    }
+
     /// The number of bytes a value of `ty` occupies on the target, padding included.
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
         self.target_data.get_bit_size(ty) / 8
@@ -685,6 +726,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             global_strings: Map::default(),
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
+            struct_types: Map::default(),
+            embedded_types: Map::default(),
         };
         gc
     }
@@ -1390,7 +1433,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let func = if let Some(func) = self.module.get_function(&func_name) {
             func
         } else {
-            let embedded = obj.ty.get_embedded_type(self, &vec![]);
+            let embedded = obj.ty.get_embedded_type(self);
             let leaf_tys = self.flatten_to_scalar_leaves(embedded);
             let param_tys = leaf_tys
                 .iter()
@@ -2103,7 +2146,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             return Some(self.declare_lambda_function(&ty, name));
         }
         let acc_fn_name = global_accessor_name(name);
-        let embedded_ty = ty.get_embedded_type(self, &vec![]);
+        let embedded_ty = ty.get_embedded_type(self);
         let acc_fn_ty = if self.sizeof(&embedded_ty) == 0 {
             self.context.void_type().fn_type(&[], false)
         } else {
@@ -2261,7 +2304,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         match call_site.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
-                    let ret_str = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
+                    let ret_str = type_tycon(ret_tycon).get_struct_type(self);
                     let ret_str_val = ret_str.get_undef();
                     let ret_str_val = self
                         .builder()
@@ -2290,7 +2333,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         let cap_obj = self.get_scoped_obj_noretain(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
-        let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
+        let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, &[]);
         let cap_val =
             cap_obj.extract_field_as(self, cap_obj_str_ty, cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX);
         let obj = Object::new(cap_val, result_ty.clone(), self);

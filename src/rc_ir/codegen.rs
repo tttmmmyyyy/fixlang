@@ -93,7 +93,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             0u32
         };
         for param in func.params.iter() {
-            let embedded = param.ty.get_embedded_type(self, &vec![]);
+            let embedded = param.ty.get_embedded_type(self);
             let leaf_count = self.flatten_to_scalar_leaves(embedded).len() as u32;
             let leaf_vals: Vec<_> = (0..leaf_count)
                 .map(|k| fn_val.get_nth_param(next_param + k).unwrap())
@@ -417,7 +417,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             let capture_struct_ty = dyn_ty
                 .get_object_type(&capture_tys, self.type_env())
-                .to_struct_type(self, vec![]);
+                .to_struct_type(self, &[]);
             for (i, cap) in captures.iter().enumerate() {
                 let cap_obj = self.get_scoped_obj(&cap.name);
                 let val = cap_obj.value(self);
@@ -471,7 +471,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .tag
                 .expect("a non-final match arm must be a variant arm");
             let tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(self, vec![])
+                .to_basic_type(self, &[])
                 .into_int_type()
                 .const_int(tag as u64, false);
             cases.push((tag_val, arm_bbs[i]));
@@ -577,7 +577,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .declare_program_global(&global_init.symbol)
                 .expect("a global initializer's symbol is a global of the program"),
         };
-        let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
+        let obj_embed_ty = global_init.ty.get_embedded_type(self);
 
         // The storage for the initialized value, and the call-once flag.
         let global_var = self.module.add_global(
