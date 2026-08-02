@@ -6,6 +6,6 @@ main : IO ();
 main = (
     let value = ThreadingLib::publish(Box::make(42));
     let values = ThreadingLib::publish_array([1, 2, 3]);
-    let here = Box::make(value.@value + values.@(0)).mark_threaded;
-    println(here.@value.to_string)
+    let total = Box::make(value.@value + values.@(0)).mark_threaded;
+    println(total.@value.to_string)
 );
