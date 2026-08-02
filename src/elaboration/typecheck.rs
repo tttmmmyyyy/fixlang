@@ -1905,9 +1905,9 @@ impl TypeCheckContext {
                 let assumed_eqs = self.assumed_eqs.clone();
                 for assumed_eq in assumed_eqs.get(assoc_ty).map_or(&[][..], Vec::as_slice) {
                     // Instantiate `assumed_eq`.
-                    let subst = self.instantiate_tyvars(&assumed_eq.gen_vars);
+                    let inst_subst = self.instantiate_tyvars(&assumed_eq.gen_vars);
                     let mut equality = assumed_eq.equality.clone();
-                    subst.substitute_equality(&mut equality);
+                    inst_subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
                     let subst: Option<Substitution> = Substitution::matching(
@@ -2136,9 +2136,9 @@ impl TypeCheckContext {
             .map_or(&[][..], Vec::as_slice)
         {
             // Instantiate qualified predicate.
-            let subst = self.instantiate_tyvars(&qual_pred_scm.gen_vars);
+            let inst_subst = self.instantiate_tyvars(&qual_pred_scm.gen_vars);
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
-            subst.substitute_qualpred(&mut qual_pred);
+            inst_subst.substitute_qualpred(&mut qual_pred);
 
             // Try to match head of `qual_pred` to `pred`.
             if let Some(subst) = Substitution::matching(
