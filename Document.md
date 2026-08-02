@@ -2439,6 +2439,27 @@ Enable multi-threading with the `--threaded` compiler option or the `threaded` f
 
 The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::mark_threaded` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
 
+### Checking for data races
+
+`--sanitize thread`, or the `sanitize` field of the project file, builds the program with
+ThreadSanitizer, which reports a data race when one occurs while the program runs. Use it to check
+that every value another thread reaches has been passed through `Std::mark_threaded`, and that the
+call happens before the value is shared.
+
+The option instruments the program and changes nothing else, so pass `--threaded` as well to check a
+program that calls `Std::mark_threaded`. The instrumented program runs several times slower and uses
+much more memory, so use it while checking a program.
+
+`fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
+follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
+
+```
+setarch $(uname -m) -R ./a.out
+```
+
+A race that no run performs goes unreported, so drive the program the way it is used, and run it
+more than once.
+
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
 - `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically. Call it on the value, and carry on with the value it returns.
@@ -2874,6 +2895,13 @@ The following table shows how each setting is handled.
             <td>Merge (OR)</td>
             <td>Does not affect</td>
             <td>Enable multi-threading</td>
+        </tr>
+        <tr>
+            <td>sanitize</td>
+            <td>--sanitize</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Sanitizer to instrument the program with</td>
         </tr>
         <tr>
             <td>debug</td>

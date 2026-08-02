@@ -57,6 +57,14 @@ files = ["main.fix"]
 ## Whether to use the thread-safe reference counting.
 # threaded = false
 
+## Sanitizer to instrument the built program with.
+## One of "none" (default) or "thread".
+## "thread" builds the program with ThreadSanitizer, which reports data races at run time.
+## The instrumented program runs several times slower and uses much more memory, so use it while
+## checking a program.
+## Overwritten by the command line argument.
+# sanitize = "thread"
+
 ## Whether to enable backtrace when a runtime error occurs.
 # backtrace = false
 

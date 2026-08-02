@@ -524,3 +524,11 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
 pub fn platform_valgrind_supported() -> bool {
     env::consts::OS == "linux"
 }
+
+/// Whether this platform can build and run a program instrumented with ThreadSanitizer.
+///
+/// The instrumented program needs the sanitizer runtime that ships with clang, and the layout it
+/// maps its shadow memory into. Linux is where that has been put to work here.
+pub fn platform_thread_sanitizer_supported() -> bool {
+    env::consts::OS == "linux"
+}

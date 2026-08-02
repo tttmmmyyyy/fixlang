@@ -1,6 +1,8 @@
 use crate::{
     configuration::BuildConfigType,
-    configuration::{Configuration, FixOptimizationLevel, LinkType, OutputFileType, ValgrindTool},
+    configuration::{
+        Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer, ValgrindTool,
+    },
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
     dependency::lockfile::{
@@ -75,6 +77,7 @@ pub struct ProjectFileBuild {
     preliminary_commands: Vec<Vec<String>>,
 
     threaded: Option<bool>,
+    sanitize: Option<String>,
     debug: Option<bool>,
     opt_level: Option<String>,
     output: Option<PathBuf>,
@@ -104,6 +107,7 @@ pub struct ProjectFileBuildTest {
     preliminary_commands: Vec<Vec<String>>,
 
     threaded: Option<bool>,
+    sanitize: Option<String>,
     debug: Option<bool>,
     opt_level: Option<String>,
     backtrace: Option<bool>,
@@ -758,6 +762,21 @@ impl ProjectFile {
                 if threaded {
                     config.set_threaded();
                 }
+            }
+        }
+
+        // Set the sanitizer.
+        if let Some(sanitize) = &self.build.sanitize {
+            config.set_sanitizer(Sanitizer::from_str(sanitize)?)?;
+        }
+        if mode == BuildConfigType::Test {
+            if let Some(sanitize) = self
+                .build
+                .test
+                .as_ref()
+                .and_then(|test| test.sanitize.as_ref())
+            {
+                config.set_sanitizer(Sanitizer::from_str(sanitize)?)?;
             }
         }
 
