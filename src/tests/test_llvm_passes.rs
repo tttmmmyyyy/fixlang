@@ -1,5 +1,5 @@
 use crate::configuration::{Configuration, FixOptimizationLevel};
-use crate::tests::test_util::{fix_build_source_command, fix_command};
+use crate::tests::test_util::{emitted_llvm_ir, fix_build_source_command, fix_command, EmittedIr};
 use std::fs;
 use std::path::Path;
 use std::process::Output;
@@ -165,19 +165,7 @@ fn test_passes_file_replaces_the_level_pipeline() {
 
     // `--emit-llvm` writes the module both before and after the pipeline runs; the post-pipeline
     // file is the one that shows what the pipeline did.
-    let emitted: String = fs::read_dir(dir.path())
-        .expect("Failed to read the build directory")
-        .filter_map(|entry| {
-            let path = entry.expect("Failed to read a directory entry").path();
-            let is_optimized_ir = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.ends_with("_optimized.ll"))
-                .unwrap_or(false);
-            is_optimized_ir
-                .then(|| fs::read_to_string(&path).expect("Failed to read the emitted IR"))
-        })
-        .collect();
+    let emitted = emitted_llvm_ir(dir.path(), EmittedIr::AfterOptimization);
     assert!(
         !emitted.is_empty(),
         "the build should have emitted the post-pipeline LLVM IR beside the source"

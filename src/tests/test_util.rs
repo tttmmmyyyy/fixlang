@@ -105,6 +105,82 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
     command
 }
 
+/// Which of a build's emitted LLVM IR files to read.
+pub enum EmittedIr {
+    /// Every module, as the code generator wrote it and as the pass pipeline left it.
+    All,
+    /// Each module as the code generator wrote it, before the LLVM pass pipeline ran.
+    BeforeOptimization,
+    /// Each module as the LLVM pass pipeline left it.
+    AfterOptimization,
+}
+
+impl EmittedIr {
+    /// Whether a file of the build directory named `name` is one this selection reads.
+    fn selects(&self, name: &str) -> bool {
+        let optimized = name.ends_with("_optimized.ll");
+        match self {
+            EmittedIr::All => name.ends_with(".ll"),
+            EmittedIr::BeforeOptimization => name.ends_with(".ll") && !optimized,
+            EmittedIr::AfterOptimization => optimized,
+        }
+    }
+}
+
+/// The LLVM IR a `--emit-llvm` build wrote into `dir`, concatenated in file-name order.
+///
+/// A build names its files after the compilation units it produced, so a second build in the same
+/// directory adds to them rather than replacing them. Give each build a directory of its own where
+/// the IR is to be attributed to it.
+pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
+    let mut paths = fs::read_dir(dir)
+        .expect("Failed to read the build directory")
+        .filter_map(|entry| {
+            let path = entry.expect("Failed to read a directory entry").path();
+            let name = path.file_name()?.to_str()?.to_string();
+            which.selects(&name).then_some(path)
+        })
+        .collect::<Vec<_>>();
+    paths.sort();
+    assert!(
+        !paths.is_empty(),
+        "the build emitted no LLVM IR in {}",
+        dir.display()
+    );
+    paths
+        .iter()
+        .map(|path| fs::read_to_string(path).expect("Failed to read an emitted LLVM IR file"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EmittedIr;
+
+    /// A build writes each module twice, once as generated and once as optimized, under names that
+    /// differ only by a suffix. The selection reads that suffix, so it is pinned here: a selection
+    /// that quietly widened would let a test asserting the absence of something in the generated
+    /// code pass on the optimized code instead.
+    #[test]
+    fn test_emitted_ir_selects_by_the_optimization_suffix() {
+        let generated = "Module-0123abcd.ll";
+        let optimized = "Module-0123abcd_optimized.ll";
+        let other = "generated.fix";
+
+        assert!(EmittedIr::All.selects(generated) && EmittedIr::All.selects(optimized));
+        assert!(!EmittedIr::All.selects(other));
+
+        assert!(EmittedIr::BeforeOptimization.selects(generated));
+        assert!(!EmittedIr::BeforeOptimization.selects(optimized));
+        assert!(!EmittedIr::BeforeOptimization.selects(other));
+
+        assert!(EmittedIr::AfterOptimization.selects(optimized));
+        assert!(!EmittedIr::AfterOptimization.selects(generated));
+        assert!(!EmittedIr::AfterOptimization.selects(other));
+    }
+}
+
 /// Waits for `child` to exit and returns its status, killing it and failing the test once `timeout`
 /// has passed. `description` names what was being waited for, and is what the failure reports.
 pub fn wait_within(child: &mut Child, timeout: Duration, description: &str) -> ExitStatus {

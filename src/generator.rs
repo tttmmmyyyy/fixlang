@@ -899,7 +899,12 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .append_basic_block(current_func, "unique_threaded_bb");
 
             self.builder().position_at_end(threaded_bb);
-            // Load refcnt atomically with monotonic ordering.
+            // Load refcnt atomically. The load acquires, so that the writes this thread is about to
+            // make are ordered after the reads another thread did before releasing this object. The
+            // acquire belongs on this load rather than in a `fence acquire` on the unique path:
+            // ThreadSanitizer draws no happens-before edge from a standalone fence, and reports the
+            // writes that follow as racing. Keeping it here is what leaves the threaded path
+            // checkable.
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let refcnt = self
                 .builder()
@@ -909,7 +914,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             refcnt
                 .as_instruction_value()
                 .unwrap()
-                .set_atomic_ordering(AtomicOrdering::Monotonic)
+                .set_atomic_ordering(AtomicOrdering::Acquire)
                 .expect("Set atomic ordering failed");
             // Jump to shared_bb if refcnt > 1.
             let is_unique = self
@@ -922,12 +927,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // Implement unique_threaded_bb.
             self.builder().position_at_end(unique_threaded_bb);
-            // We need to build acquire fence to avoid data race between
-            // - write / modify operations which will follow in this thread and
-            // - read operations done before another thread releases this object.
-            self.builder()
-                .build_fence(AtomicOrdering::Acquire, 0, "")
-                .unwrap();
             // Mark the object as non_threaded.
             self.mark_local_one(obj_ptr);
             // And jump to unique_bb.
@@ -1539,7 +1538,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_store(obj_ptr, new_refcnt).unwrap();
         self.builder().build_unconditional_branch(cont_bb).unwrap();
 
-        // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`.
+        // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`. An increment hands
+        // nothing over to another thread and reads nothing another thread wrote, so it carries no
+        // ordering of its own.
         if let Some(threaded_bb) = threaded_bb {
             self.builder().position_at_end(threaded_bb);
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
@@ -1771,21 +1772,26 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             self.builder().position_at_end(threaded_bb);
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-            // Decrement refcnt atomically.
+            // Decrement refcnt atomically. The decrement acquires as well as releases, so that the
+            // thread that brings the count to zero sees every write the other holders made. The
+            // acquire belongs in the read-modify-write rather than in a `fence acquire` taken on
+            // the way to destruction: ThreadSanitizer draws no happens-before edge from a
+            // standalone fence, and reports the destructor's reads as racing with those writes.
+            // Keeping it here is what leaves the threaded path checkable. On x86-64 both forms
+            // assemble to the same instructions; on AArch64 this trades a `dmb` on the destruction
+            // path for an acquire on every decrement.
             let old_refcnt = self
                 .builder()
                 .build_atomicrmw(
                     AtomicRMWBinOp::Sub,
                     ptr_to_refcnt,
                     refcnt_type(self.context).const_int(1, false),
-                    AtomicOrdering::Release,
+                    AtomicOrdering::AcquireRelease,
                 )
                 .unwrap();
 
-            // Branch to `threaded_destruction_bb` if old_refcnt is one.
-            let threaded_destruction_bb = self
-                .context
-                .append_basic_block(current_func, "threaded_destruction_bb");
+            // Destroy the object if old_refcnt is one. The decrement carries the ordering the
+            // destruction needs, so this path joins the one the non-threaded modes take.
             let is_refcnt_one = self
                 .builder()
                 .build_int_compare(
@@ -1796,16 +1802,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 )
                 .unwrap();
             self.builder()
-                .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb)
-                .unwrap();
-
-            // Implement `threaded_destruction_bb`.
-            self.builder().position_at_end(threaded_destruction_bb);
-            self.builder()
-                .build_fence(AtomicOrdering::Acquire, 0, "")
-                .unwrap();
-            self.builder()
-                .build_unconditional_branch(destruction_bb)
+                .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb)
                 .unwrap();
         }
 

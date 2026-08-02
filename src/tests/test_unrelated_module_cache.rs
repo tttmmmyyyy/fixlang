@@ -5,9 +5,9 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::fix_command;
+    use crate::tests::test_util::{emitted_llvm_ir, fix_command, EmittedIr};
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use tempfile::TempDir;
 
     const FIXPROJ_WITHOUT_INTRUDER: &str = r#"[general]
@@ -94,22 +94,6 @@ intruder_value = IntruderT { v : 1 }.itr;
         }
     }
 
-    /// The emitted `.ll` files concatenated in name order.
-    fn emitted_ir(dir: &Path) -> String {
-        let mut paths: Vec<PathBuf> = fs::read_dir(dir)
-            .unwrap()
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.extension().is_some_and(|e| e == "ll"))
-            .collect();
-        paths.sort();
-        assert!(!paths.is_empty(), "no LLVM IR emitted in {}", dir.display());
-        paths
-            .iter()
-            .map(|p| fs::read_to_string(p).unwrap())
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
     #[test]
     fn unrelated_module_does_not_change_the_compiled_program() {
         // Both builds run at the same absolute path: the module identifier the compiler stamps is
@@ -121,7 +105,7 @@ intruder_value = IntruderT { v : 1 }.itr;
         fs::create_dir_all(&dir).unwrap();
         write_project(&dir, FIXPROJ_WITH_INTRUDER, true);
         build(&dir);
-        let cold_ir = emitted_ir(&dir);
+        let cold_ir = emitted_llvm_ir(&dir, EmittedIr::All);
 
         // Warm: build without the intruder first, so every global value of `Main` and `Std` lands
         // in the type-check cache; then add the intruder and build again. Dropping the object
@@ -134,7 +118,7 @@ intruder_value = IntruderT { v : 1 }.itr;
         remove_emitted_ir(&dir);
         fs::remove_dir_all(dir.join(".fixlang/intermediate")).ok();
         build(&dir);
-        let warm_ir = emitted_ir(&dir);
+        let warm_ir = emitted_llvm_ir(&dir, EmittedIr::All);
 
         assert_eq!(
             cold_ir, warm_ir,
