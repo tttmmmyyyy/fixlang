@@ -30,7 +30,7 @@ fn setup_test_env() -> (TempDir, PathBuf) {
     (temp_dir, project_dir)
 }
 
-/// Builds the harness at `opt_level` under the sanitizer `sanitize` names, runs it with
+/// Builds the harness at `opt_level` under the sanitizer named by `sanitizer`, runs it with
 /// `program_args`, and returns what it produced, through `fix run`.
 ///
 /// Going through `fix run` puts the compiler's own way of starting an instrumented program under
@@ -39,7 +39,7 @@ fn setup_test_env() -> (TempDir, PathBuf) {
 fn run_harness(
     project_dir: &Path,
     opt_level: &str,
-    sanitize: &str,
+    sanitizer: &str,
     program_args: &[&str],
 ) -> Output {
     let mut command = fix_command();
@@ -48,7 +48,7 @@ fn run_harness(
         .arg("-O")
         .arg(opt_level)
         .arg("--sanitize")
-        .arg(sanitize)
+        .arg(sanitizer)
         .arg("--allow-preliminary-commands");
     if !program_args.is_empty() {
         command.arg("--").args(program_args);

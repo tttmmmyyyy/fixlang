@@ -5,11 +5,10 @@ use crate::error::{panic_if_err, panic_with_msg, Errors};
 use rand::Rng;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
-use std::process::{self, Output, Stdio};
-
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process::{self, Output, Stdio};
 
 pub fn run(
     mut config: Configuration,

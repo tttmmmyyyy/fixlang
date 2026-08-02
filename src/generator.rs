@@ -79,7 +79,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
-use std::{cell::RefCell, env, sync::Arc};
+use std::{cell::RefCell, env, iter::successors, sync::Arc};
 
 // A value bound to a name in the current scope.
 #[derive(Clone)]
@@ -2477,7 +2477,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
 // The functions `module` holds, defined and declared alike, in the order LLVM keeps them.
 pub(crate) fn module_functions<'c>(module: &Module<'c>) -> impl Iterator<Item = FunctionValue<'c>> {
-    std::iter::successors(module.get_first_function(), |function| {
+    successors(module.get_first_function(), |function| {
         function.get_next_function()
     })
 }

@@ -766,17 +766,17 @@ impl ProjectFile {
         }
 
         // Set the sanitizer.
-        if let Some(sanitize) = &self.build.sanitize {
-            config.set_sanitizer(Sanitizer::from_str(sanitize)?)?;
+        if let Some(sanitizer) = &self.build.sanitize {
+            config.set_sanitizer(Sanitizer::from_str(sanitizer)?)?;
         }
         if mode == BuildConfigType::Test {
-            if let Some(sanitize) = self
+            if let Some(sanitizer) = self
                 .build
                 .test
                 .as_ref()
                 .and_then(|test| test.sanitize.as_ref())
             {
-                config.set_sanitizer(Sanitizer::from_str(sanitize)?)?;
+                config.set_sanitizer(Sanitizer::from_str(sanitizer)?)?;
             }
         }
 

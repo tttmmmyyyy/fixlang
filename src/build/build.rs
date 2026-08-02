@@ -50,17 +50,17 @@ fn clang_path() -> Result<PathBuf, Errors> {
                 .to_string(),
         ));
     };
-    let beside_llvm = Path::new(prefix).join("bin").join("clang");
-    if !beside_llvm.exists() {
+    let clang_beside_llvm = Path::new(prefix).join("bin").join("clang");
+    if !clang_beside_llvm.exists() {
         return Err(Errors::from_msg(format!(
             "A sanitized build is compiled and linked by the clang beside the LLVM this compiler \
              was built against, and there is none at `{}`. The sanitizer runtime the \
              instrumentation calls into is distributed with clang, so the two have to come from \
              one release.",
-            beside_llvm.display()
+            clang_beside_llvm.display()
         )));
     }
-    Ok(beside_llvm)
+    Ok(clang_beside_llvm)
 }
 
 /// Runs a prepared C compiler command, passing on what it writes to standard error and reporting a
