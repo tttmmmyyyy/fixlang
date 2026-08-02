@@ -354,7 +354,7 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
         | RcExpr::Eval(_, k) => mark_tail(k, in_tail, out),
         RcExpr::Ret(_) => {}
     }
@@ -403,12 +403,25 @@ fn clone_func(
 /// The per-version state the body rewrite reads: this version's aliasing vars and tail calls,
 /// whether it is the borrow clone, and the whole-program ownership and version tables.
 struct RewriteCtx<'a> {
+    /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
+    /// Whether this version is the borrow clone, whose reference counting on its borrowed parameter
+    /// leaves is dropped. The all-owning original keeps every node it was given.
     is_borrow_version: bool,
+    /// The inferred `Own` parameter leaves of the whole program, one `(parameter-name, unit-path)`
+    /// each. A parameter leaf absent from it is borrowed.
     owned_units: &'a Set<VarPath>,
+    /// The borrow clone of each function that got one, which a call is routed to where routing is
+    /// safe and saves a reference count.
     borrow_versions: &'a Map<FuncRef, FuncRef>,
+    /// The parameter names and types of every version, original and borrow clone alike, so a call
+    /// can look its callee's parameters up in `owned_units`.
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
+    /// The bindings of this version's tail-position calls and matches, whose calls stay on the
+    /// owning version so that no after-call release lands on a tail call.
     tail: Set<FullName>,
+    /// This version's variables: what binds each one and its type, which decide the object a leaf
+    /// belongs to and whether this version owns it.
     vars: VarTable,
 }
 
@@ -458,6 +471,7 @@ impl<'a> RewriteCtx<'a> {
                 let arms = arms
                     .iter()
                     .map(|arm| MatchArm {
+                        payload_state: arm.payload_state,
                         tag: arm.tag,
                         payload: arm.payload.clone(),
                         body: self.rewrite(&arm.body),
@@ -482,8 +496,8 @@ impl<'a> RewriteCtx<'a> {
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, &node.source)
             }
-            RcExpr::Destructure(container, fields, k) => expr_node(
-                RcExpr::Destructure(container.clone(), fields.clone(), self.rewrite(k)),
+            RcExpr::Destructure(container, fields, state, k) => expr_node(
+                RcExpr::Destructure(container.clone(), fields.clone(), *state, self.rewrite(k)),
                 &node.source,
             ),
             RcExpr::Eval(v, k) => expr_node(RcExpr::Eval(v.clone(), self.rewrite(k)), &node.source),
@@ -677,7 +691,9 @@ fn used_later(name: &FullName, node: &RcExprNode) -> bool {
         RcExpr::Ret(v) => v.name == *name,
         RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
-        RcExpr::Destructure(container, _, k) => container.name == *name || used_later(name, k),
+        RcExpr::Destructure(container, _, _state, k) => {
+            container.name == *name || used_later(name, k)
+        }
         // `Eval` observes its variable, so — unlike the transparent reference-count nodes — it counts
         // as a use.
         RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
@@ -732,6 +748,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: split_body(&arm.body, type_env),
@@ -750,8 +767,13 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => expr_node(
-            RcExpr::Destructure(container.clone(), fields.clone(), split_body(k, type_env)),
+        RcExpr::Destructure(container, fields, state, k) => expr_node(
+            RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                *state,
+                split_body(k, type_env),
+            ),
             &node.source,
         ),
         RcExpr::Eval(v, k) => expr_node(
@@ -943,7 +965,7 @@ impl<'a> CancelAnalysis<'a> {
                 self.consume_rhs(&mut pending, rhs, &x.ty);
                 self.walk(k, pending, returns_from_func)
             }
-            RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container, fields, _state, k) => {
                 for leaf in destructure_consumes(container, fields, self.type_env) {
                     self.consume(&mut pending, &container.name, &leaf);
                 }
@@ -1105,6 +1127,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: drop_nodes(&arm.body, to_delete),
@@ -1123,8 +1146,13 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => expr_node(
-            RcExpr::Destructure(container.clone(), fields.clone(), drop_nodes(k, to_delete)),
+        RcExpr::Destructure(container, fields, state, k) => expr_node(
+            RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                *state,
+                drop_nodes(k, to_delete),
+            ),
             &node.source,
         ),
         RcExpr::Eval(v, k) => expr_node(

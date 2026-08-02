@@ -1,0 +1,48 @@
+module Main;
+
+// One pair of functions reached with three different input localities, so the pass clones them by
+// key and routes each call to its own clone. A forwarding function counts no reference itself, so
+// the gate has to reach it through its callee, and a global initializer calls the same pair.
+g : Array I64;
+g = [1, 2, 3];
+
+gg : Array (Array I64);
+gg = [g, g];
+
+// Mutually recursive, so neither is inlined away and both are cloned.
+even_step : I64 -> Array (Array I64) -> I64;
+even_step = |i, a| (
+    if i >= a.@size { 0 };
+    let e = a.@(i);
+    e.@(0) + odd_step(i + 1, a)
+);
+
+odd_step : I64 -> Array (Array I64) -> I64;
+odd_step = |i, a| (
+    if i >= a.@size { 0 };
+    let e = a.@(i);
+    e.@(1 % e.@size) + even_step(i + 1, a)
+);
+
+// No reference-counting site of its own: the gate reaches it only through what it calls, and
+// leaving it canonical would lose the callee's proof for every caller that goes through it.
+forward : I64 -> Array (Array I64) -> I64;
+forward = |n, a| if n <= 0 { even_step(0, a) } else { forward(n - 1, a) };
+
+// A global whose initializer calls the specialized pair.
+gsum : I64;
+gsum = even_step(0, gg);
+
+main : IO ();
+main = (
+    // Built here, elements and all.
+    let deep = [[10, 20], [30, 40]];
+    // Built here, holding the global: local at the root, not below it.
+    let root = [g, g];
+
+    let a = even_step(0, deep) + forward(2, deep);
+    let b = even_step(0, root) + forward(2, root);
+    let c = even_step(0, gg) + forward(2, gg);
+
+    println $ (a + b + c + gsum).to_string
+);

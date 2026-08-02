@@ -22,6 +22,7 @@ use crate::fixstd::runtime::{
 };
 use crate::generator::{is_const_one, Generator, Object};
 use crate::misc::Map;
+use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{
@@ -384,6 +385,7 @@ impl ObjectFieldType {
         count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
+        state: RcState,
     ) {
         let value_ty = elem_ty.get_embedded_type(gc);
 
@@ -403,7 +405,7 @@ impl ObjectFieldType {
                 .unwrap();
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
-            gc.build_release_mark(obj, work_type);
+            gc.build_release_mark(obj, work_type, state);
         };
 
         // After loop, do nothing.
@@ -426,6 +428,7 @@ impl ObjectFieldType {
         end: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
+        state: RcState,
     ) {
         let value_ty = elem_ty.get_embedded_type(gc);
         let slice_begin = unsafe {
@@ -437,7 +440,7 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(end, begin, "array_slice_count")
             .unwrap();
-        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type);
+        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
     // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
@@ -449,15 +452,30 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
         hole: Option<IntValue<'c>>,
+        state: RcState,
     ) {
         match hole {
-            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type),
+            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {
                 let value_ty = elem_ty.get_embedded_type(gc);
-                Self::release_or_mark_array_range(gc, buffer, hole, elem_ty.clone(), work_type);
+                Self::release_or_mark_array_range(
+                    gc,
+                    buffer,
+                    hole,
+                    elem_ty.clone(),
+                    work_type,
+                    state,
+                );
                 let (tail_buffer, tail_count) =
                     Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
-                Self::release_or_mark_array_range(gc, tail_buffer, tail_count, elem_ty, work_type);
+                Self::release_or_mark_array_range(
+                    gc,
+                    tail_buffer,
+                    tail_count,
+                    elem_ty,
+                    work_type,
+                    state,
+                );
             }
         }
     }
@@ -477,7 +495,7 @@ impl ObjectFieldType {
                              _size: IntValue<'c>,
                              buf_ptr: PointerValue<'c>| {
                 let value_ty = value.ty.get_embedded_type(gc);
-                gc.retain(value.clone());
+                gc.retain(value.clone(), RcState::Unknown);
                 let elm_ptr = unsafe {
                     gc.builder()
                         .build_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
@@ -490,7 +508,7 @@ impl ObjectFieldType {
             let after_loop = |gc: &mut Generator<'c, 'm>,
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {
-                gc.release(value.clone());
+                gc.release(value.clone(), RcState::Unknown);
             };
 
             // Generate loop.
@@ -510,9 +528,10 @@ impl ObjectFieldType {
         begin: IntValue<'c>,
         count: IntValue<'c>,
         value: Object<'c>,
+        state: RcState,
     ) {
         // One reference per slot, in a single reference-count add.
-        gc.build_retain(value.clone(), count);
+        gc.build_retain(value.clone(), count, state);
 
         let value_ty = value.ty.get_embedded_type(gc);
         let dst = unsafe {
@@ -537,7 +556,7 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, dst, loop_body, after_loop);
 
         // Hand off the op's own reference.
-        gc.release(value);
+        gc.release(value, state);
     }
 
     /// Abort the program if `idx` falls outside `[0, len)`, the indices an array of `len` elements
@@ -628,9 +647,10 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
+        state: RcState,
     ) -> Object<'c> {
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx);
-        gc.retain(elem.clone());
+        gc.retain(elem.clone(), state);
         elem
     }
 
@@ -649,6 +669,7 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
         value: Object<'c>,
         release_old_value: bool,
+        state: RcState,
     ) {
         let elem_ty = value.ty.clone();
 
@@ -672,7 +693,7 @@ impl ObjectFieldType {
                 .build_load(elm_basic_ty, elm_ptr, "elem")
                 .unwrap();
             let elem_obj = Object::new(elm_val, elem_ty, gc);
-            gc.release(elem_obj);
+            gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
@@ -687,6 +708,7 @@ impl ObjectFieldType {
         dst_buffer: PointerValue<'c>,
         count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
+        state: RcState,
     ) {
         let elm_basic_ty = elem_ty.get_embedded_type(gc);
         // In loop body, retain value and store it at idx.
@@ -710,7 +732,7 @@ impl ObjectFieldType {
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
             let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-            gc.retain(src_obj);
+            gc.retain(src_obj, state);
         };
 
         // After loop, do nothing.
@@ -730,28 +752,36 @@ impl ObjectFieldType {
         dst_buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         hole: Option<IntValue<'c>>,
+        state: RcState,
     ) {
         match hole {
-            None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty),
+            None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty, state),
             Some(hole) => {
                 let elm_basic_ty = elem_ty.get_embedded_type(gc);
-                Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone());
+                Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone(), state);
                 let (tail_src, tail_count) =
                     Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
                 let (tail_dst, _) =
                     Self::array_buf_after_hole(gc, elm_basic_ty, dst_buffer, len, hole);
-                Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty);
+                Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty, state);
             }
         }
     }
 
-    // Clone an struct object `str` into `dst`.
-    // `dst` should be already allocated but not initialized.
-    // `src` will not be released.
+    /// Copy the value-carrying fields of the struct object `src` into `dst`, retaining each boxed
+    /// field so that both objects own it, and return `dst`. A punched field holds no value, so it
+    /// is skipped. `src` is borrowed: it is left as it was.
+    ///
+    /// # Arguments
+    /// * `dst` — an allocated but uninitialized struct object of the same type; every field this
+    ///   writes is a first write.
+    /// * `state` — the reference-counting state of the fields, which is what `src` reaches. An
+    ///   operation whose annotation covers its clone path proves it local and passes it here.
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         mut dst: Object<'c>,
+        state: RcState,
     ) -> Object<'c> {
         for (i, field) in src.ty.fields(gc.type_env()).iter().enumerate() {
             // Skip the punched field.
@@ -761,7 +791,7 @@ impl ObjectFieldType {
 
             // Retain the field.
             let field = ObjectFieldType::move_out_struct_field(gc, src, i as u32);
-            gc.retain(field.clone());
+            gc.retain(field.clone(), state);
 
             // Clone the field.
             dst = ObjectFieldType::move_into_struct_field(gc, dst, i as u32, &field);
@@ -769,13 +799,19 @@ impl ObjectFieldType {
         dst
     }
 
-    // Clone an union object `str` into `dst`.
-    // `dst` should be already allocated but not initialized.
-    // `src` will not be released.
+    /// Copy the tag and the payload of the union object `src` into `dst`, retaining the payload so
+    /// that both objects own it, and return `dst`. `src` is borrowed: it is left as it was.
+    ///
+    /// # Arguments
+    /// * `dst` — an allocated but uninitialized union object of the same type; the tag and payload
+    ///   this writes are first writes.
+    /// * `state` — the reference-counting state of the payload, which is what `src` reaches. An
+    ///   operation whose annotation covers its clone path proves it local and passes it here.
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         dst: Object<'c>,
+        state: RcState,
     ) -> Object<'c> {
         // Clone the tag.
         let tag = ObjectFieldType::get_union_tag(gc, &src);
@@ -792,7 +828,7 @@ impl ObjectFieldType {
 
         // Retain the value.
         let one = gc.context.i64_type().const_int(1, false);
-        ObjectFieldType::retain_union(gc, dst.clone(), one);
+        ObjectFieldType::retain_union(gc, dst.clone(), one, state);
 
         dst
     }
@@ -803,6 +839,7 @@ impl ObjectFieldType {
         union: Object<'c>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
         amount: IntValue<'c>, // How many times to retain (retain path only); a constant 1 for release/mark.
+        state: RcState,       // What is known about the payload's reference-counting state.
     ) {
         let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
@@ -841,12 +878,12 @@ impl ObjectFieldType {
                 ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
             if work_type.is_none() {
                 if is_const_one(amount) {
-                    gc.retain(subobj);
+                    gc.retain(subobj, state);
                 } else {
-                    gc.build_retain(subobj, amount);
+                    gc.build_retain(subobj, amount, state);
                 }
             } else {
-                gc.build_release_mark(subobj, work_type.unwrap());
+                gc.build_release_mark(subobj, work_type.unwrap(), state);
             }
             gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -863,12 +900,14 @@ impl ObjectFieldType {
         gc.builder().position_at_end(end_bb);
     }
 
+    /// Increment the reference count of the payload a union buffer holds, `amount` times.
     pub fn retain_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         amount: IntValue<'c>,
+        state: RcState,
     ) {
-        ObjectFieldType::retain_release_mark_union(gc, union, None, amount);
+        ObjectFieldType::retain_release_mark_union(gc, union, None, amount, state);
     }
 
     // The tag of a union value: the index, among the union's variants, of the variant it holds.
@@ -914,12 +953,13 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
+        state: RcState,
     ) -> Object<'c> {
         let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
-            gc.retain(value.clone());
-            gc.release(union);
+            gc.retain(value.clone(), state);
+            gc.release(union, state);
         } else {
             // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
         }
@@ -998,55 +1038,58 @@ impl ObjectFieldType {
     // This "moves out" the field; in other words, the returned object is not retained.
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: &Object<'c>,
+        struct_obj: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        let field_ty = str.ty.field_types(gc.type_env())[field_idx as usize].clone();
-        str.extract_field_object(gc, field_idx + field_offset, field_ty)
+        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_ty = struct_obj.ty.field_types(gc.type_env())[field_idx as usize].clone();
+        struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
 
     // Set an `Object` into the field of a struct `Object`.
     // This "moves into" the field; in other words, the old value isn't released.
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: Object<'c>,
+        struct_obj: Object<'c>,
         field_idx: u32,
         field: &Object<'c>,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        str.insert_field_object(gc, field_offset + field_idx, field)
+        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
-    // Get field of struct as Objects (with refcnt managed).
+    /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
+    /// the struct: each returned field owns its reference and so outlives the struct it came from,
+    /// and the fields left behind are dropped.
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: &Object<'c>,
+        struct_obj: &Object<'c>,
         field_indices: &[u32],
+        state: RcState,
     ) -> Vec<Object<'c>> {
         // Collect unretained (but cloned) fields.
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
         let mut ret = vec![];
         for field_idx in field_indices {
             // Move the field out as an object; it carries its own parts, so it outlives the struct.
-            let field = ObjectFieldType::move_out_struct_field(gc, str, *field_idx);
+            let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
             ret.push(field);
         }
 
-        if str.is_box(gc.type_env()) {
+        if struct_obj.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
             for field in &ret {
-                gc.retain(field.clone());
+                gc.retain(field.clone(), state);
             }
-            gc.release(str.clone());
+            gc.release(struct_obj.clone(), state);
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
-            for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
+            for field_idx in 0..struct_obj.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
-                    let field = ObjectFieldType::move_out_struct_field(gc, str, field_idx);
-                    gc.release(field);
+                    let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, field_idx);
+                    gc.release(field, state);
                 }
             }
         }
@@ -2006,7 +2049,9 @@ pub fn get_traverser_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
-    match create_traverser(ty, capture, gc, work) {
+    // The pointer is stored in a dynamic object and called indirectly at reference count zero, so
+    // nothing is known about the state of what it traverses.
+    match create_traverser(ty, capture, gc, work, RcState::Unknown) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => {
             let is_dynamic = work.is_none();
@@ -2035,20 +2080,23 @@ pub fn get_traverser_ptr<'c, 'm>(
     }
 }
 
-// Create a traverser function for an object of specified type.
-//
-// Traverser function is a function that traverses all fields of an object and does some work on them.
-// Traverser function takes the pointer to the object as an argument.
-// If `work` is Some(0), then traverser function works as destructor of an object. This is called as `destructor`.
-// If `work` is Some(1), then traverser function marks all reachable objects as global. This is called as `mark_global`.
-// If `work` is Some(2), then traverser function marks all reachable objects as threaded. This is called as `mark_threaded`.
-// If `work` is None, then traverser function takes the second argument of as a work type. This is called as `(dynamic_)traverser`.
-// This function returns `None` if traverser function is empty.
+/// Generate the traverser function for an object of type `ty`: a function taking a pointer to the
+/// object, which walks its fields and performs one reference-counting job on each.
+///
+/// # Arguments
+/// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
+/// * `work` — the job to compile in: `TraverserWorkType::release` makes the object's destructor,
+///   `mark_global` and `mark_threaded` make the corresponding markers. `None` makes the dynamic
+///   traverser, which takes the job as a second argument and dispatches on it at run time.
+///
+/// # Returns
+/// `None` where the traverser would have no work to do, which lets a caller emit no call at all.
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
+    capture: &Vec<Arc<TypeNode>>,
     gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
+    state: RcState,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
@@ -2060,7 +2108,7 @@ pub fn create_traverser<'c, 'm>(
     }
 
     // If the function already exists, return it.
-    let trav_name = ty.traverser_name(capture, work);
+    let trav_name = ty.traverser_name(capture, work, state);
     if let Some(fv) = gc.module.get_function(&trav_name) {
         return Some(fv);
     }
@@ -2090,7 +2138,7 @@ pub fn create_traverser<'c, 'm>(
     match work {
         Some(work) => {
             // Static traverser case.
-            build_traverse(obj, capture, work, gc);
+            build_traverse(obj, capture, work, gc, state);
             gc.builder().build_return(None).unwrap();
         }
         None => {
@@ -2129,7 +2177,7 @@ pub fn create_traverser<'c, 'm>(
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
-                build_traverse(obj.clone(), capture, work, gc);
+                build_traverse(obj.clone(), capture, work, gc, state);
                 gc.builder().build_return(None).unwrap();
             }
         }
@@ -2138,11 +2186,14 @@ pub fn create_traverser<'c, 'm>(
     Some(func)
 }
 
+/// Emit the body of a traverser: perform `work` on every boxed object `obj` directly owns, walking
+/// through its unboxed structure to reach them.
 fn build_traverse<'c, 'm>(
     obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     work: TraverserWorkType,
     gc: &mut Generator<'c, 'm>,
+    state: RcState, // What is known about the state of the boxed leaves this traverser reaches.
 ) {
     // `Array a` = unbox { SubObject(#ArrayStorage a), size, cap }: the storage's own destructor is
     // free-only, so the array value drives element release. Release / mark the storage through its
@@ -2154,8 +2205,16 @@ fn build_traverse<'c, 'm>(
         let size = obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let storage = get_array_storage(gc, &obj);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, None);
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::release_or_mark_array_buf(
+                gc,
+                size,
+                buffer,
+                elem_ty,
+                work,
+                None,
+                RcState::Unknown,
+            );
         });
         return;
     }
@@ -2175,8 +2234,16 @@ fn build_traverse<'c, 'm>(
             .into_int_value();
         let storage = get_array_storage(gc, &inner_array);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
+        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::release_or_mark_array_buf(
+                gc,
+                size,
+                buffer,
+                elem_ty,
+                work,
+                Some(idx),
+                RcState::Unknown,
+            );
         });
         return;
     }
@@ -2197,7 +2264,7 @@ fn build_traverse<'c, 'm>(
                     obj.extract_field_as(gc, struct_type, i as u32)
                 };
                 let subobj = Object::new(subval, subty.clone(), gc);
-                gc.build_release_mark(subobj, work);
+                gc.build_release_mark(subobj, work, state);
             }
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}
@@ -2222,7 +2289,7 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::UnionBuf(_) => {
                 // The amount is unused on the release/mark path; pass a constant 1.
                 let one = gc.context.i64_type().const_int(1, false);
-                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work), one);
+                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work), one, state);
             }
             ObjectFieldType::TraverseFunction => {}
         }

@@ -12,6 +12,7 @@ use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
+use crate::rc_ir::ast::RcState;
 use inkwell::attributes::AttributeLoc;
 use inkwell::types::{BasicType, BasicTypeEnum};
 use std::sync::Arc;
@@ -96,7 +97,7 @@ impl ExportStatement {
             io_type,
         } = self.function_type.clone().unwrap();
 
-        // Create the LLVM type of the exported C function. Each exchanged value is its own scalar
+        // Create the LLVM type of the exported C function. Each exchanged value is its own
         // scalar — an integer, a floating point number or a pointer — which is the type a C
         // declaration of the same function names. `has_c_abi` admits nothing with another shape.
         let dom_llvm_tys = doms
@@ -160,7 +161,9 @@ impl ExportStatement {
                 fix_value = run_io(gc, &fix_value);
             }
             IOType::IOState => {
-                fix_value = ObjectFieldType::get_struct_fields(gc, &fix_value, &[1])[0].clone();
+                fix_value =
+                    ObjectFieldType::get_struct_fields(gc, &fix_value, &[1], RcState::Unknown)[0]
+                        .clone();
             }
         }
 
@@ -174,8 +177,8 @@ impl ExportStatement {
     }
 }
 
-// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar,
-// which is the type a C declaration of the same function names.
+/// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar,
+/// which is the type a C declaration of the same function names.
 fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
     let embedded_ty = ty.get_embedded_type(gc);
     let parts = gc.type_parts(embedded_ty);
@@ -189,14 +192,14 @@ fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Basi
     parts[0]
 }
 
-// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
-// passed.
-//
-// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
-// identically by Fix and by C. An aggregate is not: the C ABI classifies a structure by its size
-// and by the class of each of its eightbytes (System V AMD64), or by whether it is a homogeneous
-// floating-point aggregate (AAPCS64), and the shapes on which that agrees with Fix's element-wise
-// layout differ from target to target.
+/// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
+/// passed.
+///
+/// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
+/// identically by Fix and by C. An aggregate is laid down differently: the C ABI classifies a
+/// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
+/// it is a homogeneous floating-point aggregate (AAPCS64), and the shapes on which that agrees with
+/// Fix's element-wise layout differ from target to target.
 fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     let tycon = match ty.toplevel_tycon() {
         Some(tycon) => tycon,
@@ -209,8 +212,12 @@ fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     tycon.is_c_scalar()
 }
 
-// The error message for a type the C ABI cannot carry appearing in an exported function's
-// signature. `position` names where it appears, as "an argument" or "the return value".
+/// The error message for a type the C ABI cannot carry appearing in an exported function's
+/// signature.
+///
+/// # Arguments
+/// * `position` — where the type appears, phrased to follow "cannot be used as": "an argument" or
+///   "the return value".
 fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     let head = format!(
         "`{}` cannot be used as {} of an exported function",

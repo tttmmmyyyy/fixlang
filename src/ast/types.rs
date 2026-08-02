@@ -29,12 +29,13 @@ use crate::misc::Map;
 use crate::misc::Set;
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
+use crate::rc_ir::ast::RcState;
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -439,7 +440,7 @@ impl Hash for TypeNode {
 }
 
 impl Debug for TypeNode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
     }
 }
@@ -1635,25 +1636,40 @@ impl TypeNode {
         }
     }
 
-    // Create the name of traverser function.
+    /// The symbol name of the traverser function for this type. It keys the memoization of the
+    /// generated traversers, so one name is minted per distinct `(type, capture, work, state)`.
+    ///
+    /// # Arguments
+    /// * `capture` — the types a dynamic object's destructor traverses, empty for every other type.
     pub fn traverser_name(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
         work: Option<TraverserWorkType>,
+        state: RcState,
     ) -> String {
-        let prefix = match work {
-            None => "trav_dyn_",
+        let work_name = match work {
+            None => "trav_dyn",
             Some(work) => match work.0 {
-                TRAVERSER_WORK_RELEASE => "trav_release_",
-                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
-                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
+                TRAVERSER_WORK_RELEASE => "trav_release",
+                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global",
+                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded",
                 _ => unreachable!(),
             },
         };
-        prefix.to_string() + self.hash_with_capture(capture).as_str()
+        format!(
+            "{}{}_{}",
+            work_name,
+            state.name_suffix(),
+            self.hash_with_capture(capture)
+        )
     }
 
-    // Get the hash value of the type with the given capturing types (used for dynamic objects).
+    /// A digest of this type together with `capture`, short enough to embed in a symbol name. Two
+    /// types with the same normalized form and the same captures hash alike.
+    ///
+    /// # Arguments
+    /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
+    ///   of the same type. Empty for every other type.
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);

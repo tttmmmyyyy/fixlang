@@ -1,0 +1,80 @@
+module Main;
+
+// A global's initializer runs at the first read of it, so it runs with the frame that reached that
+// read suspended and that frame's own bindings live. Marking the initializer's whole result graph
+// global therefore happens in the middle of a computation over objects the analysis has already
+// proved local, which is what the premise "a binding's locality does not change while it lives"
+// rests on. Each case here reaches a first read from inside such a computation.
+
+// A chain of initializers: reading `deep` runs `mid`'s, which runs `base`'s.
+base : Array I64;
+base = [1, 2, 3];
+
+mid : Array (Array I64);
+mid = [base, [4, 5]];
+
+deep : Array (Array (Array I64));
+deep = [mid, [[6], [7]]];
+
+// An initializer that calls the same helper the program calls on its own values.
+shared : Array I64 -> Array I64;
+shared = |a| a.push_back(a.@size);
+
+built_by_shared : Array I64;
+built_by_shared = shared([8, 9]);
+
+// An initializer whose result graph is large, so the marking walk is long.
+wide : Array (Array I64);
+wide = Iterator::range(0, 64).map(|i| [i, i + 1, i + 2]).to_array;
+
+// A global first read from inside a destructor's action, so the initializer runs during a release.
+in_dtor : Array I64;
+in_dtor = [100, 200];
+
+type Res = box struct { own : Array I64 };
+
+with_dtor : Array I64 -> IO I64;
+with_dtor = |own| (
+    let d = *Destructor::make(Res { own : own }, |r| (
+        let _ = in_dtor.@(0);
+        pure(r)
+    ));
+    let here = d.Destructor::borrow(|r| r.@own.@(0));
+    pure(here)
+);
+
+// A local array counted before and after the first read of a global, so its annotated sites
+// straddle the initializer.
+straddle : Array I64 -> I64;
+straddle = |local| (
+    let before = local.@(0) + local.@(1);
+    let from_global = deep.@(0).@(0).@(0);
+    let after = local.@(0) + local.@(2);
+    let grown = local.push_back(before + after + from_global);
+    grown.to_iter.sum
+);
+
+main : IO ();
+main = (
+    let l = [10, 20, 30];
+
+    let a = l.straddle;
+
+    let b = (
+        let keep = [40, 50];
+        let g = built_by_shared.@(0);
+        keep.shared.to_iter.sum + g
+    );
+
+    let c = (
+        let keep = Iterator::range(0, 32).map(|i| i * 2).to_array;
+        let g = wide.@(0).@(0);
+        keep.to_iter.sum + g
+    );
+
+    let d = *[60, 70].with_dtor;
+
+    let e = base.shared.to_iter.sum + [80, 90].shared.to_iter.sum;
+
+    println $ (a + b + c + d + e).to_string
+);

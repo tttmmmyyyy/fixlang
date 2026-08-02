@@ -1,0 +1,48 @@
+module Main;
+
+// A global array. Its whole graph is marked global once the initializer finishes, so reading it —
+// directly, out of a container, or out of a global struct — yields an object no annotated
+// reference-counting operation may touch.
+g : Array I64;
+g = [10, 20, 30];
+
+gpair : (Array I64, Array I64);
+gpair = ([1, 2], [3, 4]);
+
+main : IO ();
+main = (
+    // A field taken out of a global unboxed struct.
+    let (p, q) = gpair;
+    let from_gpair = p.@(0) + q.@(0);
+
+    // A freshly allocated array whose elements are the global: its own storage is local, what it
+    // holds is not.
+    let mixed : Array (Array I64) = Array::fill(2, g);
+    let elem = mixed.@(0);
+    let from_elem = elem.@(0);
+
+    // A value rebuilt from a retained pointer, which says nothing about the graph it names.
+    let ptr = *Box::make([7, 8]).boxed_to_retained_ptr;
+    let boxed : Box (Array I64) = *boxed_from_retained_ptr(ptr);
+    let restored = boxed.@value;
+    let from_restored = restored.@(0);
+
+    // Overwriting an element releases the element it replaces, so the array's own storage being
+    // local says nothing: what it holds decides whether that release may drop its dispatch.
+    let holds_global : Array (Array I64) = Array::fill(2, g);
+    let overwritten = holds_global.set(1, g);
+    let from_overwritten = overwritten.@(1).@(0);
+
+    // The same write over an array holding nothing but arrays built here: the element it replaces
+    // is local, so the release may drop its dispatch.
+    let own : Array (Array I64) = Array::fill(2, [1, 2]);
+    let rewritten = own.set(1, [3, 4]);
+    let from_rewritten = rewritten.@(1).@(0);
+
+    // An array built here out of nothing but numbers: local all the way down.
+    let fresh : Array I64 = Array::fill(3, 5);
+    let from_fresh = fresh.@(0);
+
+    println $ (from_gpair + from_elem + from_restored + from_overwritten + from_rewritten
+             + from_fresh).to_string
+);

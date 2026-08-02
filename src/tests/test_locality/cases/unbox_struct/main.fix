@@ -1,0 +1,19 @@
+module Main;
+
+// Reading one field out of an unboxed struct drops the fields nobody named, so a field left behind
+// decides whether that drop may skip the state dispatch. The struct itself is built here; the field
+// nobody reads is the global.
+g : Array I64;
+g = [10, 20, 30];
+
+type Both = unbox struct { read : Array I64, dropped : Array I64 };
+
+sum : Array I64 -> I64;
+sum = |a| Iterator::range(0, a.@size).fold(0, |i, acc| acc + a.@(i));
+
+main : IO ();
+main = (
+    let holds_global = Both { read : [1, 2], dropped : g };
+    let taken = holds_global.@read;
+    println $ taken.sum.to_string
+);
