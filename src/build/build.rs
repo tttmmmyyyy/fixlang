@@ -9,6 +9,7 @@ use crate::misc::{info_msg, Set};
 use crate::parse::sourcefile::Span;
 use build_time::build_time_utc;
 use rand::Rng;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -103,7 +104,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     let mut libs_opts = vec![];
     let mut warned_on_mac = false;
     for (lib_name, link_type) in &config.linked_libraries {
-        if std::env::consts::OS != "macos" {
+        if env::consts::OS != "macos" {
             match link_type {
                 LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
                 LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
@@ -180,7 +181,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     } else {
         com.arg("-no-pie");
     }
-    if std::env::consts::OS == "macos" {
+    if env::consts::OS == "macos" {
         com.arg("-Wl,-dead_strip");
     } else {
         com.arg("-Wl,--gc-sections");

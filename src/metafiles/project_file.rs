@@ -19,7 +19,7 @@ use reqwest::Url;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::{self, File},
     hash::Hash,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -342,7 +342,7 @@ impl ProjectFile {
         for dep in &deps {
             if let Some(path) = &dep.path {
                 let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
-                if let Ok(content) = std::fs::read_to_string(&proj_file_path) {
+                if let Ok(content) = fs::read_to_string(&proj_file_path) {
                     data += &content;
                 }
             }
@@ -860,7 +860,7 @@ impl ProjectFile {
             LockFileType::Test => TRY_FIX_DEPS_UPDATE_TEST,
             LockFileType::Lsp => TRY_FIX_DEPS_UPDATE_TEST, // LSP uses auto-update, so this message is rarely shown
         };
-        let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
+        let content = fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to read the lock file: {:?}. {}",
                 e, msg_try_fix_deps_update
@@ -887,7 +887,7 @@ impl ProjectFile {
         let content = toml::to_string(lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
         let lock_file_path = get_lock_file_path(mode);
-        std::fs::write(lock_file_path, content)
+        fs::write(lock_file_path, content)
             .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
         Ok(())
     }
@@ -923,7 +923,7 @@ impl ProjectFile {
                 // Ensure the parent directory exists (e.g., .fixlang/ for LSP lock file).
                 let lock_file_path = get_lock_file_path(mode);
                 if let Some(parent) = Path::new(lock_file_path).parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| {
+                    fs::create_dir_all(parent).map_err(|e| {
                         Errors::from_msg(format!("Failed to create directory: {:?}", e))
                     })?;
                 }
@@ -1028,7 +1028,7 @@ impl ProjectFile {
         // Replace `{PLACEHOLDER_FIX_VERSION}` to the current version of Fix.
         let content = content.replace("{PLACEHOLDER_FIX_VERSION}", env!("CARGO_PKG_VERSION"));
 
-        std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
+        fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
                 PROJECT_FILE_PATH, e
@@ -1042,7 +1042,7 @@ impl ProjectFile {
             )));
         }
         let main_fix_content = include_str!("../docs/main_template.fix");
-        std::fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
+        fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
             Errors::from_msg(format!("Failed to create file \"main.fix\": {:?}.", e))
         })?;
 
@@ -1053,7 +1053,7 @@ impl ProjectFile {
             )));
         }
         let test_fix_content = include_str!("../docs/test_template.fix");
-        std::fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
+        fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
             Errors::from_msg(format!("Failed to create file \"test.fix\": {:?}.", e))
         })?;
 
@@ -1212,7 +1212,7 @@ impl ProjectFile {
         }
 
         // Write the added dependencies to the project file.
-        let mut file = std::fs::OpenOptions::new()
+        let mut file = fs::OpenOptions::new()
             .append(true)
             .open(&self.path)
             .map_err(|e| {
@@ -1252,7 +1252,7 @@ impl ProjectFile {
             })?
         } else {
             // The location is a file path.
-            std::fs::read_to_string(loc).map_err(|e| {
+            fs::read_to_string(loc).map_err(|e| {
                 Errors::from_msg(format!("Failed to read registry file \"{}\": {:?}", loc, e))
             })?
         };
