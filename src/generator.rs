@@ -1496,41 +1496,44 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
+    // Emit `body` where the boxed object is known to be non-null. A dynamic object can be null, so
+    // the body goes on the non-null side of a null check and control rejoins after it; any other
+    // boxed object is never null, so the body is emitted where the caller stands. `tag` names the
+    // two blocks the null check adds.
+    fn build_skipping_null(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
+        if !obj.is_dynamic_object() {
+            body(self);
+            return;
+        }
+        let current_func = self.current_function();
+        let nonnull_bb = self
+            .context
+            .append_basic_block(current_func, &format!("nonnull_bb@{}", tag));
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, &format!("cont_bb@{}", tag));
+
+        // Branch to `nonnull_bb` if the object is not null.
+        let is_null = obj.is_null(self);
+        self.builder()
+            .build_conditional_branch(is_null, cont_bb, nonnull_bb)
+            .unwrap();
+
+        self.builder().position_at_end(nonnull_bb);
+        body(self);
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+        self.builder().position_at_end(cont_bb);
+    }
+
     // Retain an object `amount` times: every boxed leaf reached has its reference count increased by
     // `amount` (an i64 count). Passing a constant 1 reproduces an ordinary single retain exactly, so
     // single-retain call sites stay byte-identical.
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
-            let cont_bb = if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-                let current_func = self.current_function();
-                let nonnull_bb = self
-                    .context
-                    .append_basic_block(current_func, "nonnull_bb@retain");
-                let cont_bb = self
-                    .context
-                    .append_basic_block(current_func, "cont_bb@retain");
-
-                // Branch to nonnull_bb if object is not null.
-                let is_null = obj.is_null(self);
-                self.builder()
-                    .build_conditional_branch(is_null, cont_bb, nonnull_bb)
-                    .unwrap();
-
-                // Implement code to retain in nonnull_bb.
-                self.builder().position_at_end(nonnull_bb);
-                Some(cont_bb)
-            } else {
-                None
-            };
-
-            // Increment the reference count of the (now known non-null) boxed object.
-            self.retain_nonnull_boxed(&obj, amount, state);
-
-            if let Some(cont_bb) = cont_bb {
-                self.builder().build_unconditional_branch(cont_bb).unwrap();
-                self.builder().position_at_end(cont_bb);
-            }
+            self.build_skipping_null(&obj, "retain", |gc| {
+                // Increment the reference count of the (now known non-null) boxed object.
+                gc.retain_nonnull_boxed(&obj, amount, state);
+            });
         } else {
             // When the object is unboxed,
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
@@ -1722,42 +1725,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Release or mark global or mark threaded an object.
     pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
         if obj.is_box(self.type_env()) {
-            let cont_bb = if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-
-                // Append basic blocks.
-                let current_func = self.current_function();
-                let nonnull_bb = self
-                    .context
-                    .append_basic_block(current_func, "nonnull_in_release_dynamic");
-                let cont_bb = self
-                    .context
-                    .append_basic_block(current_func, "cont_in_release_dynamic");
-
-                // Branch to nonnull_bb if object is not null.
-                let is_null = obj.is_null(self);
-                self.builder()
-                    .build_conditional_branch(is_null, cont_bb, nonnull_bb)
-                    .unwrap();
-
-                // Implement nonnull_bb.
-                self.builder().position_at_end(nonnull_bb);
-
-                Some(cont_bb)
-            } else {
-                None
-            };
-
-            // If the object is boxed and not dynamic,
-            self.build_release_mark_nonnull_boxed(&obj, work, state);
-
-            if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-                self.builder()
-                    .build_unconditional_branch(cont_bb.unwrap())
-                    .unwrap();
-                self.builder().position_at_end(cont_bb.unwrap());
-            }
+            self.build_skipping_null(&obj, "release_mark", |gc| {
+                gc.build_release_mark_nonnull_boxed(&obj, work, state);
+            });
         } else if obj.is_funptr() {
             // Nothing to do for function pointers.
         } else {
