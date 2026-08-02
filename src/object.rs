@@ -1563,6 +1563,13 @@ pub fn alloc_array_storage<'c, 'm>(
 /// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an
 /// i32 size parameter and truncate the size, which breaks allocations >= 4 GiB. Instead we call our
 /// own `@malloc(i64)` declaration registered in `runtime.rs`.
+///
+/// The result is used without a test for null, so an allocation the system cannot supply ends the
+/// program with SIGSEGV. That failure is deterministic because `create_obj` initializes the control
+/// block before it hands the object on: the first access to a block that was never allocated is
+/// within the header, at a fixed low address, and no capacity or index the program computed reaches
+/// it. Deferring that initialization would put a value the program chose into the faulting address
+/// and turn this into a wild write.
 fn build_malloc<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
