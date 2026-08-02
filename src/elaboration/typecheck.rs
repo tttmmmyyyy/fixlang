@@ -15,11 +15,10 @@ use crate::{
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
-        types::OpaqueTyConResolution,
         types::{
             is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
-            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-            TypeNode,
+            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
+            TyConVariant, TyVar, Type, TypeNode,
         },
     },
     constants::{
@@ -32,6 +31,7 @@ use crate::{
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
+use std::mem::{replace, swap};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -1822,7 +1822,7 @@ impl TypeCheckContext {
 
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
         self.substitution.compose(subst);
-        let eqs = std::mem::replace(&mut self.equalities, vec![]);
+        let eqs = replace(&mut self.equalities, vec![]);
         for eq in eqs {
             self.add_equality(eq)?;
         }
@@ -1958,7 +1958,7 @@ impl TypeCheckContext {
                 }
                 _ => {}
             }
-            std::mem::swap(&mut ty1, &mut ty2);
+            swap(&mut ty1, &mut ty2);
         }
 
         // Case: Either is usage of associated type.
@@ -1973,7 +1973,7 @@ impl TypeCheckContext {
                 self.add_equality(eq)?;
                 return Ok(());
             }
-            std::mem::swap(&mut ty1, &mut ty2);
+            swap(&mut ty1, &mut ty2);
         }
 
         // Other case.
