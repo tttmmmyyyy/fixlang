@@ -865,7 +865,7 @@ mod tests {
 
     // A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
-        Provenance(LeafMap::from_leaves([(vec![], Provenance::leaf(src))]))
+        Provenance([(vec![], Provenance::leaf(src))].into_iter().collect())
     }
     fn fresh() -> Provenance {
         boxed(LeafOrigin::Fresh)
@@ -886,11 +886,11 @@ mod tests {
                 leaves.push((p, origins.clone()));
             }
         }
-        Provenance(LeafMap::from_leaves(leaves))
+        Provenance(leaves.into_iter().collect())
     }
     // A resolved uniqueness from its `(path, verdict)` leaves.
     fn uniq(leaves: Vec<(Vec<usize>, SharingVerdict)>) -> Uniqueness {
-        Uniqueness(LeafKey::from_leaves(leaves))
+        Uniqueness(leaves.into_iter().collect())
     }
 
     #[test]
@@ -935,7 +935,7 @@ mod tests {
         let mut origins = Set::default();
         origins.insert(LeafOrigin::Fresh);
         origins.insert(LeafOrigin::Arg(1, vec![]));
-        let declared = Provenance(LeafMap::from_leaves([(vec![], origins)]));
+        let declared = Provenance([(vec![], origins)].into_iter().collect());
         let composed = declared.compose(&[Provenance::empty(), unknown()]);
         let out = composed.leaf_origins_at(&[]).unwrap();
         assert!(out.contains(&LeafOrigin::Fresh));
@@ -979,7 +979,7 @@ mod tests {
         // A fieldless value is `unboxed`; a boxed value shows its source (a bottom leaf as `_`);
         // an aggregate's leaves are keyed by path inside braces.
         assert_eq!(Provenance::empty().to_string(), "unboxed");
-        let bottom = Provenance(LeafMap::from_leaves([(vec![], Set::default())]));
+        let bottom = Provenance([(vec![], Set::default())].into_iter().collect());
         assert_eq!(bottom.to_string(), "_");
         assert_eq!(fresh().to_string(), "fresh");
         assert_eq!(

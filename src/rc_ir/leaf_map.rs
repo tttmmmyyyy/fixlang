@@ -68,6 +68,13 @@ impl<T> Default for LeafMap<T> {
     }
 }
 
+/// Collect the given leaves, where the caller knows the shape by other means than a type.
+impl<T> FromIterator<(FieldPath, T)> for LeafMap<T> {
+    fn from_iter<I: IntoIterator<Item = (FieldPath, T)>>(leaves: I) -> LeafMap<T> {
+        LeafMap(leaves.into_iter().collect())
+    }
+}
+
 impl<T: Clone> LeafMap<T> {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
     pub fn empty() -> LeafMap<T> {
@@ -95,11 +102,6 @@ impl<T: Clone> LeafMap<T> {
     /// The map whose every boxed leaf carries `fact`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, fact: T) -> LeafMap<T> {
         LeafMap::build_shape(ty, type_env, &|_| fact.clone())
-    }
-
-    /// The map of the given leaves, where the caller knows the shape by other means than a type.
-    pub fn from_leaves(leaves: impl IntoIterator<Item = (FieldPath, T)>) -> LeafMap<T> {
-        LeafMap(leaves.into_iter().collect())
     }
 
     /// The fact recorded at `path`, or `None` where `path` is not a boxed leaf of this value — a
@@ -240,12 +242,14 @@ impl<T: Clone> LeafMap<T> {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct LeafKey<T>(BTreeMap<FieldPath, T>);
 
-impl<T: Copy> LeafKey<T> {
-    /// The key of the given leaves, where the caller knows the shape by other means than a type.
-    pub fn from_leaves(leaves: impl IntoIterator<Item = (FieldPath, T)>) -> LeafKey<T> {
+/// Collect the given leaves, where the caller knows the shape by other means than a type.
+impl<T> FromIterator<(FieldPath, T)> for LeafKey<T> {
+    fn from_iter<I: IntoIterator<Item = (FieldPath, T)>>(leaves: I) -> LeafKey<T> {
         LeafKey(leaves.into_iter().collect())
     }
+}
 
+impl<T: Copy> LeafKey<T> {
     /// The fact at `path`, where the caller knows the path names a boxed leaf of the value's type.
     pub fn at(&self, path: &[usize]) -> T {
         self.0
