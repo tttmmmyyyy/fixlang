@@ -14,6 +14,7 @@ use crate::{
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
 };
+use regex::Regex;
 use reqwest::Url;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -461,7 +462,7 @@ impl ProjectFile {
     pub fn validate_disable_cpu_features(disable_cpu_features: &[String]) -> Result<(), Errors> {
         for feature in disable_cpu_features {
             // Check if each feature is a valid regex.
-            if let Err(e) = regex::Regex::new(feature) {
+            if let Err(e) = Regex::new(feature) {
                 return Err(Errors::from_msg(format!(
                     "Invalid regex in `disable-cpu-feature`: {}",
                     e
