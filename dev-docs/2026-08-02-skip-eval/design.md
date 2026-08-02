@@ -132,6 +132,21 @@ unsafe_perform : IO a -> a = |io| (
 
 `ExprVisitor` に既定実装を与えれば、この定型は 12 個の実装すべてから消える。ただし今は、`Expr` に新しいバリアントを足したとき 12 個すべてがコンパイルエラーになることで、対応漏れが止まっている。その安全性を手放す判断になるので、この変更とは別に決めたい。
 
+### コンパイラオプションのヘルプ
+
+`src/main.rs` に置く `Arg` の定義。`no_runtime_check` と同じ形にする。
+
+```rust
+let skip_eval = Arg::new("skip-eval")
+    .long("skip-eval")
+    .takes_value(false)
+    .help(
+        "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
+        A monadic action bound with `*` inside `{expr0}` is still performed. An effect that does not go \
+        through the `IO` monad, such as a call to `Debug::debug_println` or an `FFI_CALL`, is dropped."
+    );
+```
+
 ## キャッシュ
 
 `Configuration::object_generation_hash` に `skip_eval` を混ぜる。オブジェクトファイル全体のキャッシュ (`load_build_object_files_cache`) と分割コンパイル単位のハッシュ (`CompileUnit::update_unit_hash`) の両方がこの関数を通るので、1 箇所でよい。
@@ -150,13 +165,75 @@ unsafe_perform : IO a -> a = |io| (
 
 ## ドキュメント
 
-`Document.md` と `Document-ja.md` の `eval` の節に、フラグを説明する段落を足す。書く内容は次の 3 つである。
+見出しは増やさず、既存の節に段落と表の行を足すだけなので、両方の言語版の目次は変わらない。
 
-- `--skip-eval` オプションとプロジェクトファイルの `skip_eval` を立てたビルドでは、コンパイラは `{expr0}` を落とす。
-- `*` で束ねたモナドのアクションは、bind が `eval` の外側にあるので実行される。
-- IO を経由しない作用（`FFI_CALL`、グローバル値の初期化子）を `eval` に置いているコードは、この設定で動かなくなる。
+### `Document.md` の `eval` syntax の節
 
-プロジェクトファイルの節にも `skip_eval` を足す。両方の言語版の目次も更新する。
+Notes の箇条書きの後ろに置く。
+
+> The `--skip-eval` compiler option and the `skip_eval` field of the project file build `eval {expr0}; {expr1}` as `{expr1}`. Write a debugging effect with `eval` while developing, and turn this on to leave it out of the built program.
+>
+> A monadic action bound with `*` inside `{expr0}` is still performed. The bind that `*` desugars into sits outside the `eval` expression, so what this setting drops is the use of the value the action produced. In
+> ```
+> main : IO () = (
+>     eval *println("Hello");
+>     pure()
+> );
+> ```
+> the message is printed with the setting on and with it off.
+>
+> An effect that reaches the outside world without going through the `IO` monad disappears together with `{expr0}`: a call to `Debug::debug_println` and its siblings, an `FFI_CALL`, and the initializer of a global value the expression names. Reserve `eval` for effects a program built with this setting can do without.
+
+### `Document-ja.md` の `eval`構文 の節
+
+同じ位置に置く。
+
+> `--skip-eval`コンパイラオプションおよびプロジェクトファイルの`skip_eval`フィールドは、`eval {expr0}; {expr1}`を`{expr1}`としてビルドします。開発中は`eval`でデバッグ用の作用を書いておき、この設定を有効にすることで、ビルドされるプログラムからそれを外せます。
+>
+> `{expr0}`の中で`*`によって束ねられたモナドのアクションは、この設定でも実行されます。`*`が展開するbindは`eval`式の外側にあるため、この設定が落とすのは、アクションが生成した値の使用だけです。例えば
+> ```
+> main : IO () = (
+>     eval *println("Hello");
+>     pure()
+> );
+> ```
+> では、この設定の有無にかかわらずメッセージが出力されます。
+>
+> `IO`モナドを経由せずに外界に届く作用は、`{expr0}`とともに消えます。`Debug::debug_println`とその同類の呼び出し、`FFI_CALL`、そして式が名指ししたグローバル値の初期化子がこれにあたります。この設定でビルドするプログラムでは、`eval`に置く作用を、無くても成り立つものに限ってください。
+
+### プロジェクトファイルのフィールド表
+
+両方の言語版の表の、`no_runtime_check` の行の後ろに 1 行足す。列は Field / Option / Type / Dependent Project / Description である。`create_config` はプロジェクトファイルを読んでからコマンドラインオプションを適用するので、`no_runtime_check` と同じく実効的には論理和になる。表の中は HTML なので、説明の欄にバッククォートは使わない。
+
+`Document.md`:
+
+```html
+        <tr>
+            <td>skip_eval</td>
+            <td>--skip-eval</td>
+            <td>Merge (OR)</td>
+            <td>Does not affect</td>
+            <td>Skip the evaluation instructed by the eval syntax</td>
+        </tr>
+```
+
+`Document-ja.md`:
+
+```html
+        <tr>
+            <td>skip_eval</td>
+            <td>--skip-eval</td>
+            <td>マージ（論理和）</td>
+            <td>影響しない</td>
+            <td>eval構文が指示する評価を飛ばす</td>
+        </tr>
+```
+
+### `CHANGELOG.md`
+
+`## [Unreleased]` の `### Added` の `#### Tool` に置く。
+
+> - Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which build `eval {expr0}; {expr1}` as `{expr1}`. Use it to leave a debugging effect written with `eval` out of a built program. A monadic action bound with `*` inside `{expr0}` is still performed, because the bind it desugars into sits outside the `eval` expression.
 
 `CHANGELOG.md` の `## [Unreleased]` の `### Added` / `#### Tool` に 1 行足す。
 
