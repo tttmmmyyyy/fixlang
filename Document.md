@@ -2923,9 +2923,9 @@ The following table shows how each setting is handled.
         <tr>
             <td>no_runtime_check</td>
             <td>--no-runtime-check</td>
-            <td>Merge (OR)</td>
+            <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Disable runtime checks</td>
+            <td>Disable runtime checks. fix test reads it from the build.test section, which defaults to keeping the checks.</td>
         </tr>
     </tbody>
 </table>

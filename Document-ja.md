@@ -3036,9 +3036,9 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
         <tr>
             <td>no_runtime_check</td>
             <td>--no-runtime-check</td>
-            <td>マージ（論理和）</td>
+            <td>上書き</td>
             <td>影響しない</td>
-            <td>実行時チェックの無効化</td>
+            <td>実行時チェックの無効化。fix test はこれを build.test セクションから読み、既定では検査を残します。</td>
         </tr>
     </tbody>
 </table>

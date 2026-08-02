@@ -109,6 +109,8 @@ pub struct ProjectFileBuildTest {
     backtrace: Option<bool>,
     #[serde(default)]
     disable_cpu_features: Vec<String>,
+    #[serde(default)]
+    no_runtime_check: bool,
 
     memcheck: Option<bool>,
 }
@@ -842,11 +844,16 @@ impl ProjectFile {
             );
         }
 
-        // Set no_runtime_check.
-        config.no_runtime_check = self.build.no_runtime_check;
-        if mode == BuildConfigType::Test {
-            config.no_runtime_check = false;
-        }
+        // Set no_runtime_check. A test build reads the `build.test` section alone, so that a
+        // project which turns the checks off for its program still runs its tests with them.
+        config.no_runtime_check = if mode == BuildConfigType::Test {
+            self.build
+                .test
+                .as_ref()
+                .map_or(false, |test| test.no_runtime_check)
+        } else {
+            self.build.no_runtime_check
+        };
 
         Ok(())
     }

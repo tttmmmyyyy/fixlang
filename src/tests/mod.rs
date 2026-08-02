@@ -38,6 +38,7 @@ mod test_main_loop;
 mod test_match_result_alias;
 mod test_match_return_outer;
 mod test_memcheck;
+mod test_no_runtime_check_setting;
 mod test_opaque_type;
 mod test_preliminary_commands;
 mod test_provenance;

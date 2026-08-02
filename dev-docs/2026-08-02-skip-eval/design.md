@@ -214,21 +214,23 @@ let skip_eval = Arg::new("skip-eval")
 
 Notes の箇条書きの後ろに置く。
 
-> The `--skip-eval` compiler option and the `skip_eval` field of the project file build `eval {expr0}; {expr1}` as `{expr1}`. Write a debugging effect such as `Debug::debug_println` with `eval` while developing, and turn this on to leave it out of the built program.
+> The `--skip-eval` compiler option and the `skip_eval` field of the project file compile `eval {expr0}; {expr1}` as `{expr1}`, leaving `{expr0}` unevaluated.
 >
-> An effect that reaches the outside world without going through the `IO` monad disappears together with `{expr0}`: a call to `Debug::debug_println` and its siblings, an `FFI_CALL`, and the initializer of a global value the expression names. Reserve `eval` for effects a program built with this setting can do without.
+> This is the setting for taking a debugging `eval` out of a build. Write `eval debug_println(...)` while developing, and turn this on to stop the output without editing the source.
 >
-> A monadic action bound with `*` inside `{expr0}` is still performed, because the bind that `*` desugars into sits outside the `eval` expression.
+> Whatever `{expr0}` does is dropped, including work the program needs: a C function called through `FFI_CALL`, and the initialization of a global value that `{expr0}` names. In a program built with this setting, keep `eval` for work that can go unperformed.
 
 ### `Document-ja.md` の `eval`構文 の節
 
 同じ位置に置く。
 
-> `--skip-eval`コンパイラオプションおよびプロジェクトファイルの`skip_eval`フィールドは、`eval {expr0}; {expr1}`を`{expr1}`としてビルドします。開発中は`Debug::debug_println`のようなデバッグ用の作用を`eval`で書いておき、この設定を有効にすることで、ビルドされるプログラムからそれを外せます。
+> `--skip-eval`コンパイラオプション、またはプロジェクトファイルの`skip_eval`フィールドを指定すると、`eval {expr0}; {expr1}`は`{expr1}`としてコンパイルされます。すなわち、`{expr0}`は評価されません。
 >
-> `IO`モナドを経由せずに外界に届く作用は、`{expr0}`とともに消えます。`Debug::debug_println`とその同類の呼び出し、`FFI_CALL`、そして式が名指ししたグローバル値の初期化子がこれにあたります。この設定でビルドするプログラムでは、`eval`に置く作用を、無くても成り立つものに限ってください。
+> これは、デバッグのために書いた`eval`をビルドから外すための設定です。開発中は`eval debug_println(...)`を書いておき、不要になったらこの設定を有効にすることで、ソースを書き換えずに出力を止められます。
 >
-> `{expr0}`の中で`*`によって束ねられたモナドのアクションは、`*`が展開するbindが`eval`式の外側にあるため、この設定でも実行されます。
+> `{expr0}`に書いた処理は、それがプログラムの動作に必要なものであっても消えます。`FFI_CALL`によるC関数の呼び出しや、`{expr0}`が参照するグローバル値の初期化がこれにあたります。この設定を使うプログラムでは、`eval`に書く処理を、実行されなくても構わないものに限ってください。
+
+`*` で束ねたアクションが残ることは、どちらの言語版にも書かない。`*` を `eval` の中に置くのは今の書き方ではないので、リファレンスの `eval` の節をその説明で重くしない。振る舞いはこの設計書が記録する。
 
 ### プロジェクトファイルのフィールド表
 
@@ -280,11 +282,11 @@ Notes の箇条書きの後ろに置く。
 
 `## [Unreleased]` の `### Added` の `#### Tool` に置く。
 
-> - Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which build `eval {expr0}; {expr1}` as `{expr1}`. Use it to leave a debugging effect written with `eval` out of a built program. A monadic action bound with `*` inside `{expr0}` is still performed, because the bind it desugars into sits outside the `eval` expression.
+> - Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which compile `eval {expr0}; {expr1}` as `{expr1}`. Use it to take a debugging `eval debug_println(...)` out of a build without editing the source.
 
 `### Changed` の `#### Tool` に、プロジェクトファイルの方の変更を置く。
 
-> - The project file's `no_runtime_check` can now be set in the `build.test` section, which is where `fix test` reads it from; the `build` section applies to `fix build` and `fix run`. A test build keeps its runtime checks unless `build.test` disables them.
+> - The project file's `no_runtime_check` can now be set in the `build.test` section. `fix test` reads it from there, so a project that disables the checks for its program still runs its tests with them.
 
 `CHANGELOG.md` の `## [Unreleased]` の `### Added` / `#### Tool` に 1 行足す。
 
