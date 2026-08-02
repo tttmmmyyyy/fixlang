@@ -10456,3 +10456,40 @@ fn test_global_accessors_across_compilation_units() {
     config.max_cu_size = 1;
     test_source(source, config);
 }
+
+/// A higher-kinded trait whose instance is pinned down by the annotation at the use site rather
+/// than by the argument: each annotation selects a different instance of the same value.
+#[test]
+pub fn test_higher_kinded_instance_selected_by_annotation() {
+    let source = r##"
+    module Main;
+
+    trait [f : * -> *] f : Container {
+        cmap : (a -> b) -> f a -> f b;
+        cone : a -> f a;
+    }
+
+    impl Array : Container {
+        cmap = |g, xs| xs.to_iter.map(g).to_array;
+        cone = |x| [x];
+    }
+
+    impl Option : Container {
+        cmap = |g, x| x.map(g);
+        cone = |x| Option::some(x);
+    }
+
+    build : [c : Container] I64 -> c I64;
+    build = |n| Container::cone(n);
+
+    main : IO ();
+    main = (
+        let a = (build(3) : Array I64);
+        let o = (build(4) : Option I64);
+        assert_eq(|_|"", a.@(0), 3);;
+        assert_eq(|_|"", o.as_some, 4);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
