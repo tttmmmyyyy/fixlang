@@ -165,9 +165,9 @@ fn test_passes_file_replaces_the_level_pipeline() {
 
     // `--emit-llvm` writes the module both before and after the pipeline runs; the post-pipeline
     // file is the one that shows what the pipeline did.
-    let emitted = emitted_llvm_ir(dir.path(), EmittedIr::AfterOptimization);
+    let emitted_ir = emitted_llvm_ir(dir.path(), EmittedIr::AfterOptimization);
     assert!(
-        emitted.contains("alloca"),
+        emitted_ir.contains("alloca"),
         "an unoptimized module should still hold its values in stack slots; the emitted IR has \
          none, so the passes file did not replace the pipeline the optimization level implies"
     );

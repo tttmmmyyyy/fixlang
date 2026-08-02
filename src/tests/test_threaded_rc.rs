@@ -74,9 +74,14 @@ fn emit_and_run_threaded(opt_level: &str) -> String {
 }
 
 /// Asserts that `ir` accesses a multi-threaded reference count with `instruction`, and that every
-/// such access carries `ordering`. `where_` names the build the IR came from, and is what a failure
-/// reports.
-fn assert_every_access_carries_ordering(ir: &str, instruction: &str, ordering: &str, where_: &str) {
+/// such access carries `ordering`. `build_description` names the build the IR came from, and is
+/// what a failure reports.
+fn assert_every_access_carries_ordering(
+    ir: &str,
+    instruction: &str,
+    ordering: &str,
+    build_description: &str,
+) {
     let accesses = ir
         .lines()
         .filter(|line| line.contains(instruction))
@@ -85,7 +90,7 @@ fn assert_every_access_carries_ordering(ir: &str, instruction: &str, ordering: &
         !accesses.is_empty(),
         "the build should emit `{}` on a multi-threaded reference count {}",
         instruction,
-        where_
+        build_description
     );
     let ordering_token = format!(" {}", ordering);
     let without_ordering = accesses
@@ -97,7 +102,7 @@ fn assert_every_access_carries_ordering(ir: &str, instruction: &str, ordering: &
         "every `{}` on a multi-threaded reference count should be `{}` {}, but these are not: {:?}",
         instruction,
         ordering,
-        where_,
+        build_description,
         without_ordering
     );
 }
@@ -109,19 +114,19 @@ fn assert_every_access_carries_ordering(ir: &str, instruction: &str, ordering: &
 /// One build serves them all, since they are faces of one emitted artifact.
 fn assert_orderings_are_checkable(opt_level: &str) {
     let ir = emit_and_run_threaded(opt_level);
-    let where_ = format!("at -O {}", opt_level);
+    let build_description = format!("at -O {}", opt_level);
 
     // The thread that brings the count to zero has to see every write the other holders made, so
     // the decrement carries the acquire.
-    assert_every_access_carries_ordering(&ir, "atomicrmw sub", "acq_rel", &where_);
+    assert_every_access_carries_ordering(&ir, "atomicrmw sub", "acq_rel", &build_description);
 
     // A thread that finds itself the only holder goes on to write through the value, and those
     // writes come after the reads the releasing threads did.
-    assert_every_access_carries_ordering(&ir, "load atomic", "acquire", &where_);
+    assert_every_access_carries_ordering(&ir, "load atomic", "acquire", &build_description);
 
     // An increment hands nothing over and reads nothing another thread wrote, so it stays relaxed.
     // Strengthening it would cost every retain of a shared value and buy nothing.
-    assert_every_access_carries_ordering(&ir, "atomicrmw add", "monotonic", &where_);
+    assert_every_access_carries_ordering(&ir, "atomicrmw add", "monotonic", &build_description);
 
     // A standalone fence is invisible to ThreadSanitizer, so an acquire moved into one would turn
     // the threaded path into a stream of false reports.
@@ -133,7 +138,7 @@ fn assert_orderings_are_checkable(opt_level: &str) {
         fences.is_empty(),
         "synchronization should be carried by the accesses themselves, so that a race detector can \
          follow it, but the build {} emitted: {:?}",
-        where_,
+        build_description,
         fences
     );
 }

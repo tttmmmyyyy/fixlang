@@ -119,11 +119,11 @@ pub enum EmittedIr {
 impl EmittedIr {
     /// Whether a file of the build directory named `name` is one this selection reads.
     fn selects(&self, name: &str) -> bool {
-        let optimized = name.ends_with("_optimized.ll");
+        let is_optimized = name.ends_with("_optimized.ll");
         match self {
             EmittedIr::All => name.ends_with(".ll"),
-            EmittedIr::BeforeOptimization => name.ends_with(".ll") && !optimized,
-            EmittedIr::AfterOptimization => optimized,
+            EmittedIr::BeforeOptimization => name.ends_with(".ll") && !is_optimized,
+            EmittedIr::AfterOptimization => is_optimized,
         }
     }
 }
@@ -167,18 +167,18 @@ mod tests {
     fn test_emitted_ir_selects_by_the_optimization_suffix() {
         let generated = "Module-0123abcd.ll";
         let optimized = "Module-0123abcd_optimized.ll";
-        let other = "generated.fix";
+        let source_file = "generated.fix";
 
         assert!(EmittedIr::All.selects(generated) && EmittedIr::All.selects(optimized));
-        assert!(!EmittedIr::All.selects(other));
+        assert!(!EmittedIr::All.selects(source_file));
 
         assert!(EmittedIr::BeforeOptimization.selects(generated));
         assert!(!EmittedIr::BeforeOptimization.selects(optimized));
-        assert!(!EmittedIr::BeforeOptimization.selects(other));
+        assert!(!EmittedIr::BeforeOptimization.selects(source_file));
 
         assert!(EmittedIr::AfterOptimization.selects(optimized));
         assert!(!EmittedIr::AfterOptimization.selects(generated));
-        assert!(!EmittedIr::AfterOptimization.selects(other));
+        assert!(!EmittedIr::AfterOptimization.selects(source_file));
     }
 }
 
