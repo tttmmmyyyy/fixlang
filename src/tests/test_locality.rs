@@ -385,6 +385,37 @@ mod integration_tests {
         }
     }
 
+    /// Verifies that the boxed leaves of one argument carry their own keys. A clone reached with a
+    /// pair whose first element was built by the program and whose second is the global counts the
+    /// first directly and leaves the second reading the state, which a key held per value rather
+    /// than per leaf could not express.
+    #[test]
+    fn test_the_leaves_of_one_argument_are_keyed_apart() {
+        let (_temp_dir, project_dir) = setup_test_env("shapes");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let releases: Vec<&str> = dump
+            .lines()
+            .map(str::trim_start)
+            .filter(|line| line.starts_with("release "))
+            .collect();
+        let keyed_apart = releases
+            .iter()
+            .any(|deep| match deep.strip_suffix(".0 @deeplocal") {
+                Some(head) => {
+                    let dispatching = format!("{}.1", head);
+                    releases.iter().any(|line| *line == dispatching)
+                }
+                None => false,
+            });
+        assert!(
+            keyed_apart,
+            "no binding has its first leaf counted directly and its second reading the state, so \
+             this case says nothing about a key held per leaf:\n{}",
+            dump
+        );
+    }
+
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
     /// Reference counting is inserted for locals, but the borrow rewrite adds a release naming
     /// whatever was passed at a borrowed position — a global included — so resolving an operand by
@@ -469,6 +500,25 @@ mod runtime_tests {
     #[test]
     fn test_annotations_of_every_clone_hold_at_run_time() {
         let source = include_str!("test_locality/cases/clones/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations hold at run time across a global's initializer. An initializer
+    /// runs at the first read of the global, with the frame that reached it suspended and that
+    /// frame's own bindings live, and it marks its whole result graph global — so this is where a
+    /// binding's locality would change under the analysis if anything could make it.
+    #[test]
+    fn test_annotations_hold_across_a_lazy_initializer() {
+        let source = include_str!("test_locality/cases/lazy_init/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations hold at run time on the shapes that carry a key per leaf, and
+    /// on the paths a trait dictionary, a destructor and a clone the uniqueness pass made first
+    /// take to a reference-counting site.
+    #[test]
+    fn test_annotations_of_leaf_keyed_shapes_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/shapes/main.fix");
         test_source(source, Configuration::develop_mode());
     }
 }
