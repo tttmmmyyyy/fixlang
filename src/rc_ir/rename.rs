@@ -1,5 +1,5 @@
-//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`,
-//! `unique_check_elim`). Because RC IR names are globally unique, a clone must give every binder a fresh
+//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`, and the
+//! specializing passes through `specialization`). Because RC IR names are globally unique, a clone must give every binder a fresh
 //! name so the clone's names do not collide with the original's. The single entry point,
 //! `fresh_rename_function`, clones a function's parameters, capture, and body this way; `pass_tag`
 //! distinguishes each cloning pass's fresh names from the others'.

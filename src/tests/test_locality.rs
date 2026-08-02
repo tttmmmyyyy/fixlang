@@ -261,6 +261,15 @@ mod integration_tests {
         // Reading a boxed element out of the array that holds the global retains that element.
         let mixed = binding_vars(&dump, "mixed");
         assert_op_state(&dump, "array_get", &mixed[0], "");
+
+        // Overwriting an element releases the element it replaces, which the array's own locality
+        // says nothing about: the write over the array holding the global keeps its dispatch, and
+        // the same write over an array of locally built elements drops it. This is the one
+        // reference-counting target that turns on the deep fact alone.
+        let overwritten = binding_vars(&dump, "overwritten");
+        let rewritten = binding_vars(&dump, "rewritten");
+        assert_op_state(&dump, "array_set[unique]", &overwritten[0], "");
+        assert_op_state(&dump, "array_set[unique]", &rewritten[0], "local");
     }
 
     /// Verifies the annotation of an operation's internal reference counting on the two shapes that

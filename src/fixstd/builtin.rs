@@ -6433,7 +6433,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
         type_env: &TypeEnv,
     ) -> ExtShape {
         // It applies a function to the payload and puts the result back, and where the tag does not
-        // match it returns the argument union itself. Both rule out `merge`.
+        // match it returns the argument union itself. Both rule out `fresh_holding`.
         ExtShape::always(result_ty, type_env)
     }
 
@@ -6558,7 +6558,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
         type_env: &TypeEnv,
     ) -> ExtShape {
         // It aborts (`unreachable` under `--no-runtime-check`), so there is no result value and every
-        // claim about one holds vacuously. Not `merge`: its operand is the message's `Array U8`, whose
+        // claim about one holds vacuously. Not `fresh_holding`: its operand is the message's `Array U8`, whose
         // condition would otherwise flow into the arms joined with this one.
         ExtShape::bottom(result_ty, type_env)
     }
@@ -6763,7 +6763,7 @@ pub struct InlineLLVMIsUniqueFunctionBody {
 pub const IS_UNIQUE_VALUE_ARG: usize = 0;
 
 /// The locality of the result of a uniqueness test, `(flag, value)`. The flag holds no boxed leaf,
-/// so every result leaf descends through the value and names the operand's own object. Not `merge`:
+/// so every result leaf descends through the value and names the operand's own object. Not `fresh_holding`:
 /// such an op reads the operand's reference count without uniquing it, so a shared or global value
 /// comes straight back out.
 fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {

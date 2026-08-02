@@ -301,7 +301,7 @@ impl ExtShape {
     /// The middle case is where the contract bites: a global object never passes a uniqueness check
     /// (`build_branch_by_is_unique` sends its global arm to the shared arm), so a force-uniqued
     /// container is local. An op that hands back an operand's object *without* that backing must
-    /// not declare `merge`.
+    /// not declare `fresh_holding`.
     pub fn fresh_holding(
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -323,7 +323,7 @@ impl ExtShape {
 
     /// The bottom: every leaf proved local, root and all. It reads no operand, which is what an op
     /// that diverges needs — it returns no value, so any claim about one is vacuously true, and the
-    /// bottom is the most precise such claim. An op that merely allocates declares `merge` instead.
+    /// bottom is the most precise such claim. An op that merely allocates declares `fresh_holding` instead.
     pub fn bottom(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
         ExtShape::uniform(result_ty, type_env, LeafCond::bottom())
     }

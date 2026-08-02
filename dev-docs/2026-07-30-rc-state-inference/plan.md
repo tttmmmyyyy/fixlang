@@ -92,9 +92,10 @@ part is not optional.
 ### Stages
 
 1. **Non-threaded builds, every site that reads the state byte** — `Retain`/`Release`, the
-   `is_unique` checks, and `Destructure`'s own reference counting. The ceiling table above was
-   measured with all three removed, so only an implementation covering all three is comparable to
-   it. Designed in `design.md`.
+   `is_unique` checks, `Destructure`'s own reference counting, a boxed union's `match` arm, and the
+   reference counting an operation performs inside itself. The ceiling table above was measured with
+   every one of them removed, so only an implementation covering them all is comparable to it.
+   Designed in `design.md`, which lands them in four steps.
 2. **Threaded builds** — `threaded.md`. The same lattice, but `mark_threaded` breaks the
    assign-once model through aliases (an object already bound can be marked through another
    reference), so this needs escape reasoning. No threaded program exists in the repository, so
@@ -163,7 +164,10 @@ prove most of it.
 
 ## Not in this work
 
-- Moving the empty-array and string-literal storages to static memory. Stage 1's proof reads
-  `Fresh` as "not reachable from a global", which that work would break; the two have to be
-  sequenced.
-- A changelog entry. The observable behaviour does not change.
+- Moving the empty-array and string-literal storages to static memory. The proof reads a freshly
+  allocated object as local because `create_obj` initializes the state byte to `LOCAL`; a storage
+  placed in static memory never goes through `create_obj`, so that work would open a fourth door and
+  the two have to be sequenced.
+- A changelog entry for the optimization itself. The observable behaviour does not change. The
+  initializer contract the work adds to `boxed_from_retained_ptr` is a documented rule, so that one
+  is written.

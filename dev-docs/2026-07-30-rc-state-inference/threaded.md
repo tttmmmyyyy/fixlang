@@ -21,7 +21,8 @@
 
 ```
 benchmark/speedtest/cases/*/fixproj.toml   46 件すべて threaded の行はコメントアウト
-mark_threaded を使うコード                 src/tests/test_provenance/cases/mark_threaded/ のみ
+mark_threaded を使うコード                 テストのフィクスチャのみ（RC IR ダンプ用と、
+                                           ビルド設定の検査用）
 ```
 
 `plan.md` の「threaded アームは 1 度も取られない」は非 threaded ビルドでの測定なので、threaded

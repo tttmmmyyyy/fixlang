@@ -235,8 +235,8 @@ provenance / uniqueness と同じ 2 層構造で、名前も層ごとに分け�
 
 | | leaf 1 個 | 値 1 個 | 対応する既存の型 |
 | --- | --- | --- | --- |
-| **解決後** | `Locality` = `DeepLocal` / `RootLocal` / `MayExt` | `LocalityKey(Map<FieldPath, Locality>)` | `SharingVerdict` / `Uniqueness` |
-| **記号的** | `LeafCond` = `root` と `deep` の 2 条件 | `ExtShape(Map<FieldPath, LeafCond>)` | `LeafOrigins` / `Provenance` |
+| **解決後** | `Locality` = `DeepLocal` / `RootLocal` / `MayExt` | `LocalityKey(LeafKey<Locality>)` | `SharingVerdict` / `Uniqueness` |
+| **記号的** | `LeafCond` = `root` と `deep` の 2 条件 | `ExtShape(LeafMap<LeafCond>)` | `LeafOrigins` / `Provenance` |
 
 ```
 enum Locality { DeepLocal, RootLocal, MayExt }
@@ -264,10 +264,12 @@ struct LeafCond {
 
 /// 値 1 個ぶんの記号的な値。その型の boxed leaf パスごとに条件を持つ。
 /// 関数のサマリと `result_locality` の戻り値が同じこの型で、`IfAny` の添字が指す先だけが違う。
-struct ExtShape(Map<FieldPath, LeafCond>);
+/// `LeafMap<T>` は provenance と共有する葉ごとのコンテナ（「ファイル」の `leaf_map.rs`）。
+struct ExtShape(LeafMap<LeafCond>);
 
-/// 値 1 個ぶんの解決後の値。specialize のキーの成分になる。
-struct LocalityKey(Map<FieldPath, Locality>);
+/// 値 1 個ぶんの解決後の値。specialize のキーの成分になる。`LeafKey<T>` は同じ内容を
+/// 正準順に持つ形で、等しい形が順序によらず同じハッシュ・同じ比較になる。
+struct LocalityKey(LeafKey<Locality>);
 ```
 
 **この文書では、`DeepLocal`/`RootLocal`/`MayExt` は解決後の層でだけ、`Always`/`IfAny` は記号的な
@@ -412,7 +414,7 @@ impl ExtShape {
     /// 結果の全 leaf は `root = IfAny(∅)`、`deep` は全オペランドの全 leaf の `deep` の join。
     /// **契約（前提 P5）**: この op が返すコンテナは、新規確保・この op が直前に unique 化
     /// したもの・呼び出し側が uniqueness を保証した in-place 更新、のいずれかである。
-    fn merge(result_ty, arg_tys, type_env) -> ExtShape;
+    fn fresh_holding(result_ty, arg_tys, type_env) -> ExtShape;
     /// 結果の全 leaf が `root = deep = Always`。
     fn always(result_ty, type_env) -> ExtShape;
     /// 結果の全 leaf が `root = deep = IfAny(∅)`。**オペランドを見ない**のが要点で、発散して
@@ -1134,8 +1136,10 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 | `src/ast/inline_llvm.rs` | `LLVMGen::result_locality`（既定実装なし）、`internal_rc_targets`、`assuming_local` / `assumes_local` |
 | `src/fixstd/builtin.rs` | 全 77 op の `result_locality`、注釈を受ける 22 op の属性と `assuming_local`（unique-check を宣言する 18 と、内部 RC だけを宣言する 4） |
 | `src/rc_ir/unique_check_elim.rs` | skeleton を括り出し、uniqueness 固有部分だけ残す |
-| `src/rc_ir/codegen.rs` | `Retain`/`Release`/`Destructure` の `RcState::Local` アーム、`develop_mode` assert |
-| `src/generator.rs` | 状態を見る retain/release/is_unique 生成ヘルパ |
+| `src/rc_ir/codegen.rs` | ノードの `RcState` を下のヘルパへ通す |
+| `src/generator.rs` | 状態を見る retain/release/is_unique 生成ヘルパ、`develop_mode` の実行時 assert |
+| `src/object.rs` | 構造体フィールドの取り出し、配列バッファの読み書きと複製、union の retain、traverser 生成への状態の配線 |
+| `src/ast/types.rs` | `traverser_name` が状態をキーに含める（`trav_release_local_<hash>`） |
 | `src/rc_ir/` の `lower.rs`, `print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `ownership.rs`, `provenance.rs`, `rename.rs`, `unique_check_elim.rs` | `Destructure` のフィールド追加に追従（`RcExpr::Destructure` を触る全 12 ファイルから、別行に挙げた `ast.rs` と `codegen.rs` を除いたもの） |
 | `src/build/build_object_files.rs` | `specialize` の後に locality パスを差し込む |
 | `src/rc_ir/mod.rs` | 新規 3 モジュールの宣言 |

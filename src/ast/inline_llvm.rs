@@ -151,7 +151,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// `ExtShape::build_shape` writes a leaf-by-leaf one.
     ///
     /// Every op states its own; the choice among them is the author's to make, because both ways of
-    /// defaulting fail silently. `merge` would pass an op that produces a boxed object its operands
+    /// defaulting fail silently. `fresh_holding` would pass an op that produces a boxed object its operands
     /// do not reach, which is the direction of error that corrupts memory; `always` would cost
     /// precision with no symptom to notice it by.
     fn result_locality(
