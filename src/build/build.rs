@@ -1,69 +1,15 @@
-use crate::ast::name::FullName;
-use crate::ast::program::Program;
 use crate::build::build_object_files::build_object_files;
 use crate::configuration::{Configuration, LinkType, OutputFileType};
-use crate::constants::{INTERMEDIATE_PATH, MARK_THREADED_NAME, STD_NAME};
+use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
-use crate::misc::{info_msg, Set};
-use crate::parse::sourcefile::Span;
+use crate::misc::info_msg;
 use build_time::build_time_utc;
 use rand::Rng;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-
-/// Reports the calls of `Std::mark_threaded` a program makes when multi-threading is off.
-///
-/// Multi-threading is what gives an object a mode to be put into, so `Std::mark_threaded` has
-/// nothing to work with without it. The setting belongs to the program being built, so a library
-/// that needs multi-threading reaches the user through this: the calls reported are the ones asking
-/// for the setting, in the files they were written in.
-///
-/// The program is checked before it is optimized, while each expression still carries the source it
-/// came from.
-fn check_multi_threading_requirement(
-    program: &Program,
-    config: &Configuration,
-) -> Result<(), Errors> {
-    if config.threaded {
-        return Ok(());
-    }
-    let mark_threaded = FullName::from_strs(&[STD_NAME], MARK_THREADED_NAME);
-    // A generic value is instantiated once per type it is used at, and every instance answers to
-    // the name it was written as.
-    let instances = program
-        .symbols
-        .values()
-        .filter(|symbol| symbol.generic_name == mark_threaded)
-        .map(|symbol| symbol.name.clone())
-        .collect::<Set<_>>();
-    if instances.is_empty() {
-        return Ok(());
-    }
-    let mut uses: Vec<(&FullName, Option<Span>)> = vec![];
-    for symbol in program.symbols.values() {
-        let expr = symbol.expr.as_ref().unwrap();
-        expr.walk_var_uses(&mut |var, src| {
-            if instances.contains(&var.name) {
-                uses.push((&symbol.name, src.clone()));
-            }
-        });
-    }
-    // The symbols are held in a map, so an order is chosen here to keep the report the same from
-    // one build to the next.
-    uses.sort_by(|a, b| a.0.cmp(b.0));
-    let srcs = uses.iter().map(|(_, src)| src).collect::<Vec<_>>();
-    Err(Errors::from_msg_srcs(
-        format!(
-            "`{}` requires multi-threading. Enable it by `threaded = true` in the project file of \
-             the program being built, or by the `--threaded` compiler option.",
-            mark_threaded.to_string()
-        ),
-        &srcs,
-    ))
-}
 
 /// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
 fn run_gcc(com: &mut Command) {
@@ -95,7 +41,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     if program.deferred_errors.has_error() {
         return Err(program.deferred_errors);
     }
-    check_multi_threading_requirement(&program, &config)?;
+    program.check_multi_threading_requirement(&config)?;
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];
