@@ -1,0 +1,10 @@
+module Main;
+
+import ThreadingLib;
+
+main : IO ();
+main = (
+    let value = ThreadingLib::publish(Box::make(42));
+    let values = ThreadingLib::publish_array([1, 2, 3]);
+    println((value.@value + values.@(0)).to_string)
+);

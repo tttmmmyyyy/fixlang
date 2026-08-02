@@ -14,11 +14,12 @@ use crate::{
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
 };
+use regex::Regex;
 use reqwest::Url;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::{self, File},
     hash::Hash,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -341,7 +342,7 @@ impl ProjectFile {
         for dep in &deps {
             if let Some(path) = &dep.path {
                 let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
-                if let Ok(content) = std::fs::read_to_string(&proj_file_path) {
+                if let Ok(content) = fs::read_to_string(&proj_file_path) {
                     data += &content;
                 }
             }
@@ -404,6 +405,9 @@ impl ProjectFile {
         Ok(())
     }
 
+    /// Checks the fields the build reads from the project file: the project name, `version` and
+    /// `fix_version`, the dependency entries and the uniqueness of their names, and
+    /// `disable_cpu_features`. Each error points at the project file.
     pub fn validate(&self) -> Result<(), Errors> {
         // Validate the general section.
 
@@ -457,11 +461,11 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Validate `disable_cpu_features`.
-    pub fn validate_disable_cpu_features(dcfs: &[String]) -> Result<(), Errors> {
-        for feature in dcfs {
+    /// Checks that every entry of `disable_cpu_features` is a valid regular expression.
+    pub fn validate_disable_cpu_features(disable_cpu_features: &[String]) -> Result<(), Errors> {
+        for feature in disable_cpu_features {
             // Check if each feature is a valid regex.
-            if let Err(e) = regex::Regex::new(feature) {
+            if let Err(e) = Regex::new(feature) {
                 return Err(Errors::from_msg(format!(
                     "Invalid regex in `disable-cpu-feature`: {}",
                     e
@@ -471,10 +475,12 @@ impl ProjectFile {
         Ok(())
     }
 
-    // The source-file entries listed in the project file, each paired (via
-    // `Spanned`) with its byte range in the project file. Does not include
-    // files of dependent projects.
-    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    /// The source-file entries listed in this project's own project file, each paired (via
+    /// `Spanned`) with its byte range in that file.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     fn source_file_entries(&self, mode: BuildConfigType) -> Vec<&Spanned<PathBuf>> {
         let mut entries: Vec<&Spanned<PathBuf>> = self.build.files.iter().collect();
         if mode == BuildConfigType::Test {
@@ -485,8 +491,11 @@ impl ProjectFile {
         entries
     }
 
-    // Get source files of this project. Does not include files of dependent projects.
-    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    /// The paths of this project's own source files, resolved against the project directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
         self.source_file_entries(mode)
             .iter()
@@ -494,11 +503,13 @@ impl ProjectFile {
             .collect()
     }
 
-    // Check that every source file listed in the project file exists on disk.
-    // Each error points at the offending entry within the project file, so
-    // editors can surface a problem whose cause is the project file rather
-    // than any source code. `mode` selects whether `[build.test]` files are
-    // included.
+    /// Checks that every source file listed in the project file exists on disk. Each error points at
+    /// the offending entry, so an editor attaches the problem to the project file, which is where
+    /// its cause is.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also checks the files listed in the `[build.test]` section.
     fn check_source_files_exist(&self, mode: BuildConfigType) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for entry in self.source_file_entries(mode) {
@@ -542,11 +553,11 @@ impl ProjectFile {
         }
     }
 
-    // Update a configuration from a project file.
-    // Reads `self.role` to decide whether this project's dependent-only fields are skipped,
-    // and `self.source` to tag preliminary_commands for trust-store lookup. Loaders
-    // (`read_root_file` / `DependencyLockFileEntry::project_file`) are responsible for
-    // populating both before calling this method.
+    /// Updates a configuration from a project file.
+    ///
+    /// `self.role` decides whether the fields that only the root project contributes are skipped,
+    /// and `self.source` tags `preliminary_commands` for trust-store lookup. Both must be populated
+    /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
         let source = self
@@ -689,20 +700,6 @@ impl ProjectFile {
             );
         }
 
-        // Set threaded-mode.
-        if let Some(threaded) = self.build.threaded {
-            if threaded {
-                config.set_threaded();
-            }
-        }
-        if mode == BuildConfigType::Test {
-            if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
-                if threaded {
-                    config.set_threaded();
-                }
-            }
-        }
-
         // Set preliminary commands.
         let work_dir = to_absolute_path(
             self.path
@@ -748,6 +745,20 @@ impl ProjectFile {
         // From here on, only the settings in the project file of the root project are reflected.
         if is_dependent_proj {
             return Ok(());
+        }
+
+        // Set threaded-mode.
+        if let Some(threaded) = self.build.threaded {
+            if threaded {
+                config.set_threaded();
+            }
+        }
+        if mode == BuildConfigType::Test {
+            if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
+                if threaded {
+                    config.set_threaded();
+                }
+            }
         }
 
         // Set debug mode.
@@ -859,7 +870,7 @@ impl ProjectFile {
             LockFileType::Test => TRY_FIX_DEPS_UPDATE_TEST,
             LockFileType::Lsp => TRY_FIX_DEPS_UPDATE_TEST, // LSP uses auto-update, so this message is rarely shown
         };
-        let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
+        let content = fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to read the lock file: {:?}. {}",
                 e, msg_try_fix_deps_update
@@ -886,7 +897,7 @@ impl ProjectFile {
         let content = toml::to_string(lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
         let lock_file_path = get_lock_file_path(mode);
-        std::fs::write(lock_file_path, content)
+        fs::write(lock_file_path, content)
             .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
         Ok(())
     }
@@ -922,7 +933,7 @@ impl ProjectFile {
                 // Ensure the parent directory exists (e.g., .fixlang/ for LSP lock file).
                 let lock_file_path = get_lock_file_path(mode);
                 if let Some(parent) = Path::new(lock_file_path).parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| {
+                    fs::create_dir_all(parent).map_err(|e| {
                         Errors::from_msg(format!("Failed to create directory: {:?}", e))
                     })?;
                 }
@@ -1027,7 +1038,7 @@ impl ProjectFile {
         // Replace `{PLACEHOLDER_FIX_VERSION}` to the current version of Fix.
         let content = content.replace("{PLACEHOLDER_FIX_VERSION}", env!("CARGO_PKG_VERSION"));
 
-        std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
+        fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
                 PROJECT_FILE_PATH, e
@@ -1041,7 +1052,7 @@ impl ProjectFile {
             )));
         }
         let main_fix_content = include_str!("../docs/main_template.fix");
-        std::fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
+        fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
             Errors::from_msg(format!("Failed to create file \"main.fix\": {:?}.", e))
         })?;
 
@@ -1052,7 +1063,7 @@ impl ProjectFile {
             )));
         }
         let test_fix_content = include_str!("../docs/test_template.fix");
-        std::fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
+        fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
             Errors::from_msg(format!("Failed to create file \"test.fix\": {:?}.", e))
         })?;
 
@@ -1211,7 +1222,7 @@ impl ProjectFile {
         }
 
         // Write the added dependencies to the project file.
-        let mut file = std::fs::OpenOptions::new()
+        let mut file = fs::OpenOptions::new()
             .append(true)
             .open(&self.path)
             .map_err(|e| {
@@ -1251,7 +1262,7 @@ impl ProjectFile {
             })?
         } else {
             // The location is a file path.
-            std::fs::read_to_string(loc).map_err(|e| {
+            fs::read_to_string(loc).map_err(|e| {
                 Errors::from_msg(format!("Failed to read registry file \"{}\": {:?}", loc, e))
             })?
         };

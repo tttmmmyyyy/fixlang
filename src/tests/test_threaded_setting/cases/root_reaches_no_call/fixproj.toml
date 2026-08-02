@@ -1,0 +1,11 @@
+[general]
+name = "root-reaches-no-call"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "threading-lib"
+path = "../threading_lib"

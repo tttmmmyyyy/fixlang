@@ -6,11 +6,21 @@ use crate::error::Errors;
 use crate::misc::info_msg;
 use build_time::build_time_utc;
 use rand::Rng;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-// Build the program specified in the configuration.
+/// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
+fn run_gcc(com: &mut Command) {
+    let output = com.output().expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+}
+
+/// Builds the program specified in the configuration, linking the object files and the runtime into
+/// the output file.
 pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
 
@@ -31,6 +41,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     if program.deferred_errors.has_error() {
         return Err(program.deferred_errors);
     }
+    program.check_multi_threading_requirement(&config)?;
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];
@@ -40,7 +51,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     let mut libs_opts = vec![];
     let mut warned_on_mac = false;
     for (lib_name, link_type) in &config.linked_libraries {
-        if std::env::consts::OS != "macos" {
+        if env::consts::OS != "macos" {
             match link_type {
                 LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
                 LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
@@ -100,11 +111,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com = com.arg("-fPIC");
         }
-        let output = com.output().expect("Failed to run gcc.");
-
-        if output.stderr.len() > 0 {
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-        }
+        run_gcc(com);
 
         // Rename the temporary file to the final file.
         fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
@@ -121,7 +128,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     } else {
         com.arg("-no-pie");
     }
-    if std::env::consts::OS == "macos" {
+    if env::consts::OS == "macos" {
         com.arg("-Wl,-dead_strip");
     } else {
         com.arg("-Wl,--gc-sections");
@@ -136,10 +143,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     com.arg(runtime_obj_path.to_str().unwrap())
         .args(library_search_path_opts)
         .args(libs_opts);
-    let output = com.output().expect("Failed to run gcc.");
-    if output.stderr.len() > 0 {
-        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    }
+    run_gcc(&mut com);
 
     Ok(())
 }

@@ -2435,7 +2435,9 @@ contains_byte = |c, arr| (
 
 Fix has no function that starts a thread or creates a lock. A multi-threaded program uses the [FFI](#foreign-function-interface-ffi) to drive a threading library such as pthread. [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation, providing asynchronous tasks and a shared variable on top of pthread.
 
-Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, which lowers the run-time performance of the program. Leave it off for a single-threaded program. A library whose project file sets `threaded` turns it on for every project that depends on it.
+Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, which lowers the run-time performance of the program. Leave it off for a single-threaded program.
+
+The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::mark_threaded` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
 
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
@@ -2870,7 +2872,7 @@ The following table shows how each setting is handled.
             <td>threaded</td>
             <td>--threaded</td>
             <td>Merge (OR)</td>
-            <td>Affects</td>
+            <td>Does not affect</td>
             <td>Enable multi-threading</td>
         </tr>
         <tr>
@@ -2926,8 +2928,7 @@ The following table shows how each setting is handled.
 </table>
 
 Note:
-For some settings, such as optimization level and debugging information generation, you might expect that settings in dependent projects would take effect only within the scope of those dependent projects, rather than not affecting the main project at all.
-However, the Fix build system currently does not have a mechanism to separate compilation units on a per-dependent-project basis, so settings like optimization level and debugging information generation use a single value across the entire build.
+The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build, which the compiler options and the main project's project file decide.
 
 ### Approval of `preliminary_commands`
 
