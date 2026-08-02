@@ -10,6 +10,7 @@ mod test_assert;
 mod test_associated_type;
 mod test_basic;
 mod test_bool_union;
+mod test_build_exit_status;
 mod test_check;
 mod test_debug_info;
 mod test_deep_expression;

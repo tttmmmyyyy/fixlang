@@ -12,11 +12,25 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
-fn run_gcc(com: &mut Command) {
-    let output = com.output().expect("Failed to run gcc.");
+///
+/// # Arguments
+/// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
+///   a failure says which of the compiler's several `gcc` calls it was.
+fn run_gcc(com: &mut Command, step: &str) -> Result<(), Errors> {
+    let output = com
+        .output()
+        .map_err(|e| Errors::from_msg(format!("Failed to {}: {:?}", step, e)))?;
     if output.stderr.len() > 0 {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     }
+    if !output.status.success() {
+        return Err(Errors::from_msg(format!(
+            "Failed to {}: gcc exited with code {}.",
+            step,
+            output.status.code().unwrap_or(-1)
+        )));
+    }
+    Ok(())
 }
 
 /// Builds the program specified in the configuration, linking the object files and the runtime into
@@ -111,7 +125,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com = com.arg("-fPIC");
         }
-        run_gcc(com);
+        run_gcc(com, "compile the runtime")?;
 
         // Rename the temporary file to the final file.
         fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
@@ -143,7 +157,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     com.arg(runtime_obj_path.to_str().unwrap())
         .args(library_search_path_opts)
         .args(libs_opts);
-    run_gcc(&mut com);
+    run_gcc(&mut com, "link the output file")?;
 
     Ok(())
 }
