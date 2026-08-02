@@ -7253,8 +7253,8 @@ impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The third door: the value is rebuilt from a raw pointer, which says nothing about the
-        // state of the graph it names.
+        // A door out of the local state: the value is rebuilt from a raw pointer, which says
+        // nothing about the state of the graph it names.
         ExtShape::always(result_ty, type_env)
     }
 
@@ -8668,7 +8668,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The second door: it marks the argument's whole graph threaded.
+        // A door out of the local state: it marks the argument's whole graph threaded.
         ExtShape::always(result_ty, type_env)
     }
 

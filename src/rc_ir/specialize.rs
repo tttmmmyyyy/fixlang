@@ -25,13 +25,18 @@ pub struct CloneRegistry<K> {
     clone_names: Map<(FuncRef, K), FuncRef>,
     /// Every `(function, key)` already enqueued, so each is materialized once.
     requested: Set<(FuncRef, K)>,
+    /// The requested clones not yet handed out for materialization.
     worklist: VecDeque<(FuncRef, K)>,
+    /// The source of the number distinguishing one fresh name from the next, shared by the clone
+    /// names and the local names a fresh clone's body is renamed to.
     fresh_name_counter: u64,
     /// The letter marking this pass's fresh names apart from another pass's.
     tag: &'static str,
 }
 
 impl<K: Clone + Eq + Hash> CloneRegistry<K> {
+    /// An empty registry whose fresh names carry `pass_tag`, which tells this pass's names apart
+    /// from those another specializing pass minted.
     pub fn new(pass_tag: &'static str) -> CloneRegistry<K> {
         CloneRegistry {
             clone_names: Map::default(),

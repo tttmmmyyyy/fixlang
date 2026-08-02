@@ -82,7 +82,9 @@ pub struct Atom {
     /// The index of the input: a parameter, then the capture past them, in a summary; an operand
     /// slot in an op's `locality_flow`.
     pub input: usize,
+    /// The boxed leaf of that input the test is about, as a path into the input's type.
     pub path: FieldPath,
+    /// Which of that leaf's two facts the test reads.
     pub aspect: Aspect,
 }
 
@@ -192,7 +194,9 @@ impl ExtCond {
 /// non-local" reads `deep` alone.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LeafCond {
+    /// When the object this leaf points to is itself non-local.
     pub root: ExtCond,
+    /// When this leaf reaches a non-local object, its own included.
     pub deep: ExtCond,
 }
 
@@ -236,10 +240,12 @@ impl LeafCond {
         }
     }
 
+    /// Pointwise join: what holds of a leaf that is either of two.
     pub fn join(&self, other: &LeafCond) -> LeafCond {
         LeafCond::new(self.root.join(&other.root), self.deep.join(&other.deep))
     }
 
+    /// Substitute the operands' shapes for the atoms of both conditions.
     pub fn substitute(&self, operands: &[ExtShape]) -> LeafCond {
         LeafCond::new(
             self.root.substitute(operands),
@@ -461,18 +467,25 @@ impl LocalityKey {
 /// non-threaded build), so the environment only grows and a branch needs no join of exit
 /// environments.
 struct Walk<'a> {
+    /// The program as it stands before this pass: where a direct call's callee is looked up, and
+    /// where each clone's body is read from.
     prog: &'a RcProgram,
+    /// Where a type's boxed leaf paths, and whether a type is boxed, are read from.
     type_env: &'a TypeEnv,
     /// Each function's result, symbolic in its inputs, from the phase-1 fixed point.
     summaries: &'a Map<FuncRef, ExtShape>,
+    /// The symbolic locality of every local binding the walk has passed.
     env: Map<FullName, ExtShape>,
+    /// What this walk does besides computing shapes.
     mode: Mode<'a>,
 }
 
 /// What the walk replaces in a `let`'s right-hand side: a call's callee, routed to a clone, or an
 /// operation, annotated as acting on local objects.
 enum Rewritten {
+    /// The clone of the callee the call is routed to.
     Callee(RcVar),
+    /// The operation, annotated as acting on local objects.
     Op(Box<dyn LLVMGen>),
 }
 
@@ -510,10 +523,13 @@ impl<'a> Walk<'a> {
         self.walk(&func.body)
     }
 
+    /// Walk one node and everything it continues into, on a stack grown to fit a deep body.
+    /// Returns the shape of the value the node evaluates to and the node, rewritten in clone mode.
     fn walk(&mut self, node: &RcExprNode) -> (ExtShape, RcExprNode) {
         grow_stack(|| self.walk_inner(node))
     }
 
+    /// The body of `walk`, which owns the stack growth.
     fn walk_inner(&mut self, node: &RcExprNode) -> (ExtShape, RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Ret(x) => (self.shape_of(x), node.clone()),
@@ -583,11 +599,12 @@ impl<'a> Walk<'a> {
     }
 
     /// The symbolic locality of an operand. A global's graph was marked global by its initializer —
-    /// the first of the three doors, and the only rule that reads whether a name is local. It has to
-    /// sit here, at the one place an operand is resolved, because a global reaches every operand
-    /// position: the right-hand side of a `let`, an argument, a scrutinee, a destructured container,
-    /// and — after borrow-ification introduces a release for a value the callee borrows — the target
-    /// of a `Release`. A local is bound before it is read, so the environment holds it.
+    /// one of the three doors out of the local state, and the only rule that reads whether a name is
+    /// local. It has to sit here, at the one place an operand is resolved, because a global reaches
+    /// every operand position: the right-hand side of a `let`, an argument, a scrutinee, a
+    /// destructured container, and — after borrow-ification introduces a release for a value the
+    /// callee borrows — the target of a `Release`. A local is bound before it is read, so the
+    /// environment holds it.
     fn shape_of(&self, var: &RcVar) -> ExtShape {
         if var.name.is_global() {
             return ExtShape::always(&var.ty, self.type_env);

@@ -151,8 +151,9 @@ pub enum RcTarget {
 }
 
 /// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
-/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`. `tag` is `Some` for a variant arm, whose payload is that
-/// variant's value; it is `None` for a catch-all arm, whose payload is the whole scrutinee.
+/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`.
+/// `tag` is `Some` for a variant arm, whose payload is that variant's value; it is `None` for a
+/// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
 #[derive(Clone)]

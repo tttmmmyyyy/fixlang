@@ -885,6 +885,7 @@ impl ObjectFieldType {
         gc.builder().position_at_end(end_bb);
     }
 
+    /// Increment the reference count of the payload a union buffer holds, `amount` times.
     pub fn retain_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -2065,6 +2066,8 @@ pub fn create_traverser<'c, 'm>(
     Some(func)
 }
 
+/// Emit the body of a traverser: perform `work` on every boxed object `obj` directly owns, walking
+/// through its unboxed structure to reach them.
 fn build_traverse<'c, 'm>(
     obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
