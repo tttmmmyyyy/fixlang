@@ -56,7 +56,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_realloc_function(gc, mode);
 }
 
-/// Which part of a runtime function a `build_*_function` call emits.
+/// Which part of a runtime function a call in `build_runtime` emits.
 ///
 /// The runtime functions split into two groups: those provided externally (by
 /// the C runtime, e.g. `malloc`), which need only a declaration, and those

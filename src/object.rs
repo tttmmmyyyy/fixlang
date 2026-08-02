@@ -565,12 +565,12 @@ impl ObjectFieldType {
     }
 
     // Panic if size is negative
-    pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
+    pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, size: IntValue<'c>) {
         let is_neg_size = gc
             .builder()
             .build_int_compare(
                 IntPredicate::SLT,
-                len,
+                size,
                 gc.context.i64_type().const_zero(),
                 "is_neg_size",
             )
@@ -579,7 +579,7 @@ impl ObjectFieldType {
             gc,
             is_neg_size,
             RUNTIME_NEGATIVE_ARRAY_SIZE,
-            &[len.into()],
+            &[size.into()],
             "neg_size",
         );
     }
