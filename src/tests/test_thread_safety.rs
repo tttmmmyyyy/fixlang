@@ -67,7 +67,7 @@ fn races_reported(output: &Output) -> usize {
 }
 
 /// Skips the caller unless this platform can run an instrumented program, saying so.
-fn thread_sanitizer_available(test_name: &str) -> bool {
+fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     if platform_thread_sanitizer_supported() {
         return true;
     }
@@ -116,7 +116,7 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
 
 #[test]
 fn test_shared_reference_counting_is_race_free_unoptimized() {
-    if !thread_sanitizer_available(function_name!()) {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
     assert_shared_reference_counting_is_race_free("none");
@@ -127,7 +127,7 @@ fn test_shared_reference_counting_is_race_free_optimized() {
     // The optimizations that elide a reference count -- the uniqueness checks specialization
     // removes, the counting borrow-ification cancels -- run only here, so this is where a mistake
     // in one of them would show up as a race the unoptimized build never sees.
-    if !thread_sanitizer_available(function_name!()) {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
     assert_shared_reference_counting_is_race_free("max");
@@ -139,7 +139,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
     // instrumentation has to be part of what names them. Were it left out, a program built for use
     // and then built again to be checked would be checked only as far as its cached objects went,
     // which is not at all, and the run would come back clean.
-    if !thread_sanitizer_available(function_name!()) {
+    if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
     let (_temp_dir, project_dir) = setup_test_env();

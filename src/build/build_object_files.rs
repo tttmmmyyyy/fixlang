@@ -358,7 +358,7 @@ pub fn build_object_files<'c>(
             }
 
             // LLVM level optimization.
-            optimize_and_verify(gc.module, &target_machine, &config);
+            optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
@@ -593,7 +593,7 @@ fn run_passes_or_panic(
     }
 }
 
-fn optimize_and_verify<'c>(
+fn optimize_instrument_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,
     config: &Configuration,
@@ -621,7 +621,7 @@ fn instrument_for_sanitizer<'c>(
     let Some((attribute_name, passes)) = config.sanitizer.instrumentation() else {
         return;
     };
-    mark_functions(module, attribute_name);
+    add_attribute_to_defined_functions(module, attribute_name);
     run_passes_or_panic(module, passes, target_machine);
 }
 
@@ -630,7 +630,7 @@ fn instrument_for_sanitizer<'c>(
 /// The instrumentation passes rewrite the functions carrying their attribute and leave the rest
 /// alone, which is how clang lets a translation unit opt out. Nothing else here sets it, so without
 /// this the passes would run over the module and change nothing.
-fn mark_functions<'c>(module: &Module<'c>, attribute_name: &str) {
+fn add_attribute_to_defined_functions<'c>(module: &Module<'c>, attribute_name: &str) {
     let attribute = module
         .get_context()
         .create_enum_attribute(enum_attribute_kind_id(attribute_name), 0);
