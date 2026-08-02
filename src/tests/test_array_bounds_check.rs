@@ -489,27 +489,27 @@ pub fn test_array_write_clones_without_rechecking_the_capacity() {
         "the build should check the capacity where the program chooses one"
     );
 
-    let writes = llvm_function_bodies(&ir, "@\"Std::Array::set#");
+    let write_fn_bodies = llvm_function_bodies(&ir, "@\"Std::Array::set#");
     assert!(
-        !writes.is_empty(),
+        !write_fn_bodies.is_empty(),
         "the build should emit `Std::Array::set`"
     );
-    let allocating = writes
+    let allocating_bodies = write_fn_bodies
         .iter()
         .filter(|body| body.contains(&format!("@{}(", RUNTIME_MALLOC)))
         .collect::<Vec<_>>();
     assert!(
-        !allocating.is_empty(),
+        !allocating_bodies.is_empty(),
         "`Std::Array::set` should allocate, which is the clone the shared answer takes"
     );
-    let rechecking = allocating
+    let rechecking_bodies = allocating_bodies
         .iter()
         .filter(|body| body.contains(&overflow_call))
         .collect::<Vec<_>>();
     assert!(
-        rechecking.is_empty(),
+        rechecking_bodies.is_empty(),
         "the clone in `Std::Array::set` should allocate without checking the capacity again, \
          but {} of its functions do",
-        rechecking.len()
+        rechecking_bodies.len()
     );
 }

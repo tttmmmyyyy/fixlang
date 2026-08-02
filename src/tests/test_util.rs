@@ -158,16 +158,16 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
 pub fn llvm_function_bodies(ir: &str, name_part: &str) -> Vec<String> {
     let mut bodies = vec![];
-    let mut current: Option<Vec<&str>> = None;
+    let mut current_body: Option<Vec<&str>> = None;
     for line in ir.lines() {
         if line.starts_with("define ") {
-            current = line.contains(name_part).then(Vec::new);
+            current_body = line.contains(name_part).then(Vec::new);
         }
-        if let Some(body) = current.as_mut() {
+        if let Some(body) = current_body.as_mut() {
             body.push(line);
         }
         if line == "}" {
-            if let Some(body) = current.take() {
+            if let Some(body) = current_body.take() {
                 bodies.push(body.join("\n"));
             }
         }
