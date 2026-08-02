@@ -195,8 +195,8 @@ impl Substitution {
     // Apply substitution to type
     //
     // A type none of whose variables this substitution replaces is returned as
-    // it came, so that the common case of a substitution that says nothing
-    // about a type costs a walk rather than a rebuild.
+    // it came: the common case of a substitution that says nothing about a type
+    // walks the type and hands back the same node.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -901,7 +901,7 @@ impl TypeCheckContext {
         }
     }
 
-    // The substitution that sends each of `tyvars` to a fresh type variable of the same kind.
+    /// The substitution that sends each of `tyvars` to a fresh type variable of the same kind.
     fn instantiate_tyvars(&mut self, tyvars: &[Arc<TyVar>]) -> Substitution {
         let mut sub = Substitution::default();
         for tv in tyvars {
@@ -912,6 +912,7 @@ impl TypeCheckContext {
         sub
     }
 
+    /// Replaces every free type variable of `ty` by a fresh one of the same kind.
     pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         let sub = self.instantiate_tyvars(&ty.free_vars_vec());
         sub.substitute_type(ty)
@@ -2010,14 +2011,14 @@ impl TypeCheckContext {
         }
     }
 
-    /// Whether `ty1` and `ty2` can be unified, when the unifier itself is not
-    /// wanted.
+    /// Whether unification of `ty1` and `ty2` succeeds under the current
+    /// substitution, assumed equalities and fixed type variables.
     ///
-    /// The query costs the size of the two types rather than the size of the
-    /// inference state, which a copy of `self` would. It substitutes both types
-    /// here and runs on an empty substitution of its own: a substitution maps
-    /// each of its variables to a type free of them all, so it has nothing left
-    /// to say about its own image.
+    /// Both types are substituted here, and the unification then runs on an
+    /// empty substitution of its own: a substitution maps each of its variables
+    /// to a type free of them all, so it has nothing left to say about its own
+    /// image. That keeps the query proportional to the two types while the
+    /// inference state grows with the body being checked.
     pub fn are_unifiable(&self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Result<bool, Errors> {
         let ty1 = self.substitute_type(ty1);
         let ty2 = self.substitute_type(ty2);
@@ -2032,8 +2033,8 @@ impl TypeCheckContext {
             substitution: Substitution::default(),
             tyvar_expr: Map::default(),
             predicates: vec![],
-            // What unification leaves alone: empty where a copy would spend its
-            // time, carried where carrying costs a scalar or a reference count.
+            // What unification leaves alone: the large ones start empty, the
+            // ones that cost a scalar or a reference count are carried.
             scope: Scope::default(),
             import_required: vec![],
             local_assumed_eqs: vec![],
