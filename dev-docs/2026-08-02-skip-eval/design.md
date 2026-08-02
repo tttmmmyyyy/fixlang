@@ -197,7 +197,11 @@ let skip_eval = Arg::new("skip-eval")
 - `eval *println("kept"); ...` をフラグ ON で走らせると "kept" が stdout に出る。`*` で束ねたアクションが残ることを固定する。
 - `-O none` / `-O basic` / `-O max` のそれぞれで、フラグ ON のときにメッセージが出ない。最適化レベルに依存しないことを固定する。
 - プロジェクトファイルに `skip_eval = true` を書いたプロジェクトを `fix run` して、メッセージが出ない。`src/tests/test_skip_eval/cases/` に置き、`setup_test_env()` の形で一時ディレクトリにコピーする。
-- 全テストをフラグ ON で 1 回走らせ、std とテストスイートの中に意味を担っている `eval` が無いことを確かめる。これは恒久的なテストではなく、実装時の確認である。
+- 全テストをフラグ ON で 1 回走らせ、std の中に意味を担っている `eval` が無いことを確かめる。これは恒久的なテストではなく、実装時の確認である。
+
+その確認の結果: 1172 件のうち 21 件が落ち、そのすべてが `eval` の中に検証対象を置いているテストだった。`eval [0,1,2].@(3)` のように範囲外アクセスを `eval` に置く境界検査のテストが 9 件、`eval uni.as_b` や `eval pipe` のように中断させたい式を置くテストが 5 件、`eval vec.borrow_boxed(|p| FFI_CALL[...])` の FFI のテストが 1 件、`eval` そのものの振る舞いを固定するテストが 6 件である。`Std` に帰せられる失敗は無い。`IO::unsafe_perform` の `eval ios;` を落としても、IO を通る 1151 件（valgrind を通す記憶検査を含む）は通る。
+
+この 21 件は、このリポジトリのテストが `eval` を「`main` から検証対象を参照する」手段として使っていることを示している。`CLAUDE.md` がその書き方を定めているので、`fix test` が `[build.test]` からしか設定を読まない（既定は評価を残す）ことは、この点でも要る。
 
 テストセクションの扱いの方は、`fix` を子プロセスとして走らせる結合テストで固定する。観測は `test_capacity_byte_count_respects_no_runtime_check` と同じ手を使う。`Array::empty(2305843009213693952)` は、検査つきなら "Array size or capacity exceeds the address space" で中断し、検査なしなら（配列に書き込まないので安全に）完走する。
 
