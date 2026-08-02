@@ -18,7 +18,7 @@ issue #96。`Std::mark_threaded` を正しく使う限り参照カウントに�
 | 操作 | 生成される形 | 実装 |
 | --- | --- | --- |
 | retain | `atomicrmw add ... monotonic` | `Generator::build_retain` |
-| release | `atomicrmw sub ... release`、0 到達時に `fence acquire` してから破棄 | `Generator::build_release_mark_nonnull_boxed_with` |
+| release | `atomicrmw sub ... release`、0 到達時に `fence acquire` してから破棄 | `Generator::build_release_boxed_with` |
 | is_unique | `load ... monotonic`、unique なら `fence acquire` してから local 化 | `Generator::build_branch_by_is_unique` |
 
 いずれも RC IR back end から `src/rc_ir/codegen.rs` と `src/object.rs` 経由で到達する現役の経路である。
@@ -57,7 +57,7 @@ issue #96。`Std::mark_threaded` を正しく使う限り参照カウントに�
 
 TSan と無関係に単体で正しく、後段すべての前提になる。
 
-- **release**: `atomicrmw sub ... release` + `threaded_destruction_bb` の `fence acquire` を、`atomicrmw sub ... acq_rel` 1 個に畳む。
+- **release**: `atomicrmw sub ... release` + `threaded_destruction_bb` の `fence acquire` を、`atomicrmw sub ... acq_rel` 1 個に畳む。fence が消えるとそのブロックは分岐 1 本だけになるので、threaded 経路は他のモードと同じ破棄経路へ合流させる。
 - **is_unique**: `load ... monotonic` + `unique_threaded_bb` の `fence acquire` を、`load ... acquire` に置き換える。
 
 C11 の fence 規則の下でどちらも等価である（monotonic な読みの後の acquire fence は、その読みを acquire にしたのと同じ辺を張る）。
@@ -83,7 +83,7 @@ arm64 は交換になる。
 
 acquire を RMW に畳んだ形は、読んだだけでは fence 形に戻せそうに見える。戻すと**正しいまま TSan で落ちる**ようになり、P2 以降が機能しなくなる。それが分かるコメントを 2 箇所に置く。
 
-`build_release_mark_nonnull_boxed_with` の threaded な減算:
+`build_release_boxed_with` の threaded な減算:
 
 ```rust
 // The decrement acquires as well as releases, so that the thread that brings the count to
@@ -195,7 +195,7 @@ TSan は動的検出なので、スケジュールを稼ぐために反復回数
 
 **memcheck は外す。** `Configuration::develop_mode()` は memcheck を既定で有効にするが、TSan で計装したバイナリを valgrind の下で走らせる意味はない。このテスト群は memcheck を切った設定を使う。
 
-テストは `src/tests/test_thread_safety.rs` に集め、名前で選べるようにする。P4 がこの名前で絞り込む。
+テストは `src/tests/test_thread_safety.rs` に集め、名前で選べるようにする。P4 がこの名前で絞り込む。P1 が置いた `src/tests/test_threaded_rc.rs` は生成 IR を読むだけで TSan を要さないので、通常のスイートに残す。
 
 ### P4: CI 統合
 

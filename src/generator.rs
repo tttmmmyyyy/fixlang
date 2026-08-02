@@ -1526,16 +1526,19 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // In `local_bb`, increment refcnt and jump to `cont_bb`.
         self.builder().position_at_end(local_bb);
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let old_refcnt_local = self
             .builder()
-            .build_load(refcnt_type(self.context), obj_ptr, "")
+            .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
             .unwrap()
             .into_int_value();
         let new_refcnt = self
             .builder()
             .build_int_nsw_add(old_refcnt_local, amount, "")
             .unwrap();
-        self.builder().build_store(obj_ptr, new_refcnt).unwrap();
+        self.builder()
+            .build_store(ptr_to_refcnt, new_refcnt)
+            .unwrap();
         self.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`. An increment hands
