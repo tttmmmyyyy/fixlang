@@ -23,6 +23,7 @@ use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
+use std::mem;
 use std::sync::Arc;
 
 /// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
@@ -66,7 +67,7 @@ pub fn lower_program(
             LoweredSymbol::Global(g) => globals.push(g),
         }
     }
-    let funcs = std::mem::take(&mut lowerer.funcs);
+    let funcs = mem::take(&mut lowerer.funcs);
     // `entry` labels the program in the dump only; it has no role in code generation or in
     // entry-point selection. The actual entry point — `main` for a build, `test` for `fix test`,
     // or an FFI-exported function — is chosen by the build driver, independently of this field.
@@ -261,7 +262,7 @@ impl<'a> Lowerer<'a> {
         let src_tys = lam_ty.get_lambda_srcs();
         assert_eq!(params.len(), src_tys.len());
 
-        let saved_env = std::mem::take(&mut self.scope);
+        let saved_env = mem::take(&mut self.scope);
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {

@@ -23,11 +23,12 @@ use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     MatchArm, Ownership, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
 };
+use std::mem;
 use std::sync::Arc;
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
-    let funcs = std::mem::take(&mut prog.funcs);
+    let funcs = mem::take(&mut prog.funcs);
     let mut new_funcs = Map::default();
     for (fref, func) in funcs {
         let inserter = RcInserter::new(type_env, &func);
@@ -35,7 +36,7 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     }
     prog.funcs = new_funcs;
 
-    let globals = std::mem::take(&mut prog.globals);
+    let globals = mem::take(&mut prog.globals);
     prog.globals = globals
         .into_iter()
         .map(|mut glob| {
