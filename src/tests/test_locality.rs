@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -51,7 +52,7 @@ mod integration_tests {
         }
 
         let dump_path = project_dir.join(".fixlang/rc_ir.Main.post.txt");
-        std::fs::read_to_string(&dump_path)
+        fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
