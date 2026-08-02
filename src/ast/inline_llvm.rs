@@ -136,8 +136,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// The default covers the clone path: an op that force-uniques a shared container retain-copies
     /// its contents and releases the old container, so every op declaring a uniqueness check gets
-    /// those two targets without writing them. An op that only reads a count declares them too, and
-    /// counts nothing — over-declaring costs precision, never soundness.
+    /// those two targets without writing them. An op that declares a check and only reads the count
+    /// has no clone path, and says so by overriding with the empty list — the default errs towards
+    /// over-declaring, which costs precision and never soundness.
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env))
     }

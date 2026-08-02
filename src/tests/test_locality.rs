@@ -222,6 +222,23 @@ mod integration_tests {
         assert_op_state(&dump, "union_as_0", "Main::gholder#", "");
     }
 
+    /// Verifies that handing a callback a raw pointer into an array of boxed elements costs the array
+    /// its deep fact while keeping its root: the callback may write a reference to anything through
+    /// that pointer, so the array's own storage is still counted directly, and an element read out of
+    /// it afterwards is not. A payload of scalars reaches nothing and keeps both facts.
+    #[test]
+    fn test_locality_of_an_array_written_through_a_raw_pointer() {
+        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The array comes back force-uniqued, so its own reference count is counted directly.
+        assert_rc_state(&dump, "planted", "local");
+
+        // What it holds is another matter, so reading an element keeps the runtime dispatch.
+        let planted = binding_vars(&dump, "planted");
+        assert_op_state(&dump, "array_get", &planted[0], "");
+    }
+
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
     /// Reference counting is inserted for locals, but the borrow rewrite adds a release naming
     /// whatever was passed at a borrowed position — a global included — so resolving an operand by

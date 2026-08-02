@@ -19,6 +19,11 @@ sum_pair = |pair| pair.@head.@(0) + pair.@tail.@(0);
 sum_holder : Holder -> I64;
 sum_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
 
+// The callback writes through a raw pointer into the array's payload, so an array of boxed elements
+// may afterwards hold a reference to anything, the global's graph included.
+plant_global : Array (Array I64) -> Array (Array I64);
+plant_global = |arr| arr.mutate_elements(|_| pure()).@0;
+
 main : IO ();
 main = (
     let local_pair = Pair { head : [10, 20], tail : [30, 40] };
@@ -27,5 +32,8 @@ main = (
     let from_local = local_pair.sum_pair + local_holder.sum_holder;
     let from_global = gpair.sum_pair + gholder.sum_holder;
 
-    println $ (from_local + from_global).to_string
+    let planted = [[70], gpair.@head].plant_global;
+    let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
+
+    println $ (from_local + from_global + from_planted).to_string
 );

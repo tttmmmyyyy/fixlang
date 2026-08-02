@@ -6865,6 +6865,17 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // `is_unique` reads the count and hands the value back, so it has no clone path and counts
+        // no reference. The default would give it the clone path's targets, whose deep requirement
+        // would then withhold the annotation from a container holding a global.
+        vec![]
+    }
+
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.assume_local = true;
@@ -7042,6 +7053,16 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             return None;
         }
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // As in `InlineLLVMIsUniqueFunctionBody`: reading the count counts no reference, so the
+        // clone path's targets the default would supply are not this op's.
+        vec![]
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
