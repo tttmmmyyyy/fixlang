@@ -2,7 +2,7 @@ module ThreadingLib;
 
 // Puts a value into multi-threaded mode, as a threading library does before handing a value to
 // another thread. The body spans several lines so that a diagnostic about the call has to point at
-// the call rather than at the whole definition.
+// the call alone.
 publish : Box I64 -> Box I64;
 publish = |value| (
     let contents = value.@value;

@@ -48,6 +48,8 @@ fn quoted_source(stderr: &str) -> String {
         .join("\n")
 }
 
+/// A dependency's `threaded = true` leaves multi-threading off, so the calls of
+/// `Std::mark_threaded` the program reaches fail the build, each quoted at its own call site.
 #[test]
 fn test_dependency_does_not_enable_threaded() {
     let (_temp_dir, project_dir) = setup_test_env("root_without_threaded");
@@ -67,10 +69,10 @@ fn test_dependency_does_not_enable_threaded() {
         stderr
     );
 
-    // Every call is reported, at the call rather than at the definition around it, and the calls in
-    // the library are what name the library that needs the setting. The program makes three: two
-    // through the library at two different types, so that `Std::mark_threaded` is instantiated
-    // twice, and one directly.
+    // Every call is reported, each quoted at the call site alone, and the calls in the library are
+    // what name the library that needs the setting. The program makes three: two through the
+    // library at two different types, so that `Std::mark_threaded` is instantiated twice, and one
+    // directly.
     let quoted = quoted_source(&stderr);
     assert_eq!(
         quoted.matches("mark_threaded").count(),
@@ -90,6 +92,8 @@ fn test_dependency_does_not_enable_threaded() {
     );
 }
 
+/// The root project's own `threaded = true` covers the calls of `Std::mark_threaded` its
+/// dependency makes.
 #[test]
 fn test_root_enables_threaded() {
     let (_temp_dir, project_dir) = setup_test_env("root_with_threaded");
@@ -100,6 +104,7 @@ fn test_root_enables_threaded() {
     );
 }
 
+/// `--threaded` turns multi-threading on for a project whose project file leaves it off.
 #[test]
 fn test_threaded_option_enables_multi_threading() {
     let (_temp_dir, project_dir) = setup_test_env("root_without_threaded");
@@ -110,11 +115,14 @@ fn test_threaded_option_enables_multi_threading() {
     );
 }
 
+/// A program that reaches no call of `Std::mark_threaded` builds with multi-threading off, even
+/// though it depends on a library that calls it.
+///
+/// A program is built from the definitions it reaches, so depending on a library that calls
+/// `Std::mark_threaded` somewhere costs nothing until the program reaches such a definition. This
+/// is what lets one library serve programs that want multi-threading and programs that do not.
 #[test]
 fn test_unreached_library_call_needs_no_threading() {
-    // A program is built from the definitions it reaches, so depending on a library that calls
-    // `Std::mark_threaded` somewhere costs nothing until the program reaches such a definition.
-    // This is what lets a library serve programs that want multi-threading and programs that do not.
     let (_temp_dir, project_dir) = setup_test_env("root_reaches_no_call");
     let output = run_fix(&project_dir, &["build"]);
     assert_succeeded(
@@ -123,11 +131,14 @@ fn test_unreached_library_call_needs_no_threading() {
     );
 }
 
+/// `fix test` builds the test program, so the `[build.test]` section of the root project decides
+/// the setting for it.
+///
+/// The case calls `Std::mark_threaded` from `Test::test` alone, so `fix build` succeeds with the
+/// `[build]` section leaving multi-threading off, and `fix test` succeeds with `[build.test]`
+/// turning it on.
 #[test]
 fn test_test_section_enables_threaded() {
-    // `fix test` builds the test program, so the test section of the root project decides the
-    // setting for it. The program the case builds calls `Std::mark_threaded` from `Test::test`
-    // alone, which the `[build]` section leaves without multi-threading.
     let (_temp_dir, project_dir) = setup_test_env("root_threaded_in_test");
     assert_succeeded(
         &run_fix(&project_dir, &["build"]),

@@ -32,6 +32,10 @@
 - `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`.
 - The internal implementation of the counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` changed. As long as you iterate them the yielded elements are unchanged; only code that reads these iterators' fields directly is affected. See their definitions in the standard library for the details.
 
+#### Tool
+
+- The `threaded` field of a dependency's project file no longer turns multi-threading on for the project being built; the project being built decides the setting. Building a program that calls `Std::mark_threaded` with multi-threading off now fails with an error quoting the call, so a project that depends on a library needing multi-threading sets `threaded = true` in its own project file or passes `--threaded`.
+
 ### Fixed
 
 #### Std
@@ -41,7 +45,6 @@
 
 #### Tool
 
-- The `threaded` field of a dependency's project file no longer turns multi-threading on for the project being built; the project being built decides the setting, as it already did for the other settings that change how its code is generated. Building a program that calls `Std::mark_threaded` with multi-threading off now fails with an error quoting the call, so a library that needs the setting says so through that. A project that depends on such a library sets `threaded = true` in its own project file or passes `--threaded`.
 - On AArch64 targets (Apple Silicon and other 64-bit ARM), an integer narrower than 32 bits crossed the FFI boundary as a wrong number: a function exported with `FFI_EXPORT` returned one to its foreign caller, and `FFI_CALL` passed one to a foreign function that takes one. A function of type `I8 -> I8 -> I8` exported and called from C with `-100` and `30` answered 186 instead of -70. This covers `I8`, `U8`, `I16` and `U16`, and the `Std::FFI` aliases of the same widths such as `CChar` and `CShort`. x86-64 targets were unaffected.
 - Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.

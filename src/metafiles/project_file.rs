@@ -458,7 +458,7 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Validate `disable_cpu_features`.
+    /// Checks that every entry of `disable_cpu_features` is a valid regular expression.
     pub fn validate_disable_cpu_features(disable_cpu_features: &[String]) -> Result<(), Errors> {
         for feature in disable_cpu_features {
             // Check if each feature is a valid regex.

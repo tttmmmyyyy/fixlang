@@ -65,7 +65,7 @@ fn check_multi_threading_requirement(
     ))
 }
 
-// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
+/// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
 fn run_gcc(com: &mut Command) {
     let output = com.output().expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
