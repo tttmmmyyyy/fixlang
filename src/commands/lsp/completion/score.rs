@@ -68,14 +68,14 @@ pub(super) enum NamespaceMatch {
     /// e.g., `Std::push_back` for a `Std::Array` receiver. Useful for
     /// helpers grouped alongside the type at the parent level.
     InParent,
-    /// Neither — a function from an unrelated namespace that happens
-    /// to take this type as its receiver position.
+    /// Candidate lives in a namespace unrelated to the receiver TyCon,
+    /// and happens to take this type as its receiver position.
     Unrelated,
 }
 
 impl NamespaceMatch {
     /// Single-letter encoding for `sort_text`. Order: `'a' < 'b' < 'c'`
-    /// matches the variant ordering above.
+    /// matches the declaration order of `NamespaceMatch`.
     fn as_letter(self) -> char {
         match self {
             NamespaceMatch::InsideTyCon => 'a',
@@ -133,7 +133,7 @@ pub(super) fn sort_text_for(
 /// `sort_text` for completion items that can never satisfy a dot
 /// expression (types / traits / assoc types). They land at the bottom
 /// of the dot-context list — `Tier::Three` + `NamespaceMatch::Unrelated`
-/// — so they don't outrank function candidates but are still present
+/// — so function candidates rank above them while they stay reachable
 /// when the user is working in a misclassified context.
 pub(super) fn dot_context_low_priority_sort_text(name: &FullName) -> String {
     sort_text_for(Tier::Three, NamespaceMatch::Unrelated, false, name)
@@ -176,10 +176,8 @@ pub(super) fn assign_tier(
     }
 }
 
-/// Bucket-only tier assignment: the cheap Tier 1/2/3 classification
-/// without the unify-based Tier 0 promotion. Used as a fallback when
-/// the unify step's prerequisites (a scratch `Configuration` for
-/// building a `TypeCheckContext`) couldn't be set up.
+/// Bucket-only tier assignment: classifies `name` as Tier 1, 2 or 3 from
+/// `index` alone, so it costs a pair of lookups.
 pub(super) fn assign_tier_no_unify(
     name: &FullName,
     index: &CompletionIndex,
@@ -234,10 +232,10 @@ fn try_unify_receiver(
         .map_err(|_| ())?;
     let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
     let cand_recv_ty = srcs.last().ok_or(())?;
-    /// Collapses the two-level `Result<Result<T, UnificationErr>, Errors>`
-    /// returned by `extract_others` down to `Result<(), ()>`: any failure
-    /// (unification mismatch or unsatisfiable predicate) means the
-    /// candidate doesn't fit the receiver.
+    /// Collapses the outcome of a type-check step down to `Result<(), ()>`:
+    /// any failure — a unification mismatch, an unsatisfiable predicate, or
+    /// an error raised along the way — means the candidate doesn't fit the
+    /// receiver.
     fn flatten<T>(r: Result<T, UnifOrOtherErr>) -> Result<(), ()> {
         UnifOrOtherErr::extract_others(r)
             .map_err(|_| ())?

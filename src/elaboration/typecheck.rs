@@ -187,16 +187,16 @@ impl Substitution {
         return true;
     }
 
-    // Apply substitution to predicate.
+    /// Replaces the type variables this substitution binds in the type `p` constrains.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         p.ty = self.substitute_type(&p.ty);
     }
 
-    // Apply substitution to type
-    //
-    // A type none of whose variables this substitution replaces is returned as
-    // it came: the common case of a substitution that says nothing about a type
-    // walks the type and hands back the same node.
+    /// Replaces each type variable of `ty` that this substitution binds.
+    ///
+    /// A type none of whose variables this substitution replaces is returned as
+    /// it came: the common case of a substitution that says nothing about a type
+    /// walks the type and hands back the same node.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -228,6 +228,8 @@ impl Substitution {
         }
     }
 
+    /// Substitutes the types the error carries, so it is reported in terms of
+    /// the current substitution.
     pub fn substitute_unification_error(&self, e: &mut UnificationErr) {
         match e {
             UnificationErr::Unsatisfiable(predicate) => {
@@ -1821,6 +1823,8 @@ impl TypeCheckContext {
         Ok((expr, Errors::empty()))
     }
 
+    /// Composes `subst` into the accumulated substitution, then re-examines the
+    /// pending equalities, which the new bindings may let unify or reduce.
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
         self.substitution.compose(subst);
         let eqs = replace(&mut self.equalities, vec![]);
@@ -2051,7 +2055,8 @@ impl TypeCheckContext {
         Ok(UnifOrOtherErr::extract_others(tc.unify(&ty1, &ty2))?.is_ok())
     }
 
-    // Subroutine of unify().
+    /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
+    /// rejecting a binding that would be circular or kind-mismatched.
     fn unify_tyvar(
         &mut self,
         tyvar1: Arc<TyVar>,

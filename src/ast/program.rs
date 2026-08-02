@@ -1418,9 +1418,12 @@ impl Program {
         errors.to_result()
     }
 
-    // Instantiate symbol.
-    // Assumes that namespace resolution and type-checking have already been performed
-    // for all global values (via `resolve_namespace_and_check_type_in_modules`).
+    /// Fills `sym.expr` with the typed expression of `sym.generic_name`
+    /// specialized to `sym.ty`, picking the matching implementation when the
+    /// symbol is a trait method.
+    ///
+    /// Assumes that `resolve_namespace_and_check_type_in_modules` has already
+    /// run over all global values.
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
@@ -1476,7 +1479,9 @@ impl Program {
         Ok(())
     }
 
-    // Instantiate all symbols.
+    /// Instantiates every symbol queued in `deferred_instantiation`, moving each
+    /// into `symbols`. Instantiation queues further symbols, so this runs until
+    /// the queue drains.
     pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         while !self.deferred_instantiation.is_empty() {
@@ -1489,7 +1494,12 @@ impl Program {
         errors.to_result()
     }
 
-    // Instantiate `Main::main` (or `Test::test` if `fix test` is running).
+    /// Instantiates the program's entry point at type `IO ()` and stores it in
+    /// `entry_io_value`.
+    ///
+    /// # Arguments
+    /// * `test_mode` — when true the entry point is `Test::test`, as `fix test`
+    ///   runs it; otherwise it is `Main::main`.
     pub fn instantiate_entry_io_value(
         &mut self,
         tc: &TypeCheckContext,
@@ -1507,8 +1517,9 @@ impl Program {
         Ok(())
     }
 
-    // Instantiate exported values.
-    // In this function, `ExportStatement`s are updated.
+    /// Instantiates the value named by each export statement, recording the
+    /// instantiated expression and its exported function type back into the
+    /// statement.
     pub fn instantiate_exported_values(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut export_stmts = replace(&mut self.export_statements, vec![]);
@@ -1526,9 +1537,14 @@ impl Program {
         Ok(())
     }
 
-    // Instantiate a global value.
-    // - required_ty: for `Main::main`, pass `IO ()` to check that the specified type is correct. If None, then use the type specified by user.
-    // - required_src: source place where the value is exported. Used to show error message.
+    /// Instantiates the global value `value_name` for export, returning the
+    /// instantiated expression together with the function type it is exported at.
+    ///
+    /// # Arguments
+    /// * `required_ty` — the type the value is required to have, e.g. `IO ()`
+    ///   for `Main::main`; `None` accepts the type the user declared.
+    /// * `required_src` — the source location of the export, used to place the
+    ///   error message.
     pub fn instantiate_exported_value(
         &mut self,
         value_name: &FullName,
