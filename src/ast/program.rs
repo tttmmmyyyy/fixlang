@@ -24,7 +24,7 @@ use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
-use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
+use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -1434,9 +1434,8 @@ impl Program {
         // Also resolve opaque types in method_ty so both sides use concrete types.
         let opaque_types = &self.opaque_types;
         let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
-            let mut tc0 = tc.clone();
             let method_ty = resolve_opaque_type_in_type(&method.scm_via_defn.ty, opaque_types);
-            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
+            tc.are_unifiable(&method_ty, &sym.ty)
         };
 
         // Select the typed expression to specialize.

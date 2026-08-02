@@ -248,8 +248,8 @@ fn try_unify_receiver(
 
     // The remaining `reduce_predicates` call — checking that the
     // candidate's trait constraints hold for the bound receiver — is the
-    // dominant cost (it searches trait instances, cloning the context per
-    // non-matching instance). Its verdict depends only on the substituted
+    // dominant cost (it matches the predicate against every instance of its
+    // trait until one fits). Its verdict depends only on the substituted
     // predicates plus the instance environment, which is identical across
     // candidates within this request. So memoize the verdict keyed by the
     // substituted predicate set and reuse it for sibling candidates that
