@@ -34,8 +34,8 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, build_capacity_check,
+    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
     read_alloc_offset, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
