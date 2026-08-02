@@ -10,6 +10,23 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## d55854afbbe68601fe24e05a1a911d92482f8d61
+
+Reference counting reads a byte on the object and branches three ways, because the object may be
+local to this thread, shared between threads, or a global that is not counted at all. This row is
+the first with the branch gone wherever the compiler can prove the object local (#122, PR #190).
+
+Fourteen cases gain and one loses. `cp_lib_lsegtree` -31.2%, `levenshtein` -5.2%,
+`cp_lib_unionfind` -4.4%, `fannkuch` -3.8%, `fannkuch_scratch` -3.7%, `index_syntax` -3.7%,
+`cp_lib_bipartite` -3.2%, `cp_lib_scc` -2.4%, `binary_trees` -1.9%, `cp_lib_dijkstra` -1.6%,
+`get_sub` -1.0%; `cp_lib_conv_zp` +0.4%. The rest move by under a tenth of a percent.
+
+**`sort` is the case to read for what is left.** It moves 0.06% against a ceiling of 13%, and that
+ceiling is one thing: the comparator closure's capture object, released once per comparison. A
+closure keeps a single version, since it is reached indirectly and no call site names it, so no
+proof about the caller's data can attach to it. Removing that release is closure specialization's
+job, not this pass's — issue #166.
+
 ## 383a7b5e18fb9332f9a49cb40be8f85f8cbcc4b8
 
 Follows the `default<O3>` rounds with `speculative-execution`, `loop-vectorize` and `pseudo-probe`
