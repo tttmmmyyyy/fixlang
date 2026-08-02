@@ -8,8 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, fix_command, run_source_capture, test_files_in_directory,
-        test_source, test_source_fail, test_source_fail_excludes, test_source_with_c,
+        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_capture,
+        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
+        test_source_with_c, EmittedIr,
     },
 };
 use rand::Rng;
@@ -10362,15 +10363,7 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
 
     // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
     // the fix, omits) the zero-sized phi.
-    let ir_path = fs::read_dir(&work_dir)
-        .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .find(|p| {
-            let name = p.file_name().unwrap().to_string_lossy();
-            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
-        })
-        .expect("emitted LLVM IR file");
-    let ir = fs::read_to_string(&ir_path).unwrap();
+    let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
     assert!(
         !ir.contains("phi [0 x"),
         "emitted IR contains a zero-sized-aggregate phi (crashes AArch64 GlobalISel):\n{}",

@@ -2,7 +2,9 @@ use crate::{
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::test_util::{fix_command, test_source, test_source_fail, test_source_with_c},
+    tests::test_util::{
+        emitted_llvm_ir, fix_command, test_source, test_source_fail, test_source_with_c, EmittedIr,
+    },
 };
 use std::{
     fs::{self, File},
@@ -186,16 +188,7 @@ pub fn test_narrow_integers_carry_the_c_extension_attribute() {
     );
 
     // `-O none` compiles the program as several modules, and the wrappers are spread over them.
-    let ir = fs::read_dir(&work_dir)
-        .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| {
-            let name = p.file_name().unwrap().to_string_lossy();
-            name.ends_with(".ll") && !name.ends_with("_optimized.ll")
-        })
-        .map(|p| fs::read_to_string(p).unwrap())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
 
     for expected in [
         // An exported function extends its narrow arguments and result, by sign or by zero

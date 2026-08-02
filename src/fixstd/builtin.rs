@@ -34,8 +34,8 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_storage_is_aligned, create_obj,
-    get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
+    alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
+    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
     ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
@@ -2394,29 +2394,16 @@ fn realloc_array<'c, 'm>(
             .unwrap()
     };
     let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-    let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
-    let elems_size_as_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                elem_value_ty,
-                gc.context.ptr_type(AddressSpace::from(0)).const_null(),
-                &[len],
-                "elems_size_as_ptr@realloc_array",
-            )
-            .unwrap()
-    };
+    let elems_bytes = build_elems_bytes(gc, &elem_ty, len, "elems_size@realloc_array");
+    let header_size = gc
+        .target_data
+        .offset_of_element(&struct_type, STORAGE_BUF_IDX)
+        .unwrap();
     let live_bytes = gc
         .builder()
         .build_int_add(
-            gc.builder()
-                .build_ptr_to_int(elems_size_as_ptr, i64_ty, "elems_size@realloc_array")
-                .unwrap(),
-            i64_ty.const_int(
-                gc.target_data
-                    .offset_of_element(&struct_type, STORAGE_BUF_IDX)
-                    .unwrap(),
-                false,
-            ),
+            elems_bytes,
+            i64_ty.const_int(header_size, false),
             "live_bytes@realloc_array",
         )
         .unwrap();
@@ -2713,20 +2700,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
         // without touching the moved-out elements. No reference counting.
         gc.builder().position_at_end(src_unique_bb);
-        let n_span = unsafe {
-            gc.builder()
-                .build_gep(
-                    elem_value_ty,
-                    gc.context.ptr_type(AddressSpace::from(0)).const_null(),
-                    &[n],
-                    "append_n_span",
-                )
-                .unwrap()
-        };
-        let n_bytes = gc
-            .builder()
-            .build_ptr_to_int(n_span, gc.context.i64_type(), "append_n_bytes")
-            .unwrap();
+        let n_bytes = build_elems_bytes(gc, &elem_ty, n, "append_n_bytes");
         gc.builder()
             .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
             .ok()
