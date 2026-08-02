@@ -1326,15 +1326,6 @@ pub fn lambda_return_leaf_types<'c, 'm>(
     gc.flatten_to_scalar_leaves(embedded)
 }
 
-/// The buffer a lambda returning `leaf_tys` writes through its out-pointer: the flat struct those
-/// leaves would otherwise have been returned in.
-pub fn out_pointer_buffer_type<'c, 'm>(
-    leaf_tys: &[BasicTypeEnum<'c>],
-    gc: &Generator<'c, 'm>,
-) -> StructType<'c> {
-    gc.context.struct_type(leaf_tys, false)
-}
-
 /// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
 /// CAP pointer when the lambda is a closure, and the result either returned directly or written
 /// through an out-pointer that precedes them all.

@@ -33,7 +33,6 @@ use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
 use crate::object::lambda_return_leaf_types;
-use crate::object::out_pointer_buffer_type;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -535,6 +534,8 @@ pub struct Generator<'c, 'm> {
     /// would otherwise be laid out once per path that reaches it.
     struct_types: Map<Arc<TypeNode>, StructType<'c>>,
     embedded_types: Map<Arc<TypeNode>, BasicTypeEnum<'c>>,
+    /// The out-pointer buffer of each Fix type returned through one.
+    out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -665,6 +666,29 @@ impl<'c, 'm> Generator<'c, 'm> {
         embedded_ty
     }
 
+    /// The buffer a lambda returning `ret_ty` writes its result through, as the flat struct of the
+    /// leaves the result would otherwise have been returned in.
+    ///
+    /// The struct is named after the type, so the module writes the leaves out once, at the name's
+    /// definition. An anonymous struct is written out in full at every instruction that names it,
+    /// and the buffer is named by one instruction per leaf at both ends of a call, which puts the
+    /// module's text in the square of the leaf count.
+    pub fn out_pointer_buffer_type(
+        &mut self,
+        ret_ty: &Arc<TypeNode>,
+        leaf_tys: &[BasicTypeEnum<'c>],
+    ) -> StructType<'c> {
+        if let Some(buf_ty) = self.out_pointer_buffers.get(ret_ty) {
+            return *buf_ty;
+        }
+        let buf_ty = self
+            .context
+            .opaque_struct_type(&format!("out.{}", ret_ty.to_string()));
+        buf_ty.set_body(leaf_tys, false);
+        self.out_pointer_buffers.insert(ret_ty.clone(), buf_ty);
+        buf_ty
+    }
+
     /// The number of bytes a value of `ty` occupies on the target, padding included.
     pub fn sizeof(&mut self, ty: &dyn AnyType<'c>) -> u64 {
         self.target_data.get_bit_size(ty) / 8
@@ -728,6 +752,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             di_type_placeholders: Map::default(),
             struct_types: Map::default(),
             embedded_types: Map::default(),
+            out_pointer_buffers: Map::default(),
         };
         gc
     }
@@ -1134,7 +1159,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // `lambda_function_type`).
         let ret_leaf_tys = lambda_return_leaf_types(&fun.ty, self);
         let out_ptr = if self.returns_through_out_pointer(&ret_leaf_tys) {
-            Some(self.build_out_pointer_argument(&ret_leaf_tys, tail))
+            Some(self.build_out_pointer_argument(&ret_ty, &ret_leaf_tys, tail))
         } else {
             None
         };
@@ -1186,13 +1211,14 @@ impl<'c, 'm> Generator<'c, 'm> {
     // reads back with `load_out_pointer_buffer`.
     fn build_out_pointer_argument(
         &mut self,
+        ret_ty: &Arc<TypeNode>,
         ret_leaf_tys: &[BasicTypeEnum<'c>],
         tail: bool,
     ) -> PointerValue<'c> {
         if tail {
             return self.own_out_pointer();
         }
-        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        let buf_ty = self.out_pointer_buffer_type(ret_ty, ret_leaf_tys);
         self.build_alloca_at_entry(buf_ty, "out@call_lambda")
     }
 
@@ -1220,7 +1246,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         ret_leaf_tys: &[BasicTypeEnum<'c>],
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
-        let buf_ty = out_pointer_buffer_type(ret_leaf_tys, self);
+        let buf_ty = self.out_pointer_buffer_type(&ret_ty, ret_leaf_tys);
         let leaves: Vec<BasicValueEnum<'c>> = ret_leaf_tys
             .iter()
             .enumerate()
@@ -2045,7 +2071,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
         if self.returns_through_out_pointer(&leaf_tys) {
             let out_ptr = self.own_out_pointer();
-            let buf_ty = out_pointer_buffer_type(&leaf_tys, self);
+            let buf_ty = self.out_pointer_buffer_type(&obj.ty, &leaf_tys);
             for (i, leaf) in leaves.iter().enumerate() {
                 let leaf_ptr = self
                     .builder()
