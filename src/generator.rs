@@ -1626,8 +1626,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         // One phi per part, built consecutively so the block's phis stay contiguous at its top.
         let part_phis: Vec<BasicValueEnum<'c>> = (0..part_count)
             .map(|j| {
-                let lty = incomings[0].0.parts()[j].get_type();
-                let phi = self.builder().build_phi(lty, name).unwrap();
+                let part_ty = incomings[0].0.parts()[j].get_type();
+                let phi = self.builder().build_phi(part_ty, name).unwrap();
                 for (obj, bb) in incomings {
                     phi.add_incoming(&[(&obj.parts()[j], *bb)]);
                 }
@@ -2323,7 +2323,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let embedded = ret_ty.get_embedded_type(self);
         let parts: Vec<BasicValueEnum<'c>> = match call_result {
             None => vec![],
-            Some(packed) if self.part_count(embedded) == 1 => vec![packed],
+            Some(single_part) if self.part_count(embedded) == 1 => vec![single_part],
             Some(packed) => {
                 let packed = packed.into_struct_value();
                 (0..packed.get_type().count_fields())

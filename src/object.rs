@@ -2435,9 +2435,9 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             }
 
             let element_di_ty = field.to_debug_type(gc);
-            let elemet_ty = field.to_basic_type(gc, &[]);
+            let element_ty = field.to_basic_type(gc, &[]);
             let size_in_bits = element_di_ty.get_size_in_bits();
-            let align_in_bits = gc.target_data.get_abi_alignment(&elemet_ty) * 8;
+            let align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
             let offset_in_bits = gc
                 .target_data
                 .offset_of_element(&str_type, i as u32)

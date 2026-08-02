@@ -53,19 +53,19 @@ main = (
 /// struct in the program and in `Std` is carried whole.
 #[test]
 fn test_wide_value_carried_whole_computes_the_same() {
-    let split = run_source_capture(NESTED_STRUCT_PROGRAM, Configuration::develop_mode());
+    let split_output = run_source_capture(NESTED_STRUCT_PROGRAM, Configuration::develop_mode());
     let mut whole_config = Configuration::develop_mode();
     whole_config.max_split_scalars = 0;
-    let whole = run_source_capture(NESTED_STRUCT_PROGRAM, whole_config);
+    let whole_output = run_source_capture(NESTED_STRUCT_PROGRAM, whole_config);
 
     assert_eq!(
-        String::from_utf8_lossy(&split.stdout).trim(),
+        String::from_utf8_lossy(&split_output.stdout).trim(),
         "85",
         "the split representation computed the wrong answer"
     );
     assert_eq!(
-        String::from_utf8_lossy(&whole.stdout),
-        String::from_utf8_lossy(&split.stdout),
+        String::from_utf8_lossy(&whole_output.stdout),
+        String::from_utf8_lossy(&split_output.stdout),
         "carrying the values whole changed the answer"
     );
 }
