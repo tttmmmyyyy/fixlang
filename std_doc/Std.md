@@ -364,7 +364,7 @@ Creates an empty array with specified capacity.
 
 ##### Parameters
 
-* `capacity` - The number of elements the array can hold without allocating more space. If negative, the program will abort.
+* `capacity` - The number of elements the array can hold without allocating more space. If negative, or so large that the elements do not fit in memory, the program will abort.
 
 #### fill
 

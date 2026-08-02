@@ -115,6 +115,101 @@ pub fn test_fill_negative_size() {
     test_source_fail(&source, config, "Negative array size or capacity");
 }
 
+// The bytes an array's elements need must fit in the address space. A capacity whose byte count
+// exceeds it wraps around to a small number, which `malloc` supplies, leaving an array whose block
+// has no room for the capacity it claims; the first write past the block corrupts the heap.
+//
+// The capacities below are caught by different halves of the check: 2^61 elements of 8 bytes come
+// to exactly 2^64 and wrap to zero, while 2^61-3 elements come to 24 bytes short of 2^64, which
+// does fit, but leaves no room for the header and for the bytes the allocation adds to place the
+// element buffer on its alignment.
+
+#[test]
+pub fn test_empty_capacity_byte_count_wraps() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr : Array I64 = Array::empty(2305843009213693952);
+                println(arr.push_back(42).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity too large: 2305843009213693952",
+    );
+}
+
+#[test]
+pub fn test_empty_capacity_byte_count_leaves_no_room_for_the_header() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr : Array I64 = Array::empty(2305843009213693949);
+                println(arr.push_back(42).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity too large: 2305843009213693949",
+    );
+}
+
+// A capacity the compiler cannot see the value of is checked where the program allocates, rather
+// than by folding the check away at the capacity a literal gives.
+#[test]
+pub fn test_capacity_byte_count_is_checked_at_run_time() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let args = *get_args;
+                // A program run with no argument gets one element in `args`, so this is 2^61-3.
+                let arr : Array I64 = Array::empty(2305843009213693950 - args.@size);
+                println(arr.push_back(42).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity too large: 2305843009213693949",
+    );
+}
+
+// Growing an array's capacity reallocates its storage, and the byte count of the new capacity is
+// checked as the one an array is created with is.
+#[test]
+pub fn test_reserve_capacity_byte_count_wraps() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr : Array I64 = [1, 2, 3];
+                println(arr.reserve(2305843009213693952).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity too large: 2305843009213693952",
+    );
+}
+
 // `--no-runtime-check` disables array bounds checks (documented in the CLI help), so `set`
 // and `swap` must honor it like `@` / `mod` / `act`. An index within the array's capacity but
 // past its size stays inside the allocated buffer, so the access itself is memory-safe; only

@@ -17,7 +17,8 @@ use crate::fixstd::builtin::{
     make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
+    RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
+    RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
 use inkwell::context::Context;
@@ -1115,10 +1116,11 @@ impl ObjectType {
         array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
         if array_capacity.is_some() {
-            // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
+            // The size is the header -- the fields laid out ahead of the element buffer -- plus the
+            // bytes the elements take.
 
-            // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
-            // (with a preceding capacity slot) or of `#ArrayStorage` (right after the control block).
+            // The element buffer is the last field, of `Array` (with a preceding capacity slot) or
+            // of `#ArrayStorage` (right after the control block).
             let elem_ty = match self.field_types.last().unwrap() {
                 ObjectFieldType::Array(ty) => ty.clone(),
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
@@ -1126,36 +1128,35 @@ impl ObjectType {
             };
             // The buffer holds elements as they are embedded -- a pointer where the element type is
             // boxed -- which is the stride every read and write of it uses.
-            let elem_sizeof = elem_ty.get_embedded_type(gc, &vec![]).size_of().unwrap();
+            let embedded_elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+            let elem_size = gc.target_data.get_abi_size(&embedded_elem_ty);
             let struct_ty = self.to_struct_type(gc, vec![]);
+            let buf_field_idx = struct_ty.count_fields() - 1;
+            let header_size = gc
+                .target_data
+                .offset_of_element(&struct_ty, buf_field_idx)
+                .unwrap();
+
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-            let cap = array_capacity.unwrap();
             let cap = gc
                 .builder()
-                .build_int_cast(cap, ptr_int_ty, "cap_as_ptr_int_ty")
+                .build_int_cast(array_capacity.unwrap(), ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
+            if gc.config.runtime_check() {
+                panic_if_capacity_overflows(gc, cap, elem_size, header_size);
+            }
             let elems_size = gc
                 .builder()
-                .build_int_mul(elem_sizeof, cap, "elems_size")
+                .build_int_mul(ptr_int_ty.const_int(elem_size, false), cap, "elems_size")
                 .unwrap();
-
-            // Get pointer to the first element (the buffer is the last struct field).
-            let buf_field_idx = struct_ty.count_fields() - 1;
-            let null = gc.context.ptr_type(AddressSpace::from(0)).const_null();
-            let first_elm_ptr = gc
+            return gc
                 .builder()
-                .build_struct_gep(struct_ty, null, buf_field_idx, "gep_first_elem_size_of")
+                .build_int_add(
+                    ptr_int_ty.const_int(header_size, false),
+                    elems_size,
+                    "size_with_elems",
+                )
                 .unwrap();
-            let header_size = gc
-                .builder()
-                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "header_size")
-                .unwrap();
-
-            let size_with_elems = gc
-                .builder()
-                .build_int_add(header_size, elems_size, "size_with_elems")
-                .unwrap();
-            return size_with_elems;
         } else {
             self.to_struct_type(gc, vec![]).size_of().unwrap()
         }
@@ -1630,6 +1631,57 @@ pub fn build_storage_is_aligned<'c, 'm>(
             "storage_is_aligned",
         )
         .unwrap()
+}
+
+/// Abort the program unless a buffer of `cap` elements of `elem_size` bytes each, laid out behind a
+/// header of `header_size` bytes, fits in the address space.
+///
+/// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
+/// one, and leaves an object claiming a capacity its block has no room for; the first write past the
+/// block corrupts the heap. The elements must therefore leave room for the header in front of them
+/// and for the bytes `build_alloc_array_storage` adds on top of the object.
+///
+/// The bound is the widest capacity that cannot wrap, rather than a limit worth imposing: a byte
+/// count within it that the system cannot supply still fails in `malloc` as it did before. It is a
+/// constant, so the whole check is one unsigned comparison, which also rejects the negative capacity
+/// an `_unsafe_` primitive can be handed.
+fn panic_if_capacity_overflows<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    cap: IntValue<'c>,
+    elem_size: u64,
+    header_size: u64,
+) {
+    // A buffer of elements of no size is no bytes long, however many of them the capacity asks for.
+    if elem_size == 0 {
+        return;
+    }
+    let max_cap = (u64::MAX - (ARRAY_BUF_ALIGNMENT - 1) - header_size) / elem_size;
+    let overflows = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGT,
+            cap,
+            cap.get_type().const_int(max_cap, false),
+            "capacity_overflows",
+        )
+        .unwrap();
+
+    let current_func = gc.current_function();
+    let overflow_bb = gc
+        .context
+        .append_basic_block(current_func, "capacity_overflow_bb");
+    let in_range_bb = gc
+        .context
+        .append_basic_block(current_func, "capacity_in_range_bb");
+    gc.builder()
+        .build_conditional_branch(overflows, overflow_bb, in_range_bb)
+        .unwrap();
+    gc.builder().position_at_end(overflow_bb);
+    gc.call_runtime(RUNTIME_ARRAY_SIZE_OVERFLOW, &[cap.into()]);
+    gc.builder()
+        .build_unconditional_branch(in_range_bb)
+        .unwrap();
+    gc.builder().position_at_end(in_range_bb);
 }
 
 /// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address

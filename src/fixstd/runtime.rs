@@ -8,6 +8,7 @@ use inkwell::AddressSpace;
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
 pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
+pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
@@ -34,6 +35,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
     build_negative_array_size_function(gc, mode);
+    build_array_size_overflow_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -118,6 +120,25 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: 
     let func = gc
         .module
         .add_function(RUNTIME_NEGATIVE_ARRAY_SIZE, fn_ty, None);
+    set_noreturn(gc, func);
+    return;
+}
+
+fn build_array_size_overflow_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_ARRAY_SIZE_OVERFLOW) {
+        return;
+    }
+
+    let fn_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[gc.context.i64_type().into()], false);
+    let func = gc
+        .module
+        .add_function(RUNTIME_ARRAY_SIZE_OVERFLOW, fn_ty, None);
     set_noreturn(gc, func);
     return;
 }
