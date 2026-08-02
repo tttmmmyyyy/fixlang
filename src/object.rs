@@ -1609,9 +1609,9 @@ pub fn get_array_storage_buf<'c, 'm>(
 
 /// Whether an allocation checks the capacity it is given against the address space.
 ///
-/// Every allocation asks for one, so that a new allocation site states which of the two it is
-/// instead of inheriting an answer: the check is what keeps a wrapped-around byte count from
-/// reaching `malloc`, and a site that skipped it silently would corrupt the heap.
+/// Every allocation asks for one, so each allocation site states which of the two it is: the check
+/// is what keeps a wrapped-around byte count from reaching `malloc`, and a site that skipped it
+/// silently would corrupt the heap.
 #[derive(Clone, Copy)]
 pub enum CapacityCheck {
     /// Nothing has checked this capacity, so this allocation checks it.
@@ -1622,8 +1622,8 @@ pub enum CapacityCheck {
     Skip,
 }
 
-// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
-// its control block initialized to a reference count of one and its buffer left uninitialized.
+/// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
+/// its control block initialized to a reference count of one and its buffer left uninitialized.
 pub fn alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
@@ -1758,8 +1758,8 @@ pub fn build_storage_is_aligned<'c, 'm>(
 ///
 /// The bound is the widest capacity whose byte count cannot wrap, and a constant, so the whole check
 /// is one unsigned comparison. A byte count within the bound that the system cannot supply is a
-/// separate matter, left where it was: `malloc` answers null and the program faults on the store
-/// that initializes the object.
+/// separate matter: `malloc` answers null and the program faults on the store that initializes the
+/// object.
 ///
 /// Every allocation given a capacity nothing has checked runs this, which is what makes it an
 /// invariant that an array's capacity field is within the bound. `capacity_check` says whether this

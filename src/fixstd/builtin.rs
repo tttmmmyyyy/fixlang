@@ -2270,14 +2270,15 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
-// field. The elements move as raw bytes, with their reference counts left alone: the caller must
-// ensure the array is unique.
-//
-// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
-// large enough to have its own pages, by remapping them, which costs nothing per element. What comes
-// back starts wherever the allocator put it, so the object is placed in it afresh, and the contents
-// move only in the case where that lands the object somewhere other than `realloc` left it.
+/// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
+/// field. The elements move as raw bytes, with their reference counts left alone: the caller must
+/// ensure the array is unique.
+///
+/// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
+/// large enough to have its own pages, by remapping them, which costs nothing per element. What
+/// comes back starts wherever the allocator put it, so the object is placed in it afresh, and the
+/// contents move only in the case where that lands the object somewhere other than `realloc` left
+/// it.
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,

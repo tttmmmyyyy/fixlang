@@ -463,8 +463,8 @@ main = (
 ///
 /// The check is a comparison and a branch, and an array write is the innermost thing a loop over an
 /// array does, so a check emitted here is what costs the enclosing loop its unrolling. The property
-/// is read off the emitted LLVM IR because it is about the code the build emits rather than the
-/// answer it computes: a program cannot observe a check that never fires.
+/// is read off the emitted LLVM IR: it is about the code the build emits, and a program cannot
+/// observe a check that never fires.
 #[test]
 pub fn test_array_write_clones_without_rechecking_the_capacity() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
