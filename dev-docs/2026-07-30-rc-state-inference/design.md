@@ -104,10 +104,10 @@ locality の記号的サマリを不動点で求め、locality をキーに複�
    到達するグラフ全体に `mark_global` を掛ける。global シンボルを値として使う場所はすべて、
    そのマーク済みグラフの読み出しである。
 2. **`Std::mark_threaded`。** 引数のグラフを `THREADED` にマークする。`threaded = false` の
-   ビルドではコンパイルが失敗するので、**出来上がったバイナリ**にはこの扉が無い。ただし拒否は
-   `InlineLLVMMarkThreadedFunctionBody::generate` の中、すなわち RC パイプラインより後段で
-   起きるので、**この解析は非 threaded ビルドでもこの op を見る**。「`result_locality`」の `always` 表が受ける。
-   「扉が存在しない」を assert に固めると、ユーザのエラーがコンパイラの ICE になる。
+   ビルドは `Program::check_multi_threading_requirement` が使用箇所を引用したエラーで落とすので、
+   **出来上がったバイナリ**にはこの扉が無い。検査は RC パイプラインより前に走るため、非 threaded
+   ビルドの解析はこの op に到達しない。それでも「`result_locality`」の `always` を宣言するのは、
+   `result_locality` に既定実装が無く、op ごとに著者が選ぶ規律のためである。
 3. **`Std::boxed_from_retained_ptr`。** 生ポインタから値を復元する。状態は何も分からない —
    スレッドを跨いだかもしれないし、global のグラフ由来かもしれない。
 
@@ -1146,10 +1146,10 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 | `src/generator.rs` | 状態を見る retain/release/is_unique 生成ヘルパ、`develop_mode` の実行時 assert |
 | `src/object.rs` | 構造体フィールドの取り出し、配列バッファの読み書きと複製、union の retain、traverser 生成への状態の配線 |
 | `src/ast/types.rs` | `traverser_name` が状態をキーに含める（`trav_release_local_<hash>`） |
-| `src/rc_ir/` の `lower.rs`, `print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `ownership.rs`, `provenance.rs`, `rename.rs`, `unique_check_elim.rs` | `Destructure` のフィールド追加に追従（`RcExpr::Destructure` を触る全 12 ファイルから、別行に挙げた `ast.rs` と `codegen.rs` を除いたもの） |
+| `src/rc_ir/` の `lower.rs`, `print.rs`, `validate.rs`, `simplify.rs`, `rc_insert.rs`, `borrow.rs`, `ownership.rs`, `provenance.rs`, `rename.rs`, `unique_check_elim.rs` | `Destructure` のフィールド追加に追従（`RcExpr::Destructure` を触る全 13 ファイルから、別行に挙げた `ast.rs` / `codegen.rs` / `locality.rs` を除いたもの） |
 | `src/build/build_object_files.rs` | `specialize` の後に locality パスを差し込む |
 | `src/rc_ir/mod.rs` | 新規 3 モジュールの宣言 |
-| `src/fixstd/std.fix` | `boxed_from_retained_ptr` のドキュメントに初期化子の契約を追記 |
+| `src/fixstd/std.fix` | 初期化子の契約を、外部保持ハンドルが入る 2 つの扉のドキュメントに追記（`boxed_from_retained_ptr`、および生ポインタを渡す `mutate_boxed` / `mutate_elements`）。`std_doc/Std.md` を再生成 |
 
 `RcState::Local` とダンプの `@local` 形は既にある。`validate` は状態を見ない。
 `retain_<hash>` / `release_<hash>` と `trav_release_(T)` は名前で memoize されるので、状態を
@@ -1161,5 +1161,5 @@ null チェックの包み（`skip_null_check`、dynamic object のチェック�
 - `DeepLocal` 用の状態なし traverser（「`DeepLocal` 版 traverser」。実測で内訳を見てから）。
 - threaded ビルド（`threaded.md`）。
 - 複数の uniqueness チェックを宣言できるようにする拡張（#162）。
-- changelog: 最適化そのものは観測可能な振る舞いを変えない。`boxed_from_retained_ptr` に足す
-  初期化子の契約は公開ドキュメントの変更なので、そちらは載せる。
+- changelog: 最適化そのものは観測可能な振る舞いを変えない。初期化子の契約は公開ドキュメントの
+  変更なので、そちらは載せる — 契約が掛かる扉は 2 つあるので、両方が読み取れる書き方にする。

@@ -329,6 +329,10 @@ mod integration_tests {
         // What it holds is another matter, so reading an element keeps the runtime dispatch.
         let planted = binding_vars(&dump, "planted");
         assert_op_state(&dump, "array_get", &planted[0], "");
+
+        // A payload of scalars holds no reference for the callback to overwrite, so the same write
+        // costs the array nothing and it comes back proved local all the way down.
+        assert_rc_state(&dump, "scalars", "deeplocal");
     }
 
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
