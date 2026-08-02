@@ -138,19 +138,29 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
     }
     let (_temp_dir, project_dir) = setup_test_env();
 
+    // Warmed by the same subcommand the checked run uses: what names an object includes which
+    // subcommand asked for it, so a build and a run never share one to begin with.
     let plain = fix_command()
-        .arg("build")
+        .arg("run")
         .arg("-O")
         .arg("none")
         .arg("--allow-preliminary-commands")
+        .arg("--")
+        .arg(MARK_ARGUMENT)
         .current_dir(&project_dir)
         .output()
-        .expect("Failed to execute fix build");
+        .expect("Failed to execute fix run");
     assert!(
         plain.status.success(),
-        "the build without instrumentation should succeed.\nstdout: {}\nstderr: {}",
+        "the run without instrumentation should succeed.\nstdout: {}\nstderr: {}",
         String::from_utf8_lossy(&plain.stdout),
         String::from_utf8_lossy(&plain.stderr),
+    );
+    assert_eq!(
+        races_reported(&plain),
+        0,
+        "a program built without the instrumentation reports nothing, whatever it does.\nstderr: {}",
+        String::from_utf8_lossy(&plain.stderr)
     );
 
     let checked = run_harness(&project_dir, "none", &[]);
