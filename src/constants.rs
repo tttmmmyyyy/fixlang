@@ -123,6 +123,11 @@ pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
 // not, so a buffer off this boundary makes every second vector access straddle a line.
 pub const ARRAY_BUF_ALIGNMENT: u64 = 32;
 
+// The bytes an `#ArrayStorage` allocation carries on top of the object, so that the object can be
+// placed off the base of its block and land with its element buffer on `ARRAY_BUF_ALIGNMENT`. The
+// object is placed by less than the alignment, so this is the widest that distance can be.
+pub const ARRAY_STORAGE_ALLOC_SLACK: u64 = ARRAY_BUF_ALIGNMENT - 1;
+
 // The `#ArrayStorage` allocation size, in bytes, from which the element buffer is worth aligning.
 // Below it the loop over the elements is too short for the alignment to pay for the bytes the
 // alignment costs, and such arrays are numerous enough that those bytes show up on their own.

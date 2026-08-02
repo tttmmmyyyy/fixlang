@@ -322,7 +322,7 @@ __attribute__((noreturn)) void fixruntime_negative_array_size(int64_t size)
 
 __attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
 {
-    fprintf(stderr, "Array size or capacity too large: %" PRId64 "\n", size);
+    fprintf(stderr, "Array size or capacity exceeds the address space: %" PRId64 "\n", size);
     fixruntime_abort();
 }
 

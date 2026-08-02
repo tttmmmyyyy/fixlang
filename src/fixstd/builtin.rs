@@ -18,7 +18,7 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    TraverserWorkType, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX,
+    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK,
     ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME,
     BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
@@ -2080,7 +2080,7 @@ fn realloc_array<'c, 'm>(
         .builder()
         .build_select(
             is_aligned,
-            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            i64_ty.const_int(ARRAY_STORAGE_ALLOC_SLACK, false),
             old_alloc_offset,
             "slack@realloc_array",
         )

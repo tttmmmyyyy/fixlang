@@ -3,12 +3,12 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
-    ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX,
-    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
-    DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
-    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_IDX,
+    ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
+    CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
+    DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME,
+    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -1149,7 +1149,7 @@ impl ObjectType {
                 .build_int_cast(array_capacity, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
             if gc.config.runtime_check() {
-                panic_if_capacity_overflows(gc, cap, elem_size, header_size);
+                panic_if_byte_count_exceeds_address_space(gc, cap, elem_size, header_size);
             }
             let elems_size = gc
                 .builder()
@@ -1653,7 +1653,7 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// system cannot supply still fails in `malloc`. It is a constant, so the whole check is one
 /// unsigned comparison, which also rejects the negative capacity an `_unsafe_` primitive can be
 /// handed.
-fn panic_if_capacity_overflows<'c, 'm>(
+fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
     gc: &Generator<'c, 'm>,
     cap: IntValue<'c>,
     elem_size: u64,
@@ -1666,7 +1666,7 @@ fn panic_if_capacity_overflows<'c, 'm>(
     // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
     // of that width.
     assert_eq!(cap.get_type().get_bit_width(), 64);
-    let max_cap = (u64::MAX - (ARRAY_BUF_ALIGNMENT - 1) - header_size) / elem_size;
+    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - header_size) / elem_size;
     let is_capacity_overflow = gc
         .builder()
         .build_int_compare(
@@ -1747,7 +1747,7 @@ fn build_alloc_array_storage<'c, 'm>(
         .builder()
         .build_and(
             aligned_mask,
-            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            i64_ty.const_int(ARRAY_STORAGE_ALLOC_SLACK, false),
             "slack@alloc_array_storage",
         )
         .unwrap();

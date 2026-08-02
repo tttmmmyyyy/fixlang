@@ -364,7 +364,7 @@ Creates an empty array with specified capacity.
 
 ##### Parameters
 
-* `capacity` - The number of elements the array can hold without allocating more space. If negative, or so large that the elements do not fit in memory, the program will abort.
+* `capacity` - The number of elements the array can hold without allocating more space. If negative, or so large that the elements exceed the address space, the program will abort.
 
 #### fill
 
@@ -378,7 +378,7 @@ Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 ##### Parameters
 
-* `size` - The number of elements in the array.
+* `size` - The number of elements in the array. If negative, or so large that the elements exceed the address space, the program will abort.
 * `value` - The value to fill the array with.
 
 #### find_by
@@ -564,7 +564,7 @@ Reserves the memory region for an array.
 
 ##### Parameters
 
-* `capacity` - The capacity to be reserved.
+* `capacity` - The capacity to be reserved. If so large that the elements exceed the address space, the program will abort.
 * `array` - The array to be reserved.
 
 #### resize
