@@ -335,6 +335,19 @@ mod integration_tests {
         assert_rc_state(&dump, "scalars", "deeplocal");
     }
 
+    /// Verifies that reading one field out of an unboxed struct keeps its dispatch when a field
+    /// nobody named holds a global. The read drops the fields it does not hand out, so what those
+    /// hold decides the answer even though the struct itself was built by the program — and the
+    /// operand the operation declares for them is the only thing that says so.
+    #[test]
+    fn test_locality_of_a_read_out_of_an_unboxed_struct() {
+        let (_temp_dir, project_dir) = setup_test_env("unbox_struct");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let holds_global = binding_vars(&dump, "holds_global");
+        assert_op_state(&dump, "struct_get_0", &holds_global[0], "");
+    }
+
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
     /// Reference counting is inserted for locals, but the borrow rewrite adds a release naming
     /// whatever was passed at a borrowed position — a global included — so resolving an operand by
@@ -401,6 +414,15 @@ mod runtime_tests {
     #[test]
     fn test_annotations_of_a_borrowed_global_hold_at_run_time() {
         let source = include_str!("test_locality/cases/global_release/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotation holds at run time where an unboxed struct drops a field holding
+    /// a global. The drop happens inside the operation, so the state check at the operation is what
+    /// catches an operand the declaration failed to name.
+    #[test]
+    fn test_annotations_of_a_dropped_global_field_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/unbox_struct/main.fix");
         test_source(source, Configuration::develop_mode());
     }
 }
