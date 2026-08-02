@@ -848,9 +848,9 @@ impl ProjectFile {
             );
         }
 
-        // Set no_runtime_check and skip_eval. A test build reads the `build.test` section alone, so
-        // that a project which turns the run-time checks off for its program, or leaves its `eval`
-        // expressions out of it, still runs its tests with them.
+        // Set no_runtime_check and skip_eval. A test build reads these from the `build.test`
+        // section alone, so that a project which drops the run-time checks or the `eval`
+        // expressions from its program keeps them in its tests.
         (config.no_runtime_check, config.skip_eval) = if mode == BuildConfigType::Test {
             let test = self.build.test.as_ref();
             (

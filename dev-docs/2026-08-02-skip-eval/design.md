@@ -290,10 +290,9 @@ Notes の箇条書きの後ろに置く。
 
 `CHANGELOG.md` の `## [Unreleased]` の `### Added` / `#### Tool` に 1 行足す。
 
-## 承認を仰ぐ点
+## 決めたこと
 
-1. **名前。** `--skip-eval` / `skip_eval` を提案する。`--no-eval` は `--no-runtime-check` の形に揃うが、「プログラムを評価しない」とも読める。
-2. **適用範囲。** プログラム全体を推奨する。ルートプロジェクトのファイルだけに絞る案も実装可能である。
-3. **フィールド表の Type 欄。** `no_runtime_check` と `skip_eval` を Overwrite にする振り分けでよいか。他の真偽値の行は Merge (OR) で、これはコンパイラオプションが値を true にしかできないことを指している。
-
-`fix test` での扱いは決着した。「プロジェクトファイルのテストセクションの扱い」の節に書いたとおり、`[build.test]` にもフィールドを持たせ、既定 false の上書きにする。`no_runtime_check` も同じ形に直す。
+1. **名前は `--skip-eval` / `skip_eval`。** `--no-eval` は `--no-runtime-check` の形に揃うが、「プログラムを評価しない」とも読める。
+2. **適用範囲はプログラム全体。** std も依存プロジェクトもユーザのファイルも区別しない。
+3. **フィールド表の Type 欄は Overwrite。** 他の真偽値の行は Merge (OR) で、これはコンパイラオプションが値を true にしかできないことを指している。この 2 つは `[build.test]` が `[build]` を上書きする方が支配的なので Overwrite とし、精確な規則は Description に置く。
+4. **`fix test` は `[build.test]` から読む。** 「プロジェクトファイルのテストセクションの扱い」の節のとおり、既定 false の上書きにする。`no_runtime_check` も同じ形に直す。
