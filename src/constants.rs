@@ -7,6 +7,8 @@ pub const MODULE_SEPARATOR: &str = ".";
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
+/// The field of `Std::IO` holding the action, a function taking an `IOState` to the state after the
+/// action and the action's result.
 pub const IO_DATA_NAME: &str = "runner";
 /// The `Std` value that puts the values reachable from a value into multi-threaded mode.
 pub const MARK_THREADED_NAME: &str = "mark_threaded";
@@ -95,9 +97,17 @@ pub const STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL: &str = "#punch_fu_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
+/// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
+/// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
+/// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const DECAP_NAME: &str = "#decap";
+/// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
+/// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
+/// The name of the global generated in the namespace of each value whose signature has an opaque
+/// type. It wraps the value's definition so that type inference records the concrete type behind the
+/// opaque type; instantiation then removes the applications of it.
 pub const WRAP_OPAQUE_FUNC_NAME: &str = "#wrap_opaque";
 
 // Struct layout constants.

@@ -2928,8 +2928,7 @@ The following table shows how each setting is handled.
 </table>
 
 Note:
-For some settings, such as optimization level and debugging information generation, you might expect that settings in dependent projects would take effect only within the scope of those dependent projects, rather than not affecting the main project at all.
-However, the Fix build system currently does not have a mechanism to separate compilation units on a per-dependent-project basis, so settings like optimization level and debugging information generation use a single value across the entire build.
+The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build, which the compiler options and the main project's project file decide.
 
 ### Approval of `preliminary_commands`
 

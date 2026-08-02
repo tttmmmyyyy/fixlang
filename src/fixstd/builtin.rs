@@ -7340,7 +7340,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
     }
 }
 
-// Run an IO runner in the IO monad and return the result.
+/// Runs the action held by a value of type `IO a` and returns its result.
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
@@ -7352,7 +7352,8 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
     run_ios_runner(gc, &runner_obj, None).1
 }
 
-// Given an value of type `IOState -> (IOState, a)`, run it with an initial IO state and return the result `IOState` and `a`.
+/// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
+/// `ios` is `None`, and returns the resulting `IOState` and `a`.
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,
@@ -7370,8 +7371,11 @@ pub fn run_ios_runner<'b, 'm, 'c>(
     (ios, res)
 }
 
+/// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
+/// reachable from the given value into multi-threaded mode and hands the value back.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
+    /// The name the value to be marked is bound to in the scope of this body.
     var_name: FullName,
 }
 
@@ -7417,6 +7421,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     }
 }
 
+/// Expression and scheme of `Std::mark_threaded : a -> a`.
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";

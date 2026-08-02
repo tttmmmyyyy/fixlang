@@ -51,14 +51,17 @@ pub const FIX_NAME: &str = "fix";
 
 const STD_SOURCE: &str = include_str!("std.fix");
 
-// Body and scheme for a deprecated `Std::<From>::to_<To>` global that delegates
-// to its canonical replacement, the trait method `Std::To<To>::<method>`.
-//
-// `return_ty` is the value type as it should appear in the global's scheme:
-// the Fix type itself for Fix-target casts, or the C alias (e.g. `CInt`) for
-// FFI-target casts. The trait's own method already has type `[a : To<To>] a -> <To>`,
-// so the scheme is just `from -> return_ty` with no constraints (the constraint is
-// satisfied by an instance registered in `make_numeric_cast_traits_mod`).
+/// Body and scheme for a deprecated `Std::<From>::to_<To>` global that delegates
+/// to its canonical replacement, the trait method `Std::To<To>::<method>`.
+///
+/// The trait's own method already has type `[a : To<To>] a -> <To>`, so the scheme is
+/// `from -> return_ty` with no constraints; the constraint is satisfied by an instance
+/// registered in `make_numeric_cast_traits_mod`.
+///
+/// # Arguments
+///
+/// * `return_ty` - The value type as it should appear in the global's scheme: the Fix type itself
+///   for Fix-target casts, or the C alias (e.g. `CInt`) for FFI-target casts.
 fn cast_delegation(
     from: &Arc<TypeNode>,
     to_name: &str,
@@ -74,9 +77,9 @@ fn cast_delegation(
     (body, scm)
 }
 
-// Register a deprecated `Std::<From>::to_<To>` cast: it gets a body that
-// delegates to the `To<To>` trait method and a `DEPRECATED[...]` entry
-// pointing users at that trait method.
+/// Registers a deprecated `Std::<From>::to_<To>` cast: it gets a body that
+/// delegates to the `To<To>` trait method and a `DEPRECATED[...]` entry
+/// pointing users at that trait method.
 fn register_deprecated_cast(
     fix_module: &mut Program,
     errors: &mut Errors,
@@ -107,6 +110,8 @@ fn register_deprecated_cast(
     );
 }
 
+/// Builds the `Std` module: the source `std.fix` parsed, plus the type aliases, trait instances and
+/// global values whose definitions the compiler supplies.
 pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
 
@@ -680,7 +685,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     Ok(fix_module)
 }
 
-// Create source code to define traits such as ToString or Eq for tuples.
+/// Creates source code to define traits such as ToString or Eq for tuples of the given sizes.
 fn make_tuple_traits_source(sizes: &[u32]) -> String {
     let mut src = "module Std; \n\n".to_string();
     for size in sizes {
@@ -868,17 +873,14 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
     src
 }
 
-// Build the module that defines traits which convert between numeric types.
-//
-// The trait declarations (`trait a : ToF64 { f64 : a -> F64; }` etc.) are
-// emitted as source so that they participate in the usual parsing pipeline,
-// but the per-type instances are added programmatically below: each
-// `impl <From> : To<To> { <method> = ... }` is built directly as a `TraitImpl`
-// whose body is the LLVM cast lambda returned by `cast_*_function`.
-//
-// This avoids a synthetic source line per instance, which would otherwise
-// surface as deprecation warnings (the trivial `<method> = to_<To>;` body
-// referenced the deprecated `to_<To>` global).
+/// Builds the module that defines the traits which convert between numeric types.
+///
+/// The trait declarations (`trait a : ToF64 { f64 : a -> F64; }` etc.) are emitted as source so that
+/// they participate in the usual parsing pipeline. Each per-type instance
+/// `impl <From> : To<To> { <method> = ... }` is built directly as a `TraitImpl` whose body is the
+/// LLVM cast lambda returned by `cast_*_function`, since an instance written as source would have
+/// the body `<method> = to_<To>;`, whose use of the deprecated `to_<To>` global raises a deprecation
+/// warning.
 pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, Errors> {
     let int_types = integral_types();
     let float_types = floating_types();

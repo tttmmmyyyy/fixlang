@@ -405,6 +405,9 @@ impl ProjectFile {
         Ok(())
     }
 
+    /// Checks the fields the build reads from the project file: the project name, `version` and
+    /// `fix_version`, the dependency entries and the uniqueness of their names, and
+    /// `disable_cpu_features`. Each error points at the project file.
     pub fn validate(&self) -> Result<(), Errors> {
         // Validate the general section.
 
@@ -472,10 +475,12 @@ impl ProjectFile {
         Ok(())
     }
 
-    // The source-file entries listed in the project file, each paired (via
-    // `Spanned`) with its byte range in the project file. Does not include
-    // files of dependent projects.
-    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    /// The source-file entries listed in this project's own project file, each paired (via
+    /// `Spanned`) with its byte range in that file.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     fn source_file_entries(&self, mode: BuildConfigType) -> Vec<&Spanned<PathBuf>> {
         let mut entries: Vec<&Spanned<PathBuf>> = self.build.files.iter().collect();
         if mode == BuildConfigType::Test {
@@ -486,8 +491,11 @@ impl ProjectFile {
         entries
     }
 
-    // Get source files of this project. Does not include files of dependent projects.
-    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    /// The paths of this project's own source files, resolved against the project directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
         self.source_file_entries(mode)
             .iter()
@@ -495,11 +503,13 @@ impl ProjectFile {
             .collect()
     }
 
-    // Check that every source file listed in the project file exists on disk.
-    // Each error points at the offending entry within the project file, so
-    // editors can surface a problem whose cause is the project file rather
-    // than any source code. `mode` selects whether `[build.test]` files are
-    // included.
+    /// Checks that every source file listed in the project file exists on disk. Each error points at
+    /// the offending entry, so an editor attaches the problem to the project file, which is where
+    /// its cause is.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also checks the files listed in the `[build.test]` section.
     fn check_source_files_exist(&self, mode: BuildConfigType) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for entry in self.source_file_entries(mode) {
@@ -543,11 +553,11 @@ impl ProjectFile {
         }
     }
 
-    // Update a configuration from a project file.
-    // Reads `self.role` to decide whether this project's dependent-only fields are skipped,
-    // and `self.source` to tag preliminary_commands for trust-store lookup. Loaders
-    // (`read_root_file` / `DependencyLockFileEntry::project_file`) are responsible for
-    // populating both before calling this method.
+    /// Updates a configuration from a project file.
+    ///
+    /// `self.role` decides whether the fields that only the root project contributes are skipped,
+    /// and `self.source` tags `preliminary_commands` for trust-store lookup. Both must be populated
+    /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
         let source = self

@@ -73,7 +73,8 @@ fn run_gcc(com: &mut Command) {
     }
 }
 
-// Build the program specified in the configuration.
+/// Builds the program specified in the configuration, linking the object files and the runtime into
+/// the output file.
 pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
 
