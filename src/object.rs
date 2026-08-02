@@ -1649,10 +1649,10 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// block corrupts the heap. The elements must therefore leave room for the header in front of them
 /// and for the padding that puts the element buffer on `ARRAY_BUF_ALIGNMENT`.
 ///
-/// The bound is the widest capacity whose byte count cannot wrap: a byte count within it that the
-/// system cannot supply still fails in `malloc`. It is a constant, so the whole check is one
-/// unsigned comparison, which also rejects the negative capacity an `_unsafe_` primitive can be
-/// handed.
+/// The bound is the widest capacity whose byte count cannot wrap, and a constant, so the whole check
+/// is one unsigned comparison. A byte count within the bound that the system cannot supply is a
+/// separate matter, left where it was: `malloc` answers null and the program faults on the store
+/// that initializes the object.
 fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
     gc: &Generator<'c, 'm>,
     cap: IntValue<'c>,

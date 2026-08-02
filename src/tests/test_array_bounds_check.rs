@@ -1,5 +1,5 @@
 use crate::{
-    configuration::Configuration,
+    configuration::{Configuration, FixOptimizationLevel},
     tests::test_util::{test_source, test_source_fail},
 };
 
@@ -255,7 +255,8 @@ pub fn test_capacity_of_a_zero_sized_element_is_allocatable() {
 }
 
 /// A capacity reaches the check through the `_unsafe_` primitives as well, which take one the caller
-/// promises is in range; a negative one is out of range read as the byte count it asks for.
+/// promises is in range. Read as the byte count it asks for, a negative capacity of an eight-byte
+/// element exceeds the address space.
 #[test]
 pub fn test_unsafe_empty_capacity_unchecked_checks_the_byte_count() {
     let source = r#"
@@ -273,6 +274,82 @@ pub fn test_unsafe_empty_capacity_unchecked_checks_the_byte_count() {
         &source,
         config,
         "Array size or capacity exceeds the address space: -1",
+    );
+}
+
+/// The bound is exact at its top end: one element above the widest capacity that fits, the byte
+/// count plus the header and the alignment padding comes to 2^64 + 7, which wraps to 7 bytes that
+/// `malloc` supplies.
+#[test]
+pub fn test_empty_capacity_one_element_past_the_bound_is_rejected() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr : Array I64 = Array::empty(2305843009213693948);
+                println(arr.push_back(42).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity exceeds the address space: 2305843009213693948",
+    );
+}
+
+/// Growing a shared array allocates a fresh storage instead of reallocating in place, and the byte
+/// count of the new capacity is checked on that branch as it is on the in-place one.
+#[test]
+pub fn test_reserve_capacity_byte_count_wraps_for_a_shared_array() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr : Array I64 = Array::fill(3, 7);
+                // Two live references to one storage send `reserve` down the shared branch.
+                let pair = (arr, arr);
+                let big = pair.@0.reserve(2305843009213693952);
+                println((big.@(0) + pair.@1.@(0)).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity exceeds the address space: 2305843009213693952",
+    );
+}
+
+/// The runtime function the check calls is declared in every compilation unit and defined in one, so
+/// a program split into one unit per symbol links and aborts where a single-unit program does. The
+/// optimization level comes down to `Basic` because separate compilation, which `max_cu_size`
+/// divides, runs only there and below.
+#[test]
+pub fn test_capacity_byte_count_under_separate_compilation() {
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let args = *get_args;
+                // A program run with no argument gets one element in `args`, so this is 2^61-3.
+                let arr : Array I64 = Array::empty(2305843009213693950 - args.@size);
+                println(arr.push_back(42).@(0).to_string)
+            );
+        "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    config.set_fix_opt_level(FixOptimizationLevel::Basic);
+    config.max_cu_size = 1;
+    test_source_fail(
+        &source,
+        config,
+        "Array size or capacity exceeds the address space: 2305843009213693949",
     );
 }
 
