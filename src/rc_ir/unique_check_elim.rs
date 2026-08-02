@@ -86,14 +86,20 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 /// The mutable state of the specialization pass: the program and analysis it reads, and the clones
 /// it accumulates as it walks the reachable `(function, key)` pairs.
 struct Specializer<'a> {
+    /// The input program. Its functions are the originals every clone is made from.
     prog: &'a RcProgram,
+    /// The type definitions, for resolving a value's type to its boxed-leaf shape.
     type_env: &'a TypeEnv,
+    /// The uniqueness facts of `prog`, symbolic in each function's inputs: a clone's key resolves
+    /// them into the concrete verdicts that decide which checks it may drop.
     analysis: ProvenanceAnalysis,
     /// The functions worth specializing: those whose body reaches a uniqueness check (a force-unique
     /// op or `is_unique`), directly or through a direct call. A function that reaches none (a read-only
     /// function) is the same under every key, so specializing it would only make redundant clones; its
     /// calls route to its canonical version.
     reaches_unique_check: Set<FuncRef>,
+    /// The name minted for each `(function, key)` pair, and the pairs still waiting to be
+    /// materialized.
     clones: CloneRegistry<SpecializationKey>,
     /// The materialized clones, keyed by their output name.
     output_funcs: Map<FuncRef, RcFunc>,
@@ -218,8 +224,8 @@ impl<'a> Specializer<'a> {
     }
 
     /// Route a direct call: retarget the callee to the clone for the argument uniqueness this call
-    /// passes, requesting that clone. An indirect call (the callee is a closure value, not a function
-    /// name) is left as is. A funptr function is specialized; a closure named directly is not.
+    /// passes, requesting that clone. Specialization reaches a callee that names a funptr function;
+    /// a callee that is a closure value, and one that names a closure, keep the canonical version.
     fn retarget_call(&mut self, call: &RcVar, callee: &RcVar, inputs: &[Uniqueness]) -> RcVar {
         let Some(cref) = specializable_callee(self.prog, callee, &self.reaches_unique_check) else {
             return callee.clone();

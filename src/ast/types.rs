@@ -1627,7 +1627,11 @@ impl TypeNode {
         }
     }
 
-    // Create the name of traverser function.
+    /// The symbol name of the traverser function for this type. It keys the memoization of the
+    /// generated traversers, so one name is minted per distinct `(type, capture, work, state)`.
+    ///
+    /// # Arguments
+    /// * `capture` — the types a dynamic object's destructor traverses, empty for every other type.
     pub fn traverser_name(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
@@ -1651,7 +1655,12 @@ impl TypeNode {
         )
     }
 
-    // Get the hash value of the type with the given capturing types (used for dynamic objects).
+    /// A digest of this type together with `capture`, short enough to embed in a symbol name. Two
+    /// types with the same normalized form and the same captures hash alike.
+    ///
+    /// # Arguments
+    /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
+    ///   of the same type. Empty for every other type.
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);

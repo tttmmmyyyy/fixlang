@@ -3041,9 +3041,8 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Force array object to be unique.
-// If it is unique, do nothing.
-// If it is shared, clone the object.
+/// Force an array object to be unique: a unique array is returned as it is, and a shared one is
+/// cloned.
 fn make_array_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -3052,9 +3051,12 @@ fn make_array_unique<'c, 'm>(
     make_array_unique_with_hole(gc, array, None, state)
 }
 
-// Force array object to be unique: a unique array is returned as it is, and a shared one is cloned.
-// When `hole` is `Some(idx)`, the clone skips the element at `idx`, leaving that slot
-// uninitialized.
+/// Force an array object to be unique: a unique array is returned as it is, and a shared one is
+/// cloned.
+///
+/// # Arguments
+/// * `hole` — `Some(idx)` makes the clone skip the element at `idx`, leaving that slot
+///   uninitialized for the caller to fill.
 fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -3237,6 +3239,8 @@ impl LLVMGen for InlineLLVMArraySetBody {
     }
 }
 
+/// The body and type scheme of `Array::set`, shared by the bounds-checked and the unchecked
+/// version. `bounds_checked` selects which of the two is built.
 fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
@@ -5667,9 +5671,8 @@ pub fn struct_act_const(
     (expr, scm)
 }
 
-// Make struct object unique.
-// If it is (unboxed or) unique, do nothing.
-// If it is shared, clone the object.
+/// Force a struct object to be unique: an unboxed or unique struct is returned as it is, and a
+/// shared boxed one is cloned.
 fn make_struct_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_obj: Object<'c>,
@@ -5678,9 +5681,8 @@ fn make_struct_unique<'c, 'm>(
     make_struct_union_unique(gc, struct_obj, state)
 }
 
-// Make struct / union object unique.
-// If it is (unboxed or) unique, do nothing.
-// If it is shared, clone the object.
+/// Force a struct or union object to be unique: an unboxed or unique object is returned as it is,
+/// and a shared boxed one is cloned.
 fn make_struct_union_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     mut obj: Object<'c>,

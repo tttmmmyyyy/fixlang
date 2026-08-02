@@ -43,7 +43,9 @@ const MARKER: &str = "cc";
 /// constructor guard on case-of-case already keeps every rewrite productive, so the budget only
 /// guarantees termination against an unforeseen non-terminating interaction, never limits real work.
 struct Ctx {
+    /// The source of the number that makes each minted name unique across the whole program.
     fresh: u64,
+    /// The rewrites left for the body under simplification; the fixpoint stops when it reaches zero.
     budget: u64,
 }
 

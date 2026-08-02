@@ -89,17 +89,21 @@ pub fn lower_program(
 /// globally-unique name is minted at every binding, the scope resolves shadowing and the resulting
 /// names need no scope tracking downstream.
 struct Lowerer<'a> {
+    /// The type definitions, for resolving a value's type to its layout and boxedness.
     type_env: &'a TypeEnv,
+    /// The source of the number that makes each minted local name unique across the program.
     fresh_counter: u64,
+    /// The top-level functions lowered so far, the lifted lambda bodies among them.
     funcs: Map<FuncRef, RcFunc>,
-    // A shadow stack per AST name; the last entry is the current binding.
+    /// A shadow stack per AST name; the last entry is the current binding.
     scope: Map<FullName, Vec<RcVar>>,
-    // The type of each top-level symbol of the program, to type a global referenced as an LLVM
-    // operand.
+    /// The type of each top-level symbol of the program, to type a global referenced as an LLVM
+    /// operand.
     global_types: &'a Map<FullName, Arc<TypeNode>>,
-    // The top-level symbol currently being lowered, with a per-symbol counter: each lifted lambda is
-    // named `<symbol>::closure{N}` so it carries its source module (like a top-level function's name).
+    /// The top-level symbol currently being lowered: each lifted lambda is named
+    /// `<symbol>::closure{N}` so it carries its source module, like a top-level function's name.
     current_symbol: Option<FullName>,
+    /// The `N` of the next `<symbol>::closure{N}`, restarted for each top-level symbol.
     closure_counter: u64,
 }
 

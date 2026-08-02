@@ -403,12 +403,25 @@ fn clone_func(
 /// The per-version state the body rewrite reads: this version's aliasing vars and tail calls,
 /// whether it is the borrow clone, and the whole-program ownership and version tables.
 struct RewriteCtx<'a> {
+    /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
+    /// Whether this version is the borrow clone, whose reference counting on its borrowed parameter
+    /// leaves is dropped. The all-owning original keeps every node it was given.
     is_borrow_version: bool,
+    /// The inferred `Own` parameter leaves of the whole program, one `(parameter-name, unit-path)`
+    /// each. A parameter leaf absent from it is borrowed.
     owned_units: &'a Set<VarPath>,
+    /// The borrow clone of each function that got one, which a call is routed to where routing is
+    /// safe and saves a reference count.
     borrow_versions: &'a Map<FuncRef, FuncRef>,
+    /// The parameter names and types of every version, original and borrow clone alike, so a call
+    /// can look its callee's parameters up in `owned_units`.
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
+    /// The bindings of this version's tail-position calls and matches, whose calls stay on the
+    /// owning version so that no after-call release lands on a tail call.
     tail: Set<FullName>,
+    /// This version's variables: what binds each one and its type, which decide the object a leaf
+    /// belongs to and whether this version owns it.
     vars: VarTable,
 }
 

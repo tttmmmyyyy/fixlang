@@ -76,6 +76,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies the three provenance judgements a single function produces: an allocation is
+    /// `fresh`, a boxed element read out of a boxed container is `unknown`, and an unboxed tuple
+    /// carries each component's own judgement.
     #[test]
     fn test_provenance_dump_basic() {
         let (_temp_dir, project_dir) = setup_test_env("basic");
@@ -91,6 +94,9 @@ mod integration_tests {
         assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
     }
 
+    /// Verifies that a call composes its callee's effect: a recursive function returning its own
+    /// argument, whose effect takes a fixed point to compute, keeps a fresh array fresh across the
+    /// call.
     #[test]
     fn test_provenance_interprocedural_composition() {
         let (_temp_dir, project_dir) = setup_test_env("interproc");
@@ -201,6 +207,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
+    /// whose array is read again afterwards is routed, and the call at the array's last use keeps
+    /// the owning version, since borrowing there would only delay a release.
     #[test]
     fn test_benefit_routing_by_last_use() {
         let (_temp_dir, project_dir) = setup_test_env("benefit");
@@ -238,6 +247,8 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a whole-value retain of an unboxed pair is normalized into one retain per
+    /// reference-counting unit, both naming the same variable at its own field path.
     #[test]
     fn test_split_rc_into_units() {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
@@ -287,6 +298,9 @@ mod integration_tests {
             .trim()
     }
 
+    /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
+    /// cancelled when nothing between the two consumes the value, and that the value therefore
+    /// stays `fresh` for the operation following the call.
     #[test]
     fn test_cancel_removes_net_zero_bracket() {
         let (_temp_dir, project_dir) = setup_test_env("ownership");

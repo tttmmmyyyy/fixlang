@@ -416,6 +416,7 @@ pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) 
 /// The provenance analysis of one function or global initializer: a forward abstract interpretation
 /// that records each variable's provenance at its binding point.
 struct Interpreter<'a> {
+    /// The type definitions, for resolving a value's type to the paths of its boxed leaves.
     type_env: &'a TypeEnv,
     /// Each function's result provenance, symbolic in its parameters (`Arg`), used to compose a
     /// direct call at its call site. Built to a fixed point before the recording pass.
@@ -858,7 +859,6 @@ pub struct ProvenanceAnalysis {
     pub call_arg_provs: Map<FullName, Vec<Provenance>>,
 }
 
-/// Analyze every function and global initializer of `prog`.
 /// Move one function's entries into a whole-program table, where `role` says what a name does in it
 /// ("is bound", say) so a collision reads as a sentence.
 fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, role: &str) {
@@ -873,6 +873,8 @@ fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, 
     }
 }
 
+/// Analyze every function and global initializer of `prog`, after computing each function's result
+/// provenance to a fixed point so that a call composes its callee's effect.
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;

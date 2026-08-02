@@ -131,7 +131,9 @@ pub type FieldPath = Vec<usize>;
 /// container, and the path to the leaf within that operand's value. Unlike `VarPath`, `container_index`
 /// is an operand slot (resolved against the op's arguments), not a bound variable name.
 pub struct UniqueCheckOperand {
+    /// The position, among the operation's arguments, of the operand holding the container.
     pub container_index: usize,
+    /// The path from the root of that operand's value down to the checked boxed leaf.
     pub path: FieldPath,
 }
 
@@ -158,11 +160,14 @@ pub enum RcTarget {
 /// catch-all is always the final arm.
 #[derive(Clone)]
 pub struct MatchArm {
+    /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
+    /// The variable `body` reads the matched value through.
     pub payload: RcVar,
     /// What is known about the payload a variant arm of a boxed union retains out of the container.
     /// A catch-all arm binds the scrutinee itself and retains nothing, so its state is `Unknown`.
     pub payload_state: RcState,
+    /// The expression this arm evaluates to, in the scope extended with `payload`.
     pub body: RcExprNode,
 }
 

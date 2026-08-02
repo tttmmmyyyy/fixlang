@@ -1487,7 +1487,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_call(func, &args, call_name).unwrap();
     }
 
-    // Retain `obj`: increment the reference count of every boxed object it owns, once.
+    /// Retain `obj`: increment the reference count of every boxed object it owns, once.
     pub fn retain(&mut self, obj: Object<'c>, state: RcState) {
         let one = self.context.i64_type().const_int(1, false);
         let prefix = format!("retain{}", state.name_suffix());
@@ -1496,10 +1496,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
-    // Emit `body` where the boxed object is known to be non-null. A dynamic object can be null, so
-    // the body goes on the non-null side of a null check and control rejoins after it; any other
-    // boxed object is never null, so the body is emitted where the caller stands. `tag` names the
-    // two blocks the null check adds.
+    /// Emit `body` where the boxed object is known to be non-null. A dynamic object can be null, so
+    /// the body goes on the non-null side of a null check and control rejoins after it; any other
+    /// boxed object is never null, so the body is emitted where the caller stands.
+    ///
+    /// # Arguments
+    /// * `tag` — suffix distinguishing the two basic blocks the null check adds from those of
+    ///   another null check in the same function.
     fn build_skipping_null(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
         if !obj.is_dynamic_object() {
             body(self);
@@ -1525,9 +1528,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    // Retain an object `amount` times: every boxed leaf reached has its reference count increased by
-    // `amount` (an i64 count). Passing a constant 1 reproduces an ordinary single retain exactly, so
-    // single-retain call sites stay byte-identical.
+    /// Retain an object `amount` times: every boxed leaf reached has its reference count increased
+    /// by `amount`, an i64 count.
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_skipping_null(&obj, "retain", |gc| {
@@ -1722,7 +1724,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Release or mark global or mark threaded an object.
+    /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.
     pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_skipping_null(&obj, "release_mark", |gc| {
@@ -1928,7 +1930,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Release object.
+    /// Release `obj`: decrement the reference count of every boxed object it owns, destroying the
+    /// ones whose count reaches zero.
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {

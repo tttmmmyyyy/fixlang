@@ -644,11 +644,14 @@ impl ObjectFieldType {
         Object::new(elem_val, elem_ty, gc)
     }
 
-    // Read an element of array.
-    // Returned object is retained.
+    /// Read the element at `idx` out of the array buffer at `buffer`, retained, so the returned
+    /// object owns its reference independently of the array.
+    ///
+    /// # Arguments
+    /// * `len` — the element count to bounds-check `idx` against; `None` reads without a check.
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
@@ -766,9 +769,13 @@ impl ObjectFieldType {
         }
     }
 
-    // Clone an struct object `src` into `dst`.
-    // `dst` should be already allocated but not initialized.
-    // `src` will not be released.
+    /// Copy the value-carrying fields of the struct object `src` into `dst`, retaining each boxed
+    /// field so that both objects own it, and return `dst`. A punched field holds no value, so it
+    /// is skipped. `src` is borrowed: it is left as it was.
+    ///
+    /// # Arguments
+    /// * `dst` — an allocated but uninitialized struct object of the same type; every field this
+    ///   writes is a first write.
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -790,9 +797,12 @@ impl ObjectFieldType {
         dst
     }
 
-    // Clone an union object `src` into `dst`.
-    // `dst` should be already allocated but not initialized.
-    // `src` will not be released.
+    /// Copy the tag and the payload of the union object `src` into `dst`, retaining the payload so
+    /// that both objects own it, and return `dst`. `src` is borrowed: it is left as it was.
+    ///
+    /// # Arguments
+    /// * `dst` — an allocated but uninitialized union object of the same type; the tag and payload
+    ///   this writes are first writes.
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -1043,7 +1053,9 @@ impl ObjectFieldType {
         struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
-    // Get field of struct as Objects (with refcnt managed).
+    /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
+    /// the struct: each returned field owns its reference and so outlives the struct it came from,
+    /// and the fields left behind are dropped.
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1962,18 +1974,20 @@ pub fn get_traverser_ptr<'c, 'm>(
     }
 }
 
-// Create a traverser function for an object of specified type.
-//
-// Traverser function is a function that traverses all fields of an object and does some work on them.
-// Traverser function takes the pointer to the object as an argument.
-// If `work` is Some(0), then traverser function works as destructor of an object. This is called as `destructor`.
-// If `work` is Some(1), then traverser function marks all reachable objects as global. This is called as `mark_global`.
-// If `work` is Some(2), then traverser function marks all reachable objects as threaded. This is called as `mark_threaded`.
-// If `work` is None, then traverser function takes the second argument of as a work type. This is called as `(dynamic_)traverser`.
-// This function returns `None` if traverser function is empty.
+/// Generate the traverser function for an object of type `ty`: a function taking a pointer to the
+/// object, which walks its fields and performs one reference-counting job on each.
+///
+/// # Arguments
+/// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
+/// * `work` — the job to compile in: `TraverserWorkType::release` makes the object's destructor,
+///   `mark_global` and `mark_threaded` make the corresponding markers. `None` makes the dynamic
+///   traverser, which takes the job as a second argument and dispatches on it at run time.
+///
+/// # Returns
+/// `None` where the traverser would have no work to do, which lets a caller emit no call at all.
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
+    capture: &Vec<Arc<TypeNode>>,
     gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
     state: RcState,

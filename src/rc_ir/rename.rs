@@ -67,6 +67,7 @@ fn assign_fresh_names_to_binders(
     grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))
 }
 
+/// Record the fresh name of every binder of one node, then descend into its continuation and arms.
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
@@ -118,6 +119,7 @@ fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprN
     grow_stack(|| rename_expr_inner(node, renaming))
 }
 
+/// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(

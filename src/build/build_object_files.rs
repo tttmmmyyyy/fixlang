@@ -49,20 +49,23 @@ use std::{
     sync::Arc,
 };
 
-// The result of `build_object_files` function.
+/// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    // Paths of object files generated.
-    // If the function is running for language server, this will be empty.
+    /// The object files generated. Empty when the build ran for the language server, which
+    /// type-checks without emitting code.
     pub obj_paths: Vec<PathBuf>,
 }
 
-// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
-// code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
-//
-// `symbols` is the set to lower and generate code for — one compilation unit, or the whole program.
-// `global_types` types a global that a lowered function references as an LLVM operand, which under
-// separated compilation may be defined in another unit, so it covers the whole program.
+/// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
+/// code generation and the RC IR dump build on; the optimizations are separate
+/// (`optimize_rc_program`).
+///
+/// # Arguments
+/// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
+/// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
+///   Under separated compilation such a global may be defined in another unit, so this covers the
+///   whole program.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -79,11 +82,11 @@ fn lower_and_insert_rc(
     prog
 }
 
-// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
-// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
-// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
-// borrowed parameters on the functions (`RcFunc::borrowed_units`); read the owned complement back
-// with `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
+/// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
+/// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
+/// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
+/// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
+/// reads back as the owned complement.
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -124,11 +127,13 @@ fn optimize_rc_program(
     prog
 }
 
-// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a file
-// under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
-// `--emit-rc-ir`, for compiler development. `rc_program` is the whole program at that stage; the module
-// filter is applied here, on the RC IR, so the dumped functions carry the whole-program context that
-// code generation actually compiles.
+/// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a
+/// file under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
+/// `--emit-rc-ir`, for compiler development.
+///
+/// # Arguments
+/// * `rc_program` — the whole program at that stage. The module filter is applied here, on the RC
+///   IR, so the dumped functions carry the whole-program context code generation compiles.
 fn dump_rc_ir(
     rc_program: &RcProgram,
     type_env: &TypeEnv,
@@ -197,9 +202,9 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
-// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
-// generation does at `Max`), then write it before and after the optimizations, filtered to the
-// requested module in each dump.
+/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
+/// generation does at `Max`), then write it before and after the optimizations, filtered to the
+/// requested module in each dump.
 fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let Some(filter) = &config.emit_rc_ir else {
         return;

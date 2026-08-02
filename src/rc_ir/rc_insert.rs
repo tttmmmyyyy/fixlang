@@ -60,7 +60,10 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
 /// and a table from every local variable name to its `RcVar` (used to recover a variable's type and
 /// span when placing a dead-branch release). Names are globally unique, so the table is unambiguous.
 struct RcInserter<'a> {
+    /// The type definitions, for deciding whether a value needs reference counting at all.
     type_env: &'a TypeEnv,
+    /// Every local variable of this function or initializer, by name, carrying the type and span a
+    /// released variable is rebuilt from.
     vars: Map<FullName, RcVar>,
 }
 
