@@ -44,14 +44,14 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
-/// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
+/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
 ///
 /// The count comes first so that a list's items cannot be read as the next list's, and each item is
 /// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
-fn push_list_hash(data: &mut String, items: &[String]) {
-    data.push_str(&items.len().to_string());
+fn push_list_hash(hash_source: &mut String, items: &[String]) {
+    hash_source.push_str(&items.len().to_string());
     for item in items {
-        data.push_str(&format!("{:x}", md5::compute(item)));
+        hash_source.push_str(&format!("{:x}", md5::compute(item)));
     }
 }
 
@@ -716,30 +716,30 @@ impl Configuration {
     // code has to be hashed here: one left out makes a build reuse the object files of a build that
     // generated different code.
     pub fn object_generation_hash(&self) -> String {
-        let mut data = String::new();
-        data.push_str(&self.fix_opt_level.to_string());
-        data.push_str(&self.debug_info.to_string());
-        data.push_str(&self.threaded.to_string());
-        data.push_str(&self.backtrace.to_string());
-        data.push_str(&self.no_runtime_check.to_string());
-        data.push_str(&self.skip_eval.to_string());
-        data.push_str(&self.c_type_sizes.to_string());
-        push_list_hash(&mut data, &self.disable_cpu_features_regex);
+        let mut hash_source = String::new();
+        hash_source.push_str(&self.fix_opt_level.to_string());
+        hash_source.push_str(&self.debug_info.to_string());
+        hash_source.push_str(&self.threaded.to_string());
+        hash_source.push_str(&self.backtrace.to_string());
+        hash_source.push_str(&self.no_runtime_check.to_string());
+        hash_source.push_str(&self.skip_eval.to_string());
+        hash_source.push_str(&self.c_type_sizes.to_string());
+        push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        push_list_hash(&mut data, &self.llvm_passes());
+        push_list_hash(&mut hash_source, &self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        data.push_str(self.subcommand.command_type_string());
+        hash_source.push_str(self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        data.push_str(build_time_utc!());
+        hash_source.push_str(build_time_utc!());
 
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 
     // Edit CPU features according to the configuration.
@@ -758,12 +758,12 @@ impl Configuration {
             ));
         }
 
-        let mut com = Command::new("valgrind");
-        com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        let mut command = Command::new("valgrind");
+        command.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
 
         // Add suppressions file if it exists
         if PathBuf::from("valgrind.supp").exists() {
-            com.arg("--suppressions=valgrind.supp");
+            command.arg("--suppressions=valgrind.supp");
         }
 
         match self.valgrind_tool {
@@ -774,18 +774,18 @@ impl Configuration {
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.
-                com.arg("--tool=memcheck");
-                com.arg("--leak-check=yes"); // This option turns memory leak into error.
+                command.arg("--tool=memcheck");
+                command.arg("--leak-check=yes"); // This option turns memory leak into error.
 
                 // An array large enough to have its elements aligned sits above the base of its
                 // allocation, so the only pointer to that block is an interior one, which the leak
                 // checker calls possibly lost for as long as the array is alive. Take as errors the
                 // kinds a reference counting mistake produces: a block nothing points to is
                 // definitely lost, and one held only by such a block is indirectly lost.
-                com.arg("--errors-for-leak-kinds=definite,indirect");
+                command.arg("--errors-for-leak-kinds=definite,indirect");
             }
         }
-        Ok(com)
+        Ok(command)
     }
 
     /// The linkage to give a symbol that other compilation units may call: external where each unit
