@@ -1,13 +1,8 @@
 use super::{
-    dead_symbol_elimination, decapturing, defunctionalize_fix, inline, remove_tyanno,
-    simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
+    dead_symbol_elimination, decapturing, defunctionalize_fix, inline, inline_local, optimize_act,
+    remove_hktvs, remove_tyanno, simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
 };
-use crate::{
-    ast::program::Program,
-    configuration::Configuration,
-    optimization::{inline_local, optimize_act, remove_hktvs},
-    tool::stopwatch::StopWatch,
-};
+use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let _sw = StopWatch::new("optimization::run", config.show_build_times);
