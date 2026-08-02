@@ -124,6 +124,29 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
     }
 }
 
+/// The functions that reach a seed through the calls of `callees`: the least set containing every
+/// seed and closed under "calls a member".
+///
+/// A specializing pass gates its clones on this. Whatever makes one function worth cloning — a
+/// reference-counting site whose answer depends on the inputs, a uniqueness check in the body —
+/// travels to its callers, because a caller cloned for its own inputs is what lets the callee be
+/// called with more informative ones.
+pub fn callers_of(seeds: Set<FuncRef>, callees: &Map<FuncRef, Vec<FuncRef>>) -> Set<FuncRef> {
+    let mut reaching = seeds;
+    loop {
+        let mut changed = false;
+        for (fref, cs) in callees {
+            if !reaching.contains(fref) && cs.iter().any(|c| reaching.contains(c)) {
+                reaching.insert(fref.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            return reaching;
+        }
+    }
+}
+
 /// The function a direct call names, when routing that call to a clone is possible: the callee
 /// resolves to a function of this program, it takes no capture (a closure is reached indirectly, so
 /// it keeps its single canonical version), and it is one the pass's gate passes — a function the key

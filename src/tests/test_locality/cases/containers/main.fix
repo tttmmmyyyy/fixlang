@@ -1,0 +1,31 @@
+module Main;
+
+// A boxed struct and a boxed union, each built once here and once as a global, so the same
+// `destructure` and `match` shapes appear with a local container and with a global one.
+type Pair = box struct { head : Array I64, tail : Array I64 };
+type Holder = box union { some : Array I64, none : () };
+
+gpair : Pair;
+gpair = Pair { head : [1, 2], tail : [3, 4] };
+
+gholder : Holder;
+gholder = Holder::some([5, 6]);
+
+// Both fields are read, so the destructure hands out each one rather than dropping it.
+sum_pair : Pair -> I64;
+sum_pair = |pair| pair.@head.@(0) + pair.@tail.@(0);
+
+// The variant arm binds the payload out of the container, which is the take-out rule.
+sum_holder : Holder -> I64;
+sum_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
+
+main : IO ();
+main = (
+    let local_pair = Pair { head : [10, 20], tail : [30, 40] };
+    let local_holder = Holder::some([50, 60]);
+
+    let from_local = local_pair.sum_pair + local_holder.sum_holder;
+    let from_global = gpair.sum_pair + gholder.sum_holder;
+
+    println $ (from_local + from_global).to_string
+);

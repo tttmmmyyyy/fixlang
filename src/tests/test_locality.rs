@@ -1,13 +1,18 @@
-// Integration tests for the RC IR locality inference, checked through the `--emit-rc-ir` dump.
-// The dump tags a `Retain`/`Release` whose target the analysis proved local with `@local`, and one
-// whose whole reachable graph it proved local with `@deeplocal`, so a small program with named
-// `let`s asserts the analysis end to end.
+// Tests for the RC IR locality inference, in two shapes.
 //
-// The negative cases are the point of the file: an operation that reaches a global object may not
-// be tagged, and the run-time assertion that would catch such a mistake fires only on a program
-// that actually builds a global object, which most of the corpus does not. Each of them asserts on
-// a reference-counting operation the dump really contains, so a case that stopped producing one
-// would fail rather than pass vacuously.
+// The integration tests read the `--emit-rc-ir` dump, which tags each kind of annotated site: a
+// `Retain` / `Release` proved local with `@local` and one whose whole reachable graph is proved
+// local with `@deeplocal`, an operation whose internal reference counting is proved local with a
+// trailing `@local` on its right-hand side, and likewise a `destructure` and a boxed-union `case`
+// arm. A small program with named `let`s therefore asserts the analysis end to end. The negative
+// cases are the point: an operation that reaches a global object may not be tagged, and each case
+// asserts on a site the dump really contains, so one that stopped producing that site would fail
+// rather than pass vacuously.
+//
+// The in-process tests run the same programs under `Configuration::develop_mode()`, where every
+// annotated site carries the assertion that its object really is in the local state. The dump tests
+// pin what the analysis concluded; these pin that the conclusion holds at run time, which is what a
+// wrong hand-written `locality_flow` declaration would break.
 
 #[cfg(test)]
 mod integration_tests {
@@ -101,6 +106,39 @@ mod integration_tests {
             .collect()
     }
 
+    /// The `let` lines whose right-hand side is the operation `op` and which mention `value` — a
+    /// variable of the dump, or the prefix a global's mangled name starts with. The value may be an
+    /// operand of the operation or the binding it produces, since either identifies the site the
+    /// source wrote.
+    fn op_lines<'a>(dump: &'a str, op: &str, value: &str) -> Vec<&'a str> {
+        let call = format!("= {}(", op);
+        dump.lines()
+            .filter(|line| line.contains(&call) && line.contains(value))
+            .collect()
+    }
+
+    /// Assert that every application of `op` involving `value` carries the state tag `expected` (the
+    /// empty string for an operation that must keep the runtime dispatch), and that there is at least
+    /// one such application to judge.
+    fn assert_op_state(dump: &str, op: &str, value: &str, expected: &str) {
+        let lines = op_lines(dump, op, value);
+        assert!(
+            !lines.is_empty(),
+            "no `{}` involving `{}` in the RC IR dump, so this case asserts nothing:\n{}",
+            op,
+            value,
+            dump
+        );
+        for line in &lines {
+            let tag = line.split_once('@').map_or("", |(_, t)| t.trim_end());
+            assert_eq!(
+                tag, expected,
+                "`{}` involving `{}` should be tagged {:?}, but a line reads:\n{}",
+                op, value, expected, line
+            );
+        }
+    }
+
     /// Assert that every reference-counting operation on the value bound as `source_name` carries
     /// the state tag `expected` (the empty string for an operation that must keep the runtime
     /// dispatch), and that there is at least one such operation to judge.
@@ -150,6 +188,38 @@ mod integration_tests {
         // A value rebuilt from a retained pointer may name anything, including a global's graph or
         // an object another thread holds.
         assert_rc_state(&dump, "restored", "");
+
+        // The reference counting an operation performs inside itself, on the same operation applied
+        // to a local container and to the global. Appending to a fresh array retains the value it
+        // takes in, so appending the global keeps the dispatch while appending a number drops it.
+        assert_op_state(&dump, "array_append_value[unique]", "Main::g#", "");
+        let fresh = binding_vars(&dump, "fresh");
+        assert_op_state(&dump, "array_append_value[unique]", &fresh[0], "local");
+
+        // Reading a boxed element out of the array that holds the global retains that element.
+        let mixed = binding_vars(&dump, "mixed");
+        assert_op_state(&dump, "array_get", &mixed[0], "");
+    }
+
+    /// Verifies the annotation of an operation's internal reference counting on the two shapes that
+    /// take a boxed value out of a boxed container — a struct field and a union payload. The source
+    /// writes each shape once and reaches it twice, with a container built here and with a global,
+    /// so the pair turns on the container's locality alone.
+    #[test]
+    fn test_locality_of_a_read_out_of_a_boxed_container() {
+        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let local_pair = binding_vars(&dump, "local_pair");
+        let local_holder = binding_vars(&dump, "local_holder");
+
+        assert_op_state(&dump, "struct_get_0", &local_pair[0], "local");
+        assert_op_state(&dump, "struct_get_1", &local_pair[0], "local");
+        assert_op_state(&dump, "union_as_0", &local_holder[0], "local");
+
+        assert_op_state(&dump, "struct_get_0", "Main::gpair#", "");
+        assert_op_state(&dump, "struct_get_1", "Main::gpair#", "");
+        assert_op_state(&dump, "union_as_0", "Main::gholder#", "");
     }
 
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
@@ -180,5 +250,39 @@ mod integration_tests {
                 line
             );
         }
+    }
+}
+
+/// The same case programs, compiled and run in process. Development mode puts a state check at every
+/// site the analysis annotated, so running these turns each conclusion the dump tests read into a
+/// claim the program itself has to satisfy.
+#[cfg(test)]
+mod runtime_tests {
+    use crate::configuration::Configuration;
+    use crate::tests::test_util::test_source;
+
+    /// Verifies that the annotations on a program walking all three doors out of the local state
+    /// hold at run time — a global read directly, out of a container and out of a global struct, and
+    /// a value rebuilt from a retained pointer.
+    #[test]
+    fn test_annotations_of_the_doors_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/doors/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations on reads out of a boxed struct and a boxed union hold at run
+    /// time, over a container built by the program and the same shape over a global.
+    #[test]
+    fn test_annotations_of_reads_out_of_boxed_containers_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/containers/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations hold at run time where borrow-ification leaves a release naming
+    /// the global itself.
+    #[test]
+    fn test_annotations_of_a_borrowed_global_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/global_release/main.fix");
+        test_source(source, Configuration::develop_mode());
     }
 }

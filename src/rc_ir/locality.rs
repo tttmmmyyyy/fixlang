@@ -28,7 +28,7 @@ use crate::rc_ir::ast::{
     RcState, RcTarget, RcVar,
 };
 use crate::rc_ir::provenance::boxed_leaf_paths;
-use crate::rc_ir::specialize::{specializable_callee, CloneRegistry};
+use crate::rc_ir::specialize::{callers_of, specializable_callee, CloneRegistry};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -736,30 +736,45 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// The annotation of a reference-counting node on the subtree of `v` at `path`, and, in survey
-    /// mode, the record that the node's answer depends on the inputs. The node covers every boxed
-    /// leaf under the path — several of them where the path stops at an unboxed union — and may drop
-    /// the state dispatch only where all of them are proved local, so the leaves' localities join.
-    fn annotate_rc_site(&mut self, v: &RcVar, path: &FieldPath) -> RcState {
-        let shape = self.shape_of(v);
+    /// The inputs this clone is specialized on, so that a site can resolve the leaves it consults.
+    ///
+    /// In survey mode there are none, and the call records instead that the site's answer depends on
+    /// the inputs, when any leaf it consults says so. That is exactly what the clone gate asks of a
+    /// body: a site whose leaves all answer unconditionally answers the same under every key, so
+    /// cloning the body for it buys nothing. Every kind of site goes through here, because a body
+    /// whose only annotatable site is an operation's internal reference counting, a `Destructure`, or
+    /// a boxed-union `Match` is as worth cloning as one holding a `Retain`.
+    fn site_inputs<'l>(
+        &mut self,
+        leaves: impl Iterator<Item = &'l LeafCond>,
+    ) -> Option<&'a [LocalityKey]> {
         match &mut self.mode {
             Mode::Survey {
                 has_dependent_site, ..
             } => {
-                if shape
-                    .leaves_under(path)
-                    .any(|leaf| leaf.depends_on_inputs())
-                {
+                if leaves.into_iter().any(LeafCond::depends_on_inputs) {
                     *has_dependent_site = true;
                 }
-                RcState::Unknown
+                None
             }
-            Mode::Clone { inputs, .. } => shape
-                .leaves_under(path)
-                .map(|leaf| leaf.resolve(inputs))
-                .fold(Locality::DeepLocal, Locality::join)
-                .annotation(),
+            Mode::Clone { inputs, .. } => Some(inputs),
         }
+    }
+
+    /// The annotation of a reference-counting node on the subtree of `v` at `path`. The node covers
+    /// every boxed leaf under the path — several of them where the path stops at an unboxed union —
+    /// and may drop the state dispatch only where all of them are proved local, so the leaves'
+    /// localities join.
+    fn annotate_rc_site(&mut self, v: &RcVar, path: &FieldPath) -> RcState {
+        let shape = self.shape_of(v);
+        let Some(inputs) = self.site_inputs(shape.leaves_under(path)) else {
+            return RcState::Unknown;
+        };
+        shape
+            .leaves_under(path)
+            .map(|leaf| leaf.resolve(inputs))
+            .fold(Locality::DeepLocal, Locality::join)
+            .annotation()
     }
 
     /// The operation annotated as acting on local objects, where this clone's inputs prove every
@@ -769,20 +784,32 @@ impl<'a> Walk<'a> {
     ///
     /// A check the same `generate` emits without declaring is not covered and goes on reading it.
     fn annotate_op(
-        &self,
+        &mut self,
         llvm_gen: &Box<dyn LLVMGen>,
         arg_tys: &[Arc<TypeNode>],
         arg_shapes: &[ExtShape],
         result_shape: &ExtShape,
     ) -> Option<Box<dyn LLVMGen>> {
-        let Mode::Clone { inputs, .. } = &self.mode else {
-            return None;
-        };
         let check = llvm_gen.unique_check_operand(arg_tys, self.type_env);
         let targets = llvm_gen.internal_rc_targets(arg_tys, self.type_env);
         if check.is_none() && targets.is_empty() {
             return None;
         }
+        let consulted = || {
+            let checked = check
+                .iter()
+                .map(|check| arg_shapes[check.container_index].leaf_at(&check.path));
+            let counted = targets.iter().flat_map(|target| match target {
+                // The result's leaves under the path: what the operation retained on its way out.
+                RcTarget::Result(path) => result_shape.leaves_under(path).collect::<Vec<_>>(),
+                // The operand's own leaves under the path.
+                RcTarget::Operand(i, path) => arg_shapes[*i].leaves_under(path).collect(),
+                // What the operand's leaf reaches, which only its deep fact answers.
+                RcTarget::Contents(i, path) => vec![arg_shapes[*i].leaf_at(path)],
+            });
+            checked.chain(counted)
+        };
+        let inputs = self.site_inputs(consulted())?;
         if let Some(check) = &check {
             let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
             if leaf.resolve(inputs) == Locality::MayExt {
@@ -791,15 +818,12 @@ impl<'a> Walk<'a> {
         }
         for target in &targets {
             let local = match target {
-                // The result's leaves under the path: what the operation retained on its way out.
                 RcTarget::Result(path) => result_shape
                     .leaves_under(path)
                     .all(|leaf| leaf.resolve(inputs) != Locality::MayExt),
-                // The operand's own leaves under the path.
                 RcTarget::Operand(i, path) => arg_shapes[*i]
                     .leaves_under(path)
                     .all(|leaf| leaf.resolve(inputs) != Locality::MayExt),
-                // What the operand's leaf reaches, which only its deep fact answers.
                 RcTarget::Contents(i, path) => {
                     arg_shapes[*i].leaf_at(path).resolve(inputs) == Locality::DeepLocal
                 }
@@ -816,18 +840,21 @@ impl<'a> Walk<'a> {
     /// rule makes the fields local only where the container is `DeepLocal` — which also covers the
     /// container's own release. Out of an unboxed container it releases the fields nobody named, so
     /// every one of those has to be local.
-    fn annotate_destructure(&self, container: &RcVar, fields: &[(usize, RcVar)]) -> RcState {
-        let Mode::Clone { inputs, .. } = &self.mode else {
-            return RcState::Unknown;
-        };
+    fn annotate_destructure(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) -> RcState {
         let shape = self.shape_of(container);
         if container.ty.is_box(self.type_env) {
+            let Some(inputs) = self.site_inputs(std::iter::once(shape.leaf_at(&[]))) else {
+                return RcState::Unknown;
+            };
             return match shape.leaf_at(&[]).resolve(inputs) {
                 Locality::DeepLocal => RcState::Local,
                 _ => RcState::Unknown,
             };
         }
         let named: Vec<usize> = fields.iter().map(|(idx, _)| *idx).collect();
+        let Some(inputs) = self.site_inputs(shape.leaves_outside_fields(&named)) else {
+            return RcState::Unknown;
+        };
         let locality = shape
             .leaves_outside_fields(&named)
             .map(|leaf| leaf.resolve(inputs))
@@ -877,15 +904,14 @@ impl<'a> Walk<'a> {
             // A variant arm of a boxed union retains the payload out of the container, so the
             // take-out rule decides it: only a `DeepLocal` container hands out a local payload. A
             // catch-all arm binds the scrutinee itself and retains nothing.
-            let payload_state = match (arm.tag, &self.mode) {
-                (Some(_), Mode::Clone { inputs, .. }) if boxed => {
-                    if scrut_shape.leaf_at(&[]).resolve(inputs) == Locality::DeepLocal {
-                        RcState::Local
-                    } else {
-                        RcState::Unknown
-                    }
+            let payload_state = if arm.tag.is_some() && boxed {
+                let leaf = scrut_shape.leaf_at(&[]);
+                match self.site_inputs(std::iter::once(leaf)) {
+                    Some(inputs) if leaf.resolve(inputs) == Locality::DeepLocal => RcState::Local,
+                    _ => RcState::Unknown,
                 }
-                _ => RcState::Unknown,
+            } else {
+                RcState::Unknown
             };
             self.env.insert(arm.payload.name.clone(), payload_shape);
             let (arm_shape, body) = self.walk(&arm.body);
@@ -939,6 +965,25 @@ fn survey<'a>(
             has_dependent_site: false,
             dependent_calls: vec![],
         },
+    }
+}
+
+/// What a survey of `func`'s body reports to the clone gate: whether some site's answer depends on
+/// the inputs, and which direct callees the body hands an input-dependent leaf to.
+fn survey_gate_material(
+    prog: &RcProgram,
+    type_env: &TypeEnv,
+    summaries: &Map<FuncRef, ExtShape>,
+    func: &RcFunc,
+) -> (bool, Vec<FuncRef>) {
+    let mut walk = survey(prog, type_env, summaries);
+    walk.run_func(func);
+    match walk.mode {
+        Mode::Survey {
+            has_dependent_site,
+            dependent_calls,
+        } => (has_dependent_site, dependent_calls),
+        Mode::Clone { .. } => unreachable!("`survey` builds a walk in survey mode"),
     }
 }
 
@@ -1015,32 +1060,13 @@ fn clone_gate(
     let mut gated: Set<FuncRef> = Set::default();
     let mut dependent_calls: Map<FuncRef, Vec<FuncRef>> = Map::default();
     for func in prog.funcs.values() {
-        let mut walk = survey(prog, type_env, summaries);
-        walk.run_func(func);
-        let Mode::Survey {
-            has_dependent_site,
-            dependent_calls: calls,
-        } = walk.mode
-        else {
-            unreachable!("the gate sweep runs in survey mode")
-        };
+        let (has_dependent_site, calls) = survey_gate_material(prog, type_env, summaries, func);
         if has_dependent_site {
             gated.insert(func.name.clone());
         }
         dependent_calls.insert(func.name.clone(), calls);
     }
-    loop {
-        let mut changed = false;
-        for (fref, calls) in &dependent_calls {
-            if !gated.contains(fref) && calls.iter().any(|c| gated.contains(c)) {
-                gated.insert(fref.clone());
-                changed = true;
-            }
-        }
-        if !changed {
-            return gated;
-        }
-    }
+    callers_of(gated, &dependent_calls)
 }
 
 /// Annotate the reference-counting operations of `prog` whose target is provably local, cloning a

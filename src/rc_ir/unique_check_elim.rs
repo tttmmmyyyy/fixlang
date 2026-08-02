@@ -33,7 +33,7 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
 };
-use crate::rc_ir::specialize::{specializable_callee, CloneRegistry};
+use crate::rc_ir::specialize::{callers_of, specializable_callee, CloneRegistry};
 use std::sync::Arc;
 
 /// What identifies one clone of a function: the uniqueness of each of its parameters. A closure
@@ -319,22 +319,7 @@ fn funcs_reaching_unique_check(prog: &RcProgram, type_env: &TypeEnv) -> Set<Func
         }
         callees.insert(fref.clone(), cs);
     }
-    // A function that calls a reaches_unique_check function is itself reaches_unique_check.
-    loop {
-        let mut changed = false;
-        for (fref, cs) in &callees {
-            if !reaches_unique_check.contains(fref)
-                && cs.iter().any(|c| reaches_unique_check.contains(c))
-            {
-                reaches_unique_check.insert(fref.clone());
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-    reaches_unique_check
+    callers_of(reaches_unique_check, &callees)
 }
 
 /// Collect a body's direct callees (functions of `prog`) and whether it performs a uniqueness check.

@@ -970,6 +970,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         Option<BasicBlock<'c>>,
     ) {
         if !state.dispatches() {
+            self.build_assert_refcnt_state_local(obj_ptr);
             // The caller is positioned where the operation goes, which is where its local case goes.
             return (self.builder().get_insert_block().unwrap(), None, None);
         }
@@ -1053,6 +1054,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// somewhere else. Locality inference rests on a hand-written declaration per inline-LLVM
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.
+    ///
+    /// Reaching every such site takes two call sites, because the state dispatch is built two ways:
+    /// `build_branch_by_refcnt_state` covers the release and the uniqueness check, and
+    /// `retain_nonnull_boxed` inlines its own dispatch and calls this itself.
     fn build_assert_refcnt_state_local(&mut self, obj_ptr: PointerValue<'c>) {
         if !self.config.develop_mode {
             return;
@@ -1796,9 +1801,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Branch by refcnt_state.
         let current_func = self.current_function();
-        if !state.dispatches() {
-            self.build_assert_refcnt_state_local(obj_ptr);
-        }
         let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr, state);
         let destruction_bb = self
             .context
