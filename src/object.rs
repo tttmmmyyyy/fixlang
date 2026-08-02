@@ -23,7 +23,9 @@ use crate::fixstd::runtime::{
 use crate::generator::{is_const_one, Generator, Object};
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
+use inkwell::values::{
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
+};
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
@@ -549,29 +551,21 @@ impl ObjectFieldType {
         len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
-        let current_func = gc.current_function();
         let is_out_of_range = gc
             .builder()
             .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range")
             .unwrap();
-        let out_of_range_bb = gc
-            .context
-            .append_basic_block(current_func, "out_of_range_bb");
-        let in_range_bb = gc.context.append_basic_block(current_func, "in_range_bb");
-        gc.builder()
-            .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb)
-            .unwrap();
-        gc.builder().position_at_end(out_of_range_bb);
-        gc.call_runtime(RUNTIME_INDEX_OUT_OF_RANGE, &[idx.into(), len.into()]);
-        gc.builder()
-            .build_unconditional_branch(in_range_bb)
-            .unwrap();
-        gc.builder().position_at_end(in_range_bb);
+        build_abort_if(
+            gc,
+            is_out_of_range,
+            RUNTIME_INDEX_OUT_OF_RANGE,
+            &[idx.into(), len.into()],
+            "out_of_range",
+        );
     }
 
     // Panic if size is negative
     pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
-        let current_func = gc.current_function();
         let is_neg_size = gc
             .builder()
             .build_int_compare(
@@ -581,17 +575,13 @@ impl ObjectFieldType {
                 "is_neg_size",
             )
             .unwrap();
-        let neg_size_bb = gc.context.append_basic_block(current_func, "neg_size_bb");
-        let pos_size_bb = gc.context.append_basic_block(current_func, "pos_size_bb");
-        gc.builder()
-            .build_conditional_branch(is_neg_size, neg_size_bb, pos_size_bb)
-            .unwrap();
-        gc.builder().position_at_end(neg_size_bb);
-        gc.call_runtime(RUNTIME_NEGATIVE_ARRAY_SIZE, &[len.into()]);
-        gc.builder()
-            .build_unconditional_branch(pos_size_bb)
-            .unwrap();
-        gc.builder().position_at_end(pos_size_bb);
+        build_abort_if(
+            gc,
+            is_neg_size,
+            RUNTIME_NEGATIVE_ARRAY_SIZE,
+            &[len.into()],
+            "neg_size",
+        );
     }
 
     // Read an element of array.
@@ -1115,7 +1105,7 @@ impl ObjectType {
         gc: &mut Generator<'c, 'm>,
         array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
-        if array_capacity.is_some() {
+        if let Some(array_capacity) = array_capacity {
             // The size is the header -- the fields laid out ahead of the element buffer -- plus the
             // bytes the elements take.
 
@@ -1140,7 +1130,7 @@ impl ObjectType {
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
             let cap = gc
                 .builder()
-                .build_int_cast(array_capacity.unwrap(), ptr_int_ty, "cap_as_ptr_int_ty")
+                .build_int_cast(array_capacity, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
             if gc.config.runtime_check() {
                 panic_if_capacity_overflows(gc, cap, elem_size, header_size);
@@ -1646,7 +1636,7 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// constant, so the whole check is one unsigned comparison, which also rejects the negative capacity
 /// an `_unsafe_` primitive can be handed.
 fn panic_if_capacity_overflows<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
+    gc: &Generator<'c, 'm>,
     cap: IntValue<'c>,
     elem_size: u64,
     header_size: u64,
@@ -1668,23 +1658,43 @@ fn panic_if_capacity_overflows<'c, 'm>(
             "capacity_overflows",
         )
         .unwrap();
+    build_abort_if(
+        gc,
+        overflows,
+        RUNTIME_ARRAY_SIZE_OVERFLOW,
+        &[cap.into()],
+        "capacity_overflow",
+    );
+}
 
+/// Emit a call to the runtime function `runtime_fn` with `args` for the case that `cond` holds, and
+/// leave the builder at the block reached when it does not.
+///
+/// The runtime function ends the program, so the call is followed by a branch to the continuation
+/// only to close its basic block. `name` names that pair of blocks in the emitted IR.
+fn build_abort_if<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    cond: IntValue<'c>,
+    runtime_fn: &str,
+    args: &[BasicMetadataValueEnum<'c>],
+    name: &str,
+) {
     let current_func = gc.current_function();
-    let overflow_bb = gc
+    let abort_bb = gc
         .context
-        .append_basic_block(current_func, "capacity_overflow_bb");
-    let in_range_bb = gc
+        .append_basic_block(current_func, &format!("{}_bb", name));
+    let continue_bb = gc
         .context
-        .append_basic_block(current_func, "capacity_in_range_bb");
+        .append_basic_block(current_func, &format!("{}_continue_bb", name));
     gc.builder()
-        .build_conditional_branch(overflows, overflow_bb, in_range_bb)
+        .build_conditional_branch(cond, abort_bb, continue_bb)
         .unwrap();
-    gc.builder().position_at_end(overflow_bb);
-    gc.call_runtime(RUNTIME_ARRAY_SIZE_OVERFLOW, &[cap.into()]);
+    gc.builder().position_at_end(abort_bb);
+    gc.call_runtime(runtime_fn, args);
     gc.builder()
-        .build_unconditional_branch(in_range_bb)
+        .build_unconditional_branch(continue_bb)
         .unwrap();
-    gc.builder().position_at_end(in_range_bb);
+    gc.builder().position_at_end(continue_bb);
 }
 
 /// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address

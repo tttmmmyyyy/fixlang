@@ -2,6 +2,7 @@ use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
+use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
 use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::AddressSpace;
 
@@ -32,10 +33,16 @@ pub const RUNTIME_REALLOC: &str = "realloc";
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    build_abort_function(gc, mode);
-    build_index_out_of_range_function(gc, mode);
-    build_negative_array_size_function(gc, mode);
-    build_array_size_overflow_function(gc, mode);
+    let i64_ty = gc.context.i64_type();
+    declare_noreturn_runtime_function(gc, mode, RUNTIME_ABORT, &[]);
+    declare_noreturn_runtime_function(
+        gc,
+        mode,
+        RUNTIME_INDEX_OUT_OF_RANGE,
+        &[i64_ty.into(), i64_ty.into()],
+    );
+    declare_noreturn_runtime_function(gc, mode, RUNTIME_NEGATIVE_ARRAY_SIZE, &[i64_ty.into()]);
+    declare_noreturn_runtime_function(gc, mode, RUNTIME_ARRAY_SIZE_OVERFLOW, &[i64_ty.into()]);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -64,83 +71,55 @@ pub enum BuildMode {
     Implement,
 }
 
-/// Mark a runtime function as `noreturn` so LLVM knows control never continues past a call to it.
-/// Without this, a bounds-check failure path (which calls the function and then flows to a merge)
-/// keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the array
-/// size and defeats bounds-check elimination.
-fn set_noreturn<'c, 'm>(gc: &Generator<'c, 'm>, func: FunctionValue<'c>) {
+/// Declare a runtime function that ends the program: it takes `param_types`, returns nothing, and
+/// is marked `noreturn` so LLVM knows control never continues past a call to it.
+///
+/// Without `noreturn`, a bounds-check failure path (which calls the function and then flows to a
+/// merge) keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the
+/// array size and defeats bounds-check elimination.
+fn declare_noreturn_runtime_function<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    mode: BuildMode,
+    name: &str,
+    param_types: &[BasicMetadataTypeEnum<'c>],
+) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if gc.module.get_function(name).is_some() {
+        return;
+    }
+
+    let fn_ty = gc.context.void_type().fn_type(param_types, false);
+    let func = gc.module.add_function(name, fn_ty, None);
     gc.add_enum_attribute(func, "noreturn", AttributeLoc::Function);
 }
 
-fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
+/// Prepare the runtime function `name` of type `fn_ty`, which this module implements itself: in
+/// `Declare` mode add its declaration, in `Implement` mode look the declaration up.
+///
+/// Returns the function whose body the caller is to emit, and `None` in `Declare` mode, where there
+/// is no body to emit yet.
+fn declare_or_lookup_runtime_function<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    mode: BuildMode,
+    name: &str,
+    fn_ty: FunctionType<'c>,
+) -> Option<FunctionValue<'c>> {
+    match mode {
+        BuildMode::Declare => {
+            if gc.module.get_function(name).is_none() {
+                gc.module
+                    .add_function(name, fn_ty, Some(gc.config.external_if_separated()));
+            }
+            None
+        }
+        BuildMode::Implement => Some(
+            gc.module
+                .get_function(name)
+                .unwrap_or_else(|| panic!("Runtime function {} is not declared", name)),
+        ),
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_ABORT) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    let func = gc.module.add_function(RUNTIME_ABORT, fn_ty, None);
-    set_noreturn(gc, func);
-    return;
-}
-
-fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_INDEX_OUT_OF_RANGE) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(
-        &[gc.context.i64_type().into(), gc.context.i64_type().into()],
-        false,
-    );
-    let func = gc
-        .module
-        .add_function(RUNTIME_INDEX_OUT_OF_RANGE, fn_ty, None);
-    set_noreturn(gc, func);
-    return;
-}
-
-fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_NEGATIVE_ARRAY_SIZE) {
-        return;
-    }
-
-    let fn_ty = gc
-        .context
-        .void_type()
-        .fn_type(&[gc.context.i64_type().into()], false);
-    let func = gc
-        .module
-        .add_function(RUNTIME_NEGATIVE_ARRAY_SIZE, fn_ty, None);
-    set_noreturn(gc, func);
-    return;
-}
-
-fn build_array_size_overflow_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_ARRAY_SIZE_OVERFLOW) {
-        return;
-    }
-
-    let fn_ty = gc
-        .context
-        .void_type()
-        .fn_type(&[gc.context.i64_type().into()], false);
-    let func = gc
-        .module
-        .add_function(RUNTIME_ARRAY_SIZE_OVERFLOW, fn_ty, None);
-    set_noreturn(gc, func);
-    return;
 }
 
 fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
@@ -189,27 +168,14 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 }
 
 fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    let func = match mode {
-        BuildMode::Declare => {
-            if let Some(_func) = gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
-                return;
-            }
-            let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-            let fn_ty = gc
-                .context
-                .i64_type()
-                .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-            gc.module.add_function(
-                RUNTIME_SUBTRACT_PTR,
-                fn_ty,
-                Some(gc.config.external_if_separated()),
-            );
-            return;
-        }
-        BuildMode::Implement => match gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
-            Some(func) => func,
-            None => panic!("Runtime function {} is not declared", RUNTIME_SUBTRACT_PTR),
-        },
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let fn_ty = gc
+        .context
+        .i64_type()
+        .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_SUBTRACT_PTR, fn_ty)
+    else {
+        return;
     };
 
     let bb = gc.context.append_basic_block(func, "entry");
@@ -235,26 +201,10 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
     let i64_ty = gc.context.i64_type();
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
 
-    let func = match mode {
-        BuildMode::Declare => {
-            if let Some(_func) = gc.module.get_function(RUNTIME_PTR_ADD_OFFSET) {
-                return;
-            }
-            let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
-            gc.module.add_function(
-                RUNTIME_PTR_ADD_OFFSET,
-                fn_ty,
-                Some(gc.config.external_if_separated()),
-            );
-            return;
-        }
-        BuildMode::Implement => match gc.module.get_function(RUNTIME_PTR_ADD_OFFSET) {
-            Some(func) => func,
-            None => panic!(
-                "Runtime function {} is not declared",
-                RUNTIME_PTR_ADD_OFFSET
-            ),
-        },
+    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_PTR_ADD_OFFSET, fn_ty)
+    else {
+        return;
     };
 
     let bb = gc.context.append_basic_block(func, "entry");
@@ -299,23 +249,9 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode:
 
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();
-    let func = match mode {
-        BuildMode::Declare => {
-            if let Some(_func) = gc.module.get_function(RUNTIME_GET_ARGC) {
-                return;
-            }
-            let fn_ty = argc_gv_ty.fn_type(&[], false);
-            gc.module.add_function(
-                RUNTIME_GET_ARGC,
-                fn_ty,
-                Some(gc.config.external_if_separated()),
-            );
-            return;
-        }
-        BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGC) {
-            Some(func) => func,
-            None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGC),
-        },
+    let fn_ty = argc_gv_ty.fn_type(&[], false);
+    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_GET_ARGC, fn_ty) else {
+        return;
     };
     // Add GLOBAL_VAR_NAME_ARGC global variable.
     let argc_gv = gc.module.add_global(argc_gv_ty, None, GLOBAL_VAR_NAME_ARGC);
@@ -343,31 +279,13 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
 }
 
 fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    let func = match mode {
-        BuildMode::Declare => {
-            if let Some(_func) = gc.module.get_function(RUNTIME_GET_ARGV) {
-                return;
-            }
-
-            let fn_ty = gc
-                .context
-                .ptr_type(AddressSpace::from(0))
-                .fn_type(&[gc.context.i64_type().into()], false);
-            gc.module.add_function(
-                RUNTIME_GET_ARGV,
-                fn_ty,
-                Some(gc.config.external_if_separated()),
-            );
-            return;
-        }
-        BuildMode::Implement => match gc.module.get_function(RUNTIME_GET_ARGV) {
-            Some(func) => func,
-            None => panic!("Runtime function {} is not declared", RUNTIME_GET_ARGV),
-        },
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let fn_ty = ptr_ty.fn_type(&[gc.context.i64_type().into()], false);
+    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_GET_ARGV, fn_ty) else {
+        return;
     };
 
     // Add GLOBAL_VAR_NAME_ARGV global variable.
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let argv_gv = gc.module.add_global(ptr_ty, None, GLOBAL_VAR_NAME_ARGV);
     argv_gv.set_initializer(&ptr_ty.const_zero());
     argv_gv.set_linkage(Linkage::Internal);
