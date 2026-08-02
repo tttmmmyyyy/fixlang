@@ -30,19 +30,25 @@ fn setup_test_env() -> (TempDir, PathBuf) {
     (temp_dir, project_dir)
 }
 
-/// Builds the harness at `opt_level` and runs it with `program_args`, through `fix run`.
+/// Builds the harness at `opt_level` under the sanitizer `sanitize` names, runs it with
+/// `program_args`, and returns what it produced, through `fix run`.
 ///
 /// Going through `fix run` puts the compiler's own way of starting an instrumented program under
 /// test: the sanitizer maps its shadow memory to addresses derived from the program's own, so it
 /// needs the address space laid out the same way on every run, and `fix run` is what arranges that.
-fn run_harness(project_dir: &Path, opt_level: &str, program_args: &[&str]) -> Output {
+fn run_harness(
+    project_dir: &Path,
+    opt_level: &str,
+    sanitize: &str,
+    program_args: &[&str],
+) -> Output {
     let mut command = fix_command();
     command
         .arg("run")
         .arg("-O")
         .arg(opt_level)
         .arg("--sanitize")
-        .arg("thread")
+        .arg(sanitize)
         .arg("--allow-preliminary-commands");
     if !program_args.is_empty() {
         command.arg("--").args(program_args);
@@ -78,7 +84,7 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
 
     // The program the language asks for: every thread reaches the value through
     // `Std::mark_threaded`, so the counts are updated atomically and nothing races.
-    let marked = run_harness(&project_dir, opt_level, &[MARK_ARGUMENT]);
+    let marked = run_harness(&project_dir, opt_level, "thread", &[MARK_ARGUMENT]);
     assert_eq!(
         races_reported(&marked),
         0,
@@ -97,7 +103,7 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     );
 
     // The same program without the call. Reporting this is what gives the run above its weight.
-    let unmarked = run_harness(&project_dir, opt_level, &[]);
+    let unmarked = run_harness(&project_dir, opt_level, "thread", &[]);
     assert!(
         races_reported(&unmarked) > 0,
         "sharing a value that was never handed over through `Std::mark_threaded` should be \
@@ -140,16 +146,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
 
     // Warmed by the same subcommand the checked run uses: what names an object includes which
     // subcommand asked for it, so a build and a run never share one to begin with.
-    let plain = fix_command()
-        .arg("run")
-        .arg("-O")
-        .arg("none")
-        .arg("--allow-preliminary-commands")
-        .arg("--")
-        .arg(MARK_ARGUMENT)
-        .current_dir(&project_dir)
-        .output()
-        .expect("Failed to execute fix run");
+    let plain = run_harness(&project_dir, "none", "none", &[MARK_ARGUMENT]);
     assert!(
         plain.status.success(),
         "the run without instrumentation should succeed.\nstdout: {}\nstderr: {}",
@@ -163,7 +160,7 @@ fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
         String::from_utf8_lossy(&plain.stderr)
     );
 
-    let checked = run_harness(&project_dir, "none", &[]);
+    let checked = run_harness(&project_dir, "none", "thread", &[]);
     assert!(
         races_reported(&checked) > 0,
         "a build that asks for the instrumentation after one built without it should carry the \

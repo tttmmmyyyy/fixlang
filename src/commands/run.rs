@@ -1,30 +1,15 @@
 use crate::commands::build::build;
-use crate::configuration::{Configuration, Sanitizer, ValgrindTool};
+use crate::configuration::Configuration;
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use rand::Rng;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::process::{self, Command, Output, Stdio};
+use std::process::{self, Output, Stdio};
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-
-/// The command that runs `exec_path`, laid out the way the configured sanitizer needs.
-///
-/// A sanitizer maps its shadow memory to addresses it derives from the program's own, so it needs
-/// the program where it expects to find it. `setarch -R` lays the address space out the same way on
-/// every run, which is what lets the sanitizer start. A program built by `fix build` is run by hand,
-/// so the same wrapper is what its user writes.
-fn sanitizer_aware_command(config: &Configuration, exec_path: &str) -> Command {
-    if config.sanitizer == Sanitizer::None {
-        return Command::new(exec_path);
-    }
-    let mut com = Command::new("setarch");
-    com.arg(std::env::consts::ARCH).arg("-R").arg(exec_path);
-    com
-}
 
 pub fn run(
     mut config: Configuration,
@@ -48,13 +33,7 @@ pub fn run(
     build(&mut config)?;
 
     // Run the executable file.
-    let mut com = if config.valgrind_tool == ValgrindTool::None {
-        sanitizer_aware_command(&config, &exec_path)
-    } else {
-        let mut com = config.valgrind_command()?;
-        com.arg(exec_path.clone());
-        com
-    };
+    let mut com = config.program_run_command(&exec_path)?;
     for arg in &config.run_program_args {
         com.arg(arg);
     }

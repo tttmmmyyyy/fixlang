@@ -14,7 +14,7 @@ use crate::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},
     },
-    generator::Generator,
+    generator::{enum_attribute_kind_id, module_functions, Generator},
     misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
@@ -31,7 +31,7 @@ use crate::{
     tool::stopwatch::StopWatch,
 };
 use inkwell::{
-    attributes::{Attribute, AttributeLoc},
+    attributes::AttributeLoc,
     context::Context,
     module::Module,
     passes::PassBuilderOptions,
@@ -631,19 +631,13 @@ fn instrument_for_sanitizer<'c>(
 /// alone, which is how clang lets a translation unit opt out. Nothing else here sets it, so without
 /// this the passes would run over the module and change nothing.
 fn mark_functions<'c>(module: &Module<'c>, attribute_name: &str) {
-    let kind_id = Attribute::get_named_enum_kind_id(attribute_name);
-    assert!(
-        kind_id != 0,
-        "LLVM does not know the function attribute `{}`",
-        attribute_name
-    );
-    let attribute = module.get_context().create_enum_attribute(kind_id, 0);
-    let mut function = module.get_first_function();
-    while let Some(current) = function {
-        if current.count_basic_blocks() > 0 {
-            current.add_attribute(AttributeLoc::Function, attribute);
+    let attribute = module
+        .get_context()
+        .create_enum_attribute(enum_attribute_kind_id(attribute_name), 0);
+    for function in module_functions(module) {
+        if function.count_basic_blocks() > 0 {
+            function.add_attribute(AttributeLoc::Function, attribute);
         }
-        function = current.get_next_function();
     }
 }
 

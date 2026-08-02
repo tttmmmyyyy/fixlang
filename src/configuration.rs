@@ -797,7 +797,7 @@ impl Configuration {
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
     /// configuration and for the errors the Fix runtime's memory management can produce.
-    pub fn valgrind_command(&self) -> Result<Command, Errors> {
+    fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
         let which_output = Command::new("which").arg("valgrind").output();
         if which_output.is_err() || !which_output.unwrap().status.success() {
@@ -879,6 +879,30 @@ impl Configuration {
             )));
         }
         Ok(())
+    }
+
+    /// The command that runs the built program at `exec_path`, under whatever the run settings ask
+    /// to run it under.
+    pub fn program_run_command(&self, exec_path: &str) -> Result<Command, Errors> {
+        assert!(
+            self.validate_run_settings().is_ok(),
+            "the run settings pick at most one of valgrind and a sanitizer"
+        );
+        if self.valgrind_tool != ValgrindTool::None {
+            let mut com = self.valgrind_command()?;
+            com.arg(exec_path);
+            return Ok(com);
+        }
+        if self.sanitizer != Sanitizer::None {
+            // A sanitizer maps its shadow memory to addresses it derives from the program's own, so
+            // it needs the program where it expects to find it. `setarch -R` lays the address space
+            // out the same way on every run, which is what lets the sanitizer start. A program built
+            // by `fix build` is run by hand, so the same wrapper is what its user writes.
+            let mut com = Command::new("setarch");
+            com.arg(env::consts::ARCH).arg("-R").arg(exec_path);
+            return Ok(com);
+        }
+        Ok(Command::new(exec_path))
     }
 
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
