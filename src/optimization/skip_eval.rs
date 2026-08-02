@@ -9,12 +9,12 @@ Unlike the passes around it, this changes what the program does, so it runs at e
 level: dropping the side expression is what the setting asks for.
 */
 
-use std::sync::Arc;
 use crate::ast::{
     expr::ExprNode,
     program::{Program, Symbol},
     traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
+use std::sync::Arc;
 
 /// Replaces every `eval {side}; {main}` expression in the program with `{main}`.
 pub fn run(prg: &mut Program) {
