@@ -237,6 +237,13 @@ impl<'c> Object<'c> {
         self.ty.is_dynamic()
     }
 
+    // Whether this object is carried as one aggregate rather than split into its fields' parts, so
+    // that its single part holds the whole struct (see `Generator::is_grouped`).
+    pub fn is_grouped<'m>(&self, gc: &mut Generator<'c, 'm>) -> bool {
+        let embedded = self.ty.get_embedded_type(gc);
+        gc.is_grouped(embedded)
+    }
+
     pub fn is_destructor_object(&self) -> bool {
         self.ty.is_destructor_object()
     }
@@ -270,8 +277,7 @@ impl<'c> Object<'c> {
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            if gc.is_grouped(struct_ty.into()) {
+            if self.is_grouped(gc) {
                 return gc
                     .builder()
                     .build_extract_value(self.data[0].into_struct_value(), field_idx, "field")
@@ -280,6 +286,7 @@ impl<'c> Object<'c> {
             // The object's parts already hold the field, spread across a contiguous range; slice
             // that range and reassemble the field's value. The field lives directly in the parts,
             // so they stay independent for LLVM.
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
             let mut parts = self.data[off..off + cnt].iter().copied();
@@ -322,11 +329,11 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            if gc.is_grouped(struct_ty.into()) {
+            if self.is_grouped(gc) {
                 let field_val = self.extract_field(gc, field_idx);
                 return Object::new(field_val, field_ty, gc);
             }
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             Object::from_parts(self.data[off..off + cnt].to_vec(), field_ty, gc)
         } else {
@@ -350,8 +357,7 @@ impl<'c> Object<'c> {
     {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            if gc.is_grouped(struct_ty.into()) {
+            if self.is_grouped(gc) {
                 self.data[0] = gc
                     .builder()
                     .build_insert_value(
@@ -367,6 +373,7 @@ impl<'c> Object<'c> {
             // Swap the field's parts in place: split the new field value into its own parts and
             // splice them over the range this field occupies, leaving every other field's parts
             // untouched and never materializing an aggregate.
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             let new_parts = gc.explode_to_parts(val.as_basic_value_enum());
             assert_eq!(new_parts.len(), cnt);
@@ -391,11 +398,11 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            if gc.is_grouped(struct_ty.into()) {
+            if self.is_grouped(gc) {
                 let val = field.value(gc);
                 return self.insert_field(gc, field_idx, val);
             }
+            let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             assert_eq!(field.parts().len(), cnt);
             self.data
@@ -706,7 +713,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         part_tys: &[BasicTypeEnum<'c>],
     ) -> StructType<'c> {
         if let Some(buf_ty) = self.out_pointer_buffers.get(ret_ty) {
-            return *buf_ty;
+            let buf_ty = *buf_ty;
+            // One buffer serves every writer and reader of a type's result, so they must all name
+            // the same parts; disagreeing lists would put the two ends of a call at different
+            // offsets. Checked under develop mode (the unit tests).
+            if self.config.develop_mode {
+                assert_eq!(
+                    buf_ty.get_field_types().as_slice(),
+                    part_tys,
+                    "`{}` reached its out-pointer buffer with two different part lists",
+                    ret_ty.to_string()
+                );
+            }
+            return buf_ty;
         }
         let buf_ty = self
             .context
@@ -1430,8 +1449,12 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Whether a value of `ty` is carried as one aggregate rather than split into the parts of its
     // fields: it holds more scalars than `Configuration::max_split_scalars`.
+    //
+    // A value of one scalar is carried as that scalar however low the limit is set: there is no
+    // aggregate to keep together, and a funptr is carried as its bare function pointer rather than
+    // as the one-field struct it is laid out as.
     pub fn is_grouped(&self, ty: BasicTypeEnum<'c>) -> bool {
-        let limit = self.config.max_split_scalars;
+        let limit = self.config.max_split_scalars.max(1);
         matches!(ty, BasicTypeEnum::StructType(_))
             && !self.is_zero_sized(ty)
             && self.scalar_count_up_to(ty, limit) > limit
@@ -2273,16 +2296,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
         let embedded = ret_ty.get_embedded_type(self);
-        // A value carried whole holds more scalars than any target's return registers, so it comes
-        // back through the out-pointer and never reaches here. Checked under develop mode (the unit
-        // tests), where a lower split limit or a wider register budget would break it.
-        if self.config.develop_mode {
-            assert!(
-                !(call_result.is_some() && self.is_grouped(embedded)),
-                "`{}` is carried whole, so it cannot be returned in registers",
-                ret_ty.to_string()
-            );
-        }
         let parts: Vec<BasicValueEnum<'c>> = match call_result {
             None => vec![],
             Some(packed) if self.part_count(embedded) == 1 => vec![packed],

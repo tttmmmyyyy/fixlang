@@ -717,6 +717,7 @@ impl Configuration {
         data.push_str(&self.backtrace.to_string());
         data.push_str(&self.no_runtime_check.to_string());
         data.push_str(&self.c_type_sizes.to_string());
+        data.push_str(&self.max_split_scalars.to_string());
         push_list_hash(&mut data, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
