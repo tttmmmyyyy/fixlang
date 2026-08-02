@@ -901,13 +901,19 @@ impl TypeCheckContext {
         }
     }
 
-    pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    // The substitution that sends each of `tyvars` to a fresh type variable of the same kind.
+    fn instantiate_tyvars(&mut self, tyvars: &[Arc<TyVar>]) -> Substitution {
         let mut sub = Substitution::default();
-        for tv in ty.free_vars_vec() {
-            let new_tv = self.new_tyvar_by(&tv);
-            let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+        for tv in tyvars {
+            let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
+            let merge_ok = sub.merge(&Substitution::single(&tv.name, new_tv));
             assert!(merge_ok);
         }
+        sub
+    }
+
+    pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        let sub = self.instantiate_tyvars(&ty.free_vars_vec());
         sub.substitute_type(ty)
     }
 
@@ -1899,12 +1905,7 @@ impl TypeCheckContext {
                 let assumed_eqs = self.assumed_eqs.clone();
                 for assumed_eq in assumed_eqs.get(assoc_ty).map_or(&[][..], Vec::as_slice) {
                     // Instantiate `assumed_eq`.
-                    let mut subst = Substitution::default();
-                    for tv in &assumed_eq.gen_vars {
-                        let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                        let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
-                        assert!(merge_ok);
-                    }
+                    let subst = self.instantiate_tyvars(&assumed_eq.gen_vars);
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
 
@@ -2135,12 +2136,7 @@ impl TypeCheckContext {
             .map_or(&[][..], Vec::as_slice)
         {
             // Instantiate qualified predicate.
-            let mut subst = Substitution::default();
-            for tv in &qual_pred_scm.gen_vars {
-                let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
-                assert!(merge_ok);
-            }
+            let subst = self.instantiate_tyvars(&qual_pred_scm.gen_vars);
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);
 
