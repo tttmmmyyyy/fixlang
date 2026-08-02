@@ -130,6 +130,9 @@ impl ObjectFieldType {
         }
     }
 
+    /// The debug-info type describing this field: the Fix type name and encoding a debugger displays
+    /// it under. A union's payload buffer gets a synthetic member per variant, all at offset zero,
+    /// so that every variant is readable from the one buffer.
     pub fn to_debug_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_di_type(gc),
@@ -1096,9 +1099,16 @@ impl ObjectFieldType {
     }
 }
 
+/// The layout of a Fix type: the fields the LLVM struct carrying its values is built from.
 #[derive(Eq, PartialEq, Clone)]
 pub struct ObjectType {
+    /// The fields in struct order, the runtime machinery included: a boxed object leads with its
+    /// control block, a union carries its tag ahead of its payload buffer, and an object ending in
+    /// an element buffer carries it last.
     pub field_types: Vec<ObjectFieldType>,
+    /// Whether values of this type are held inline where they appear. A boxed type is held as a
+    /// pointer to a heap object, and the layout then begins with the control block that carries the
+    /// reference count.
     pub is_unbox: bool,
     /// The Fix type this is the layout of.
     pub ty: Arc<TypeNode>,
@@ -1454,6 +1464,12 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
         .unwrap_or_else(|| panic!("`{}` has no primitive layout", name.to_string()))
 }
 
+/// The layout of `ty`, derived from what its top-level type constructor is: a closure, a function
+/// pointer, a primitive, or a struct, union, array or dynamic object declared in `type_env`.
+///
+/// # Arguments
+/// * `capture` - the types a `#DynamicObject` holds captured, which become its trailing fields.
+///   It is empty for every other type, whose fields follow from the type alone.
 pub fn ty_to_object_ty(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,

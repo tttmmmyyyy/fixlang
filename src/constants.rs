@@ -168,6 +168,10 @@ pub const IS_UNIQUE_VALUE_FIELD: usize = 1;
 // of `ObjectFieldType::to_debug_type` in object.rs and the debugging section of
 // Document.md.
 pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
+
+// Field layout of the `#DynamicObject` a closure keeps its captured values in: a control block, the
+// traverse function that drives the captures' lifetimes, then the captures themselves. The captures
+// vary with the closure, which is why the object carries its own traverse function.
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
@@ -176,6 +180,8 @@ pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that 
 pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
 pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
 
+// Field layout of the control block every boxed object begins with: the reference count, then the
+// `REFCNT_STATE_*` value saying how that count is to be maintained.
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // How far the object sits above the base of its allocation. Nonzero where the object was placed

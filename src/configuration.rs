@@ -353,6 +353,7 @@ pub enum FixOptimizationLevel {
 }
 
 impl fmt::Display for FixOptimizationLevel {
+    /// Writes the level under the name `--opt-level` accepts for it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
@@ -364,6 +365,7 @@ impl fmt::Display for FixOptimizationLevel {
 }
 
 impl FixOptimizationLevel {
+    /// The level `--opt-level` spells `opt_level`, the inverse of `Display`.
     pub fn from_str(opt_level: &str) -> Option<Self> {
         match opt_level {
             OPTIMIZATION_LEVEL_NONE => Some(FixOptimizationLevel::None),
@@ -376,6 +378,9 @@ impl FixOptimizationLevel {
 }
 
 impl Configuration {
+    /// The configuration a run of `subcommand` starts from, which the command line and the project
+    /// file then override. The optimization level comes from the environment and the C type sizes
+    /// from the C compiler; every other setting takes its default.
     fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,
@@ -500,6 +505,14 @@ impl Configuration {
         self.root_source_files.push(path);
     }
 
+    /// Where `--emit-llvm` writes one compilation unit's LLVM IR: a `.ll` file beside the output
+    /// file, or in the working directory where the build names no output file.
+    ///
+    /// # Arguments
+    /// * `optimized` - whether this is the IR as the LLVM pipeline left it, which takes a file of
+    ///   its own alongside the IR as first emitted.
+    /// * `unit_name` - the compilation unit the IR belongs to, which is what distinguishes the files
+    ///   one build writes.
     pub fn get_output_llvm_ir_path(&self, optimized: bool, unit_name: &str) -> PathBuf {
         match &self.out_file_path {
             None => {
@@ -663,6 +676,9 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Shorten the compiler-added suffixes of global symbol names to serial numbers, so that a
+    /// symbol dump shows `Std::func#0` where the name is `Std::func#{...}#{...}`. Runs at
+    /// `Experimental`.
     pub fn enable_simplify_symbol_names(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }

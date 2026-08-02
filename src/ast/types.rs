@@ -62,6 +62,7 @@ impl Hash for TyVar {
 }
 
 impl TyVar {
+    /// A copy of this type variable carrying `kind`, leaving this one as it is.
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.kind = kind;
@@ -126,9 +127,13 @@ impl AssocType {
     }
 }
 
+/// The kind of a type, which classifies types the way a type classifies values.
 #[derive(Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Kind {
+    /// `*`, the kind of a type that has values of its own.
     Star,
+    /// `k -> l`, the kind of a type constructor that yields a type of kind `l` when applied to a
+    /// type of kind `k`.
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
@@ -443,6 +448,8 @@ impl Hash for TypeNode {
 }
 
 impl Debug for TypeNode {
+    /// Writes the type in source syntax, with its free type variables renamed to `t0`, `t1`, ... in
+    /// order of appearance, so that two types differing only in variable names print alike.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
     }

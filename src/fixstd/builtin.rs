@@ -1059,10 +1059,16 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Converts an integer to another integer type, truncating it to the target width or widening it by
+/// sign- or zero-extension. The target type is the one the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntegralBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
+    /// Whether the source type is a signed integer, which decides whether widening sign-extends or
+    /// zero-extends.
     is_source_signed: bool,
+    /// Whether the target type is a signed integer.
     is_target_signed: bool,
 }
 
@@ -1163,8 +1169,11 @@ pub fn cast_between_integral_function(
     (expr, scm)
 }
 
+/// Converts a floating point number to another floating point type, which is the one the operation
+/// is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
 }
 
@@ -1251,9 +1260,12 @@ pub fn cast_between_float_function(
     (expr, scm)
 }
 
+/// Converts an integer to a floating point number of the type the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntToFloatBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
+    /// Whether the source type is a signed integer, which decides how the bits are read.
     is_signed: bool,
 }
 
@@ -6223,9 +6235,13 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     (expr, scm)
 }
 
+/// Tests whether a union holds a given variant, by comparing its tag. It reads the union without
+/// taking a reference to it, and the result is a `Std::Bool`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionIsBody {
+    /// The local binding holding the union to test.
     union_arg_name: FullName,
+    /// The variant tested for, as its index among the union's variants.
     field_idx: usize,
 }
 
@@ -10153,8 +10169,10 @@ pub fn not_trait_id() -> TraitId {
     }
 }
 
+/// Negates a `Std::Bool`, the implementation of `Std::Not::not` for it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoolNegBody {
+    /// The local binding holding the value to negate.
     rhs_name: FullName,
 }
 

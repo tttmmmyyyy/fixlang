@@ -229,10 +229,16 @@ impl<'c> Object<'c> {
         self.ty.is_box(type_env)
     }
 
+    /// Whether this object is a function pointer, carried as the bare pointer: it captures nothing,
+    /// so it has no struct to extract fields from and nothing to reference-count.
     pub fn is_funptr(&self) -> bool {
         self.ty.is_funptr()
     }
 
+    /// Whether this object is a `#DynamicObject`, the boxed object a closure keeps its captured
+    /// values in. Its fields vary with the closure, so its layout follows from the capture types
+    /// passed to `ty_to_object_ty` rather than from its type alone, and it carries its own traverse
+    /// function to drive those captures' lifetimes.
     pub fn is_dynamic_object(&self) -> bool {
         self.ty.is_dynamic()
     }
@@ -244,14 +250,19 @@ impl<'c> Object<'c> {
         gc.is_carried_whole(embedded)
     }
 
+    /// Whether this object is a `Std::FFI::Destructor`, which runs the destructor function it holds
+    /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
         self.ty.is_destructor_object()
     }
 
+    /// The debug-info type describing this object where it is embedded in another value.
     pub fn debug_embedded_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         ty_to_debug_embedded_ty(self.ty.clone(), gc)
     }
 
+    /// The LLVM struct this object is laid out as: the struct held inline for an unboxed object, the
+    /// struct pointed to for a boxed one.
     pub fn struct_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         assert!(!self.is_funptr());
         self.ty.get_struct_type(gc)
