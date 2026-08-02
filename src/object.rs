@@ -250,8 +250,7 @@ impl ObjectFieldType {
                 // The storage buffer's debug type is an array of `DEBUG_ARRAY_ASSUMED_LEN`
                 // elements. `#ArrayStorage`'s own declared size is stretched to cover them in
                 // `ty_to_debug_struct_ty`, which builds the enclosing struct's debug layout.
-                let element_ty =
-                    ty_to_object_ty(elem_ty, &vec![], gc.type_env()).to_embedded_type(gc, &[]);
+                let element_ty = elem_ty.get_embedded_type(gc);
                 let element_debug_ty = ty_to_debug_embedded_ty(elem_ty.clone(), gc);
                 let element_size_in_bits = gc.target_data.get_bit_size(&element_ty);
                 let element_align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
@@ -857,10 +856,7 @@ impl ObjectFieldType {
             let mismatch_bb = gc
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
-            let expect_tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(gc, &[])
-                .into_int_type()
-                .const_int(i as u64, false);
+            let expect_tag_val = union_tag_type(gc.context).const_int(i as u64, false);
             let is_match = gc
                 .builder()
                 .build_int_compare(
@@ -1174,7 +1170,10 @@ impl ObjectType {
             let elem_ty = match self.field_types.last().unwrap() {
                 ObjectFieldType::Array(ty) => ty.clone(),
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
-                _ => panic!(),
+                _ => panic!(
+                    "`{}` was given an array capacity, but its layout ends in no element buffer",
+                    self.ty.to_string()
+                ),
             };
             let elem_size = elem_stride(gc, &elem_ty);
             let struct_ty = self.to_struct_type(gc, &[]);
@@ -2380,7 +2379,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         }
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-        let str_type = obj_type.to_struct_type(gc, &[]);
+        let str_type = gc.struct_type_of(&ty);
         let size_in_bits = gc.target_data.get_bit_size(&str_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
 

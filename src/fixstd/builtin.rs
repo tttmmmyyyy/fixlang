@@ -35,8 +35,8 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
-    ObjectFieldType,
+    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_type,
+    write_alloc_offset, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -5920,10 +5920,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         );
 
         // Set tag value.
-        let tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, &[])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let tag_value = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
         let obj = ObjectFieldType::set_union_tag(gc, obj, tag_value);
 
         // Set value.
@@ -6098,10 +6095,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         };
 
         if gc.config.runtime_check() {
-            let expected_tag = ObjectFieldType::UnionTag
-                .to_basic_type(gc, &[])
-                .into_int_type()
-                .const_int(self.field_idx as u64, false);
+            let expected_tag = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
             // If tag mismatch, panic.
             ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
@@ -6242,10 +6236,7 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         // Create specified tag value.
-        let expected_tag = ObjectFieldType::UnionTag
-            .to_basic_type(gc, &[])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let expected_tag = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
@@ -6329,10 +6320,8 @@ impl LLVMGen for InlineLLVMUnionModBody {
         let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Create specified tag value.
-        let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, &[])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let specified_tag_value =
+            union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let tag_value = ObjectFieldType::get_union_tag(gc, &obj);

@@ -16,7 +16,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_return_part_types, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
@@ -460,10 +460,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let tag = arm
                 .tag
                 .expect("a non-final match arm must be a variant arm");
-            let tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(self, &[])
-                .into_int_type()
-                .const_int(tag as u64, false);
+            let tag_val = union_tag_type(self.context).const_int(tag as u64, false);
             cases.push((tag_val, arm_bbs[i]));
         }
         if cases.is_empty() {

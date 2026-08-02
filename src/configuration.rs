@@ -432,9 +432,7 @@ impl Configuration {
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
         config.set_fix_opt_level(FixOptimizationLevel::Experimental);
-        // config.set_sanitize_memory();
         config.emit_llvm = true;
-        // config.debug_info = true;
         config.emit_symbols = true;
         config
     }
