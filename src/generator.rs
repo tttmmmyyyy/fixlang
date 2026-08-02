@@ -156,7 +156,7 @@ impl<'c> Object<'c> {
             let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
         }
-        let data = gc.explode_to_parts(value);
+        let data = gc.value_parts(value);
         Object { data, ty }
     }
 
@@ -375,7 +375,7 @@ impl<'c> Object<'c> {
             // untouched and never materializing an aggregate.
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
-            let new_parts = gc.explode_to_parts(val.as_basic_value_enum());
+            let new_parts = gc.value_parts(val.as_basic_value_enum());
             assert_eq!(new_parts.len(), cnt);
             self.data.splice(off..off + cnt, new_parts);
         } else {
@@ -1426,12 +1426,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     // count stops as soon as it settles the answer: counting the rest would cost what the limit is
     // there to bound.
     fn holds_more_scalars_than(&self, ty: BasicTypeEnum<'c>, limit: usize) -> bool {
-        self.scalar_count_bounded_by(ty, limit) > limit
+        self.scalar_count_until_over(ty, limit) > limit
     }
 
     // The number of scalars `ty` holds, or some number above `limit` once the count passes it: the
     // descent stops as soon as the limit is settled.
-    fn scalar_count_bounded_by(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
+    fn scalar_count_until_over(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
         }
@@ -1443,7 +1443,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                         break;
                     }
                     count +=
-                        self.scalar_count_bounded_by(st.get_field_type_at_index(i).unwrap(), limit);
+                        self.scalar_count_until_over(st.get_field_type_at_index(i).unwrap(), limit);
                 }
                 count
             }
@@ -1530,10 +1530,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         (offset, count)
     }
 
-    // Split a value into its parts in the order of `type_parts` on its type, emitting an
+    // The parts a value is carried as, in the order of `type_parts` on its type, emitting an
     // `extractvalue` per struct field at the current insert position. A zero-sized value yields no
     // part, and a value carried whole is one part already.
-    pub fn explode_to_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
+    pub fn value_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
         if self.is_carried_whole(val.get_type()) {
             return vec![val];
         }
@@ -1550,7 +1550,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .flat_map(|i| {
                     let field = self
                         .builder()
-                        .build_extract_value(sv, i, "explode_part")
+                        .build_extract_value(sv, i, "split_part")
                         .unwrap();
                     self.split_value_parts(field)
                 })
@@ -1560,7 +1560,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
-    // `insertvalue` per struct field. The inverse of `explode_to_parts`. A zero-sized type consumes
+    // `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
     // no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
     // value.
     pub fn assemble_from_parts(
@@ -1610,7 +1610,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // terminator; the phis are placed at the current insert block.
     //
     // A zero-sized part (an empty union's `[0 x i8]` payload) never reaches here: `parts()` excludes
-    // it, since `explode_to_parts` drops it. So no per-part phi is ever a zero-sized one
+    // it, since `value_parts` drops it. So no per-part phi is ever a zero-sized one
     // (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no part and merges
     // to an empty object with no phi at all — the zero-sized part is rebuilt on materialization.
     pub fn build_object_phi(
