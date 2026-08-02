@@ -30,7 +30,6 @@ use crate::constants::{
     STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
     UNION_DATA_IDX,
 };
-use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
@@ -7379,12 +7378,9 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Check if the `threaded` compiler flag is true.
-        if !gc.config.threaded {
-            panic_with_msg(
-                "The `threaded` compiler flag must be set to true to use `Std::mark_threaded`.",
-            );
-        }
+        // `check_multithreading_requirement` has already reported a program that reaches here
+        // without multi-threading, where the source of the use is still known.
+        assert!(gc.config.threaded);
 
         let obj = gc.get_scoped_obj(&self.var_name);
         gc.mark_threaded(obj.clone());

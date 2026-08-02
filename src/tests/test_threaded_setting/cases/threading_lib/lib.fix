@@ -1,0 +1,19 @@
+module ThreadingLib;
+
+// Puts a value into multi-threaded mode, as a threading library does before handing a value to
+// another thread. The body spans several lines so that a diagnostic about the call has to point at
+// the call rather than at the whole definition.
+publish : Box I64 -> Box I64;
+publish = |value| (
+    let doubled = value.@value * 2;
+    let value = Box::make(doubled);
+    value.mark_threaded
+);
+
+// Publishes a value of another type, so that `Std::mark_threaded` is instantiated twice.
+publish_array : Array I64 -> Array I64;
+publish_array = |values| values.mark_threaded;
+
+// Needs nothing of multi-threading, so a program that uses only this is built without it.
+doubled : I64 -> I64;
+doubled = |value| value * 2;

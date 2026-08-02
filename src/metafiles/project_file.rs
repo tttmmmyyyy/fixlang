@@ -689,20 +689,6 @@ impl ProjectFile {
             );
         }
 
-        // Set threaded-mode.
-        if let Some(threaded) = self.build.threaded {
-            if threaded {
-                config.set_threaded();
-            }
-        }
-        if mode == BuildConfigType::Test {
-            if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
-                if threaded {
-                    config.set_threaded();
-                }
-            }
-        }
-
         // Set preliminary commands.
         let work_dir = to_absolute_path(
             self.path
@@ -748,6 +734,20 @@ impl ProjectFile {
         // From here on, only the settings in the project file of the root project are reflected.
         if is_dependent_proj {
             return Ok(());
+        }
+
+        // Set threaded-mode.
+        if let Some(threaded) = self.build.threaded {
+            if threaded {
+                config.set_threaded();
+            }
+        }
+        if mode == BuildConfigType::Test {
+            if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
+                if threaded {
+                    config.set_threaded();
+                }
+            }
         }
 
         // Set debug mode.

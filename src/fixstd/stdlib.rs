@@ -13,7 +13,8 @@ use crate::{
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
         ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME,
-        HOLE_NAME, IOSTATE_NAME, IO_NAME, PUNCHED_ARRAY_NAME, STD_NAME, WITH_RETAINED_NAME,
+        HOLE_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+        WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -372,7 +373,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_unsafe_is_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "mark_threaded"),
+        FullName::from_strs(&[STD_NAME], MARK_THREADED_NAME),
         mark_threaded_function(),
         None,
         None,

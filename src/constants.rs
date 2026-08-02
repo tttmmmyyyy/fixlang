@@ -8,6 +8,8 @@ pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
 pub const IO_DATA_NAME: &str = "runner";
+/// The `Std` value that puts the values reachable from a value into multi-threaded mode.
+pub const MARK_THREADED_NAME: &str = "mark_threaded";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";
 pub const I8_NAME: &str = "I8";
