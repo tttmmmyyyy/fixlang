@@ -1,13 +1,13 @@
 module Main;
 
-// A program that violates the rule `Array::mutate_elements` states: a global value's initializer
-// has to produce a graph of objects that nothing outside Fix holds a reference to.
+// A program that breaks the rule `Array::mutate_elements` states: an object may not be both what a
+// global value's initializer returns and what the running program holds.
 //
 // The callback of `mutate_elements` gets a raw pointer to the array's element buffer and may run
 // any IO, so it can hand that buffer's contents to C and read them back later. Doing the reading
-// back inside a global's initializer plants an object the running program still holds into that
-// global's result graph, and finishing the initializer marks the whole graph global. From then on
-// the program holds a binding the compiler proved local, pointing at an object that is not.
+// back inside a global's initializer puts an object the program still holds into what the
+// initializer returns, and finishing the initializer stops that object being counted. From then on
+// the program counts references to an object nothing maintains a count for. See README.md.
 
 // The C side keeps one `Array a` value, which is three words: the storage pointer, the size and the
 // capacity.

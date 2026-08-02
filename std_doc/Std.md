@@ -503,9 +503,9 @@ Do not perform any IO operations other than mutating the elements of `arr`.
 
 This function first clones the array if it is shared. The pointer is valid only while `io` runs.
 
-For example, using the callback's IO context and the FFI to store into this array a boxed value made somewhere far away can let an optimization break the program.
-A global value's initializer has to produce a graph of objects that nothing outside Fix holds a reference to, and such a store is one way to violate that.
-`dev-docs/2026-08-03-initializer-contract-violation/` holds a program that does.
+For example, the callback can use its IO context and the FFI to store into this array a boxed value made somewhere far away.
+Doing that inside a global value's initializer can let an optimization break the program: what an initializer's result reaches stops being reference-counted once the initializer finishes, and the program goes on counting references to what it holds, so nothing may be both.
+`dev-docs/2026-08-03-initializer-contract-violation/` holds a program that makes something be both.
 
 ##### Parameters
 
