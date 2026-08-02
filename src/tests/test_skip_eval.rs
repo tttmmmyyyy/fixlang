@@ -192,16 +192,16 @@ fn test_test_section_keeps_the_evaluation_for_the_program() {
 #[test]
 fn test_option_skips_the_evaluation_for_a_test() {
     let (_temp_dir, project_dir) = setup_test_env("root_skip_in_build");
-    let kept = stderr_of_run(&project_dir, &["test"]);
+    let stderr_without_option = stderr_of_run(&project_dir, &["test"]);
     assert!(
-        kept.contains(FROM_EVAL),
+        stderr_without_option.contains(FROM_EVAL),
         "a test build should keep the evaluation.\nstderr: {}",
-        kept
+        stderr_without_option
     );
-    let skipped = stderr_of_run(&project_dir, &["test", "--skip-eval"]);
+    let stderr_with_option = stderr_of_run(&project_dir, &["test", "--skip-eval"]);
     assert!(
-        !skipped.contains(FROM_EVAL),
+        !stderr_with_option.contains(FROM_EVAL),
         "`--skip-eval` should skip the evaluation, whichever subcommand it is given to.\nstderr: {}",
-        skipped
+        stderr_with_option
     );
 }

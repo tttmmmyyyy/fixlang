@@ -291,7 +291,7 @@ fn run_cli() {
 
     // The options of a subcommand that builds a Fix program and then executes it. They are listed
     // in the order `--help` shows them.
-    let add_execution_options = |app: App<'static>| {
+    let add_run_and_test_options = |app: App<'static>| {
         app.arg(source_file.clone())
             .arg(object_file.clone())
             .arg(output_file.clone())
@@ -319,14 +319,14 @@ fn run_cli() {
     };
 
     // "fix run" subcommand
-    let run_subc = add_execution_options(
+    let run_subc = add_run_and_test_options(
         App::new("run")
             .trailing_var_arg(true)
             .about("Runs a Fix program. Executes `Main::main : IO ()`."),
     );
 
     // "fix test" subcommand
-    let test_subc = add_execution_options(
+    let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
             .about("Tests a Fix program. Executes `Test::test : IO ()`."),
