@@ -131,10 +131,17 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// The values this op reference-counts inside `generate`, for the operand types it is
     /// instantiated at. An op that counts none answers the empty list and is never annotated.
     ///
-    /// **The declaration has to cover every retain and release `generate` emits.** The annotation
+    /// **The declaration has to cover every retain and release `generate` emits under the state the
+    /// annotation carries** — that is, every one it counts through `assumed_state`. The annotation
     /// says of all of them at once that the objects they touch are local, so one left out is the
     /// direction of error that corrupts memory. It is the same kind of hand-maintained claim as
     /// `unique_check_operand`, and `assuming_local` is what carries the answer back.
+    ///
+    /// What the same `generate` reaches with `RcState::Unknown` pinned in is outside the declaration
+    /// by construction: the annotation cannot reach it, so it goes on reading the state whatever
+    /// this answers. Reading an operand that is an unboxed global is the one that turns up in nearly
+    /// every op, since `Generator::get_scoped_obj` retains the global's boxed subobjects there.
+    /// Threading state into one of those is what would make it the declaration's business.
     ///
     /// The default covers the clone path: an op that force-uniques a shared container retain-copies
     /// its contents and releases the old container, so every op declaring a uniqueness check gets

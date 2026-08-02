@@ -885,10 +885,17 @@ capture projection のコンテナからの取り出し）と、書き込み系�
 
 **`internal_rc_targets` の対と不変条件**: op の `generate` が属性を読むのは、その op が
 `unique_check_operand` か `internal_rc_targets` のどちらかを宣言しているときに限る（1 つの
-`assume_local` が両方を担う）。そして**宣言は `generate` が出す retain/release を漏れなく覆わなければ
-ならない**。宣言し損ねた操作が 1 つでもあると、注釈が「対象はすべて `LOCAL`」と言いながら
-その操作が非 LOCAL なオブジェクトに当たる — 「誤りの 2 方向は対称ではない」の「壊れる側」の誤りである。前提 P1 と同じ
-性質の、手書き宣言への依存になる。
+`assume_local` が両方を担う）。そして**宣言は、注釈が変えうる retain/release を漏れなく覆わなければ
+ならない** — すなわち `generate` が `assumed_state` を通して出すものすべてである。宣言し損ねた
+操作が 1 つでもあると、注釈が「対象はすべて `LOCAL`」と言いながらその操作が非 LOCAL なオブジェクトに
+当たる — 「誤りの 2 方向は対称ではない」の「壊れる側」の誤りである。前提 P1 と同じ性質の、
+手書き宣言への依存になる。
+
+**同じ `generate` が `RcState::Unknown` を直に渡して出す RC は、構成上この宣言の外側である。**
+注釈はそこに届かないので、宣言が何と答えてもディスパッチのまま残る。ほぼ全 op に現れるのは
+オペランドの読み出しで、`Generator::get_scoped_obj` は unboxed な global を読むときその boxed
+subobject を retain する（「注釈する site」の「残す」の 3 つ目）。将来そこへ state を通すなら、
+そのとき初めて宣言の担当になる。
 
 対象は op ごとに違うので、どの値を触るかを宣言させる — `unique_check_operand` が「どのオペランド
 のどのパスを見るか」を宣言しているのと同じ形である:

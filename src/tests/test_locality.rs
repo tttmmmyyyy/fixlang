@@ -348,6 +348,43 @@ mod integration_tests {
         assert_op_state(&dump, "struct_get_0", &holds_global[0], "");
     }
 
+    /// The names the dump gives the clones of `source_name`, in no particular order. A clone keyed
+    /// on the least informative inputs keeps the original name; every other key gets a fresh one.
+    fn clone_names<'a>(dump: &'a str, source_name: &str) -> Vec<&'a str> {
+        dump.lines()
+            .filter_map(|line| line.strip_prefix("fn "))
+            .filter_map(|rest| rest.split_once('('))
+            .map(|(name, _)| name)
+            .filter(|name| name.starts_with(source_name) && !name.ends_with("#borrow"))
+            .collect()
+    }
+
+    /// Verifies that a function reached with several input localities is cloned per key, and that
+    /// the gate carries that over a function which counts no reference of its own. Leaving such a
+    /// forwarder canonical would key its callee on the least informative inputs and lose the proof
+    /// for every caller reaching the callee through it.
+    #[test]
+    fn test_a_function_is_cloned_per_input_locality() {
+        let (_temp_dir, project_dir) = setup_test_env("clones");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // Three localities reach them: built here elements and all, built here holding the global,
+        // and the global itself. The third keeps the original name, so two clones join it. Only one
+        // of the mutually recursive pair survives as a function of its own, the other being inlined
+        // into it.
+        for f in ["Main::odd_step", "Main::forward"] {
+            let names = clone_names(&dump, f);
+            assert_eq!(
+                names.len(),
+                3,
+                "`{}` should have the canonical version and two clones, but the dump has {:?}:\n{}",
+                f,
+                names,
+                dump
+            );
+        }
+    }
+
     /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
     /// Reference counting is inserted for locals, but the borrow rewrite adds a release naming
     /// whatever was passed at a borrowed position — a global included — so resolving an operand by
@@ -423,6 +460,15 @@ mod runtime_tests {
     #[test]
     fn test_annotations_of_a_dropped_global_field_hold_at_run_time() {
         let source = include_str!("test_locality/cases/unbox_struct/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations of a cloned function hold at run time, at every key its callers
+    /// reach it with. A clone's annotations rest on the inputs its key names, so a call routed to
+    /// the wrong clone is what the state check catches here.
+    #[test]
+    fn test_annotations_of_every_clone_hold_at_run_time() {
+        let source = include_str!("test_locality/cases/clones/main.fix");
         test_source(source, Configuration::develop_mode());
     }
 }
