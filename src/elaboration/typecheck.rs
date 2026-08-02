@@ -1989,6 +1989,43 @@ impl TypeCheckContext {
         }
     }
 
+    /// Whether `ty1` and `ty2` can be unified, when the unifier itself is
+    /// not wanted.
+    ///
+    /// Both types must already be substituted under `self`. The query then
+    /// runs on an empty substitution -- a substitution maps each of its
+    /// variables to a type free of them all, so applying it to its own image
+    /// changes nothing -- and so costs the size of the two types rather than
+    /// the size of the inference state, which a copy of `self` would.
+    fn are_unifiable(&self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Result<bool, Errors> {
+        let mut tc = Self {
+            // What unification reads.
+            tyvar_id: self.tyvar_id,
+            equalities: self.equalities.clone(),
+            fixed_tyvars: self.fixed_tyvars.clone(),
+            assumed_eqs: self.assumed_eqs.clone(),
+            assumed_preds: self.assumed_preds.clone(),
+            trait_env: self.trait_env.clone(),
+            type_env: self.type_env.clone(),
+            kind_env: self.kind_env.clone(),
+            import_statements: self.import_statements.clone(),
+            current_module: self.current_module.clone(),
+            cache: self.cache.clone(),
+            num_worker_threads: self.num_worker_threads,
+            error_tolerant: self.error_tolerant,
+            // What unification writes, and the answer discards.
+            substitution: Substitution::default(),
+            tyvar_expr: Map::default(),
+            predicates: vec![],
+            // What unification leaves alone.
+            scope: Scope::default(),
+            import_required: vec![],
+            local_assumed_eqs: vec![],
+            opaque_instantiations: Map::default(),
+        };
+        Ok(UnifOrOtherErr::extract_others(tc.unify(ty1, ty2))?.is_ok())
+    }
+
     // Subroutine of unify().
     fn unify_tyvar(
         &mut self,
@@ -2100,16 +2137,13 @@ impl TypeCheckContext {
                     self.reduce_predicate(pred, irr_preds, skip)?;
                 }
                 return Ok(());
-            } else {
+            } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
                 // But we may be able to reduce it after the predicate is substituted further.
                 // To see if there is possibility for further reduction, we check here the unifiability.
-                let mut tc = self.clone();
-                if UnifOrOtherErr::extract_others(tc.unify(&qual_pred.predicate.ty, &pred.ty))?
-                    .is_ok()
-                {
-                    unifiable = true;
-                }
+                // One qualified predicate the head is unifiable with settles that, so the rest are
+                // left unasked.
+                unifiable = self.are_unifiable(&qual_pred.predicate.ty, &pred.ty)?;
             }
         }
         if !unifiable {
