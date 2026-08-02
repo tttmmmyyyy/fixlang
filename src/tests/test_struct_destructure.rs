@@ -118,3 +118,52 @@ main : IO () = (
         test_source(DESTRUCTURED_PARAMETER_SOURCE, config);
     }
 }
+
+// A struct pattern names the fields of one struct type, so a name the type does not declare and a
+// name given twice are both rejected with a source-level diagnostic.
+#[cfg(test)]
+mod struct_pattern_validation_tests {
+    use crate::{configuration::Configuration, tests::test_util::test_source_fail};
+
+    /// A field named twice in one struct pattern is reported rather than bound twice.
+    #[test]
+    pub fn test_struct_pattern_duplicate_field_rejected() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64, b : I64 };
+
+main : IO ();
+main = (
+    let S { a : x, a : y } = S { a : 1, b : 2 };
+    println((x + y).to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "Duplicate field in struct pattern.",
+        );
+    }
+
+    /// A field the struct does not declare is reported rather than matched.
+    #[test]
+    pub fn test_struct_pattern_unknown_field_rejected() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64 };
+
+main : IO ();
+main = (
+    let S { zz : x } = S { a : 1 };
+    println(x.to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "Unknown field `zz` for struct `Main::S`.",
+        );
+    }
+}

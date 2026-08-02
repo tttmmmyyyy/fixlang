@@ -961,3 +961,38 @@ pub fn test_get_funptr_retain_error() {
     "##;
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
+
+/// A non-variadic `FFI_CALL` signature fixes the number of arguments the call takes, and both too
+/// many and too few are reported as a source-level diagnostic.
+#[test]
+pub fn test_ffi_call_wrong_argument_count() {
+    let too_many = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            eval *FFI_CALL_IO[CInt puts(Ptr), "hi".borrow_c_str(|p| p), 1];
+            pure()
+        );
+    "##;
+    test_source_fail(
+        too_many,
+        Configuration::develop_mode(),
+        "Wrong number of arguments in FFI_CALL_IO expression.",
+    );
+
+    let too_few = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            eval *FFI_CALL_IO[CInt puts(Ptr)];
+            pure()
+        );
+    "##;
+    test_source_fail(
+        too_few,
+        Configuration::develop_mode(),
+        "Wrong number of arguments in FFI_CALL_IO expression.",
+    );
+}
