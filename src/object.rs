@@ -1133,10 +1133,7 @@ impl ObjectType {
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
                 _ => panic!(),
             };
-            // The buffer holds elements as they are embedded -- a pointer where the element type is
-            // boxed -- which is the stride every read and write of it uses.
-            let embedded_elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
-            let elem_size = gc.target_data.get_abi_size(&embedded_elem_ty);
+            let elem_size = elem_stride(gc, &elem_ty);
             let struct_ty = self.to_struct_type(gc, vec![]);
             let buf_field_idx = struct_ty.count_fields() - 1;
             let header_size = gc
@@ -1587,6 +1584,29 @@ fn build_malloc<'c, 'm>(
         .left()
         .unwrap()
         .into_pointer_value()
+}
+
+/// The number of bytes one element of `elem_ty` occupies in an element buffer.
+///
+/// The buffer holds elements as they are embedded -- a pointer where the element type is boxed --
+/// which is the stride every read and write of it uses.
+fn elem_stride<'c, 'm>(gc: &mut Generator<'c, 'm>, elem_ty: &Arc<TypeNode>) -> u64 {
+    let embedded_elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+    gc.target_data.get_abi_size(&embedded_elem_ty)
+}
+
+/// The number of bytes `count` elements of `elem_ty` occupy in an element buffer, as a value of
+/// `count`'s type named `name`.
+pub fn build_elems_bytes<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: &Arc<TypeNode>,
+    count: IntValue<'c>,
+    name: &str,
+) -> IntValue<'c> {
+    let stride = elem_stride(gc, elem_ty);
+    gc.builder()
+        .build_int_mul(count.get_type().const_int(stride, false), count, name)
+        .unwrap()
 }
 
 /// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
