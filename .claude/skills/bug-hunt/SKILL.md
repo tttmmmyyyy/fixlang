@@ -115,6 +115,27 @@ How to hunt. A finder reads this section before starting. Two kinds of entry: a 
 
 The code leans on a condition it never checks — a catch-all `_ =>`, an `unwrap_or`, a `map_or`, or a silent clamp that absorbs a case the author calls impossible, or a comment asserting "same length" / "never empty" / "always last" with no assertion behind it. Turn the assumption into a loud failure — replace the fallback with a `panic!`, or add the `assert!` the comment implies — and run the suite. When it fires, the case was reachable and something upstream is already broken; the swallowed value was flowing on and would have surfaced somewhere else entirely. Revert the probe afterward.
 
+#### Check that a guard can fire for the case its comment names
+
+The code states an invariant and puts a check behind it — an `assert`, a validation call, a
+conditional that decides whether to save, report or continue — and a comment says which case the
+check exists to catch. Take the comment at its word and ask the mechanical question: **on that
+exact case, does control reach the check, and does the condition it tests distinguish it?** Two
+ways it fails to. The check sits *downstream of something that aborts first* on the very case it
+guards, so it is unreachable precisely when it would matter. Or the condition is *not the one the
+comment describes* — it reads a value that the guarded case leaves indistinguishable from the good
+case, most often because a second mode of the same code produces that value by design.
+
+Both leave a comment asserting a protection the code does not have, and both survive review
+indefinitely: the reader checks that a guard exists, not that it can fire. The probe is cheap —
+construct the case the comment names and watch whether the guard sees it — and a hit is a bug plus
+a false sense of safety, which is worse than an unguarded invariant, because nobody looks again at
+a line that says it is handled.
+
+This is the *Show the detector fires before trusting its silence* rule turned on the production
+code: a guard is a detector the program runs on itself, and its silence is worth exactly as much
+as a hunting detector's.
+
 #### Exploit a fact stored in two places
 
 The same information lives in two representations kept in sync by convention rather than construction — a length beside the data it measures, an operand name embedded in an operation and repeated in its separate argument list, a cached field derivable from its source, a tag order that a switch's default silently assumes. Force or find a state where the two disagree: trace whether any pass updates one without the other, or add an assertion that the two are equal and run the suite. Then check whether a consumer reads the stale copy — a desync a consumer trusts is a use-after-free, a miscompile, or a wrong answer waiting for the first pass that breaks the convention.
