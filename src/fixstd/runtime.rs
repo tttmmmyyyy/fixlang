@@ -124,7 +124,7 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: 
     return;
 }
 
-fn build_array_size_overflow_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+fn build_array_size_overflow_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }

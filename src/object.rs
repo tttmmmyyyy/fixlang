@@ -1655,6 +1655,9 @@ fn panic_if_capacity_overflows<'c, 'm>(
     if elem_size == 0 {
         return;
     }
+    // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
+    // of that width.
+    assert_eq!(cap.get_type().get_bit_width(), 64);
     let max_cap = (u64::MAX - (ARRAY_BUF_ALIGNMENT - 1) - header_size) / elem_size;
     let overflows = gc
         .builder()
