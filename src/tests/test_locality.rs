@@ -350,12 +350,14 @@ mod integration_tests {
 
     /// The names the dump gives the clones of `source_name`, in no particular order. A clone keyed
     /// on the least informative inputs keeps the original name; every other key gets a fresh one.
+    /// The borrowing version a caller reaches where it keeps its argument is a function of its own
+    /// and is cloned on its own, so it and its clones are left out.
     fn clone_names<'a>(dump: &'a str, source_name: &str) -> Vec<&'a str> {
         dump.lines()
             .filter_map(|line| line.strip_prefix("fn "))
             .filter_map(|rest| rest.split_once('('))
             .map(|(name, _)| name)
-            .filter(|name| name.starts_with(source_name) && !name.ends_with("#borrow"))
+            .filter(|name| name.starts_with(source_name) && !name.contains("#borrow"))
             .collect()
     }
 
@@ -383,6 +385,25 @@ mod integration_tests {
                 dump
             );
         }
+    }
+
+    /// Verifies that a function reached with more input localities than the budget allows stops
+    /// being cloned instead of being cloned for each. The keys reachable here are the product of six
+    /// arguments' localities, which is more than any program has use for and more than a compilation
+    /// can afford: the calls past the budget route to the canonical version, which proves nothing
+    /// and therefore keeps every dispatch it had.
+    #[test]
+    fn test_the_clones_of_one_function_are_bounded() {
+        let (_temp_dir, project_dir) = setup_test_env("clone_budget");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let names = clone_names(&dump, "Main::work");
+        assert!(
+            names.len() <= 20,
+            "`Main::work` is reached with the product of six arguments' localities, and the budget \
+             should stop its clones well before that, but the dump has {} of them",
+            names.len()
+        );
     }
 
     /// Verifies that the boxed leaves of one argument carry their own keys. A clone reached with a
@@ -510,6 +531,15 @@ mod runtime_tests {
     #[test]
     fn test_annotations_hold_across_a_lazy_initializer() {
         let source = include_str!("test_locality/cases/lazy_init/main.fix");
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the annotations hold at run time where the budget sent some calls to the
+    /// canonical version. A clone and the canonical version answer differently by construction, so
+    /// a call that fell back has to be reading the state everywhere its clone would not have.
+    #[test]
+    fn test_annotations_hold_where_the_clone_budget_falls_back() {
+        let source = include_str!("test_locality/cases/clone_budget/main.fix");
         test_source(source, Configuration::develop_mode());
     }
 

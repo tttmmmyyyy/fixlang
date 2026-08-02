@@ -247,9 +247,9 @@ namespace Array {
     //
     // This function first clones the array if it is shared. The pointer is valid only while `io` runs.
     //
-    // NOTE:
-    // The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
-    // If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
+    // For example, using the callback's IO context and the FFI to store into this array a boxed value made somewhere far away can let an optimization break the program.
+    // A global value's initializer has to produce a graph of objects that nothing outside Fix holds a reference to, and such a store is one way to violate that.
+    // `dev-docs/2026-08-03-initializer-contract-violation/` holds a program that does.
     //
     // # Parameters
     // * `act` - The action to perform on the pointer to the first element.
@@ -887,10 +887,6 @@ namespace FFI {
     // 
     // This function first clones the value if `x` is not unique.
     //
-    // NOTE:
-    // The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
-    // If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
-    //
     // See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
     // 
     // # Parameters
@@ -967,10 +963,6 @@ namespace FFI {
     //
     // NOTE:
     // It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
-    //
-    // NOTE:
-    // The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to, so bringing a value restored here into such an initializer's result causes undefined behavior.
-    // A global value's whole result graph is made exempt from reference counting once the initializer finishes, and the compiler counts references to the objects a running program holds on the assumption that this exemption cannot reach them.
     //
     // # Parameters
     // 

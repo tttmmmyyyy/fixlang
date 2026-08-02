@@ -503,9 +503,9 @@ Do not perform any IO operations other than mutating the elements of `arr`.
 
 This function first clones the array if it is shared. The pointer is valid only while `io` runs.
 
-NOTE:
-The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
-If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
+For example, using the callback's IO context and the FFI to store into this array a boxed value made somewhere far away can let an optimization break the program.
+A global value's initializer has to produce a graph of objects that nothing outside Fix holds a reference to, and such a store is one way to violate that.
+`dev-docs/2026-08-03-initializer-contract-violation/` holds a program that does.
 
 ##### Parameters
 
@@ -1429,10 +1429,6 @@ Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr
 NOTE:
 It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
 
-NOTE:
-The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to, so bringing a value restored here into such an initializer's result causes undefined behavior.
-A global value's whole result graph is made exempt from reference counting once the initializer finishes, and the compiler counts references to the objects a running program holds on the assumption that this exemption cannot reach them.
-
 ##### Parameters
 
 * `retained_ptr` - The pointer to the value.
@@ -1518,10 +1514,6 @@ Do not perform any IO operations other than mutating the value of `x`.
 For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
 
 This function first clones the value if `x` is not unique.
-
-NOTE:
-The initializer of a global value has to produce a graph of objects that nothing outside Fix holds a reference to.
-If the action gives the foreign side a reference it keeps, bringing the returned value into such an initializer's result causes undefined behavior.
 
 See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
 
