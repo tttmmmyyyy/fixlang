@@ -80,6 +80,7 @@
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
         - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
+    - [Multithreading](#multithreading)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2430,6 +2431,24 @@ contains_byte = |c, arr| (
 );
 ```
 
+## Multithreading
+
+Fix has no function that starts a thread or creates a lock. A multi-threaded program uses the [FFI](#foreign-function-interface-ffi) to drive a threading library such as pthread. [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation, providing asynchronous tasks and a shared variable on top of pthread.
+
+Enable multi-threading with the `--threaded` compiler option or the `threaded` field of the project file. It adds a check of each object's mode to every reference counting operation, which lowers the run-time performance of the program. Leave it off for a single-threaded program.
+
+The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::mark_threaded` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
+
+A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
+
+- `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically. Call it on the value, and carry on with the value it returns.
+- Call `Std::FFI::boxed_to_retained_ptr` on the returned value to get a pointer to it, and pass the pointer to the threading library with `FFI_CALL_IO`.
+- From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. An exported function receives a boxed parameter as such a pointer, and `Std::FFI::boxed_from_retained_ptr` turns a `Ptr` back into a boxed value.
+
+The pointer carries the responsibility for the reference count described in [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language).
+
+While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
+
 ## `eval` syntax
 
 The expression `eval {expr0}; {expr1}` evaluates both `{expr0}` and `{expr1}`, and returns the value of `{expr1}`.
@@ -2853,7 +2872,7 @@ The following table shows how each setting is handled.
             <td>threaded</td>
             <td>--threaded</td>
             <td>Merge (OR)</td>
-            <td>Affects</td>
+            <td>Does not affect</td>
             <td>Enable multi-threading</td>
         </tr>
         <tr>
@@ -2909,8 +2928,7 @@ The following table shows how each setting is handled.
 </table>
 
 Note:
-For some settings, such as optimization level and debugging information generation, you might expect that settings in dependent projects would take effect only within the scope of those dependent projects, rather than not affecting the main project at all.
-However, the Fix build system currently does not have a mechanism to separate compilation units on a per-dependent-project basis, so settings like optimization level and debugging information generation use a single value across the entire build.
+The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build, which the compiler options and the main project's project file decide.
 
 ### Approval of `preliminary_commands`
 

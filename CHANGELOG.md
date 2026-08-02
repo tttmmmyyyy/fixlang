@@ -31,17 +31,23 @@
 - `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
 - `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`.
 - A value restored by `FFI::boxed_from_retained_ptr` must not be brought into the result of a global value's initializer. An initializer has to produce a graph of objects that nothing outside Fix holds a reference to, and violating that is undefined behavior.
-- The internal implementation of the counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` changed. As long as you iterate them the yielded elements are unchanged; only code that reads these iterators' fields directly is affected. See their definitions in the standard library for the details.
+- The counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` hold different fields. They yield the same elements as before, so only code that reads their fields directly is affected; see their definitions in the standard library.
+
+#### Tool
+
+- The `threaded` field of a dependency's project file no longer turns multi-threading on for the project being built; the project being built decides the setting. Building a program that calls `Std::mark_threaded` with multi-threading off now fails with an error quoting the call, so a project that depends on a library needing multi-threading sets `threaded = true` in its own project file or passes `--threaded`.
 
 ### Fixed
 
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
+- Creating or growing an array whose elements need more bytes than the address space holds now aborts the program. `Array::empty(2305843009213693952) : Array I64` used to return an array whose memory had room for none of its elements, so writing to that array corrupted the heap. `--no-runtime-check` disables this check as it does the bounds checks.
 - An `Array` whose element type is boxed now uses one pointer of memory per element. An array of a boxed struct of eight `I64` fields used nine times the memory it needed.
 
 #### Tool
 
+- `fix build` now exits with a failure status when linking fails. It printed the linker's error and exited 0, so a build that produced no output file looked like a success to `fix build && ./prog`, to a `make` rule and to a CI step.
 - On AArch64 targets (Apple Silicon and other 64-bit ARM), an integer narrower than 32 bits crossed the FFI boundary as a wrong number: a function exported with `FFI_EXPORT` returned one to its foreign caller, and `FFI_CALL` passed one to a foreign function that takes one. A function of type `I8 -> I8 -> I8` exported and called from C with `-100` and `30` answered 186 instead of -70. This covers `I8`, `U8`, `I16` and `U16`, and the `Std::FFI` aliases of the same widths such as `CChar` and `CShort`. x86-64 targets were unaffected.
 - Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.
 - Tail call optimization now applies in more cases. Code that overflowed the stack at `-O none` or `-O basic` — typically a loop written with monadic binds, whose result or state is too wide for the target's registers — now runs in constant stack.

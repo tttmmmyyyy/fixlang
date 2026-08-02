@@ -15,11 +15,10 @@ use crate::{
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
-        types::OpaqueTyConResolution,
         types::{
             is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
-            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-            TypeNode,
+            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
+            TyConVariant, TyVar, Type, TypeNode,
         },
     },
     constants::{
@@ -32,6 +31,7 @@ use crate::{
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
+use std::mem::{replace, swap};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -187,27 +187,49 @@ impl Substitution {
         return true;
     }
 
-    // Apply substitution to predicate.
+    /// Replaces the type variables this substitution binds in the type `p` constrains.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         p.ty = self.substitute_type(&p.ty);
     }
 
-    // Apply substitution to type
+    /// Replaces each type variable of `ty` that this substitution binds.
+    ///
+    /// A type none of whose variables this substitution replaces is returned as
+    /// it came: the common case of a substitution that says nothing about a type
+    /// walks the type and hands back the same node.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
                 sub.set_source_if_none(ty.get_source().clone())
             }),
             Type::TyCon(_) => ty.clone(),
-            Type::TyApp(fun, arg) => ty
-                .set_tyapp_fun(self.substitute_type(fun))
-                .set_tyapp_arg(self.substitute_type(arg)),
+            Type::TyApp(fun, arg) => {
+                let new_fun = self.substitute_type(fun);
+                let new_arg = self.substitute_type(arg);
+                if Arc::ptr_eq(&new_fun, fun) && Arc::ptr_eq(&new_arg, arg) {
+                    return ty.clone();
+                }
+                ty.set_tyapp_fun(new_fun).set_tyapp_arg(new_arg)
+            }
             Type::AssocTy(_, args) => {
-                ty.set_assocty_args(args.iter().map(|arg| self.substitute_type(arg)).collect())
+                let new_args = args
+                    .iter()
+                    .map(|arg| self.substitute_type(arg))
+                    .collect::<Vec<_>>();
+                if new_args
+                    .iter()
+                    .zip(args)
+                    .all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))
+                {
+                    return ty.clone();
+                }
+                ty.set_assocty_args(new_args)
             }
         }
     }
 
+    /// Substitutes the types the error carries, so it is reported in terms of
+    /// the current substitution.
     pub fn substitute_unification_error(&self, e: &mut UnificationErr) {
         match e {
             UnificationErr::Unsatisfiable(predicate) => {
@@ -424,9 +446,11 @@ pub struct TypeCheckContext {
     // Names that should be imported in the current module.
     pub import_required: Vec<FullName>,
     // Equalities assumed.
-    pub assumed_eqs: Map<AssocType, Vec<EqualityScheme>>,
+    // Arc for sharing them among the contexts cloned for speculative type checking.
+    pub assumed_eqs: Arc<Map<AssocType, Vec<EqualityScheme>>>,
     // Predicates assumed.
-    pub assumed_preds: Map<TraitId, Vec<QualPredScheme>>,
+    // Arc for sharing them among the contexts cloned for speculative type checking.
+    pub assumed_preds: Arc<Map<TraitId, Vec<QualPredScheme>>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
     // NOTE: We use `Vec` instead of `Set` because the expected size is small.
@@ -489,8 +513,8 @@ impl TypeCheckContext {
             substitution: Substitution::default(),
             predicates: vec![],
             equalities: vec![],
-            assumed_preds,
-            assumed_eqs,
+            assumed_preds: Arc::new(assumed_preds),
+            assumed_eqs: Arc::new(assumed_eqs),
             fixed_tyvars: vec![],
             local_assumed_eqs: vec![],
             import_required: vec![],
@@ -879,13 +903,20 @@ impl TypeCheckContext {
         }
     }
 
-    pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    /// The substitution that sends each of `tyvars` to a fresh type variable of the same kind.
+    fn instantiate_tyvars(&mut self, tyvars: &[Arc<TyVar>]) -> Substitution {
         let mut sub = Substitution::default();
-        for tv in ty.free_vars_vec() {
-            let new_tv = self.new_tyvar_by(&tv);
-            let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+        for tv in tyvars {
+            let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
+            let merge_ok = sub.merge(&Substitution::single(&tv.name, new_tv));
             assert!(merge_ok);
         }
+        sub
+    }
+
+    /// Replaces every free type variable of `ty` by a fresh one of the same kind.
+    pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        let sub = self.instantiate_tyvars(&ty.free_vars_vec());
         sub.substitute_type(ty)
     }
 
@@ -952,7 +983,11 @@ impl TypeCheckContext {
                             predicate: pred,
                         },
                     };
-                    insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
+                    insert_to_map_vec(
+                        Arc::make_mut(&mut self.assumed_preds),
+                        &trait_id,
+                        qual_pred_scm,
+                    );
                 }
                 for eq in eqs {
                     let assoc_ty = eq.assoc_type.clone();
@@ -960,7 +995,7 @@ impl TypeCheckContext {
                         gen_vars: vec![],
                         equality: eq.clone(),
                     };
-                    insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
+                    insert_to_map_vec(Arc::make_mut(&mut self.assumed_eqs), &assoc_ty, eq_scm);
                     self.local_assumed_eqs.push(eq);
                 }
                 return Ok(scheme.ty.clone());
@@ -1182,11 +1217,11 @@ impl TypeCheckContext {
                 } else {
                     // candidates.len() == 1
                     let (tc, ns) = candidates_check_res
-                        .iter()
-                        .find_map(|cand| cand.as_ref().ok())
+                        .into_iter()
+                        .find_map(|cand| cand.ok())
                         .unwrap();
-                    *self = tc.clone();
-                    let ei = ei.set_var_namespace(ns.clone());
+                    *self = tc;
+                    let ei = ei.set_var_namespace(ns);
                     let name = &ei.get_var().name;
                     if name.is_global() && !name.is_absolute() {
                         self.import_required.push(name.clone());
@@ -1788,9 +1823,11 @@ impl TypeCheckContext {
         Ok((expr, Errors::empty()))
     }
 
+    /// Composes `subst` into the accumulated substitution, then re-examines the
+    /// pending equalities, which the new bindings may let unify or reduce.
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
         self.substitution.compose(subst);
-        let eqs = std::mem::replace(&mut self.equalities, vec![]);
+        let eqs = replace(&mut self.equalities, vec![]);
         for eq in eqs {
             self.add_equality(eq)?;
         }
@@ -1870,29 +1907,25 @@ impl TypeCheckContext {
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
-                for assumed_eq in &self.assumed_eqs.get(assoc_ty).cloned().unwrap_or(vec![]) {
+                let assumed_eqs = self.assumed_eqs.clone();
+                for assumed_eq in assumed_eqs.get(assoc_ty).map_or(&[][..], Vec::as_slice) {
                     // Instantiate `assumed_eq`.
-                    let mut subst = Substitution::default();
-                    for tv in &assumed_eq.gen_vars {
-                        let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                        let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
-                        assert!(merge_ok);
-                    }
+                    let inst_subst = self.instantiate_tyvars(&assumed_eq.gen_vars);
                     let mut equality = assumed_eq.equality.clone();
-                    subst.substitute_equality(&mut equality);
+                    inst_subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
-                    let subst: Option<Substitution> = Substitution::matching(
+                    let match_subst: Option<Substitution> = Substitution::matching(
                         &equality.lhs(),
                         &ty,
                         &self.fixed_tyvars,
                         &self.kind_env,
                     )?;
-                    if subst.is_none() {
+                    if match_subst.is_none() {
                         continue;
                     }
-                    let subst: Substitution = subst.unwrap();
-                    let rhs = subst.substitute_type(&equality.value);
+                    let match_subst: Substitution = match_subst.unwrap();
+                    let rhs = match_subst.substitute_type(&equality.value);
                     return self.reduce_type_by_equality(rhs);
                 }
                 Ok(ty)
@@ -1930,7 +1963,7 @@ impl TypeCheckContext {
                 }
                 _ => {}
             }
-            std::mem::swap(&mut ty1, &mut ty2);
+            swap(&mut ty1, &mut ty2);
         }
 
         // Case: Either is usage of associated type.
@@ -1945,7 +1978,7 @@ impl TypeCheckContext {
                 self.add_equality(eq)?;
                 return Ok(());
             }
-            std::mem::swap(&mut ty1, &mut ty2);
+            swap(&mut ty1, &mut ty2);
         }
 
         // Other case.
@@ -1982,7 +2015,48 @@ impl TypeCheckContext {
         }
     }
 
-    // Subroutine of unify().
+    /// Whether unification of `ty1` and `ty2` succeeds under the current
+    /// substitution, assumed equalities and fixed type variables.
+    ///
+    /// Both types are substituted here, and the unification then runs on an
+    /// empty substitution of its own: a substitution maps each of its variables
+    /// to a type free of them all, so it has nothing left to say about its own
+    /// image. That keeps the query proportional to the two types while the
+    /// inference state grows with the body being checked.
+    pub fn are_unifiable(&self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> Result<bool, Errors> {
+        let ty1 = self.substitute_type(ty1);
+        let ty2 = self.substitute_type(ty2);
+        let mut tc = Self {
+            // What unification reads.
+            tyvar_id: self.tyvar_id,
+            equalities: self.equalities.clone(),
+            fixed_tyvars: self.fixed_tyvars.clone(),
+            assumed_eqs: self.assumed_eqs.clone(),
+            kind_env: self.kind_env.clone(),
+            // What unification writes, and the answer discards.
+            substitution: Substitution::default(),
+            tyvar_expr: Map::default(),
+            predicates: vec![],
+            // What unification leaves alone: the large ones start empty, the
+            // ones that cost a scalar or a reference count are carried.
+            scope: Scope::default(),
+            import_required: vec![],
+            local_assumed_eqs: vec![],
+            opaque_instantiations: Map::default(),
+            assumed_preds: self.assumed_preds.clone(),
+            trait_env: self.trait_env.clone(),
+            type_env: self.type_env.clone(),
+            import_statements: self.import_statements.clone(),
+            current_module: self.current_module.clone(),
+            cache: self.cache.clone(),
+            num_worker_threads: self.num_worker_threads,
+            error_tolerant: self.error_tolerant,
+        };
+        Ok(UnifOrOtherErr::extract_others(tc.unify(&ty1, &ty2))?.is_ok())
+    }
+
+    /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
+    /// rejecting a binding that would be circular or kind-mismatched.
     fn unify_tyvar(
         &mut self,
         tyvar1: Arc<TyVar>,
@@ -2062,48 +2136,38 @@ impl TypeCheckContext {
         skip.insert(pred_str);
         pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
         let mut unifiable = false;
-        for qual_pred_scm in &self
-            .assumed_preds
+        let assumed_preds = self.assumed_preds.clone();
+        for qual_pred_scm in assumed_preds
             .get(&pred.trait_id)
-            .unwrap_or(&vec![])
-            .clone()
+            .map_or(&[][..], Vec::as_slice)
         {
             // Instantiate qualified predicate.
-            let mut subst = Substitution::default();
-            for tv in &qual_pred_scm.gen_vars {
-                let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
-                assert!(merge_ok);
-            }
+            let inst_subst = self.instantiate_tyvars(&qual_pred_scm.gen_vars);
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
-            subst.substitute_qualpred(&mut qual_pred);
+            inst_subst.substitute_qualpred(&mut qual_pred);
 
             // Try to match head of `qual_pred` to `pred`.
-            if let Some(subst) = Substitution::matching(
+            if let Some(match_subst) = Substitution::matching(
                 &qual_pred.predicate.ty,
                 &pred.ty,
                 &self.fixed_tyvars,
                 &self.kind_env,
             )? {
                 for mut eq in qual_pred.eq_constraints {
-                    subst.substitute_equality(&mut eq);
+                    match_subst.substitute_equality(&mut eq);
                     self.add_equality(eq)?;
                 }
                 for mut pred in qual_pred.pred_constraints {
-                    subst.substitute_predicate(&mut pred);
+                    match_subst.substitute_predicate(&mut pred);
                     self.reduce_predicate(pred, irr_preds, skip)?;
                 }
                 return Ok(());
-            } else {
+            } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
                 // But we may be able to reduce it after the predicate is substituted further.
                 // To see if there is possibility for further reduction, we check here the unifiability.
-                let mut tc = self.clone();
-                if UnifOrOtherErr::extract_others(tc.unify(&qual_pred.predicate.ty, &pred.ty))?
-                    .is_ok()
-                {
-                    unifiable = true;
-                }
+                // One instance head it unifies with settles the question, so the rest go unasked.
+                unifiable = self.are_unifiable(&qual_pred.predicate.ty, &pred.ty)?;
             }
         }
         if !unifiable {
@@ -2135,8 +2199,8 @@ impl TypeCheckContext {
                 let subpat = self.fix_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
-            Pattern::Struct(_, fied_to_pat) => {
-                let mut field_to_pat = fied_to_pat.clone();
+            Pattern::Struct(_, field_to_pat) => {
+                let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;

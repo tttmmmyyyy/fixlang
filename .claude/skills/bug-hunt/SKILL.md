@@ -115,6 +115,27 @@ How to hunt. A finder reads this section before starting. Two kinds of entry: a 
 
 The code leans on a condition it never checks — a catch-all `_ =>`, an `unwrap_or`, a `map_or`, or a silent clamp that absorbs a case the author calls impossible, or a comment asserting "same length" / "never empty" / "always last" with no assertion behind it. Turn the assumption into a loud failure — replace the fallback with a `panic!`, or add the `assert!` the comment implies — and run the suite. When it fires, the case was reachable and something upstream is already broken; the swallowed value was flowing on and would have surfaced somewhere else entirely. Revert the probe afterward.
 
+#### Check that a guard can fire for the case its comment names
+
+The code states an invariant and puts a check behind it — an `assert`, a validation call, a
+conditional that decides whether to save, report or continue — and a comment says which case the
+check exists to catch. Take the comment at its word and ask the mechanical question: **on that
+exact case, does control reach the check, and does the condition it tests distinguish it?** Two
+ways it fails to. The check sits *downstream of something that aborts first* on the very case it
+guards, so it is unreachable precisely when it would matter. Or the condition is *not the one the
+comment describes* — it reads a value that the guarded case leaves indistinguishable from the good
+case, most often because a second mode of the same code produces that value by design.
+
+Both leave a comment asserting a protection the code does not have, and both survive review
+indefinitely: the reader checks that a guard exists, not that it can fire. The probe is cheap —
+construct the case the comment names and watch whether the guard sees it — and a hit is a bug plus
+a false sense of safety, which is worse than an unguarded invariant, because nobody looks again at
+a line that says it is handled.
+
+This is the *Show the detector fires before trusting its silence* rule turned on the production
+code: a guard is a detector the program runs on itself, and its silence is worth exactly as much
+as a hunting detector's.
+
 #### Exploit a fact stored in two places
 
 The same information lives in two representations kept in sync by convention rather than construction — a length beside the data it measures, an operand name embedded in an operation and repeated in its separate argument list, a cached field derivable from its source, a tag order that a switch's default silently assumes. Force or find a state where the two disagree: trace whether any pass updates one without the other, or add an assertion that the two are equal and run the suite. Then check whether a consumer reads the stale copy — a desync a consumer trusts is a use-after-free, a miscompile, or a wrong answer waiting for the first pass that breaks the convention.
@@ -148,6 +169,14 @@ A change that only moves *when* the compiler does something — reordering the w
 The class this exposes is a false neutrality claim, and it costs twice. A change believed neutral skips the performance measurement, so a regression ships unmeasured; and any consumer that reads the emitted artifact — a debugger stepping through it, a linker resolving it, a tool parsing it — silently gets something else. Neither shows up in a differential of program *outputs*, which is what a hunt otherwise runs.
 
 The verdict is not "identical or broken". "Not identical, and measured to cost nothing" is the common and useful answer, and it is only available to a hunt that looked.
+
+#### Run the old code beside the new one and diff the decisions, not the outputs
+
+When what changed is an *analysis* — something that computes answers a rewrite then acts on — an artifact diff is the weak form of the check. It compares the end of a long chain, so it only sees a disagreement that survives every stage after it, and it says nothing about where one came from. Copy the pre-change implementation in verbatim under another name, run it beside the new one at every point an answer is produced, and assert every field of the two answers agrees. Now a disagreement is caught at the decision that made it, on the input that made it, whether or not it would have changed the output.
+
+This is cheap in a way an artifact diff is not: one compiler instead of two, no corpus to keep in step, and the standard library alone drives thousands of decisions per build. It is also the strongest neutrality evidence available, because equal decisions imply equal rewrites imply equal output, while equal output implies nothing about the decisions.
+
+Two things to hold onto. Prove it fires — break the new implementation in the way you are afraid of and confirm the assertion catches it — because a differential wired to the wrong object is silent for the same reason a correct one is. And remember what it cannot see: a differential is blind by construction to anything the old code got wrong too, so pair it with at least one oracle derived from something other than the old code — the semantics the rewrite is supposed to preserve, or an independent recomputation of the same answer.
 
 #### Check a transformation against a property it must preserve, over a corpus
 

@@ -1013,3 +1013,37 @@ main = pure();
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+/// A type variable of a signature that is tied to the rest only through equality constraints —
+/// the shape `Std::Iterator::flatten` has — is resolved and the value it types runs.
+#[test]
+pub fn test_associated_type_inner_bound_only_by_equalities() {
+    let source = r##"
+    module Main;
+
+    import Std::* hiding Indexable::Elem;
+
+    trait c : Coll {
+        type Elem c;
+        head : c -> Elem c;
+        wrap : Elem c -> c;
+    }
+
+    impl Array a : Coll {
+        type Elem (Array a) = a;
+        head = |x| x.@(0);
+        wrap = |x| [x];
+    }
+
+    flatten2 : [out : Coll, Elem out = e, inner : Coll, Elem inner = e, input : Coll, Elem input = inner] input -> out;
+    flatten2 = |xs| Coll::wrap(xs.head.head);
+
+    main : IO ();
+    main = (
+        let r : Array I64 = flatten2([[1, 2], [3]]);
+        assert_eq(|_|"", r, [1]);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}

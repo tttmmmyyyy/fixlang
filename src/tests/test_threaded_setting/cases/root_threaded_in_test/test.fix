@@ -1,0 +1,6 @@
+module Test;
+
+import ThreadingLib;
+
+test : IO ();
+test = println(ThreadingLib::publish(Box::make(21)).@value.to_string);

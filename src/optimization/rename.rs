@@ -592,6 +592,13 @@ fn calculate_renaming_bound_vars_avoiding(
         }
     }
 
+    // Everything below decides a new name for each name to rename, so a binder that keeps every
+    // name it binds needs none of it -- including the free variables of `value`, a set as large as
+    // the expression under the binder.
+    if names_to_rename.is_empty() {
+        return Map::default();
+    }
+
     // Calculate the set of names that should be avoided when we decide new names.
     let mut ng_list = ng_list.clone();
     for var in value.free_vars() {
@@ -780,7 +787,7 @@ mod tests {
         map.insert(local("x"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "#v0"]));
         assert!(
-            res.expr.free_vars().contains(&local("#v0")),
+            res.expr.has_free_var(&local("#v0")),
             "`#v0` of the enclosing scope was captured"
         );
     }
@@ -796,7 +803,7 @@ mod tests {
         map.insert(local("z"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
-            res.expr.free_vars().contains(&local("z")),
+            res.expr.has_free_var(&local("z")),
             "`z` of the enclosing scope was captured"
         );
     }
@@ -812,7 +819,7 @@ mod tests {
         map.insert(local("z"), null_ptr());
         let res = Substitutor::new(map).traverse(&llvm_with_free_names(&["x", "z"]));
         assert!(
-            res.expr.free_vars().contains(&local("z")),
+            res.expr.has_free_var(&local("z")),
             "`z` of the enclosing scope was captured"
         );
     }

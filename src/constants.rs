@@ -7,7 +7,11 @@ pub const MODULE_SEPARATOR: &str = ".";
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
+/// The field of `Std::IO` holding the action, a function taking an `IOState` to the state after the
+/// action and the action's result.
 pub const IO_DATA_NAME: &str = "runner";
+/// The `Std` value that puts the values reachable from a value into multi-threaded mode.
+pub const MARK_THREADED_NAME: &str = "mark_threaded";
 pub const PTR_NAME: &str = "Ptr";
 pub const U8_NAME: &str = "U8";
 pub const I8_NAME: &str = "I8";
@@ -93,12 +97,18 @@ pub const STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL: &str = "#punch_fu_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
+/// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
+/// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
+/// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const DECAP_NAME: &str = "#decap";
+/// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
+/// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
+/// The name of the global generated in the namespace of each value whose signature has an opaque
+/// type. It wraps the value's definition so that type inference records the concrete type behind the
+/// opaque type; instantiation then removes the applications of it.
 pub const WRAP_OPAQUE_FUNC_NAME: &str = "#wrap_opaque";
-
-// pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 
 // Struct layout constants.
 pub const CONTROL_BLOCK_IDX: u32 = 0;
@@ -122,6 +132,11 @@ pub const STORAGE_BUF_IDX: u32 = STORAGE_CTRL_IDX + 1;
 // iteration, and an access that crosses a 64-byte cache line costs about 1.75 times one that does
 // not, so a buffer off this boundary makes every second vector access straddle a line.
 pub const ARRAY_BUF_ALIGNMENT: u64 = 32;
+
+// The bytes an `#ArrayStorage` allocation carries on top of the object, so that the object can be
+// placed off the base of its block and land with its element buffer on `ARRAY_BUF_ALIGNMENT`. The
+// object is placed by less than the alignment, so this is the widest that distance can be.
+pub const ARRAY_STORAGE_ALLOC_SLACK: u64 = ARRAY_BUF_ALIGNMENT - 1;
 
 // The `#ArrayStorage` allocation size, in bytes, from which the element buffer is worth aligning.
 // Below it the loop over the elements is too short for the alignment to pay for the bytes the
@@ -218,14 +233,6 @@ impl TraverserWorkType {
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
-    // pub fn runtime_function(&self) -> &str {
-    //     match self.0 {
-    //         TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
-    //         TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
-    //         TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
-    //         _ => unreachable!(),
-    //     }
-    // }
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;

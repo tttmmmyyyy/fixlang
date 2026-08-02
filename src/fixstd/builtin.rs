@@ -18,7 +18,7 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    TraverserWorkType, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX,
+    TraverserWorkType, ARRAY_CAP_IDX, ARRAY_NAME, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK,
     ARRAY_STORAGE_IDX, ARRAY_STORAGE_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARROW_NAME, BOOL_NAME,
     BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
@@ -30,7 +30,6 @@ use crate::constants::{
     STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
     U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
-use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
@@ -2312,7 +2311,7 @@ fn realloc_array<'c, 'm>(
         .builder()
         .build_select(
             is_aligned,
-            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            i64_ty.const_int(ARRAY_STORAGE_ALLOC_SLACK, false),
             old_alloc_offset,
             "slack@realloc_array",
         )
@@ -8607,7 +8606,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
     }
 }
 
-// Run an IO runner in the IO monad and return the result.
+/// Runs the action held by a value of type `IO a` and returns its result.
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
@@ -8619,7 +8618,8 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
     run_ios_runner(gc, &runner_obj, None).1
 }
 
-// Given an value of type `IOState -> (IOState, a)`, run it with an initial IO state and return the result `IOState` and `a`.
+/// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
+/// `ios` is `None`, and returns the resulting `IOState` and `a`.
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,
@@ -8638,20 +8638,20 @@ pub fn run_ios_runner<'b, 'm, 'c>(
     (ios, res)
 }
 
+/// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
+/// reachable from the given value into multi-threaded mode and hands the value back.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
+    /// The name the value to be marked is bound to in the scope of this body.
     var_name: FullName,
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Check if the `threaded` compiler flag is true.
-        if !gc.config.threaded {
-            panic_with_msg(
-                "The `threaded` compiler flag must be set to true to use `Std::mark_threaded`.",
-            );
-        }
+        // `check_multi_threading_requirement` has already reported a program that reaches here
+        // without multi-threading, where the source of the use is still known.
+        assert!(gc.config.threaded);
 
         let obj = gc.get_scoped_obj(&self.var_name);
         gc.mark_threaded(obj.clone());
@@ -8698,6 +8698,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     }
 }
 
+/// Expression and scheme of `Std::mark_threaded : a -> a`.
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";

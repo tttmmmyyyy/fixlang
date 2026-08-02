@@ -1,0 +1,15 @@
+[general]
+name = "root-threaded-in-test"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]
+threaded = true
+
+[[dependencies]]
+name = "threading-lib"
+path = "../threading_lib"

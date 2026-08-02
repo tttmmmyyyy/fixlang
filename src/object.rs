@@ -3,12 +3,12 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
-    ARRAY_SIZE_IDX, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX,
-    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
-    DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
-    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_IDX,
+    ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
+    CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
+    DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME,
+    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -17,13 +17,16 @@ use crate::fixstd::builtin::{
     make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
+    RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
+    RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
 use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
+use inkwell::values::{
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
+};
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
@@ -561,62 +564,55 @@ impl ObjectFieldType {
         gc.release(value, state);
     }
 
-    // Panic if idx is out_of_range for the array.
+    /// Abort the program if `idx` falls outside `[0, len)`, the indices an array of `len` elements
+    /// has. The comparison is unsigned, so a negative index is out of range as well.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
-        let current_func = gc.current_function();
         let is_out_of_range = gc
             .builder()
             .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range")
             .unwrap();
-        let out_of_range_bb = gc
-            .context
-            .append_basic_block(current_func, "out_of_range_bb");
-        let in_range_bb = gc.context.append_basic_block(current_func, "in_range_bb");
-        gc.builder()
-            .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb)
-            .unwrap();
-        gc.builder().position_at_end(out_of_range_bb);
-        gc.call_runtime(RUNTIME_INDEX_OUT_OF_RANGE, &[idx.into(), len.into()]);
-        gc.builder()
-            .build_unconditional_branch(in_range_bb)
-            .unwrap();
-        gc.builder().position_at_end(in_range_bb);
+        build_abort_if(
+            gc,
+            is_out_of_range,
+            RUNTIME_INDEX_OUT_OF_RANGE,
+            &[idx.into(), len.into()],
+            "out_of_range",
+        );
     }
 
-    // Panic if size is negative
-    pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
-        let current_func = gc.current_function();
+    /// Abort the program if the array size or capacity `size` is negative.
+    pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, size: IntValue<'c>) {
         let is_neg_size = gc
             .builder()
             .build_int_compare(
                 IntPredicate::SLT,
-                len,
+                size,
                 gc.context.i64_type().const_zero(),
                 "is_neg_size",
             )
             .unwrap();
-        let neg_size_bb = gc.context.append_basic_block(current_func, "neg_size_bb");
-        let pos_size_bb = gc.context.append_basic_block(current_func, "pos_size_bb");
-        gc.builder()
-            .build_conditional_branch(is_neg_size, neg_size_bb, pos_size_bb)
-            .unwrap();
-        gc.builder().position_at_end(neg_size_bb);
-        gc.call_runtime(RUNTIME_NEGATIVE_ARRAY_SIZE, &[len.into()]);
-        gc.builder()
-            .build_unconditional_branch(pos_size_bb)
-            .unwrap();
-        gc.builder().position_at_end(pos_size_bb);
+        build_abort_if(
+            gc,
+            is_neg_size,
+            RUNTIME_NEGATIVE_ARRAY_SIZE,
+            &[size.into()],
+            "neg_size",
+        );
     }
 
-    // Read an element of array.
-    // Returned object is not retained.
+    /// Read the element at `idx` out of an array's buffer, borrowing the array's own reference to
+    /// it: the caller has to retain the result to hold it past the array's lifetime.
+    ///
+    /// # Arguments
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
     pub fn read_from_array_buf_noretain<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
@@ -644,11 +640,12 @@ impl ObjectFieldType {
         Object::new(elem_val, elem_ty, gc)
     }
 
-    /// Read the element at `idx` out of the array buffer at `buffer`, retained, so the returned
-    /// object owns its reference independently of the array.
+    /// Read the element at `idx` out of an array's buffer and retain it, giving the caller a
+    /// reference of its own.
     ///
     /// # Arguments
-    /// * `len` — the element count to bounds-check `idx` against; `None` reads without a check.
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -662,7 +659,14 @@ impl ObjectFieldType {
         elem
     }
 
-    // Write an element into array.
+    /// Store `value` into the slot at `idx` of an array's buffer, handing the caller's reference to
+    /// it over to the array.
+    ///
+    /// # Arguments
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
+    /// * `release_old_value` - `true` when the slot holds a live element, whose reference is
+    ///   released before the store; `false` when the slot is uninitialized.
     pub fn write_to_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -1149,7 +1153,8 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
-    /// The size of this object in bytes, as a value computed at run time.
+    /// The size of this object in bytes: a constant, except for an object that ends in an element
+    /// buffer, whose size takes a capacity the program computes at run time.
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
@@ -1160,11 +1165,12 @@ impl ObjectType {
         gc: &mut Generator<'c, 'm>,
         array_capacity: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
-        if array_capacity.is_some() {
-            // Get pointer to the first element (which is properly aligned) and add it to sizeof(elem_ty) * size.
+        if let Some(array_capacity) = array_capacity {
+            // The size is the header -- the fields laid out ahead of the element buffer -- plus the
+            // bytes the elements take.
 
-            // Calculate sizeof(elem_ty) * size. The element buffer is the last field, of `Array`
-            // (with a preceding capacity slot) or of `#ArrayStorage` (right after the control block).
+            // The element buffer is the last field, of `Array` (with a preceding capacity slot) or
+            // of `#ArrayStorage` (right after the control block).
             let elem_ty = match self.field_types.last().unwrap() {
                 ObjectFieldType::Array(ty) => ty.clone(),
                 ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
@@ -1172,44 +1178,45 @@ impl ObjectType {
             };
             // The buffer holds elements as they are embedded -- a pointer where the element type is
             // boxed -- which is the stride every read and write of it uses.
-            let elem_sizeof = elem_ty.get_embedded_type(gc, &vec![]).size_of().unwrap();
+            let embedded_elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+            let elem_size = gc.target_data.get_abi_size(&embedded_elem_ty);
             let struct_ty = self.to_struct_type(gc, vec![]);
+            let buf_field_idx = struct_ty.count_fields() - 1;
+            let header_size = gc
+                .target_data
+                .offset_of_element(&struct_ty, buf_field_idx)
+                .unwrap();
+
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-            let cap = array_capacity.unwrap();
             let cap = gc
                 .builder()
-                .build_int_cast(cap, ptr_int_ty, "cap_as_ptr_int_ty")
+                .build_int_cast(array_capacity, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
+            if gc.config.runtime_check() {
+                panic_if_byte_count_exceeds_address_space(gc, cap, elem_size, header_size);
+            }
             let elems_size = gc
                 .builder()
-                .build_int_mul(elem_sizeof, cap, "elems_size")
+                .build_int_mul(ptr_int_ty.const_int(elem_size, false), cap, "elems_size")
                 .unwrap();
-
-            // Get pointer to the first element (the buffer is the last struct field).
-            let buf_field_idx = struct_ty.count_fields() - 1;
-            let null = gc.context.ptr_type(AddressSpace::from(0)).const_null();
-            let first_elm_ptr = gc
+            return gc
                 .builder()
-                .build_struct_gep(struct_ty, null, buf_field_idx, "gep_first_elem_size_of")
+                .build_int_add(
+                    ptr_int_ty.const_int(header_size, false),
+                    elems_size,
+                    "size_with_elems",
+                )
                 .unwrap();
-            let header_size = gc
-                .builder()
-                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "header_size")
-                .unwrap();
-
-            let size_with_elems = gc
-                .builder()
-                .build_int_add(header_size, elems_size, "size_with_elems")
-                .unwrap();
-            return size_with_elems;
         } else {
             self.to_struct_type(gc, vec![]).size_of().unwrap()
         }
     }
 
-    // Get type used when this object is embedded.
-    // i.e., for unboxed type, a pointer; for unboxed type, a struct.
-    // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
+    /// The type this object takes where it is embedded in another value: a struct for an unboxed
+    /// type, a pointer for a boxed one.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
     pub fn to_embedded_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1600,6 +1607,13 @@ pub fn alloc_array_storage<'c, 'm>(
 /// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an
 /// i32 size parameter and truncate the size, which breaks allocations >= 4 GiB. Instead we call our
 /// own `@malloc(i64)` declaration registered in `runtime.rs`.
+///
+/// The result is used without a test for null, so an allocation the system cannot supply ends the
+/// program with SIGSEGV. That failure is deterministic because `create_obj` initializes the control
+/// block before it hands the object on: the first access to a block that was never allocated is
+/// within the header, at a fixed low address, and no capacity or index the program computed reaches
+/// it. Deferring that initialization would put a value the program chose into the faulting address
+/// and turn this into a wild write.
 fn build_malloc<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
@@ -1678,6 +1692,80 @@ pub fn build_storage_is_aligned<'c, 'm>(
         .unwrap()
 }
 
+/// Abort the program unless a buffer of `cap` elements of `elem_size` bytes each, laid out behind a
+/// header of `header_size` bytes, fits in the address space.
+///
+/// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
+/// one, and leaves an object claiming a capacity its block has no room for; the first write past the
+/// block corrupts the heap. The elements must therefore leave room for the header in front of them
+/// and for the padding that puts the element buffer on `ARRAY_BUF_ALIGNMENT`.
+///
+/// The bound is the widest capacity whose byte count cannot wrap, and a constant, so the whole check
+/// is one unsigned comparison. A byte count within the bound that the system cannot supply is a
+/// separate matter, left where it was: `malloc` answers null and the program faults on the store
+/// that initializes the object.
+fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    cap: IntValue<'c>,
+    elem_size: u64,
+    header_size: u64,
+) {
+    // A buffer of elements of no size is no bytes long, however many of them the capacity asks for.
+    if elem_size == 0 {
+        return;
+    }
+    // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
+    // of that width.
+    assert_eq!(cap.get_type().get_bit_width(), 64);
+    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - header_size) / elem_size;
+    let is_capacity_overflow = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGT,
+            cap,
+            cap.get_type().const_int(max_cap, false),
+            "is_capacity_overflow",
+        )
+        .unwrap();
+    build_abort_if(
+        gc,
+        is_capacity_overflow,
+        RUNTIME_ARRAY_SIZE_OVERFLOW,
+        &[cap.into()],
+        "capacity_overflow",
+    );
+}
+
+/// Emit a call to the runtime function `func_name` with `args` for the case that `cond` holds, and
+/// leave the builder at the block reached when it does not.
+///
+/// The runtime function ends the program, so the call is followed by a branch to the continuation
+/// only to close its basic block. `bb_name` names that pair of blocks in the emitted IR.
+fn build_abort_if<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    cond: IntValue<'c>,
+    func_name: &str,
+    args: &[BasicMetadataValueEnum<'c>],
+    bb_name: &str,
+) {
+    let current_func = gc.current_function();
+    let abort_bb = gc
+        .context
+        .append_basic_block(current_func, &format!("{}_bb", bb_name));
+    let continue_bb = gc
+        .context
+        .append_basic_block(current_func, &format!("{}_continue_bb", bb_name));
+    gc.builder()
+        .build_conditional_branch(cond, abort_bb, continue_bb)
+        .unwrap();
+    gc.builder().position_at_end(abort_bb);
+    gc.call_runtime(func_name, args);
+    gc.builder()
+        .build_unconditional_branch(continue_bb)
+        .unwrap();
+    gc.builder().position_at_end(continue_bb);
+}
+
 /// Allocate the block of an `#ArrayStorage` object of `sizeof` bytes and return the object's address
 /// within it, together with the distance from the base of the block to that address.
 ///
@@ -1710,7 +1798,7 @@ fn build_alloc_array_storage<'c, 'm>(
         .builder()
         .build_and(
             aligned_mask,
-            i64_ty.const_int(ARRAY_BUF_ALIGNMENT - 1, false),
+            i64_ty.const_int(ARRAY_STORAGE_ALLOC_SLACK, false),
             "slack@alloc_array_storage",
         )
         .unwrap();

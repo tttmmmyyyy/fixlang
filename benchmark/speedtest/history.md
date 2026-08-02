@@ -10,6 +10,34 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 383a7b5e18fb9332f9a49cb40be8f85f8cbcc4b8
+
+Follows the `default<O3>` rounds with `speculative-execution`, `loop-vectorize` and `pseudo-probe`
+(PR #153), which a search by cycle count kept out of the twelve passes the compiler shipped until
+#147.
+
+**Read this row in cycles, not in instructions.** The instruction counts come to +0.05% over the 46
+cases, which would have rejected the change: `fib` -4.02% against `sort` +2.50%, `cp_lib_lsegtree`
++1.06%, `cp_lib_scc` +0.77%, `levenshtein` +0.76%, `cp_lib_dijkstra` +0.63%, `fannkuch` +0.52%. What
+these three passes change is where the branches fall and how the front end fetches the code, so the
+work stays the same and the machine gets through it faster.
+
+Measured by building the same fifteen cases both ways and alternating between the two binaries
+within one run, the three are worth **0.80%** of the cycles, and **1.22%** over the five cases held
+out of the search: `get_sub` -4.4%, `fib` -4.4%, `cp_lib_dijkstra` -2.8%, `levenshtein` -2.2%,
+`fannkuch_scratch` -1.9%, against `cp_lib_lsegtree` +2.0% and `cp_lib_segtree` +1.5%. The three are
+one unit — `pseudo-probe` alone costs 0.48%, and 1.21% on the held-out cases.
+
+Against C and Rust, measured on an idle machine over the nine cases that carry counterparts, Fix now
+comes to **1.21x C and 1.08x Rust** in cycles and the same in wall clock, the two agreeing case by
+case. `fannkuch_scratch` 0.93x C, `mandelbrot` 0.93x, `arrayrw` 0.95x; `fib` 1.74x C and 1.19x Rust,
+`binary_trees` 1.59x and 1.15x, `nbody` 1.32x and 1.48x.
+
+**This row's own cycle columns were taken while the machine got busy** — the `load` column reads
+13.49, so they are a starting point for later rows rather than something to compare against the row
+above. From here `perf_counters.py` leaves the cycle field empty above a load of 2, so a count that
+reaches the log is one taken on a quiet machine and the series is sparse by construction.
+
 ## daebd8de1544fe7ae2f50abc578980955edb98b7
 
 Bounds how many times inlining rewrites the program (PR #145), so that globals naming each other in

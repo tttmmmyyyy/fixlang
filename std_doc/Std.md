@@ -116,6 +116,8 @@ Type: `a -> a`
 
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
+Building a program that calls this function requires multi-threading to be enabled by the `--threaded` compiler option or by the `threaded` field of the project file of the program being built. A library that calls this function is used by turning multi-threading on there.
+
 ##### Parameters
 
 * `value` - The value to make multi-threaded.
@@ -362,7 +364,7 @@ Creates an empty array with specified capacity.
 
 ##### Parameters
 
-* `capacity` - The number of elements the array can hold without allocating more space. If negative, the program will abort.
+* `capacity` - The number of elements the array can hold without allocating more space. If negative, or so large that the elements exceed the address space, the program will abort.
 
 #### fill
 
@@ -376,7 +378,7 @@ Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 ##### Parameters
 
-* `size` - The number of elements in the array.
+* `size` - The number of elements in the array. If negative, or so large that the elements exceed the address space, the program will abort.
 * `value` - The value to fill the array with.
 
 #### find_by
@@ -562,7 +564,7 @@ Reserves the memory region for an array.
 
 ##### Parameters
 
-* `capacity` - The capacity to be reserved.
+* `capacity` - The capacity to be reserved. If so large that the elements exceed the address space, the program will abort.
 * `array` - The array to be reserved.
 
 #### resize
