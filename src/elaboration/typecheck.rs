@@ -1188,11 +1188,11 @@ impl TypeCheckContext {
                 } else {
                     // candidates.len() == 1
                     let (tc, ns) = candidates_check_res
-                        .iter()
-                        .find_map(|cand| cand.as_ref().ok())
+                        .into_iter()
+                        .find_map(|cand| cand.ok())
                         .unwrap();
-                    *self = tc.clone();
-                    let ei = ei.set_var_namespace(ns.clone());
+                    *self = tc;
+                    let ei = ei.set_var_namespace(ns);
                     let name = &ei.get_var().name;
                     if name.is_global() && !name.is_absolute() {
                         self.import_required.push(name.clone());
