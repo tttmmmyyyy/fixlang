@@ -221,8 +221,6 @@ Notes の箇条書きの後ろに置く。
 > The `--skip-eval` compiler option and the `skip_eval` field of the project file compile `eval {expr0}; {expr1}` as `{expr1}`, leaving `{expr0}` unevaluated.
 >
 > This is the setting for taking a debugging `eval` out of a build. Write `eval debug_println(...)` while developing, and turn this on to stop the output without editing the source.
->
-> Whatever `{expr0}` does is dropped, including work the program needs: a C function called through `FFI_CALL`, and the initialization of a global value that `{expr0}` names. In a program built with this setting, keep `eval` for work that can go unperformed.
 
 ### `Document-ja.md` の `eval`構文 の節
 
@@ -231,8 +229,6 @@ Notes の箇条書きの後ろに置く。
 > `--skip-eval`コンパイラオプション、またはプロジェクトファイルの`skip_eval`フィールドを指定すると、`eval {expr0}; {expr1}`は`{expr1}`としてコンパイルされます。すなわち、`{expr0}`は評価されません。
 >
 > これは、デバッグのために書いた`eval`をビルドから外すための設定です。開発中は`eval debug_println(...)`を書いておき、不要になったらこの設定を有効にすることで、ソースを書き換えずに出力を止められます。
->
-> `{expr0}`に書いた処理は、それがプログラムの動作に必要なものであっても消えます。`FFI_CALL`によるC関数の呼び出しや、`{expr0}`が参照するグローバル値の初期化がこれにあたります。この設定を使うプログラムでは、`eval`に書く処理を、実行されなくても構わないものに限ってください。
 
 `*` で束ねたアクションが残ることは、どちらの言語版にも書かない。`*` を `eval` の中に置くのは今の書き方ではないので、リファレンスの `eval` の節をその説明で重くしない。振る舞いはこの設計書が記録する。
 
