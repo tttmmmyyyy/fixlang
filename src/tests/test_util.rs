@@ -236,9 +236,9 @@ fn run_source(
 }
 
 pub fn test_source(source: &str, config: Configuration) {
-    let res = run_source(source, config);
-    let res = panic_if_err(res);
-    let output = res.unwrap();
+    let compile_result = run_source(source, config);
+    let spawn_result = panic_if_err(compile_result);
+    let output = spawn_result.unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stdout.is_empty() {
@@ -295,8 +295,8 @@ pub fn assert_grammar_accepts(source: &str) {
 ///     spawn;
 ///   - the captured stderr from the child process otherwise.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
-    let res = run_source(source, config);
-    match res {
+    let compile_result = run_source(source, config);
+    match compile_result {
         Err(errs) => errs.to_string(),
         Ok(Err(e)) => e.to_string(),
         Ok(Ok(output)) => {
@@ -366,9 +366,9 @@ pub fn test_files_in_directory(dir: &Path) {
             config.add_user_source_file(path.clone());
         }
         println!("[{}]:", path.to_string_lossy().to_string());
-        let res = run(config, false);
-        let res = panic_if_err(res);
-        let output = res.unwrap();
+        let compile_result = run(config, false);
+        let spawn_result = panic_if_err(compile_result);
+        let output = spawn_result.unwrap();
         let code = output.status.code().unwrap();
         assert_eq!(code, 0);
         remove_file("test_process_text_file.txt").unwrap_or(());

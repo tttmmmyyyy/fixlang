@@ -869,15 +869,18 @@ pub fn make_byte_array_copy<'c, 'm>(
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
     let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
     let dst = get_array_storage_buf(gc, &array);
-    let len = gc
+    let len_ptr_int = gc
         .builder()
         .build_int_cast(
             len,
             gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr@make_byte_array_copy",
+            "len_ptr_int@make_byte_array_copy",
         )
         .unwrap();
-    gc.builder().build_memcpy(dst, 1, buf, 1, len).ok().unwrap();
+    gc.builder()
+        .build_memcpy(dst, 1, buf, 1, len_ptr_int)
+        .ok()
+        .unwrap();
 
     array
 }
@@ -4308,19 +4311,11 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
         let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
         let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
-        let buffer = get_array_storage_buf(gc, &array);
+        let buf = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);
             let idx = gc.context.i64_type().const_int(i as u64, false);
-            ObjectFieldType::write_to_array_buf(
-                gc,
-                None,
-                buffer,
-                idx,
-                value,
-                false,
-                RcState::Unknown,
-            );
+            ObjectFieldType::write_to_array_buf(gc, None, buf, idx, value, false, RcState::Unknown);
         }
         array
     }
