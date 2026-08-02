@@ -1910,17 +1910,17 @@ impl TypeCheckContext {
                     inst_subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
-                    let subst: Option<Substitution> = Substitution::matching(
+                    let match_subst: Option<Substitution> = Substitution::matching(
                         &equality.lhs(),
                         &ty,
                         &self.fixed_tyvars,
                         &self.kind_env,
                     )?;
-                    if subst.is_none() {
+                    if match_subst.is_none() {
                         continue;
                     }
-                    let subst: Substitution = subst.unwrap();
-                    let rhs = subst.substitute_type(&equality.value);
+                    let match_subst: Substitution = match_subst.unwrap();
+                    let rhs = match_subst.substitute_type(&equality.value);
                     return self.reduce_type_by_equality(rhs);
                 }
                 Ok(ty)
@@ -2141,18 +2141,18 @@ impl TypeCheckContext {
             inst_subst.substitute_qualpred(&mut qual_pred);
 
             // Try to match head of `qual_pred` to `pred`.
-            if let Some(subst) = Substitution::matching(
+            if let Some(match_subst) = Substitution::matching(
                 &qual_pred.predicate.ty,
                 &pred.ty,
                 &self.fixed_tyvars,
                 &self.kind_env,
             )? {
                 for mut eq in qual_pred.eq_constraints {
-                    subst.substitute_equality(&mut eq);
+                    match_subst.substitute_equality(&mut eq);
                     self.add_equality(eq)?;
                 }
                 for mut pred in qual_pred.pred_constraints {
-                    subst.substitute_predicate(&mut pred);
+                    match_subst.substitute_predicate(&mut pred);
                     self.reduce_predicate(pred, irr_preds, skip)?;
                 }
                 return Ok(());
@@ -2193,8 +2193,8 @@ impl TypeCheckContext {
                 let subpat = self.fix_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
-            Pattern::Struct(_, fied_to_pat) => {
-                let mut field_to_pat = fied_to_pat.clone();
+            Pattern::Struct(_, field_to_pat) => {
+                let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;

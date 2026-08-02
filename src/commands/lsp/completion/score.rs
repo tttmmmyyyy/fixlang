@@ -233,7 +233,7 @@ fn try_unify_receiver(
         .instantiate_scheme(&gv.scm, ConstraintInstantiationMode::Require)
         .map_err(|_| ())?;
     let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
-    let recv_pos = srcs.last().ok_or(())?;
+    let cand_recv_ty = srcs.last().ok_or(())?;
     /// Collapses the two-level `Result<Result<T, UnificationErr>, Errors>`
     /// returned by `extract_others` down to `Result<(), ()>`: any failure
     /// (unification mismatch or unsatisfiable predicate) means the
@@ -244,7 +244,7 @@ fn try_unify_receiver(
             .map(|_| ())
             .map_err(|_| ())
     }
-    flatten(tc.unify(recv_pos, receiver_type))?;
+    flatten(tc.unify(cand_recv_ty, receiver_type))?;
 
     // The remaining `reduce_predicates` call — checking that the
     // candidate's trait constraints hold for the bound receiver — is the

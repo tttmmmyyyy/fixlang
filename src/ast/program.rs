@@ -1433,7 +1433,7 @@ impl Program {
         // Select method implementation whose type unifies with the required type `sym.ty`.
         // Also resolve opaque types in method_ty so both sides use concrete types.
         let opaque_types = &self.opaque_types;
-        let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
+        let method_type_matches = |method: &TraitMemberImpl| -> Result<bool, Errors> {
             let method_ty = resolve_opaque_type_in_type(&method.scm_via_defn.ty, opaque_types);
             tc.are_unifiable(&method_ty, &sym.ty)
         };
@@ -1445,7 +1445,7 @@ impl Program {
             SymbolExpr::Method(impls) => {
                 let method = impls
                     .iter()
-                    .find(|method| method_selector(method).unwrap_or(false))
+                    .find(|method| method_type_matches(method).unwrap_or(false))
                     .unwrap();
                 &method.expr
             }
