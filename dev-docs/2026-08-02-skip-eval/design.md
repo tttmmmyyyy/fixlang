@@ -117,13 +117,50 @@ unsafe_perform : IO a -> a = |io| (
 
 どちらを採るかは判断を仰ぐ。
 
+## プロジェクトファイルのテストセクションの扱い
+
+`Document.md` の「About Duplicated Build Settings」が規定している優先順位は、高い方から次のとおりである。
+
+- コンパイラオプション
+- プロジェクトファイルの `build.test` セクション（`fix test` にだけ効く）
+- プロジェクトファイルの `build` セクション
+- 依存ライブラリのプロジェクトファイルの `build` セクション
+
+`no_runtime_check` はこの形から外れている。`ProjectFileBuildTest` にフィールドが無く、代わりに `set_config` がテストモードのとき値を false に潰している。プロジェクトファイルからテストのために立てる方法が無い。
+
+**`no_runtime_check` を形に戻し、`skip_eval` を最初からその形で作る。** 両方とも次のようにする。
+
+- `[build]` と `[build.test]` の双方に、`#[serde(default)]` の `bool` フィールドを持つ。
+- `fix test` は `[build.test]` の値を使う。書かれていなければ false である。
+- `fix build` / `fix run` は `[build]` の値を使う。
+- コンパイラオプションは後から適用されるので、`--no-runtime-check` / `--skip-eval` はどのサブコマンドでも効く。
+
+```rust
+// Set no_runtime_check.
+config.no_runtime_check = if mode == BuildConfigType::Test {
+    self.build
+        .test
+        .as_ref()
+        .map_or(false, |test| test.no_runtime_check)
+} else {
+    self.build.no_runtime_check
+};
+```
+
+`[build]` の値が `fix test` に届かない点は、`opt_level` のような他の上書き設定（`[build.test]` に書かれていなければ `[build]` の値が残る）とは違う。テストは実行時検査を持ったまま走るのが既定である、という現在の性質をそのまま保つための違いである。表の Description 欄にこれを書く。
+
+既存のプロジェクトの挙動は変わらない。`[build] no_runtime_check = true` のプロジェクトの `fix test` は、今も変更後も検査つきで走る。増えるのは `[build.test]` に書けることだけである。
+
+この修正は `eval` とは独立しているので、先に単独の PR として出せる。
+
 ## 実装
 
 | ファイル | 変更 |
 | --- | --- |
 | `src/configuration.rs` | `Configuration` に `pub skip_eval: bool` を追加、`Default` で `false`。`object_generation_hash` に混ぜる |
 | `src/main.rs` | `--skip-eval` の `Arg` を作り、`build` / `run` / `test` サブコマンドに付ける。引数があれば `config.skip_eval = true` |
-| `src/metafiles/project_file.rs` | `ProjectFileBuild` に `#[serde(default)] skip_eval: bool`。`set_config` のルート限定部分で `config.skip_eval = self.build.skip_eval` |
+| `src/metafiles/project_file.rs` | `ProjectFileBuild` と `ProjectFileBuildTest` の双方に `#[serde(default)] skip_eval: bool` と `no_runtime_check: bool`。`set_config` のルート限定部分で、両方をテストセクション優先の形に直す |
+| `src/docs/project_template.toml` | `fix init` が生成するテンプレートの `[build]` に、`no_runtime_check` と同じ形で `skip_eval` の行を足す |
 | `src/optimization/skip_eval.rs` | 新規。全シンボルの式を走査し、`Eval` ノードを `main` で置き換える |
 | `src/optimization/mod.rs` | `mod skip_eval;` |
 | `src/optimization/optimization.rs` | `run` の先頭に、他のパスと同じ形（`StopWatch` と `emit_symbols` のダンプ付き）で挿入 |
@@ -142,8 +179,7 @@ let skip_eval = Arg::new("skip-eval")
     .takes_value(false)
     .help(
         "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
-        A monadic action bound with `*` inside `{expr0}` is still performed. An effect that does not go \
-        through the `IO` monad, such as a call to `Debug::debug_println` or an `FFI_CALL`, is dropped."
+        Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
     );
 ```
 
@@ -163,6 +199,13 @@ let skip_eval = Arg::new("skip-eval")
 - プロジェクトファイルに `skip_eval = true` を書いたプロジェクトを `fix run` して、メッセージが出ない。`src/tests/test_skip_eval/cases/` に置き、`setup_test_env()` の形で一時ディレクトリにコピーする。
 - 全テストをフラグ ON で 1 回走らせ、std とテストスイートの中に意味を担っている `eval` が無いことを確かめる。これは恒久的なテストではなく、実装時の確認である。
 
+テストセクションの扱いの方は、`fix` を子プロセスとして走らせる結合テストで固定する。観測は `test_capacity_byte_count_respects_no_runtime_check` と同じ手を使う。`Array::empty(2305843009213693952)` は、検査つきなら "Array size or capacity exceeds the address space" で中断し、検査なしなら（配列に書き込まないので安全に）完走する。
+
+- `[build] no_runtime_check = true` だけを書いたプロジェクトの `fix test` が中断する。`[build]` の値がテストに届かないことを固定する。
+- `[build.test] no_runtime_check = true` を書いたプロジェクトの `fix test` が完走する。テストセクションから立てられることを固定する。
+- 同じプロジェクトの `fix test --no-runtime-check` が完走する。オプションがどのサブコマンドでも効くことを固定する。
+- `skip_eval` についても、`[build]` と `[build.test]` の同じ 3 通りを、デバッグ出力が出るかどうかで固定する。
+
 ## ドキュメント
 
 見出しは増やさず、既存の節に段落と表の行を足すだけなので、両方の言語版の目次は変わらない。
@@ -171,49 +214,44 @@ let skip_eval = Arg::new("skip-eval")
 
 Notes の箇条書きの後ろに置く。
 
-> The `--skip-eval` compiler option and the `skip_eval` field of the project file build `eval {expr0}; {expr1}` as `{expr1}`. Write a debugging effect with `eval` while developing, and turn this on to leave it out of the built program.
->
-> A monadic action bound with `*` inside `{expr0}` is still performed. The bind that `*` desugars into sits outside the `eval` expression, so what this setting drops is the use of the value the action produced. In
-> ```
-> main : IO () = (
->     eval *println("Hello");
->     pure()
-> );
-> ```
-> the message is printed with the setting on and with it off.
+> The `--skip-eval` compiler option and the `skip_eval` field of the project file build `eval {expr0}; {expr1}` as `{expr1}`. Write a debugging effect such as `Debug::debug_println` with `eval` while developing, and turn this on to leave it out of the built program.
 >
 > An effect that reaches the outside world without going through the `IO` monad disappears together with `{expr0}`: a call to `Debug::debug_println` and its siblings, an `FFI_CALL`, and the initializer of a global value the expression names. Reserve `eval` for effects a program built with this setting can do without.
+>
+> A monadic action bound with `*` inside `{expr0}` is still performed, because the bind that `*` desugars into sits outside the `eval` expression.
 
 ### `Document-ja.md` の `eval`構文 の節
 
 同じ位置に置く。
 
-> `--skip-eval`コンパイラオプションおよびプロジェクトファイルの`skip_eval`フィールドは、`eval {expr0}; {expr1}`を`{expr1}`としてビルドします。開発中は`eval`でデバッグ用の作用を書いておき、この設定を有効にすることで、ビルドされるプログラムからそれを外せます。
->
-> `{expr0}`の中で`*`によって束ねられたモナドのアクションは、この設定でも実行されます。`*`が展開するbindは`eval`式の外側にあるため、この設定が落とすのは、アクションが生成した値の使用だけです。例えば
-> ```
-> main : IO () = (
->     eval *println("Hello");
->     pure()
-> );
-> ```
-> では、この設定の有無にかかわらずメッセージが出力されます。
+> `--skip-eval`コンパイラオプションおよびプロジェクトファイルの`skip_eval`フィールドは、`eval {expr0}; {expr1}`を`{expr1}`としてビルドします。開発中は`Debug::debug_println`のようなデバッグ用の作用を`eval`で書いておき、この設定を有効にすることで、ビルドされるプログラムからそれを外せます。
 >
 > `IO`モナドを経由せずに外界に届く作用は、`{expr0}`とともに消えます。`Debug::debug_println`とその同類の呼び出し、`FFI_CALL`、そして式が名指ししたグローバル値の初期化子がこれにあたります。この設定でビルドするプログラムでは、`eval`に置く作用を、無くても成り立つものに限ってください。
+>
+> `{expr0}`の中で`*`によって束ねられたモナドのアクションは、`*`が展開するbindが`eval`式の外側にあるため、この設定でも実行されます。
 
 ### プロジェクトファイルのフィールド表
 
-両方の言語版の表の、`no_runtime_check` の行の後ろに 1 行足す。列は Field / Option / Type / Dependent Project / Description である。`create_config` はプロジェクトファイルを読んでからコマンドラインオプションを適用するので、`no_runtime_check` と同じく実効的には論理和になる。表の中は HTML なので、説明の欄にバッククォートは使わない。
+列は Field / Option / Type / Dependent Project / Description である。Type は「優先度の高い場所の設定が上書きするか、マージされるか」を表す。表の中は HTML なので、説明の欄にバッククォートは使わない。
+
+`no_runtime_check` の行の Type を Overwrite に直し、Description に `fix test` が読む場所を書く。`skip_eval` の行を同じ形でその後ろに足す。
 
 `Document.md`:
 
 ```html
         <tr>
+            <td>no_runtime_check</td>
+            <td>--no-runtime-check</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Disable runtime checks. fix test reads it from the build.test section, which defaults to keeping the checks.</td>
+        </tr>
+        <tr>
             <td>skip_eval</td>
             <td>--skip-eval</td>
-            <td>Merge (OR)</td>
+            <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Skip the evaluation instructed by the eval syntax</td>
+            <td>Skip the evaluation instructed by the eval syntax. fix test reads it from the build.test section, which defaults to keeping the evaluation.</td>
         </tr>
 ```
 
@@ -221,13 +259,22 @@ Notes の箇条書きの後ろに置く。
 
 ```html
         <tr>
+            <td>no_runtime_check</td>
+            <td>--no-runtime-check</td>
+            <td>上書き</td>
+            <td>影響しない</td>
+            <td>実行時チェックの無効化。fix test はこれを build.test セクションから読み、既定では検査を残します。</td>
+        </tr>
+        <tr>
             <td>skip_eval</td>
             <td>--skip-eval</td>
-            <td>マージ（論理和）</td>
+            <td>上書き</td>
             <td>影響しない</td>
-            <td>eval構文が指示する評価を飛ばす</td>
+            <td>eval構文が指示する評価を飛ばす。fix test はこれを build.test セクションから読み、既定では評価を残します。</td>
         </tr>
 ```
+
+真偽値の設定の行はどれも Type が「Merge (OR) / マージ（論理和）」になっている。これはコンパイラオプションが値を true にしかできないことを指している。この 2 つは `[build.test]` が `[build]` を上書きする方が支配的なので Overwrite とし、精確な規則は Description に置く。この振り分けは判断を仰ぐ点でもある。
 
 ### `CHANGELOG.md`
 
@@ -235,12 +282,16 @@ Notes の箇条書きの後ろに置く。
 
 > - Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which build `eval {expr0}; {expr1}` as `{expr1}`. Use it to leave a debugging effect written with `eval` out of a built program. A monadic action bound with `*` inside `{expr0}` is still performed, because the bind it desugars into sits outside the `eval` expression.
 
+`### Changed` の `#### Tool` に、プロジェクトファイルの方の変更を置く。
+
+> - The project file's `no_runtime_check` can now be set in the `build.test` section, which is where `fix test` reads it from; the `build` section applies to `fix build` and `fix run`. A test build keeps its runtime checks unless `build.test` disables them.
+
 `CHANGELOG.md` の `## [Unreleased]` の `### Added` / `#### Tool` に 1 行足す。
 
 ## 承認を仰ぐ点
 
 1. **名前。** `--skip-eval` / `skip_eval` を提案する。`--no-eval` は `--no-runtime-check` の形に揃うが、「プログラムを評価しない」とも読める。
 2. **適用範囲。** プログラム全体を推奨する。ルートプロジェクトのファイルだけに絞る案も実装可能である。
-3. **`fix test` での扱い。** 隣の `no_runtime_check` の現状は次のとおりである。`create_config` はプロジェクトファイルを読んでからコマンドラインオプションを適用し、プロジェクトファイル側の処理はテストモードのとき `config.no_runtime_check` を false に戻す。したがって `fixproj.toml` の `[build] no_runtime_check = true` は `fix test` に持ち越されず（`[build.test]` にこのフィールドは無いので、プロジェクトファイルからテストのために立てる方法も無い）、`fix test --no-runtime-check` は後から適用されるので効く。
+3. **フィールド表の Type 欄。** `no_runtime_check` と `skip_eval` を Overwrite にする振り分けでよいか。他の真偽値の行は Merge (OR) で、これはコンパイラオプションが値を true にしかできないことを指している。
 
-   `skip_eval` も同じにするか、`threaded` / `debug` / `backtrace` と同じく `[build.test]` で立てられる形にするか。`Debug::assert` は `IO ()` なのでこのフラグでは落ちない。テストが `eval` に頼るのは `eval debug_println` でテストの進行を出している場合くらいなので、テストモードでの強制はせず、`[build.test]` の `skip_eval` で他の設定と同じように立てられる形を提案する。
+`fix test` での扱いは決着した。「プロジェクトファイルのテストセクションの扱い」の節に書いたとおり、`[build.test]` にもフィールドを持たせ、既定 false の上書きにする。`no_runtime_check` も同じ形に直す。
