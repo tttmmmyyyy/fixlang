@@ -2470,6 +2470,8 @@ The pointer carries the responsibility for the reference count described in [Man
 
 While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
 
+`Std::mark_threaded` puts a value into multi-threaded mode from the thread that calls it, and the mode is what every other thread's reference counting reads. Call it on a value before that value becomes reachable from another thread, and let the call finish before the pointer is handed over. A value already reachable from a second thread when the call runs is counted in one mode by one thread and in another by the other, and the counts each thread makes are lost to the other.
+
 ## `eval` syntax
 
 The expression `eval {expr0}; {expr1}` evaluates both `{expr0}` and `{expr1}`, and returns the value of `{expr1}`.
