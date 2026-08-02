@@ -37,7 +37,7 @@ const EXPECTED_OUTPUT: &str = "66";
 ///
 /// Each call builds in a directory of its own, which is what makes the returned IR the work of this
 /// build alone.
-fn emit_and_run_threaded(opt_level: &str) -> String {
+fn build_run_and_read_ir(opt_level: &str) -> String {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     let build = fix_build_source_command(dir, SOURCE, opt_level)
@@ -113,7 +113,7 @@ fn assert_every_access_carries_ordering(
 ///
 /// One build serves them all, since they are faces of one emitted artifact.
 fn assert_orderings_are_checkable(opt_level: &str) {
-    let ir = emit_and_run_threaded(opt_level);
+    let ir = build_run_and_read_ir(opt_level);
     let build_description = format!("at -O {}", opt_level);
 
     // The thread that brings the count to zero has to see every write the other holders made, so
