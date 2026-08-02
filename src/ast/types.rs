@@ -1342,7 +1342,7 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> StructType<'c> {
-        gc.struct_type_of(self, &[])
+        gc.struct_type_of(self)
     }
 
     pub fn get_embedded_type<'c, 'm>(

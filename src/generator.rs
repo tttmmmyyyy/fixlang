@@ -663,20 +663,15 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The LLVM struct a value of `ty` is laid out as.
     ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`. A kept answer is returned without
-    ///   consulting it: an entry exists only where the layout completed, and a type that reaches
-    ///   itself through unboxed fields completes by no path, so such a type is never kept.
-    pub fn struct_type_of(
-        &mut self,
-        ty: &Arc<TypeNode>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> StructType<'c> {
+    /// A kept answer is returned without checking for a cycle of unboxed types: an entry exists
+    /// only where the layout completed, and a type that reaches itself through unboxed fields
+    /// completes by no path, so such a type is never kept.
+    pub fn struct_type_of(&mut self, ty: &Arc<TypeNode>) -> StructType<'c> {
         if let Some(struct_ty) = self.struct_types.get(ty) {
             return *struct_ty;
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
-        let struct_ty = object_ty.to_struct_type(self, unboxed_path);
+        let struct_ty = object_ty.to_struct_type(self, &[]);
         self.struct_types.insert(ty.clone(), struct_ty);
         struct_ty
     }
@@ -685,7 +680,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// laid out as when it is unboxed, a pointer when it is boxed.
     ///
     /// # Arguments
-    /// * `unboxed_path` - see `struct_type_of`.
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`; a kept answer is returned without
+    ///   consulting it, for the reason given at `struct_type_of`.
     pub fn embedded_type_of(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -1470,15 +1466,22 @@ impl<'c, 'm> Generator<'c, 'm> {
     // so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
     // deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
     pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
-        if self.is_zero_sized(ty) {
-            return vec![];
-        }
         if self.is_grouped(ty) {
             return vec![ty];
         }
+        self.split_type_parts(ty)
+    }
+
+    // The parts of a type the caller has found to be split. Its fields are split as well, so the
+    // descent asks no further: a struct holds the scalars of its fields and no fewer, so a field of
+    // a type within the limit is within it too.
+    fn split_type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
+        if self.is_zero_sized(ty) {
+            return vec![];
+        }
         match ty {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
-                .flat_map(|i| self.type_parts(st.get_field_type_at_index(i).unwrap()))
+                .flat_map(|i| self.split_type_parts(st.get_field_type_at_index(i).unwrap()))
                 .collect(),
             _ => vec![ty],
         }
@@ -1487,15 +1490,20 @@ impl<'c, 'm> Generator<'c, 'm> {
     // The number of parts `ty` splits into under `type_parts`, without allocating the list of their
     // types.
     pub fn part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
-        if self.is_zero_sized(ty) {
-            return 0;
-        }
         if self.is_grouped(ty) {
             return 1;
         }
+        self.split_part_count(ty)
+    }
+
+    // The part count of a type the caller has found to be split; see `split_type_parts`.
+    fn split_part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+        if self.is_zero_sized(ty) {
+            return 0;
+        }
         match ty {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
-                .map(|i| self.part_count(st.get_field_type_at_index(i).unwrap()))
+                .map(|i| self.split_part_count(st.get_field_type_at_index(i).unwrap()))
                 .sum(),
             _ => 1,
         }
@@ -1518,11 +1526,16 @@ impl<'c, 'm> Generator<'c, 'm> {
     // `extractvalue` per struct field at the current insert position. A zero-sized value yields no
     // part, and a grouped value is one part already.
     pub fn explode_to_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
-        if self.is_zero_sized(val.get_type()) {
-            return vec![];
-        }
         if self.is_grouped(val.get_type()) {
             return vec![val];
+        }
+        self.split_value_parts(val)
+    }
+
+    // The parts of a value whose type the caller has found to be split; see `split_type_parts`.
+    fn split_value_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
+        if self.is_zero_sized(val.get_type()) {
+            return vec![];
         }
         match val {
             BasicValueEnum::StructValue(sv) => (0..sv.get_type().count_fields())
@@ -1531,7 +1544,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                         .builder()
                         .build_extract_value(sv, i, "explode_part")
                         .unwrap();
-                    self.explode_to_parts(field)
+                    self.split_value_parts(field)
                 })
                 .collect(),
             _ => vec![val],
@@ -1546,15 +1559,27 @@ impl<'c, 'm> Generator<'c, 'm> {
         ty: BasicTypeEnum<'c>,
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
+        if self.is_grouped(ty) {
+            return parts.next().expect("too few parts to assemble the value");
+        }
+        self.assemble_split_parts(ty, parts)
+    }
+
+    // Reassemble a value whose type the caller has found to be split; see `split_type_parts`.
+    fn assemble_split_parts(
+        &self,
+        ty: BasicTypeEnum<'c>,
+        parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
+    ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
             return Self::get_undef(&ty);
         }
         match ty {
-            BasicTypeEnum::StructType(st) if !self.is_grouped(ty) => {
+            BasicTypeEnum::StructType(st) => {
                 let mut val = st.get_undef();
                 for i in 0..st.count_fields() {
                     let field_ty = st.get_field_type_at_index(i).unwrap();
-                    let field = self.assemble_from_parts(field_ty, parts);
+                    let field = self.assemble_split_parts(field_ty, parts);
                     val = self
                         .builder()
                         .build_insert_value(val, field, i, "assemble_part")
