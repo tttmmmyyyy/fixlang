@@ -1,7 +1,11 @@
 module Main;
 
-// Takes one reference to the shared value, takes and drops many more, then drops the one it was
-// handed. The reference counts the threads run through here are what they contend over.
+// Takes one reference to the shared value, takes and drops many more, writes through it, and drops
+// the one it was handed. The reference counts the threads run through here are what they contend
+// over, and because the threads hold every reference, all three answers the counting can give are
+// reached under contention: a count that stays above one, a count that reaches one and lets a write
+// happen in place, and a count that reaches zero and destroys the value while other threads are
+// still working.
 //
 // Written in `IO` so that the reference counting survives optimization. Run through
 // `IO::unsafe_perform` instead, the loop's result goes unused and the whole loop is removed --
@@ -15,7 +19,14 @@ hammer_one = |ptr| (
         let taken : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
         if taken.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
         continue_m $ i + 1
-    )
+    );;
+
+    // A write through the handle. Whichever thread finds itself the only holder left takes the
+    // uniqueness check's unique answer and writes in place; the others find the value shared and
+    // write to a copy of their own.
+    let value = value.set_value(value.@value + 1);
+    if value.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+    pure()
 );
 FFI_EXPORT[hammer_one, fix_hammer_one];
 
@@ -53,6 +64,11 @@ main = (
 
     let threads = 8;
     let ptr = *value.retain_many(threads);
+
+    // Nothing here holds the value any more: the threads hold every reference to it, so whichever
+    // of them finishes last is the one that destroys it, and the destructor runs while the others
+    // are still working. Reading the value after this would keep a reference and leave the
+    // destruction to this thread alone.
     hammer_from_threads(ptr, threads);;
-    println(if value.@value > 0 { "ok" } else { "the value did not survive" })
+    println("ok")
 );
