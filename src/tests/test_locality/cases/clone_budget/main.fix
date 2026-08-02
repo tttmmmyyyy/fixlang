@@ -1,0 +1,27 @@
+module Main;
+
+// One function reached with every combination of its arguments' localities. The key of a call is a
+// value per boxed leaf of every argument, so the reachable set is the product and a body of a few
+// lines names more clones than any program has use for. Without a bound on how many a function may
+// have, this does not finish compiling.
+g : Array I64;
+g = [1, 2, 3];
+
+gg : Array (Array I64);
+gg = [g, g];
+
+work : I64 -> Array (Array I64) -> Array (Array I64) -> Array (Array I64) -> Array (Array I64) -> Array (Array I64) -> Array (Array I64) -> I64;
+work = |k, a0, a1, a2, a3, a4, a5| (
+    if k <= 0 { a0.@(0).@(0) + a1.@(0).@(0) + a2.@(0).@(0) + a3.@(0).@(0) + a4.@(0).@(0) + a5.@(0).@(0) };
+    let s = a0.@(0).@(0) + a1.@(0).@(0);
+    let r = k % 3;
+    if r == 0 { s + work(k - 1, gg, a0, a1, a2, a3, a4) };
+    if r == 1 { s + work(k - 1, [g, [7]], a0, a1, a2, a3, a4) };
+    s + work(k - 1, a1, a2, a3, a4, a5, a0)
+);
+
+main : IO ();
+main = (
+    let loc : Array (Array I64) = [[10, 20], [30, 40]];
+    println $ (work(20, loc, loc, loc, loc, loc, loc)).to_string
+);

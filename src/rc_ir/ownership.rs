@@ -23,7 +23,8 @@ use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar, VarPath,
 };
-use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin};
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::rc_ir::provenance::LeafOrigin;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
@@ -126,7 +127,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
             vars.var_tys.insert(x.name.clone(), x.ty.clone());
             collect_bindings(k, vars);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             for (idx, fv) in fields {
                 vars.bindings
                     .insert(fv.name.clone(), Binding::Field(container.clone(), *idx));
@@ -147,7 +148,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
         RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k) => returned_var(k),
@@ -345,7 +346,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             for leaf in destructure_consumes(container, fields, type_env) {
                 out.push((container.name.clone(), leaf));
             }

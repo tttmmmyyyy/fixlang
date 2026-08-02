@@ -23,11 +23,12 @@ use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     MatchArm, Ownership, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
 };
+use std::mem;
 use std::sync::Arc;
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
-    let funcs = std::mem::take(&mut prog.funcs);
+    let funcs = mem::take(&mut prog.funcs);
     let mut new_funcs = Map::default();
     for (fref, func) in funcs {
         let inserter = RcInserter::new(type_env, &func);
@@ -35,7 +36,7 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     }
     prog.funcs = new_funcs;
 
-    let globals = std::mem::take(&mut prog.globals);
+    let globals = mem::take(&mut prog.globals);
     prog.globals = globals
         .into_iter()
         .map(|mut glob| {
@@ -59,7 +60,10 @@ pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
 /// and a table from every local variable name to its `RcVar` (used to recover a variable's type and
 /// span when placing a dead-branch release). Names are globally unique, so the table is unambiguous.
 struct RcInserter<'a> {
+    /// The type definitions, for deciding whether a value needs reference counting at all.
     type_env: &'a TypeEnv,
+    /// Every local variable of this function or initializer, by name, carrying the type and span a
+    /// released variable is rebuilt from.
     vars: Map<FullName, RcVar>,
 }
 
@@ -155,7 +159,7 @@ impl<'a> RcInserter<'a> {
             RcExpr::Let(x, rhs, cont) => {
                 self.insert_into_operation_let(x, rhs, cont, source, live_after)
             }
-            RcExpr::Destructure(container, fields, cont) => {
+            RcExpr::Destructure(container, fields, _state, cont) => {
                 self.insert_into_destructure(container, fields, cont, source, live_after)
             }
             RcExpr::Eval(x, cont) => self.insert_into_eval(x, cont, source, live_after),
@@ -274,7 +278,12 @@ impl<'a> RcInserter<'a> {
         let cont = build_releases(dead, cont);
 
         let node = RcExprNode {
-            expr: Arc::new(RcExpr::Destructure(container.clone(), fields.clone(), cont)),
+            expr: Arc::new(RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                RcState::Unknown,
+                cont,
+            )),
             source,
         };
         // Retain the container before the destructure iff it is used afterward, so both the extracted
@@ -364,6 +373,7 @@ impl<'a> RcInserter<'a> {
             live_before_arms.remove(&payload.name);
 
             new_arms.push(MatchArm {
+                payload_state: arm.payload_state,
                 tag: arm.tag,
                 payload,
                 body,
@@ -536,7 +546,7 @@ fn collect_referenced_and_bound(
             }
             collect_referenced_and_bound(k, refs, bound);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
@@ -591,7 +601,7 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
             }
             collect_vars(k, vars);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             record_if_local(vars, container);
             for (_, fv) in fields {
                 record_if_local(vars, fv);

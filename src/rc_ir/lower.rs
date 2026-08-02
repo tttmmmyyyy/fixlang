@@ -21,8 +21,9 @@ use crate::fixstd::builtin::{
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
+use std::mem;
 use std::sync::Arc;
 
 /// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
@@ -66,7 +67,7 @@ pub fn lower_program(
             LoweredSymbol::Global(g) => globals.push(g),
         }
     }
-    let funcs = std::mem::take(&mut lowerer.funcs);
+    let funcs = mem::take(&mut lowerer.funcs);
     // `entry` labels the program in the dump only; it has no role in code generation or in
     // entry-point selection. The actual entry point — `main` for a build, `test` for `fix test`,
     // or an FFI-exported function — is chosen by the build driver, independently of this field.
@@ -88,17 +89,21 @@ pub fn lower_program(
 /// globally-unique name is minted at every binding, the scope resolves shadowing and the resulting
 /// names need no scope tracking downstream.
 struct Lowerer<'a> {
+    /// The type definitions, for resolving a value's type to its layout and boxedness.
     type_env: &'a TypeEnv,
+    /// The source of the number that makes each minted local name unique across the program.
     fresh_counter: u64,
+    /// The top-level functions lowered so far, the lifted lambda bodies among them.
     funcs: Map<FuncRef, RcFunc>,
-    // A shadow stack per AST name; the last entry is the current binding.
+    /// A shadow stack per AST name; the last entry is the current binding.
     scope: Map<FullName, Vec<RcVar>>,
-    // The type of each top-level symbol of the program, to type a global referenced as an LLVM
-    // operand.
+    /// The type of each top-level symbol of the program, to type a global referenced as an LLVM
+    /// operand.
     global_types: &'a Map<FullName, Arc<TypeNode>>,
-    // The top-level symbol currently being lowered, with a per-symbol counter: each lifted lambda is
-    // named `<symbol>::closure{N}` so it carries its source module (like a top-level function's name).
+    /// The top-level symbol currently being lowered: each lifted lambda is named
+    /// `<symbol>::closure{N}` so it carries its source module, like a top-level function's name.
     current_symbol: Option<FullName>,
+    /// The `N` of the next `<symbol>::closure{N}`, restarted for each top-level symbol.
     closure_counter: u64,
 }
 
@@ -191,7 +196,12 @@ impl<'a> Lowerer<'a> {
                     source,
                 },
                 PendingBinding::Destructure(container, fields, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Destructure(container, fields, cont)),
+                    expr: Arc::new(RcExpr::Destructure(
+                        container,
+                        fields,
+                        RcState::Unknown,
+                        cont,
+                    )),
                     source,
                 },
                 PendingBinding::Eval(var, source) => RcExprNode {
@@ -256,7 +266,7 @@ impl<'a> Lowerer<'a> {
         let src_tys = lam_ty.get_lambda_srcs();
         assert_eq!(params.len(), src_tys.len());
 
-        let saved_env = std::mem::take(&mut self.scope);
+        let saved_env = mem::take(&mut self.scope);
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
@@ -279,6 +289,7 @@ impl<'a> Lowerer<'a> {
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let llvm_gen = Box::new(InlineLLVMCaptureProjectBody {
+                    assume_local: false,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
                     cap_tys: capture_tys.clone(),
@@ -521,11 +532,13 @@ impl<'a> Lowerer<'a> {
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
+            payload_state: RcState::Unknown,
             tag: Some(BOOL_TRUE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
+            payload_state: RcState::Unknown,
             tag: Some(BOOL_FALSE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
             body: self.lower_body(else_expr),
@@ -585,6 +598,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: Some(variant_idx),
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
@@ -599,6 +613,7 @@ impl<'a> Lowerer<'a> {
                 let body = self.lower_body(body);
                 self.unbind(&v.name);
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: None,
                     payload,
                     body,
@@ -616,6 +631,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: None,
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
