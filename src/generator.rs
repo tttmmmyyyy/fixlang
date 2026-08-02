@@ -18,6 +18,7 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
+use crate::constants::MAX_SPLIT_SCALARS;
 use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
@@ -32,7 +33,7 @@ use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
-use crate::object::lambda_return_leaf_types;
+use crate::object::lambda_return_part_types;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -130,20 +131,21 @@ impl<'c> ValueAccessor<'c> {
 // its layout and reference-counting behavior.
 #[derive(Clone)]
 pub struct Object<'c> {
-    // The object's value, held as the flat list of leaf (non-struct) scalars it decomposes into,
-    // in `flatten_to_scalar_leaves` order. A boxed object is the single heap pointer, a funcptr the
-    // single function pointer, an unboxed scalar the value itself; an unbox struct is its leaf
-    // fields spread out here rather than kept as one aggregate, so a loop-carried field (an
-    // `Array`'s `@size`) stays visible to LLVM instead of hiding inside an aggregate phi. The
-    // aggregate is reassembled on demand by `value`, only at memory and ABI boundaries.
+    // The object's value, held as the list of parts it splits into, in `type_parts` order. A boxed
+    // object is the single heap pointer, a funcptr the single function pointer, an unboxed scalar
+    // the value itself; an unbox struct is its fields spread out here rather than kept as one
+    // aggregate, so a loop-carried field (an `Array`'s `@size`) stays visible to LLVM instead of
+    // hiding inside an aggregate phi. A struct too wide to split is one part holding the whole
+    // aggregate. The aggregate is reassembled on demand by `value`, only at memory and ABI
+    // boundaries.
     data: Vec<BasicValueEnum<'c>>,
     pub ty: Arc<TypeNode>,
 }
 
 impl<'c> Object<'c> {
     // Construct an object from its assembled value: the heap pointer of a boxed object, the
-    // function pointer of a funptr, or the embedded value of an unboxed one. The value is exploded
-    // into leaves on the way in.
+    // function pointer of a funptr, or the embedded value of an unboxed one. The value is split
+    // into parts on the way in.
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
@@ -154,14 +156,14 @@ impl<'c> Object<'c> {
             let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
         }
-        let data = gc.explode_to_scalar_leaves(value);
+        let data = gc.explode_to_parts(value);
         Object { data, ty }
     }
 
-    // Construct an object directly from its leaf scalars, in `flatten_to_scalar_leaves` order. This
-    // is the fast path at ABI and phi boundaries, where the leaves are already in hand and reforming
-    // the aggregate only to explode it again in `new` would be wasted work.
-    pub fn from_leaves<'m>(
+    // Construct an object directly from its parts, in `type_parts` order. This is the fast path at
+    // ABI and phi boundaries, where the parts are already in hand and reforming the aggregate only
+    // to split it again in `new` would be wasted work.
+    pub fn from_parts<'m>(
         data: Vec<BasicValueEnum<'c>>,
         ty: Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
@@ -169,44 +171,40 @@ impl<'c> Object<'c> {
         assert!(ty.free_vars().is_empty());
         if gc.config.develop_mode {
             let embed_ty = ty.get_embedded_type(gc);
-            let leaf_tys = gc.flatten_to_scalar_leaves(embed_ty);
+            let part_tys = gc.type_parts(embed_ty);
             assert_eq!(
                 data.len(),
-                leaf_tys.len(),
-                "Object::from_leaves leaf count disagrees with flatten_to_scalar_leaves"
+                part_tys.len(),
+                "Object::from_parts part count disagrees with type_parts"
             );
-            for (leaf, leaf_ty) in data.iter().zip(leaf_tys.iter()) {
-                assert_eq!(leaf.get_type(), *leaf_ty);
-                assert!(
-                    !matches!(leaf, BasicValueEnum::StructValue(_)),
-                    "an Object leaf must be a non-struct scalar"
-                );
+            for (part, part_ty) in data.iter().zip(part_tys.iter()) {
+                assert_eq!(part.get_type(), *part_ty);
             }
         }
         Object { data, ty }
     }
 
-    // The leaf scalars of this object, in `flatten_to_scalar_leaves` order.
-    pub fn leaves(&self) -> &[BasicValueEnum<'c>] {
+    // The parts of this object, in `type_parts` order.
+    pub fn parts(&self) -> &[BasicValueEnum<'c>] {
         &self.data
     }
 
-    // The object's leaves as call arguments, for a callee that takes the object flattened into its
-    // leaf scalars.
-    pub fn leaf_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
+    // The object's parts as call arguments, for a callee that takes the object split into them.
+    pub fn part_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
         self.data.iter().map(|v| (*v).into()).collect()
     }
 
-    // Reassemble the object's value from its leaves. Free for a boxed object, a funcptr, or an
-    // unboxed scalar (the single leaf is returned as is); an unbox struct is rebuilt with one
-    // `insertvalue` per field, which SROA folds away wherever the aggregate is not truly needed.
+    // Reassemble the object's value from its parts. Free for a boxed object, a funcptr, an unboxed
+    // scalar, or a struct too wide to split (the single part is returned as is); a split unbox
+    // struct is rebuilt with one `insertvalue` per field, which SROA folds away wherever the
+    // aggregate is not truly needed.
     pub fn value<'m>(&self, gc: &mut Generator<'c, 'm>) -> BasicValueEnum<'c> {
         if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
             return self.data[0];
         }
         let embedded = self.ty.get_embedded_type(gc);
-        let mut leaves = self.data.iter().copied();
-        gc.assemble_from_scalar_leaves(embedded, &mut leaves)
+        let mut parts = self.data.iter().copied();
+        gc.assemble_from_parts(embedded, &mut parts)
     }
 
     // An object of type `ty` whose value is `undef`, for an unreachable point that still has to
@@ -272,14 +270,20 @@ impl<'c> Object<'c> {
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            // The object's leaves already hold the field, spread across a contiguous range; slice
-            // that range and reassemble the field's value. The field lives directly in the leaves,
-            // so they stay independent for LLVM.
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
+            if gc.is_grouped(struct_ty.into()) {
+                return gc
+                    .builder()
+                    .build_extract_value(self.data[0].into_struct_value(), field_idx, "field")
+                    .unwrap();
+            }
+            // The object's parts already hold the field, spread across a contiguous range; slice
+            // that range and reassemble the field's value. The field lives directly in the parts,
+            // so they stay independent for LLVM.
+            let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
-            let mut leaves = self.data[off..off + cnt].iter().copied();
-            gc.assemble_from_scalar_leaves(field_ty, &mut leaves)
+            let mut parts = self.data[off..off + cnt].iter().copied();
+            gc.assemble_from_parts(field_ty, &mut parts)
         } else {
             // When the object is boxed,
             let struct_ty = self.struct_ty(gc);
@@ -304,11 +308,11 @@ impl<'c> Object<'c> {
             .unwrap()
     }
 
-    // Extract a field of an object as an `Object`, keeping its value in the leaf domain: for an
-    // unbox object the field's leaves are sliced straight out with no aggregate formed, so a struct
+    // Extract a field of an object as an `Object`, keeping its value in the part domain: for an
+    // unbox object the field's parts are sliced straight out with no aggregate formed, so a struct
     // field never round-trips through an `insertvalue`/`extractvalue` that a later pass could sink
     // into an aggregate phi. `field_ty` is the field's Fix type; for a boxed object the field is
-    // loaded from the heap and its (materialized) value exploded back into leaves. The field is
+    // loaded from the heap and its (materialized) value split back into parts. The field is
     // moved out, not retained.
     pub fn extract_field_object<'m>(
         &self,
@@ -319,8 +323,12 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
-            Object::from_leaves(self.data[off..off + cnt].to_vec(), field_ty, gc)
+            if gc.is_grouped(struct_ty.into()) {
+                let field_val = self.extract_field(gc, field_idx);
+                return Object::new(field_val, field_ty, gc);
+            }
+            let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
+            Object::from_parts(self.data[off..off + cnt].to_vec(), field_ty, gc)
         } else {
             let struct_ty = self.struct_ty(gc);
             let field_val = self.extract_field_as(gc, struct_ty, field_idx);
@@ -342,14 +350,27 @@ impl<'c> Object<'c> {
     {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            // Swap the field's leaves in place: explode the new field value into its own leaves and
-            // splice them over the range this field occupies, leaving every other field's leaves
-            // untouched and never materializing an aggregate.
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
-            let new_leaves = gc.explode_to_scalar_leaves(val.as_basic_value_enum());
-            assert_eq!(new_leaves.len(), cnt);
-            self.data.splice(off..off + cnt, new_leaves);
+            if gc.is_grouped(struct_ty.into()) {
+                self.data[0] = gc
+                    .builder()
+                    .build_insert_value(
+                        self.data[0].into_struct_value(),
+                        val,
+                        field_idx,
+                        "set_field",
+                    )
+                    .unwrap()
+                    .as_basic_value_enum();
+                return self;
+            }
+            // Swap the field's parts in place: split the new field value into its own parts and
+            // splice them over the range this field occupies, leaving every other field's parts
+            // untouched and never materializing an aggregate.
+            let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
+            let new_parts = gc.explode_to_parts(val.as_basic_value_enum());
+            assert_eq!(new_parts.len(), cnt);
+            self.data.splice(off..off + cnt, new_parts);
         } else {
             // When the object is boxed,
             let struct_ty = self.struct_ty(gc);
@@ -358,8 +379,8 @@ impl<'c> Object<'c> {
         self
     }
 
-    // Insert an `Object` into a field, keeping the value in the leaf domain: for an unbox object the
-    // source object's leaves are spliced straight into the field's range with no aggregate formed on
+    // Insert an `Object` into a field, keeping the value in the part domain: for an unbox object the
+    // source object's parts are spliced straight into the field's range with no aggregate formed on
     // either side. For a boxed object the field is stored to the heap, where the value must be
     // materialized. The counterpart of `extract_field_object`.
     pub fn insert_field_object<'m>(
@@ -371,10 +392,14 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
-            let (off, cnt) = gc.field_leaf_range(struct_ty, field_idx);
-            assert_eq!(field.leaves().len(), cnt);
+            if gc.is_grouped(struct_ty.into()) {
+                let val = field.value(gc);
+                return self.insert_field(gc, field_idx, val);
+            }
+            let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
+            assert_eq!(field.parts().len(), cnt);
             self.data
-                .splice(off..off + cnt, field.leaves().iter().copied());
+                .splice(off..off + cnt, field.parts().iter().copied());
         } else {
             let val = field.value(gc);
             let struct_ty = self.struct_ty(gc);
@@ -667,16 +692,16 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// The buffer a lambda returning `ret_ty` writes its result through, as the flat struct of the
-    /// leaves the result would otherwise have been returned in.
+    /// parts the result would otherwise have been returned in.
     ///
-    /// The struct is named after the type, so the module writes the leaves out once, at the name's
+    /// The struct is named after the type, so the module writes the parts out once, at the name's
     /// definition. An anonymous struct is written out in full at every instruction that names it,
-    /// and the buffer is named by one instruction per leaf at both ends of a call, which puts the
-    /// module's text in the square of the leaf count.
+    /// and the buffer is named by one instruction per part at both ends of a call, which puts the
+    /// module's text in the square of the part count.
     pub fn out_pointer_buffer_type(
         &mut self,
         ret_ty: &Arc<TypeNode>,
-        leaf_tys: &[BasicTypeEnum<'c>],
+        part_tys: &[BasicTypeEnum<'c>],
     ) -> StructType<'c> {
         if let Some(buf_ty) = self.out_pointer_buffers.get(ret_ty) {
             return *buf_ty;
@@ -684,7 +709,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let buf_ty = self
             .context
             .opaque_struct_type(&format!("out.{}", ret_ty.to_string()));
-        buf_ty.set_body(leaf_tys, false);
+        buf_ty.set_body(part_tys, false);
         self.out_pointer_buffers.insert(ret_ty.clone(), buf_ty);
         buf_ty
     }
@@ -1155,11 +1180,11 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Call function pointer with the out-pointer if the result is too wide for the return
         // registers, then the arguments, then CAP if closure. Each unbox-struct argument is
-        // decomposed into its leaf scalars to match the flattened signature (see
+        // split into its parts to match the signature (see
         // `lambda_function_type`).
-        let ret_leaf_tys = lambda_return_leaf_types(&fun.ty, self);
-        let out_ptr = if self.returns_through_out_pointer(&ret_leaf_tys) {
-            Some(self.build_out_pointer_argument(&ret_ty, &ret_leaf_tys, tail))
+        let ret_part_tys = lambda_return_part_types(&fun.ty, self);
+        let out_ptr = if self.returns_through_out_pointer(&ret_part_tys) {
+            Some(self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail))
         } else {
             None
         };
@@ -1168,8 +1193,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             call_args.push(out_ptr.into());
         }
         for arg in args {
-            for leaf in arg.leaves() {
-                call_args.push((*leaf).into());
+            for part in arg.parts() {
+                call_args.push((*part).into());
             }
         }
         if fun.ty.is_closure() {
@@ -1199,7 +1224,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             return None;
         }
         if let Some(out_ptr) = out_ptr {
-            return Some(self.load_out_pointer_buffer(out_ptr, &ret_leaf_tys, ret_ty));
+            return Some(self.load_out_pointer_buffer(out_ptr, &ret_part_tys, ret_ty));
         }
         Some(self.unpack_return(call_result, ret_ty))
     }
@@ -1212,13 +1237,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     fn build_out_pointer_argument(
         &mut self,
         ret_ty: &Arc<TypeNode>,
-        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        ret_part_tys: &[BasicTypeEnum<'c>],
         tail: bool,
     ) -> PointerValue<'c> {
         if tail {
             return self.own_out_pointer();
         }
-        let buf_ty = self.out_pointer_buffer_type(ret_ty, ret_leaf_tys);
+        let buf_ty = self.out_pointer_buffer_type(ret_ty, ret_part_tys);
         self.build_alloca_at_entry(buf_ty, "out@call_lambda")
     }
 
@@ -1238,35 +1263,35 @@ impl<'c, 'm> Generator<'c, 'm> {
         func.get_nth_param(0).unwrap().into_pointer_value()
     }
 
-    // Read back the leaves a callee wrote through the out-pointer, as the object of type `ret_ty`
+    // Read back the parts a callee wrote through the out-pointer, as the object of type `ret_ty`
     // it returned.
     fn load_out_pointer_buffer(
         &mut self,
         out_ptr: PointerValue<'c>,
-        ret_leaf_tys: &[BasicTypeEnum<'c>],
+        ret_part_tys: &[BasicTypeEnum<'c>],
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
-        let buf_ty = self.out_pointer_buffer_type(&ret_ty, ret_leaf_tys);
-        let leaves: Vec<BasicValueEnum<'c>> = ret_leaf_tys
+        let buf_ty = self.out_pointer_buffer_type(&ret_ty, ret_part_tys);
+        let parts: Vec<BasicValueEnum<'c>> = ret_part_tys
             .iter()
             .enumerate()
-            .map(|(i, leaf_ty)| {
-                let leaf_ptr = self
+            .map(|(i, part_ty)| {
+                let part_ptr = self
                     .builder()
-                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
                 self.builder()
-                    .build_load(*leaf_ty, leaf_ptr, "load_out_leaf")
+                    .build_load(*part_ty, part_ptr, "load_out_part")
                     .unwrap()
             })
             .collect();
-        Object::from_leaves(leaves, ret_ty, self)
+        Object::from_parts(parts, ret_ty, self)
     }
 
-    // Whether a function returning `leaf_tys` takes an out-pointer for its result on this module's
+    // Whether a function returning `part_tys` takes an out-pointer for its result on this module's
     // target (see `return_abi`).
-    pub fn returns_through_out_pointer(&self, leaf_tys: &[BasicTypeEnum<'c>]) -> bool {
-        returns_through_out_pointer(leaf_tys, self.return_registers)
+    pub fn returns_through_out_pointer(&self, part_tys: &[BasicTypeEnum<'c>]) -> bool {
+        returns_through_out_pointer(part_tys, self.return_registers)
     }
 
     // The convention every Fix lambda in this module is defined and called with (see `return_abi`).
@@ -1296,120 +1321,153 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
-    // value carries no information, so the scalar-leaf helpers drop it: it yields no leaf (no phi, no
-    // ABI slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
+    // value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
+    // slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
     // AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
     fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
 
-    // Expand an embedded type into the flat list of leaf (non-struct) scalar types it holds,
-    // descending through nested structs; a non-struct type is a leaf on its own, and a zero-sized
-    // type yields no leaf. Passing an unbox struct across a function boundary as these scalars,
-    // rather than as one aggregate, keeps a loop-carried field (such as an `Array`'s `@size`)
-    // visible to LLVM's value analyses: the recursive `fold`/`loop` tail call then carries scalar
-    // phis instead of an opaque aggregate phi, so the per-element bounds check folds away and the
-    // loop vectorizes.
-    pub fn flatten_to_scalar_leaves(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
-        if self.is_zero_sized(ty) {
-            return vec![];
-        }
-        match ty {
-            BasicTypeEnum::StructType(st) => (0..st.count_fields())
-                .flat_map(|i| self.flatten_to_scalar_leaves(st.get_field_type_at_index(i).unwrap()))
-                .collect(),
-            _ => vec![ty],
-        }
-    }
-
-    // The number of leaf scalars `ty` decomposes into under `flatten_to_scalar_leaves`, without
-    // allocating the list of their types.
-    pub fn scalar_leaf_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+    // The number of scalars `ty` holds, counting through nested structs. A non-struct type is one
+    // scalar and a zero-sized type is none.
+    fn scalar_count(&self, ty: BasicTypeEnum<'c>) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
         }
         match ty {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
-                .map(|i| self.scalar_leaf_count(st.get_field_type_at_index(i).unwrap()))
+                .map(|i| self.scalar_count(st.get_field_type_at_index(i).unwrap()))
                 .sum(),
             _ => 1,
         }
     }
 
-    // The half-open range `[offset, offset + count)` of leaves that field `field_idx` of `struct_ty`
-    // occupies within the struct's flattened leaf list, so a leaf-held value can address one field
-    // without materializing the aggregate. `offset` is the leaf count of the preceding fields.
-    pub fn field_leaf_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
+    // Whether a value of `ty` is carried as one aggregate rather than split into the parts of its
+    // fields: it holds more scalars than `MAX_SPLIT_SCALARS`.
+    pub fn is_grouped(&self, ty: BasicTypeEnum<'c>) -> bool {
+        matches!(ty, BasicTypeEnum::StructType(_))
+            && !self.is_zero_sized(ty)
+            && self.scalar_count(ty) > MAX_SPLIT_SCALARS
+    }
+
+    // Split an embedded type into the parts a value of it is carried as: the scalars of its nested
+    // structs, except that a struct holding more scalars than `MAX_SPLIT_SCALARS` is one part of its
+    // own. A non-struct type is one part, and a zero-sized type is none.
+    //
+    // Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
+    // a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
+    // recursive `fold`/`loop` tail call then carries scalar phis instead of an opaque aggregate phi,
+    // so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
+    // deeply nested type from paying one LLVM value per scalar; see `MAX_SPLIT_SCALARS`.
+    pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
+        if self.is_zero_sized(ty) {
+            return vec![];
+        }
+        if self.is_grouped(ty) {
+            return vec![ty];
+        }
+        match ty {
+            BasicTypeEnum::StructType(st) => (0..st.count_fields())
+                .flat_map(|i| self.type_parts(st.get_field_type_at_index(i).unwrap()))
+                .collect(),
+            _ => vec![ty],
+        }
+    }
+
+    // The number of parts `ty` splits into under `type_parts`, without allocating the list of their
+    // types.
+    pub fn part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+        if self.is_zero_sized(ty) {
+            return 0;
+        }
+        if self.is_grouped(ty) {
+            return 1;
+        }
+        match ty {
+            BasicTypeEnum::StructType(st) => (0..st.count_fields())
+                .map(|i| self.part_count(st.get_field_type_at_index(i).unwrap()))
+                .sum(),
+            _ => 1,
+        }
+    }
+
+    // The half-open range `[offset, offset + count)` of parts that field `field_idx` of `struct_ty`
+    // occupies within the struct's part list, so a split value can address one field without
+    // materializing the aggregate. `offset` is the part count of the preceding fields. A grouped
+    // struct has no such range -- its fields live inside its one part -- so this is for a struct
+    // `is_grouped` rejects.
+    pub fn field_part_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
         let offset: usize = (0..field_idx)
-            .map(|i| self.scalar_leaf_count(struct_ty.get_field_type_at_index(i).unwrap()))
+            .map(|i| self.part_count(struct_ty.get_field_type_at_index(i).unwrap()))
             .sum();
-        let count = self.scalar_leaf_count(struct_ty.get_field_type_at_index(field_idx).unwrap());
+        let count = self.part_count(struct_ty.get_field_type_at_index(field_idx).unwrap());
         (offset, count)
     }
 
-    // Decompose a value into its leaf scalars in the order of `flatten_to_scalar_leaves` on its
-    // type, emitting an `extractvalue` per struct field at the current insert position. A zero-sized
-    // value yields no leaf.
-    pub fn explode_to_scalar_leaves(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
+    // Split a value into its parts in the order of `type_parts` on its type, emitting an
+    // `extractvalue` per struct field at the current insert position. A zero-sized value yields no
+    // part, and a grouped value is one part already.
+    pub fn explode_to_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
         if self.is_zero_sized(val.get_type()) {
             return vec![];
+        }
+        if self.is_grouped(val.get_type()) {
+            return vec![val];
         }
         match val {
             BasicValueEnum::StructValue(sv) => (0..sv.get_type().count_fields())
                 .flat_map(|i| {
                     let field = self
                         .builder()
-                        .build_extract_value(sv, i, "explode_leaf")
+                        .build_extract_value(sv, i, "explode_part")
                         .unwrap();
-                    self.explode_to_scalar_leaves(field)
+                    self.explode_to_parts(field)
                 })
                 .collect(),
             _ => vec![val],
         }
     }
 
-    // Reassemble a value of `ty` from a leaf-scalar iterator produced in `flatten_to_scalar_leaves`
-    // order, emitting an `insertvalue` per struct field. The inverse of `explode_to_scalar_leaves`.
-    // A zero-sized type consumes no leaf and is rebuilt as `undef`.
-    pub fn assemble_from_scalar_leaves(
+    // Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
+    // `insertvalue` per struct field. The inverse of `explode_to_parts`. A zero-sized type consumes
+    // no part and is rebuilt as `undef`; a grouped type consumes the one part that is its value.
+    pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
-        leaves: &mut impl Iterator<Item = BasicValueEnum<'c>>,
+        parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
             return Self::get_undef(&ty);
         }
         match ty {
-            BasicTypeEnum::StructType(st) => {
+            BasicTypeEnum::StructType(st) if !self.is_grouped(ty) => {
                 let mut val = st.get_undef();
                 for i in 0..st.count_fields() {
                     let field_ty = st.get_field_type_at_index(i).unwrap();
-                    let field = self.assemble_from_scalar_leaves(field_ty, leaves);
+                    let field = self.assemble_from_parts(field_ty, parts);
                     val = self
                         .builder()
-                        .build_insert_value(val, field, i, "assemble_leaf")
+                        .build_insert_value(val, field, i, "assemble_part")
                         .unwrap()
                         .into_struct_value();
                 }
                 val.as_basic_value_enum()
             }
-            _ => leaves
-                .next()
-                .expect("too few leaf scalars to assemble the value"),
+            _ => parts.next().expect("too few parts to assemble the value"),
         }
     }
 
-    // Merge objects of one type across predecessor edges as one scalar phi per leaf, rather than as a
-    // single aggregate phi. LLVM's value analyses see through the scalar phis where they cannot see
+    // Merge objects of one type across predecessor edges as one phi per part, rather than as a
+    // single aggregate phi. LLVM's value analyses see through the per-part phis where they cannot see
     // through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed this way lets
-    // the bounds check fold and the loop vectorize. Each incoming object holds its leaves directly, so
-    // no aggregate is ever formed here. Every incoming's leaves must be available on its edge (defined
+    // the bounds check fold and the loop vectorize. Each incoming object holds its parts directly, so
+    // no aggregate is ever formed here. Every incoming's parts must be available on its edge (defined
     // in, or dominating, its predecessor block), and every predecessor must already have its
     // terminator; the phis are placed at the current insert block.
     //
-    // A zero-sized leaf (an empty union's `[0 x i8]` payload) never reaches here: `leaves()` excludes
-    // it, since `explode_to_scalar_leaves` drops it. So no per-leaf phi is ever a zero-sized one
-    // (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no leaves and merges
+    // A zero-sized part (an empty union's `[0 x i8]` payload) never reaches here: `parts()` excludes
+    // it, since `explode_to_parts` drops it. So no per-part phi is ever a zero-sized one
+    // (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no part and merges
     // to an empty object with no phi at all — the zero-sized part is rebuilt on materialization.
     pub fn build_object_phi(
         &mut self,
@@ -1417,37 +1475,37 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &str,
     ) -> Object<'c> {
         let ty = incomings[0].0.ty.clone();
-        let leaf_count = incomings[0].0.leaves().len();
-        // Every incoming merges an object of the same type, so their leaves line up one-to-one.
+        let part_count = incomings[0].0.parts().len();
+        // Every incoming merges an object of the same type, so their parts line up one-to-one.
         // Checked under develop mode (the unit tests).
         if self.config.develop_mode {
             for (obj, _) in incomings {
                 assert_eq!(obj.ty, ty, "build_object_phi incomings must share one type");
                 assert_eq!(
-                    obj.leaves().len(),
-                    leaf_count,
-                    "build_object_phi incomings must share one leaf count"
+                    obj.parts().len(),
+                    part_count,
+                    "build_object_phi incomings must share one part count"
                 );
             }
         }
-        // One scalar phi per leaf, built consecutively so the block's phis stay contiguous at its top.
-        let leaf_phis: Vec<BasicValueEnum<'c>> = (0..leaf_count)
+        // One phi per part, built consecutively so the block's phis stay contiguous at its top.
+        let part_phis: Vec<BasicValueEnum<'c>> = (0..part_count)
             .map(|j| {
-                let lty = incomings[0].0.leaves()[j].get_type();
+                let lty = incomings[0].0.parts()[j].get_type();
                 let phi = self.builder().build_phi(lty, name).unwrap();
                 for (obj, bb) in incomings {
-                    phi.add_incoming(&[(&obj.leaves()[j], *bb)]);
+                    phi.add_incoming(&[(&obj.parts()[j], *bb)]);
                 }
                 phi.as_basic_value()
             })
             .collect();
-        Object::from_leaves(leaf_phis, ty, self)
+        Object::from_parts(part_phis, ty, self)
     }
 
     // Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
-    // object is passed as its flat leaf scalars rather than as one aggregate (see
-    // `lambda_function_type`), so no aggregate is materialized across the call; `build_body` emits
-    // the retain / release / mark work on the object reassembled from those leaves inside the helper.
+    // object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so no
+    // aggregate is materialized across the call; `build_body` emits the retain / release / mark work
+    // on the object reassembled from those parts inside the helper.
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -1460,8 +1518,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             func
         } else {
             let embedded = obj.ty.get_embedded_type(self);
-            let leaf_tys = self.flatten_to_scalar_leaves(embedded);
-            let param_tys = leaf_tys
+            let part_tys = self.type_parts(embedded);
+            let param_tys = part_tys
                 .iter()
                 .map(|t| (*t).into())
                 .collect::<Vec<BasicMetadataTypeEnum>>();
@@ -1473,16 +1531,16 @@ impl<'c, 'm> Generator<'c, 'm> {
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let leaves = (0..leaf_tys.len())
+            let parts = (0..part_tys.len())
                 .map(|i| func.get_nth_param(i as u32).unwrap())
                 .collect::<Vec<_>>();
-            let obj = Object::from_leaves(leaves, obj.ty.clone(), self);
+            let obj = Object::from_parts(parts, obj.ty.clone(), self);
             build_body(self, obj);
             self.builder().build_return(None).unwrap();
             func
         };
 
-        let args = obj.leaf_call_args();
+        let args = obj.part_call_args();
         self.builder().build_call(func, &args, call_name).unwrap();
     }
 
@@ -1494,7 +1552,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
-    // Retain an object `amount` times: every boxed leaf reached has its reference count increased by
+    // Retain an object `amount` times: every boxed value reached has its reference count increased by
     // `amount` (an i64 count). Passing a constant 1 reproduces an ordinary single retain exactly, so
     // single-retain call sites stay byte-identical.
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>) {
@@ -1738,8 +1796,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             // Unboxed case (inlude lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work)) {
                 Some(trav) => {
-                    // Pass the object as its flat leaf scalars, matching `traverser_type`.
-                    let args = obj.leaf_call_args();
+                    // Pass the object as its parts, matching `traverser_type`.
+                    let args = obj.part_call_args();
                     self.builder()
                         .build_call(trav, &args, "call_traverser_of_unboxed")
                         .unwrap();
@@ -2062,40 +2120,40 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Return `obj` from the current function under the scalarized return ABI (see
-    // `lambda_function_type`): its leaves are packed into the flat return value — `void` for none, the
-    // bare scalar for one, a flat struct built with one `insertvalue` per leaf for several. Leaves
-    // too wide for the return registers are stored through the function's out-pointer instead.
+    // Return `obj` from the current function under the split return ABI (see
+    // `lambda_function_type`): its parts are packed into the flat return value — `void` for none, the
+    // bare part for one, a flat struct built with one `insertvalue` per part for several. Parts too
+    // wide for the return registers are stored through the function's out-pointer instead.
     pub fn build_return_object(&mut self, obj: Object<'c>) {
-        let leaves: Vec<BasicValueEnum<'c>> = obj.leaves().to_vec();
-        let leaf_tys: Vec<BasicTypeEnum<'c>> = leaves.iter().map(|l| l.get_type()).collect();
-        if self.returns_through_out_pointer(&leaf_tys) {
+        let parts: Vec<BasicValueEnum<'c>> = obj.parts().to_vec();
+        let part_tys: Vec<BasicTypeEnum<'c>> = parts.iter().map(|p| p.get_type()).collect();
+        if self.returns_through_out_pointer(&part_tys) {
             let out_ptr = self.own_out_pointer();
-            let buf_ty = self.out_pointer_buffer_type(&obj.ty, &leaf_tys);
-            for (i, leaf) in leaves.iter().enumerate() {
-                let leaf_ptr = self
+            let buf_ty = self.out_pointer_buffer_type(&obj.ty, &part_tys);
+            for (i, part) in parts.iter().enumerate() {
+                let part_ptr = self
                     .builder()
-                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_leaf_ptr")
+                    .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
-                self.builder().build_store(leaf_ptr, *leaf).unwrap();
+                self.builder().build_store(part_ptr, *part).unwrap();
             }
             self.builder().build_return(None).unwrap();
             return;
         }
-        match leaves.len() {
+        match parts.len() {
             0 => {
                 self.builder().build_return(None).unwrap();
             }
             1 => {
-                self.builder().build_return(Some(&leaves[0])).unwrap();
+                self.builder().build_return(Some(&parts[0])).unwrap();
             }
             _ => {
-                let struct_ty = self.context.struct_type(&leaf_tys, false);
+                let struct_ty = self.context.struct_type(&part_tys, false);
                 let mut val = struct_ty.get_undef();
-                for (i, leaf) in leaves.iter().enumerate() {
+                for (i, part) in parts.iter().enumerate() {
                     val = self
                         .builder()
-                        .build_insert_value(val, *leaf, i as u32, "pack_return")
+                        .build_insert_value(val, *part, i as u32, "pack_return")
                         .unwrap()
                         .into_struct_value();
                 }
@@ -2104,26 +2162,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Reconstruct the object a call returns under the scalarized return ABI: a `void` result carries
-    // no leaves, a scalar result one leaf, a flat struct its fields. The inverse of
+    // Reconstruct the object a call returns under the split return ABI: a `void` result carries no
+    // part, a single part is the result itself, and several are the fields of the flat struct it
+    // returned. Which of the three applies follows from the return type's part count, since a
+    // single part is a struct of its own where the type is too wide to split. The inverse of
     // `build_return_object`.
     pub fn unpack_return(
         &mut self,
         call_result: Option<BasicValueEnum<'c>>,
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
-        let leaves: Vec<BasicValueEnum<'c>> = match call_result {
+        let embedded = ret_ty.get_embedded_type(self);
+        let parts: Vec<BasicValueEnum<'c>> = match call_result {
             None => vec![],
-            Some(BasicValueEnum::StructValue(sv)) => (0..sv.get_type().count_fields())
-                .map(|i| {
-                    self.builder()
-                        .build_extract_value(sv, i, "unpack_return")
-                        .unwrap()
-                })
-                .collect(),
-            Some(v) => vec![v],
+            Some(packed) if self.part_count(embedded) == 1 => vec![packed],
+            Some(packed) => {
+                let packed = packed.into_struct_value();
+                (0..packed.get_type().count_fields())
+                    .map(|i| {
+                        self.builder()
+                            .build_extract_value(packed, i, "unpack_return")
+                            .unwrap()
+                    })
+                    .collect()
+            }
         };
-        Object::from_leaves(leaves, ret_ty, self)
+        Object::from_parts(parts, ret_ty, self)
     }
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.

@@ -1028,7 +1028,7 @@ impl ObjectFieldType {
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
         let mut ret = vec![];
         for field_idx in field_indices {
-            // Move the field out as an object; it carries its own leaves, so it outlives the struct.
+            // Move the field out as an object; it carries its own parts, so it outlives the struct.
             let field = ObjectFieldType::move_out_struct_field(gc, str, *field_idx);
             ret.push(field);
         }
@@ -1215,13 +1215,13 @@ pub fn traverser_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     is_dynamic: bool,
 ) -> FunctionType<'c> {
-    // The object is passed as its flat leaf scalars, mirroring `lambda_function_type`: a boxed
-    // object is a single pointer leaf, an unbox struct is its leaf fields spread out. This keeps the
-    // "materialize the aggregate only at memory / foreign-ABI boundaries" invariant intact across
-    // the release / mark path.
+    // The object is passed as its parts, mirroring `lambda_function_type`: a boxed object is a
+    // single pointer, an unbox struct is its fields spread out. This keeps the "materialize the
+    // aggregate only at memory / foreign-ABI boundaries" invariant intact across the release / mark
+    // path.
     let embedded = ty.get_embedded_type(gc);
     let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = gc
-        .flatten_to_scalar_leaves(embedded)
+        .type_parts(embedded)
         .into_iter()
         .map(|t| t.into())
         .collect();
@@ -1311,10 +1311,10 @@ pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-/// The scalar leaves a lambda of type `ty` returns, in `flatten_to_scalar_leaves` order: a boxed
-/// result is the single heap pointer, an unboxed one its flattened leaves. These are exactly the
-/// leaves of the `Object` the lambda's body returns, so a call site and a `return` agree on them.
-pub fn lambda_return_leaf_types<'c, 'm>(
+/// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single
+/// heap pointer, an unboxed one its parts. These are exactly the parts of the `Object` the lambda's
+/// body returns, so a call site and a `return` agree on them.
+pub fn lambda_return_part_types<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
 ) -> Vec<BasicTypeEnum<'c>> {
@@ -1323,7 +1323,7 @@ pub fn lambda_return_leaf_types<'c, 'm>(
         return vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
     }
     let embedded = ret_ty.get_embedded_type(gc);
-    gc.flatten_to_scalar_leaves(embedded)
+    gc.type_parts(embedded)
 }
 
 /// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
@@ -1333,14 +1333,14 @@ pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
 ) -> FunctionType<'c> {
-    // Arguments. An unbox-struct argument is passed as its flat leaf scalars rather than as one
-    // aggregate, so a loop-carried field stays visible to LLVM (see `flatten_to_scalar_leaves`).
+    // Arguments. An unbox-struct argument is passed as its parts rather than as one aggregate, so a
+    // loop-carried field stays visible to LLVM (see `type_parts`).
     let mut arg_tys: Vec<BasicMetadataTypeEnum> = ty
         .get_lambda_srcs()
         .iter()
         .flat_map(|src| {
             let embedded = src.get_embedded_type(gc);
-            gc.flatten_to_scalar_leaves(embedded)
+            gc.type_parts(embedded)
         })
         .map(|t| t.into())
         .collect::<Vec<_>>();
@@ -1354,20 +1354,20 @@ pub fn lambda_function_type<'c, 'm>(
     // precedes every other parameter, and the function returns `void`. Carrying the pointer as an
     // ordinary parameter is what keeps the function's tail calls turning into jumps; see
     // `return_abi`.
-    let ret_leaf_tys = lambda_return_leaf_types(ty, gc);
-    if gc.returns_through_out_pointer(&ret_leaf_tys) {
+    let ret_part_tys = lambda_return_part_types(ty, gc);
+    if gc.returns_through_out_pointer(&ret_part_tys) {
         let mut param_tys: Vec<BasicMetadataTypeEnum> =
             vec![gc.context.ptr_type(AddressSpace::from(0)).into()];
         param_tys.extend(arg_tys);
         return gc.context.void_type().fn_type(&param_tys, false);
     }
 
-    // Otherwise the result is returned as its flat leaf scalars, mirroring how the arguments are
-    // passed (see `flatten_to_scalar_leaves`): no leaves returns `void`, a single leaf is returned
-    // bare, and several leaves are returned as a flat struct `{ leaf, ... }`. A later pass that
-    // decomposes the return value at a control-flow merge then yields one scalar phi per leaf
-    // instead of an aggregate phi, keeping a loop-carried field visible to LLVM.
-    match ret_leaf_tys.as_slice() {
+    // Otherwise the result is returned as its parts, mirroring how the arguments are passed (see
+    // `type_parts`): no part returns `void`, a single part is returned bare, and several parts are
+    // returned as a flat struct `{ part, ... }`. A later pass that splits the return value at a
+    // control-flow merge then yields one phi per part instead of an aggregate phi, keeping a
+    // loop-carried field visible to LLVM.
+    match ret_part_tys.as_slice() {
         [] => gc.context.void_type().fn_type(&arg_tys, false),
         [single] => single.fn_type(&arg_tys, false),
         many => gc.context.struct_type(many, false).fn_type(&arg_tys, false),
@@ -2077,15 +2077,15 @@ pub fn create_traverser<'c, 'm>(
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Reassemble the object from its leaf parameters (see `traverser_type`).
-    let leaf_count = {
+    // Reassemble the object from its part parameters (see `traverser_type`).
+    let part_count = {
         let embedded = ty.get_embedded_type(gc);
-        gc.scalar_leaf_count(embedded)
+        gc.part_count(embedded)
     };
-    let leaves = (0..leaf_count)
+    let parts = (0..part_count)
         .map(|i| func.get_nth_param(i as u32).unwrap())
         .collect::<Vec<_>>();
-    let obj = Object::from_leaves(leaves, ty.clone(), gc);
+    let obj = Object::from_parts(parts, ty.clone(), gc);
 
     match work {
         Some(work) => {
@@ -2096,9 +2096,9 @@ pub fn create_traverser<'c, 'm>(
         None => {
             // Dynamic traverser case.
 
-            // The work-type argument follows the object's leaf parameters.
+            // The work-type argument follows the object's part parameters.
             let work = func
-                .get_nth_param(leaf_count as u32)
+                .get_nth_param(part_count as u32)
                 .unwrap()
                 .into_int_value();
 

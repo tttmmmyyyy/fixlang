@@ -143,6 +143,16 @@ pub const ARRAY_STORAGE_ALLOC_SLACK: u64 = ARRAY_BUF_ALIGNMENT - 1;
 // alignment costs, and such arrays are numerous enough that those bytes show up on their own.
 pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
 
+// The most scalars an unboxed value is split into and carried as separate LLVM values. A type
+// holding more than this many stays one aggregate wherever it is carried.
+//
+// Splitting is what keeps a loop-carried field visible to LLVM (see `Generator::type_parts`), and
+// the widest type in the benchmark suite holds 21 scalars, the widest across the minilib libraries
+// 37, so this is well above what real code splits. Above it the count is what matters: a value of
+// 4096 scalars costs one LLVM value per scalar at every function boundary it crosses, and the
+// backend's per-block work grows faster than the count.
+pub const MAX_SPLIT_SCALARS: usize = 128;
+
 // The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
 pub const BOOL_FALSE_TAG: usize = 0;
 pub const BOOL_TRUE_TAG: usize = 1;

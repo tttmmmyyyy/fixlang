@@ -16,7 +16,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_part_types, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
@@ -83,23 +83,23 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         let _scope_guard = self.push_scope();
 
-        // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`), which are
-        // exactly an object's leaves and become its `Object` directly. The CAP pointer follows all
+        // Each parameter arrives as its parts (see `lambda_function_type`), which are exactly an
+        // object's parts and become its `Object` directly. The CAP pointer follows all
         // of them, and the out-pointer of a wide result precedes them.
-        let ret_leaf_tys = lambda_return_leaf_types(&func.fn_ty, self);
-        let mut next_param = if self.returns_through_out_pointer(&ret_leaf_tys) {
+        let ret_part_tys = lambda_return_part_types(&func.fn_ty, self);
+        let mut next_param = if self.returns_through_out_pointer(&ret_part_tys) {
             1u32
         } else {
             0u32
         };
         for param in func.params.iter() {
             let embedded = param.ty.get_embedded_type(self);
-            let leaf_count = self.flatten_to_scalar_leaves(embedded).len() as u32;
-            let leaf_vals: Vec<_> = (0..leaf_count)
+            let part_count = self.type_parts(embedded).len() as u32;
+            let part_vals: Vec<_> = (0..part_count)
                 .map(|k| fn_val.get_nth_param(next_param + k).unwrap())
                 .collect();
-            next_param += leaf_count;
-            let obj = Object::from_leaves(leaf_vals, param.ty.clone(), self);
+            next_param += part_count;
+            let obj = Object::from_parts(part_vals, param.ty.clone(), self);
             self.scope_push(&param.name, &obj);
         }
         if let Some(cap) = &func.capture {
@@ -108,7 +108,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_push(&cap.name, &obj);
         }
 
-        // The flattened parameters consumed here must exhaust the function's parameters: the leaf
+        // The parameters consumed here must exhaust the function's parameters: the part
         // scalars of every argument, plus the capture pointer for a closure. A mismatch means the
         // call site (`apply_lambda`) and the signature (`lambda_function_type`) disagree on the
         // flattening. Checked under develop mode (the unit tests).
