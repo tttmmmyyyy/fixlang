@@ -18,6 +18,7 @@
 //! resolved layer (`Locality`, `LocalityKey`) is what a condition becomes once the inputs are
 //! concrete — inside a clone specialized on them.
 
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
@@ -453,6 +454,13 @@ struct Walk<'a> {
     mode: Mode<'a>,
 }
 
+/// What the walk replaces in a `let`'s right-hand side: a call's callee, routed to a clone, or an
+/// operation, annotated as acting on local objects.
+enum Rewritten {
+    Callee(RcVar),
+    Op(Box<dyn LLVMGen>),
+}
+
 /// What a walk does besides computing shapes.
 enum Mode<'a> {
     /// Compute shapes, leaving the body as it is, and collect what the clone gate asks: whether some
@@ -507,9 +515,13 @@ impl<'a> Walk<'a> {
                 let (shape, k) = self.walk(k);
                 let rebuilt = || {
                     let rhs = match routed {
-                        Some(callee) => match rhs {
+                        Some(Rewritten::Callee(callee)) => match rhs {
                             RcRhs::App(_, args) => RcRhs::App(callee, args.clone()),
                             _ => unreachable!("only a call is routed to another function"),
+                        },
+                        Some(Rewritten::Op(op)) => match rhs {
+                            RcRhs::Llvm(_, args) => RcRhs::Llvm(op, args.clone()),
+                            _ => unreachable!("only an operation is annotated in place"),
                         },
                         None => rhs.clone(),
                     };
@@ -568,16 +580,16 @@ impl<'a> Walk<'a> {
     }
 
     /// The shape of a `let`'s right-hand side (`Match` excepted, which the caller handles for the
-    /// payload bindings its arms make), and the callee a call is routed to. Only a call is ever
-    /// rewritten, so every other right-hand side answers `None` and the caller carries it over.
-    fn walk_rhs(&mut self, result: &RcVar, rhs: &RcRhs) -> (ExtShape, Option<RcVar>) {
+    /// payload bindings its arms make), and what the right-hand side is rewritten to, if anything.
+    fn walk_rhs(&mut self, result: &RcVar, rhs: &RcRhs) -> (ExtShape, Option<Rewritten>) {
         match rhs {
             RcRhs::Var(y) => (self.shape_of(y), None),
             RcRhs::Llvm(llvm_gen, args) => {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let declared = llvm_gen.locality_flow(&result.ty, &arg_tys, self.type_env);
-                (declared.substitute(&arg_shapes), None)
+                let op = self.annotate_op(llvm_gen, &arg_tys, &arg_shapes);
+                (declared.substitute(&arg_shapes), op.map(Rewritten::Op))
             }
             RcRhs::Closure(_, caps) => {
                 // `{funptr, capture}`: the capture object is freshly allocated, so its root is
@@ -595,7 +607,10 @@ impl<'a> Walk<'a> {
                 );
                 (shape, None)
             }
-            RcRhs::App(callee, args) => self.walk_app(result, callee, args),
+            RcRhs::App(callee, args) => {
+                let (shape, callee) = self.walk_app(result, callee, args);
+                (shape, callee.map(Rewritten::Callee))
+            }
             RcRhs::Match(..) => {
                 unreachable!("a Match rhs is handled by walk_inner for the bindings its arms make")
             }
@@ -703,6 +718,26 @@ impl<'a> Walk<'a> {
                 .fold(Locality::DeepLocal, Locality::join)
                 .annotation(),
         }
+    }
+
+    /// The operation with its declared uniqueness check annotated, where this clone's inputs make
+    /// the checked object local. The annotation covers only the check `unique_check_operand`
+    /// declares; a check the same `generate` emits without declaring keeps reading the state.
+    fn annotate_op(
+        &self,
+        llvm_gen: &Box<dyn LLVMGen>,
+        arg_tys: &[Arc<TypeNode>],
+        arg_shapes: &[ExtShape],
+    ) -> Option<Box<dyn LLVMGen>> {
+        let Mode::Clone { inputs, .. } = &self.mode else {
+            return None;
+        };
+        let check = llvm_gen.unique_check_operand(arg_tys, self.type_env)?;
+        let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
+        if leaf.resolve(inputs) == Locality::MayExt {
+            return None;
+        }
+        Some(llvm_gen.assuming_local())
     }
 
     /// Bind the fields a `Destructure` names. Out of a boxed container each field is read by the

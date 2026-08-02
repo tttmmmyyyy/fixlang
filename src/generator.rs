@@ -861,22 +861,23 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    // Build branch by whether or not the reference counter is one.
-    // Returns (unique_bb, shared_bb).
+    /// Branch on whether the object's reference count is one, returning the block for each answer.
+    ///
+    /// A global object is never unique, so the count is read only after the state says the object
+    /// is local. Where `state` says so already, the state is not read and the global case does not
+    /// exist — the check becomes the comparison against one alone.
     pub fn build_branch_by_is_unique(
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
+        state: RcState,
     ) -> (BasicBlock<'c>, BasicBlock<'c>) {
         let current_func = self.current_function();
 
         let unique_bb = self.context.append_basic_block(current_func, "unique_bb");
         let shared_bb = self.context.append_basic_block(current_func, "shared_bb");
 
-        // Branch by refcnt_state. A uniqueness check reads the state whatever is known about it:
-        // eliding it is the business of the annotation on the op that carries the check.
-        let (local_bb, threaded_bb, global_bb) =
-            self.build_branch_by_refcnt_state(obj_ptr, RcState::Unknown);
-        let global_bb = global_bb.expect("the runtime dispatch always has a global case");
+        // Branch by refcnt_state.
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr, state);
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
@@ -943,11 +944,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
 
         // Implement global_bb.
-        self.builder().position_at_end(global_bb);
-        // Jump to shared_bb.
-        self.builder()
-            .build_unconditional_branch(shared_bb)
-            .unwrap();
+        if let Some(global_bb) = global_bb {
+            self.builder().position_at_end(global_bb);
+            // Jump to shared_bb.
+            self.builder()
+                .build_unconditional_branch(shared_bb)
+                .unwrap();
+        }
 
         (unique_bb, shared_bb)
     }
@@ -1679,7 +1682,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
             let obj_ptr = obj.value(self).into_pointer_value();
-            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
+            // The destructor pre-stage of a release still reads the state; annotating it is
+            // separate work.
+            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr, RcState::Unknown);
 
             // If reference counter is one, call destructor.
             self.builder().position_at_end(unique_bb);

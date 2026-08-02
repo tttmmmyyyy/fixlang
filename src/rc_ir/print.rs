@@ -224,8 +224,15 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
             format!("closure {}[{}]", func.name.name.to_string(), operands(caps))
         }
         RcRhs::Llvm(llvm_gen, _args) => {
-            // The op's name spells out its operands, so it is the whole right-hand side here.
-            llvm_gen.name()
+            // The op's name spells out its operands, so it is the whole right-hand side here. A
+            // trailing `@local` says locality inference proved the objects the op's own checks and
+            // reference counting touch to be local.
+            let mark = if llvm_gen.assumes_local() {
+                " @local"
+            } else {
+                ""
+            };
+            format!("{}{}", llvm_gen.name(), mark)
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));

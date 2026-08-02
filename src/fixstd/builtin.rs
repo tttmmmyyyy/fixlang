@@ -1922,6 +1922,9 @@ pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     // When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
     // array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -1932,7 +1935,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
 
         // Force the array to be unique before shrinking it in place.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -1975,6 +1978,16 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2024,6 +2037,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayTruncateBoundsUnchecked {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     len_name: FullName::local(LEN_NAME),
                     force_unique: true,
@@ -2053,6 +2067,9 @@ pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     // When true, clone the array first if it is shared, so the appended slots land in a uniquely
     // owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2066,7 +2083,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
 
         // Force the array to be unique before appending in place.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -2107,6 +2124,16 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2158,6 +2185,7 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
                     Box::new(InlineLLVMArrayAppendValueCapacityUnchecked {
+                        assume_local: false,
                         arr_name: FullName::local(ARR_NAME),
                         value_name: FullName::local(VALUE_NAME),
                         count_name: FullName::local(COUNT_NAME),
@@ -2373,6 +2401,9 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     // retain-copy a shared array's elements. Set false only where the array is statically known to
     // be unique, leaving just the `realloc`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2390,7 +2421,8 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
-        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+        let (unique_bb, shared_bb) =
+            gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
         let current_func = unique_bb.get_parent().unwrap();
         let end_bb = gc
             .context
@@ -2455,6 +2487,16 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2502,6 +2544,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArraySetCapacityBoundsUnchecked {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     cap_name: FullName::local(CAP_NAME),
                     force_unique: true,
@@ -2532,6 +2575,9 @@ pub struct InlineLLVMArrayAppendCapacityBoundsUnchecked {
     // When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
     // array. Set false only where `dst` is statically known to be unique. `src` is read either way.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2549,7 +2595,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
 
         // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
         let dst = if self.force_unique {
-            make_array_unique(gc, dst)
+            make_array_unique(gc, dst, assumed_state(self.assume_local))
         } else {
             dst
         };
@@ -2594,8 +2640,13 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .unwrap();
 
         // Full range: move the elements if `src` is unique, otherwise fall through to the copy.
+        //
+        // This check is not the one `unique_check_operand` declares -- it is emitted whatever
+        // `force_unique` says, because moving the elements instead of retaining them is sound only
+        // for a unique `src`. Nothing proved `src` local, so it reads the state.
         gc.builder().position_at_end(maybe_move_bb);
-        let (src_unique_bb, src_shared_bb) = gc.build_branch_by_is_unique(src_ptr);
+        let (src_unique_bb, src_shared_bb) =
+            gc.build_branch_by_is_unique(src_ptr, RcState::Unknown);
 
         // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
         // without touching the moved-out elements. No reference counting.
@@ -2677,6 +2728,16 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2730,6 +2791,7 @@ pub fn array_append_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) 
         ],
         expr_llvm(
             Box::new(InlineLLVMArrayAppendCapacityBoundsUnchecked {
+                assume_local: false,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 begin_name: FullName::local(BEGIN_NAME),
@@ -2763,6 +2825,9 @@ pub struct InlineLLVMArrayGrowSizeBody {
     // When true, clone the array first if it is shared, so the length grows on a uniquely owned
     // array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2784,7 +2849,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         // Force the array to be unique before growing it in place, so the length is written only on a
         // uniquely owned array.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -2813,6 +2878,16 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -2865,6 +2940,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayGrowSizeBody {
+                    assume_local: false,
                     arr_name,
                     len_name,
                     force_unique: true,
@@ -2889,8 +2965,12 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // Force array object to be unique.
 // If it is unique, do nothing.
 // If it is shared, clone the object.
-fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> Object<'c> {
-    make_array_unique_with_hole(gc, array, None)
+fn make_array_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
+    make_array_unique_with_hole(gc, array, None, state)
 }
 
 // Force array object to be unique: a unique array is returned as it is, and a shared one is cloned.
@@ -2900,6 +2980,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     hole: Option<IntValue<'c>>,
+    state: RcState,
 ) -> Object<'c> {
     assert!(array.ty.is_array());
 
@@ -2909,7 +2990,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let current_func = gc.current_function();
 
     // Branch by whether the storage, which carries the reference count, is unique.
-    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, state);
     let end_bb = gc.context.append_basic_block(current_func, "end_bb");
 
     // Implement shared_bb: allocate a new storage, copy the elements into it, and drop the reference
@@ -2956,6 +3037,9 @@ pub struct InlineLLVMArraySetBody {
     // When true, panic if `idx` is out of range (unless `--no-runtime-check`). `set` sets this;
     // `unsafe_set_bounds_unchecked` clears it. Fixed at registration, not folded.
     bounds_checked: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2968,7 +3052,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
         // Force array to be unique
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -3019,6 +3103,16 @@ impl LLVMGen for InlineLLVMArraySetBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -3053,6 +3147,7 @@ fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_llvm(
         Box::new(InlineLLVMArraySetBody {
+            assume_local: false,
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
@@ -3103,6 +3198,9 @@ pub struct InlineLLVMArraySwapBody {
     pub(crate) force_unique: bool,
     // When true, panic if `i` or `j` is out of range.
     bounds_checked: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -3115,7 +3213,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 
         // Force array to be unique.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -3171,6 +3269,16 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -3203,6 +3311,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_llvm(
         Box::new(InlineLLVMArraySwapBody {
+            assume_local: false,
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
             j_name: FullName::local("j"),
@@ -3249,6 +3358,9 @@ pub struct InlineLLVMArrayPunchBody {
     pub(crate) force_unique: bool,
     idx_name: FullName,
     arr_name: FullName,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -3261,7 +3373,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
         if self.force_unique {
-            array = make_array_unique(gc, array);
+            array = make_array_unique(gc, array, assumed_state(self.assume_local));
         }
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
@@ -3303,6 +3415,16 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3374,6 +3496,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMArrayPunchBody {
+                assume_local: false,
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
                 arr_name: FullName::local(ARR_NAME),
@@ -3396,6 +3519,9 @@ pub struct InlineLLVMPunchedArrayPlugBody {
     pub(crate) force_unique: bool,
     elem_name: FullName,
     punched_name: FullName,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -3411,7 +3537,8 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
         if self.force_unique {
-            array = make_array_unique_with_hole(gc, array, Some(idx));
+            array =
+                make_array_unique_with_hole(gc, array, Some(idx), assumed_state(self.assume_local));
         }
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
@@ -3442,6 +3569,16 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
             return None;
         }
         unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_FIELD], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3488,6 +3625,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
         expr_llvm(
             Box::new(InlineLLVMPunchedArrayPlugBody {
+                assume_local: false,
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
                 punched_name: FullName::local(PUNCHED_NAME),
@@ -4232,6 +4370,9 @@ pub struct InlineLLVMStructPunchBody {
     pub var_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -4242,7 +4383,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
         if self.force_unique {
             // If the struct is shared, we should clone it to make it unique.
-            str = make_struct_unique(gc, str);
+            str = make_struct_unique(gc, str, assumed_state(self.assume_local));
         }
 
         // Move out struct field value without releasing the struct itself.
@@ -4278,6 +4419,16 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -4416,6 +4567,7 @@ pub fn struct_punch(
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMStructPunchBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
                 force_unique,
@@ -4434,6 +4586,9 @@ pub struct InlineLLVMStructPlugInBody {
     pub field_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -4449,7 +4604,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
         // Make the punched struct unique before plugging-in the field value.
         if self.force_unique {
-            punched_str = make_struct_unique(gc, punched_str);
+            punched_str = make_struct_unique(gc, punched_str, assumed_state(self.assume_local));
         }
 
         // Convert type of punched_str into the struct type.
@@ -4485,6 +4640,16 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
             return None;
         }
         unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -4628,6 +4793,7 @@ pub fn struct_plug_in(
             vec![var_local(FIELD_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMStructPlugInBody {
+                    assume_local: false,
                     punched_str_name: FullName::local(PUNCHED_STR_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
@@ -5326,14 +5492,22 @@ pub fn struct_act_const(
 // Make struct object unique.
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.
-fn make_struct_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, str: Object<'c>) -> Object<'c> {
-    make_struct_union_unique(gc, str)
+fn make_struct_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    str: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
+    make_struct_union_unique(gc, str, state)
 }
 
 // Make struct / union object unique.
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.
-fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<'c>) -> Object<'c> {
+fn make_struct_union_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    mut obj: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
     assert!(obj.ty.is_union(gc.type_env()) || obj.ty.is_struct(gc.type_env()));
 
     let is_unbox = obj.ty.is_unbox(gc.type_env());
@@ -5345,7 +5519,7 @@ fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<
 
     // Branch by if refcnt is one.
     let obj_ptr = obj.value(gc).into_pointer_value();
-    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr, state);
     let end_bb = gc
         .context
         .append_basic_block(unique_bb.get_parent().unwrap(), "end_bb");
@@ -5398,6 +5572,9 @@ pub struct InlineLLVMStructSetBody {
     // When true, clone the struct first if it is shared, so the write lands in a uniquely owned
     // struct. Set false only where the struct is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -5409,7 +5586,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
 
         // Make struct object unique.
         let str = if self.force_unique {
-            make_struct_unique(gc, str)
+            make_struct_unique(gc, str, assumed_state(self.assume_local))
         } else {
             str
         };
@@ -5445,6 +5622,16 @@ impl LLVMGen for InlineLLVMStructSetBody {
             return None;
         }
         unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -5513,6 +5700,7 @@ pub fn struct_set(
             vec![var_local(STRUCT_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMStructSetBody {
+                    assume_local: false,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
                     field_count,
@@ -6360,6 +6548,9 @@ pub struct InlineLLVMIsUniqueFunctionBody {
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
     /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
     pub(crate) assume_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 /// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
@@ -6393,7 +6584,8 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+            let (unique_bb, shared_bb) =
+                gc.build_branch_by_is_unique(obj_ptr, assumed_state(self.assume_local));
             // Add continuing basic block.
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
@@ -6446,6 +6638,16 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             return None;
         }
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -6518,6 +6720,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMIsUniqueFunctionBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -6542,6 +6745,9 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
     /// As in `InlineLLVMIsUniqueFunctionBody`: set where the caller proved the array statically
     /// unique, so the runtime check is dropped and the flag is the constant `true`.
     pub(crate) assume_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -6571,7 +6777,8 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
                 .into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+            let (unique_bb, shared_bb) =
+                gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
             gc.builder().position_at_end(unique_bb);
@@ -6622,6 +6829,16 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             return None;
         }
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -6679,6 +6896,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMArrayIsStorageUniqueBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -7200,6 +7418,9 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
     /// one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -7213,7 +7434,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique);
+        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -7254,6 +7475,16 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
             return None;
         }
         unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -7334,20 +7565,31 @@ fn mutated_in_place_locality(
     })
 }
 
+/// The reference-counting state an op's own checks and reference counting run under: `Local` where
+/// locality inference proved the objects they touch local, `Unknown` otherwise.
+fn assumed_state(assume_local: bool) -> RcState {
+    if assume_local {
+        RcState::Local
+    } else {
+        RcState::Unknown
+    }
+}
+
 /// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
 /// nothing when `force_unique` is false, which is set only where the value is known to be unique.
 fn force_unique_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
     force_unique: bool,
+    state: RcState,
 ) -> Object<'c> {
     if !force_unique {
         return val;
     }
     if val.ty.is_array() {
-        make_array_unique(gc, val)
+        make_array_unique(gc, val, state)
     } else {
-        make_struct_union_unique(gc, val)
+        make_struct_union_unique(gc, val, state)
     }
 }
 
@@ -7375,6 +7617,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(VAL_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
+                    assume_local: false,
                     val_name: FullName::local(VAL_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
                     force_unique: true,
@@ -7396,6 +7639,9 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     iostate_name: FullName,
     /// As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -7410,7 +7656,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique);
+        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -7465,6 +7711,16 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
             return None;
         }
         unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -7540,6 +7796,7 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_llvm(
             Box::new(InlineLLVMUnsafeMutateBoxedIOSInternalBody {
+                assume_local: false,
                 io_act_name: FullName::local(IO_ACT_NAME),
                 val_name: FullName::local(VAL_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
@@ -7654,6 +7911,9 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
     /// As in `InlineLLVMArrayTruncateBoundsUnchecked`: clone the array when shared so the write lands
     /// in a uniquely owned one. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -7665,7 +7925,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -7705,6 +7965,16 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -7761,6 +8031,7 @@ pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayMutateElementsInternalBody {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
                     force_unique: true,
@@ -7782,6 +8053,9 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
     iostate_name: FullName,
     /// As in `InlineLLVMArrayMutateElementsInternalBody`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -7794,7 +8068,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -7848,6 +8122,16 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -7909,6 +8193,7 @@ pub fn array_mutate_elements_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_llvm(
             Box::new(InlineLLVMArrayMutateElementsIosInternalBody {
+                assume_local: false,
                 arr_name: FullName::local(ARR_NAME),
                 io_act_name: FullName::local(IO_ACT_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
