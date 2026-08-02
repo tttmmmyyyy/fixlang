@@ -21,13 +21,13 @@ use std::process::Command;
 /// A sanitized build goes through clang. The instrumentation the code generator inserts calls into
 /// the sanitizer runtime, which ships with clang, and clang is what knows where to find it and how
 /// to link it. Every other build goes through gcc.
-fn c_compiler_command(config: &Configuration) -> Command {
+fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
     match config.sanitizer {
-        Sanitizer::None => Command::new("gcc"),
+        Sanitizer::None => Ok(Command::new("gcc")),
         Sanitizer::Thread => {
-            let mut com = Command::new(clang_path());
+            let mut com = Command::new(clang_path()?);
             com.arg("-fsanitize=thread");
-            com
+            Ok(com)
         }
     }
 }
@@ -39,14 +39,28 @@ fn c_compiler_command(config: &Configuration) -> Command {
 /// LLVM this compiler was built against is what pairs the two: the instrumentation and the runtime
 /// answering it come from one release. A build of this compiler that recorded no LLVM location asks
 /// the path for a clang instead.
-fn clang_path() -> PathBuf {
-    if let Some(prefix) = option_env!("LLVM_SYS_170_PREFIX") {
-        let beside_llvm = Path::new(prefix).join("bin").join("clang");
-        if beside_llvm.exists() {
-            return beside_llvm;
-        }
+fn clang_path() -> Result<PathBuf, Errors> {
+    // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
+    // inkwell's `llvm17-0` feature. Raising one without the other leaves this looking for a prefix
+    // nothing sets, so say so rather than reach for whatever clang the path happens to hold.
+    let Some(prefix) = option_env!("LLVM_SYS_170_PREFIX") else {
+        return Err(Errors::from_msg(
+            "This compiler was built without recording where its LLVM lives, so the clang a \
+             sanitized build needs cannot be found. Build it with `LLVM_SYS_170_PREFIX` set."
+                .to_string(),
+        ));
+    };
+    let beside_llvm = Path::new(prefix).join("bin").join("clang");
+    if !beside_llvm.exists() {
+        return Err(Errors::from_msg(format!(
+            "A sanitized build is compiled and linked by the clang beside the LLVM this compiler \
+             was built against, and there is none at `{}`. The sanitizer runtime the \
+             instrumentation calls into is distributed with clang, so the two have to come from \
+             one release.",
+            beside_llvm.display()
+        )));
     }
-    PathBuf::from("clang")
+    Ok(beside_llvm)
 }
 
 /// Runs a prepared C compiler command, passing on what it writes to standard error and reporting a
@@ -151,7 +165,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
             runtime_c_path.to_string_lossy().to_string()
         ));
         // Create library object file.
-        let mut com = c_compiler_command(&config);
+        let mut com = c_compiler_command(&config)?;
         let mut com = com.arg("-ffunction-sections").arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
@@ -178,7 +192,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         ));
     }
 
-    let mut com = c_compiler_command(&config);
+    let mut com = c_compiler_command(&config)?;
     com.arg("-Wno-unused-command-line-argument");
     if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         com.arg("-shared");

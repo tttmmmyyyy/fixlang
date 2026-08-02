@@ -153,6 +153,17 @@ impl Sanitizer {
         }
     }
 
+    /// Whether this platform can build and run a program instrumented with this sanitizer.
+    ///
+    /// The instrumented program needs the sanitizer runtime that ships with clang, and the layout
+    /// it maps its shadow memory into. Linux is where that has been put to work here.
+    pub fn platform_supported(&self) -> bool {
+        match self {
+            Sanitizer::None => true,
+            Sanitizer::Thread => platform_thread_sanitizer_supported(),
+        }
+    }
+
     /// Reads the value a `sanitize` setting names, or reports the names there are.
     pub fn from_str(name: &str) -> Result<Sanitizer, Errors> {
         match name {
@@ -854,7 +865,7 @@ impl Configuration {
     /// test that wants the instrumentation asks `platform_thread_sanitizer_supported` first and
     /// says that it skipped.
     pub fn set_sanitizer(&mut self, sanitizer: Sanitizer) -> Result<&mut Configuration, Errors> {
-        if sanitizer != Sanitizer::None && !platform_thread_sanitizer_supported() {
+        if !sanitizer.platform_supported() {
             return Err(Errors::from_msg(format!(
                 "The `{}` sanitizer is not available on this platform.",
                 sanitizer
