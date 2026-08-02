@@ -107,7 +107,7 @@ pub enum RcExpr {
     /// whole-container extraction. Representing the whole destructure as one node (rather than
     /// per-field getters) lets that retain be decided once, from the container's liveness after the
     /// destructure, and placed before the extraction.
-    Destructure(RcVar, Vec<(usize, RcVar)>, RcExprNode),
+    Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
     /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
@@ -135,8 +135,8 @@ pub struct UniqueCheckOperand {
     pub path: FieldPath,
 }
 
-/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, and the arm
-/// body, whose value is its final `Ret`. `tag` is `Some` for a variant arm, whose payload is that
+/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
+/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`. `tag` is `Some` for a variant arm, whose payload is that
 /// variant's value; it is `None` for a catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
@@ -144,6 +144,9 @@ pub struct UniqueCheckOperand {
 pub struct MatchArm {
     pub tag: Option<usize>,
     pub payload: RcVar,
+    /// What is known about the payload a variant arm of a boxed union retains out of the container.
+    /// A catch-all arm binds the scrutinee itself and retains nothing, so its state is `Unknown`.
+    pub payload_state: RcState,
     pub body: RcExprNode,
 }
 

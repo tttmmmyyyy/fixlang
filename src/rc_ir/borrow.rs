@@ -354,7 +354,7 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
         | RcExpr::Eval(_, k) => mark_tail(k, in_tail, out),
         RcExpr::Ret(_) => {}
     }
@@ -458,6 +458,7 @@ impl<'a> RewriteCtx<'a> {
                 let arms = arms
                     .iter()
                     .map(|arm| MatchArm {
+                        payload_state: arm.payload_state,
                         tag: arm.tag,
                         payload: arm.payload.clone(),
                         body: self.rewrite(&arm.body),
@@ -482,8 +483,8 @@ impl<'a> RewriteCtx<'a> {
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, &node.source)
             }
-            RcExpr::Destructure(container, fields, k) => expr_node(
-                RcExpr::Destructure(container.clone(), fields.clone(), self.rewrite(k)),
+            RcExpr::Destructure(container, fields, state, k) => expr_node(
+                RcExpr::Destructure(container.clone(), fields.clone(), *state, self.rewrite(k)),
                 &node.source,
             ),
             RcExpr::Eval(v, k) => expr_node(RcExpr::Eval(v.clone(), self.rewrite(k)), &node.source),
@@ -677,7 +678,9 @@ fn used_later(name: &FullName, node: &RcExprNode) -> bool {
         RcExpr::Ret(v) => v.name == *name,
         RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
-        RcExpr::Destructure(container, _, k) => container.name == *name || used_later(name, k),
+        RcExpr::Destructure(container, _, _state, k) => {
+            container.name == *name || used_later(name, k)
+        }
         // `Eval` observes its variable, so — unlike the transparent reference-count nodes — it counts
         // as a use.
         RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
@@ -732,6 +735,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: split_body(&arm.body, type_env),
@@ -750,8 +754,13 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => expr_node(
-            RcExpr::Destructure(container.clone(), fields.clone(), split_body(k, type_env)),
+        RcExpr::Destructure(container, fields, state, k) => expr_node(
+            RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                *state,
+                split_body(k, type_env),
+            ),
             &node.source,
         ),
         RcExpr::Eval(v, k) => expr_node(
@@ -943,7 +952,7 @@ impl<'a> CancelAnalysis<'a> {
                 self.consume_rhs(&mut pending, rhs, &x.ty);
                 self.walk(k, pending, returns_from_func)
             }
-            RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container, fields, _state, k) => {
                 for leaf in destructure_consumes(container, fields, self.type_env) {
                     self.consume(&mut pending, &container.name, &leaf);
                 }
@@ -1105,6 +1114,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: drop_nodes(&arm.body, to_delete),
@@ -1123,8 +1133,13 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
             &node.source,
         ),
-        RcExpr::Destructure(container, fields, k) => expr_node(
-            RcExpr::Destructure(container.clone(), fields.clone(), drop_nodes(k, to_delete)),
+        RcExpr::Destructure(container, fields, state, k) => expr_node(
+            RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                *state,
+                drop_nodes(k, to_delete),
+            ),
             &node.source,
         ),
         RcExpr::Eval(v, k) => expr_node(

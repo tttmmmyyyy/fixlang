@@ -1024,6 +1024,7 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         str: &Object<'c>,
         field_indices: &[u32],
+        state: RcState,
     ) -> Vec<Object<'c>> {
         // Collect unretained (but cloned) fields.
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
@@ -1037,9 +1038,9 @@ impl ObjectFieldType {
         if str.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
             for field in &ret {
-                gc.retain(field.clone(), RcState::Unknown);
+                gc.retain(field.clone(), state);
             }
-            gc.release(str.clone(), RcState::Unknown);
+            gc.release(str.clone(), state);
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
@@ -1047,7 +1048,7 @@ impl ObjectFieldType {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
                     let field = ObjectFieldType::move_out_struct_field(gc, str, field_idx);
-                    gc.release(field, RcState::Unknown);
+                    gc.release(field, state);
                 }
             }
         }

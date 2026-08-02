@@ -353,6 +353,21 @@ impl ExtShape {
             .map(|(_, cond)| cond)
     }
 
+    /// The conditions of the boxed leaves that descend through none of `fields` — what a
+    /// `Destructure` of an unboxed container drops rather than hands out.
+    pub fn leaves_outside_fields<'a>(
+        &'a self,
+        fields: &'a [usize],
+    ) -> impl Iterator<Item = &'a LeafCond> {
+        self.0
+            .iter()
+            .filter(move |(path, _)| match path.split_first() {
+                Some((head, _)) => !fields.contains(head),
+                None => true,
+            })
+            .map(|(_, cond)| cond)
+    }
+
     /// Every boxed leaf's condition, in no particular order.
     pub fn leaves(&self) -> impl Iterator<Item = &LeafCond> {
         self.0.values()
@@ -541,10 +556,11 @@ impl<'a> Walk<'a> {
                 let rebuilt = || RcExpr::Release(v.clone(), path.clone(), state, k);
                 (shape, self.rebuild(node, rebuilt))
             }
-            RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container, fields, _, k) => {
+                let state = self.annotate_destructure(container, fields);
                 self.bind_destructured_fields(container, fields);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || RcExpr::Destructure(container.clone(), fields.clone(), k);
+                let rebuilt = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
                 (shape, self.rebuild(node, rebuilt))
             }
             RcExpr::Eval(v, k) => {
@@ -740,6 +756,33 @@ impl<'a> Walk<'a> {
         Some(llvm_gen.assuming_local())
     }
 
+    /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
+    /// a boxed container it releases the container and retains each named field, and the take-out
+    /// rule makes the fields local only where the container is `DeepLocal` — which also covers the
+    /// container's own release. Out of an unboxed container it releases the fields nobody named, so
+    /// every one of those has to be local.
+    fn annotate_destructure(&self, container: &RcVar, fields: &[(usize, RcVar)]) -> RcState {
+        let Mode::Clone { inputs, .. } = &self.mode else {
+            return RcState::Unknown;
+        };
+        let shape = self.shape_of(container);
+        if container.ty.is_box(self.type_env) {
+            return match shape.leaf_at(&[]).resolve(inputs) {
+                Locality::DeepLocal => RcState::Local,
+                _ => RcState::Unknown,
+            };
+        }
+        let named: Vec<usize> = fields.iter().map(|(idx, _)| *idx).collect();
+        let locality = shape
+            .leaves_outside_fields(&named)
+            .map(|leaf| leaf.resolve(inputs))
+            .fold(Locality::DeepLocal, Locality::join);
+        match locality {
+            Locality::MayExt => RcState::Unknown,
+            _ => RcState::Local,
+        }
+    }
+
     /// Bind the fields a `Destructure` names. Out of a boxed container each field is read by the
     /// take-out rule; out of an unboxed one it is the projection of the container's own leaves.
     fn bind_destructured_fields(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
@@ -776,6 +819,19 @@ impl<'a> Walk<'a> {
                 }
                 None => scrut_shape.clone(),
             };
+            // A variant arm of a boxed union retains the payload out of the container, so the
+            // take-out rule decides it: only a `DeepLocal` container hands out a local payload. A
+            // catch-all arm binds the scrutinee itself and retains nothing.
+            let payload_state = match (arm.tag, &self.mode) {
+                (Some(_), Mode::Clone { inputs, .. }) if boxed => {
+                    if scrut_shape.leaf_at(&[]).resolve(inputs) == Locality::DeepLocal {
+                        RcState::Local
+                    } else {
+                        RcState::Unknown
+                    }
+                }
+                _ => RcState::Unknown,
+            };
             self.env.insert(arm.payload.name.clone(), payload_shape);
             let (arm_shape, body) = self.walk(&arm.body);
             joined = Some(match joined {
@@ -785,6 +841,7 @@ impl<'a> Walk<'a> {
             out.push(MatchArm {
                 tag: arm.tag,
                 payload: arm.payload.clone(),
+                payload_state,
                 body,
             });
         }

@@ -546,7 +546,7 @@ impl<'a> Interpreter<'a> {
             // `Eval` only observes its variable; like a release it creates no lasting alias, so the
             // provenance environment is unchanged.
             RcExpr::Release(_, _, _, cont) | RcExpr::Eval(_, cont) => self.interpret(cont, env),
-            RcExpr::Destructure(container, fields, cont) => {
+            RcExpr::Destructure(container, fields, _state, cont) => {
                 // Destructuring a boxed container retains each field out of the shared allocation, so
                 // every field's boxed leaf is `Unknown` (the same read-out-of-a-shared-box rule as a boxed
                 // union's payload in `interpret_match`). An unboxed container's fields carry the tracked

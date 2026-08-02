@@ -21,7 +21,7 @@ use crate::fixstd::builtin::{
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use std::sync::Arc;
 
@@ -191,7 +191,12 @@ impl<'a> Lowerer<'a> {
                     source,
                 },
                 PendingBinding::Destructure(container, fields, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Destructure(container, fields, cont)),
+                    expr: Arc::new(RcExpr::Destructure(
+                        container,
+                        fields,
+                        RcState::Unknown,
+                        cont,
+                    )),
                     source,
                 },
                 PendingBinding::Eval(var, source) => RcExprNode {
@@ -521,11 +526,13 @@ impl<'a> Lowerer<'a> {
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
+            payload_state: RcState::Unknown,
             tag: Some(BOOL_TRUE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
+            payload_state: RcState::Unknown,
             tag: Some(BOOL_FALSE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
             body: self.lower_body(else_expr),
@@ -585,6 +592,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: Some(variant_idx),
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
@@ -599,6 +607,7 @@ impl<'a> Lowerer<'a> {
                 let body = self.lower_body(body);
                 self.unbind(&v.name);
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: None,
                     payload,
                     body,
@@ -616,6 +625,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
+                    payload_state: RcState::Unknown,
                     tag: None,
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),

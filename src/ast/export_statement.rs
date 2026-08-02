@@ -12,6 +12,7 @@ use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
+use crate::rc_ir::ast::RcState;
 use inkwell::attributes::AttributeLoc;
 use inkwell::types::{BasicType, BasicTypeEnum};
 use std::sync::Arc;
@@ -160,7 +161,9 @@ impl ExportStatement {
                 fix_value = run_io(gc, &fix_value);
             }
             IOType::IOState => {
-                fix_value = ObjectFieldType::get_struct_fields(gc, &fix_value, &[1])[0].clone();
+                fix_value =
+                    ObjectFieldType::get_struct_fields(gc, &fix_value, &[1], RcState::Unknown)[0]
+                        .clone();
             }
         }
 

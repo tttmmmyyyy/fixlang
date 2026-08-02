@@ -171,6 +171,7 @@ impl<'a> Specializer<'a> {
                 let arms = arms
                     .iter()
                     .map(|arm| MatchArm {
+                        payload_state: arm.payload_state,
                         tag: arm.tag,
                         payload: arm.payload.clone(),
                         body: self.rewrite_expr(&arm.body, inputs),
@@ -201,9 +202,10 @@ impl<'a> Specializer<'a> {
                 *state,
                 self.rewrite_expr(k, inputs),
             ),
-            RcExpr::Destructure(container, fields, k) => RcExpr::Destructure(
+            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
                 container.clone(),
                 fields.clone(),
+                *state,
                 self.rewrite_expr(k, inputs),
             ),
             RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), self.rewrite_expr(k, inputs)),
@@ -371,7 +373,7 @@ fn collect_callees_and_unique_check(
         }
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
-        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
         | RcExpr::Eval(_, k) => {
             collect_callees_and_unique_check(k, prog, type_env, callees, has_unique_check)
         }

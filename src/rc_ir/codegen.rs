@@ -18,7 +18,7 @@ use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Linkage;
@@ -254,15 +254,19 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.eval_rc_rhs(rhs, &x.ty, func_vals);
                 self.bind_and_continue(x, obj, k, tail, func_vals)
             }
-            RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container, fields, state, k) => {
                 // Extract all fields at once (the container was retained beforehand by a `Retain`
                 // node iff it is used afterward). `get_struct_fields` performs the whole-container
                 // reference counting: a boxed container retains the fields and releases itself, an
                 // unboxed container moves the fields out and releases the fields not named here.
                 let container_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
-                let field_objs =
-                    ObjectFieldType::get_struct_fields(self, &container_obj, &field_indices);
+                let field_objs = ObjectFieldType::get_struct_fields(
+                    self,
+                    &container_obj,
+                    &field_indices,
+                    *state,
+                );
                 // One object per requested index; the pop below walks `fields`, so a shorter list
                 // would leave it popping names this loop never pushed.
                 assert_eq!(
@@ -495,7 +499,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     );
                     if scrut_is_boxed {
                         let one = self.context.i64_type().const_int(1, false);
-                        self.build_retain(value.clone(), one, RcState::Unknown);
+                        self.build_retain(value.clone(), one, arm.payload_state);
                     }
                     value
                 }

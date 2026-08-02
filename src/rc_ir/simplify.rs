@@ -90,6 +90,7 @@ fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcE
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: rewrite(&arm.body, ctx, changed),
@@ -102,9 +103,12 @@ fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcE
             )
         }
         RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, ctx, changed)),
-        RcExpr::Destructure(container, fields, k) => {
-            RcExpr::Destructure(container.clone(), fields.clone(), rewrite(k, ctx, changed))
-        }
+        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
+            container.clone(),
+            fields.clone(),
+            *state,
+            rewrite(k, ctx, changed),
+        ),
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, ctx, changed)),
         RcExpr::Retain(v, path, state, k) => {
             RcExpr::Retain(v.clone(), path.clone(), *state, rewrite(k, ctx, changed))
@@ -158,7 +162,7 @@ fn node_count(node: &RcExprNode) -> u64 {
                 return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
             }
             RcExpr::Let(_, _, k)
-            | RcExpr::Destructure(_, _, k)
+            | RcExpr::Destructure(_, _, _, k)
             | RcExpr::Eval(_, k)
             | RcExpr::Retain(_, _, _, k)
             | RcExpr::Release(_, _, _, k) => k,
@@ -203,7 +207,7 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
         return None;
     };
     gen.as_any().downcast_ref::<InlineLLVMMakeStructBody>()?;
-    let RcExpr::Destructure(container, fields, k2) = k.expr.as_ref() else {
+    let RcExpr::Destructure(container, fields, _, k2) = k.expr.as_ref() else {
         return None;
     };
     if container.name != x.name || count_value_uses(&x.name, k) != 1 {
@@ -254,6 +258,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             substitute_expr(&fresh, &single(&s.name, &produced.name))
         });
         new_arms.push(MatchArm {
+            payload_state: arm.payload_state,
             tag: arm.tag,
             payload: arm.payload.clone(),
             body,
@@ -304,7 +309,7 @@ fn arm_tail_union_tag(body: &RcExprNode) -> Option<usize> {
             let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
             (args.len() == 1).then(|| make.variant_index())
         }
-        RcExpr::Destructure(_, _, k)
+        RcExpr::Destructure(_, _, _, k)
         | RcExpr::Eval(_, k)
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k) => arm_tail_union_tag(k),
@@ -319,8 +324,8 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
     let expr = match node.expr.as_ref() {
         RcExpr::Ret(r) => return f(r),
         RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), replace_tail(k, f)),
-        RcExpr::Destructure(c, fields, k) => {
-            RcExpr::Destructure(c.clone(), fields.clone(), replace_tail(k, f))
+        RcExpr::Destructure(c, fields, state, k) => {
+            RcExpr::Destructure(c.clone(), fields.clone(), *state, replace_tail(k, f))
         }
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
         RcExpr::Retain(v, p, st, k) => {
@@ -344,7 +349,7 @@ fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
         match node.expr.as_ref() {
             RcExpr::Ret(v) => hit(v),
             RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-            RcExpr::Destructure(c, _, k) => hit(c) + count_value_uses(name, k),
+            RcExpr::Destructure(c, _, _state, k) => hit(c) + count_value_uses(name, k),
             RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
             RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
         }

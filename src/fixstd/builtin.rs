@@ -4001,7 +4001,8 @@ impl LLVMGen for InlineLLVMStructGetBody {
             return ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
         }
         let str = gc.get_scoped_obj(&self.var_name);
-        ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
+        ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32], RcState::Unknown)[0]
+            .clone()
     }
 
     fn name(&self) -> String {
@@ -8404,7 +8405,8 @@ pub fn run_ios_runner<'b, 'm, 'c>(
         create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
     };
     let ios_res_pair = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
-    let iostate_res = ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1]);
+    let iostate_res =
+        ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1], RcState::Unknown);
     let ios = iostate_res[0].clone();
     let res = iostate_res[1].clone();
     (ios, res)

@@ -155,7 +155,7 @@ impl<'a> RcInserter<'a> {
             RcExpr::Let(x, rhs, cont) => {
                 self.insert_into_operation_let(x, rhs, cont, source, live_after)
             }
-            RcExpr::Destructure(container, fields, cont) => {
+            RcExpr::Destructure(container, fields, _state, cont) => {
                 self.insert_into_destructure(container, fields, cont, source, live_after)
             }
             RcExpr::Eval(x, cont) => self.insert_into_eval(x, cont, source, live_after),
@@ -274,7 +274,12 @@ impl<'a> RcInserter<'a> {
         let cont = build_releases(dead, cont);
 
         let node = RcExprNode {
-            expr: Arc::new(RcExpr::Destructure(container.clone(), fields.clone(), cont)),
+            expr: Arc::new(RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                RcState::Unknown,
+                cont,
+            )),
             source,
         };
         // Retain the container before the destructure iff it is used afterward, so both the extracted
@@ -364,6 +369,7 @@ impl<'a> RcInserter<'a> {
             live_before_arms.remove(&payload.name);
 
             new_arms.push(MatchArm {
+                payload_state: arm.payload_state,
                 tag: arm.tag,
                 payload,
                 body,
@@ -536,7 +542,7 @@ fn collect_referenced_and_bound(
             }
             collect_referenced_and_bound(k, refs, bound);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             insert_if_local(refs, &container.name);
             for (_, fv) in fields {
                 bound.insert(fv.name.clone());
@@ -591,7 +597,7 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
             }
             collect_vars(k, vars);
         }
-        RcExpr::Destructure(container, fields, k) => {
+        RcExpr::Destructure(container, fields, _state, k) => {
             record_if_local(vars, container);
             for (_, fv) in fields {
                 record_if_local(vars, fv);
