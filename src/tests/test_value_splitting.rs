@@ -99,8 +99,8 @@ fn test_split_limit_boundary() {
     assert_eq!(gc.part_count(at_limit.into()), limit);
     assert_eq!(gc.part_count(past_limit.into()), 1);
 
-    // The limit counts the scalars a type holds, not its fields, so nesting reaches it as well: a
-    // struct of two structs of `limit` scalars each is one part, though it has two fields.
+    // The limit counts the scalars a type holds through its nesting, so a struct of two structs of
+    // `limit` scalars each is one part, though it has two fields.
     let nested = context.struct_type(&[at_limit.into(), at_limit.into()], false);
     assert_eq!(gc.part_count(nested.into()), 1);
 }

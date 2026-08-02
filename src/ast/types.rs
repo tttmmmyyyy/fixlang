@@ -54,6 +54,7 @@ impl PartialEq for TyVar {
 impl Eq for TyVar {}
 
 impl Hash for TyVar {
+    /// Hashes the name and the kind, which are what `PartialEq` compares.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
         self.kind.hash(state);
@@ -434,6 +435,8 @@ impl PartialEq for TypeNode {
 impl Eq for TypeNode {}
 
 impl Hash for TypeNode {
+    /// Hashes the type expression, which is what `PartialEq` compares; the source information the
+    /// node carries stays out of both.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.ty.hash(state);
     }
@@ -1338,6 +1341,7 @@ impl TypeNode {
         ty_to_object_ty(self, capture, type_env)
     }
 
+    /// The LLVM struct a value of this type is laid out as.
     pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
@@ -1345,6 +1349,8 @@ impl TypeNode {
         gc.struct_type_of(self)
     }
 
+    /// The LLVM type a value of this type takes where it is embedded in another value: the struct
+    /// it is laid out as when it is unboxed, a pointer when it is boxed.
     pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,

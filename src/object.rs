@@ -96,8 +96,10 @@ fn union_buf_type<'c, 'm>(
 }
 
 impl ObjectFieldType {
-    // Convert ObjectType to inkwell's BasicTypeEnum.
-    // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
+    /// The LLVM type this field occupies in the struct its object is laid out as.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
     pub fn to_basic_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,

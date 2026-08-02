@@ -283,8 +283,8 @@ pub struct Configuration {
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
     // The most scalars a value is split into and carried as separate LLVM values; a type holding
-    // more stays one aggregate (see `Generator::type_parts`). A test lowers it so that the same
-    // programs compile both ways.
+    // more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
+    // under the same treatment.
     pub max_split_scalars: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,

@@ -560,11 +560,12 @@ pub struct Generator<'c, 'm> {
     /// placeholder, which is replaced by the finished type once construction completes. Without it,
     /// describing a recursive type would recurse forever.
     di_type_placeholders: Map<String, DIDerivedType<'c>>,
-    /// The LLVM struct each Fix type is laid out as, and the type it takes where it is embedded in
-    /// another value. Laying a type out walks every type it is built from, so a type reached from
-    /// many places -- a field type repeated across a struct, a struct nested several levels deep --
-    /// would otherwise be laid out once per path that reaches it.
+    /// The LLVM struct each Fix type is laid out as. Laying a type out walks every type it is built
+    /// from, so a type reached from many places -- a field type repeated across a struct, a struct
+    /// nested several levels deep -- would otherwise be laid out once per path that reaches it.
     struct_types: Map<Arc<TypeNode>, StructType<'c>>,
+    /// The LLVM type each Fix type takes where it is embedded in another value, kept for the reason
+    /// given at `struct_types`.
     embedded_types: Map<Arc<TypeNode>, BasicTypeEnum<'c>>,
     /// The out-pointer buffer of each Fix type returned through one.
     out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
@@ -1428,8 +1429,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.scalar_count_bounded_by(ty, limit) > limit
     }
 
-    // The number of scalars `ty` holds, or some number above `limit` once the count passes it; see
-    // `holds_more_scalars_than`, the only reader.
+    // The number of scalars `ty` holds, or some number above `limit` once the count passes it: the
+    // descent stops as soon as the limit is settled.
     fn scalar_count_bounded_by(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
