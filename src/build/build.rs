@@ -43,9 +43,7 @@ fn check_multithreading_requirement(
     }
     let mut uses: Vec<(&FullName, Option<Span>)> = vec![];
     for symbol in program.symbols.values() {
-        let Some(expr) = symbol.expr.as_ref() else {
-            continue;
-        };
+        let expr = symbol.expr.as_ref().unwrap();
         expr.walk_var_uses(&mut |var, src| {
             if instances.contains(&var.name) {
                 uses.push((&symbol.name, src.clone()));
