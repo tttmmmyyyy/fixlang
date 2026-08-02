@@ -83,14 +83,15 @@ pub trait LLVMGen: DynClone + Send + Sync {
         None
     }
 
-    /// This op with the object its declared uniqueness check tests taken to be local, so that the
-    /// check reads the reference count without first reading the state. Only an op that reports a
-    /// check through `unique_check_operand` is asked for this, and every such op overrides it.
+    /// This op with every object it declared taken to be local: the one its uniqueness check tests,
+    /// and the ones `internal_rc_targets` names. `generate` then counts them and tests the count
+    /// without first reading the state. An op declaring either is asked for this, and every such op
+    /// overrides it.
     ///
-    /// A `generate` that emits a check it does not declare leaves that one reading the state, so the
-    /// pair of methods stays honest about which check the annotation covers.
+    /// A `generate` that emits a check or a reference count it does not declare leaves that one
+    /// reading the state, so the declarations stay honest about what the annotation covers.
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
-        unreachable!("assuming_local called on an op that declares no uniqueness check")
+        unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
     }
 
     /// Whether `assuming_local` was applied. The RC IR dump renders it.

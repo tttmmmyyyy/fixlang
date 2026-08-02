@@ -15,9 +15,24 @@ gholder = Holder::some([5, 6]);
 sum_pair : Pair -> I64;
 sum_pair = |pair| pair.@head.@(0) + pair.@tail.@(0);
 
-// The variant arm binds the payload out of the container, which is the take-out rule.
+// A `match` on a boxed union retains the payload out of the container, which is the take-out rule.
 sum_holder : Holder -> I64;
-sum_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
+sum_holder = |holder| match holder {
+    some(arr) => arr.@(0),
+    none(_) => 0
+};
+
+// `as_some` reads the payload through an operation instead, which counts the reference inside
+// itself rather than at a node of its own.
+head_of_holder : Holder -> I64;
+head_of_holder = |holder| if holder.is_some { holder.as_some.@(0) } else { 0 };
+
+// A struct pattern hands out both fields of a boxed container at once.
+head_and_tail : Pair -> I64;
+head_and_tail = |pair| (
+    let Pair { head : h, tail : t } = pair;
+    h.@(0) + t.@(0)
+);
 
 // The callback writes through a raw pointer into the array's payload, so an array of boxed elements
 // may afterwards hold a reference to anything, the global's graph included.
@@ -29,8 +44,10 @@ main = (
     let local_pair = Pair { head : [10, 20], tail : [30, 40] };
     let local_holder = Holder::some([50, 60]);
 
-    let from_local = local_pair.sum_pair + local_holder.sum_holder;
-    let from_global = gpair.sum_pair + gholder.sum_holder;
+    let from_local = local_pair.sum_pair + local_holder.sum_holder
+                   + local_pair.head_and_tail + local_holder.head_of_holder;
+    let from_global = gpair.sum_pair + gholder.sum_holder
+                    + gpair.head_and_tail + gholder.head_of_holder;
 
     let planted = [[70], gpair.@head].plant_global;
     let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
