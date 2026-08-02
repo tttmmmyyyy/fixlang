@@ -25,7 +25,7 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs,
-    RcState, RcVar,
+    RcState, RcTarget, RcVar,
 };
 use crate::rc_ir::provenance::boxed_leaf_paths;
 use crate::rc_ir::specialize::{specializable_callee, CloneRegistry};
@@ -604,8 +604,9 @@ impl<'a> Walk<'a> {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let declared = llvm_gen.locality_flow(&result.ty, &arg_tys, self.type_env);
-                let op = self.annotate_op(llvm_gen, &arg_tys, &arg_shapes);
-                (declared.substitute(&arg_shapes), op.map(Rewritten::Op))
+                let result_shape = declared.substitute(&arg_shapes);
+                let op = self.annotate_op(llvm_gen, &arg_tys, &arg_shapes, &result_shape);
+                (result_shape, op.map(Rewritten::Op))
             }
             RcRhs::Closure(_, caps) => {
                 // `{funptr, capture}`: the capture object is freshly allocated, so its root is
@@ -736,22 +737,51 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// The operation with its declared uniqueness check annotated, where this clone's inputs make
-    /// the checked object local. The annotation covers only the check `unique_check_operand`
-    /// declares; a check the same `generate` emits without declaring keeps reading the state.
+    /// The operation annotated as acting on local objects, where this clone's inputs prove every
+    /// object it touches inside `generate` local: the one its declared uniqueness check tests, and
+    /// the ones `internal_rc_targets` names. One annotation covers them all, so one unproven target
+    /// leaves the whole operation reading the state.
+    ///
+    /// A check the same `generate` emits without declaring is not covered and goes on reading it.
     fn annotate_op(
         &self,
         llvm_gen: &Box<dyn LLVMGen>,
         arg_tys: &[Arc<TypeNode>],
         arg_shapes: &[ExtShape],
+        result_shape: &ExtShape,
     ) -> Option<Box<dyn LLVMGen>> {
         let Mode::Clone { inputs, .. } = &self.mode else {
             return None;
         };
-        let check = llvm_gen.unique_check_operand(arg_tys, self.type_env)?;
-        let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
-        if leaf.resolve(inputs) == Locality::MayExt {
+        let check = llvm_gen.unique_check_operand(arg_tys, self.type_env);
+        let targets = llvm_gen.internal_rc_targets(arg_tys, self.type_env);
+        if check.is_none() && targets.is_empty() {
             return None;
+        }
+        if let Some(check) = &check {
+            let leaf = arg_shapes[check.container_index].leaf_at(&check.path);
+            if leaf.resolve(inputs) == Locality::MayExt {
+                return None;
+            }
+        }
+        for target in &targets {
+            let local = match target {
+                // The result's leaves under the path: what the operation retained on its way out.
+                RcTarget::Result(path) => result_shape
+                    .leaves_under(path)
+                    .all(|leaf| leaf.resolve(inputs) != Locality::MayExt),
+                // The operand's own leaves under the path.
+                RcTarget::Operand(i, path) => arg_shapes[*i]
+                    .leaves_under(path)
+                    .all(|leaf| leaf.resolve(inputs) != Locality::MayExt),
+                // What the operand's leaf reaches, which only its deep fact answers.
+                RcTarget::Contents(i, path) => {
+                    arg_shapes[*i].leaf_at(path).resolve(inputs) == Locality::DeepLocal
+                }
+            };
+            if !local {
+                return None;
+            }
         }
         Some(llvm_gen.assuming_local())
     }

@@ -387,6 +387,7 @@ impl ObjectFieldType {
         count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
+        state: RcState,
     ) {
         let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
@@ -406,7 +407,7 @@ impl ObjectFieldType {
                 .unwrap();
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
-            gc.build_release_mark(obj, work_type, RcState::Unknown);
+            gc.build_release_mark(obj, work_type, state);
         };
 
         // After loop, do nothing.
@@ -429,6 +430,7 @@ impl ObjectFieldType {
         end: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
+        state: RcState,
     ) {
         let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
         let slice_begin = unsafe {
@@ -440,7 +442,7 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(end, begin, "array_slice_count")
             .unwrap();
-        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type);
+        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
     // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
@@ -452,15 +454,30 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
         hole: Option<IntValue<'c>>,
+        state: RcState,
     ) {
         match hole {
-            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type),
+            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {
                 let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
-                Self::release_or_mark_array_range(gc, buffer, hole, elem_ty.clone(), work_type);
+                Self::release_or_mark_array_range(
+                    gc,
+                    buffer,
+                    hole,
+                    elem_ty.clone(),
+                    work_type,
+                    state,
+                );
                 let (tail_buffer, tail_count) =
                     Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
-                Self::release_or_mark_array_range(gc, tail_buffer, tail_count, elem_ty, work_type);
+                Self::release_or_mark_array_range(
+                    gc,
+                    tail_buffer,
+                    tail_count,
+                    elem_ty,
+                    work_type,
+                    state,
+                );
             }
         }
     }
@@ -513,9 +530,10 @@ impl ObjectFieldType {
         begin: IntValue<'c>,
         count: IntValue<'c>,
         value: Object<'c>,
+        state: RcState,
     ) {
         // One reference per slot, in a single reference-count add.
-        gc.build_retain(value.clone(), count, RcState::Unknown);
+        gc.build_retain(value.clone(), count, state);
 
         let value_ty = value.ty.get_embedded_type(gc, &vec![]);
         let dst = unsafe {
@@ -540,7 +558,7 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, dst, loop_body, after_loop);
 
         // Hand off the op's own reference.
-        gc.release(value, RcState::Unknown);
+        gc.release(value, state);
     }
 
     // Panic if idx is out_of_range for the array.
@@ -634,9 +652,10 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
+        state: RcState,
     ) -> Object<'c> {
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx);
-        gc.retain(elem.clone(), RcState::Unknown);
+        gc.retain(elem.clone(), state);
         elem
     }
 
@@ -648,6 +667,7 @@ impl ObjectFieldType {
         idx: IntValue<'c>,
         value: Object<'c>,
         release_old_value: bool,
+        state: RcState,
     ) {
         let elem_ty = value.ty.clone();
 
@@ -671,7 +691,7 @@ impl ObjectFieldType {
                 .build_load(elm_basic_ty, elm_ptr, "elem")
                 .unwrap();
             let elem_obj = Object::new(elm_val, elem_ty, gc);
-            gc.release(elem_obj, RcState::Unknown);
+            gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
@@ -686,6 +706,7 @@ impl ObjectFieldType {
         dst_buffer: PointerValue<'c>,
         count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
+        state: RcState,
     ) {
         let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
         // In loop body, retain value and store it at idx.
@@ -709,7 +730,7 @@ impl ObjectFieldType {
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
             let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-            gc.retain(src_obj, RcState::Unknown);
+            gc.retain(src_obj, state);
         };
 
         // After loop, do nothing.
@@ -729,17 +750,18 @@ impl ObjectFieldType {
         dst_buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         hole: Option<IntValue<'c>>,
+        state: RcState,
     ) {
         match hole {
-            None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty),
+            None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty, state),
             Some(hole) => {
                 let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
-                Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone());
+                Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone(), state);
                 let (tail_src, tail_count) =
                     Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
                 let (tail_dst, _) =
                     Self::array_buf_after_hole(gc, elm_basic_ty, dst_buffer, len, hole);
-                Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty);
+                Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty, state);
             }
         }
     }
@@ -915,12 +937,13 @@ impl ObjectFieldType {
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
+        state: RcState,
     ) -> Object<'c> {
         let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
-            gc.retain(value.clone(), RcState::Unknown);
-            gc.release(union, RcState::Unknown);
+            gc.retain(value.clone(), state);
+            gc.release(union, state);
         } else {
             // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
         }
@@ -2060,7 +2083,15 @@ fn build_traverse<'c, 'm>(
         let storage = get_array_storage(gc, &obj);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
         gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, None);
+            ObjectFieldType::release_or_mark_array_buf(
+                gc,
+                size,
+                buffer,
+                elem_ty,
+                work,
+                None,
+                RcState::Unknown,
+            );
         });
         return;
     }
@@ -2081,7 +2112,15 @@ fn build_traverse<'c, 'm>(
         let storage = get_array_storage(gc, &inner_array);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
         gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
+            ObjectFieldType::release_or_mark_array_buf(
+                gc,
+                size,
+                buffer,
+                elem_ty,
+                work,
+                Some(idx),
+                RcState::Unknown,
+            );
         });
         return;
     }

@@ -2395,6 +2395,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         cap_idx: usize,
         cap_tys: &Vec<Arc<TypeNode>>,
         result_ty: &Arc<TypeNode>,
+        state: RcState,
     ) -> Object<'c> {
         let cap_obj = self.get_scoped_obj_noretain(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
@@ -2403,7 +2404,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             cap_obj.extract_field_as(self, cap_obj_str_ty, cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX);
         let obj = Object::new(cap_val, result_ty.clone(), self);
         let one = self.context.i64_type().const_int(1, false);
-        self.build_retain(obj.clone(), one, RcState::Unknown);
+        self.build_retain(obj.clone(), one, state);
         obj
     }
 

@@ -284,6 +284,7 @@ impl<'a> Lowerer<'a> {
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let llvm_gen = Box::new(InlineLLVMCaptureProjectBody {
+                    assume_local: false,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
                     cap_tys: capture_tys.clone(),

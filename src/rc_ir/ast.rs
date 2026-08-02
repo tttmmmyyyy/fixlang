@@ -135,6 +135,21 @@ pub struct UniqueCheckOperand {
     pub path: FieldPath,
 }
 
+/// A value an inline-LLVM operation reference-counts inside its own `generate`, named the way the
+/// operation sees it. Locality inference resolves each against the operation's operands and result,
+/// and annotates the operation only where all of them are local.
+pub enum RcTarget {
+    /// A boxed leaf of the result, under this path — an element, field or payload the operation
+    /// retained on its way out of a container.
+    Result(FieldPath),
+    /// A boxed leaf of operand `.0`, under the path — a container the operation released.
+    Operand(usize, FieldPath),
+    /// What operand `.0`'s leaf at the path reaches — an element the operation overwrote or dropped,
+    /// or one it retain-copied while cloning a shared container. Such a value is no variable of the
+    /// IR, so the judgement is the operand leaf's deep fact.
+    Contents(usize, FieldPath),
+}
+
 /// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
 /// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`. `tag` is `Some` for a variant arm, whose payload is that
 /// variant's value; it is `None` for a catch-all arm, whose payload is the whole scrutinee.

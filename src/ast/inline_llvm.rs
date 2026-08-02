@@ -2,7 +2,7 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
-use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
+use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::locality::ExtShape;
 use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin, Provenance};
 use dyn_clone::DynClone;
@@ -124,6 +124,28 @@ pub trait LLVMGen: DynClone + Send + Sync {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+    }
+
+    /// The values this op reference-counts inside `generate`, for the operand types it is
+    /// instantiated at. An op that counts none answers the empty list and is never annotated.
+    ///
+    /// **The declaration has to cover every retain and release `generate` emits.** The annotation
+    /// says of all of them at once that the objects they touch are local, so one left out is the
+    /// direction of error that corrupts memory. It is the same kind of hand-maintained claim as
+    /// `unique_check_operand`, and `assuming_local` is what carries the answer back.
+    ///
+    /// The default covers the clone path: an op that force-uniques a shared container retain-copies
+    /// its contents and releases the old container, so every op declaring a uniqueness check gets
+    /// those two targets without writing them. An op that only reads a count declares them too, and
+    /// counts nothing — over-declaring costs precision, never soundness.
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        match self.unique_check_operand(arg_tys, type_env) {
+            Some(check) => vec![
+                RcTarget::Operand(check.container_index, check.path.clone()),
+                RcTarget::Contents(check.container_index, check.path),
+            ],
+            None => vec![],
+        }
     }
 
     /// The locality of this op's result: for each of its boxed leaves, the condition on the operands
