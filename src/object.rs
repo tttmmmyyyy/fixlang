@@ -1718,7 +1718,7 @@ fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
 ///
 /// The runtime function ends the program, so the call is followed by a branch to the continuation
 /// only to close its basic block. `bb_name` names that pair of blocks in the emitted IR.
-fn build_abort_if<'c, 'm>(
+pub fn build_abort_if<'c, 'm>(
     gc: &Generator<'c, 'm>,
     cond: IntValue<'c>,
     func_name: &str,
