@@ -18,7 +18,6 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
-use crate::constants::MAX_SPLIT_SCALARS;
 use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
@@ -658,7 +657,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The LLVM struct a value of `ty` is laid out as.
     ///
     /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`. A kept answer is returned without
+    ///   consulting it: an entry exists only where the layout completed, and a type that reaches
+    ///   itself through unboxed fields completes by no path, so such a type is never kept.
     pub fn struct_type_of(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -677,7 +678,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// laid out as when it is unboxed, a pointer when it is boxed.
     ///
     /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
+    /// * `unboxed_path` - see `struct_type_of`.
     pub fn embedded_type_of(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -1402,37 +1403,49 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_bit_size(&ty) == 0
     }
 
-    // The number of scalars `ty` holds, counting through nested structs. A non-struct type is one
-    // scalar and a zero-sized type is none.
-    fn scalar_count(&self, ty: BasicTypeEnum<'c>) -> usize {
+    // The number of scalars `ty` holds, counting through nested structs and stopping once the count
+    // passes `limit`. A non-struct type is one scalar and a zero-sized type is none.
+    //
+    // A type whose fields nest holds a number of scalars exponential in the nesting depth, and the
+    // count is only ever compared against the limit, so counting past it would cost what the limit
+    // is there to bound.
+    fn scalar_count_up_to(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
         }
         match ty {
-            BasicTypeEnum::StructType(st) => (0..st.count_fields())
-                .map(|i| self.scalar_count(st.get_field_type_at_index(i).unwrap()))
-                .sum(),
+            BasicTypeEnum::StructType(st) => {
+                let mut count = 0;
+                for i in 0..st.count_fields() {
+                    if count > limit {
+                        break;
+                    }
+                    count += self.scalar_count_up_to(st.get_field_type_at_index(i).unwrap(), limit);
+                }
+                count
+            }
             _ => 1,
         }
     }
 
     // Whether a value of `ty` is carried as one aggregate rather than split into the parts of its
-    // fields: it holds more scalars than `MAX_SPLIT_SCALARS`.
+    // fields: it holds more scalars than `Configuration::max_split_scalars`.
     pub fn is_grouped(&self, ty: BasicTypeEnum<'c>) -> bool {
+        let limit = self.config.max_split_scalars;
         matches!(ty, BasicTypeEnum::StructType(_))
             && !self.is_zero_sized(ty)
-            && self.scalar_count(ty) > MAX_SPLIT_SCALARS
+            && self.scalar_count_up_to(ty, limit) > limit
     }
 
     // Split an embedded type into the parts a value of it is carried as: the scalars of its nested
-    // structs, except that a struct holding more scalars than `MAX_SPLIT_SCALARS` is one part of its
-    // own. A non-struct type is one part, and a zero-sized type is none.
+    // structs, except that a struct wide enough for `is_grouped` is one part of its own. A
+    // non-struct type is one part, and a zero-sized type is none.
     //
     // Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
     // a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
     // recursive `fold`/`loop` tail call then carries scalar phis instead of an opaque aggregate phi,
     // so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
-    // deeply nested type from paying one LLVM value per scalar; see `MAX_SPLIT_SCALARS`.
+    // deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
     pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         if self.is_zero_sized(ty) {
             return vec![];
@@ -2251,8 +2264,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Reconstruct the object a call returns under the split return ABI: a `void` result carries no
     // part, a single part is the result itself, and several are the fields of the flat struct it
-    // returned. Which of the three applies follows from the return type's part count, since a
-    // single part is a struct of its own where the type is too wide to split. The inverse of
+    // returned. Which of the three applies follows from the return type's part count, which the
+    // shape of the returned value would answer wrongly for a type carried whole. The inverse of
     // `build_return_object`.
     pub fn unpack_return(
         &mut self,
@@ -2260,6 +2273,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
         let embedded = ret_ty.get_embedded_type(self);
+        // A value carried whole holds more scalars than any target's return registers, so it comes
+        // back through the out-pointer and never reaches here. Checked under develop mode (the unit
+        // tests), where a lower split limit or a wider register budget would break it.
+        if self.config.develop_mode {
+            assert!(
+                !(call_result.is_some() && self.is_grouped(embedded)),
+                "`{}` is carried whole, so it cannot be returned in registers",
+                ret_ty.to_string()
+            );
+        }
         let parts: Vec<BasicValueEnum<'c>> = match call_result {
             None => vec![],
             Some(packed) if self.part_count(embedded) == 1 => vec![packed],

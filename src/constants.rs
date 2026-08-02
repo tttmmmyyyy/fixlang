@@ -143,8 +143,9 @@ pub const ARRAY_STORAGE_ALLOC_SLACK: u64 = ARRAY_BUF_ALIGNMENT - 1;
 // alignment costs, and such arrays are numerous enough that those bytes show up on their own.
 pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
 
-// The most scalars an unboxed value is split into and carried as separate LLVM values. A type
-// holding more than this many stays one aggregate wherever it is carried.
+// The default for `Configuration::max_split_scalars`: the most scalars an unboxed value is split
+// into and carried as separate LLVM values, above which it stays one aggregate wherever it is
+// carried.
 //
 // Splitting is what keeps a loop-carried field visible to LLVM (see `Generator::type_parts`), and
 // the widest type in the benchmark suite holds 21 scalars, the widest across the minilib libraries

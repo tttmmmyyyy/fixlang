@@ -4,8 +4,8 @@ use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
     C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE, OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL,
-    OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
+    DEFAULT_COMPILATION_UNIT_MAX_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
+    OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
 use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
@@ -282,6 +282,10 @@ pub struct Configuration {
     pub verbose: bool,
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
+    // The most scalars a value is split into and carried as separate LLVM values; a type holding
+    // more stays one aggregate (see `Generator::type_parts`). A test lowers it so that the same
+    // programs compile both ways.
+    pub max_split_scalars: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,
     // Sizes of C types.
@@ -390,6 +394,7 @@ impl Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            max_split_scalars: MAX_SPLIT_SCALARS,
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
