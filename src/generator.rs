@@ -1604,16 +1604,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         if !state.dispatches() {
             // A local object is counted in place: no state load, no branch, no continuation block.
             self.build_assert_refcnt_state_local(obj_ptr);
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let old_refcnt = self
                 .builder()
-                .build_load(refcnt_type(self.context), obj_ptr, "")
+                .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
                 .unwrap()
                 .into_int_value();
             let new_refcnt = self
                 .builder()
                 .build_int_nsw_add(old_refcnt, amount, "")
                 .unwrap();
-            self.builder().build_store(obj_ptr, new_refcnt).unwrap();
+            self.builder()
+                .build_store(ptr_to_refcnt, new_refcnt)
+                .unwrap();
             return;
         }
         let current_func = self.current_function();
