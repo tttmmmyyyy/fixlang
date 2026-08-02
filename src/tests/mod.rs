@@ -43,6 +43,7 @@ mod test_opaque_type;
 mod test_preliminary_commands;
 mod test_provenance;
 mod test_punched_array;
+mod test_sanitize_setting;
 mod test_shared_boxed_swap;
 mod test_signal;
 mod test_simplify;

@@ -1,0 +1,4 @@
+module SanitizingLib;
+
+doubled : I64 -> I64;
+doubled = |value| value * 2;
