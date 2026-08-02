@@ -6,7 +6,7 @@ is how a debugging effect such as `Debug::debug_println` reaches a program. This
 build's `skip_eval` setting up on that instruction, so the effect is left out of the program.
 
 Unlike the passes around it, this changes what the program does, so it runs at every optimization
-level: what it drops is the setting's subject, rather than a cost the optimizer is trading away.
+level: dropping the side expression is what the setting asks for.
 */
 
 use std::sync::Arc;
@@ -16,12 +16,14 @@ use crate::ast::{
     traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 
+/// Replaces every `eval {side}; {main}` expression in the program with `{main}`.
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym);
     }
 }
 
+/// Replaces the `eval` expressions in the body of `sym`.
 fn run_on_symbol(sym: &mut Symbol) {
     let mut skipper = EvalSkipper {};
     let res = skipper.traverse(&sym.expr.as_ref().unwrap());
@@ -30,12 +32,19 @@ fn run_on_symbol(sym: &mut Symbol) {
     }
 }
 
+/// Walks an expression tree, replacing each `eval` expression with its main expression and leaving
+/// every other expression as it is.
 struct EvalSkipper {}
 
 impl ExprVisitor for EvalSkipper {
+    /// Replaces the `eval` expression with its main expression, dropping the side expression.
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::changed(expr.get_eval_main())
     }
+
+    // `ExprVisitor` declares every method without a default, so the rest of the expression kinds are
+    // listed here and passed through: their children are visited, and the expression itself is left
+    // as it is.
 
     fn start_visit_eval(
         &mut self,

@@ -34,8 +34,7 @@ fn run_at(opt_level: FixOptimizationLevel, skip_eval: bool) -> (String, String) 
     )
 }
 
-/// Every optimization level, since dropping the side expression is what the setting asks for rather
-/// than a cost the optimizer is trading away.
+/// Every optimization level, since dropping the side expression is what the setting asks for.
 const OPT_LEVELS: [FixOptimizationLevel; 3] = [
     FixOptimizationLevel::None,
     FixOptimizationLevel::Basic,

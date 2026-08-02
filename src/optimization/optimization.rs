@@ -13,8 +13,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Drop the side expressions of `eval`, before any pass looks at them. Type checking and
-    // instantiation are done by now, so the setting does not decide whether the program compiles;
-    // and every pass below sees the simplified tree.
+    // instantiation are done by now, so whether the program compiles is already settled, and every
+    // pass below sees the simplified tree.
     run_pass(prg, config, config.skip_eval, "skip_eval", skip_eval::run);
 
     run_pass(

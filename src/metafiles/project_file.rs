@@ -84,6 +84,8 @@ pub struct ProjectFileBuild {
     disable_cpu_features: Vec<String>,
     #[serde(default)]
     no_runtime_check: bool,
+    /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
+    /// the program.
     #[serde(default)]
     skip_eval: bool,
 
@@ -111,8 +113,12 @@ pub struct ProjectFileBuildTest {
     backtrace: Option<bool>,
     #[serde(default)]
     disable_cpu_features: Vec<String>,
+    /// Whether to disable the run-time checks, such as the array bounds check, in a test build.
+    /// The value the `build` section gives covers the program alone.
     #[serde(default)]
     no_runtime_check: bool,
+    /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
+    /// `{side}` out of it. The value the `build` section gives covers the program alone.
     #[serde(default)]
     skip_eval: bool,
 
