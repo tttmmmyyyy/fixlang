@@ -82,6 +82,7 @@
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
         - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
     - [Multithreading](#multithreading)
+        - [Checking for data races](#checking-for-data-races)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2442,27 +2443,6 @@ Enable multi-threading with the `--threaded` compiler option or the `threaded` f
 
 The project being built decides the setting, so a library that needs multi-threading is used by turning it on there. Building a program that calls `Std::mark_threaded` with multi-threading off fails, and the error quotes the call, which is what names the library that needs it.
 
-### Checking for data races
-
-`--sanitize thread`, or the `sanitize` field of the project file, builds the program with
-ThreadSanitizer, which reports a data race when one occurs while the program runs. Use it to check
-that every value another thread reaches has been passed through `Std::mark_threaded`, and that the
-call happens before the value is shared.
-
-Instrumenting is all this option does, so pass `--threaded` as well to check a program that calls
-`Std::mark_threaded`. The instrumented program runs several times slower and uses much more memory,
-so use it while checking a program.
-
-`fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
-follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
-
-```
-setarch $(uname -m) -R ./a.out
-```
-
-A race that no run performs goes unreported, so drive the program the way it is used, and run it
-more than once.
-
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
 - `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically. Call it on the value, and carry on with the value it returns.
@@ -2473,7 +2453,19 @@ The pointer carries the responsibility for the reference count described in [Man
 
 While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
 
-`Std::mark_threaded` puts a value into multi-threaded mode from the thread that calls it, and the mode is what every other thread's reference counting reads. Call it on a value before that value becomes reachable from another thread, and let the call finish before the pointer is handed over. A value already reachable from a second thread when the call runs is counted in one mode by one thread and in another by the other, and the counts each thread makes are lost to the other.
+### Checking for data races
+
+`--sanitize thread`, or the `sanitize` field of the project file, builds the program with
+[ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html), which reports a data race when one occurs while
+the program runs, so that you can check that every value another thread reaches has been passed
+through `Std::mark_threaded`.
+
+`fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
+follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
+
+```
+setarch $(uname -m) -R ./a.out
+```
 
 ## `eval` syntax
 
