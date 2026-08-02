@@ -1649,48 +1649,48 @@ fn panic_if_capacity_overflows<'c, 'm>(
     // of that width.
     assert_eq!(cap.get_type().get_bit_width(), 64);
     let max_cap = (u64::MAX - (ARRAY_BUF_ALIGNMENT - 1) - header_size) / elem_size;
-    let overflows = gc
+    let is_capacity_overflow = gc
         .builder()
         .build_int_compare(
             IntPredicate::UGT,
             cap,
             cap.get_type().const_int(max_cap, false),
-            "capacity_overflows",
+            "is_capacity_overflow",
         )
         .unwrap();
     build_abort_if(
         gc,
-        overflows,
+        is_capacity_overflow,
         RUNTIME_ARRAY_SIZE_OVERFLOW,
         &[cap.into()],
         "capacity_overflow",
     );
 }
 
-/// Emit a call to the runtime function `runtime_fn` with `args` for the case that `cond` holds, and
+/// Emit a call to the runtime function `func_name` with `args` for the case that `cond` holds, and
 /// leave the builder at the block reached when it does not.
 ///
 /// The runtime function ends the program, so the call is followed by a branch to the continuation
-/// only to close its basic block. `name` names that pair of blocks in the emitted IR.
+/// only to close its basic block. `bb_name` names that pair of blocks in the emitted IR.
 fn build_abort_if<'c, 'm>(
     gc: &Generator<'c, 'm>,
     cond: IntValue<'c>,
-    runtime_fn: &str,
+    func_name: &str,
     args: &[BasicMetadataValueEnum<'c>],
-    name: &str,
+    bb_name: &str,
 ) {
     let current_func = gc.current_function();
     let abort_bb = gc
         .context
-        .append_basic_block(current_func, &format!("{}_bb", name));
+        .append_basic_block(current_func, &format!("{}_bb", bb_name));
     let continue_bb = gc
         .context
-        .append_basic_block(current_func, &format!("{}_continue_bb", name));
+        .append_basic_block(current_func, &format!("{}_continue_bb", bb_name));
     gc.builder()
         .build_conditional_branch(cond, abort_bb, continue_bb)
         .unwrap();
     gc.builder().position_at_end(abort_bb);
-    gc.call_runtime(runtime_fn, args);
+    gc.call_runtime(func_name, args);
     gc.builder()
         .build_unconditional_branch(continue_bb)
         .unwrap();
