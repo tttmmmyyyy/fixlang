@@ -239,6 +239,9 @@ pub struct DocsConfig {
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
+///
+/// A field whose value changes the generated code has to be added to `object_generation_hash`,
+/// which decides when a cached object file may be reused.
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -708,6 +711,10 @@ impl Configuration {
     }
 
     // Get hash value of the configurations that affect the object file generation.
+    //
+    // The fields are listed by hand, so every field of `Configuration` that changes the generated
+    // code has to be hashed here: one left out makes a build reuse the object files of a build that
+    // generated different code.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
         data.push_str(&self.fix_opt_level.to_string());

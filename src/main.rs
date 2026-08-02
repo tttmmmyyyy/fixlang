@@ -289,63 +289,48 @@ fn run_cli() {
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
 
+    // The options of a subcommand that builds a Fix program and then executes it. They are listed
+    // in the order `--help` shows them.
+    let add_execution_options = |app: App<'static>| {
+        app.arg(source_file.clone())
+            .arg(object_file.clone())
+            .arg(output_file.clone())
+            .arg(static_link_library.clone())
+            .arg(dynamic_link_library.clone())
+            .arg(library_paths.clone())
+            .arg(ld_flags.clone())
+            .arg(debug_info.clone())
+            .arg(opt_level.clone())
+            .arg(disable_cpu_feature.clone())
+            .arg(emit_llvm.clone())
+            .arg(threaded.clone())
+            .arg(verbose.clone())
+            .arg(max_cu_size.clone())
+            .arg(llvm_passes_file.clone())
+            .arg(emit_symbols.clone())
+            .arg(emit_rc_ir.clone())
+            .arg(program_args.clone())
+            .arg(backtrace.clone())
+            .arg(no_runtime_check.clone())
+            .arg(skip_eval.clone())
+            .arg(allow_preliminary_commands.clone())
+            .arg(allow_deprecated.clone())
+            .arg(deny_deprecated.clone())
+    };
+
     // "fix run" subcommand
-    let run_subc = App::new("run")
-        .trailing_var_arg(true)
-        .about("Runs a Fix program. Executes `Main::main : IO ()`.")
-        .arg(source_file.clone())
-        .arg(object_file.clone())
-        .arg(output_file.clone())
-        .arg(static_link_library.clone())
-        .arg(dynamic_link_library.clone())
-        .arg(library_paths.clone())
-        .arg(ld_flags.clone())
-        .arg(debug_info.clone())
-        .arg(opt_level.clone())
-        .arg(disable_cpu_feature.clone())
-        .arg(emit_llvm.clone())
-        .arg(threaded.clone())
-        .arg(verbose.clone())
-        .arg(max_cu_size.clone())
-        .arg(llvm_passes_file.clone())
-        .arg(emit_symbols.clone())
-        .arg(emit_rc_ir.clone())
-        .arg(program_args.clone())
-        .arg(backtrace.clone())
-        .arg(no_runtime_check.clone())
-        .arg(skip_eval.clone())
-        .arg(allow_preliminary_commands.clone())
-        .arg(allow_deprecated.clone())
-        .arg(deny_deprecated.clone());
+    let run_subc = add_execution_options(
+        App::new("run")
+            .trailing_var_arg(true)
+            .about("Runs a Fix program. Executes `Main::main : IO ()`."),
+    );
 
     // "fix test" subcommand
-    let test_subc = App::new("test")
-        .trailing_var_arg(true)
-        .about("Tests a Fix program. Executes `Test::test : IO ()`.")
-        .arg(source_file.clone())
-        .arg(object_file.clone())
-        .arg(output_file.clone())
-        .arg(static_link_library.clone())
-        .arg(dynamic_link_library.clone())
-        .arg(library_paths.clone())
-        .arg(ld_flags.clone())
-        .arg(debug_info.clone())
-        .arg(opt_level.clone())
-        .arg(disable_cpu_feature.clone())
-        .arg(emit_llvm.clone())
-        .arg(threaded.clone())
-        .arg(verbose.clone())
-        .arg(max_cu_size.clone())
-        .arg(llvm_passes_file.clone())
-        .arg(emit_symbols.clone())
-        .arg(emit_rc_ir.clone())
-        .arg(program_args.clone())
-        .arg(backtrace.clone())
-        .arg(no_runtime_check.clone())
-        .arg(skip_eval.clone())
-        .arg(allow_preliminary_commands.clone())
-        .arg(allow_deprecated.clone())
-        .arg(deny_deprecated.clone());
+    let test_subc = add_execution_options(
+        App::new("test")
+            .trailing_var_arg(true)
+            .about("Tests a Fix program. Executes `Test::test : IO ()`."),
+    );
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
