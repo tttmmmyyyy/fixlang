@@ -1103,6 +1103,15 @@ impl ObjectFieldType {
     }
 }
 
+/// How an object that ends in an element buffer is laid out around that buffer.
+struct ElementBufferLayout {
+    /// The bytes of the fields laid out ahead of the buffer.
+    header_size: u64,
+    /// The bytes one element takes in the buffer, which is the stride every read and write of it
+    /// uses.
+    elem_size: u64,
+}
+
 #[derive(Eq, PartialEq, Clone)]
 pub struct ObjectType {
     pub field_types: Vec<ObjectFieldType>,
@@ -1153,8 +1162,32 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
+    /// The bytes laid out ahead of the element buffer, and the bytes one element takes in it, for an
+    /// object type that ends in such a buffer (`Array`, `#ArrayStorage`).
+    fn element_buffer_layout<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> ElementBufferLayout {
+        // The element buffer is the last field, of `Array` (with a preceding capacity slot) or of
+        // `#ArrayStorage` (right after the control block).
+        let elem_ty = match self.field_types.last().unwrap() {
+            ObjectFieldType::Array(ty) => ty.clone(),
+            ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
+            _ => panic!("this object type does not end in an element buffer"),
+        };
+        let struct_ty = self.to_struct_type(gc, vec![]);
+        let buf_field_idx = struct_ty.count_fields() - 1;
+        ElementBufferLayout {
+            header_size: gc
+                .target_data
+                .offset_of_element(&struct_ty, buf_field_idx)
+                .unwrap(),
+            elem_size: elem_stride(gc, &elem_ty),
+        }
+    }
+
     /// The size of this object in bytes: a constant, except for an object that ends in an element
     /// buffer, whose size takes a capacity the program computes at run time.
+    ///
+    /// The capacity is taken as one whose byte count fits in the address space;
+    /// `panic_if_capacity_exceeds_address_space` is what establishes that.
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
@@ -1168,38 +1201,24 @@ impl ObjectType {
         if let Some(array_capacity) = array_capacity {
             // The size is the header -- the fields laid out ahead of the element buffer -- plus the
             // bytes the elements take.
-
-            // The element buffer is the last field, of `Array` (with a preceding capacity slot) or
-            // of `#ArrayStorage` (right after the control block).
-            let elem_ty = match self.field_types.last().unwrap() {
-                ObjectFieldType::Array(ty) => ty.clone(),
-                ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
-                _ => panic!(),
-            };
-            let elem_size = elem_stride(gc, &elem_ty);
-            let struct_ty = self.to_struct_type(gc, vec![]);
-            let buf_field_idx = struct_ty.count_fields() - 1;
-            let header_size = gc
-                .target_data
-                .offset_of_element(&struct_ty, buf_field_idx)
-                .unwrap();
-
+            let layout = self.element_buffer_layout(gc);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
             let cap = gc
                 .builder()
                 .build_int_cast(array_capacity, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
-            if gc.config.runtime_check() {
-                panic_if_byte_count_exceeds_address_space(gc, cap, elem_size, header_size);
-            }
             let elems_size = gc
                 .builder()
-                .build_int_mul(ptr_int_ty.const_int(elem_size, false), cap, "elems_size")
+                .build_int_mul(
+                    ptr_int_ty.const_int(layout.elem_size, false),
+                    cap,
+                    "elems_size",
+                )
                 .unwrap();
             return gc
                 .builder()
                 .build_int_add(
-                    ptr_int_ty.const_int(header_size, false),
+                    ptr_int_ty.const_int(layout.header_size, false),
                     elems_size,
                     "size_with_elems",
                 )
@@ -1588,13 +1607,30 @@ pub fn get_array_storage_buf<'c, 'm>(
     get_array_storage(gc, array).gep_boxed(gc, STORAGE_BUF_IDX)
 }
 
+/// Whether an allocation checks the capacity it is given against the address space.
+///
+/// Every allocation asks for one, so that a new allocation site states which of the two it is
+/// instead of inheriting an answer: the check is what keeps a wrapped-around byte count from
+/// reaching `malloc`, and a site that skipped it silently would corrupt the heap.
+#[derive(Clone, Copy)]
+pub enum CapacityCheck {
+    /// Nothing has checked this capacity, so this allocation checks it.
+    Run,
+    /// The capacity is already within the bound -- read off an array that holds it, or checked by
+    /// the caller ahead of a branch whose arms both allocate -- so checking it here would only add
+    /// a branch to the emitted code.
+    Skip,
+}
+
 // Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
 // its control block initialized to a reference count of one and its buffer left uninitialized.
 pub fn alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
     cap: IntValue<'c>,
+    capacity_check: CapacityCheck,
 ) -> Object<'c> {
+    panic_if_capacity_exceeds_address_space(gc, &elem_ty, cap, capacity_check);
     let storage_ty = make_array_storage_ty(elem_ty);
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
@@ -1712,8 +1748,8 @@ pub fn build_storage_is_aligned<'c, 'm>(
         .unwrap()
 }
 
-/// Abort the program unless a buffer of `cap` elements of `elem_size` bytes each, laid out behind a
-/// header of `header_size` bytes, fits in the address space.
+/// Abort the program unless an `#ArrayStorage` holding `cap` elements of `elem_ty` fits in the
+/// address space.
 ///
 /// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
 /// one, and leaves an object claiming a capacity its block has no room for; the first write past the
@@ -1724,20 +1760,32 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// is one unsigned comparison. A byte count within the bound that the system cannot supply is a
 /// separate matter, left where it was: `malloc` answers null and the program faults on the store
 /// that initializes the object.
-fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
-    gc: &Generator<'c, 'm>,
+///
+/// Every allocation given a capacity nothing has checked runs this, which is what makes it an
+/// invariant that an array's capacity field is within the bound. `capacity_check` says whether this
+/// allocation is one of those; `CapacityCheck::Skip` is for the capacities that invariant already
+/// covers.
+pub fn panic_if_capacity_exceeds_address_space<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: &Arc<TypeNode>,
     cap: IntValue<'c>,
-    elem_size: u64,
-    header_size: u64,
+    capacity_check: CapacityCheck,
 ) {
+    if matches!(capacity_check, CapacityCheck::Skip) || !gc.config.runtime_check() {
+        return;
+    }
+    let storage_ty = make_array_storage_ty(elem_ty.clone());
+    let layout = storage_ty
+        .get_object_type(&vec![], gc.type_env())
+        .element_buffer_layout(gc);
     // A buffer of elements of no size is no bytes long, however many of them the capacity asks for.
-    if elem_size == 0 {
+    if layout.elem_size == 0 {
         return;
     }
     // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
     // of that width.
     assert_eq!(cap.get_type().get_bit_width(), 64);
-    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - header_size) / elem_size;
+    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - layout.header_size) / layout.elem_size;
     let is_capacity_overflow = gc
         .builder()
         .build_int_compare(

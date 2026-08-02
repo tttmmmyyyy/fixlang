@@ -1,7 +1,11 @@
 use crate::{
     configuration::{Configuration, FixOptimizationLevel},
-    tests::test_util::{test_source, test_source_fail},
+    fixstd::runtime::{RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_MALLOC},
+    tests::test_util::{
+        emitted_llvm_ir, fix_build_source_command, test_source, test_source_fail, EmittedIr,
+    },
 };
+use tempfile::TempDir;
 
 #[test]
 pub fn test_get() {
@@ -444,4 +448,96 @@ pub fn test_unsafe_swap_bounds_unchecked_skips_check() {
     let mut checked = Configuration::develop_mode();
     checked.no_runtime_check = false;
     test_source(&source, checked);
+}
+
+/// A program that writes into an array while a second handle to it is alive, so that the build emits
+/// `Array::set` with both answers of its uniqueness check -- including the clone the shared answer
+/// takes.
+const SHARED_WRITE_SOURCE: &str = r#"
+module Main;
+
+main : IO ();
+main = (
+    let arr = Array::fill(4, 0);
+    let shared = arr;
+    let arr = arr.set(0, 7);
+    println((arr.@(0) + shared.@(0)).to_string)
+);
+"#;
+
+/// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
+fn llvm_function_bodies(ir: &str, name_part: &str) -> Vec<String> {
+    let mut bodies = vec![];
+    let mut current: Option<Vec<&str>> = None;
+    for line in ir.lines() {
+        if line.starts_with("define ") {
+            current = line.contains(name_part).then(Vec::new);
+        }
+        if let Some(body) = current.as_mut() {
+            body.push(line);
+        }
+        if line == "}" {
+            if let Some(body) = current.take() {
+                bodies.push(body.join("\n"));
+            }
+        }
+    }
+    bodies
+}
+
+/// Writing into a shared array clones its storage with the capacity that array already holds, and
+/// the clone allocates without checking that capacity: the allocation that gave the array its
+/// capacity checked it.
+///
+/// The check is a comparison and a branch, and an array write is the innermost thing a loop over an
+/// array does, so a check emitted here is what costs the enclosing loop its unrolling. The property
+/// is read off the emitted LLVM IR because it is about the code the build emits rather than the
+/// answer it computes: a program cannot observe a check that never fires.
+#[test]
+pub fn test_array_write_clones_without_rechecking_the_capacity() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    // At `-O none` the array write keeps its uniqueness check, so the clone is in the emitted code
+    // whatever the program does at run time.
+    let build = fix_build_source_command(dir, SHARED_WRITE_SOURCE, "none")
+        .arg("--emit-llvm")
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
+    let overflow_call = format!("call void @{}(", RUNTIME_ARRAY_SIZE_OVERFLOW);
+    assert!(
+        ir.contains(&overflow_call),
+        "the build should check the capacity where the program chooses one"
+    );
+
+    let writes = llvm_function_bodies(&ir, "@\"Std::Array::set#");
+    assert!(
+        !writes.is_empty(),
+        "the build should emit `Std::Array::set`"
+    );
+    let allocating = writes
+        .iter()
+        .filter(|body| body.contains(&format!("@{}(", RUNTIME_MALLOC)))
+        .collect::<Vec<_>>();
+    assert!(
+        !allocating.is_empty(),
+        "`Std::Array::set` should allocate, which is the clone the shared answer takes"
+    );
+    let rechecking = allocating
+        .iter()
+        .filter(|body| body.contains(&overflow_call))
+        .collect::<Vec<_>>();
+    assert!(
+        rechecking.is_empty(),
+        "the clone in `Std::Array::set` should allocate without checking the capacity again, \
+         but {} of its functions do",
+        rechecking.len()
+    );
 }
