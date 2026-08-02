@@ -1,5 +1,5 @@
-//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`,
-//! `unique_check_elim`). Because RC IR names are globally unique, a clone must give every binder a fresh
+//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`, and the
+//! specializing passes through `specialization`). Because RC IR names are globally unique, a clone must give every binder a fresh
 //! name so the clone's names do not collide with the original's. The single entry point,
 //! `fresh_rename_function`, clones a function's parameters, capture, and body this way; `pass_tag`
 //! distinguishes each cloning pass's fresh names from the others'.
@@ -67,6 +67,7 @@ fn assign_fresh_names_to_binders(
     grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))
 }
 
+/// Record the fresh name of every binder of one node, then descend into its continuation and arms.
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
@@ -89,7 +90,7 @@ fn assign_fresh_names_to_binders_inner(
             }
             assign_fresh_names_to_binders(k, pass_tag, renaming, counter);
         }
-        RcExpr::Destructure(_, fields, k) => {
+        RcExpr::Destructure(_, fields, _state, k) => {
             for (_, fv) in fields {
                 assign_fresh_name(&fv.name, pass_tag, renaming, counter);
             }
@@ -118,6 +119,7 @@ fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprN
     grow_stack(|| rename_expr_inner(node, renaming))
 }
 
+/// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
@@ -137,12 +139,13 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
             *state,
             rename_expr(k, renaming),
         ),
-        RcExpr::Destructure(container, fields, k) => RcExpr::Destructure(
+        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
             rename_var(container, renaming),
             fields
                 .iter()
                 .map(|(i, v)| (*i, rename_var(v, renaming)))
                 .collect(),
+            *state,
             rename_expr(k, renaming),
         ),
         RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, renaming), rename_expr(k, renaming)),
@@ -183,6 +186,7 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
             rename_var(scrut, renaming),
             arms.iter()
                 .map(|arm| MatchArm {
+                    payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: rename_var(&arm.payload, renaming),
                     body: rename_expr(&arm.body, renaming),

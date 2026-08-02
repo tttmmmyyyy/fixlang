@@ -8,6 +8,8 @@
 pub mod ast;
 pub mod borrow;
 pub mod codegen;
+pub mod leaf_map;
+pub mod locality;
 pub mod lower;
 pub mod ownership;
 pub mod print;
@@ -15,5 +17,6 @@ pub mod provenance;
 pub mod rc_insert;
 pub mod rename;
 pub mod simplify;
+pub mod specialization;
 pub mod unique_check_elim;
 pub mod validate;

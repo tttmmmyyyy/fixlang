@@ -2,8 +2,10 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
-use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
-use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin, Provenance};
+use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::rc_ir::locality::ExtShape;
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -81,6 +83,22 @@ pub trait LLVMGen: DynClone + Send + Sync {
         None
     }
 
+    /// This op with every object it declared taken to be local: the one its uniqueness check tests,
+    /// and the ones `internal_rc_targets` names. `generate` then counts them and tests the count
+    /// without first reading the state. An op declaring either is asked for this, and every such op
+    /// overrides it.
+    ///
+    /// A `generate` that emits a check or a reference count it does not declare leaves that one
+    /// reading the state, so the declarations stay honest about what the annotation covers.
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
+    }
+
+    /// Whether `assuming_local` was applied. The RC IR dump renders it.
+    fn assumes_local(&self) -> bool {
+        false
+    }
+
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
     /// `unique_check_operand` is asked to drop it, and every such op overrides this method; an op with
     /// no branch is never routed here.
@@ -110,6 +128,46 @@ pub trait LLVMGen: DynClone + Send + Sync {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
+    /// The values this op reference-counts inside `generate`, for the operand types it is
+    /// instantiated at. An op that counts none answers the empty list and is never annotated.
+    ///
+    /// **The declaration has to cover every retain and release `generate` emits under the state the
+    /// annotation carries** — that is, every one it counts through `assumed_state`. The annotation
+    /// says of all of them at once that the objects they touch are local, so one left out is the
+    /// direction of error that corrupts memory. It is the same kind of hand-maintained claim as
+    /// `unique_check_operand`, and `assuming_local` is what carries the answer back.
+    ///
+    /// What the same `generate` reaches with `RcState::Unknown` pinned in is outside the declaration
+    /// by construction: the annotation cannot reach it, so it goes on reading the state whatever
+    /// this answers. Reading an operand that is an unboxed global is the one that turns up in nearly
+    /// every op, since `Generator::get_scoped_obj` retains the global's boxed subobjects there.
+    /// Threading state into one of those is what would make it the declaration's business.
+    ///
+    /// The default covers the clone path: an op that force-uniques a shared container retain-copies
+    /// its contents and releases the old container, so every op declaring a uniqueness check gets
+    /// those two targets without writing them. An op that declares a check and only reads the count
+    /// has no clone path, and says so by overriding with the empty list — the default errs towards
+    /// over-declaring, which costs precision and never soundness.
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env))
+    }
+
+    /// The locality of this op's result: for each of its boxed leaves, the condition on the operands
+    /// under which that leaf's own object is non-local, and the condition under which something it
+    /// reaches is. `ExtShape::fresh_holding` / `always` / `bottom` build the recurring answers, and
+    /// `ExtShape::build_shape` writes a leaf-by-leaf one.
+    ///
+    /// Every op states its own; the choice among them is the author's to make, because both ways of
+    /// defaulting fail silently. `fresh_holding` would pass an op that produces a boxed object its operands
+    /// do not reach, which is the direction of error that corrupts memory; `always` would cost
+    /// precision with no symptom to notice it by.
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape;
+
     /// Downcast hook, for the few passes that special-case a concrete op.
     fn as_any(&self) -> &dyn Any;
 }
@@ -133,6 +191,20 @@ pub fn unique_check_on_boxed_leaf(
         container_index,
         path,
     })
+}
+
+/// The clone path a force-unique op takes when its container is shared: it retain-copies the
+/// contents into a new container and releases the old one. Every op declaring a uniqueness check
+/// takes it, so its targets are composed here — by `LLVMGen::internal_rc_targets`'s default, and by
+/// the ops that override that default to add targets of their own.
+pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget> {
+    match check {
+        Some(check) => vec![
+            RcTarget::Operand(check.container_index, check.path.clone()),
+            RcTarget::Contents(check.container_index, check.path),
+        ],
+        None => vec![],
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

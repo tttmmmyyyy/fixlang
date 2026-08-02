@@ -33,6 +33,7 @@ mod test_import;
 mod test_index_syntax;
 mod test_let_elimination;
 mod test_llvm_passes;
+mod test_locality;
 mod test_lsp;
 mod test_main_loop;
 mod test_match_result_alias;

@@ -1,0 +1,42 @@
+module Main;
+
+// A program that breaks the rule `Array::mutate_elements` states: an object may not be both what a
+// global value's initializer returns and what the running program holds.
+//
+// The callback of `mutate_elements` gets a raw pointer to the array's element buffer and may run
+// any IO, so it can hand that buffer's contents to C and read them back later. Doing the reading
+// back inside a global's initializer puts an object the program still holds into what the
+// initializer returns, and finishing the initializer stops that object being counted. From then on
+// the program counts references to an object nothing maintains a count for. See README.md.
+
+// The C side keeps one `Array a` value, which is three words: the storage pointer, the size and the
+// capacity.
+steal : Ptr -> IO ();
+steal = |p| FFI_CALL_IO[() steal_element(Ptr), p];
+
+plant : Ptr -> IO ();
+plant = |p| FFI_CALL_IO[() plant_element(Ptr), p];
+
+// Reading this global runs its initializer, which writes the stolen element into the array it
+// returns. `mutate_elements` is not an IO action, so no escape hatch is needed to reach this from a
+// global's initializer.
+planted : Array (Array I64);
+planted = [[0]].mutate_elements(|ptr| plant(ptr)).@0;
+
+main : IO ();
+main = (
+    // Built here, elements and all, so the compiler proves it local and counts its references
+    // without reading the state byte.
+    let victim = [11, 22, 33];
+
+    // Hand C the buffer holding `victim`, and let C keep a copy of what is in it.
+    let holder = [victim];
+    let (holder, _) = *holder.mutate_elements_io(|ptr| steal(ptr));
+    eval holder.@(0).@(0);
+
+    // Read the global. Its initializer plants `victim` into the global's result graph, and
+    // finishing it marks `victim` global — while `victim` is still live here.
+    eval planted.@(0).@(0);
+
+    println $ victim.@(0).to_string
+);

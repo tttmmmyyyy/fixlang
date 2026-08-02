@@ -1,0 +1,84 @@
+module Main;
+
+// Shapes the analysis has to key leaf by leaf, and paths that reach a site through machinery the
+// other cases do not use: a trait dictionary, a destructor, and a clone the uniqueness pass made
+// first.
+
+g : Array I64;
+g = [1, 2, 3];
+
+gtup : (Array I64, Array I64);
+gtup = ([4, 5], [6, 7]);
+
+// One parameter with two boxed leaves. A caller can make one leaf local and leave the other on the
+// global, so the two leaves of one argument carry different keys.
+walk_tup : I64 -> (Array I64, Array I64) -> I64;
+walk_tup = |n, t| (
+    if n <= 0 { 0 };
+    let (p, q) = t;
+    p.@(0) + q.@(0) + walk_tup(n - 1, (p, q))
+);
+
+// An unboxed union parameter: one reference-counting node covers every variant's leaves at once.
+walk_opt : I64 -> Option (Array I64) -> I64;
+walk_opt = |n, o| (
+    if n <= 0 { 0 };
+    let v = match o {
+        some(a) => a.@(0),
+        none(_) => 0
+    };
+    v + walk_opt(n - 1, if v == 0 { Option::none() } else { Option::some([v]) })
+);
+
+// Writing into a container: the uniqueness pass clones this first, and the locality pass clones
+// what it produced.
+overwrite : I64 -> Array (Array I64) -> I64;
+overwrite = |n, a| (
+    if n <= 0 { a.@(0).@(0) };
+    overwrite(n - 1, a.set(0, [n]))
+);
+
+// A trait whose two instances hand back a global and a locally built value, so one generic body
+// meets both.
+trait a : Source {
+    values : a -> Array I64;
+}
+
+type FromGlobal = unbox struct { tag : I64 };
+type FromLocal = unbox struct { tag : I64 };
+
+impl FromGlobal : Source {
+    values = |_| g;
+}
+
+impl FromLocal : Source {
+    values = |_| [8, 9];
+}
+
+total : [a : Source] a -> I64;
+total = |x| x.values.@(0);
+
+// A destructor holding a value, released while another binding is live.
+type Held = box struct { payload : Array I64 };
+
+hold : Array I64 -> IO I64;
+hold = |a| (
+    let d = *Destructor::make(Held { payload : a }, |h| pure(h));
+    pure $ d.Destructor::borrow(|h| h.@payload.@(0))
+);
+
+main : IO ();
+main = (
+    let local : Array I64 = [10, 20];
+    let localtup = ([30, 40], [50, 60]);
+    // One leaf built here, the other the global.
+    let mixedtup = ([70, 80], g);
+
+    let a = walk_tup(2, localtup) + walk_tup(2, gtup) + walk_tup(2, mixedtup);
+    let b = walk_opt(2, Option::some(local)) + walk_opt(2, Option::some(g));
+    let c = overwrite(2, [[90], [100]]) + overwrite(2, [g, g]);
+    let d = FromGlobal { tag : 0 }.total + FromLocal { tag : 0 }.total;
+    let e = *g.hold + *local.hold;
+
+    println $ (a + b + c + d + e).to_string
+);

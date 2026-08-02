@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -49,7 +50,7 @@ mod integration_tests {
         }
 
         let dump_path = project_dir.join(".fixlang/rc_ir.Main.post.txt");
-        std::fs::read_to_string(&dump_path)
+        fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
@@ -75,6 +76,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies the three provenance judgements a single function produces: an allocation is
+    /// `fresh`, a boxed element read out of a boxed container is `unknown`, and an unboxed tuple
+    /// carries each component's own judgement.
     #[test]
     fn test_provenance_dump_basic() {
         let (_temp_dir, project_dir) = setup_test_env("basic");
@@ -90,6 +94,9 @@ mod integration_tests {
         assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
     }
 
+    /// Verifies that a call composes its callee's effect: a recursive function returning its own
+    /// argument, whose effect takes a fixed point to compute, keeps a fresh array fresh across the
+    /// call.
     #[test]
     fn test_provenance_interprocedural_composition() {
         let (_temp_dir, project_dir) = setup_test_env("interproc");
@@ -200,6 +207,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
+    /// whose array is read again afterwards is routed, and the call at the array's last use keeps
+    /// the owning version, since borrowing there would only delay a release.
     #[test]
     fn test_benefit_routing_by_last_use() {
         let (_temp_dir, project_dir) = setup_test_env("benefit");
@@ -237,6 +247,8 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a whole-value retain of an unboxed pair is normalized into one retain per
+    /// reference-counting unit, both naming the same variable at its own field path.
     #[test]
     fn test_split_rc_into_units() {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
@@ -246,26 +258,30 @@ mod integration_tests {
             n.split('#').count() == 3 && n.ends_with("#funptr1")
         });
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
-        // The tuple binding has no source name, so match the retains by their field paths.
-        let retains: Vec<&&str> = main
+        // The tuple binding has no source name, so match the retains by their field paths. A retain
+        // may carry a trailing reference-counting state tag, which is not part of the target.
+        let target = |l: &str| {
+            l.trim()
+                .trim_start_matches("retain ")
+                .split(" @")
+                .next()
+                .unwrap()
+                .to_string()
+        };
+        let retains: Vec<String> = main
             .iter()
             .filter(|l| l.trim_start().starts_with("retain "))
+            .map(|l| target(l))
             .collect();
-        let field0 = retains.iter().find(|l| l.trim_end().ends_with(".0"));
-        let field1 = retains.iter().find(|l| l.trim_end().ends_with(".1"));
+        let field0 = retains.iter().find(|t| t.ends_with(".0"));
+        let field1 = retains.iter().find(|t| t.ends_with(".1"));
         assert!(
             field0.is_some() && field1.is_some(),
             "the pair retain should be split into `.0` and `.1` retains of the same variable:\n{}",
             main.join("\n")
         );
         // Both name the same tuple variable (the text before the field path).
-        let var_of = |l: &str| {
-            l.trim()
-                .trim_start_matches("retain ")
-                .trim_end_matches(".0")
-                .trim_end_matches(".1")
-                .to_string()
-        };
+        let var_of = |t: &String| t.trim_end_matches(".0").trim_end_matches(".1").to_string();
         assert_eq!(
             var_of(field0.unwrap()),
             var_of(field1.unwrap()),
@@ -282,6 +298,9 @@ mod integration_tests {
             .trim()
     }
 
+    /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
+    /// cancelled when nothing between the two consumes the value, and that the value therefore
+    /// stays `fresh` for the operation following the call.
     #[test]
     fn test_cancel_removes_net_zero_bracket() {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
