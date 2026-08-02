@@ -1112,16 +1112,27 @@ struct ElementBufferLayout {
     elem_stride: u64,
 }
 
+/// The layout the code generator gives a Fix type: the fields it is made of, and whether a value of
+/// it is held in place or behind a pointer.
 #[derive(Eq, PartialEq, Clone)]
 pub struct ObjectType {
+    /// The fields in the order they are laid out. A boxed type leads with its `ControlBlock`.
     pub field_types: Vec<ObjectFieldType>,
+    /// Whether a value of this type is held in place. A boxed value is a pointer to a heap block
+    /// whose contents this layout describes.
     pub is_unbox: bool,
+    /// The normalized name of the Fix type this is the layout of, which `to_struct_type` compares
+    /// against `unboxed_path` to find a cycle of unboxed types.
     pub name: Name,
 }
 
 impl ObjectType {
-    // Convert ObjectType to inkwell's StructType.
-    // * `unboxed_path` - When unboxed types are used recursively in each definition, this function can fall into infinite recursion. `unboxed_path` is an argument to detect this infinite loop and to generate a good error message. When you call to_struct_type from outside, specify an empty Vec. When to_struct_type calls itself (possibly via another function), unboxed_path contains the sequence of unboxed types that to_struct_type has been called on so far.
+    /// The LLVM struct type this object is laid out as.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - the unboxed types this call is already nested inside, which is what turns
+    ///   a circular definition by unboxed types into a diagnostic instead of an infinite recursion.
+    ///   A call from outside passes an empty `Vec`.
     pub fn to_struct_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1247,10 +1258,14 @@ impl ObjectType {
     }
 }
 
+/// The integer type of the control block field holding an object's reference count. Its width is
+/// what bounds the number of references to one object a program can hold.
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i32_type()
 }
 
+/// The debug info type of an object's reference count, which presents it to a debugger session as an
+/// unsigned integer.
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
         .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
@@ -1258,8 +1273,8 @@ pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
         .as_type()
 }
 
-// State for reference counting.
-// Values of this fields are REFCNT_STATE_* constants.
+/// The integer type of the control block field holding which reference-counting scheme an object is
+/// under. Its values are the `REFCNT_STATE_*` constants.
 pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
@@ -1272,8 +1287,11 @@ pub fn alloc_offset_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-// Type of traverser function.
-// - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
+/// The function type of a traverser, which walks an object's reference-counted leaves.
+///
+/// # Arguments
+/// * `is_dynamic` - whether the traverser takes the work to do as a second argument, of
+///   `traverser_work_type`, instead of having it fixed at the point the traverser is generated.
 pub fn traverser_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ty: &Arc<TypeNode>,
@@ -1296,10 +1314,15 @@ pub fn traverser_type<'c, 'm>(
     gc.context.void_type().fn_type(&arg_tys, false)
 }
 
+/// The integer type of the work argument a dynamic traverser takes, whose values are the
+/// `TRAVERSER_WORK_*` constants.
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
+/// The LLVM struct type of the control block that heads every boxed object, holding the reference
+/// count, the reference-counting state, and the distance the object sits above the base of its
+/// allocation.
 pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     let mut fields = vec![];
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
@@ -1590,8 +1613,8 @@ pub fn ty_to_object_ty(
     ret
 }
 
-// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
-// type so the reference-count helpers and buffer GEPs operate on it directly.
+/// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
+/// type so the reference-count helpers and buffer GEPs operate on it directly.
 pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage_ty = make_array_storage_ty(elem_ty);
@@ -1599,7 +1622,7 @@ pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>)
     Object::new(storage_ptr, storage_ty, gc)
 }
 
-// A pointer to the first element of a flipped `Array`'s element buffer.
+/// A pointer to the first element of a flipped `Array`'s element buffer.
 pub fn get_array_storage_buf<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: &Object<'c>,
@@ -1845,9 +1868,9 @@ fn build_abort_if<'c, 'm>(
 /// an allocator is free to hand out any alignment the requested size can hold, and mimalloc, for
 /// one, aligns an 8-byte allocation -- the size of an empty array's storage -- to 8 bytes.
 ///
-/// The threshold is applied as a mask rather than a branch. An array allocation is a handful of
-/// instructions that many callers inline, and the basic blocks a branch here adds to every one of
-/// them cost more in inlining decisions downstream than the arithmetic they save.
+/// The threshold is applied by masking, so the allocation stays a single basic block: an array
+/// allocation is a handful of instructions that many callers inline, and extra blocks in every one
+/// of them cost more in inlining decisions downstream than the arithmetic the mask spends.
 fn build_alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,

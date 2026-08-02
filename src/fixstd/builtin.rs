@@ -848,7 +848,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-// Create a byte array by copying from given pointer.
+/// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
 pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
@@ -885,8 +885,11 @@ pub fn make_byte_array_copy<'c, 'm>(
     array
 }
 
+/// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
+/// null terminator, copied out of a global into a fresh array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
+    /// The literal's bytes, without the null terminator.
     string: String,
 }
 
@@ -1741,8 +1744,12 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Array::_unsafe_empty_capacity_unchecked`: an array of size 0 whose storage has room
+/// for the given capacity, its elements left uninitialized.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeEmpty {
+    /// The local binding holding the capacity, in elements. The caller of the primitive is what
+    /// establishes it is non-negative.
     capacity_name: FullName,
 }
 
@@ -2444,9 +2451,9 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     arr_name: FullName,
     /// The local binding holding the new capacity, in elements.
     cap_name: FullName,
-    // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
-    // retain-copy a shared array's elements. Set false only where the array is statically known to
-    // be unique, leaving just the `realloc`.
+    /// When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
+    /// retain-copy a shared array's elements. Set false only where the array is statically known to
+    /// be unique, leaving just the `realloc`.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -4290,11 +4297,12 @@ impl LLVMGen for InlineLLVMMakeStructBody {
     }
 }
 
-// Allocate an array whose length equals the number of operands and fill it with them. The array
-// type is the value type of the enclosing expression. This is the RC IR counterpart of the
-// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
+/// Allocate an array whose length equals the number of operands and fill it with them. The array
+/// type is the value type of the enclosing expression. This is the RC IR counterpart of the
+/// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayLitBody {
+    /// The local bindings holding the elements, in the order they are written into the array.
     pub elem_names: Vec<FullName>,
 }
 

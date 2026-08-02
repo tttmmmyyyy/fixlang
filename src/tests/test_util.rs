@@ -73,9 +73,9 @@ fn path_env_with_fix_binary_dir() -> OsString {
 
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
 /// path. Building is triggered (once) first, so the returned command always
-/// targets a complete binary. Spawning `fix` this way runs the binary the test
-/// just built rather than whatever `fix` is on `PATH`, which a parallel
-/// worktree may be overwriting.
+/// targets a complete binary. The absolute path pins the run to the binary the
+/// test just built; the `fix` on `PATH` is one a parallel worktree may be
+/// overwriting.
 pub fn fix_command() -> Command {
     build_fix();
     let mut command = Command::new(fix_binary_path());
@@ -235,6 +235,9 @@ fn run_source(
     run(config, false)
 }
 
+/// Compiles `source` under `config` and runs it, failing the test unless it exits with code 0. The
+/// program's stdout and stderr are forwarded to the test's stderr, so a failing run shows what it
+/// printed.
 pub fn test_source(source: &str, config: Configuration) {
     let compile_result = run_source(source, config);
     let spawn_result = panic_if_err(compile_result);

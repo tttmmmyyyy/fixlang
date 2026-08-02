@@ -23,6 +23,7 @@ fn runtime_unchecked_config() -> Configuration {
     config
 }
 
+/// `@` bounds-checks the index it is given, and the message reports both the index and the size.
 #[test]
 pub fn test_get() {
     let source = r#"    
@@ -38,6 +39,7 @@ pub fn test_get() {
     test_source_fail(&source, config, "Index out of range: index=3, size=3");
 }
 
+/// `set` bounds-checks the index it is given.
 #[test]
 pub fn test_set() {
     let source = r#"    
@@ -384,9 +386,11 @@ pub fn test_capacity_byte_count_respects_no_runtime_check() {
 // `--no-runtime-check` disables array bounds checks (documented in the CLI help), so `set`
 // and `swap` must honor it like `@` / `mod` / `act`. An index within the array's capacity but
 // past its size stays inside the allocated buffer, so the access itself is memory-safe; only
-// the bounds check decides whether it aborts. That makes "the check was removed" observable
-// as a completed run rather than an out-of-range abort.
+// the bounds check decides whether it aborts. Such an access therefore runs to completion
+// exactly when the check is gone, and that is what the tests below read off.
 
+/// `set` honors `--no-runtime-check`: one index, in capacity and past the size, aborts with the
+/// checks on and completes with them off.
 #[test]
 pub fn test_set_bounds_check_respects_no_runtime_check() {
     let source = r#"
@@ -407,6 +411,7 @@ pub fn test_set_bounds_check_respects_no_runtime_check() {
     test_source(&source, unchecked);
 }
 
+/// `swap` honors `--no-runtime-check` for both of the indices it checks.
 #[test]
 pub fn test_swap_bounds_check_respects_no_runtime_check() {
     let source = r#"
@@ -425,9 +430,10 @@ pub fn test_swap_bounds_check_respects_no_runtime_check() {
     test_source(&source, unchecked);
 }
 
+/// `unsafe_swap_bounds_unchecked` skips the bounds check even with the runtime checks on, so a pair
+/// of indices in capacity and past the size runs to completion.
 #[test]
 pub fn test_unsafe_swap_bounds_unchecked_skips_check() {
-    // `unsafe_swap_bounds_unchecked` never bounds-checks, even with runtime checks on.
     let source = r#"
             module Main;
 
