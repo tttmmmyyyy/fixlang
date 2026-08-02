@@ -193,17 +193,37 @@ impl Substitution {
     }
 
     // Apply substitution to type
+    //
+    // A type none of whose variables this substitution replaces is returned as
+    // it came, so that the common case of a substitution that says nothing
+    // about a type costs a walk rather than a rebuild.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
                 sub.set_source_if_none(ty.get_source().clone())
             }),
             Type::TyCon(_) => ty.clone(),
-            Type::TyApp(fun, arg) => ty
-                .set_tyapp_fun(self.substitute_type(fun))
-                .set_tyapp_arg(self.substitute_type(arg)),
+            Type::TyApp(fun, arg) => {
+                let new_fun = self.substitute_type(fun);
+                let new_arg = self.substitute_type(arg);
+                if Arc::ptr_eq(&new_fun, fun) && Arc::ptr_eq(&new_arg, arg) {
+                    return ty.clone();
+                }
+                ty.set_tyapp_fun(new_fun).set_tyapp_arg(new_arg)
+            }
             Type::AssocTy(_, args) => {
-                ty.set_assocty_args(args.iter().map(|arg| self.substitute_type(arg)).collect())
+                let new_args = args
+                    .iter()
+                    .map(|arg| self.substitute_type(arg))
+                    .collect::<Vec<_>>();
+                if new_args
+                    .iter()
+                    .zip(args)
+                    .all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))
+                {
+                    return ty.clone();
+                }
+                ty.set_assocty_args(new_args)
             }
         }
     }
