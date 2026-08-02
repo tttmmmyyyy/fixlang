@@ -130,9 +130,9 @@ impl EmittedIr {
 
 /// The LLVM IR a `--emit-llvm` build wrote into `dir`, concatenated in file-name order.
 ///
-/// A build names its files after the compilation units it produced, so a second build in the same
-/// directory adds to them rather than replacing them. Give each build a directory of its own where
-/// the IR is to be attributed to it.
+/// A build names its files after the compilation units it produced, so the files an earlier build
+/// left in the same directory survive it. Give each build a directory of its own where the IR is to
+/// be attributed to it.
 pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     let mut paths = fs::read_dir(dir)
         .expect("Failed to read the build directory")

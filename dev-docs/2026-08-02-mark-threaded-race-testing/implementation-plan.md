@@ -43,7 +43,7 @@ issue #96。`Std::mark_threaded` を正しく使う限り参照カウントに�
 | `fetch_sub(acq_rel)` | 0 件 | clean |
 | `fetch_sub(relaxed)` | 2 件 | 真の競合（対照） |
 
-現状の Fix codegen は 1 行目の形なので、このまま TSan にかけると正しいコードが落ちる。TSan は standalone の `atomic_thread_fence` を happens-before として扱わないためで、issue の §2 が指摘するとおりである。
+現状の Fix codegen は 1 行目の形なので、このまま TSan にかけると正しいコードが落ちる。TSan は standalone の `atomic_thread_fence` を happens-before として扱わないためで、issue が指摘するとおりである。
 
 ### 阻害要因ではなかったもの
 
@@ -87,20 +87,20 @@ acquire を RMW に畳んだ形は、読んだだけでは fence 形に戻せそ
 
 ```rust
 // The decrement acquires as well as releases, so that the thread that brings the count to
-// zero sees every write the other holders made. The acquire belongs in the RMW rather than
-// in a `fence acquire` taken on the way to destruction: ThreadSanitizer draws no
-// happens-before edge from a standalone fence, and reports the destructor's reads as racing
-// with those writes. Keeping it here is what leaves the threaded path checkable. On x86-64
-// both forms assemble to the same instructions; on AArch64 this trades a `dmb` on the
-// destruction path for an acquire on every decrement.
+// zero sees every write the other holders made. Keep the acquire in the read-modify-write:
+// ThreadSanitizer draws no happens-before edge from a standalone `fence acquire`, so an
+// acquire moved into one on the way to destruction leaves the code correct while making the
+// race detector report the destructor's reads as racing with those writes. The acquire is
+// free on x86-64, where a `lock`-prefixed read-modify-write already orders both ways; on
+// AArch64 it costs an acquire on every decrement and saves a `dmb` on the destruction path.
 ```
 
 `build_branch_by_is_unique` の threaded な読み出し（この経路が acquire を要る理由は既存のコメントが述べているので、置き場所の制約を足す）:
 
 ```rust
-// The acquire belongs on this load rather than in a `fence acquire` on the unique path:
-// ThreadSanitizer draws no happens-before edge from a standalone fence, and reports the
-// writes that follow as racing. Keeping it here is what leaves the threaded path checkable.
+// Keep the acquire on the load itself: ThreadSanitizer draws no happens-before edge from a
+// standalone `fence acquire`, so an acquire moved into one on the unique path leaves the
+// code correct while making the race detector report the writes that follow as racing.
 ```
 
 測定した表は、この計画書が残るので、そちらを根拠として参照できる。

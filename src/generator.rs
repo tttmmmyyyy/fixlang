@@ -900,11 +900,11 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             self.builder().position_at_end(threaded_bb);
             // Load refcnt atomically. The load acquires, so that the writes this thread is about to
-            // make are ordered after the reads another thread did before releasing this object. The
-            // acquire belongs on this load rather than in a `fence acquire` on the unique path:
-            // ThreadSanitizer draws no happens-before edge from a standalone fence, and reports the
-            // writes that follow as racing. Keeping it here is what leaves the threaded path
-            // checkable.
+            // make are ordered after the reads another thread did before releasing this object.
+            // Keep the acquire on the load itself: ThreadSanitizer draws no happens-before edge
+            // from a standalone `fence acquire`, so an acquire moved into one on the unique path
+            // leaves the code correct while making the race detector report the writes that follow
+            // as racing.
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let refcnt = self
                 .builder()
@@ -1776,13 +1776,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(threaded_bb);
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             // Decrement refcnt atomically. The decrement acquires as well as releases, so that the
-            // thread that brings the count to zero sees every write the other holders made. The
-            // acquire belongs in the read-modify-write rather than in a `fence acquire` taken on
-            // the way to destruction: ThreadSanitizer draws no happens-before edge from a
-            // standalone fence, and reports the destructor's reads as racing with those writes.
-            // Keeping it here is what leaves the threaded path checkable. On x86-64 both forms
-            // assemble to the same instructions; on AArch64 this trades a `dmb` on the destruction
-            // path for an acquire on every decrement.
+            // thread that brings the count to zero sees every write the other holders made. Keep
+            // the acquire in the read-modify-write: ThreadSanitizer draws no happens-before edge
+            // from a standalone `fence acquire`, so an acquire moved into one on the way to
+            // destruction leaves the code correct while making the race detector report the
+            // destructor's reads as racing with those writes. The acquire is free on x86-64, where
+            // a `lock`-prefixed read-modify-write already orders both ways; on AArch64 it costs an
+            // acquire on every decrement and saves a `dmb` on the destruction path.
             let old_refcnt = self
                 .builder()
                 .build_atomicrmw(
@@ -1794,7 +1794,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
 
             // Destroy the object if old_refcnt is one. The decrement carries the ordering the
-            // destruction needs, so this path joins the one the non-threaded modes take.
+            // destruction needs, so this path branches into `destruction_bb` directly, as the
+            // other modes do.
             let is_refcnt_one = self
                 .builder()
                 .build_int_compare(

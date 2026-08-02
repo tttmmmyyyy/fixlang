@@ -32,8 +32,8 @@ const EXPECTED_OUTPUT: &str = "66";
 /// Builds `SOURCE` with multi-threading on at `opt_level`, runs it, and returns the LLVM IR of the
 /// modules the build emitted.
 ///
-/// Running the program is what covers the reference-counting paths as control flow rather than as
-/// text: the orderings below are read off the same build that produced the answer.
+/// Running the program puts the reference-counting paths under execution, so the orderings
+/// `assert_orderings_are_checkable` reads come off a build that is known to answer correctly.
 ///
 /// Each call builds in a directory of its own, which is what makes the returned IR the work of this
 /// build alone.
@@ -143,14 +143,14 @@ fn assert_orderings_are_checkable(opt_level: &str) {
     );
 }
 
+/// The orderings as the code generator emits them, before any LLVM pass has run.
 #[test]
 fn test_threaded_orderings_are_checkable_unoptimized() {
     assert_orderings_are_checkable("none");
 }
 
+/// The orderings that survive the optimizer, which rewrites the reference-counting paths.
 #[test]
 fn test_threaded_orderings_are_checkable_optimized() {
-    // The optimizer rewrites the reference-counting paths, so the orderings are read again on what
-    // it leaves behind.
     assert_orderings_are_checkable("max");
 }
