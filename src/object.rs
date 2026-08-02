@@ -564,7 +564,7 @@ impl ObjectFieldType {
         );
     }
 
-    // Panic if size is negative
+    /// Abort the program if the array size or capacity `size` is negative.
     pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, size: IntValue<'c>) {
         let is_neg_size = gc
             .builder()
@@ -1629,12 +1629,12 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
 /// one, and leaves an object claiming a capacity its block has no room for; the first write past the
 /// block corrupts the heap. The elements must therefore leave room for the header in front of them
-/// and for the bytes `build_alloc_array_storage` adds on top of the object.
+/// and for the padding that puts the element buffer on `ARRAY_BUF_ALIGNMENT`.
 ///
-/// The bound is the widest capacity that cannot wrap, rather than a limit worth imposing: a byte
-/// count within it that the system cannot supply still fails in `malloc` as it did before. It is a
-/// constant, so the whole check is one unsigned comparison, which also rejects the negative capacity
-/// an `_unsafe_` primitive can be handed.
+/// The bound is the widest capacity whose byte count cannot wrap: a byte count within it that the
+/// system cannot supply still fails in `malloc`. It is a constant, so the whole check is one
+/// unsigned comparison, which also rejects the negative capacity an `_unsafe_` primitive can be
+/// handed.
 fn panic_if_capacity_overflows<'c, 'm>(
     gc: &Generator<'c, 'm>,
     cap: IntValue<'c>,

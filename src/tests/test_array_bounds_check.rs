@@ -117,13 +117,10 @@ pub fn test_fill_negative_size() {
 
 // The bytes an array's elements need must fit in the address space. A capacity whose byte count
 // exceeds it wraps around to a small number, which `malloc` supplies, leaving an array whose block
-// has no room for the capacity it claims; the first write past the block corrupts the heap.
-//
-// The capacities below are caught by different halves of the check: 2^61 elements of 8 bytes come
-// to exactly 2^64 and wrap to zero, while 2^61-3 elements come to 24 bytes short of 2^64, which
-// does fit, but leaves no room for the header and for the bytes the allocation adds to place the
-// element buffer on its alignment.
+// has no room for the capacity it claims; the first write past the block corrupts the heap. The two
+// capacities below are caught by different halves of the check.
 
+// A capacity of 2^61 elements of 8 bytes comes to exactly 2^64 bytes, which wraps to zero.
 #[test]
 pub fn test_empty_capacity_byte_count_wraps() {
     let source = r#"
@@ -144,6 +141,8 @@ pub fn test_empty_capacity_byte_count_wraps() {
     );
 }
 
+// A capacity of 2^61-3 elements of 8 bytes comes to 24 bytes short of 2^64: the elements fit, while
+// the header and the padding that puts the element buffer on its alignment do not.
 #[test]
 pub fn test_empty_capacity_byte_count_leaves_no_room_for_the_header() {
     let source = r#"
