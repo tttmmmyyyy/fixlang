@@ -10,7 +10,6 @@ level: what it drops is the setting's subject, rather than a cost the optimizer 
 */
 
 use std::sync::Arc;
-
 use crate::ast::{
     expr::ExprNode,
     program::{Program, Symbol},
