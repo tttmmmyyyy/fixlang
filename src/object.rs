@@ -545,7 +545,8 @@ impl ObjectFieldType {
         gc.release(value);
     }
 
-    // Panic if idx is out_of_range for the array.
+    /// Abort the program if `idx` falls outside `[0, len)`, the indices an array of `len` elements
+    /// has. The comparison is unsigned, so a negative index is out of range as well.
     pub fn panic_if_out_of_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
@@ -584,11 +585,15 @@ impl ObjectFieldType {
         );
     }
 
-    // Read an element of array.
-    // Returned object is not retained.
+    /// Read the element at `idx` out of an array's buffer, borrowing the array's own reference to
+    /// it: the caller has to retain the result to hold it past the array's lifetime.
+    ///
+    /// # Arguments
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
     pub fn read_from_array_buf_noretain<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
@@ -616,11 +621,15 @@ impl ObjectFieldType {
         Object::new(elem_val, elem_ty, gc)
     }
 
-    // Read an element of array.
-    // Returned object is retained.
+    /// Read the element at `idx` out of an array's buffer and retain it, giving the caller a
+    /// reference of its own.
+    ///
+    /// # Arguments
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
+        len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
@@ -630,7 +639,14 @@ impl ObjectFieldType {
         elem
     }
 
-    // Write an element into array.
+    /// Store `value` into the slot at `idx` of an array's buffer, handing the caller's reference to
+    /// it over to the array.
+    ///
+    /// # Arguments
+    /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
+    ///   `None` omits the check.
+    /// * `release_old_value` - `true` when the slot holds a live element, whose reference is
+    ///   released before the store; `false` when the slot is uninitialized.
     pub fn write_to_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -1152,9 +1168,11 @@ impl ObjectType {
         }
     }
 
-    // Get type used when this object is embedded.
-    // i.e., for unboxed type, a pointer; for unboxed type, a struct.
-    // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
+    /// The type this object takes where it is embedded in another value: a struct for an unboxed
+    /// type, a pointer for a boxed one.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
     pub fn to_embedded_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,

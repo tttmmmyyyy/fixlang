@@ -122,6 +122,8 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
     }
 }
 
+/// Declare `fixruntime_eprintln`, which writes a C string to stderr followed by a newline and
+/// flushes it.
 fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -167,6 +169,8 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     return;
 }
 
+/// Build `fixruntime_subtract_ptr`, which returns the distance in bytes from its second pointer
+/// argument to its first.
 fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = gc
@@ -197,6 +201,9 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
     return;
 }
 
+/// Build `fixruntime_ptr_add_offset`, which returns the address `offset` bytes past the pointer it
+/// is given. The offset is applied to the integer address, so it may be negative and may land
+/// outside the object the pointer points into.
 fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
@@ -247,6 +254,9 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode:
     return;
 }
 
+/// Build `fixruntime_get_argc`, which returns the number of command line arguments the program was
+/// started with, together with the module-internal global variable holding that number, which the C
+/// `main` function stores it into.
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();
     let fn_ty = argc_gv_ty.fn_type(&[], false);
@@ -278,6 +288,9 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
     return;
 }
 
+/// Build `fixruntime_get_argv`, which returns a pointer to the command line argument string at the
+/// index it is given, together with the module-internal global variable holding the argument array,
+/// which the C `main` function stores it into.
 fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = ptr_ty.fn_type(&[gc.context.i64_type().into()], false);

@@ -35,6 +35,7 @@ pub fn test_set() {
     test_source_fail(&source, config, "Index out of range");
 }
 
+/// `mod` bounds-checks the index it is given.
 #[test]
 pub fn test_mod() {
     let source = r#"    
@@ -51,6 +52,7 @@ pub fn test_mod() {
     test_source_fail(&source, config, "Index out of range");
 }
 
+/// `act` bounds-checks the index it is given.
 #[test]
 pub fn test_act() {
     let source = r#"    
@@ -67,6 +69,7 @@ pub fn test_act() {
     test_source_fail(&source, config, "Index out of range");
 }
 
+/// The `arr[idx]` index syntax bounds-checks the index as `@` does.
 #[test]
 pub fn test_index_syntax() {
     let source = r#"    
@@ -83,6 +86,8 @@ pub fn test_index_syntax() {
     test_source_fail(&source, config, "Index out of range");
 }
 
+/// A negative capacity given to `Array::empty` aborts the program, and the message reports the
+/// capacity.
 #[test]
 pub fn test_empty_negative_capacity() {
     let source = r#"    
@@ -99,6 +104,7 @@ pub fn test_empty_negative_capacity() {
     test_source_fail(&source, config, "Negative array size or capacity: -1");
 }
 
+/// A negative size given to `Array::fill` aborts the program.
 #[test]
 pub fn test_fill_negative_size() {
     let source = r#"
