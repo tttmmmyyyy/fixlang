@@ -4,10 +4,6 @@
 // The most threads this driver hands a value to.
 #define MAX_THREADS 64
 
-// Takes a pointer and does nothing with it. The Fix code calls this between taking a reference and
-// dropping it, so that the pair escapes the optimizer's view and survives into the running program.
-
-
 // Defined by the Fix program through FFI_EXPORT: takes one reference to the shared value, works it,
 // and drops it.
 void fix_hammer_one(void *value);

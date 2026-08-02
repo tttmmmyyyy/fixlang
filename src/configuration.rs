@@ -119,9 +119,8 @@ impl fmt::Display for ValgrindTool {
 
 /// The sanitizer the generated program is instrumented with.
 ///
-/// One value rather than a set: the sanitizers that give a program shadow memory place it at
-/// addresses derived from the program's own, so two of them cannot share a program. A build asks
-/// for at most one.
+/// A build asks for at most one: the sanitizers that give a program shadow memory place it at
+/// addresses derived from the program's own, so two of them cannot share a program.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Sanitizer {
     /// Generate the program as it is built for use.
@@ -141,7 +140,7 @@ impl fmt::Display for Sanitizer {
 
 impl Sanitizer {
     /// What instrumenting a module for this sanitizer takes: the function attribute the passes look
-    /// for, and the passes themselves. `None` where the program is generated as it is built for use.
+    /// for, and the passes themselves.
     ///
     /// The two travel together because a pass without its attribute rewrites nothing.
     pub fn instrumentation(&self) -> Option<(&'static str, &'static [&'static str])> {
@@ -154,9 +153,6 @@ impl Sanitizer {
     }
 
     /// Whether this platform can build and run a program instrumented with this sanitizer.
-    ///
-    /// The instrumented program needs the sanitizer runtime that ships with clang, and the layout
-    /// it maps its shadow memory into. Linux is where that has been put to work here.
     pub fn platform_supported(&self) -> bool {
         match self {
             Sanitizer::None => true,
@@ -859,11 +855,10 @@ impl Configuration {
 
     /// Instrument the generated program with `sanitizer`.
     ///
-    /// A sanitizer this platform cannot provide is an error rather than a warning. Everything else
-    /// here works to keep a build from calling itself sanitized while carrying no instrumentation,
-    /// and quietly dropping the setting is that same failure arriving through the front door. A
-    /// test that wants the instrumentation asks `platform_thread_sanitizer_supported` first and
-    /// says that it skipped.
+    /// A sanitizer this platform cannot provide is an error. Everything else here works to keep a
+    /// build from calling itself sanitized while carrying no instrumentation, and quietly dropping
+    /// the setting is that same failure arriving through the front door. A test that wants the
+    /// instrumentation asks `platform_thread_sanitizer_supported` first and says that it skipped.
     pub fn set_sanitizer(&mut self, sanitizer: Sanitizer) -> Result<&mut Configuration, Errors> {
         if !sanitizer.platform_supported() {
             return Err(Errors::from_msg(format!(

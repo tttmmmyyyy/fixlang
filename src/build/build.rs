@@ -11,11 +11,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
-///
-/// # Arguments
-/// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
-///   a failure says which of the compiler's several `gcc` calls it was.
 /// The C compiler a build drives, prepared with the flags the configuration calls for.
 ///
 /// A sanitized build goes through clang. The instrumentation the code generator inserts calls into
@@ -34,11 +29,10 @@ fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
 
 /// The clang a sanitized build is compiled and linked by.
 ///
-/// The instrumentation the code generator inserts calls into the sanitizer runtime, and the runtime
-/// is distributed with clang rather than with LLVM itself. Taking the clang that sits beside the
-/// LLVM this compiler was built against is what pairs the two: the instrumentation and the runtime
-/// answering it come from one release. A build of this compiler that recorded no LLVM location asks
-/// the path for a clang instead.
+/// The instrumentation the code generator inserts calls into the sanitizer runtime, which is
+/// distributed with clang. Taking the clang that sits beside the LLVM this compiler was built
+/// against is what pairs the two: the instrumentation and the runtime answering it come from one
+/// release.
 fn clang_path() -> Result<PathBuf, Errors> {
     // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
     // inkwell's `llvm17-0` feature. Raising one without the other leaves this looking for a prefix
@@ -65,6 +59,10 @@ fn clang_path() -> Result<PathBuf, Errors> {
 
 /// Runs a prepared C compiler command, passing on what it writes to standard error and reporting a
 /// non-zero exit as a failure of `step`.
+///
+/// # Arguments
+/// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
+///   a failure says which of the build's several C compiler calls it was.
 fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     let program = com.get_program().to_string_lossy().to_string();
     let output = com.output().map_err(|e| {

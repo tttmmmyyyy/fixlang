@@ -2475,18 +2475,18 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 }
 
-// The functions `module` holds, defined and declared alike, in the order LLVM keeps them.
+/// The functions `module` holds, defined and declared alike, in the order LLVM keeps them.
 pub(crate) fn module_functions<'c>(module: &Module<'c>) -> impl Iterator<Item = FunctionValue<'c>> {
     successors(module.get_first_function(), |function| {
         function.get_next_function()
     })
 }
 
-// The kind id LLVM knows the enum attribute `name` under.
-//
-// An enum attribute is created from its kind id, and a name LLVM does not know yields kind id 0,
-// whose attribute every consumer ignores. Asking for an attribute that does nothing is a mistake in
-// the caller, so the lookup reports it rather than returning it.
+/// The kind id LLVM knows the enum attribute `name` under.
+///
+/// An enum attribute is created from its kind id, and a name LLVM does not know yields kind id 0,
+/// whose attribute every consumer ignores. Asking for an attribute that does nothing is a mistake
+/// in the caller, so the lookup panics on it.
 pub(crate) fn enum_attribute_kind_id(name: &str) -> u32 {
     let kind_id = Attribute::get_named_enum_kind_id(name);
     assert!(

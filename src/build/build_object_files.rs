@@ -572,8 +572,6 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
-// Verify `module`, run the LLVM optimization pipeline the configuration selects over it, then
-// verify it again. A module LLVM rejects, or a pipeline it cannot build, aborts the compilation.
 /// Hands each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if LLVM
 /// rejects one.
 fn run_passes_or_panic(
@@ -593,6 +591,9 @@ fn run_passes_or_panic(
     }
 }
 
+/// Verifies `module`, runs the LLVM optimization pipeline the configuration selects over it,
+/// instruments it for the configured sanitizer, then verifies it again. A module LLVM rejects, or a
+/// pipeline it cannot build, aborts the compilation.
 fn optimize_instrument_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,

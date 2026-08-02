@@ -2446,9 +2446,9 @@ ThreadSanitizer, which reports a data race when one occurs while the program run
 that every value another thread reaches has been passed through `Std::mark_threaded`, and that the
 call happens before the value is shared.
 
-The option instruments the program and changes nothing else, so pass `--threaded` as well to check a
-program that calls `Std::mark_threaded`. The instrumented program runs several times slower and uses
-much more memory, so use it while checking a program.
+Instrumenting is all this option does, so pass `--threaded` as well to check a program that calls
+`Std::mark_threaded`. The instrumented program runs several times slower and uses much more memory,
+so use it while checking a program.
 
 `fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
 follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:

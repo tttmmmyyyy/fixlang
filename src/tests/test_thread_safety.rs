@@ -66,7 +66,8 @@ fn races_reported(output: &Output) -> usize {
         .count()
 }
 
-/// Skips the caller unless this platform can run an instrumented program, saying so.
+/// Whether an instrumented program can run on this platform, printing that `test_name` was skipped
+/// when it cannot.
 fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     if platform_thread_sanitizer_supported() {
         return true;
@@ -114,6 +115,8 @@ fn assert_shared_reference_counting_is_race_free(opt_level: &str) {
     );
 }
 
+/// Verifies that a value handed to eight threads through `Std::mark_threaded` is counted without a
+/// race in a build with the optimizations off.
 #[test]
 fn test_shared_reference_counting_is_race_free_unoptimized() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
@@ -122,23 +125,24 @@ fn test_shared_reference_counting_is_race_free_unoptimized() {
     assert_shared_reference_counting_is_race_free("none");
 }
 
+/// Verifies that the same sharing stays race-free at `-O max`, where the optimizations that elide a
+/// reference count run -- the uniqueness checks specialization removes, the counting
+/// borrow-ification cancels -- so a mistake in one of them shows up as a race the unoptimized build
+/// never sees.
 #[test]
 fn test_shared_reference_counting_is_race_free_optimized() {
-    // The optimizations that elide a reference count -- the uniqueness checks specialization
-    // removes, the counting borrow-ification cancels -- run only here, so this is where a mistake
-    // in one of them would show up as a race the unoptimized build never sees.
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
     assert_shared_reference_counting_is_race_free("max");
 }
 
+/// Verifies that a build asking for the instrumentation carries it even after the same program was
+/// built without it. The objects a build leaves behind are reused by the next build of the same
+/// program, so the instrumentation has to be part of what names them; otherwise the checked build
+/// would reuse the uninstrumented objects and report a clean run.
 #[test]
 fn test_instrumentation_is_not_taken_from_an_uninstrumented_build() {
-    // The objects a build leaves behind are reused by the next build of the same program, so the
-    // instrumentation has to be part of what names them. Were it left out, a program built for use
-    // and then built again to be checked would be checked only as far as its cached objects went,
-    // which is not at all, and the run would come back clean.
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }

@@ -77,6 +77,8 @@ pub struct ProjectFileBuild {
     preliminary_commands: Vec<Vec<String>>,
 
     threaded: Option<bool>,
+    /// Name of the sanitizer to instrument the built program with, from the set
+    /// `Sanitizer::from_str` accepts.
     sanitize: Option<String>,
     debug: Option<bool>,
     opt_level: Option<String>,
@@ -107,6 +109,8 @@ pub struct ProjectFileBuildTest {
     preliminary_commands: Vec<Vec<String>>,
 
     threaded: Option<bool>,
+    /// Name of the sanitizer to instrument the built test program with, from the set
+    /// `Sanitizer::from_str` accepts.
     sanitize: Option<String>,
     debug: Option<bool>,
     opt_level: Option<String>,
