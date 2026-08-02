@@ -241,4 +241,6 @@ Notes の箇条書きの後ろに置く。
 
 1. **名前。** `--skip-eval` / `skip_eval` を提案する。`--no-eval` は `--no-runtime-check` の形に揃うが、「プログラムを評価しない」とも読める。
 2. **適用範囲。** プログラム全体を推奨する。ルートプロジェクトのファイルだけに絞る案も実装可能である。
-3. **`fix test` での扱い。** `no_runtime_check` はテストモードで強制的に false に戻される。`skip_eval` も同じにするか、`build.test` セクションでの上書きに任せるか。`Debug::assert` は IO なのでこのフラグでは落ちない。テストが `eval` に頼るのは、`eval debug_println` でテストの進行を出している場合くらいである。強制はせず、`[build.test]` の `skip_eval` で他の設定と同じように上書きできる形を提案する。
+3. **`fix test` での扱い。** 隣の `no_runtime_check` の現状は次のとおりである。`create_config` はプロジェクトファイルを読んでからコマンドラインオプションを適用し、プロジェクトファイル側の処理はテストモードのとき `config.no_runtime_check` を false に戻す。したがって `fixproj.toml` の `[build] no_runtime_check = true` は `fix test` に持ち越されず（`[build.test]` にこのフィールドは無いので、プロジェクトファイルからテストのために立てる方法も無い）、`fix test --no-runtime-check` は後から適用されるので効く。
+
+   `skip_eval` も同じにするか、`threaded` / `debug` / `backtrace` と同じく `[build.test]` で立てられる形にするか。`Debug::assert` は `IO ()` なのでこのフラグでは落ちない。テストが `eval` に頼るのは `eval debug_println` でテストの進行を出している場合くらいなので、テストモードでの強制はせず、`[build.test]` の `skip_eval` で他の設定と同じように立てられる形を提案する。
