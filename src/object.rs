@@ -1110,7 +1110,8 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
-    /// The size of this object in bytes, as a value computed at run time.
+    /// The size of this object in bytes: a constant, except for an object that ends in an element
+    /// buffer, whose size takes a capacity the program computes at run time.
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
