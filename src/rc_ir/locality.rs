@@ -27,9 +27,8 @@ use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs,
     RcState, RcTarget, RcVar,
 };
-use crate::rc_ir::provenance::boxed_leaf_paths;
+use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
 use crate::rc_ir::specialize::{callers_of, specializable_callee, CloneRegistry};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// What is proved about one boxed leaf, once the enclosing function's inputs are concrete. A
@@ -274,7 +273,7 @@ impl LeafCond {
 /// A value with no boxed leaf is the empty map. A function's summary and an op's `locality_flow`
 /// share this type, differing only in what the atoms' input indices name.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct ExtShape(Map<FieldPath, LeafCond>);
+pub struct ExtShape(LeafMap<LeafCond>);
 
 impl ExtShape {
     /// The condition of each boxed leaf of a value of type `ty`, keyed by its path. `leaf` is called
@@ -284,20 +283,12 @@ impl ExtShape {
         type_env: &TypeEnv,
         leaf: &dyn Fn(&FieldPath) -> LeafCond,
     ) -> ExtShape {
-        ExtShape(
-            boxed_leaf_paths(ty, type_env)
-                .into_iter()
-                .map(|path| {
-                    let cond = leaf(&path);
-                    (path, cond)
-                })
-                .collect(),
-        )
+        ExtShape(LeafMap::build_shape(ty, type_env, leaf))
     }
 
     /// The shape whose every boxed leaf is `cond`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, cond: LeafCond) -> ExtShape {
-        ExtShape::build_shape(ty, type_env, &|_| cond.clone())
+        ExtShape(LeafMap::uniform(ty, type_env, cond))
     }
 
     /// The result of an op that produces a container the analysis knows the root state of: freshly
@@ -345,18 +336,13 @@ impl ExtShape {
     /// The condition of the boxed leaf at `path`. The path is always a boxed leaf of the value's
     /// type, which is the sole authority on the shape.
     pub fn leaf_at(&self, path: &[usize]) -> &LeafCond {
-        self.0
-            .get(path)
-            .unwrap_or_else(|| unreachable!("{:?} is not a boxed leaf of this value's type", path))
+        self.0.leaf_at(path)
     }
 
     /// The conditions of the boxed leaves under `path` — the leaves one reference-counting operation
     /// on that subtree touches. The empty path covers the whole value.
     pub fn leaves_under<'a>(&'a self, path: &'a [usize]) -> impl Iterator<Item = &'a LeafCond> {
-        self.0
-            .iter()
-            .filter(move |(leaf_path, _)| leaf_path.starts_with(path))
-            .map(|(_, cond)| cond)
+        self.0.leaves_under(path)
     }
 
     /// The conditions of the boxed leaves that descend through none of `fields` — what a
@@ -365,97 +351,53 @@ impl ExtShape {
         &'a self,
         fields: &'a [usize],
     ) -> impl Iterator<Item = &'a LeafCond> {
-        self.0
-            .iter()
-            .filter(move |(path, _)| match path.split_first() {
-                Some((head, _)) => !fields.contains(head),
-                None => true,
-            })
-            .map(|(_, cond)| cond)
+        self.0.leaves_outside_fields(fields)
     }
 
     /// Every boxed leaf's condition, in no particular order.
     pub fn leaves(&self) -> impl Iterator<Item = &LeafCond> {
-        self.0.values()
+        self.0.leaves()
     }
 
     /// Pointwise join. Both operands are shapes of the same type, hence of the same leaf paths.
     pub fn join(&self, other: &ExtShape) -> ExtShape {
-        // Differing paths would leave the result shaped like neither operand's type, which every
-        // reader of a leaf takes for granted.
-        assert!(
-            self.0.len() == other.0.len() && self.0.keys().all(|path| other.0.contains_key(path)),
-            "joining the locality of differently shaped values"
-        );
-        ExtShape(
-            self.0
-                .iter()
-                .map(|(path, cond)| (path.clone(), cond.join(&other.0[path])))
-                .collect(),
-        )
+        ExtShape(self.0.zip_with(&other.0, "locality", LeafCond::join))
     }
 
     /// The shape of field `i` of an unboxed aggregate: the leaves whose path descends through field
     /// `i`, with that head index stripped.
     pub fn project(&self, i: usize) -> ExtShape {
-        ExtShape(
-            self.0
-                .iter()
-                .filter_map(|(path, cond)| match path.split_first() {
-                    Some((head, rest)) if *head == i => Some((rest.to_vec(), cond.clone())),
-                    _ => None,
-                })
-                .collect(),
-        )
+        ExtShape(self.0.project(i))
     }
 
     /// Substitute the operands' shapes for the atoms of every leaf.
     pub fn substitute(&self, operands: &[ExtShape]) -> ExtShape {
-        ExtShape(
-            self.0
-                .iter()
-                .map(|(path, cond)| (path.clone(), cond.substitute(operands)))
-                .collect(),
-        )
+        ExtShape(self.0.map_leaves(|_, cond| cond.substitute(operands)))
     }
 
     /// What this shape resolves to for concrete inputs.
     pub fn resolve(&self, inputs: &[LocalityKey]) -> LocalityKey {
-        LocalityKey(
-            self.0
-                .iter()
-                .map(|(path, cond)| (path.clone(), cond.resolve(inputs)))
-                .collect(),
-        )
+        LocalityKey(self.0.to_key(|cond| cond.resolve(inputs)))
     }
 }
 
-/// The resolved locality of a whole value: the `Locality` of each of its boxed leaves, keyed by path.
-/// A specialization key is a function's parameters' locality, so it is `Hash`; the `BTreeMap` orders
-/// the paths canonically, giving equal shapes an identical hash and comparison.
+/// The resolved locality of a whole value: the `Locality` of each of its boxed leaves, mirroring
+/// `ExtShape` with a locality in place of each leaf's condition.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct LocalityKey(BTreeMap<FieldPath, Locality>);
+pub struct LocalityKey(LeafKey<Locality>);
 
 impl LocalityKey {
     /// The locality of the boxed leaf at `path`. As in `ExtShape::leaf_at`, the path always names a
     /// boxed leaf of the value's type.
     pub fn at(&self, path: &[usize]) -> Locality {
-        self.0
-            .get(path)
-            .copied()
-            .unwrap_or_else(|| unreachable!("{:?} is not a boxed leaf of this locality key", path))
+        self.0.at(path)
     }
 
     /// The key of a value of type `ty` about which nothing is proved — what an input reached from
     /// outside the analysis (an entry point, an indirect call, a call from outside this compilation
     /// unit) carries, and the key of every function's canonical version.
     pub fn all_may_ext(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> LocalityKey {
-        LocalityKey(
-            boxed_leaf_paths(ty, type_env)
-                .into_iter()
-                .map(|path| (path, Locality::MayExt))
-                .collect(),
-        )
+        LocalityKey(LeafKey::uniform(ty, type_env, Locality::MayExt))
     }
 }
 

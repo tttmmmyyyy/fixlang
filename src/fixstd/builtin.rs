@@ -42,8 +42,9 @@ use crate::object::{
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
-use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin, Provenance};
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};

@@ -32,9 +32,7 @@ use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::constants::{
-    BOOL_TRUE_TAG, CLOSURE_CAPTURE_IDX, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD,
-};
+use crate::constants::{BOOL_TRUE_TAG, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD};
 use crate::fixstd::builtin::{
     InlineLLVMArrayIsStorageUniqueBody, InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG,
 };
@@ -42,7 +40,7 @@ use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
 };
-use std::collections::BTreeMap;
+use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
@@ -61,55 +59,14 @@ pub enum LeafOrigin {
 /// branch join, empty for an absent union variant (the bottom of the lattice).
 pub type LeafOrigins = Set<LeafOrigin>;
 
-/// The provenance of a whole value: the source of each of its boxed leaves, keyed by the leaf's path
-/// (the field indices from the value's root down to the leaf). A value with no boxed leaf — a scalar
-/// or a fieldless aggregate — is the empty map. The value's type is the sole authority on the shape
-/// (which paths are boxed leaves), so a provenance stores no aggregate structure that could disagree
-/// with the type; a fieldless value therefore has exactly one representation.
+/// The provenance of a whole value: the source of each of its boxed leaves.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct Provenance(Map<FieldPath, LeafOrigins>);
-
-/// The paths of the boxed leaves of a value of type `ty` — the field indices from the root of `ty`
-/// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
-/// the capture; a boxed value is a single leaf at the current path; an unboxed aggregate (struct,
-/// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
-/// has none. It is the single source of truth for which of a type's paths are boxed leaves.
-pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
-    fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut FieldPath, out: &mut Vec<FieldPath>) {
-        if ty.is_fully_unboxed(type_env) {
-            return;
-        }
-        if ty.is_closure() {
-            path.push(CLOSURE_CAPTURE_IDX as usize);
-            out.push(path.clone());
-            path.pop();
-            return;
-        }
-        if ty.is_box(type_env) {
-            out.push(path.clone());
-            return;
-        }
-        // `Array` is one indivisible boxed leaf at its own path: its `field_types` is the element
-        // type, not the storage, so descending would miss the leaf (like `is_box`, stop here).
-        if ty.is_array() {
-            out.push(path.clone());
-            return;
-        }
-        for (i, fty) in ty.field_types(type_env).iter().enumerate() {
-            path.push(i);
-            go(fty, type_env, path, out);
-            path.pop();
-        }
-    }
-    let mut out = Vec::new();
-    go(ty, type_env, &mut Vec::new(), &mut out);
-    out
-}
+pub struct Provenance(LeafMap<LeafOrigins>);
 
 impl Provenance {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
     pub fn empty() -> Provenance {
-        Provenance(Map::default())
+        Provenance(LeafMap::empty())
     }
 
     /// The singleton leaf-source `{src}`.
@@ -126,20 +83,12 @@ impl Provenance {
         type_env: &TypeEnv,
         leaf: &dyn Fn(&FieldPath) -> LeafOrigins,
     ) -> Provenance {
-        Provenance(
-            boxed_leaf_paths(ty, type_env)
-                .into_iter()
-                .map(|path| {
-                    let origins = leaf(&path);
-                    (path, origins)
-                })
-                .collect(),
-        )
+        Provenance(LeafMap::build_shape(ty, type_env, leaf))
     }
 
     /// The provenance whose every boxed leaf is `src`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
-        Provenance::build_shape(ty, type_env, &|_| Provenance::leaf(src.clone()))
+        Provenance(LeafMap::uniform(ty, type_env, Provenance::leaf(src)))
     }
 
     /// The provenance of the result of an operation that produces one uniquely owned value among
@@ -160,19 +109,10 @@ impl Provenance {
     /// Pointwise join (branch merge): the leaf origins are unioned per path. Both operands have the
     /// same type, hence the same boxed-leaf paths.
     fn join(&self, other: &Provenance) -> Provenance {
-        // Differing paths would leave the result shaped like neither operand's type, which every
-        // reader of a leaf takes for granted.
-        assert!(
-            self.0.len() == other.0.len() && self.0.keys().all(|path| other.0.contains_key(path)),
-            "joining the provenance of differently shaped values"
-        );
-        let mut m = self.0.clone();
-        for (path, origins) in &other.0 {
-            m.entry(path.clone())
-                .and_modify(|acc| *acc = acc.union(origins).cloned().collect())
-                .or_insert_with(|| origins.clone());
-        }
-        Provenance(m)
+        Provenance(
+            self.0
+                .zip_with(&other.0, "provenance", |a, b| a.union(b).cloned().collect()),
+        )
     }
 
     /// The origins recorded for the boxed leaf at path `π`. `None` where `π` is not a boxed leaf of
@@ -186,15 +126,14 @@ impl Provenance {
 
     /// The source of every boxed leaf, in no particular order (the paths are not reported).
     pub fn leaves(&self) -> impl Iterator<Item = &LeafOrigins> {
-        self.0.values()
+        self.0.leaves()
     }
 
     /// Substitute the `Arg(j, σ)` symbols of a declared provenance with the operands' provenance:
     /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Unknown` stay. Used to compose a
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
     fn compose(&self, operand_provs: &[Provenance]) -> Provenance {
-        let mut m = Map::default();
-        for (path, origins) in &self.0 {
+        Provenance(self.0.map_leaves(|_, origins| {
             let mut out = Set::default();
             for src in origins {
                 match src {
@@ -227,34 +166,22 @@ impl Provenance {
                     }
                 }
             }
-            m.insert(path.clone(), out);
-        }
-        Provenance(m)
+            out
+        }))
     }
 
     /// The provenance of field `i`: the leaves whose path descends through field `i`, with that head
     /// index stripped. A boxed value or a scalar has no such leaf, so it projects to the empty value.
     fn project(&self, i: usize) -> Provenance {
-        let mut m = Map::default();
-        for (path, origins) in &self.0 {
-            if let Some((head, rest)) = path.split_first() {
-                if *head == i {
-                    m.insert(rest.to_vec(), origins.clone());
-                }
-            }
-        }
-        Provenance(m)
+        Provenance(self.0.project(i))
     }
 
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
     fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
-        let mut m = self.0.clone();
-        for (leaf_path, origins) in m.iter_mut() {
-            if leaf_path.starts_with(path) {
-                *origins = Provenance::leaf(src.clone());
-            }
-        }
-        Provenance(m)
+        Provenance(
+            self.0
+                .map_leaves_under(path, |_| Provenance::leaf(src.clone())),
+        )
     }
 
     /// Demote every boxed leaf under `path` to `Unknown` (the effect of duplicating the reference with a
@@ -329,31 +256,24 @@ pub enum SharingVerdict {
     Dynamic,
 }
 
-/// The resolved uniqueness of a whole value: the `SharingVerdict` verdict of each of its boxed leaves,
-/// keyed by path (mirroring `Provenance`, with a `SharingVerdict` in place of each leaf source). A
-/// specialization key is a function's parameters' uniqueness, so it is `Hash`; the `BTreeMap` orders
-/// the paths canonically, giving equal shapes an identical hash and comparison.
+/// The resolved uniqueness of a whole value: the `SharingVerdict` of each of its boxed leaves,
+/// mirroring `Provenance` with a verdict in place of each leaf source.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Uniqueness(BTreeMap<FieldPath, SharingVerdict>);
+pub struct Uniqueness(LeafKey<SharingVerdict>);
 
 impl Uniqueness {
     /// The `SharingVerdict` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
     /// caller (`resolve_leaf`) resolves an `Arg`'s path, which addresses a boxed leaf of the input's
     /// type — so a miss is a malformed provenance, not a case to default away.
     fn verdict_at(&self, path: &[usize]) -> SharingVerdict {
-        self.0.get(path).copied().unwrap_or_else(|| {
-            unreachable!(
-                "path {:?} is not a boxed leaf of the uniqueness shape",
-                path
-            )
-        })
+        self.0.at(path)
     }
 
     /// The uniqueness shape of a value of type `ty` whose every boxed leaf is `Dynamic` — the input
     /// uniqueness of a function whose caller supplies no static information (an entry point, an
     /// indirectly reached function, or the baseline version of any function).
     pub fn all_dynamic(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Uniqueness {
-        resolve(&Provenance::uniform(ty, type_env, LeafOrigin::Unknown), &[])
+        Uniqueness(LeafKey::uniform(ty, type_env, SharingVerdict::Dynamic))
     }
 }
 
@@ -394,12 +314,7 @@ fn resolve_leaf(origins: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict 
 /// A value with no boxed leaf resolves to the empty map, so a specialization key built from the
 /// resolved uniqueness reflects only the boxed leaves and ignores how the unboxed structure nests.
 pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
-    Uniqueness(
-        prov.0
-            .iter()
-            .map(|(path, origins)| (path.clone(), resolve_leaf(origins, inputs)))
-            .collect(),
-    )
+    Uniqueness(prov.0.to_key(|origins| resolve_leaf(origins, inputs)))
 }
 
 /// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
@@ -950,9 +865,7 @@ mod tests {
 
     // A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
-        let mut m = Map::default();
-        m.insert(vec![], Provenance::leaf(src));
-        Provenance(m)
+        Provenance(LeafMap::from_leaves([(vec![], Provenance::leaf(src))]))
     }
     fn fresh() -> Provenance {
         boxed(LeafOrigin::Fresh)
@@ -965,19 +878,19 @@ mod tests {
     }
     // An unboxed aggregate: each child's leaves keyed under the child's field index.
     fn agg(children: Vec<Provenance>) -> Provenance {
-        let mut m = Map::default();
-        for (i, child) in children.into_iter().enumerate() {
-            for (path, origins) in child.0 {
+        let mut leaves = vec![];
+        for (i, child) in children.iter().enumerate() {
+            for (path, origins) in child.0.iter() {
                 let mut p = vec![i];
-                p.extend(path);
-                m.insert(p, origins);
+                p.extend(path.iter().copied());
+                leaves.push((p, origins.clone()));
             }
         }
-        Provenance(m)
+        Provenance(LeafMap::from_leaves(leaves))
     }
     // A resolved uniqueness from its `(path, verdict)` leaves.
     fn uniq(leaves: Vec<(Vec<usize>, SharingVerdict)>) -> Uniqueness {
-        Uniqueness(leaves.into_iter().collect())
+        Uniqueness(LeafKey::from_leaves(leaves))
     }
 
     #[test]
@@ -1022,9 +935,8 @@ mod tests {
         let mut origins = Set::default();
         origins.insert(LeafOrigin::Fresh);
         origins.insert(LeafOrigin::Arg(1, vec![]));
-        let mut dm = Map::default();
-        dm.insert(vec![], origins);
-        let composed = Provenance(dm).compose(&[Provenance::empty(), unknown()]);
+        let declared = Provenance(LeafMap::from_leaves([(vec![], origins)]));
+        let composed = declared.compose(&[Provenance::empty(), unknown()]);
         let out = composed.leaf_origins_at(&[]).unwrap();
         assert!(out.contains(&LeafOrigin::Fresh));
         assert!(out.contains(&LeafOrigin::Unknown));
@@ -1067,9 +979,8 @@ mod tests {
         // A fieldless value is `unboxed`; a boxed value shows its source (a bottom leaf as `_`);
         // an aggregate's leaves are keyed by path inside braces.
         assert_eq!(Provenance::empty().to_string(), "unboxed");
-        let mut bottom = Map::default();
-        bottom.insert(vec![], Set::default());
-        assert_eq!(Provenance(bottom).to_string(), "_");
+        let bottom = Provenance(LeafMap::from_leaves([(vec![], Set::default())]));
+        assert_eq!(bottom.to_string(), "_");
         assert_eq!(fresh().to_string(), "fresh");
         assert_eq!(
             agg(vec![fresh(), unknown()]).to_string(),

@@ -23,7 +23,8 @@ use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar, VarPath,
 };
-use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin};
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::rc_ir::provenance::LeafOrigin;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
