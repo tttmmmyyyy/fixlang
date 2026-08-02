@@ -766,7 +766,7 @@ impl ObjectFieldType {
         }
     }
 
-    // Clone an struct object `str` into `dst`.
+    // Clone an struct object `src` into `dst`.
     // `dst` should be already allocated but not initialized.
     // `src` will not be released.
     pub fn clone_struct<'c, 'm>(
@@ -790,7 +790,7 @@ impl ObjectFieldType {
         dst
     }
 
-    // Clone an union object `str` into `dst`.
+    // Clone an union object `src` into `dst`.
     // `dst` should be already allocated but not initialized.
     // `src` will not be released.
     pub fn clone_union<'c, 'm>(
@@ -1022,30 +1022,30 @@ impl ObjectFieldType {
     // This "moves out" the field; in other words, the returned object is not retained.
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: &Object<'c>,
+        struct_obj: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        let field_ty = str.ty.field_types(gc.type_env())[field_idx as usize].clone();
-        str.extract_field_object(gc, field_idx + field_offset, field_ty)
+        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_ty = struct_obj.ty.field_types(gc.type_env())[field_idx as usize].clone();
+        struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
 
     // Set an `Object` into the field of a struct `Object`.
     // This "moves into" the field; in other words, the old value isn't released.
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: Object<'c>,
+        struct_obj: Object<'c>,
         field_idx: u32,
         field: &Object<'c>,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        str.insert_field_object(gc, field_offset + field_idx, field)
+        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
     // Get field of struct as Objects (with refcnt managed).
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        str: &Object<'c>,
+        struct_obj: &Object<'c>,
         field_indices: &[u32],
         state: RcState,
     ) -> Vec<Object<'c>> {
@@ -1054,23 +1054,23 @@ impl ObjectFieldType {
         let mut ret = vec![];
         for field_idx in field_indices {
             // Move the field out as an object; it carries its own leaves, so it outlives the struct.
-            let field = ObjectFieldType::move_out_struct_field(gc, str, *field_idx);
+            let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
             ret.push(field);
         }
 
-        if str.is_box(gc.type_env()) {
+        if struct_obj.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
             for field in &ret {
                 gc.retain(field.clone(), state);
             }
-            gc.release(str.clone(), state);
+            gc.release(struct_obj.clone(), state);
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
-            for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
+            for field_idx in 0..struct_obj.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
-                    let field = ObjectFieldType::move_out_struct_field(gc, str, field_idx);
+                    let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, field_idx);
                     gc.release(field, state);
                 }
             }

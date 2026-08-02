@@ -2339,13 +2339,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         match call_site.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
-                    let ret_str = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
-                    let ret_str_val = ret_str.get_undef();
-                    let ret_str_val = self
+                    let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
+                    let ret_struct_val = ret_struct_ty.get_undef();
+                    let ret_struct_val = self
                         .builder()
-                        .build_insert_value(ret_str_val, ret_c_val, 0, "")
+                        .build_insert_value(ret_struct_val, ret_c_val, 0, "")
                         .unwrap();
-                    obj = obj.insert_field(self, 1, ret_str_val);
+                    obj = obj.insert_field(self, 1, ret_struct_val);
                 } else {
                     obj = obj.insert_field(self, 0, ret_c_val);
                 }
@@ -2369,9 +2369,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         let cap_obj = self.get_scoped_obj_noretain(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
-        let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
-        let cap_val =
-            cap_obj.extract_field_as(self, cap_obj_str_ty, cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX);
+        let cap_obj_struct_ty = cap_obj_ty.to_struct_type(self, vec![]);
+        let cap_val = cap_obj.extract_field_as(
+            self,
+            cap_obj_struct_ty,
+            cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX,
+        );
         let obj = Object::new(cap_val, result_ty.clone(), self);
         let one = self.context.i64_type().const_int(1, false);
         self.build_retain(obj.clone(), one, state);

@@ -4110,13 +4110,13 @@ impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         if Self::borrows_container(ty, gc.type_env()) {
-            let str = gc.get_scoped_obj_noretain(&self.var_name);
-            return ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+            let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
+            return ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
         }
-        let str = gc.get_scoped_obj(&self.var_name);
+        let struct_obj = gc.get_scoped_obj(&self.var_name);
         ObjectFieldType::get_struct_fields(
             gc,
-            &str,
+            &struct_obj,
             &[self.field_idx as u32],
             assumed_state(self.assume_local),
         )[0]
@@ -4546,20 +4546,20 @@ pub struct InlineLLVMStructPunchBody {
 impl LLVMGen for InlineLLVMStructPunchBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument object (the struct value).
-        let mut str = gc.get_scoped_obj(&self.var_name);
+        let mut struct_obj = gc.get_scoped_obj(&self.var_name);
 
         if self.force_unique {
             // If the struct is shared, we should clone it to make it unique.
-            str = make_struct_unique(gc, str, assumed_state(self.assume_local));
+            struct_obj = make_struct_unique(gc, struct_obj, assumed_state(self.assume_local));
         }
 
         // Move out struct field value without releasing the struct itself.
-        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+        let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
 
         // Create the return value.
         let pair = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"));
         let pair = pair.insert_field_object(gc, 0, &field);
-        let pair = pair.insert_field_object(gc, 1, &str);
+        let pair = pair.insert_field_object(gc, 1, &struct_obj);
 
         pair
     }
@@ -4763,12 +4763,13 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
         // Convert type of punched_str into the struct type.
         let punched_value = punched_str.value(gc);
-        let str = Object::new(punched_value, struct_ty.clone(), gc);
+        let struct_obj = Object::new(punched_value, struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
-        let str = ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field);
+        let struct_obj =
+            ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &field);
 
-        str
+        struct_obj
     }
 
     fn name(&self) -> String {
@@ -5671,10 +5672,10 @@ pub fn struct_act_const(
 // If it is shared, clone the object.
 fn make_struct_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    str: Object<'c>,
+    struct_obj: Object<'c>,
     state: RcState,
 ) -> Object<'c> {
-    make_struct_union_unique(gc, str, state)
+    make_struct_union_unique(gc, struct_obj, state)
 }
 
 // Make struct / union object unique.
@@ -5759,21 +5760,22 @@ impl LLVMGen for InlineLLVMStructSetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _str_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
-        let str = gc.get_scoped_obj(&self.struct_name);
+        let struct_obj = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let str = if self.force_unique {
-            make_struct_unique(gc, str, assumed_state(self.assume_local))
+        let struct_obj = if self.force_unique {
+            make_struct_unique(gc, struct_obj, assumed_state(self.assume_local))
         } else {
-            str
+            struct_obj
         };
 
         // Release old value
-        let old_value = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+        let old_value =
+            ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
         gc.release(old_value, assumed_state(self.assume_local));
 
         // Set new value
-        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &value)
+        ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &value)
     }
 
     fn name(&self) -> String {
