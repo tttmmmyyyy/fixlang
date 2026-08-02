@@ -521,14 +521,14 @@ impl<'a> Walk<'a> {
                 let (result, arms) = self.walk_match(scrut, arms);
                 self.env.insert(x.name.clone(), result);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || RcExpr::Let(x.clone(), RcRhs::Match(scrut.clone(), arms), k);
-                (shape, self.rebuild(node, rebuilt))
+                let build = || RcExpr::Let(x.clone(), RcRhs::Match(scrut.clone(), arms), k);
+                (shape, self.rebuild(node, build))
             }
             RcExpr::Let(x, rhs, k) => {
                 let (value, routed) = self.walk_rhs(x, rhs);
                 self.env.insert(x.name.clone(), value);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || {
+                let build = || {
                     let rhs = match routed {
                         Some(Rewritten::Callee(callee)) => match rhs {
                             RcRhs::App(_, args) => RcRhs::App(callee, args.clone()),
@@ -542,26 +542,26 @@ impl<'a> Walk<'a> {
                     };
                     RcExpr::Let(x.clone(), rhs, k)
                 };
-                (shape, self.rebuild(node, rebuilt))
+                (shape, self.rebuild(node, build))
             }
             RcExpr::Retain(v, path, _, k) => {
                 let state = self.annotate_rc_site(v, path);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || RcExpr::Retain(v.clone(), path.clone(), state, k);
-                (shape, self.rebuild(node, rebuilt))
+                let build = || RcExpr::Retain(v.clone(), path.clone(), state, k);
+                (shape, self.rebuild(node, build))
             }
             RcExpr::Release(v, path, _, k) => {
                 let state = self.annotate_rc_site(v, path);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || RcExpr::Release(v.clone(), path.clone(), state, k);
-                (shape, self.rebuild(node, rebuilt))
+                let build = || RcExpr::Release(v.clone(), path.clone(), state, k);
+                (shape, self.rebuild(node, build))
             }
             RcExpr::Destructure(container, fields, _, k) => {
                 let state = self.annotate_destructure(container, fields);
                 self.bind_destructured_fields(container, fields);
                 let (shape, k) = self.walk(k);
-                let rebuilt = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
-                (shape, self.rebuild(node, rebuilt))
+                let build = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
+                (shape, self.rebuild(node, build))
             }
             RcExpr::Eval(v, k) => {
                 let (shape, k) = self.walk(k);

@@ -32,13 +32,13 @@ pub struct CloneRegistry<K> {
 }
 
 impl<K: Clone + Eq + Hash> CloneRegistry<K> {
-    pub fn new(tag: &'static str) -> CloneRegistry<K> {
+    pub fn new(pass_tag: &'static str) -> CloneRegistry<K> {
         CloneRegistry {
             clone_names: Map::default(),
             requested: Set::default(),
             worklist: VecDeque::new(),
             fresh_name_counter: 0,
-            tag,
+            tag: pass_tag,
         }
     }
 

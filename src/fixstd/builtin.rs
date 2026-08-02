@@ -4906,10 +4906,10 @@ fn read_component_locality(
         let container = LeafCond::input_leaf(CONTAINER_ARG, vec![]);
         return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
     }
-    ExtShape::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
-        let mut path = vec![component];
-        path.extend_from_slice(sigma);
-        LeafCond::input_leaf(CONTAINER_ARG, path)
+    ExtShape::build_shape(result_ty, type_env, &|path: &FieldPath| {
+        let mut p = vec![component];
+        p.extend_from_slice(path);
+        LeafCond::input_leaf(CONTAINER_ARG, p)
     })
 }
 
