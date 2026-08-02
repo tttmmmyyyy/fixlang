@@ -320,6 +320,12 @@ __attribute__((noreturn)) void fixruntime_negative_array_size(int64_t size)
     fixruntime_abort();
 }
 
+__attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
+{
+    fprintf(stderr, "Array size or capacity exceeds the address space: %" PRId64 "\n", size);
+    fixruntime_abort();
+}
+
 // void fixruntime_union_variant_mismatch(uint8_t expected, uint8_t actual)
 // {
 //     fprintf(stderr, "Union variant mismatch: expected=%" PRIu8 ", actual=%" PRIu8 "\n", expected, actual);

@@ -41,6 +41,7 @@
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
+- Creating or growing an array whose elements need more bytes than the address space holds now aborts the program. `Array::empty(2305843009213693952) : Array I64` used to return an array whose memory had room for none of its elements, so writing to that array corrupted the heap. `--no-runtime-check` disables this check as it does the bounds checks.
 - An `Array` whose element type is boxed now uses one pointer of memory per element. An array of a boxed struct of eight `I64` fields used nine times the memory it needed.
 
 #### Tool
