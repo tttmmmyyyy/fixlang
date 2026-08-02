@@ -612,7 +612,10 @@ impl<'a> Walk<'a> {
         self.env
             .get(&var.name)
             .unwrap_or_else(|| {
-                unreachable!("local `{}` is read before its binding", var.name.to_string())
+                unreachable!(
+                    "local `{}` is read before its binding",
+                    var.name.to_string()
+                )
             })
             .clone()
     }
