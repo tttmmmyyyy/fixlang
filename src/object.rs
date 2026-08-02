@@ -1219,8 +1219,8 @@ impl ObjectType {
         unboxed_path: &[Arc<TypeNode>],
     ) -> BasicTypeEnum<'c> {
         if self.is_unbox {
-            let str_ty = self.to_struct_type(gc, unboxed_path);
-            str_ty.into()
+            let struct_ty = self.to_struct_type(gc, unboxed_path);
+            struct_ty.into()
         } else {
             gc.context.ptr_type(AddressSpace::from(0)).into()
         }
@@ -1294,14 +1294,14 @@ pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
 /// The debug info type describing the control block that heads every boxed object. It presents the
 /// reference counter alone, the one field a debugger session has use for.
 pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
-    let str_type = control_block_type(gc);
+    let struct_ty = control_block_type(gc);
 
     let refcnt_ty = refcnt_type(gc.context);
     let refcnt_size_in_bits = gc.target_data.get_bit_size(&refcnt_ty);
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
     let refcnt_offset_in_bits = gc
         .target_data
-        .offset_of_element(&str_type, CTRL_BLK_REFCNT_IDX)
+        .offset_of_element(&struct_ty, CTRL_BLK_REFCNT_IDX)
         .unwrap()
         * 8;
     let refcnt_member = gc
@@ -1321,8 +1321,8 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let elements = vec![refcnt_member];
 
     let name = "<control block>";
-    let size_in_bits = gc.target_data.get_bit_size(&str_type);
-    let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
+    let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
+    let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
     gc.get_di_builder()
         .create_struct_type(
             gc.get_di_compile_unit().as_debug_info_scope(),
@@ -2303,7 +2303,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
 ) -> DIType<'c> {
-    let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
+    let debug_struct_ty = ty_to_debug_struct_ty(ty.clone(), gc);
     if ty.is_box(&gc.type_env()) {
         let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
         let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
@@ -2311,14 +2311,14 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
         gc.get_di_builder()
             .create_pointer_type(
                 "<pointer to boxed value>",
-                debug_str_ty,
+                debug_struct_ty,
                 size_in_bits,
                 align_in_bits,
                 AddressSpace::from(0),
             )
             .as_type()
     } else {
-        debug_str_ty
+        debug_struct_ty
     }
 }
 
@@ -2379,9 +2379,9 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         }
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-        let str_type = gc.struct_type_of(&ty);
-        let size_in_bits = gc.target_data.get_bit_size(&str_type);
-        let align_in_bits = gc.target_data.get_abi_alignment(&str_type) * 8;
+        let struct_ty = gc.struct_type_of(&ty);
+        let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
+        let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
 
         let mut subelement_names = vec![];
         if !ty.is_closure() {
@@ -2441,7 +2441,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             let align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
             let offset_in_bits = gc
                 .target_data
-                .offset_of_element(&str_type, i as u32)
+                .offset_of_element(&struct_ty, i as u32)
                 .unwrap()
                 * 8;
             let mem_ty = gc

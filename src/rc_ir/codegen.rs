@@ -108,16 +108,16 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_push(&cap.name, &obj);
         }
 
-        // The parameters consumed here must exhaust the function's parameters: the part
-        // scalars of every argument, plus the capture pointer for a closure. A mismatch means the
-        // call site (`apply_lambda`) and the signature (`lambda_function_type`) disagree on the
-        // flattening. Checked under develop mode (the unit tests).
+        // The parameters consumed here must exhaust the function's parameters: the parts of every
+        // argument, plus the capture pointer for a closure. A mismatch means the call site
+        // (`apply_lambda`) and the signature (`lambda_function_type`) disagree on the split.
+        // Checked under develop mode (the unit tests).
         if self.config.develop_mode {
             let expected = next_param + if func.capture.is_some() { 1 } else { 0 };
             assert_eq!(
                 expected,
                 fn_val.count_params(),
-                "flattened parameter count desync for `{}`",
+                "the parameters of `{}` disagree with the split of its arguments",
                 func.name.name.to_string()
             );
         }

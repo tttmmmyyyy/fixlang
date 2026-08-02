@@ -286,10 +286,10 @@ impl ExportedFunctionType {
         // Resolve type aliases in `ty`.
         let ty = ty.resolve_type_aliases(type_env)?;
 
-        // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
+        // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], B)`.
         let (doms, mut codom) = ty.collect_app_src(usize::MAX);
 
-        // If `B` is `IO C`, then replace `B` with `C` and set `is_io` to `true`.
+        // If `B` is `IO C`, then replace `B` with `C` and set `io_type` to `IO`.
         let mut io_type = IOType::Pure;
         match &codom.ty {
             Type::TyApp(fun, arg) => {
