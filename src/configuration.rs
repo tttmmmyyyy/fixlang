@@ -313,11 +313,12 @@ pub struct Configuration {
     // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
     // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
     pub emit_rc_ir: Option<String>,
-    // Is in compiler development mode?
+    /// Run the compiler's own consistency checks — the RC IR validator and the assertions in the
+    /// code generator — and turn an internal error into a panic.
     pub develop_mode: bool,
-    // Enable backtrace support (keep frame pointers and add backtrace library).
+    /// Enable backtrace support: keep frame pointers and link the backtrace library.
     pub backtrace: bool,
-    // Disable runtime checks such as array bounds check.
+    /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
@@ -710,11 +711,11 @@ impl Configuration {
         }
     }
 
-    // Get hash value of the configurations that affect the object file generation.
-    //
-    // The fields are listed by hand, so every field of `Configuration` that changes the generated
-    // code has to be hashed here: one left out makes a build reuse the object files of a build that
-    // generated different code.
+    /// Get hash value of the configurations that affect the object file generation.
+    ///
+    /// The fields are listed by hand, so every field of `Configuration` that changes the generated
+    /// code has to be hashed here: one left out makes a build reuse the object files of a build that
+    /// generated different code.
     pub fn object_generation_hash(&self) -> String {
         let mut hash_source = String::new();
         hash_source.push_str(&self.fix_opt_level.to_string());
@@ -742,7 +743,8 @@ impl Configuration {
         format!("{:x}", md5::compute(hash_source))
     }
 
-    // Edit CPU features according to the configuration.
+    /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
+    /// feature a pattern matches.
     pub fn edit_cpu_features(&self, features: &mut CpuFeatures) {
         features.disable_by_regexes(&self.disable_cpu_features_regex);
     }

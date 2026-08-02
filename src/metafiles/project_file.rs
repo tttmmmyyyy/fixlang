@@ -82,6 +82,7 @@ pub struct ProjectFileBuild {
     backtrace: Option<bool>,
     #[serde(default)]
     disable_cpu_features: Vec<String>,
+    /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
     #[serde(default)]
     no_runtime_check: bool,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
@@ -89,6 +90,8 @@ pub struct ProjectFileBuild {
     #[serde(default)]
     skip_eval: bool,
 
+    /// The `build.test` sub-section, which supplies the settings a `fix test` build uses in place of
+    /// the ones this `build` section gives.
     test: Option<ProjectFileBuildTest>,
 }
 
@@ -111,6 +114,8 @@ pub struct ProjectFileBuildTest {
     debug: Option<bool>,
     opt_level: Option<String>,
     backtrace: Option<bool>,
+    /// Regex patterns of the CPU features to turn off in a test build, added to the ones the
+    /// `build` section gives.
     #[serde(default)]
     disable_cpu_features: Vec<String>,
     /// Whether to disable the run-time checks, such as the array bounds check, in a test build.
@@ -122,6 +127,7 @@ pub struct ProjectFileBuildTest {
     #[serde(default)]
     skip_eval: bool,
 
+    /// Whether `fix test` runs the built test program under valgrind's memcheck tool.
     memcheck: Option<bool>,
 }
 
@@ -870,8 +876,8 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Open the lock file.
-    // If the project has no dependencies, return an empty lock file.
+    /// Open the lock file.
+    /// If the project has no dependencies, return an empty lock file.
     pub fn open_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
         if self

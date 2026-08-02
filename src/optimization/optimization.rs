@@ -4,6 +4,8 @@ use super::{
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
+/// Rewrite `prg` in place by running the optimization passes in order, each one gated by the
+/// setting in `config` that turns it on. A pass sees the program the passes above it left.
 pub fn run(prg: &mut Program, config: &Configuration) {
     let _sw = StopWatch::new("optimization::run", config.show_build_times);
 
