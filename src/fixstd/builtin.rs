@@ -720,13 +720,13 @@ impl LLVMGen for InlineLLVMIntLit {
         true
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -774,13 +774,13 @@ impl LLVMGen for InlineLLVMFloatLit {
         true
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -816,13 +816,13 @@ impl LLVMGen for InlineLLVMNullPtrLit {
         true
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -920,13 +920,13 @@ impl LLVMGen for InlineLLVMStringBuf {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -961,10 +961,10 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
-    x_str: FullName,
+    x_name: FullName,
     /// The variable holding the recursion functional, which takes `self` and returns the recursive
     /// function.
-    f_str: FullName,
+    f_name: FullName,
     /// The variable holding the capture of the function being generated, which the rebuilt `fix(f)`
     /// closure carries so that it captures the same values.
     cap_name: FullName,
@@ -984,8 +984,8 @@ impl LLVMGen for InlineLLVMFixBody {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Get arguments
-        let x = gc.get_scoped_obj(&self.x_str);
-        let f = gc.get_scoped_obj(&self.f_str);
+        let x = gc.get_scoped_obj(&self.x_name);
+        let f = gc.get_scoped_obj(&self.f_name);
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
@@ -1003,17 +1003,17 @@ impl LLVMGen for InlineLLVMFixBody {
     fn name(&self) -> String {
         format!(
             "fix({}, {}, {})",
-            self.f_str.to_string(),
-            self.x_str.to_string(),
+            self.f_name.to_string(),
+            self.x_name.to_string(),
             self.cap_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
+        vec![&mut self.x_name, &mut self.f_name, &mut self.cap_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -1029,13 +1029,13 @@ impl LLVMGen for InlineLLVMFixBody {
 }
 
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
-    let f_str = FullName::local(f);
-    let x_str = FullName::local(x);
+    let f_name = FullName::local(f);
+    let x_name = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
     expr_llvm(
         Box::new(InlineLLVMFixBody {
-            x_str,
-            f_str,
+            x_name,
+            f_name,
             cap_name,
         }),
         type_tyvar_star(b),
@@ -1115,13 +1115,13 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
         vec![&mut self.from_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1209,13 +1209,13 @@ impl LLVMGen for InlineLLVMCastFloatBody {
         vec![&mut self.from_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1310,13 +1310,13 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
         vec![&mut self.from_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1416,13 +1416,13 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
         vec![&mut self.from_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1506,13 +1506,13 @@ impl LLVMGen for InlineLLVMShiftBody {
         vec![&mut self.value_name, &mut self.n_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1623,13 +1623,13 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1702,13 +1702,13 @@ impl LLVMGen for InlineLLVMBitNotBody {
         vec![&mut self.operand_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1789,13 +1789,13 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1874,7 +1874,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -2037,13 +2037,13 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
@@ -2198,20 +2198,20 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // `append_value_into_array_buf` gives every filled slot its own reference to the value and
         // then consumes the operand's, whatever `force_unique` says.
         let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
-        targets.push(RcTarget::Operand(APPEND_VALUE_VALUE_ARG, vec![]));
+        targets.push(RcTarget::Operand(APPEND_VALUE_ELEMENT_ARG, vec![]));
         targets
     }
 
@@ -2508,7 +2508,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         gc.build_release_mark(
             storage.clone(),
             TraverserWorkType::release(),
-            RcState::Unknown,
+            assumed_state(self.assume_local),
         );
         let new_storage_val = new_storage.value(gc);
         let cloned = array
@@ -2575,13 +2575,13 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2824,21 +2824,21 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // Both paths consume `src`: the move path releases it emptied, and the copy path retains
         // each element it takes out of it and then releases it. Neither depends on `force_unique`.
         let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
-        targets.push(RcTarget::Operand(APPEND_SRC_ARG, vec![]));
-        targets.push(RcTarget::Contents(APPEND_SRC_ARG, vec![]));
+        targets.push(RcTarget::Operand(APPEND_RANGE_SRC_ARG, vec![]));
+        targets.push(RcTarget::Contents(APPEND_RANGE_SRC_ARG, vec![]));
         targets
     }
 
@@ -2985,13 +2985,13 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3084,11 +3084,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
     ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole, state);
-    gc.build_release_mark(
-        storage.clone(),
-        TraverserWorkType::release(),
-        RcState::Unknown,
-    );
+    gc.build_release_mark(storage.clone(), TraverserWorkType::release(), state);
     let new_storage_val = new_storage.value(gc);
     let cloned_array = array
         .clone()
@@ -3218,13 +3214,13 @@ impl LLVMGen for InlineLLVMArraySetBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
@@ -3394,13 +3390,13 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3549,7 +3545,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -3711,13 +3707,13 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3787,13 +3783,13 @@ impl LLVMGen for InlineLLVMArrayCheckRange {
         vec![&mut self.idx_name, &mut self.size_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3849,13 +3845,13 @@ impl LLVMGen for InlineLLVMArrayCheckSize {
         vec![&mut self.size_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3918,13 +3914,13 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3988,13 +3984,13 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -4050,13 +4046,13 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -4168,7 +4164,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
         }
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -4286,7 +4282,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         })
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -4296,7 +4292,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         // its fields, so field `i`'s boxed leaves carry constructor operand `i` (the path's head is
         // the field index, its tail the position within that field).
         if result_ty.is_box(type_env) {
-            return ExtShape::merge(result_ty, arg_tys, type_env);
+            return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
         }
         ExtShape::build_shape(result_ty, type_env, &|path| {
             let (i, rest) = path
@@ -4374,13 +4370,13 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -4445,7 +4441,7 @@ impl LLVMGen for InlineLLVMFFICallBody {
         self.arg_names.iter_mut().collect()
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -4501,7 +4497,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -4654,7 +4650,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         })
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -4741,7 +4737,7 @@ pub fn struct_punch(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
-    punched_str_name: FullName,
+    punched_struct_name: FullName,
     pub field_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
@@ -4758,16 +4754,17 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         struct_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
-        let mut punched_str = gc.get_scoped_obj(&self.punched_str_name);
+        let mut punched_struct = gc.get_scoped_obj(&self.punched_struct_name);
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
         if self.force_unique {
-            punched_str = make_struct_unique(gc, punched_str, assumed_state(self.assume_local));
+            punched_struct =
+                make_struct_unique(gc, punched_struct, assumed_state(self.assume_local));
         }
 
-        // Convert type of punched_str into the struct type.
-        let punched_value = punched_str.value(gc);
+        // Convert type of punched_struct into the struct type.
+        let punched_value = punched_struct.value(gc);
         let struct_obj = Object::new(punched_value, struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
@@ -4783,12 +4780,12 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
             self.field_idx,
             if self.force_unique { "" } else { "[unique]" },
             self.field_name.to_string(),
-            self.punched_str_name.to_string(),
+            self.punched_struct_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.punched_str_name, &mut self.field_name]
+        vec![&mut self.punched_struct_name, &mut self.field_name]
     }
 
     fn unique_check_operand(
@@ -4833,7 +4830,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         )
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -4935,7 +4932,7 @@ fn replaced_field_locality(
     value_arg: usize,
 ) -> ExtShape {
     if result_ty.is_box(type_env) {
-        return ExtShape::merge(result_ty, arg_tys, type_env);
+        return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
     }
     ExtShape::build_shape(result_ty, type_env, &|path| {
         // A boxed leaf of an unboxed struct starts with a field index.
@@ -4968,16 +4965,16 @@ pub fn struct_plug_in(
     let ty = type_fun(punched_ty, type_fun(field.ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
 
-    const PUNCHED_STR_NAME: &str = "punched_str_obj";
+    const PUNCHED_STRUCT_NAME: &str = "punched_struct_obj";
     const FIELD_NAME: &str = "field_obj";
     let expr = expr_abs(
-        vec![var_local(PUNCHED_STR_NAME)],
+        vec![var_local(PUNCHED_STRUCT_NAME)],
         expr_abs(
             vec![var_local(FIELD_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMStructPlugInBody {
                     assume_local: false,
-                    punched_str_name: FullName::local(PUNCHED_STR_NAME),
+                    punched_struct_name: FullName::local(PUNCHED_STRUCT_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
                     force_unique,
@@ -5711,15 +5708,15 @@ fn make_struct_union_unique<'c, 'm>(
     // Create new object and clone fields.
     let cloned_obj = create_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
     let cloned_obj = if obj.ty.is_struct(gc.type_env()) {
-        ObjectFieldType::clone_struct(gc, &obj, cloned_obj)
+        ObjectFieldType::clone_struct(gc, &obj, cloned_obj, state)
     } else if obj.ty.is_union(gc.type_env()) {
-        ObjectFieldType::clone_union(gc, &obj, cloned_obj)
+        ObjectFieldType::clone_union(gc, &obj, cloned_obj, state)
     } else {
         unreachable!()
     };
 
     // Release the old object.
-    gc.release(obj.clone(), RcState::Unknown);
+    gc.release(obj.clone(), state);
 
     let cloned_obj_ptr = cloned_obj.value(gc);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
@@ -5760,7 +5757,7 @@ pub struct InlineLLVMStructSetBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructSetBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _str_ty: &Arc<TypeNode>) -> Object<'c> {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
         let struct_obj = gc.get_scoped_obj(&self.struct_name);
@@ -5837,7 +5834,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         )
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -5987,7 +5984,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         })
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -5997,7 +5994,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         // variants, so the constructed variant's leaves carry the sole operand and the other
         // variants' leaves are the bottom.
         if result_ty.is_box(type_env) {
-            return ExtShape::merge(result_ty, arg_tys, type_env);
+            return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
         }
         let active = self.variant_index();
         ExtShape::build_shape(result_ty, type_env, &|path| {
@@ -6182,7 +6179,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         }
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -6315,13 +6312,13 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6430,7 +6427,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
         vec![&mut self.union_name, &mut self.modifier_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -6555,7 +6552,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
         Provenance::uniform_bottom(result_ty, type_env)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -6628,7 +6625,7 @@ impl LLVMGen for InlineLLVMHoleBody {
         vec![]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -6698,7 +6695,7 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
         vec![&mut self.f_name, &mut self.x_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -6909,7 +6906,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -7094,7 +7091,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -7185,13 +7182,13 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
         vec![&mut self.val_name, &mut self.ios_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7271,7 +7268,7 @@ impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
         vec![&mut self.ptr_name, &mut self.ios_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -7388,13 +7385,13 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7499,13 +7496,13 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7577,13 +7574,13 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7729,7 +7726,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -7791,9 +7788,9 @@ fn mutated_in_place_locality(
 /// The operand position of the array an `Array::set` writes into.
 const ARRAY_SET_ARRAY_ARG: usize = 0;
 /// The operand position of the value `_unsafe_append_value_capacity_unchecked` fills slots with.
-const APPEND_VALUE_VALUE_ARG: usize = 1;
+const APPEND_VALUE_ELEMENT_ARG: usize = 1;
 /// The operand position of the array `_unsafe_append_capacity_bounds_unchecked` reads from.
-const APPEND_SRC_ARG: usize = 1;
+const APPEND_RANGE_SRC_ARG: usize = 1;
 
 /// The reference-counting state an op's own checks and reference counting run under: `Local` where
 /// locality inference proved the objects they touch local, `Unknown` otherwise.
@@ -7974,7 +7971,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         )
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -8084,7 +8081,7 @@ impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
         i == 0
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -8224,7 +8221,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         Provenance::fresh_under(result_ty, type_env, &[0])
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -8381,7 +8378,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         Provenance::fresh_under(result_ty, type_env, &[1, 0])
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
@@ -8453,13 +8450,13 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
         vec![]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8544,13 +8541,13 @@ impl LLVMGen for InlineLLVMDestructorMake {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8686,7 +8683,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
@@ -8881,13 +8878,13 @@ impl LLVMGen for InlineLLVMIntEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8960,13 +8957,13 @@ impl LLVMGen for InlineLLVMPtrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9036,13 +9033,13 @@ impl LLVMGen for InlineLLVMFloatEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9133,13 +9130,13 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9214,13 +9211,13 @@ impl LLVMGen for InlineLLVMFloatLessThanBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9309,13 +9306,13 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9390,13 +9387,13 @@ impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9465,13 +9462,13 @@ impl LLVMGen for InlineLLVMIntAddBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9531,13 +9528,13 @@ impl LLVMGen for InlineLLVMFloatAddBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9606,13 +9603,13 @@ impl LLVMGen for InlineLLVMIntSubBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9672,13 +9669,13 @@ impl LLVMGen for InlineLLVMFloatSubBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9747,13 +9744,13 @@ impl LLVMGen for InlineLLVMIntMulBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9813,13 +9810,13 @@ impl LLVMGen for InlineLLVMFloatMulBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9896,13 +9893,13 @@ impl LLVMGen for InlineLLVMIntDivBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9962,13 +9959,13 @@ impl LLVMGen for InlineLLVMFloatDivBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -10045,13 +10042,13 @@ impl LLVMGen for InlineLLVMIntRemBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -10113,13 +10110,13 @@ impl LLVMGen for InlineLLVMIntNegBody {
         vec![&mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -10172,13 +10169,13 @@ impl LLVMGen for InlineLLVMFloatNegBody {
         vec![&mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -10248,13 +10245,13 @@ impl LLVMGen for InlineLLVMBoolNegBody {
         vec![&mut self.rhs_name]
     }
 
-    fn locality_flow(
+    fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::merge(result_ty, arg_tys, type_env)
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {

@@ -776,10 +776,13 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `dst` — an allocated but uninitialized struct object of the same type; every field this
     ///   writes is a first write.
+    /// * `state` — the reference-counting state of the fields, which is what `src` reaches. An
+    ///   operation whose annotation covers its clone path proves it local and passes it here.
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         mut dst: Object<'c>,
+        state: RcState,
     ) -> Object<'c> {
         for (i, field) in src.ty.fields(gc.type_env()).iter().enumerate() {
             // Skip the punched field.
@@ -789,7 +792,7 @@ impl ObjectFieldType {
 
             // Retain the field.
             let field = ObjectFieldType::move_out_struct_field(gc, src, i as u32);
-            gc.retain(field.clone(), RcState::Unknown);
+            gc.retain(field.clone(), state);
 
             // Clone the field.
             dst = ObjectFieldType::move_into_struct_field(gc, dst, i as u32, &field);
@@ -803,10 +806,13 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `dst` — an allocated but uninitialized union object of the same type; the tag and payload
     ///   this writes are first writes.
+    /// * `state` — the reference-counting state of the payload, which is what `src` reaches. An
+    ///   operation whose annotation covers its clone path proves it local and passes it here.
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         dst: Object<'c>,
+        state: RcState,
     ) -> Object<'c> {
         // Clone the tag.
         let tag = ObjectFieldType::get_union_tag(gc, &src);
@@ -823,7 +829,7 @@ impl ObjectFieldType {
 
         // Retain the value.
         let one = gc.context.i64_type().const_int(1, false);
-        ObjectFieldType::retain_union(gc, dst.clone(), one, RcState::Unknown);
+        ObjectFieldType::retain_union(gc, dst.clone(), one, state);
 
         dst
     }

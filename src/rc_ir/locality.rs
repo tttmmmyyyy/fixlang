@@ -14,9 +14,12 @@
 //!
 //! Two layers carry those facts, mirroring the provenance / uniqueness pair. The symbolic layer
 //! (`ExtCond`, `LeafCond`, `ExtShape`) states, for a function or an op, the condition on its inputs
-//! under which a result leaf is non-local; it is what a summary and an op's `locality_flow` hold. The
+//! under which a result leaf is non-local; it is what a summary and an op's `result_locality` hold. The
 //! resolved layer (`Locality`, `LocalityKey`) is what a condition becomes once the inputs are
 //! concrete — inside a clone specialized on them.
+//!
+//! `Ext` throughout this module abbreviates *external*: an object outside the local heap, which is
+//! what `REFCNT_STATE_GLOBAL` and `REFCNT_STATE_THREADED` both mean to reference counting.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -28,7 +31,7 @@ use crate::rc_ir::ast::{
     RcState, RcTarget, RcVar,
 };
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
-use crate::rc_ir::specialize::{callers_of, specializable_callee, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneRegistry};
 use std::sync::Arc;
 
 /// What is proved about one boxed leaf, once the enclosing function's inputs are concrete. A
@@ -79,7 +82,7 @@ pub enum Aspect {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Atom {
     /// The index of the input: a parameter, then the capture past them, in a summary; an operand
-    /// slot in an op's `locality_flow`.
+    /// slot in an op's `result_locality`.
     pub input: usize,
     /// The boxed leaf of that input the test is about, as a path into the input's type.
     pub path: FieldPath,
@@ -139,7 +142,7 @@ impl ExtCond {
 
     /// Substitute the operands' conditions for the atoms, moving a declared condition from the atom
     /// space of its declaration (an op's operand slots, or a callee's inputs) into that of the
-    /// caller. Used both to compose an op's `locality_flow` with its operands and to compose a
+    /// caller. Used both to compose an op's `result_locality` with its operands and to compose a
     /// callee's summary with a call's arguments.
     pub fn substitute(&self, operands: &[ExtShape]) -> ExtCond {
         let ExtCond::IfAny(atoms) = self else {
@@ -270,7 +273,7 @@ impl LeafCond {
 }
 
 /// The symbolic value of a whole value: the condition of each of its boxed leaves, keyed by path.
-/// A value with no boxed leaf is the empty map. A function's summary and an op's `locality_flow`
+/// A value with no boxed leaf is the empty map. A function's summary and an op's `result_locality`
 /// share this type, differing only in what the atoms' input indices name.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct ExtShape(LeafMap<LeafCond>);
@@ -299,7 +302,7 @@ impl ExtShape {
     /// (`build_branch_by_is_unique` sends its global arm to the shared arm), so a force-uniqued
     /// container is local. An op that hands back an operand's object *without* that backing must
     /// not declare `merge`.
-    pub fn merge(
+    pub fn fresh_holding(
         result_ty: &Arc<TypeNode>,
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
@@ -453,7 +456,7 @@ impl<'a> Walk<'a> {
     /// Walk a body, seeding the parameters (and the capture past them) as the identity summary of
     /// the input they are. Returns the shape of the body's value and the body, rewritten in clone
     /// mode and unchanged in survey mode.
-    fn run_func(&mut self, func: &RcFunc) -> (ExtShape, RcExprNode) {
+    fn walk_func(&mut self, func: &RcFunc) -> (ExtShape, RcExprNode) {
         for (i, p) in func.params.iter().enumerate() {
             let shape = ExtShape::identity(&p.ty, self.type_env, i);
             self.env.insert(p.name.clone(), shape);
@@ -570,7 +573,7 @@ impl<'a> Walk<'a> {
             RcRhs::Llvm(llvm_gen, args) => {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                let declared = llvm_gen.locality_flow(&result.ty, &arg_tys, self.type_env);
+                let declared = llvm_gen.result_locality(&result.ty, &arg_tys, self.type_env);
                 let result_shape = declared.substitute(&arg_shapes);
                 let op = self.annotate_op(llvm_gen, &arg_tys, &arg_shapes, &result_shape);
                 (result_shape, op.map(Rewritten::Op))
@@ -919,7 +922,7 @@ fn survey_gate_material(
     func: &RcFunc,
 ) -> (bool, Vec<FuncRef>) {
     let mut walk = survey(prog, type_env, summaries);
-    walk.run_func(func);
+    walk.walk_func(func);
     match walk.mode {
         Mode::Survey {
             has_dependent_site,
@@ -948,7 +951,7 @@ fn summarize(prog: &RcProgram, type_env: &TypeEnv) -> Map<FuncRef, ExtShape> {
         let mut changed = false;
         let mut next = summaries.clone();
         for func in prog.funcs.values() {
-            let (result, _) = survey(prog, type_env, &summaries).run_func(func);
+            let (result, _) = survey(prog, type_env, &summaries).walk_func(func);
             let merged = summaries[&func.name].join(&result);
             if merged != summaries[&func.name] {
                 next.insert(func.name.clone(), merged);
@@ -964,7 +967,7 @@ fn summarize(prog: &RcProgram, type_env: &TypeEnv) -> Map<FuncRef, ExtShape> {
 
 /// A walk that annotates the reference-counting nodes and routes the direct calls, under inputs the
 /// enclosing clone's key made concrete.
-fn annotating<'a>(
+fn annotate<'a>(
     prog: &'a RcProgram,
     type_env: &'a TypeEnv,
     summaries: &'a Map<FuncRef, ExtShape>,
@@ -1026,7 +1029,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // A global initializer takes no argument, so its body resolves against no inputs.
     let mut globals: Vec<RcGlobalInit> = vec![];
     for g in prog.globals.iter() {
-        let init = annotating(prog, type_env, &summaries, &gate, &[], &mut clones)
+        let init = annotate(prog, type_env, &summaries, &gate, &[], &mut clones)
             .walk(&g.init)
             .1;
         globals.push(RcGlobalInit {
@@ -1041,8 +1044,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     while let Some((fref, key)) = clones.pop() {
         let func = prog.funcs[&fref].clone();
         let inputs = input_localities(&func, &key, type_env);
-        let body = annotating(prog, type_env, &summaries, &gate, &inputs, &mut clones)
-            .run_func(&func)
+        let body = annotate(prog, type_env, &summaries, &gate, &inputs, &mut clones)
+            .walk_func(&func)
             .1;
         let name = clones.request(&fref, key.clone(), key == canonical_key(&func, type_env));
         let clone = clones.finish_clone(&func, name, body);

@@ -1508,7 +1508,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// # Arguments
     /// * `tag` — suffix distinguishing the two basic blocks the null check adds from those of
     ///   another null check in the same function.
-    fn build_skipping_null(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
+    fn build_if_nonnull(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
         if !obj.is_dynamic_object() {
             body(self);
             return;
@@ -1537,7 +1537,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// by `amount`, an i64 count.
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
-            self.build_skipping_null(&obj, "retain", |gc| {
+            self.build_if_nonnull(&obj, "retain", |gc| {
                 // Increment the reference count of the (now known non-null) boxed object.
                 gc.retain_nonnull_boxed(&obj, amount, state);
             });
@@ -1732,7 +1732,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.
     pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
         if obj.is_box(self.type_env()) {
-            self.build_skipping_null(&obj, "release_mark", |gc| {
+            self.build_if_nonnull(&obj, "release_mark", |gc| {
                 gc.build_release_mark_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_funptr() {

@@ -623,10 +623,11 @@ k() = if c { 新規確保 } else { k() }
 なって join も `Always` になる。Kleene 反復を底から回すと最小の post-fixpoint に着くので、
 健全なものの中で最も精密なものが得られる。
 
-**収束後にもう 1 周**して、各関数と各 global 初期化子の本体を走査し、RC site ごとの `ExtCond`
-を記録する（site の `ExtCond` とは、「注釈のしかた」の判定でその site が参照する全 leaf 条件の
-join）。これが相 2 のゲートの判定材料になる。global 初期化子は呼ばれる側ではないので
-不動点には参加せず、この 1 周でだけ扱う。
+**収束後にもう 1 周**して、各関数の本体を走査し、RC site ごとの `ExtCond` を記録する（site の
+`ExtCond` とは、「注釈のしかた」の判定でその site が参照する全 leaf 条件の join）。これが相 2 の
+ゲートの判定材料になる。global 初期化子は呼ばれる側ではないので不動点には参加せず、入力を
+持たないので site が入力に依存することもない。ゲートの材料にはならないので、相 2 が
+入力なしの clone として一度だけ走査する。
 
 ### サマリの健全性
 
@@ -915,11 +916,12 @@ enum RcTarget {
 `Operand(i, π)` と `Contents(i, π)` を対象に足す**を `internal_rc_targets` の既定合成にして、
 手書きを取り出し系・書き込み系の残りだけにする。手で列挙すれば必ず落ちる面が、これで消える。
 
-既定合成が掛かるのは**チェックを宣言し、かつ unique 化する** op である。`is_unique` と
+既定合成が意味を持つのは**チェックを宣言し、かつ unique 化する** op である。`is_unique` と
 `_unsafe_is_storage_unique` はチェックを宣言するが uniqueness を*調べる*だけで（「全 op の値」の
 `build_shape` 表）、`generate` は旗を立てるほかに参照カウントを出さないので、対象は空になる。
-判定は `assuming_unique` が落とすものが unique 化そのものか（`force_unique` フィールドを持つか）
-で付く。clone 経路は共通のヘルパを通るとは限らない — `ArraySetCapacityBoundsUnchecked` は
+既定はチェックの宣言だけを見るので、この 2 op は空リストを返す override で自分に clone 経路が
+無いことを述べる。既定の向きは**過剰宣言**の側に置く: 落とした対象はメモリを壊し、余分な対象は
+精度だけを失う。clone 経路は共通のヘルパを通るとは限らない — `ArraySetCapacityBoundsUnchecked` は
 `generate` の中に直接書いている — ので、監査はヘルパの呼び出し元の数え上げではなく、この
 性質で行う。
 
@@ -1003,10 +1005,13 @@ enum RcTarget {
 
 ```
 release_<hash>              Unknown（今日のもの）
-release_local_<hash>        Local
-release_deeplocal_<hash>    DeepLocal
+release_local_<hash>        Local と DeepLocal
 trav_release_local_(T)      unboxed の値が経由する traverser も同様
 ```
+
+**`DeepLocal` は `Local` と同じ補助関数を指す。** 両者を分ける唯一の材料は子孫のディスパッチを
+外した traverser で、それは下の「3 版の違い」のとおり本設計の対象外だからである。`DeepLocal` は
+解析の側でだけ意味を持ち、コード生成には `Local` として届く。
 
 `create_traverser` は既に work ごとに名前を分けており（`trav_release_` / `trav_mark_global_` /
 `trav_mark_threaded_`）、`emit_rc_helper_call` も `create_traverser` も**名前で memoize して、

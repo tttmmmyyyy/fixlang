@@ -12,7 +12,7 @@
 // The in-process tests run the same programs under `Configuration::develop_mode()`, where every
 // annotated site carries the assertion that its object really is in the local state. The dump tests
 // pin what the analysis concluded; these pin that the conclusion holds at run time, which is what a
-// wrong hand-written `locality_flow` declaration would break.
+// wrong hand-written `result_locality` declaration would break.
 
 #[cfg(test)]
 mod integration_tests {

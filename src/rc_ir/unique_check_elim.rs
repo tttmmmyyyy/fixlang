@@ -33,7 +33,7 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
 };
-use crate::rc_ir::specialize::{callers_of, specializable_callee, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneRegistry};
 use std::sync::Arc;
 
 /// What identifies one clone of a function: the uniqueness of each of its parameters. A closure
