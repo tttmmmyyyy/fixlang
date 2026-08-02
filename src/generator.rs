@@ -238,10 +238,10 @@ impl<'c> Object<'c> {
     }
 
     // Whether this object is carried as one aggregate rather than split into its fields' parts, so
-    // that its single part holds the whole struct (see `Generator::is_grouped`).
-    pub fn is_grouped<'m>(&self, gc: &mut Generator<'c, 'm>) -> bool {
+    // that its single part holds the whole struct (see `Generator::is_carried_whole`).
+    pub fn is_carried_whole<'m>(&self, gc: &mut Generator<'c, 'm>) -> bool {
         let embedded = self.ty.get_embedded_type(gc);
-        gc.is_grouped(embedded)
+        gc.is_carried_whole(embedded)
     }
 
     pub fn is_destructor_object(&self) -> bool {
@@ -277,7 +277,7 @@ impl<'c> Object<'c> {
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            if self.is_grouped(gc) {
+            if self.is_carried_whole(gc) {
                 return gc
                     .builder()
                     .build_extract_value(self.data[0].into_struct_value(), field_idx, "field")
@@ -329,7 +329,7 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            if self.is_grouped(gc) {
+            if self.is_carried_whole(gc) {
                 let field_val = self.extract_field(gc, field_idx);
                 return Object::new(field_val, field_ty, gc);
             }
@@ -357,7 +357,7 @@ impl<'c> Object<'c> {
     {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            if self.is_grouped(gc) {
+            if self.is_carried_whole(gc) {
                 self.data[0] = gc
                     .builder()
                     .build_insert_value(
@@ -398,7 +398,7 @@ impl<'c> Object<'c> {
     ) -> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
-            if self.is_grouped(gc) {
+            if self.is_carried_whole(gc) {
                 let val = field.value(gc);
                 return self.insert_field(gc, field_idx, val);
             }
@@ -1418,13 +1418,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_bit_size(&ty) == 0
     }
 
-    // The number of scalars `ty` holds, counting through nested structs and stopping once the count
-    // passes `limit`. A non-struct type is one scalar and a zero-sized type is none.
+    // Whether `ty` holds more than `limit` scalars, counting through nested structs. A non-struct
+    // type is one scalar and a zero-sized type is none.
     //
-    // A type whose fields nest holds a number of scalars exponential in the nesting depth, and the
-    // count is only ever compared against the limit, so counting past it would cost what the limit
-    // is there to bound.
-    fn scalar_count_up_to(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
+    // A type whose fields nest holds a number of scalars exponential in the nesting depth, so the
+    // count stops as soon as it settles the answer: counting the rest would cost what the limit is
+    // there to bound.
+    fn holds_more_scalars_than(&self, ty: BasicTypeEnum<'c>, limit: usize) -> bool {
+        self.scalar_count_bounded_by(ty, limit) > limit
+    }
+
+    // The number of scalars `ty` holds, or some number above `limit` once the count passes it; see
+    // `holds_more_scalars_than`, the only reader.
+    fn scalar_count_bounded_by(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
         }
@@ -1435,7 +1441,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                     if count > limit {
                         break;
                     }
-                    count += self.scalar_count_up_to(st.get_field_type_at_index(i).unwrap(), limit);
+                    count +=
+                        self.scalar_count_bounded_by(st.get_field_type_at_index(i).unwrap(), limit);
                 }
                 count
             }
@@ -1449,15 +1456,15 @@ impl<'c, 'm> Generator<'c, 'm> {
     // A value of one scalar is carried as that scalar however low the limit is set: there is no
     // aggregate to keep together, and a funptr is carried as its bare function pointer rather than
     // as the one-field struct it is laid out as.
-    pub fn is_grouped(&self, ty: BasicTypeEnum<'c>) -> bool {
+    pub fn is_carried_whole(&self, ty: BasicTypeEnum<'c>) -> bool {
         let limit = self.config.max_split_scalars.max(1);
         matches!(ty, BasicTypeEnum::StructType(_))
             && !self.is_zero_sized(ty)
-            && self.scalar_count_up_to(ty, limit) > limit
+            && self.holds_more_scalars_than(ty, limit)
     }
 
     // Split an embedded type into the parts a value of it is carried as: the scalars of its nested
-    // structs, except that a struct wide enough for `is_grouped` is one part of its own. A
+    // structs, except that a struct wide enough for `is_carried_whole` is one part of its own. A
     // non-struct type is one part, and a zero-sized type is none.
     //
     // Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
@@ -1466,7 +1473,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
     // deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
     pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
-        if self.is_grouped(ty) {
+        if self.is_carried_whole(ty) {
             return vec![ty];
         }
         self.split_type_parts(ty)
@@ -1490,7 +1497,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // The number of parts `ty` splits into under `type_parts`, without allocating the list of their
     // types.
     pub fn part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
-        if self.is_grouped(ty) {
+        if self.is_carried_whole(ty) {
             return 1;
         }
         self.split_part_count(ty)
@@ -1511,9 +1518,9 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // The half-open range `[offset, offset + count)` of parts that field `field_idx` of `struct_ty`
     // occupies within the struct's part list, so a split value can address one field without
-    // materializing the aggregate. `offset` is the part count of the preceding fields. A grouped
-    // struct has no such range -- its fields live inside its one part -- so this is for a struct
-    // `is_grouped` rejects.
+    // materializing the aggregate. `offset` is the part count of the preceding fields. A struct
+    // carried whole has no such range -- its fields live inside its one part -- so this is for a
+    // struct `is_carried_whole` rejects.
     pub fn field_part_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
         let offset: usize = (0..field_idx)
             .map(|i| self.part_count(struct_ty.get_field_type_at_index(i).unwrap()))
@@ -1524,9 +1531,9 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Split a value into its parts in the order of `type_parts` on its type, emitting an
     // `extractvalue` per struct field at the current insert position. A zero-sized value yields no
-    // part, and a grouped value is one part already.
+    // part, and a value carried whole is one part already.
     pub fn explode_to_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
-        if self.is_grouped(val.get_type()) {
+        if self.is_carried_whole(val.get_type()) {
             return vec![val];
         }
         self.split_value_parts(val)
@@ -1553,13 +1560,14 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
     // `insertvalue` per struct field. The inverse of `explode_to_parts`. A zero-sized type consumes
-    // no part and is rebuilt as `undef`; a grouped type consumes the one part that is its value.
+    // no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
+    // value.
     pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
-        if self.is_grouped(ty) {
+        if self.is_carried_whole(ty) {
             return parts.next().expect("too few parts to assemble the value");
         }
         self.assemble_split_parts(ty, parts)
