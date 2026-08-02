@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::{unique_check_on_boxed_leaf, LLVMGen},
+    inline_llvm::{clone_path_rc_targets, unique_check_on_boxed_leaf, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -2048,7 +2048,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // `release_or_mark_array_slice` releases the elements the shrink drops, whatever
         // `force_unique` says.
-        let mut targets = default_internal_rc_targets(self, arg_tys, type_env);
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Contents(0, vec![]));
         targets
     }
@@ -2209,7 +2209,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // `append_value_into_array_buf` gives every filled slot its own reference to the value and
         // then consumes the operand's, whatever `force_unique` says.
-        let mut targets = default_internal_rc_targets(self, arg_tys, type_env);
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Operand(APPEND_VALUE_VALUE_ARG, vec![]));
         targets
     }
@@ -2835,7 +2835,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // Both paths consume `src`: the move path releases it emptied, and the copy path retains
         // each element it takes out of it and then releases it. Neither depends on `force_unique`.
-        let mut targets = default_internal_rc_targets(self, arg_tys, type_env);
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Operand(APPEND_SRC_ARG, vec![]));
         targets.push(RcTarget::Contents(APPEND_SRC_ARG, vec![]));
         targets
@@ -3227,7 +3227,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // `write_to_array_buf` releases the element it overwrites, whatever `force_unique` says, so
         // the array's contents are a target beside the clone path the default declares.
-        let mut targets = default_internal_rc_targets(self, arg_tys, type_env);
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Contents(ARRAY_SET_ARRAY_ARG, vec![]));
         targets
     }
@@ -3550,20 +3550,9 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The result is `(punched array, element)`. The punched array is uniquely owned either
-        // way (see `result_prov`), so its root is local and it holds what the operand held; the
-        // element is carried out of the array by the take-out rule.
-        let container = LeafCond::input_leaf(0, vec![]);
-        ExtShape::build_shape(result_ty, type_env, &|path| {
-            let (head, _) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head == PUNCHED_ARRAY_FIELD {
-                LeafCond::new(ExtCond::bottom(), container.deep.clone())
-            } else {
-                LeafCond::take_out_of(&container)
-            }
-        })
+        // The result is `(punched array, element)`, and the punched array is uniquely owned either
+        // way (see `result_prov`).
+        punched_out_locality(result_ty, type_env, 0, PUNCHED_ARRAY_FIELD)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3573,6 +3562,32 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
 const PUNCHED_ARRAY_FIELD: usize = 0;
+
+/// The locality of the result of a punch — the punched container, at `container_field` of the
+/// result, beside the value moved out of it — given the operand position of the container.
+///
+/// The punched container is uniquely owned either way (force-uniquing clones it when it is shared,
+/// and the version without that check runs where uniqueness is established already), so its root is
+/// local and it holds what the operand held. The moved-out value comes out of the container by the
+/// take-out rule.
+fn punched_out_locality(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    container_arg: usize,
+    container_field: usize,
+) -> ExtShape {
+    let container = LeafCond::input_leaf(container_arg, vec![]);
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        let (head, _) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed pair has a non-empty path");
+        if *head == container_field {
+            LeafCond::new(ExtCond::bottom(), container.deep.clone())
+        } else {
+            LeafCond::take_out_of(&container)
+        }
+    })
+}
 
 // Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
 // returns the punched array together with the moved-out element.
@@ -4154,19 +4169,8 @@ impl LLVMGen for InlineLLVMStructGetBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // A field getter takes exactly the container, so `arg_tys[0]` is it. Out of a boxed
-        // container the field is read by the take-out rule; out of an unboxed one it is a pure
-        // projection carrying the container's leaf at that field.
-        if arg_tys[0].is_box(type_env) {
-            let container = LeafCond::input_leaf(0, vec![]);
-            return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
-        }
-        let field = self.field_index();
-        ExtShape::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
-            let mut p = vec![field];
-            p.extend_from_slice(sigma);
-            LeafCond::input_leaf(0, p)
-        })
+        // A field getter takes exactly the container, so `arg_tys[0]` is it.
+        read_component_locality(result_ty, arg_tys, type_env, self.field_index())
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
@@ -4653,27 +4657,14 @@ impl LLVMGen for InlineLLVMStructPunchBody {
     ) -> ExtShape {
         // The result is `(field, punched struct)`.
         //
-        // A punched boxed struct is uniquely owned either way (force-uniquing clones it when shared,
-        // and the version without that check runs where uniqueness is established already), so its
-        // root is local and it holds what the operand held; the field is read out of it by the
-        // take-out rule.
+        // A punched boxed struct is uniquely owned either way, so the punch rule decides it.
         //
         // Punching an unboxed struct only takes it apart in registers, so every result leaf names
         // the same object the operand's does — the field component the operand's leaf at the punched
         // field, the punched-struct component the operand's leaf at the same path.
-        let container = LeafCond::input_leaf(0, vec![]);
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
-            return ExtShape::build_shape(result_ty, type_env, &|path| {
-                let (head, _) = path
-                    .split_first()
-                    .expect("a boxed leaf of an unboxed pair has a non-empty path");
-                if *head == PUNCHED_STRUCT_FIELD {
-                    LeafCond::new(ExtCond::bottom(), container.deep.clone())
-                } else {
-                    LeafCond::take_out_of(&container)
-                }
-            });
+            return punched_out_locality(result_ty, type_env, 0, PUNCHED_STRUCT_FIELD);
         }
         ExtShape::build_shape(result_ty, type_env, &|path| {
             let (head, rest) = path
@@ -4896,6 +4887,29 @@ fn replaced_field_prov(
         } else {
             Provenance::leaf(LeafOrigin::Arg(struct_arg, path.clone()))
         }
+    })
+}
+
+/// The locality of component `component` read out of a container that is the op's sole operand —
+/// a struct's field, a union's payload.
+///
+/// Out of a boxed container the component is read by the take-out rule; out of an unboxed one it is
+/// a pure projection carrying the container's leaf at that component.
+fn read_component_locality(
+    result_ty: &Arc<TypeNode>,
+    arg_tys: &[Arc<TypeNode>],
+    type_env: &TypeEnv,
+    component: usize,
+) -> ExtShape {
+    const CONTAINER_ARG: usize = 0;
+    if arg_tys[CONTAINER_ARG].is_box(type_env) {
+        let container = LeafCond::input_leaf(CONTAINER_ARG, vec![]);
+        return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
+    }
+    ExtShape::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
+        let mut path = vec![component];
+        path.extend_from_slice(sigma);
+        LeafCond::input_leaf(CONTAINER_ARG, path)
     })
 }
 
@@ -5838,7 +5852,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         // The old field value is released whatever `force_unique` says. Out of a boxed struct it is
         // something the struct reaches; out of an unboxed one it is the struct operand's own leaves
         // under the replaced field.
-        let mut targets = default_internal_rc_targets(self, arg_tys, type_env);
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         let field = self.field_idx as usize;
         if arg_tys[STRUCT_SET_STRUCT_ARG].is_box(type_env) {
             targets.push(RcTarget::Contents(STRUCT_SET_STRUCT_ARG, vec![]));
@@ -6169,19 +6183,8 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // `as` takes exactly the union, so `arg_tys[0]` is it. Out of a boxed union the payload
-        // is read by the take-out rule; out of an unboxed one it is a pure projection carrying the
-        // scrutinee's leaf at that variant.
-        if arg_tys[0].is_box(type_env) {
-            let container = LeafCond::input_leaf(0, vec![]);
-            return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
-        }
-        let variant = self.variant_index();
-        ExtShape::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
-            let mut p = vec![variant];
-            p.extend_from_slice(sigma);
-            LeafCond::input_leaf(0, p)
-        })
+        // `as` takes exactly the union, so `arg_tys[0]` is it.
+        read_component_locality(result_ty, arg_tys, type_env, self.variant_index())
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
@@ -6758,6 +6761,22 @@ pub struct InlineLLVMIsUniqueFunctionBody {
 /// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
 pub const IS_UNIQUE_VALUE_ARG: usize = 0;
 
+/// The locality of the result of a uniqueness test, `(flag, value)`. The flag holds no boxed leaf,
+/// so every result leaf descends through the value and names the operand's own object. Not `merge`:
+/// such an op reads the operand's reference count without uniquing it, so a shared or global value
+/// comes straight back out.
+fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        let (field, rest) = path
+            .split_first()
+            .expect("an is_unique result is an unboxed pair, so its leaves have non-empty paths");
+        if *field != IS_UNIQUE_VALUE_FIELD {
+            unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
+        }
+        LeafCond::input_leaf(IS_UNIQUE_VALUE_ARG, rest.to_vec())
+    })
+}
+
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -6880,19 +6899,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The result is `(flag, value)`; the flag holds no boxed leaf, so every result leaf
-        // descends through the value and names the operand's own object. Not `merge`: this op reads
-        // the operand's reference count without uniquing it, so a shared or global value comes
-        // straight back out.
-        ExtShape::build_shape(result_ty, type_env, &|path| {
-            let (field, rest) = path.split_first().expect(
-                "an is_unique result is an unboxed pair, so its leaves have non-empty paths",
-            );
-            if *field != IS_UNIQUE_VALUE_FIELD {
-                unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
-            }
-            LeafCond::input_leaf(IS_UNIQUE_VALUE_ARG, rest.to_vec())
-        })
+        is_unique_result_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7067,19 +7074,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The result is `(flag, value)`; the flag holds no boxed leaf, so every result leaf
-        // descends through the value and names the operand's own object. Not `merge`: this op reads
-        // the operand's reference count without uniquing it, so a shared or global value comes
-        // straight back out.
-        ExtShape::build_shape(result_ty, type_env, &|path| {
-            let (field, rest) = path.split_first().expect(
-                "an is_unique result is an unboxed pair, so its leaves have non-empty paths",
-            );
-            if *field != IS_UNIQUE_VALUE_FIELD {
-                unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
-            }
-            LeafCond::input_leaf(IS_UNIQUE_VALUE_ARG, rest.to_vec())
-        })
+        is_unique_result_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7773,23 +7768,6 @@ const ARRAY_SET_ARRAY_ARG: usize = 0;
 const APPEND_VALUE_VALUE_ARG: usize = 1;
 /// The operand position of the array `_unsafe_append_capacity_bounds_unchecked` reads from.
 const APPEND_SRC_ARG: usize = 1;
-
-/// The clone path a force-unique op takes when its container is shared: it retain-copies the
-/// contents into a new container and releases the old one. Every op declaring a uniqueness check
-/// takes it, so its targets are composed here rather than written out at each of them.
-fn default_internal_rc_targets(
-    op: &dyn LLVMGen,
-    arg_tys: &[Arc<TypeNode>],
-    type_env: &TypeEnv,
-) -> Vec<RcTarget> {
-    match op.unique_check_operand(arg_tys, type_env) {
-        Some(check) => vec![
-            RcTarget::Operand(check.container_index, check.path.clone()),
-            RcTarget::Contents(check.container_index, check.path),
-        ],
-        None => vec![],
-    }
-}
 
 /// The reference-counting state an op's own checks and reference counting run under: `Local` where
 /// locality inference proved the objects they touch local, `Unknown` otherwise.

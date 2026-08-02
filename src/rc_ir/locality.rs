@@ -582,17 +582,22 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// The symbolic locality of an operand. A name the environment does not hold is a global symbol,
-    /// whose graph its initializer marked global — the first of the three doors, and the only rule
-    /// that reads whether a name is local. It has to sit here, at the one place an operand is
-    /// resolved, because a global reaches every operand position: the right-hand side of a `let`, an
-    /// argument, a scrutinee, a destructured container, and — after borrow-ification introduces a
-    /// release for a value the callee borrows — the target of a `Release`.
+    /// The symbolic locality of an operand. A global's graph was marked global by its initializer —
+    /// the first of the three doors, and the only rule that reads whether a name is local. It has to
+    /// sit here, at the one place an operand is resolved, because a global reaches every operand
+    /// position: the right-hand side of a `let`, an argument, a scrutinee, a destructured container,
+    /// and — after borrow-ification introduces a release for a value the callee borrows — the target
+    /// of a `Release`. A local is bound before it is read, so the environment holds it.
     fn shape_of(&self, var: &RcVar) -> ExtShape {
-        match self.env.get(&var.name) {
-            Some(shape) => shape.clone(),
-            None => ExtShape::always(&var.ty, self.type_env),
+        if var.name.is_global() {
+            return ExtShape::always(&var.ty, self.type_env);
         }
+        self.env
+            .get(&var.name)
+            .unwrap_or_else(|| {
+                unreachable!("local `{}` is read before its binding", var.name.to_string())
+            })
+            .clone()
     }
 
     /// The shape of a `let`'s right-hand side (`Match` excepted, which the caller handles for the

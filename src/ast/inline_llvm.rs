@@ -139,13 +139,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// those two targets without writing them. An op that only reads a count declares them too, and
     /// counts nothing — over-declaring costs precision, never soundness.
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        match self.unique_check_operand(arg_tys, type_env) {
-            Some(check) => vec![
-                RcTarget::Operand(check.container_index, check.path.clone()),
-                RcTarget::Contents(check.container_index, check.path),
-            ],
-            None => vec![],
-        }
+        clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env))
     }
 
     /// The locality of this op's result: for each of its boxed leaves, the condition on the operands
@@ -187,6 +181,20 @@ pub fn unique_check_on_boxed_leaf(
         container_index,
         path,
     })
+}
+
+/// The clone path a force-unique op takes when its container is shared: it retain-copies the
+/// contents into a new container and releases the old one. Every op declaring a uniqueness check
+/// takes it, so its targets are composed here — by `LLVMGen::internal_rc_targets`'s default, and by
+/// the ops that override that default to add targets of their own.
+pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget> {
+    match check {
+        Some(check) => vec![
+            RcTarget::Operand(check.container_index, check.path.clone()),
+            RcTarget::Contents(check.container_index, check.path),
+        ],
+        None => vec![],
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
