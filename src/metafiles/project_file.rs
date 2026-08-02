@@ -458,8 +458,8 @@ impl ProjectFile {
     }
 
     // Validate `disable_cpu_features`.
-    pub fn validate_disable_cpu_features(dcfs: &[String]) -> Result<(), Errors> {
-        for feature in dcfs {
+    pub fn validate_disable_cpu_features(disable_cpu_features: &[String]) -> Result<(), Errors> {
+        for feature in disable_cpu_features {
             // Check if each feature is a valid regex.
             if let Err(e) = regex::Regex::new(feature) {
                 return Err(Errors::from_msg(format!(

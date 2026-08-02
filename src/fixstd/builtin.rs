@@ -7378,7 +7378,7 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // `check_multithreading_requirement` has already reported a program that reaches here
+        // `check_multi_threading_requirement` has already reported a program that reaches here
         // without multi-threading, where the source of the use is still known.
         assert!(gc.config.threaded);
 
