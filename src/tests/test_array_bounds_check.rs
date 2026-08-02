@@ -2,7 +2,8 @@ use crate::{
     configuration::{Configuration, FixOptimizationLevel},
     fixstd::runtime::{RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_MALLOC},
     tests::test_util::{
-        emitted_llvm_ir, fix_build_source_command, test_source, test_source_fail, EmittedIr,
+        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source,
+        test_source_fail, EmittedIr,
     },
 };
 use tempfile::TempDir;
@@ -464,26 +465,6 @@ main = (
     println((arr.@(0) + shared.@(0)).to_string)
 );
 "#;
-
-/// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
-fn llvm_function_bodies(ir: &str, name_part: &str) -> Vec<String> {
-    let mut bodies = vec![];
-    let mut current: Option<Vec<&str>> = None;
-    for line in ir.lines() {
-        if line.starts_with("define ") {
-            current = line.contains(name_part).then(Vec::new);
-        }
-        if let Some(body) = current.as_mut() {
-            body.push(line);
-        }
-        if line == "}" {
-            if let Some(body) = current.take() {
-                bodies.push(body.join("\n"));
-            }
-        }
-    }
-    bodies
-}
 
 /// Writing into a shared array clones its storage with the capacity that array already holds, and
 /// the clone allocates without checking that capacity: the allocation that gave the array its
