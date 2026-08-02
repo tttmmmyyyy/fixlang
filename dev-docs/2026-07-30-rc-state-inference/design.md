@@ -24,7 +24,7 @@ may 解析で「この site が触るオブジェクトは LOCAL」を site ご�
 証明を諦めて `MayExt` に倒すのは無害で、その操作は今日の実行時ディスパッチのまま — だから精度は
 いくら落としても正しさは動かない。逆向きの誤り、実際には非 LOCAL なオブジェクトの参照カウント
 操作からディスパッチを外す方は、その場でメモリを壊す。global オブジェクトの参照カウントは維持
-されていない（`build_retain` の `global_bb` は何もしない）一方で、`insert_rc` は global の
+されていない（`build_branch_by_refcnt_state` の `global_bb` はカウントを触らない）一方で、`insert_rc` は global の
 読み出しに retain を入れず callee は release するので、読むたびにカウントが 1 ずつ減る勘定に
 なっている。今はその release が `global_bb` へ落ちて何もしないので釣り合っているが、
 `RcState::Local` と注釈された release はディスパッチせず直接デクリメントするため、最初の消費
@@ -629,9 +629,9 @@ k() = if c { 新規確保 } else { k() }
 なって join も `Always` になる。Kleene 反復を底から回すと最小の post-fixpoint に着くので、
 健全なものの中で最も精密なものが得られる。
 
-**収束後にもう 1 周**して、各関数の本体を走査し、RC site ごとの `ExtCond` を記録する（site の
-`ExtCond` とは、「注釈のしかた」の判定でその site が参照する全 leaf 条件の join）。これが相 2 の
-ゲートの判定材料になる。global 初期化子は呼ばれる側ではないので不動点には参加せず、入力を
+**収束後にもう 1 周**して、各関数の本体を走査し、site ごとに「その site が参照する leaf のうち
+入力に依存するものがあるか」を記録する（判定は「相 2」のゲートで定義する。leaf ごとに見るので
+あって、条件を join してからではない）。これが相 2 のゲートの判定材料になる。global 初期化子は呼ばれる側ではないので不動点には参加せず、入力を
 持たないので site が入力に依存することもない。ゲートの材料にはならないので、相 2 が
 入力なしの clone として一度だけ走査する。
 
@@ -976,13 +976,16 @@ enum RcTarget {
   `RcState::DeepLocal`（新設。「コード生成」）、そうでなく全 leaf が `RootLocal` 以下なら
   `RcState::Local` に書き換える。
   `π` が複数の leaf を覆う（unboxed union の unit、部分木）ときは、その全部で判定する。
-- unique-check op: `unique_check_operand` が指す leaf が `RootLocal` 以下なら、op を「対象は `LOCAL`」
-  版に差し替える。外れるのは宣言されたチェックだけで、同じ op が出す宣言外のチェックは
-  ディスパッチのまま残る（「注釈する site」）。差し替えは `assuming_unique` と同じパターン —
-  対象 op の struct にフィールドを
-  足し、それを立てたクローンを返すメソッドを生やす。`unique_check_elim` を先に走らせてあるので
-  （「`unique_check_elim` とは別のパスにする」）、ここで見るのは実行時チェックが残った site
-  だけである。
+- op（unique-check と op 内部 RC）: **1 つの旗が両方を担う**ので、判定も両方を満たしたときだけ
+  立つ — 宣言されたチェックが指す leaf が `RootLocal` 以下で、**かつ** `internal_rc_targets` が
+  挙げた対象がすべて局所（`Result` と `Operand` は `RootLocal` 以下、`Contents` は `DeepLocal`）
+  のとき、op を「対象は `LOCAL`」版に差し替える。片方だけで差し替えると、もう片方が非 LOCAL な
+  オブジェクトに当たる（「誤りの 2 方向は対称ではない」の壊れる側）。チェックも対象も宣言しない
+  op は差し替えの対象にならない。外れるのは宣言されたチェックだけで、同じ op が出す宣言外の
+  チェックはディスパッチのまま残る（「注釈する site」）。差し替えは `assuming_unique` と同じ
+  パターン — 対象 op の struct にフィールドを足し、それを立てたクローンを返すメソッドを生やす。
+  `unique_check_elim` を先に走らせてあるので（「`unique_check_elim` とは別のパスにする」）、
+  ここで見るのは実行時チェックが残った site だけである。
 - boxed union の `Match`: variant アームは payload を retain するので、取り出し規則により
   **被検査値の leaf が `DeepLocal` のときに限り** `MatchArm` に印を付ける。印は
   `RcState::Local` — retain は根だけの操作なので、`DeepLocal` を出しても同じコードになる。
