@@ -5,8 +5,8 @@ module ThreadingLib;
 // the call rather than at the whole definition.
 publish : Box I64 -> Box I64;
 publish = |value| (
-    let doubled = value.@value * 2;
-    let boxed = Box::make(doubled);
+    let contents = value.@value;
+    let boxed = Box::make(contents);
     boxed.mark_threaded
 );
 
@@ -15,5 +15,5 @@ publish_array : Array I64 -> Array I64;
 publish_array = |values| values.mark_threaded;
 
 // Needs nothing of multi-threading, so a program that uses only this is built without it.
-doubled : I64 -> I64;
-doubled = |value| value * 2;
+double : I64 -> I64;
+double = |value| value * 2;

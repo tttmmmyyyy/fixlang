@@ -22,7 +22,7 @@ use std::process::Command;
 ///
 /// The program is checked before it is optimized, while each expression still carries the source it
 /// came from.
-fn check_multithreading_requirement(
+fn check_multi_threading_requirement(
     program: &Program,
     config: &Configuration,
 ) -> Result<(), Errors> {
@@ -93,7 +93,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     if program.deferred_errors.has_error() {
         return Err(program.deferred_errors);
     }
-    check_multithreading_requirement(&program, &config)?;
+    check_multi_threading_requirement(&program, &config)?;
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];

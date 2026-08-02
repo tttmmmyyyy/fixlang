@@ -1,6 +1,0 @@
-module Main;
-
-import ThreadingLib;
-
-main : IO ();
-main = println(ThreadingLib::doubled(21).to_string);

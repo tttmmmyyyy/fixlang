@@ -1,5 +1,5 @@
 [general]
-name = "root-uses-plain-only"
+name = "root-reaches-no-call"
 version = "0.1.0"
 fix_version = "*"
 

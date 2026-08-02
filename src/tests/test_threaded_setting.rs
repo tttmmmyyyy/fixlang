@@ -79,7 +79,7 @@ fn test_dependency_does_not_enable_threaded() {
         quoted
     );
     assert!(
-        !quoted.contains("doubled"),
+        !quoted.contains("contents"),
         "a call should be quoted on its own, leaving the rest of the definition out.\nquoted: {}",
         quoted
     );
@@ -101,7 +101,7 @@ fn test_root_enables_threaded() {
 }
 
 #[test]
-fn test_threaded_compiler_option_enables_it() {
+fn test_threaded_option_enables_multi_threading() {
     let (_temp_dir, project_dir) = setup_test_env("root_without_threaded");
     let output = run_fix(&project_dir, &["build", "--threaded"]);
     assert_succeeded(
@@ -111,11 +111,11 @@ fn test_threaded_compiler_option_enables_it() {
 }
 
 #[test]
-fn test_library_call_out_of_reach_needs_nothing() {
+fn test_unreached_library_call_needs_no_threading() {
     // A program is built from the definitions it reaches, so depending on a library that calls
     // `Std::mark_threaded` somewhere costs nothing until the program reaches such a definition.
     // This is what lets a library serve programs that want multi-threading and programs that do not.
-    let (_temp_dir, project_dir) = setup_test_env("root_uses_plain_only");
+    let (_temp_dir, project_dir) = setup_test_env("root_reaches_no_call");
     let output = run_fix(&project_dir, &["build"]);
     assert_succeeded(
         &output,
