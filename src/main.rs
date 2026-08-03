@@ -57,7 +57,7 @@ use commands::lsp::server::launch_language_server;
 use commands::{check, clean, deps, docs, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
-    OutputFileType, SubCommand,
+    OutputFileType, Sanitizer, SubCommand,
 };
 use constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
@@ -176,6 +176,17 @@ fn run_cli() {
         .long("threaded")
         .takes_value(false)
         .help("Enable multi-threading. Turning this option ON increases overhead, it is recommended keeping this option OFF for single-threaded programs.");
+    let sanitize = Arg::new("sanitize")
+        .long("sanitize")
+        .takes_value(true)
+        .possible_value(
+            PossibleValue::new("none").help("Build the program as it is built for use."),
+        )
+        .possible_value(PossibleValue::new("thread").help(
+            "Instrument the program with ThreadSanitizer, which reports data races at run time. \
+             The instrumented program runs several times slower and uses much more memory.",
+        ))
+        .help("Sanitizer to instrument the built program with.");
     let output_file = Arg::new("output-file")
         .long("output")
         .short('o')
@@ -270,6 +281,7 @@ fn run_cli() {
         .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
+        .arg(sanitize.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
@@ -297,6 +309,7 @@ fn run_cli() {
         .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
+        .arg(sanitize.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
@@ -325,6 +338,7 @@ fn run_cli() {
         .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
+        .arg(sanitize.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
@@ -604,6 +618,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `threaded`.
         if args.contains_id("threaded") {
             config.set_threaded();
+        }
+
+        // Set `sanitizer`.
+        if let Some(sanitizer) = args.value_of("sanitize") {
+            panic_if_err(config.set_sanitizer(panic_if_err(Sanitizer::from_str(sanitizer))));
         }
 
         // Set `debug_info`.

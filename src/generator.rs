@@ -80,7 +80,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
-use std::{cell::RefCell, env, sync::Arc};
+use std::{cell::RefCell, env, iter::successors, sync::Arc};
 
 // A value bound to a name in the current scope.
 #[derive(Clone)]
@@ -2523,7 +2523,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // must be created through their kind id; a string attribute of the same name is silently
     // ignored by LLVM.
     pub fn add_enum_attribute(&self, func: FunctionValue<'c>, name: &str, loc: AttributeLoc) {
-        let kind = Attribute::get_named_enum_kind_id(name);
+        let kind = enum_attribute_kind_id(name);
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
@@ -2556,16 +2556,36 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Add frame-pointer attribute to all functions in the module
     // This is especially important on macOS where backtrace() relies on frame pointers
     pub fn add_frame_pointer_attribute_to_all_functions(&self) {
-        let mut func = self.module.get_first_function();
-        while let Some(function) = func {
+        for function in module_functions(self.module) {
             // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept
             function.add_attribute(
                 AttributeLoc::Function,
                 self.context.create_string_attribute("frame-pointer", "all"),
             );
-            func = function.get_next_function();
         }
     }
+}
+
+/// The functions `module` holds, defined and declared alike, in the order LLVM keeps them.
+pub(crate) fn module_functions<'c>(module: &Module<'c>) -> impl Iterator<Item = FunctionValue<'c>> {
+    successors(module.get_first_function(), |function| {
+        function.get_next_function()
+    })
+}
+
+/// The kind id LLVM knows the enum attribute `name` under.
+///
+/// An enum attribute is created from its kind id, and a name LLVM does not know yields kind id 0,
+/// whose attribute every consumer ignores. Asking for an attribute that does nothing is a mistake
+/// in the caller, so the lookup panics on it.
+pub(crate) fn enum_attribute_kind_id(name: &str) -> u32 {
+    let kind_id = Attribute::get_named_enum_kind_id(name);
+    assert!(
+        kind_id != 0,
+        "LLVM does not know the enum attribute `{}`.",
+        name
+    );
+    kind_id
 }
 
 // Whether `v` is the constant integer 1. Used where a retain-by-`amount` reproduces the ordinary
