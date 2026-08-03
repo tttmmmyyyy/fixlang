@@ -10,6 +10,27 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+## 0fa42cadaaac5aa40e2b9bbf1e2cff3ab34502ff
+
+The capacity check that #178 put in front of every array write which clones a shared array is now
+emitted only where the program chooses a capacity (#191). The two extra basic blocks per write were
+costing the enclosing loop its unrolling.
+
+`nbody` -21.0%, `fannkuch` -10.4%, `cp_lib_lsegtree` -3.5%, `nbody_fold` -2.7%, `cp_lib_conv_zp`
+-2.2%, `cp_lib_dijkstra` -0.5%, `cp_lib_unionfind` -0.4%, `fannkuch_scratch` -0.1%;
+`cp_lib_bipartite` +0.1%. The other 37 cases hold to within a twentieth of a percent. `nbody` also
+stops splitting 6,000,000 of its accesses across a cache line.
+
+**Read the cycle column here for the large cases only.** `fannkuch` -5.9%, `nbody` -5.8% and
+`cp_lib_lsegtree` -3.8% follow their instruction counts, and `mutate_boxed_loop` takes 11.3% fewer
+cycles for an instruction count that did not move at all -- code that changed size around it landed
+differently. Below a few million instructions the column is dominated by what start-up costs and by
+run-to-run variation, so the percent figures on the `sum_by_*` cases say nothing.
+
+**`fannkuch_scratch` costs 2.7% of its cycles**, which three back-to-back pairs of builds put
+outside the run-to-run range on both sides. Its instruction count moves -0.1% and its split count is
+23 either way, so what changed is code layout.
+
 ## 61d9cc8f1d540f778a48d369152a5d4c2ead7f67
 
 The first row whose cycle counts were judged by the CPU the measurement had rather than by the
