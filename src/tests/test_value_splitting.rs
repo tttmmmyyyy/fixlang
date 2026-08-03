@@ -1,11 +1,11 @@
 use crate::build::build_object_files::get_target_machine;
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, FixOptimizationLevel};
 use crate::constants::MAX_SPLIT_SCALARS;
 use crate::elaboration::elaborate_via_config;
 use crate::error::panic_if_err;
 use crate::generator::Generator;
 use crate::misc::Map;
-use crate::tests::test_util::run_source_capture;
+use crate::tests::test_util::{run_source_capture, test_source};
 use inkwell::context::Context;
 use std::sync::Arc;
 
@@ -103,4 +103,101 @@ fn test_split_limit_boundary() {
     // `limit` scalars each is one part, though it has two fields.
     let nested = context.struct_type(&[at_limit.into(), at_limit.into()], false);
     assert_eq!(gc.part_count(nested.into()), 1);
+}
+
+// A value carried whole reaches a function's parameters, its return value and its phis, and the
+// unit that defines a function and the unit that calls it derive that shape apart. One symbol per
+// unit puts a boundary on every call, so the two sides agree only by reading the shape off the
+// type. The shapes cover a value exactly at the limit beside one past it, a carried-whole value
+// returned through the out-pointer, read a field at a time, merged at a branch, carried around a
+// loop, held in an array, captured by a closure, and holding a boxed subobject.
+const CROSS_UNIT_PROGRAM: &str = r#"
+module Main;
+
+type W4 = unbox struct { a : I64, b : I64, c : I64, d : I64 };
+type W16 = unbox struct { a : W4, b : W4, c : W4, d : W4 };
+type W64 = unbox struct { a : W16, b : W16, c : W16, d : W16 };
+// 128 scalars: exactly the limit, so a value of this type is still split into them.
+type W128 = unbox struct { x : W64, y : W64 };
+// 129 scalars: one past the limit, so a value of this type is carried whole.
+type W129 = unbox struct { x : W64, y : W64, t : I64 };
+// A carried-whole value holding a boxed subobject, so reference counting runs over one.
+type Boxy = unbox struct { w : W129, xs : Array I64 };
+
+mk4 : I64 -> W4;
+mk4 = |n| W4 { a : n, b : n + 1, c : n + 2, d : n + 3 };
+mk16 : I64 -> W16;
+mk16 = |n| W16 { a : mk4(n), b : mk4(n + 4), c : mk4(n + 8), d : mk4(n + 12) };
+mk64 : I64 -> W64;
+mk64 = |n| W64 { a : mk16(n), b : mk16(n + 16), c : mk16(n + 32), d : mk16(n + 48) };
+mk128 : I64 -> W128;
+mk128 = |n| W128 { x : mk64(n), y : mk64(n + 64) };
+mk129 : I64 -> W129;
+mk129 = |n| W129 { x : mk64(n), y : mk64(n + 64), t : n + 128 };
+
+sum4 : W4 -> I64;
+sum4 = |v| v.@a + v.@b + v.@c + v.@d;
+sum16 : W16 -> I64;
+sum16 = |v| sum4(v.@a) + sum4(v.@b) + sum4(v.@c) + sum4(v.@d);
+sum64 : W64 -> I64;
+sum64 = |v| sum16(v.@a) + sum16(v.@b) + sum16(v.@c) + sum16(v.@d);
+sum128 : W128 -> I64;
+sum128 = |v| sum64(v.@x) + sum64(v.@y);
+sum129 : W129 -> I64;
+sum129 = |v| sum64(v.@x) + sum64(v.@y) + v.@t;
+
+// Reads a split field out of a carried-whole value.
+half : Bool -> W129 -> W64;
+half = |b, v| if b { v.@x } else { v.@y };
+
+// Modifies a field of a field, and returns the value whole.
+bump129 : W129 -> W129;
+bump129 = |v| v.mod_x(|s| s.mod_a(|s| s.mod_a(|s| s.set_a(s.@a + 1))));
+
+// Merges two carried-whole values at a branch.
+choose : Bool -> W129 -> W129 -> W129;
+choose = |b, x, y| if b { x } else { y };
+
+// Carries a carried-whole value around a loop.
+bump_n : I64 -> W129 -> W129;
+bump_n = |n, v| loop((0, v), |(i, w)|
+    if i == n { break $ w } else { continue $ (i + 1, bump129(w)) }
+);
+
+mk_boxy : I64 -> Boxy;
+mk_boxy = |n| Boxy { w : mk129(n), xs : [n, n + 1, n + 2] };
+sum_boxy : Boxy -> I64;
+sum_boxy = |v| sum129(v.@w) + v.@xs.to_iter.fold(0, |e, acc| acc + e);
+
+// Captures a carried-whole value in a closure.
+adder : W129 -> (I64 -> I64);
+adder = |v| |n| n + sum129(v);
+
+main : IO ();
+main = (
+    assert_eq(|_|"at the limit", sum128(mk128(0)), 8128);;
+    assert_eq(|_|"past the limit", sum129(mk129(0)), 8256);;
+    let w = bump_n(5, mk129(0));
+    assert_eq(|_|"around a loop", sum129(w), 8261);;
+    assert_eq(|_|"a field at a time", sum64(half(true, w)) + sum64(half(false, w)), 8133);;
+    assert_eq(|_|"merged at a branch", sum129(choose(true, mk129(0), w)), 8256);;
+    assert_eq(|_|"holding a boxed subobject", sum_boxy(mk_boxy(0)), 8259);;
+    assert_eq(|_|"captured by a closure", adder(mk129(0))(7), 8263);;
+    let arr = Array::from_map(3, |i| mk129(i));
+    assert_eq(|_|"held in an array", arr.to_iter.map(sum129).fold(0, |e, acc| acc + e), 25155);;
+    pure()
+);
+"#;
+
+/// Verifies that a value carried whole reaches the same answers when the function defining it and
+/// the function calling it are compiled as separate units.
+///
+/// Separate compilation, which `max_cu_size` divides, runs at `Basic` and below, so the level comes
+/// down to it: at a higher one the whole program is one unit and no call crosses a boundary.
+#[test]
+fn test_wide_value_crosses_compilation_units() {
+    let mut config = Configuration::develop_mode();
+    config.set_fix_opt_level(FixOptimizationLevel::Basic);
+    config.max_cu_size = 1;
+    test_source(CROSS_UNIT_PROGRAM, config);
 }
