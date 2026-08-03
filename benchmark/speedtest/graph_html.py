@@ -41,7 +41,8 @@ METRICS = [
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
      "several runs. This is the only column here that is not deterministic: it rises with whatever "
      "else the machine is doing, so it is read only on runs taken while the machine is free and the "
-     "series is sparse. Two points are comparable only when both rows report a low load.",
+     "series is sparse. Two points are comparable only when the machine had CPU to spare for "
+     "both, which is what the contention figure beside each commit says.",
      "ratio", "perf"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "
@@ -103,7 +104,8 @@ def build_data(log_path, history_path, latest_n):
 
     index = {name.strip(): i for i, name in enumerate(header)}
     cpu_col = index.get("cpu")
-    load_col = index.get("load")
+    # Rows taken before the counters were judged by contention carry a `load` column instead.
+    contention_col = index.get("contention", index.get("load"))
 
     commits = []
     for row in body:
@@ -117,9 +119,10 @@ def build_data(log_path, history_path, latest_n):
             matches = [k for k in history if h.startswith(k) or k.startswith(h)]
             entry = history[max(matches, key=len)] if matches else None
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
-        load = row[load_col].strip() if load_col is not None and load_col < len(row) else ""
+        contention = (row[contention_col].strip()
+                      if contention_col is not None and contention_col < len(row) else "")
         commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry,
-                        "cpu": cpu, "load": load})
+                        "cpu": cpu, "contention": contention})
 
     # Split each "<case>-<metric>" column apart, and each "<case>-<metric>-<language>"
     # reference beside it. A reference does not move with a Fix commit, so the last value
@@ -158,7 +161,7 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,load,a-inst,a-mem,a-splits,a-cycles,b-inst,a-inst-c,a-inst-rust\n"
+            "commit,cpu,contention,a-inst,a-mem,a-splits,a-cycles,b-inst,a-inst-c,a-inst-rust\n"
             "1111111111111111111111111111111111111111,Zen,0.10,100,200,4,7,50,90,\n"
             "2222222222222222222222222222222222222222(dirty),Zen,,150,,0,,,90,120\n",
             encoding="utf-8",
@@ -168,8 +171,8 @@ def self_check():
         data = build_data(log, history, 40)
 
     first, second = data["commits"]
-    assert first["cpu"] == "Zen" and first["load"] == "0.10" and not first["dirty"], first
-    assert second["load"] == "", second
+    assert first["cpu"] == "Zen" and first["contention"] == "0.10" and not first["dirty"], first
+    assert second["contention"] == "", second
     assert second["dirty"] and "second commit" in second["history"], second
     assert first["history"] is None, first
     series = {k: v["series"] for k, v in data["metrics"].items()}
@@ -481,7 +484,7 @@ function showHistory(i) {
   const c = DATA.commits[i];
   document.getElementById("history").innerHTML =
     `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}${c.cpu ? "<br>" + c.cpu : ""}`
-    + `${c.load ? ` at load ${c.load}` : ""}</p>`
+    + `${c.contention ? ` with ${c.contention} cores of other work` : ""}</p>`
     + (c.history || `<p class="placeholder">No note recorded for this commit.</p>`);
 }
 

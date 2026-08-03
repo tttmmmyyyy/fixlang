@@ -1099,29 +1099,37 @@ impl ObjectFieldType {
     }
 }
 
-/// The layout of a Fix type: the fields the LLVM struct carrying its values is built from.
+/// How an object that ends in an element buffer is laid out around that buffer.
+struct ElementBufferLayout {
+    /// The bytes of the fields laid out ahead of the buffer.
+    header_size: u64,
+    /// The bytes one element takes in the buffer, which is the stride every read and write of it
+    /// uses.
+    elem_stride: u64,
+}
+
+/// The layout the code generator gives a Fix type: the fields it is made of, and whether a value of
+/// it is held in place or behind a pointer.
 #[derive(Eq, PartialEq, Clone)]
 pub struct ObjectType {
-    /// The fields in struct order, the runtime machinery included: a boxed object leads with its
-    /// control block, a union carries its tag ahead of its payload buffer, and an object ending in
-    /// an element buffer carries it last.
+    /// The fields in the order they are laid out. A boxed type leads with its `ControlBlock`.
     pub field_types: Vec<ObjectFieldType>,
-    /// Whether values of this type are held inline where they appear. A boxed type is held as a
-    /// pointer to a heap object, and the layout then begins with the control block that carries the
-    /// reference count.
+    /// Whether a value of this type is held in place. A boxed value is a pointer to a heap block
+    /// whose contents this layout describes.
     pub is_unbox: bool,
-    /// The Fix type this is the layout of.
+    /// The Fix type this is the layout of, which `to_struct_type` compares against `unboxed_path`
+    /// to find a cycle of unboxed types.
     pub ty: Arc<TypeNode>,
 }
 
 impl ObjectType {
-    /// The LLVM struct a value of this object type is laid out as.
+    /// The LLVM struct type this object is laid out as.
     ///
     /// # Arguments
-    /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first. An
-    ///   unboxed type that reaches itself through unboxed fields has no finite layout, and comparing
-    ///   against this path is what detects it. Pass an empty slice from outside; the recursion
-    ///   extends it, and a boxed type on the way clears it, since a pointer bounds the layout there.
+    /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first, which
+    ///   is what turns a circular definition by unboxed types into a diagnostic instead of an
+    ///   infinite recursion. A call from outside passes an empty slice; the recursion extends it,
+    ///   and a boxed type on the way clears it, since a pointer bounds the layout there.
     pub fn to_struct_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1159,8 +1167,35 @@ impl ObjectType {
         gc.context.struct_type(&fields, false)
     }
 
+    /// The bytes laid out ahead of the element buffer, and the bytes one element takes in it, for an
+    /// object type that ends in such a buffer (`Array`, `#ArrayStorage`).
+    fn element_buffer_layout<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> ElementBufferLayout {
+        // The element buffer is the last field, of `Array` (with a preceding capacity slot) or of
+        // `#ArrayStorage` (right after the control block).
+        let elem_ty = match self.field_types.last().unwrap() {
+            ObjectFieldType::Array(ty) => ty.clone(),
+            ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
+            _ => panic!(
+                "`{}` was given an array capacity, but its layout ends in no element buffer",
+                self.ty.to_string()
+            ),
+        };
+        let struct_ty = self.to_struct_type(gc, &[]);
+        let buf_field_idx = struct_ty.count_fields() - 1;
+        ElementBufferLayout {
+            header_size: gc
+                .target_data
+                .offset_of_element(&struct_ty, buf_field_idx)
+                .unwrap(),
+            elem_stride: elem_stride(gc, &elem_ty),
+        }
+    }
+
     /// The size of this object in bytes: a constant, except for an object that ends in an element
     /// buffer, whose size takes a capacity the program computes at run time.
+    ///
+    /// The capacity is taken as one whose byte count fits in the address space;
+    /// `build_capacity_check` is what establishes that.
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
@@ -1174,41 +1209,24 @@ impl ObjectType {
         if let Some(array_capacity) = array_capacity {
             // The size is the header -- the fields laid out ahead of the element buffer -- plus the
             // bytes the elements take.
-
-            // The element buffer is the last field, of `Array` (with a preceding capacity slot) or
-            // of `#ArrayStorage` (right after the control block).
-            let elem_ty = match self.field_types.last().unwrap() {
-                ObjectFieldType::Array(ty) => ty.clone(),
-                ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
-                _ => panic!(
-                    "`{}` was given an array capacity, but its layout ends in no element buffer",
-                    self.ty.to_string()
-                ),
-            };
-            let elem_size = elem_stride(gc, &elem_ty);
-            let struct_ty = self.to_struct_type(gc, &[]);
-            let buf_field_idx = struct_ty.count_fields() - 1;
-            let header_size = gc
-                .target_data
-                .offset_of_element(&struct_ty, buf_field_idx)
-                .unwrap();
-
+            let layout = self.element_buffer_layout(gc);
             let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
             let cap = gc
                 .builder()
                 .build_int_cast(array_capacity, ptr_int_ty, "cap_as_ptr_int_ty")
                 .unwrap();
-            if gc.config.runtime_check() {
-                panic_if_byte_count_exceeds_address_space(gc, cap, elem_size, header_size);
-            }
             let elems_size = gc
                 .builder()
-                .build_int_mul(ptr_int_ty.const_int(elem_size, false), cap, "elems_size")
+                .build_int_mul(
+                    ptr_int_ty.const_int(layout.elem_stride, false),
+                    cap,
+                    "elems_size",
+                )
                 .unwrap();
             return gc
                 .builder()
                 .build_int_add(
-                    ptr_int_ty.const_int(header_size, false),
+                    ptr_int_ty.const_int(layout.header_size, false),
                     elems_size,
                     "size_with_elems",
                 )
@@ -1237,10 +1255,14 @@ impl ObjectType {
     }
 }
 
+/// The integer type of the control block field holding an object's reference count. Its width is
+/// what bounds the number of references to one object a program can hold.
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i32_type()
 }
 
+/// The debug info type of an object's reference count, which presents it to a debugger session as an
+/// unsigned integer.
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
         .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
@@ -1248,8 +1270,8 @@ pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
         .as_type()
 }
 
-// State for reference counting.
-// Values of this fields are REFCNT_STATE_* constants.
+/// The integer type of the control block field holding which reference-counting scheme an object is
+/// under. Its values are the `REFCNT_STATE_*` constants.
 pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
@@ -1262,8 +1284,11 @@ pub fn alloc_offset_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-// Type of traverser function.
-// - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
+/// The function type of a traverser, which walks an object's reference-counted leaves.
+///
+/// # Arguments
+/// * `is_dynamic` - whether the traverser takes the work to do as a second argument, of
+///   `traverser_work_type`, instead of having it fixed at the point the traverser is generated.
 pub fn traverser_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ty: &Arc<TypeNode>,
@@ -1286,10 +1311,15 @@ pub fn traverser_type<'c, 'm>(
     gc.context.void_type().fn_type(&arg_tys, false)
 }
 
+/// The integer type of the work argument a dynamic traverser takes, whose values are the
+/// `TRAVERSER_WORK_*` constants.
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
+/// The LLVM struct type of the control block that heads every boxed object, holding the reference
+/// count, the reference-counting state, and the distance the object sits above the base of its
+/// allocation.
 pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     let mut fields = vec![];
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
@@ -1304,14 +1334,14 @@ pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
 /// The debug info type describing the control block that heads every boxed object. It presents the
 /// reference counter alone, the one field a debugger session has use for.
 pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
-    let struct_ty = control_block_type(gc);
+    let struct_type = control_block_type(gc);
 
     let refcnt_ty = refcnt_type(gc.context);
     let refcnt_size_in_bits = gc.target_data.get_bit_size(&refcnt_ty);
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
     let refcnt_offset_in_bits = gc
         .target_data
-        .offset_of_element(&struct_ty, CTRL_BLK_REFCNT_IDX)
+        .offset_of_element(&struct_type, CTRL_BLK_REFCNT_IDX)
         .unwrap()
         * 8;
     let refcnt_member = gc
@@ -1331,8 +1361,8 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let elements = vec![refcnt_member];
 
     let name = "<control block>";
-    let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
-    let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
+    let size_in_bits = gc.target_data.get_bit_size(&struct_type);
+    let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
     gc.get_di_builder()
         .create_struct_type(
             gc.get_di_compile_unit().as_debug_info_scope(),
@@ -1580,8 +1610,8 @@ pub fn ty_to_object_ty(
     ret
 }
 
-// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
-// type so the reference-count helpers and buffer GEPs operate on it directly.
+/// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
+/// type so the reference-count helpers and buffer GEPs operate on it directly.
 pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage_ty = make_array_storage_ty(elem_ty);
@@ -1589,7 +1619,7 @@ pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>)
     Object::new(storage_ptr, storage_ty, gc)
 }
 
-// A pointer to the first element of a flipped `Array`'s element buffer.
+/// A pointer to the first element of a flipped `Array`'s element buffer.
 pub fn get_array_storage_buf<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: &Object<'c>,
@@ -1597,13 +1627,30 @@ pub fn get_array_storage_buf<'c, 'm>(
     get_array_storage(gc, array).gep_boxed(gc, STORAGE_BUF_IDX)
 }
 
-// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
-// its control block initialized to a reference count of one and its buffer left uninitialized.
+/// Whether an allocation checks the capacity it is given against the address space.
+///
+/// Every allocation asks for one, so each allocation site states which of the two it is: the check
+/// is what keeps a wrapped-around byte count from reaching `malloc`, and a site that skipped it
+/// silently would corrupt the heap.
+#[derive(Clone, Copy)]
+pub enum CapacityCheck {
+    /// Nothing has checked this capacity, so this allocation checks it.
+    Run,
+    /// The capacity is already within the bound -- read off an array that holds it, or checked by
+    /// the caller ahead of a branch whose arms both allocate -- so checking it here would only add
+    /// a branch to the emitted code.
+    Skip,
+}
+
+/// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
+/// its control block initialized to a reference count of one and its buffer left uninitialized.
 pub fn alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
     cap: IntValue<'c>,
+    capacity_check: CapacityCheck,
 ) -> Object<'c> {
+    build_capacity_check(gc, &elem_ty, cap, capacity_check);
     let storage_ty = make_array_storage_ty(elem_ty);
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
@@ -1721,8 +1768,8 @@ pub fn build_storage_is_aligned<'c, 'm>(
         .unwrap()
 }
 
-/// Abort the program unless a buffer of `cap` elements of `elem_size` bytes each, laid out behind a
-/// header of `header_size` bytes, fits in the address space.
+/// Emit the check `capacity_check` asks for: the program aborts unless an `#ArrayStorage` holding
+/// `cap` elements of `elem_ty` fits in the address space.
 ///
 /// Left unchecked, a capacity whose byte count wraps around asks `malloc` for a small block, gets
 /// one, and leaves an object claiming a capacity its block has no room for; the first write past the
@@ -1731,22 +1778,34 @@ pub fn build_storage_is_aligned<'c, 'm>(
 ///
 /// The bound is the widest capacity whose byte count cannot wrap, and a constant, so the whole check
 /// is one unsigned comparison. A byte count within the bound that the system cannot supply is a
-/// separate matter, left where it was: `malloc` answers null and the program faults on the store
-/// that initializes the object.
-fn panic_if_byte_count_exceeds_address_space<'c, 'm>(
-    gc: &Generator<'c, 'm>,
+/// separate matter: `malloc` answers null and the program faults on the store that initializes the
+/// object.
+///
+/// Every allocation given a capacity nothing has checked runs this, which is what makes it an
+/// invariant that an array's capacity field is within the bound. `capacity_check` says whether this
+/// allocation is one of those; `CapacityCheck::Skip` is for the capacities that invariant already
+/// covers.
+pub fn build_capacity_check<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    elem_ty: &Arc<TypeNode>,
     cap: IntValue<'c>,
-    elem_size: u64,
-    header_size: u64,
+    capacity_check: CapacityCheck,
 ) {
+    if matches!(capacity_check, CapacityCheck::Skip) || !gc.config.runtime_check() {
+        return;
+    }
+    let storage_ty = make_array_storage_ty(elem_ty.clone());
+    let layout = storage_ty
+        .get_object_type(&vec![], gc.type_env())
+        .element_buffer_layout(gc);
     // A buffer of elements of no size is no bytes long, however many of them the capacity asks for.
-    if elem_size == 0 {
+    if layout.elem_stride == 0 {
         return;
     }
     // The bound below is the widest byte count of a 64-bit address space, so it bounds a capacity
     // of that width.
     assert_eq!(cap.get_type().get_bit_width(), 64);
-    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - header_size) / elem_size;
+    let max_cap = (u64::MAX - ARRAY_STORAGE_ALLOC_SLACK - layout.header_size) / layout.elem_stride;
     let is_capacity_overflow = gc
         .builder()
         .build_int_compare(
@@ -1806,9 +1865,9 @@ fn build_abort_if<'c, 'm>(
 /// an allocator is free to hand out any alignment the requested size can hold, and mimalloc, for
 /// one, aligns an 8-byte allocation -- the size of an empty array's storage -- to 8 bytes.
 ///
-/// The threshold is applied as a mask rather than a branch. An array allocation is a handful of
-/// instructions that many callers inline, and the basic blocks a branch here adds to every one of
-/// them cost more in inlining decisions downstream than the arithmetic they save.
+/// The threshold is applied by masking, so the allocation stays a single basic block: an array
+/// allocation is a handful of instructions that many callers inline, and extra blocks in every one
+/// of them cost more in inlining decisions downstream than the arithmetic the mask spends.
 fn build_alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,
@@ -2395,9 +2454,9 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         }
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
-        let struct_ty = gc.struct_type_of(&ty);
-        let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
-        let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
+        let struct_type = gc.struct_type_of(&ty);
+        let size_in_bits = gc.target_data.get_bit_size(&struct_type);
+        let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
 
         let mut subelement_names = vec![];
         if !ty.is_closure() {
@@ -2457,7 +2516,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             let align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
             let offset_in_bits = gc
                 .target_data
-                .offset_of_element(&struct_ty, i as u32)
+                .offset_of_element(&struct_type, i as u32)
                 .unwrap()
                 * 8;
             let mem_ty = gc
