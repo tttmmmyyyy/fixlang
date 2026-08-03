@@ -34,9 +34,9 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
-    ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -848,7 +848,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-// Create a byte array by copying from given pointer.
+/// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
 pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
@@ -856,7 +856,7 @@ pub fn make_byte_array_copy<'c, 'm>(
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let storage = alloc_array_storage(gc, make_u8_ty(), len);
+    let storage = alloc_array_storage(gc, make_u8_ty(), len, CapacityCheck::Run);
     let array = create_obj(
         array_ty,
         &vec![],
@@ -869,21 +869,27 @@ pub fn make_byte_array_copy<'c, 'm>(
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
     let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
     let dst = get_array_storage_buf(gc, &array);
-    let len = gc
+    let len_ptr_int = gc
         .builder()
         .build_int_cast(
             len,
             gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr@make_byte_array_copy",
+            "len_ptr_int@make_byte_array_copy",
         )
         .unwrap();
-    gc.builder().build_memcpy(dst, 1, buf, 1, len).ok().unwrap();
+    gc.builder()
+        .build_memcpy(dst, 1, buf, 1, len_ptr_int)
+        .ok()
+        .unwrap();
 
     array
 }
 
+/// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
+/// null terminator, copied out of a global into a fresh array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
+    /// The literal's bytes, without the null terminator.
     string: String,
 }
 
@@ -1738,8 +1744,12 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Array::_unsafe_empty_capacity_unchecked`: an array of size 0 whose storage has room
+/// for the given capacity, its elements left uninitialized.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeEmpty {
+    /// The local binding holding the capacity, in elements. The caller of the primitive is what
+    /// establishes it is non-negative.
     capacity_name: FullName,
 }
 
@@ -1754,7 +1764,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         // Allocate the storage with room for `cap` elements, then build the array value
         // `{ storage, size = 0, cap }`.
         let elem_ty = arr_ty.field_types(gc.type_env())[0].clone();
-        let storage = alloc_array_storage(gc, elem_ty, cap);
+        let storage = alloc_array_storage(gc, elem_ty, cap, CapacityCheck::Run);
         let array = create_obj(
             arr_ty.clone(),
             &vec![],
@@ -2267,18 +2277,20 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
-// field. The elements move as raw bytes, with their reference counts left alone: the caller must
-// ensure the array is unique.
-//
-// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
-// large enough to have its own pages, by remapping them, which costs nothing per element. What comes
-// back starts wherever the allocator put it, so the object is placed in it afresh, and the contents
-// move only in the case where that lands the object somewhere other than `realloc` left it.
+/// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
+/// field. The elements move as raw bytes, with their reference counts left alone: the caller must
+/// ensure the array is unique.
+///
+/// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
+/// large enough to have its own pages, by remapping them, which costs nothing per element. What
+/// comes back starts wherever the allocator put it, so the object is placed in it afresh, and the
+/// contents move only in the case where that lands the object somewhere other than `realloc` left
+/// it.
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     new_cap: IntValue<'c>,
+    capacity_check: CapacityCheck,
 ) -> Object<'c> {
     let i64_ty = gc.context.i64_type();
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
@@ -2286,6 +2298,7 @@ fn realloc_array<'c, 'm>(
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
+    build_capacity_check(gc, &elem_ty, new_cap, capacity_check);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
     let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
@@ -2438,9 +2451,9 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     arr_name: FullName,
     /// The local binding holding the new capacity, in elements.
     cap_name: FullName,
-    // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
-    // retain-copy a shared array's elements. Set false only where the array is statically known to
-    // be unique, leaving just the `realloc`.
+    /// When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
+    /// retain-copy a shared array's elements. Set false only where the array is statically known to
+    /// be unique, leaving just the `realloc`.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -2454,7 +2467,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
 
         if !self.force_unique {
-            return realloc_array(gc, array, new_cap);
+            return realloc_array(gc, array, new_cap, CapacityCheck::Run);
         }
 
         // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
@@ -2462,6 +2475,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
+        build_capacity_check(gc, &elem_ty, new_cap, CapacityCheck::Run);
         let (unique_bb, shared_bb) =
             gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
         let current_func = unique_bb.get_parent().unwrap();
@@ -2471,7 +2485,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced = realloc_array(gc, array.clone(), new_cap);
+        let realloced = realloc_array(gc, array.clone(), new_cap, CapacityCheck::Skip);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2479,7 +2493,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // reference to the old shared storage.
         gc.builder().position_at_end(shared_bb);
         let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-        let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap);
+        let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap, CapacityCheck::Skip);
         let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
         let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
         ObjectFieldType::clone_array_buf(
@@ -3053,7 +3067,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
     let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
-    let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap);
+    let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap, CapacityCheck::Skip);
     let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
     ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole, state);
@@ -4283,11 +4297,12 @@ impl LLVMGen for InlineLLVMMakeStructBody {
     }
 }
 
-// Allocate an array whose length equals the number of operands and fill it with them. The array
-// type is the value type of the enclosing expression. This is the RC IR counterpart of the
-// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
+/// Allocate an array whose length equals the number of operands and fill it with them. The array
+/// type is the value type of the enclosing expression. This is the RC IR counterpart of the
+/// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayLitBody {
+    /// The local bindings holding the elements, in the order they are written into the array.
     pub elem_names: Vec<FullName>,
 }
 
@@ -4299,25 +4314,17 @@ impl LLVMGen for InlineLLVMArrayLitBody {
             .i64_type()
             .const_int(self.elem_names.len() as u64, false);
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
-        let storage = alloc_array_storage(gc, elem_ty, len);
+        let storage = alloc_array_storage(gc, elem_ty, len, CapacityCheck::Run);
         let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
         let storage_val = storage.value(gc);
         let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
         let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
         let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
-        let buffer = get_array_storage_buf(gc, &array);
+        let buf = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);
             let idx = gc.context.i64_type().const_int(i as u64, false);
-            ObjectFieldType::write_to_array_buf(
-                gc,
-                None,
-                buffer,
-                idx,
-                value,
-                false,
-                RcState::Unknown,
-            );
+            ObjectFieldType::write_to_array_buf(gc, None, buf, idx, value, false, RcState::Unknown);
         }
         array
     }

@@ -73,9 +73,9 @@ fn path_env_with_fix_binary_dir() -> OsString {
 
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
 /// path. Building is triggered (once) first, so the returned command always
-/// targets a complete binary. Spawning `fix` this way runs the binary the test
-/// just built rather than whatever `fix` is on `PATH`, which a parallel
-/// worktree may be overwriting.
+/// targets a complete binary. The absolute path pins the run to the binary the
+/// test just built; the `fix` on `PATH` is one a parallel worktree may be
+/// overwriting.
 pub fn fix_command() -> Command {
     build_fix();
     let mut command = Command::new(fix_binary_path());
@@ -155,6 +155,26 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
         .join("\n")
 }
 
+/// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
+pub fn llvm_function_bodies(ir: &str, name_part: &str) -> Vec<String> {
+    let mut bodies = vec![];
+    let mut current_body: Option<Vec<&str>> = None;
+    for line in ir.lines() {
+        if line.starts_with("define ") {
+            current_body = line.contains(name_part).then(Vec::new);
+        }
+        if let Some(body) = current_body.as_mut() {
+            body.push(line);
+        }
+        if line == "}" {
+            if let Some(body) = current_body.take() {
+                bodies.push(body.join("\n"));
+            }
+        }
+    }
+    bodies
+}
+
 #[cfg(test)]
 mod tests {
     use super::EmittedIr;
@@ -215,10 +235,13 @@ fn run_source(
     run(config, false)
 }
 
+/// Compiles `source` under `config` and runs it, failing the test unless it exits with code 0. The
+/// program's stdout and stderr are forwarded to the test's stderr, so a failing run shows what it
+/// printed.
 pub fn test_source(source: &str, config: Configuration) {
-    let res = run_source(source, config);
-    let res = panic_if_err(res);
-    let output = res.unwrap();
+    let compile_result = run_source(source, config);
+    let spawn_result = panic_if_err(compile_result);
+    let output = spawn_result.unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stdout.is_empty() {
@@ -275,8 +298,8 @@ pub fn assert_grammar_accepts(source: &str) {
 ///     spawn;
 ///   - the captured stderr from the child process otherwise.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
-    let res = run_source(source, config);
-    match res {
+    let compile_result = run_source(source, config);
+    match compile_result {
         Err(errs) => errs.to_string(),
         Ok(Err(e)) => e.to_string(),
         Ok(Ok(output)) => {
@@ -346,9 +369,9 @@ pub fn test_files_in_directory(dir: &Path) {
             config.add_user_source_file(path.clone());
         }
         println!("[{}]:", path.to_string_lossy().to_string());
-        let res = run(config, false);
-        let res = panic_if_err(res);
-        let output = res.unwrap();
+        let compile_result = run(config, false);
+        let spawn_result = panic_if_err(compile_result);
+        let output = spawn_result.unwrap();
         let code = output.status.code().unwrap();
         assert_eq!(code, 0);
         remove_file("test_process_text_file.txt").unwrap_or(());
