@@ -1,8 +1,29 @@
 use crate::{
     configuration::{Configuration, FixOptimizationLevel},
-    tests::test_util::{test_source, test_source_fail},
+    fixstd::runtime::{RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_MALLOC},
+    tests::test_util::{
+        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source,
+        test_source_fail, EmittedIr,
+    },
 };
+use tempfile::TempDir;
 
+/// A configuration whose runtime checks are on, which is what makes the checks under test part of
+/// the emitted program.
+fn runtime_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    config
+}
+
+/// A configuration whose runtime checks are off, as `--no-runtime-check` leaves them.
+fn runtime_unchecked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = true;
+    config
+}
+
+/// `@` bounds-checks the index it is given, and the message reports both the index and the size.
 #[test]
 pub fn test_get() {
     let source = r#"    
@@ -14,11 +35,11 @@ pub fn test_get() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Index out of range: index=3, size=3");
 }
 
+/// `set` bounds-checks the index it is given.
 #[test]
 pub fn test_set() {
     let source = r#"    
@@ -30,8 +51,7 @@ pub fn test_set() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Index out of range");
 }
 
@@ -47,8 +67,7 @@ pub fn test_mod() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Index out of range");
 }
 
@@ -64,8 +83,7 @@ pub fn test_act() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Index out of range");
 }
 
@@ -81,8 +99,7 @@ pub fn test_index_syntax() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Index out of range");
 }
 
@@ -99,8 +116,7 @@ pub fn test_empty_negative_capacity() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Negative array size or capacity: -1");
 }
 
@@ -116,8 +132,7 @@ pub fn test_fill_negative_size() {
                 pure()
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(&source, config, "Negative array size or capacity");
 }
 
@@ -137,8 +152,7 @@ pub fn test_empty_capacity_byte_count_wraps() {
                 println(arr.push_back(42).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -159,8 +173,7 @@ pub fn test_empty_capacity_byte_count_leaves_no_room_for_the_header() {
                 println(arr.push_back(42).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -183,8 +196,7 @@ pub fn test_empty_capacity_byte_count_is_checked_at_run_time() {
                 println(arr.push_back(42).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -205,8 +217,7 @@ pub fn test_reserve_capacity_byte_count_wraps() {
                 println(arr.reserve(2305843009213693952).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -227,8 +238,7 @@ pub fn test_capacity_byte_count_wraps_for_a_wide_element() {
                 println(arr.push_back((1, 2, 3, 4)).@size.to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -249,8 +259,7 @@ pub fn test_capacity_of_a_zero_sized_element_is_allocatable() {
                 println(arr.@size.to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source(&source, config);
 }
 
@@ -268,8 +277,7 @@ pub fn test_unsafe_empty_capacity_unchecked_checks_the_byte_count() {
                 println(arr.@capacity.to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -291,8 +299,7 @@ pub fn test_empty_capacity_one_element_past_the_bound_is_rejected() {
                 println(arr.push_back(42).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -316,8 +323,7 @@ pub fn test_reserve_capacity_byte_count_wraps_for_a_shared_array() {
                 println((big.@(0) + pair.@1.@(0)).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let config = runtime_checked_config();
     test_source_fail(
         &source,
         config,
@@ -342,8 +348,7 @@ pub fn test_capacity_byte_count_under_separate_compilation() {
                 println(arr.push_back(42).@(0).to_string)
             );
         "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
+    let mut config = runtime_checked_config();
     config.set_fix_opt_level(FixOptimizationLevel::Basic);
     config.max_cu_size = 1;
     test_source_fail(
@@ -368,24 +373,24 @@ pub fn test_capacity_byte_count_respects_no_runtime_check() {
                 println(arr.@capacity.to_string)
             );
         "#;
-    let mut checked = Configuration::develop_mode();
-    checked.no_runtime_check = false;
+    let checked = runtime_checked_config();
     test_source_fail(
         &source,
         checked,
         "Array size or capacity exceeds the address space: 2305843009213693952",
     );
-    let mut unchecked = Configuration::develop_mode();
-    unchecked.no_runtime_check = true;
+    let unchecked = runtime_unchecked_config();
     test_source(&source, unchecked);
 }
 
 // `--no-runtime-check` disables array bounds checks (documented in the CLI help), so `set`
 // and `swap` must honor it like `@` / `mod` / `act`. An index within the array's capacity but
 // past its size stays inside the allocated buffer, so the access itself is memory-safe; only
-// the bounds check decides whether it aborts. That makes "the check was removed" observable
-// as a completed run rather than an out-of-range abort.
+// the bounds check decides whether it aborts. Such an access therefore runs to completion
+// exactly when the check is gone, and that is what the tests below read off.
 
+/// `set` honors `--no-runtime-check`: one index, in capacity and past the size, aborts with the
+/// checks on and completes with them off.
 #[test]
 pub fn test_set_bounds_check_respects_no_runtime_check() {
     let source = r#"
@@ -399,15 +404,14 @@ pub fn test_set_bounds_check_respects_no_runtime_check() {
             );
         "#;
     // Checks on: the out-of-range index aborts.
-    let mut checked = Configuration::develop_mode();
-    checked.no_runtime_check = false;
+    let checked = runtime_checked_config();
     test_source_fail(&source, checked, "Index out of range");
     // Checks off: no bounds check, so the (memory-safe) access completes.
-    let mut unchecked = Configuration::develop_mode();
-    unchecked.no_runtime_check = true;
+    let unchecked = runtime_unchecked_config();
     test_source(&source, unchecked);
 }
 
+/// `swap` honors `--no-runtime-check` for both of the indices it checks.
 #[test]
 pub fn test_swap_bounds_check_respects_no_runtime_check() {
     let source = r#"
@@ -420,17 +424,16 @@ pub fn test_swap_bounds_check_respects_no_runtime_check() {
                 pure()
             );
         "#;
-    let mut checked = Configuration::develop_mode();
-    checked.no_runtime_check = false;
+    let checked = runtime_checked_config();
     test_source_fail(&source, checked, "Index out of range");
-    let mut unchecked = Configuration::develop_mode();
-    unchecked.no_runtime_check = true;
+    let unchecked = runtime_unchecked_config();
     test_source(&source, unchecked);
 }
 
+/// `unsafe_swap_bounds_unchecked` skips the bounds check even with the runtime checks on, so a pair
+/// of indices in capacity and past the size runs to completion.
 #[test]
 pub fn test_unsafe_swap_bounds_unchecked_skips_check() {
-    // `unsafe_swap_bounds_unchecked` never bounds-checks, even with runtime checks on.
     let source = r#"
             module Main;
 
@@ -441,7 +444,78 @@ pub fn test_unsafe_swap_bounds_unchecked_skips_check() {
                 pure()
             );
         "#;
-    let mut checked = Configuration::develop_mode();
-    checked.no_runtime_check = false;
+    let checked = runtime_checked_config();
     test_source(&source, checked);
+}
+
+/// A program that writes into an array while a second handle to it is alive, so that the build emits
+/// `Array::set` with both answers of its uniqueness check -- including the clone the shared answer
+/// takes.
+const SHARED_WRITE_SOURCE: &str = r#"
+module Main;
+
+main : IO ();
+main = (
+    let arr = Array::fill(4, 0);
+    let shared = arr;
+    let arr = arr.set(0, 7);
+    println((arr.@(0) + shared.@(0)).to_string)
+);
+"#;
+
+/// Writing into a shared array clones its storage with the capacity that array already holds, and
+/// the clone allocates without checking that capacity: the allocation that gave the array its
+/// capacity checked it.
+///
+/// The check is a comparison and a branch, and an array write is the innermost thing a loop over an
+/// array does, so a check emitted here is what costs the enclosing loop its unrolling. The property
+/// is read off the emitted LLVM IR: it is about the code the build emits, and a program cannot
+/// observe a check that never fires.
+#[test]
+pub fn test_array_write_clones_without_rechecking_the_capacity() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    // At `-O none` the array write keeps its uniqueness check, so the clone is in the emitted code
+    // whatever the program does at run time.
+    let build = fix_build_source_command(dir, SHARED_WRITE_SOURCE, "none")
+        .arg("--emit-llvm")
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
+    let overflow_call = format!("call void @{}(", RUNTIME_ARRAY_SIZE_OVERFLOW);
+    assert!(
+        ir.contains(&overflow_call),
+        "the build should check the capacity where the program chooses one"
+    );
+
+    let write_fn_bodies = llvm_function_bodies(&ir, "@\"Std::Array::set#");
+    assert!(
+        !write_fn_bodies.is_empty(),
+        "the build should emit `Std::Array::set`"
+    );
+    let allocating_bodies = write_fn_bodies
+        .iter()
+        .filter(|body| body.contains(&format!("@{}(", RUNTIME_MALLOC)))
+        .collect::<Vec<_>>();
+    assert!(
+        !allocating_bodies.is_empty(),
+        "`Std::Array::set` should allocate, which is the clone the shared answer takes"
+    );
+    let rechecking_bodies = allocating_bodies
+        .iter()
+        .filter(|body| body.contains(&overflow_call))
+        .collect::<Vec<_>>();
+    assert!(
+        rechecking_bodies.is_empty(),
+        "the clone in `Std::Array::set` should allocate without checking the capacity again, \
+         but {} of its functions do",
+        rechecking_bodies.len()
+    );
 }
