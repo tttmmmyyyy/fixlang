@@ -1,0 +1,10 @@
+module Main;
+
+// The byte count this capacity asks for overflows the address space, which the run-time check
+// rejects. With the checks off the capacity is recorded as given, and nothing writes to the element
+// buffer, so the program prints the capacity and exits.
+main : IO ();
+main = (
+    let arr : Array I64 = Array::empty(2305843009213693952);
+    println(arr.@capacity.to_string)
+);
