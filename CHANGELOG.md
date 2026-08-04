@@ -12,6 +12,7 @@
 #### Tool
 
 - LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
+- Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which compile `eval {expr0}; {expr1}` as `{expr1}`. Use it to take a debugging `eval debug_println(...)` out of a build without editing the source.
 
 #### Std
 
@@ -37,6 +38,7 @@
 - `Std::mark_threaded` has to be called before the value becomes reachable from another thread, and the call has to finish before the pointer is handed over. Its documentation and the multi-threading section of the manual now say so.
 - `--sanitize thread`, or the `sanitize` field of the project file, builds the program with ThreadSanitizer, which reports a data race when one occurs while the program runs; use it to check that every value another thread reaches has been passed through `Std::mark_threaded`. Available on Linux; the instrumented program runs several times slower and uses much more memory.
 - The `threaded` field of a dependency's project file no longer turns multi-threading on for the project being built; the project being built decides the setting. Building a program that calls `Std::mark_threaded` with multi-threading off now fails with an error quoting the call, so a project that depends on a library needing multi-threading sets `threaded = true` in its own project file or passes `--threaded`.
+- The project file's `no_runtime_check` can now be set in the `build.test` section. `fix test` reads it from there, so a project that disables the checks for its program still runs its tests with them.
 
 ### Fixed
 
@@ -57,7 +59,7 @@
 - The compiler no longer aborts with a stack overflow when compiling a module whose expressions nest very deeply — for example a module with several hundred top-level values all sequenced from `main`, or a single deep `let` / `;;` chain.
 - Building with debug information (`-g`) no longer crashes on a program that uses a recursive type, such as `type Tree = box union { leaf : (), node : (Tree, Tree) };`.
 - Building with debug information (`-g`) now works at every optimization level. Passing `-g` together with an explicitly given `-O basic` aborted the build with `function declaration may only have a unique !dbg attachment` followed by `LLVM ERROR: Broken module found`.
-- Debug information (`-g`) records every `Array` as having 100 elements, since the actual element count is only determined at run time. The byte sizes recorded for the array debug types covered only a single element, contradicting that element count: gdb refused to display the elements with an "access outside bounds of object" error, and recent lldb displayed wrong values for all elements after the first. The byte sizes now cover the 100 elements, so debuggers display them, the first `<array size>` of which are the valid values. This also applies to the byte array inside a `String`.
+- With debug information (`-g`), a debugger now displays the elements of an `Array`, and of the byte array inside a `String`. gdb refused with an "access outside bounds of object" error, and recent lldb showed wrong values for every element after the first. Each array is recorded as having 100 elements, of which the first `<array size>` are the valid ones.
 - The compiler no longer hangs or aborts on a program whose global definitions name each other in a cycle, such as `a = b; b = c; c = a;` or three functions each of which only calls the next. This affected `-O max` and above.
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).

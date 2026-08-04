@@ -2503,6 +2503,10 @@ truth : I64 = eval debug_println("evaluated"); 42;
 ```
 For code like this, there is no guarantee whether "evaluated" will be output every time `truth` is referenced, or only once when it is first referenced.
 
+The `--skip-eval` compiler option and the `skip_eval` field of the project file compile `eval {expr0}; {expr1}` as `{expr1}`, leaving `{expr0}` unevaluated.
+
+This is the setting for taking a debugging `eval` out of a build. Write `eval debug_println(...)` while developing, and turn this on to stop the output without editing the source.
+
 ## Substitute Pattern
 
 This section explains a phenomenon that can be considered one of Fix's weaknesses and the "substitute pattern" as a workaround.
@@ -2945,9 +2949,16 @@ The following table shows how each setting is handled.
         <tr>
             <td>no_runtime_check</td>
             <td>--no-runtime-check</td>
-            <td>Merge (OR)</td>
+            <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Disable runtime checks</td>
+            <td>Disable runtime checks. fix test reads it from the build.test section, which defaults to keeping the checks.</td>
+        </tr>
+        <tr>
+            <td>skip_eval</td>
+            <td>--skip-eval</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Skip the evaluation instructed by the eval syntax. fix test reads it from the build.test section, which defaults to keeping the evaluation.</td>
         </tr>
     </tbody>
 </table>

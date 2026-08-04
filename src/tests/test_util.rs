@@ -17,6 +17,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
+use tempfile::TempDir;
 
 static BUILD_FIX: Once = Once::new();
 
@@ -436,4 +437,55 @@ pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Copies the case projects under `cases_dir` into a temporary directory and returns it with the
+/// path of `project` inside it. The projects are copied together because they refer to each other
+/// by relative path.
+///
+/// # Arguments
+/// * `cases_dir` — the directory holding the case projects, relative to the crate root.
+pub fn setup_case_projects(cases_dir: &str, project: &str) -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let cases = Path::new(env!("CARGO_MANIFEST_DIR")).join(cases_dir);
+    copy_dir_recursive(&cases, &temp_dir.path().to_path_buf()).expect("Failed to copy test cases");
+    let project_dir = temp_dir.path().join(project);
+    (temp_dir, project_dir)
+}
+
+/// Runs `fix` with `args` in `project_dir`.
+pub fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
+    fix_command()
+        .args(args)
+        .current_dir(project_dir)
+        .output()
+        .expect("Failed to execute fix")
+}
+
+/// Asserts that `output` succeeded, quoting both streams otherwise.
+///
+/// # Arguments
+/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+pub fn assert_succeeded(output: &Output, what: &str) {
+    assert!(
+        output.status.success(),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// Asserts that `output` failed, quoting both streams otherwise.
+///
+/// # Arguments
+/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+pub fn assert_failed(output: &Output, what: &str) {
+    assert!(
+        !output.status.success(),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 }

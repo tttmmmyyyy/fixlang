@@ -4,40 +4,10 @@
 //! The cases under `test_threaded_setting/cases` are a library that calls `Std::mark_threaded` and
 //! sets `threaded = true`, together with the root projects that depend on it.
 
-use crate::tests::test_util::{copy_dir_recursive, fix_command};
-use std::path::{Path, PathBuf};
-use std::process::Output;
-use tempfile::TempDir;
+use crate::tests::test_util::{assert_succeeded, run_fix, setup_case_projects};
 
-/// Copies the case projects into a temporary directory and returns it with the path of `project`
-/// inside it. The projects are copied together because they refer to each other by relative path.
-fn setup_test_env(project: &str) -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let cases = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_threaded_setting/cases");
-    copy_dir_recursive(&cases, &temp_dir.path().to_path_buf()).expect("Failed to copy test cases");
-    let project_dir = temp_dir.path().join(project);
-    (temp_dir, project_dir)
-}
-
-/// Runs `fix` with `args` in `project_dir`.
-fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
-    fix_command()
-        .args(args)
-        .current_dir(project_dir)
-        .output()
-        .expect("Failed to execute fix")
-}
-
-/// Asserts that `output` succeeded, quoting both streams otherwise.
-fn assert_succeeded(output: &Output, what: &str) {
-    assert!(
-        output.status.success(),
-        "{}\nstdout: {}\nstderr: {}",
-        what,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-}
+/// The directory holding this module's case projects.
+const CASES: &str = "src/tests/test_threaded_setting/cases";
 
 /// The lines of a diagnostic that quote source, which is where the reported call sites appear.
 fn quoted_source(stderr: &str) -> String {
@@ -52,7 +22,7 @@ fn quoted_source(stderr: &str) -> String {
 /// `Std::mark_threaded` the program reaches fail the build, each quoted at its own call site.
 #[test]
 fn test_dependency_does_not_enable_threaded() {
-    let (_temp_dir, project_dir) = setup_test_env("root_without_threaded");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_without_threaded");
     let output = run_fix(&project_dir, &["build"]);
 
     assert!(
@@ -96,7 +66,7 @@ fn test_dependency_does_not_enable_threaded() {
 /// dependency makes.
 #[test]
 fn test_root_enables_threaded() {
-    let (_temp_dir, project_dir) = setup_test_env("root_with_threaded");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_with_threaded");
     let output = run_fix(&project_dir, &["build"]);
     assert_succeeded(
         &output,
@@ -107,7 +77,7 @@ fn test_root_enables_threaded() {
 /// `--threaded` turns multi-threading on for a project whose project file leaves it off.
 #[test]
 fn test_threaded_option_enables_multi_threading() {
-    let (_temp_dir, project_dir) = setup_test_env("root_without_threaded");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_without_threaded");
     let output = run_fix(&project_dir, &["build", "--threaded"]);
     assert_succeeded(
         &output,
@@ -123,7 +93,7 @@ fn test_threaded_option_enables_multi_threading() {
 /// is what lets one library serve programs that want multi-threading and programs that do not.
 #[test]
 fn test_unreached_library_call_needs_no_threading() {
-    let (_temp_dir, project_dir) = setup_test_env("root_reaches_no_call");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_reaches_no_call");
     let output = run_fix(&project_dir, &["build"]);
     assert_succeeded(
         &output,
@@ -139,7 +109,7 @@ fn test_unreached_library_call_needs_no_threading() {
 /// turning it on.
 #[test]
 fn test_test_section_enables_threaded() {
-    let (_temp_dir, project_dir) = setup_test_env("root_threaded_in_test");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_threaded_in_test");
     assert_succeeded(
         &run_fix(&project_dir, &["build"]),
         "`fix build` should succeed, because `main` reaches no call of `Std::mark_threaded`.",
