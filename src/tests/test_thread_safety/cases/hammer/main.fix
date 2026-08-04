@@ -1,0 +1,74 @@
+module Main;
+
+// Takes one reference to the shared value, takes and drops many more, writes through it, and drops
+// the one it was handed. The reference counts the threads run through here are what they contend
+// over, and because the threads hold every reference, all three answers the counting can give are
+// reached under contention: a count that stays above one, a count that reaches one and lets a write
+// happen in place, and a count that reaches zero and destroys the value while other threads are
+// still working.
+//
+// Written in `IO` so that the reference counting survives optimization. Run through
+// `IO::unsafe_perform` instead, the loop's result goes unused and the whole loop is removed --
+// eight threads then share a value without touching its count and the control cannot fail.
+hammer_one : Ptr -> IO ();
+hammer_one = |ptr| (
+    let value : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
+    loop_m(0, |i|
+        if i == 4000 { break_m $ () };
+        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let taken : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
+        if taken.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+        continue_m $ i + 1
+    );;
+
+    // A write through the handle. Whichever thread finds itself the only holder left takes the
+    // uniqueness check's unique answer and writes in place; the others find the value shared and
+    // write to a copy of their own.
+    let value = value.set_value(value.@value + 1);
+    if value.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+    pure()
+);
+FFI_EXPORT[hammer_one, fix_hammer_one];
+
+hammer_from_threads : Ptr -> I64 -> IO ();
+hammer_from_threads = |ptr, threads| (
+    FFI_CALL_IO[() hammer_from_threads(Ptr, CInt), ptr, threads.c_int]
+);
+
+// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
+// drop.
+retain_many : I64 -> Box I64 -> IO Ptr;
+retain_many = |count, value| (
+    loop_m((0, nullptr), |(i, ptr)|
+        if i == count { break_m $ ptr };
+        let ptr = *value.FFI::boxed_to_retained_ptr;
+        continue_m $ (i + 1, ptr)
+    )
+);
+
+main : IO ();
+main = (
+    let args = *get_args;
+
+    // A boxed value built from a literal is a global, and a global carries no reference count at
+    // all -- the threads would have nothing to contend over and the program would look correct
+    // however it was written. Building the value from the program's own arguments is what puts it
+    // on the heap with a count. The length of `argv[0]` is the same on both of this program's runs,
+    // so the value it holds is too.
+    let value = Box::make(args.@(0).@size);
+
+    // An argument asks for the value to be handed over the way the language says to. Run without it
+    // and the reference counts are updated non-atomically while eight threads share the value,
+    // which is the race this program exists to produce.
+    let value = if args.@size >= 2 { value.mark_threaded } else { value };
+
+    let threads = 8;
+    let ptr = *value.retain_many(threads);
+
+    // Nothing here holds the value any more: the threads hold every reference to it, so whichever
+    // of them finishes last is the one that destroys it, and the destructor runs while the others
+    // are still working. Reading the value after this would keep a reference and leave the
+    // destruction to this thread alone.
+    hammer_from_threads(ptr, threads);;
+    println("ok")
+);

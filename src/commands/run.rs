@@ -1,15 +1,14 @@
 use crate::commands::build::build;
-use crate::configuration::{Configuration, ValgrindTool};
+use crate::configuration::Configuration;
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use rand::Rng;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
-use std::process::{self, Command, Output, Stdio};
-
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process::{self, Output, Stdio};
 
 pub fn run(
     mut config: Configuration,
@@ -27,17 +26,13 @@ pub fn run(
         Some(PathBuf::from(exec_path.clone())),
     );
 
+    config.validate_run_settings()?;
+
     // Build executable file.
     build(&mut config)?;
 
     // Run the executable file.
-    let mut com = if config.valgrind_tool == ValgrindTool::None {
-        Command::new(exec_path.clone())
-    } else {
-        let mut com = config.valgrind_command()?;
-        com.arg(exec_path.clone());
-        com
-    };
+    let mut com = config.program_run_command(&exec_path)?;
     for arg in &config.run_program_args {
         com.arg(arg);
     }

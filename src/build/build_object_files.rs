@@ -14,7 +14,7 @@ use crate::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},
     },
-    generator::Generator,
+    generator::{enum_attribute_kind_id, module_functions, Generator},
     misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
@@ -31,6 +31,7 @@ use crate::{
     tool::stopwatch::StopWatch,
 };
 use inkwell::{
+    attributes::AttributeLoc,
     context::Context,
     module::Module,
     passes::PassBuilderOptions,
@@ -369,7 +370,7 @@ pub fn build_object_files<'c>(
             }
 
             // LLVM level optimization.
-            optimize_and_verify(gc.module, &target_machine, &config);
+            optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
@@ -583,35 +584,74 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
-// Verify `module`, run the LLVM optimization pipeline the configuration selects over it, then
-// verify it again. A module LLVM rejects, or a pipeline it cannot build, aborts the compilation.
-fn optimize_and_verify<'c>(
+/// Hands each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if LLVM
+/// rejects one.
+fn run_passes_or_panic(
+    module: &Module,
+    passes: &[impl AsRef<str>],
+    target_machine: &TargetMachine,
+) {
+    for pass in passes {
+        let pass = pass.as_ref();
+        if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
+            panic_with_msg(&format!(
+                "Failed to run pass \"{}\": {}",
+                pass,
+                e.to_string()
+            ));
+        }
+    }
+}
+
+/// Verifies `module`, runs the LLVM optimization pipeline the configuration selects over it,
+/// instruments it for the configured sanitizer, then verifies it again. A module LLVM rejects, or a
+/// pipeline it cannot build, aborts the compilation.
+fn optimize_instrument_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
-    // Hand each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if
-    // LLVM rejects one.
-    fn run_passes_or_panic(
-        module: &Module,
-        passes: &[impl AsRef<str>],
-        target_machine: &TargetMachine,
-    ) {
-        for pass in passes {
-            let pass = pass.as_ref();
-            if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
-                panic_with_msg(&format!(
-                    "Failed to run pass \"{}\": {}",
-                    pass,
-                    e.to_string()
-                ));
-            }
-        }
-    }
-
     run_passes_or_panic(module, &["verify"], target_machine);
     run_passes_or_panic(module, &config.llvm_passes(), target_machine);
+    instrument_for_sanitizer(module, target_machine, config);
     run_passes_or_panic(module, &["verify"], target_machine);
+}
+
+/// Instruments `module` for the configured sanitizer, so that its runtime sees the program's memory
+/// accesses.
+///
+/// The instrumentation runs after the optimization pipeline, which is where clang puts it: an
+/// access the optimizer removes is one the program never makes.
+///
+/// It sits outside `Configuration::llvm_passes` because `--llvm-passes-file` replaces what that
+/// returns. Were the instrumentation part of it, a build could drop the instrumentation while
+/// still reporting itself as sanitized.
+fn instrument_for_sanitizer<'c>(
+    module: &Module<'c>,
+    target_machine: &TargetMachine,
+    config: &Configuration,
+) {
+    let Some((attribute_name, passes)) = config.sanitizer.instrumentation() else {
+        return;
+    };
+    add_attribute_to_defined_functions(module, attribute_name);
+    run_passes_or_panic(module, passes, target_machine);
+}
+
+/// Gives every function of `module` that has a body the attribute named `attribute_name`.
+///
+/// The instrumentation passes rewrite the functions carrying their attribute and leave the rest
+/// alone, which is how clang lets a translation unit opt out. Nothing else here sets it, so without
+/// this the passes would run over the module and change nothing.
+fn add_attribute_to_defined_functions<'c>(module: &Module<'c>, attribute_name: &str) {
+    let attribute = module
+        .get_context()
+        .create_enum_attribute(enum_attribute_kind_id(attribute_name), 0);
+    for function in module_functions(module) {
+        if function.count_basic_blocks() > 0 {
+            function.add_attribute(AttributeLoc::Function, attribute);
+        }
+    }
 }
 
 // Build exported c functions.

@@ -82,6 +82,7 @@
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
         - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
     - [Multithreading](#multithreading)
+        - [Checking for data races](#checking-for-data-races)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2452,6 +2453,20 @@ The pointer carries the responsibility for the reference count described in [Man
 
 While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
 
+### Checking for data races
+
+`--sanitize thread`, or the `sanitize` field of the project file, builds the program with
+[ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html), which reports a data race when one occurs while
+the program runs, so that you can check that every value another thread reaches has been passed
+through `Std::mark_threaded`.
+
+`fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
+follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
+
+```
+setarch $(uname -m) -R ./a.out
+```
+
 ## `eval` syntax
 
 The expression `eval {expr0}; {expr1}` evaluates both `{expr0}` and `{expr1}`, and returns the value of `{expr1}`.
@@ -2487,6 +2502,10 @@ Notes:
 truth : I64 = eval debug_println("evaluated"); 42;
 ```
 For code like this, there is no guarantee whether "evaluated" will be output every time `truth` is referenced, or only once when it is first referenced.
+
+The `--skip-eval` compiler option and the `skip_eval` field of the project file compile `eval {expr0}; {expr1}` as `{expr1}`, leaving `{expr0}` unevaluated.
+
+This is the setting for taking a debugging `eval` out of a build. Write `eval debug_println(...)` while developing, and turn this on to stop the output without editing the source.
 
 ## Substitute Pattern
 
@@ -2879,6 +2898,13 @@ The following table shows how each setting is handled.
             <td>Enable multi-threading</td>
         </tr>
         <tr>
+            <td>sanitize</td>
+            <td>--sanitize</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Sanitizer to instrument the program with</td>
+        </tr>
+        <tr>
             <td>debug</td>
             <td>-g, --debug</td>
             <td>Merge (OR)</td>
@@ -2923,9 +2949,16 @@ The following table shows how each setting is handled.
         <tr>
             <td>no_runtime_check</td>
             <td>--no-runtime-check</td>
-            <td>Merge (OR)</td>
+            <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Disable runtime checks</td>
+            <td>Disable runtime checks. fix test reads it from the build.test section, which defaults to keeping the checks.</td>
+        </tr>
+        <tr>
+            <td>skip_eval</td>
+            <td>--skip-eval</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Skip the evaluation instructed by the eval syntax. fix test reads it from the build.test section, which defaults to keeping the evaluation.</td>
         </tr>
     </tbody>
 </table>

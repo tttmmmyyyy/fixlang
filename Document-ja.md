@@ -82,6 +82,7 @@
         - [CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)
         - [CからFixの配列の要素にアクセスする](#cからfixの配列の要素にアクセスする)
     - [マルチスレッド](#マルチスレッド)
+        - [データ競合の検査](#データ競合の検査)
     - [`eval`構文](#eval構文)
     - [身代わりパターン](#身代わりパターン)
     - [演算子と構文の優先度](#演算子と構文の優先度)
@@ -2565,6 +2566,16 @@ Fixの値は、ボックス型の値へのポインタとして他のスレッ�
 
 他のスレッドが値への参照を保持している間、その値は共有されているので、`Std::Array::set`などの関数は値をその場で更新せず複製します。
 
+### データ競合の検査
+
+`--sanitize thread`、またはプロジェクトファイルの`sanitize`フィールドを使うと、[ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html)を組み込んだプログラムがビルドされます。実行中にデータ競合が起きると報告されるので、他のスレッドが到達するすべての値が`Std::mark_threaded`を通っていることを確かめられます。
+
+`fix run`はThreadSanitizerが必要とする形でプログラムを実行します。`fix build`で作ったプログラムを自分で実行する場合、LinuxではThreadSanitizerがアドレス空間配置のランダム化を無効にすることを要求するので、次のように実行します。
+
+```
+setarch $(uname -m) -R ./a.out
+```
+
 ## `eval`構文
 
 式`eval {expr0}; {expr1}`は、`{expr0}`と`{expr1}`の両方を評価し、`{expr1}`の値を返します。
@@ -2601,6 +2612,10 @@ my_add : I64 -> I64 -> I64 = |x, y| (
 truth : I64 = eval debug_println("evaluated"); 42;
 ```
 というコードがあった時、`truth`を参照するたびに"evaluated"が出力されるか、最初に参照するときに一回だけ出力されるかは保証されません。
+
+`--skip-eval`コンパイラオプション、またはプロジェクトファイルの`skip_eval`フィールドを指定すると、`eval {expr0}; {expr1}`は`{expr1}`としてコンパイルされます。すなわち、`{expr0}`は評価されません。
+
+これは、デバッグのために書いた`eval`をビルドから外すための設定です。開発中は`eval debug_println(...)`を書いておき、不要になったらこの設定を有効にすることで、ソースを書き換えずに出力を止められます。
 
 ## 身代わりパターン
 
@@ -2992,6 +3007,13 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>マルチスレッドの利用</td>
         </tr>
         <tr>
+            <td>sanitize</td>
+            <td>--sanitize</td>
+            <td>上書き</td>
+            <td>影響しない</td>
+            <td>プログラムに施す sanitizer</td>
+        </tr>
+        <tr>
             <td>debug</td>
             <td>-g, --debug</td>
             <td>マージ（論理和）</td>
@@ -3036,9 +3058,16 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
         <tr>
             <td>no_runtime_check</td>
             <td>--no-runtime-check</td>
-            <td>マージ（論理和）</td>
+            <td>上書き</td>
             <td>影響しない</td>
-            <td>実行時チェックの無効化</td>
+            <td>実行時チェックの無効化。fix test はこれを build.test セクションから読み、既定では検査を残します。</td>
+        </tr>
+        <tr>
+            <td>skip_eval</td>
+            <td>--skip-eval</td>
+            <td>上書き</td>
+            <td>影響しない</td>
+            <td>eval構文が指示する評価を飛ばす。fix test はこれを build.test セクションから読み、既定では評価を残します。</td>
         </tr>
     </tbody>
 </table>

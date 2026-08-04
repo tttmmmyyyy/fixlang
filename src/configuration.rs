@@ -10,7 +10,9 @@ use crate::constants::{
 use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::misc::{platform_valgrind_supported, warn_msg, Finally, Map};
+use crate::misc::{
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+};
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -44,14 +46,14 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
-/// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
+/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
 ///
 /// The count comes first so that a list's items cannot be read as the next list's, and each item is
 /// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
-fn push_list_hash(data: &mut String, items: &[String]) {
-    data.push_str(&items.len().to_string());
+fn push_list_hash(hash_source: &mut String, items: &[String]) {
+    hash_source.push_str(&items.len().to_string());
     for item in items {
-        data.push_str(&format!("{:x}", md5::compute(item)));
+        hash_source.push_str(&format!("{:x}", md5::compute(item)));
     }
 }
 
@@ -115,6 +117,62 @@ impl fmt::Display for ValgrindTool {
     }
 }
 
+/// The sanitizer the generated program is instrumented with.
+///
+/// A build asks for at most one: the sanitizers that give a program shadow memory place it at
+/// addresses derived from the program's own, so two of them cannot share a program.
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Sanitizer {
+    /// Generate the program as it is built for use.
+    None,
+    /// Instrument every memory access so that ThreadSanitizer can report data races.
+    Thread,
+}
+
+impl fmt::Display for Sanitizer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Sanitizer::None => write!(f, "none"),
+            Sanitizer::Thread => write!(f, "thread"),
+        }
+    }
+}
+
+impl Sanitizer {
+    /// What instrumenting a module for this sanitizer takes: the function attribute the passes look
+    /// for, and the passes themselves.
+    ///
+    /// The two travel together because a pass without its attribute rewrites nothing.
+    pub fn instrumentation(&self) -> Option<(&'static str, &'static [&'static str])> {
+        match self {
+            Sanitizer::None => None,
+            // The module pass registers the runtime's initializer; the function pass rewrites the
+            // accesses.
+            Sanitizer::Thread => Some(("sanitize_thread", &["tsan-module", "function(tsan)"])),
+        }
+    }
+
+    /// Whether this platform can build and run a program instrumented with this sanitizer.
+    pub fn platform_supported(&self) -> bool {
+        match self {
+            Sanitizer::None => true,
+            Sanitizer::Thread => platform_thread_sanitizer_supported(),
+        }
+    }
+
+    /// Reads the value a `sanitize` setting names, or reports the names there are.
+    pub fn from_str(name: &str) -> Result<Sanitizer, Errors> {
+        match name {
+            "none" => Ok(Sanitizer::None),
+            "thread" => Ok(Sanitizer::Thread),
+            _ => Err(Errors::from_msg(format!(
+                "Unknown sanitizer \"{}\". Available sanitizers are \"none\" and \"thread\".",
+                name
+            ))),
+        }
+    }
+}
+
 // Subcommands of the `fix` command.
 #[derive(Clone)]
 pub enum SubCommand {
@@ -161,12 +219,14 @@ impl SubCommand {
         }
     }
 
-    // Get the build mode based on the subcommand.
+    /// Which section of the project file this subcommand's settings come from.
     pub fn build_mode(&self) -> BuildConfigType {
         match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => BuildConfigType::Test,
+            SubCommand::Build => BuildConfigType::Build,
+            SubCommand::Run => BuildConfigType::Build,
+            SubCommand::Test => BuildConfigType::Test,
+            SubCommand::Diagnostics(_) => BuildConfigType::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => BuildConfigType::Build,
         }
     }
 
@@ -239,6 +299,9 @@ pub struct DocsConfig {
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
+///
+/// A field whose value changes the generated code has to be added to `object_generation_hash`,
+/// which decides when a cached object file may be reused.
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -288,6 +351,10 @@ pub struct Configuration {
     pub max_split_scalars: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,
+    /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
+    /// program that is built, so the project being built decides it, as it does the optimization
+    /// level.
+    pub sanitizer: Sanitizer,
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
     // Regex patterns of disabled CPU features.
@@ -314,12 +381,16 @@ pub struct Configuration {
     // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
     // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
     pub emit_rc_ir: Option<String>,
-    // Is in compiler development mode?
+    /// Run the compiler's own consistency checks — the RC IR validator and the assertions in the
+    /// code generator — and turn an internal error into a panic.
     pub develop_mode: bool,
-    // Enable backtrace support (keep frame pointers and add backtrace library).
+    /// Enable backtrace support: keep frame pointers and link the backtrace library.
     pub backtrace: bool,
-    // Disable runtime checks such as array bounds check.
+    /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
+    /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
+    /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
+    pub skip_eval: bool,
     /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
     pub deprecation_mode: DeprecationMode,
 }
@@ -401,6 +472,7 @@ impl Configuration {
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
             max_split_scalars: MAX_SPLIT_SCALARS,
             valgrind_tool: ValgrindTool::None,
+            sanitizer: Sanitizer::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             disable_cpu_features_regex: vec![],
@@ -415,6 +487,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
+            skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
     }
@@ -722,42 +795,52 @@ impl Configuration {
         }
     }
 
-    // Get hash value of the configurations that affect the object file generation.
+    /// Get hash value of the configurations that affect the object file generation.
+    ///
+    /// The fields are listed by hand, so every field of `Configuration` that changes the generated
+    /// code has to be hashed here: one left out makes a build reuse the object files of a build that
+    /// generated different code.
     pub fn object_generation_hash(&self) -> String {
-        let mut data = String::new();
-        data.push_str(&self.fix_opt_level.to_string());
-        data.push_str(&self.debug_info.to_string());
-        data.push_str(&self.threaded.to_string());
-        data.push_str(&self.backtrace.to_string());
-        data.push_str(&self.no_runtime_check.to_string());
-        data.push_str(&self.c_type_sizes.to_string());
-        data.push_str(&self.max_split_scalars.to_string());
-        push_list_hash(&mut data, &self.disable_cpu_features_regex);
+        let mut hash_source = String::new();
+        hash_source.push_str(&self.fix_opt_level.to_string());
+        hash_source.push_str(&self.debug_info.to_string());
+        hash_source.push_str(&self.threaded.to_string());
+        // The instrumentation is part of the code that is generated, so an object built without it
+        // cannot stand in for one built with it. Leaving this out would let a build reuse
+        // uninstrumented objects and report a clean run of a program nothing was checking.
+        hash_source.push_str(&self.sanitizer.to_string());
+        hash_source.push_str(&self.backtrace.to_string());
+        hash_source.push_str(&self.no_runtime_check.to_string());
+        hash_source.push_str(&self.skip_eval.to_string());
+        hash_source.push_str(&self.c_type_sizes.to_string());
+        hash_source.push_str(&self.max_split_scalars.to_string());
+        push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        push_list_hash(&mut data, &self.llvm_passes());
+        push_list_hash(&mut hash_source, &self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        data.push_str(self.subcommand.command_type_string());
+        hash_source.push_str(self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        data.push_str(build_time_utc!());
+        hash_source.push_str(build_time_utc!());
 
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 
-    // Edit CPU features according to the configuration.
+    /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
+    /// feature a pattern matches.
     pub fn edit_cpu_features(&self, features: &mut CpuFeatures) {
         features.disable_by_regexes(&self.disable_cpu_features_regex);
     }
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
     /// configuration and for the errors the Fix runtime's memory management can produce.
-    pub fn valgrind_command(&self) -> Result<Command, Errors> {
+    fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
         let which_output = Command::new("which").arg("valgrind").output();
         if which_output.is_err() || !which_output.unwrap().status.success() {
@@ -766,12 +849,12 @@ impl Configuration {
             ));
         }
 
-        let mut com = Command::new("valgrind");
-        com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        let mut command = Command::new("valgrind");
+        command.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
 
         // Add suppressions file if it exists
         if PathBuf::from("valgrind.supp").exists() {
-            com.arg("--suppressions=valgrind.supp");
+            command.arg("--suppressions=valgrind.supp");
         }
 
         match self.valgrind_tool {
@@ -782,18 +865,18 @@ impl Configuration {
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.
-                com.arg("--tool=memcheck");
-                com.arg("--leak-check=yes"); // This option turns memory leak into error.
+                command.arg("--tool=memcheck");
+                command.arg("--leak-check=yes"); // This option turns memory leak into error.
 
                 // An array large enough to have its elements aligned sits above the base of its
                 // allocation, so the only pointer to that block is an interior one, which the leak
                 // checker calls possibly lost for as long as the array is alive. Take as errors the
                 // kinds a reference counting mistake produces: a block nothing points to is
                 // definitely lost, and one held only by such a block is indirectly lost.
-                com.arg("--errors-for-leak-kinds=definite,indirect");
+                command.arg("--errors-for-leak-kinds=definite,indirect");
             }
         }
-        Ok(com)
+        Ok(command)
     }
 
     /// The linkage to give a symbol that other compilation units may call: external where each unit
@@ -806,18 +889,66 @@ impl Configuration {
         }
     }
 
-    pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
-        approve_and_run(self)
+    /// Instrument the generated program with `sanitizer`.
+    ///
+    /// A sanitizer this platform cannot provide is an error. Everything else here works to keep a
+    /// build from calling itself sanitized while carrying no instrumentation, and quietly dropping
+    /// the setting is that same failure arriving through the front door. A test that wants the
+    /// instrumentation asks `platform_thread_sanitizer_supported` first and says that it skipped.
+    pub fn set_sanitizer(&mut self, sanitizer: Sanitizer) -> Result<&mut Configuration, Errors> {
+        if !sanitizer.platform_supported() {
+            return Err(Errors::from_msg(format!(
+                "The `{}` sanitizer is not available on this platform.",
+                sanitizer
+            )));
+        }
+        self.sanitizer = sanitizer;
+        Ok(self)
     }
 
-    /// Whether the compiler is running to report diagnostics to an editor, rather than to produce a
-    /// program.
-    #[allow(dead_code)]
-    pub fn is_diagnostics_mode(&self) -> bool {
-        match &self.subcommand {
-            SubCommand::Diagnostics(_) => true,
-            _ => false,
+    /// Whether the settings this configuration carries can be met together.
+    ///
+    /// An instrumented program brings its own runtime, which lays out memory the way the sanitizer
+    /// needs. Valgrind gives the program a machine of its own instead, and the two arrangements do
+    /// not survive each other: the instrumented program dies at startup with a message that names
+    /// neither setting.
+    pub fn validate_run_settings(&self) -> Result<(), Errors> {
+        if self.sanitizer != Sanitizer::None && self.valgrind_tool != ValgrindTool::None {
+            return Err(Errors::from_msg(format!(
+                "A program instrumented with the `{}` sanitizer cannot also be run under {}. \
+                 Choose one of the two.",
+                self.sanitizer, self.valgrind_tool
+            )));
         }
+        Ok(())
+    }
+
+    /// The command that runs the built program at `exec_path`, under whatever the run settings ask
+    /// to run it under.
+    pub fn program_run_command(&self, exec_path: &str) -> Result<Command, Errors> {
+        assert!(
+            self.validate_run_settings().is_ok(),
+            "the run settings pick at most one of valgrind and a sanitizer"
+        );
+        if self.valgrind_tool != ValgrindTool::None {
+            let mut com = self.valgrind_command()?;
+            com.arg(exec_path);
+            return Ok(com);
+        }
+        if self.sanitizer != Sanitizer::None {
+            // A sanitizer maps its shadow memory to addresses it derives from the program's own, so
+            // it needs the program where it expects to find it. `setarch -R` lays the address space
+            // out the same way on every run, which is what lets the sanitizer start. A program built
+            // by `fix build` is run by hand, so the same wrapper is what its user writes.
+            let mut com = Command::new("setarch");
+            com.arg(env::consts::ARCH).arg("-R").arg(exec_path);
+            return Ok(com);
+        }
+        Ok(Command::new(exec_path))
+    }
+
+    pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
+        approve_and_run(self)
     }
 
     /// Whether the generated program keeps the checks that abort it on a violation, such as array

@@ -57,11 +57,23 @@ files = ["main.fix"]
 ## Whether to use the thread-safe reference counting.
 # threaded = false
 
+## Sanitizer to instrument the built program with.
+## One of "none" (default) or "thread".
+## "thread" builds the program with ThreadSanitizer, which reports data races at run time.
+## The instrumented program runs several times slower and uses much more memory, so use it while
+## checking a program.
+## Overwritten by the command line argument.
+# sanitize = "thread"
+
 ## Whether to enable backtrace when a runtime error occurs.
 # backtrace = false
 
 ## Whether to disable runtime checks (e.g., out-of-range check for array access).
 # no_runtime_check = false
+
+## Whether to skip the evaluation instructed by the `eval` syntax, which drops a debugging effect
+## such as `Debug::debug_println` from the built program.
+# skip_eval = false
 
 ## Preliminary commands to be executed before the Fix program is compiled.
 ## This is useful when you need to compile a object files / library before compiling the Fix program.

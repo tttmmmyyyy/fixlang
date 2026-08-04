@@ -57,7 +57,7 @@ use commands::lsp::server::launch_language_server;
 use commands::{check, clean, deps, docs, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
-    OutputFileType, SubCommand,
+    OutputFileType, Sanitizer, SubCommand,
 };
 use constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
@@ -76,11 +76,16 @@ use std::path::PathBuf;
 use std::process;
 use std::vec::Vec;
 
+/// The allocator the compiler process itself runs on. A program the compiler builds allocates
+/// through the Fix runtime instead.
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+/// The `git describe` output for the revision the compiler was built from, carrying a `-dirty`
+/// suffix when the working tree held uncommitted changes. Printed by `fix version`.
 const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
 
+/// Run the `fix` command, exiting with status 1 when it fails.
 fn main() {
     // The compiler recurses over the user program's expression tree, whose nesting depth is
     // unbounded, so it runs on a thread with a stack sized for that recursion — the size its
@@ -176,6 +181,17 @@ fn run_cli() {
         .long("threaded")
         .takes_value(false)
         .help("Enable multi-threading. Turning this option ON increases overhead, it is recommended keeping this option OFF for single-threaded programs.");
+    let sanitize = Arg::new("sanitize")
+        .long("sanitize")
+        .takes_value(true)
+        .possible_value(
+            PossibleValue::new("none").help("Build the program as it is built for use."),
+        )
+        .possible_value(PossibleValue::new("thread").help(
+            "Instrument the program with ThreadSanitizer, which reports data races at run time. \
+             The instrumented program runs several times slower and uses much more memory.",
+        ))
+        .help("Sanitizer to instrument the built program with.");
     let output_file = Arg::new("output-file")
         .long("output")
         .short('o')
@@ -236,6 +252,13 @@ fn run_cli() {
             "Disable runtime checks that would abort the program.\n\
             This includes disabling array bounds checks, union variant checks in `as_` functions, and `Std::undefined`, etc."
         );
+    let skip_eval = Arg::new("skip-eval")
+        .long("skip-eval")
+        .takes_value(false)
+        .help(
+            "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
+            Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
+        );
     let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
         .long("allow-preliminary-commands")
         .help(
@@ -270,6 +293,7 @@ fn run_cli() {
         .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
+        .arg(sanitize.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
@@ -277,65 +301,54 @@ fn run_cli() {
         .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
+        .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
+
+    // The options of a subcommand that builds a Fix program and then executes it. They are listed
+    // in the order `--help` shows them.
+    let add_run_and_test_options = |app: App<'static>| {
+        app.arg(source_file.clone())
+            .arg(object_file.clone())
+            .arg(output_file.clone())
+            .arg(static_link_library.clone())
+            .arg(dynamic_link_library.clone())
+            .arg(library_paths.clone())
+            .arg(ld_flags.clone())
+            .arg(debug_info.clone())
+            .arg(opt_level.clone())
+            .arg(disable_cpu_feature.clone())
+            .arg(emit_llvm.clone())
+            .arg(threaded.clone())
+            .arg(sanitize.clone())
+            .arg(verbose.clone())
+            .arg(max_cu_size.clone())
+            .arg(llvm_passes_file.clone())
+            .arg(emit_symbols.clone())
+            .arg(emit_rc_ir.clone())
+            .arg(program_args.clone())
+            .arg(backtrace.clone())
+            .arg(no_runtime_check.clone())
+            .arg(skip_eval.clone())
+            .arg(allow_preliminary_commands.clone())
+            .arg(allow_deprecated.clone())
+            .arg(deny_deprecated.clone())
+    };
 
     // "fix run" subcommand
-    let run_subc = App::new("run")
-        .trailing_var_arg(true)
-        .about("Runs a Fix program. Executes `Main::main : IO ()`.")
-        .arg(source_file.clone())
-        .arg(object_file.clone())
-        .arg(output_file.clone())
-        .arg(static_link_library.clone())
-        .arg(dynamic_link_library.clone())
-        .arg(library_paths.clone())
-        .arg(ld_flags.clone())
-        .arg(debug_info.clone())
-        .arg(opt_level.clone())
-        .arg(disable_cpu_feature.clone())
-        .arg(emit_llvm.clone())
-        .arg(threaded.clone())
-        .arg(verbose.clone())
-        .arg(max_cu_size.clone())
-        .arg(llvm_passes_file.clone())
-        .arg(emit_symbols.clone())
-        .arg(emit_rc_ir.clone())
-        .arg(program_args.clone())
-        .arg(backtrace.clone())
-        .arg(no_runtime_check.clone())
-        .arg(allow_preliminary_commands.clone())
-        .arg(allow_deprecated.clone())
-        .arg(deny_deprecated.clone());
+    let run_subc = add_run_and_test_options(
+        App::new("run")
+            .trailing_var_arg(true)
+            .about("Runs a Fix program. Executes `Main::main : IO ()`."),
+    );
 
     // "fix test" subcommand
-    let test_subc = App::new("test")
-        .trailing_var_arg(true)
-        .about("Tests a Fix program. Executes `Test::test : IO ()`.")
-        .arg(source_file.clone())
-        .arg(object_file.clone())
-        .arg(output_file.clone())
-        .arg(static_link_library.clone())
-        .arg(dynamic_link_library.clone())
-        .arg(library_paths.clone())
-        .arg(ld_flags.clone())
-        .arg(debug_info.clone())
-        .arg(opt_level.clone())
-        .arg(disable_cpu_feature.clone())
-        .arg(emit_llvm.clone())
-        .arg(threaded.clone())
-        .arg(verbose.clone())
-        .arg(max_cu_size.clone())
-        .arg(llvm_passes_file.clone())
-        .arg(emit_symbols.clone())
-        .arg(emit_rc_ir.clone())
-        .arg(program_args.clone())
-        .arg(backtrace.clone())
-        .arg(no_runtime_check.clone())
-        .arg(allow_preliminary_commands.clone())
-        .arg(allow_deprecated.clone())
-        .arg(deny_deprecated.clone());
+    let test_subc = add_run_and_test_options(
+        App::new("test")
+            .trailing_var_arg(true)
+            .about("Tests a Fix program. Executes `Test::test : IO ()`."),
+    );
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -566,8 +579,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
     }
 
-    // Apply the options of one invocation on top of `config`, which already carries what the
-    // project file declares.
+    /// Apply the options of one invocation on top of `config`, which already carries what the
+    /// project file declares.
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Files passed via `--file` are user code — append to both
         // `source_files` and `root_source_files`. Note that this runs
@@ -604,6 +617,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `threaded`.
         if args.contains_id("threaded") {
             config.set_threaded();
+        }
+
+        // Set `sanitizer`.
+        if let Some(sanitizer) = args.value_of("sanitize") {
+            panic_if_err(config.set_sanitizer(panic_if_err(Sanitizer::from_str(sanitizer))));
         }
 
         // Set `debug_info`.
@@ -679,6 +697,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.no_runtime_check = true;
         }
 
+        // Set `skip_eval`.
+        if args.contains_id("skip-eval") {
+            config.skip_eval = true;
+        }
+
         // Set `allow_preliminary_commands`.
         if args.contains_id("allow-preliminary-commands") {
             config.allow_preliminary_commands = true;
@@ -714,7 +737,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
-    // Create configuration from the command line arguments and the project file.
+    /// Create configuration from the command line arguments and the project file. The project
+    /// file's settings are laid down first, so an option on the command line overrides them.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mode = subcommand.build_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));

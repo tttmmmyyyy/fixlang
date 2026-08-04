@@ -1,0 +1,11 @@
+[general]
+name = "sanitizing-lib"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["lib.fix"]
+
+# A library asking for instrumentation. The project being built decides the setting, so this leaves
+# it off for anything that depends on this library.
+sanitize = "thread"

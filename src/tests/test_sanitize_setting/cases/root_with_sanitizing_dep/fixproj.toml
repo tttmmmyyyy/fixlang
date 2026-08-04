@@ -1,0 +1,11 @@
+[general]
+name = "root-with-sanitizing-dep"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "sanitizing-lib"
+path = "../sanitizing_lib"

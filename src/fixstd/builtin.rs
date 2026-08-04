@@ -34,9 +34,10 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
-    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, union_tag_type, write_alloc_offset, CapacityCheck, ObjectFieldType,
+    alloc_array_storage, build_abort_if, build_array_storage_shift, build_capacity_check,
+    build_elems_bytes, build_storage_is_aligned, create_obj, get_array_storage,
+    get_array_storage_buf, read_alloc_offset, refcnt_type, union_tag_type, write_alloc_offset,
+    CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -7795,6 +7796,7 @@ fn force_unique_boxed<'c, 'm>(
     state: RcState,
 ) -> Object<'c> {
     if !force_unique {
+        assert_proven_unique(gc, &val);
         return val;
     }
     if val.ty.is_array() {
@@ -7802,6 +7804,46 @@ fn force_unique_boxed<'c, 'm>(
     } else {
         make_struct_union_unique(gc, val, state)
     }
+}
+
+/// Abort, in compiler development mode, if `val` is shared where the uniqueness analysis proved it
+/// unique.
+///
+/// Dropping the check that clones a shared container is what makes an in-place write legal, so a
+/// wrong proof turns a value another holder can see into one this code overwrites. Between threads
+/// that other holder may be running, which makes the mistake a data race that the write's own thread
+/// never sees. The check the analysis removed is exactly the observation that would have caught it,
+/// so it is made again here, where a violated proof stops at the write rather than at whatever reads
+/// the value later.
+///
+/// Development mode only: this restores the cost the analysis exists to remove.
+fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
+    if !gc.config.develop_mode || !val.is_box(gc.type_env()) {
+        return;
+    }
+    let obj_ptr = val.value(gc).into_pointer_value();
+    let refcnt_ptr = gc.get_refcnt_ptr(obj_ptr);
+    let refcnt = gc
+        .builder()
+        .build_load(refcnt_type(gc.context), refcnt_ptr, "proven_unique_refcnt")
+        .unwrap()
+        .into_int_value();
+    let is_shared = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGT,
+            refcnt,
+            refcnt_type(gc.context).const_int(1, false),
+            "is_shared_though_proven_unique",
+        )
+        .unwrap();
+    build_abort_if(
+        gc,
+        is_shared,
+        RUNTIME_ABORT,
+        &[],
+        "shared_though_proven_unique",
+    );
 }
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
