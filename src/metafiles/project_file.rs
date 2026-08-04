@@ -88,12 +88,11 @@ pub struct ProjectFileBuild {
     #[serde(default)]
     disable_cpu_features: Vec<String>,
     /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
-    #[serde(default)]
-    no_runtime_check: bool,
+    /// Unset keeps them.
+    no_runtime_check: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
-    /// the program.
-    #[serde(default)]
-    skip_eval: bool,
+    /// the program. Unset evaluates `{side}`.
+    skip_eval: Option<bool>,
 
     /// The `build.test` sub-section, which supplies the settings a `fix test` build uses in place of
     /// the ones this `build` section gives.
@@ -126,14 +125,13 @@ pub struct ProjectFileBuildTest {
     /// `build` section gives.
     #[serde(default)]
     disable_cpu_features: Vec<String>,
-    /// Whether to disable the run-time checks, such as the array bounds check, in a test build.
-    /// The value the `build` section gives covers the program alone.
-    #[serde(default)]
-    no_runtime_check: bool,
+    /// Whether to leave the run-time checks, such as the array bounds check, out of a test build.
+    /// Unset keeps them, and the value the `build` section gives covers the program alone.
+    no_runtime_check: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
-    /// `{side}` out of it. The value the `build` section gives covers the program alone.
-    #[serde(default)]
-    skip_eval: bool,
+    /// `{side}` out of it. Unset evaluates `{side}`, and the value the `build` section gives covers
+    /// the program alone.
+    skip_eval: Option<bool>,
 
     /// Whether `fix test` runs the built test program under valgrind's memcheck tool.
     memcheck: Option<bool>,
@@ -886,15 +884,17 @@ impl ProjectFile {
         // Set no_runtime_check and skip_eval. A test build reads these from the `build.test`
         // section alone, so that a project which drops the run-time checks or the `eval`
         // expressions from its program keeps them in its tests.
-        (config.no_runtime_check, config.skip_eval) = if mode == BuildConfigType::Test {
+        let (no_runtime_check, skip_eval) = if mode == BuildConfigType::Test {
             let test = self.build.test.as_ref();
             (
-                test.map_or(false, |test| test.no_runtime_check),
-                test.map_or(false, |test| test.skip_eval),
+                test.and_then(|test| test.no_runtime_check),
+                test.and_then(|test| test.skip_eval),
             )
         } else {
             (self.build.no_runtime_check, self.build.skip_eval)
         };
+        config.no_runtime_check = no_runtime_check.unwrap_or(false);
+        config.skip_eval = skip_eval.unwrap_or(false);
 
         Ok(())
     }

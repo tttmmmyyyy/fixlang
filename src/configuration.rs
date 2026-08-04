@@ -219,12 +219,14 @@ impl SubCommand {
         }
     }
 
-    // Get the build mode based on the subcommand.
+    /// Which section of the project file this subcommand's settings come from.
     pub fn build_mode(&self) -> BuildConfigType {
         match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => BuildConfigType::Test,
+            SubCommand::Build => BuildConfigType::Build,
+            SubCommand::Run => BuildConfigType::Build,
+            SubCommand::Test => BuildConfigType::Test,
+            SubCommand::Diagnostics(_) => BuildConfigType::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => BuildConfigType::Build,
         }
     }
 
