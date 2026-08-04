@@ -931,16 +931,6 @@ impl Configuration {
         approve_and_run(self)
     }
 
-    /// Whether the compiler is running to report diagnostics to an editor, rather than to produce a
-    /// program.
-    #[allow(dead_code)]
-    pub fn is_diagnostics_mode(&self) -> bool {
-        match &self.subcommand {
-            SubCommand::Diagnostics(_) => true,
-            _ => false,
-        }
-    }
-
     /// Whether the generated program keeps the checks that abort it on a violation, such as array
     /// bounds checks and the union variant checks of the `as_` functions.
     pub fn runtime_check(&self) -> bool {
