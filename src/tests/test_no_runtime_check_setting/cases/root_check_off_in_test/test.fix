@@ -1,0 +1,7 @@
+module Test;
+
+test : IO ();
+test = (
+    let arr : Array I64 = Array::empty(2305843009213693952);
+    println(arr.@capacity.to_string)
+);

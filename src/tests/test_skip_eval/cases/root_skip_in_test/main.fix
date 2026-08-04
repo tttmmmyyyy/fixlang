@@ -1,0 +1,7 @@
+module Main;
+
+main : IO ();
+main = (
+    eval debug_eprintln("from eval");
+    println("done")
+);

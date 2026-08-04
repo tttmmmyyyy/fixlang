@@ -46,14 +46,14 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
-/// Appends a hash of `items` to `data`, for a hash source that concatenates several lists.
+/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
 ///
 /// The count comes first so that a list's items cannot be read as the next list's, and each item is
 /// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
-fn push_list_hash(data: &mut String, items: &[String]) {
-    data.push_str(&items.len().to_string());
+fn push_list_hash(hash_source: &mut String, items: &[String]) {
+    hash_source.push_str(&items.len().to_string());
     for item in items {
-        data.push_str(&format!("{:x}", md5::compute(item)));
+        hash_source.push_str(&format!("{:x}", md5::compute(item)));
     }
 }
 
@@ -219,12 +219,14 @@ impl SubCommand {
         }
     }
 
-    // Get the build mode based on the subcommand.
+    /// Which section of the project file this subcommand's settings come from.
     pub fn build_mode(&self) -> BuildConfigType {
         match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => BuildConfigType::Test,
+            SubCommand::Build => BuildConfigType::Build,
+            SubCommand::Run => BuildConfigType::Build,
+            SubCommand::Test => BuildConfigType::Test,
+            SubCommand::Diagnostics(_) => BuildConfigType::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => BuildConfigType::Build,
         }
     }
 
@@ -297,6 +299,9 @@ pub struct DocsConfig {
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
+///
+/// A field whose value changes the generated code has to be added to `object_generation_hash`,
+/// which decides when a cached object file may be reused.
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -372,12 +377,16 @@ pub struct Configuration {
     // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
     // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
     pub emit_rc_ir: Option<String>,
-    // Is in compiler development mode?
+    /// Run the compiler's own consistency checks — the RC IR validator and the assertions in the
+    /// code generator — and turn an internal error into a panic.
     pub develop_mode: bool,
-    // Enable backtrace support (keep frame pointers and add backtrace library).
+    /// Enable backtrace support: keep frame pointers and link the backtrace library.
     pub backtrace: bool,
-    // Disable runtime checks such as array bounds check.
+    /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
+    /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
+    /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
+    pub skip_eval: bool,
     /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
     pub deprecation_mode: DeprecationMode,
 }
@@ -468,6 +477,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
+            skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
     }
@@ -766,38 +776,44 @@ impl Configuration {
         }
     }
 
-    // Get hash value of the configurations that affect the object file generation.
+    /// Get hash value of the configurations that affect the object file generation.
+    ///
+    /// The fields are listed by hand, so every field of `Configuration` that changes the generated
+    /// code has to be hashed here: one left out makes a build reuse the object files of a build that
+    /// generated different code.
     pub fn object_generation_hash(&self) -> String {
-        let mut data = String::new();
-        data.push_str(&self.fix_opt_level.to_string());
-        data.push_str(&self.debug_info.to_string());
-        data.push_str(&self.threaded.to_string());
+        let mut hash_source = String::new();
+        hash_source.push_str(&self.fix_opt_level.to_string());
+        hash_source.push_str(&self.debug_info.to_string());
+        hash_source.push_str(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
-        data.push_str(&self.sanitizer.to_string());
-        data.push_str(&self.backtrace.to_string());
-        data.push_str(&self.no_runtime_check.to_string());
-        data.push_str(&self.c_type_sizes.to_string());
-        push_list_hash(&mut data, &self.disable_cpu_features_regex);
+        hash_source.push_str(&self.sanitizer.to_string());
+        hash_source.push_str(&self.backtrace.to_string());
+        hash_source.push_str(&self.no_runtime_check.to_string());
+        hash_source.push_str(&self.skip_eval.to_string());
+        hash_source.push_str(&self.c_type_sizes.to_string());
+        push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        push_list_hash(&mut data, &self.llvm_passes());
+        push_list_hash(&mut hash_source, &self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        data.push_str(self.subcommand.command_type_string());
+        hash_source.push_str(self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        data.push_str(build_time_utc!());
+        hash_source.push_str(build_time_utc!());
 
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 
-    // Edit CPU features according to the configuration.
+    /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
+    /// feature a pattern matches.
     pub fn edit_cpu_features(&self, features: &mut CpuFeatures) {
         features.disable_by_regexes(&self.disable_cpu_features_regex);
     }
@@ -813,12 +829,12 @@ impl Configuration {
             ));
         }
 
-        let mut com = Command::new("valgrind");
-        com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
+        let mut command = Command::new("valgrind");
+        command.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
 
         // Add suppressions file if it exists
         if PathBuf::from("valgrind.supp").exists() {
-            com.arg("--suppressions=valgrind.supp");
+            command.arg("--suppressions=valgrind.supp");
         }
 
         match self.valgrind_tool {
@@ -829,18 +845,18 @@ impl Configuration {
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.
-                com.arg("--tool=memcheck");
-                com.arg("--leak-check=yes"); // This option turns memory leak into error.
+                command.arg("--tool=memcheck");
+                command.arg("--leak-check=yes"); // This option turns memory leak into error.
 
                 // An array large enough to have its elements aligned sits above the base of its
                 // allocation, so the only pointer to that block is an interior one, which the leak
                 // checker calls possibly lost for as long as the array is alive. Take as errors the
                 // kinds a reference counting mistake produces: a block nothing points to is
                 // definitely lost, and one held only by such a block is indirectly lost.
-                com.arg("--errors-for-leak-kinds=definite,indirect");
+                command.arg("--errors-for-leak-kinds=definite,indirect");
             }
         }
-        Ok(com)
+        Ok(command)
     }
 
     /// The linkage to give a symbol that other compilation units may call: external where each unit
@@ -913,16 +929,6 @@ impl Configuration {
 
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
         approve_and_run(self)
-    }
-
-    /// Whether the compiler is running to report diagnostics to an editor, rather than to produce a
-    /// program.
-    #[allow(dead_code)]
-    pub fn is_diagnostics_mode(&self) -> bool {
-        match &self.subcommand {
-            SubCommand::Diagnostics(_) => true,
-            _ => false,
-        }
     }
 
     /// Whether the generated program keeps the checks that abort it on a violation, such as array
