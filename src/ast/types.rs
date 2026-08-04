@@ -54,10 +54,12 @@ impl PartialEq for TyVar {
 impl Eq for TyVar {}
 
 impl Hash for TyVar {
-    /// Hashes the name and the kind, which are what `PartialEq` compares.
+    /// Hashes the name alone. The kind is an attribute of a variable rather than part of which
+    /// variable it is, so two variables of one name are one variable whatever kinds they carry --
+    /// a shape a well-formed program does not produce, and one a hash should not distinguish.
+    /// Leaving the kind out also keeps this consistent with an equality that stopped reading it.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
-        self.kind.hash(state);
     }
 }
 
@@ -128,7 +130,7 @@ impl AssocType {
 }
 
 /// The kind of a type, which classifies types the way a type classifies values.
-#[derive(Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
     /// `*`, the kind of a type that has values of its own.
     Star,
