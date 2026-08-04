@@ -7571,6 +7571,17 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 }
 
+/// Apply `io_act`, which takes the `Ptr` to work through, to `data_ptr`.
+fn apply_to_data_ptr<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    io_act: Object<'c>,
+    data_ptr: PointerValue<'c>,
+) -> Object<'c> {
+    let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+    let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
+    gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap()
+}
+
 fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
@@ -7641,11 +7652,9 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value.
@@ -7793,15 +7802,16 @@ fn force_unique_boxed<'c, 'm>(
     force_unique: bool,
     state: RcState,
 ) -> Object<'c> {
+    assert!(
+        val.is_box(gc.type_env()),
+        "force_unique_boxed on the unboxed type {}.",
+        val.ty.to_string()
+    );
     if !force_unique {
         assert_proven_unique(gc, &val);
         return val;
     }
-    if val.ty.is_array() {
-        make_array_unique(gc, val, state)
-    } else {
-        make_struct_union_unique(gc, val, state)
-    }
+    make_struct_union_unique(gc, val, state)
 }
 
 /// Abort, in compiler development mode, if `val` is shared where the uniqueness analysis proved it
@@ -7920,11 +7930,9 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value.
@@ -8192,9 +8200,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
 
         // Run the callback with a pointer to the first element.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value `(array, action result)`.
@@ -8335,9 +8341,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
 
         // Run the callback with a pointer to the first element, threading the real `ios`.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value `(ios, (array, action result))`.
