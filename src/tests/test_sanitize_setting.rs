@@ -6,29 +6,11 @@
 //! `ProjectFile::set_config`, which nothing else would notice moving.
 
 use crate::misc::{function_name, platform_thread_sanitizer_supported};
-use crate::tests::test_util::{copy_dir_recursive, emitted_llvm_ir, fix_command, EmittedIr};
-use std::path::{Path, PathBuf};
-use std::process::Output;
-use tempfile::TempDir;
+use crate::tests::test_util::{emitted_llvm_ir, run_fix, setup_case_projects, EmittedIr};
+use std::path::Path;
 
-/// Copies the case projects into a temporary directory and returns it with the path of `project`
-/// inside it. The projects are copied together because they refer to each other by relative path.
-fn setup_test_env(project: &str) -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let cases = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_sanitize_setting/cases");
-    copy_dir_recursive(&cases, &temp_dir.path().to_path_buf()).expect("Failed to copy test cases");
-    let project_dir = temp_dir.path().join(project);
-    (temp_dir, project_dir)
-}
-
-/// Runs `fix` with `args` in `project_dir`.
-fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
-    fix_command()
-        .args(args)
-        .current_dir(project_dir)
-        .output()
-        .expect("Failed to execute fix")
-}
+/// The directory holding this module's case projects.
+const CASES: &str = "src/tests/test_sanitize_setting/cases";
 
 /// Skips the caller unless this platform can build an instrumented program, saying so.
 fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
@@ -52,7 +34,7 @@ fn test_dependency_does_not_sanitize_the_project_being_built() {
     // A library that asks for instrumentation would otherwise impose it on every program that
     // depends on it, and a program several times slower than it was built to be is not what
     // depending on a library should mean.
-    let (_temp_dir, project_dir) = setup_test_env("root_with_sanitizing_dep");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_with_sanitizing_dep");
     let output = run_fix(&project_dir, &["build", "-O", "none", "--emit-llvm"]);
     assert!(
         output.status.success(),
@@ -74,7 +56,7 @@ fn test_project_file_sanitizes_the_project_being_built() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    let (_temp_dir, project_dir) = setup_test_env("root_sanitizes_itself");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_sanitizes_itself");
     let output = run_fix(&project_dir, &["build", "-O", "none", "--emit-llvm"]);
     assert!(
         output.status.success(),
@@ -92,7 +74,7 @@ fn test_project_file_sanitizes_the_project_being_built() {
 fn test_unknown_sanitizer_is_reported() {
     // The command line offers its sanitizers as a fixed set, so a name outside it reaches the
     // compiler only through the project file.
-    let (_temp_dir, project_dir) = setup_test_env("root_unknown_sanitizer");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_unknown_sanitizer");
     let output = run_fix(&project_dir, &["build"]);
 
     assert!(
@@ -117,7 +99,7 @@ fn test_sanitizer_and_valgrind_together_are_refused() {
     if !skip_unless_thread_sanitizer_available(function_name!()) {
         return;
     }
-    let (_temp_dir, project_dir) = setup_test_env("root_sanitize_and_memcheck");
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_sanitize_and_memcheck");
     let output = run_fix(&project_dir, &["test"]);
 
     assert!(
