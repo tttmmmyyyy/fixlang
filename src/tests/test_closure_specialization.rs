@@ -56,6 +56,13 @@ mod integration_tests {
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute the built program");
+        assert!(
+            run.status.success(),
+            "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
+            opt_level,
+            run.status,
+            String::from_utf8_lossy(&run.stderr),
+        );
         assert_eq!(
             String::from_utf8_lossy(&run.stdout).trim(),
             EXPECTED_OUTPUT,
