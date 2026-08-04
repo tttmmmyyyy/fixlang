@@ -1,5 +1,10 @@
-use std::{rc::Rc, sync::Arc};
-
+use super::{
+    capture_struct::{fresh_global_name, CaptureStruct},
+    find_usage_of_name::{self, UsageType},
+    inline,
+    uncurry::internalize_let_to_var_at_head,
+    unique_local_names,
+};
 use crate::{
     ast::{
         expr::{
@@ -8,7 +13,7 @@ use crate::{
         name::FullName,
         pattern::PatternNode,
         program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
     constants::{
@@ -19,14 +24,7 @@ use crate::{
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
-
-use super::{
-    capture_struct::{fresh_global_name, CaptureStruct},
-    find_usage_of_name::{self, UsageType},
-    inline::{self},
-    uncurry::internalize_let_to_var_at_head,
-    unique_local_names,
-};
+use std::{mem, rc::Rc, sync::Arc};
 
 /*
 # Closure specialization
@@ -168,7 +166,7 @@ pub fn run_one(
     let specializable_funcs = specializable_functions(prg);
     let specializable_funcs = Rc::new(specializable_funcs);
 
-    let symbols = std::mem::take(&mut prg.symbols);
+    let symbols = mem::take(&mut prg.symbols);
     let mut new_tycons = Map::default();
 
     // Create a set of global names
@@ -571,7 +569,7 @@ impl ClosureSpecializationVisitor {
     fn decapture_lambda(
         &mut self,
         mut lam: Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
+        state: &mut VisitState,
     ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // Get the capture list.
         let cap_names = lam.lambda_cap_names();
@@ -715,8 +713,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If `expr` refers to a decaptured lambda, and
         // the type of this expression is T, and the lambda function type is C->T (C is the capture list type),
         // replace it with an expression that applies the lambda function to the capture list.
@@ -754,19 +752,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If any free variable in the LLVM expression refers to a decaptured lambda,
         // replace it with an expression that applies the lambda function to the capture list.
 
@@ -823,19 +817,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         // Perform closure specialization if this application expression meets the following conditions:
         // - The called function is specializable, and a specializable argument is either a lambda expression or an already decaptured lambda (i.e., a capture list).
 
@@ -901,19 +891,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
         let arg = expr.get_lam_params();
         assert_eq!(arg.len(), 1);
@@ -938,11 +924,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
         // Example: In `expr` is a lambda `|x| |y| (...)`, if `y` is a decaptured lambda, visiting `|y| (...)` may change its type, so the codomain of `|x| |y| (...)` may need to be fixed.
         let lam_ty = expr.type_.as_ref().unwrap();
@@ -961,8 +943,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
         let value = expr.get_let_value();
@@ -1010,123 +992,107 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         }
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_if(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_eval(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

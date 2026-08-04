@@ -4,8 +4,6 @@
 // `defunctionalize_fix` both
 // lift lambdas this way and build on these.
 
-use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{expr_make_struct, expr_var, var_var, ExprNode},
@@ -17,6 +15,7 @@ use crate::{
     constants::STD_NAME,
     misc::Set,
 };
+use std::sync::Arc;
 
 // The unboxed struct that carries a lambda's captured environment across the call to its lifted
 // global function. The type constructor is named `{prefix}<{signature}>`, where `signature` encodes

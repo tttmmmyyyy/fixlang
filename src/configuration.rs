@@ -7,7 +7,7 @@ use crate::constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL,
     OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
-use crate::elaboration::typecheckcache::{self, TypeCheckCache};
+use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
@@ -459,7 +459,7 @@ impl Configuration {
             disable_cpu_features_regex: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
-            type_check_cache: Arc::new(typecheckcache::FileCache::new()),
+            type_check_cache: Arc::new(FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_override: None,
             run_program_args: vec![],
