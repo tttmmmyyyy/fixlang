@@ -7583,6 +7583,8 @@ fn apply_to_data_ptr<'c, 'm>(
     gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap()
 }
 
+/// The pointer to the payload of a boxed value: the fields of a boxed struct, or the payload buffer
+/// past the tag of a boxed union.
 fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
@@ -7626,6 +7628,8 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Std::FFI::_mutate_boxed_internal`: makes the boxed value unique, runs the action on a
+/// pointer to the value's payload, and evaluates to the value paired with the action's result.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
@@ -7795,8 +7799,13 @@ fn assumed_state(assume_local: bool) -> RcState {
     }
 }
 
-/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
-/// nothing when `force_unique` is false, which is set only where the value is known to be unique.
+/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere.
+///
+/// # Arguments
+/// * `force_unique` — false where the uniqueness analysis proved the value already unique; the value
+///   is then returned as it stands, and compiler development mode checks that proof against the
+///   value's reference count.
+/// * `state` — the reference-counting state the uniqueness check reads the count under.
 fn force_unique_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -7864,7 +7873,10 @@ fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
     gc.builder().position_at_end(unique_bb);
 }
 
-// _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
+/// The definition of `Std::FFI::_mutate_boxed_internal`, which makes the boxed value unique, applies
+/// the action to a pointer to the value's payload, and returns the value with the action's result.
+///
+/// `_mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)`
 pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_A_NAME: &str = "a";
     const TYPE_B_NAME: &str = "b";
@@ -7903,6 +7915,9 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Std::FFI::_mutate_boxed_ios_internal`: makes the boxed value unique, runs the action on
+/// a pointer to the value's payload while threading the caller's `IOState`, and evaluates to that
+/// state paired with the value and the action's result.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
