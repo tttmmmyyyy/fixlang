@@ -7936,18 +7936,18 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value.
-        let pair_ab = create_obj(
+        let val_and_res = create_obj(
             make_tuple_ty(vec![val.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
             gc,
-            Some("pair_ab"),
+            Some("val_and_res"),
         );
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &val);
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 0, &val);
+        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 1, &io_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &val_and_res);
 
         res
     }
@@ -8345,18 +8345,18 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value `(ios, (array, action result))`.
-        let pair_ab = create_obj(
+        let array_and_res = create_obj(
             make_tuple_ty(vec![array.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
             gc,
-            Some("pair_ab"),
+            Some("array_and_res"),
         );
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &array);
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 0, &array);
+        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 1, &io_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab)
+        ObjectFieldType::move_into_struct_field(gc, res, 1, &array_and_res)
     }
 
     fn name(&self) -> String {
