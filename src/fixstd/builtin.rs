@@ -7571,7 +7571,8 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 }
 
-/// Apply `io_act`, which takes the `Ptr` to work through, to `data_ptr`.
+/// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
+/// yields.
 fn apply_to_data_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     io_act: Object<'c>,
