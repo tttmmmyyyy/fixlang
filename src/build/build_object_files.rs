@@ -14,23 +14,24 @@ use crate::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},
     },
-    generator::Generator,
+    generator::{enum_attribute_kind_id, module_functions, Generator},
     misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
         simplify::simplify,
-        unique_check_elim::specialize,
-        validate,
+        unique_check_elim, validate,
     },
     tool::stopwatch::StopWatch,
 };
 use inkwell::{
+    attributes::AttributeLoc,
     context::Context,
     module::Module,
     passes::PassBuilderOptions,
@@ -49,20 +50,23 @@ use std::{
     sync::Arc,
 };
 
-// The result of `build_object_files` function.
+/// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    // Paths of object files generated.
-    // If the function is running for language server, this will be empty.
+    /// The object files generated. Empty when the build ran for the language server, which
+    /// type-checks without emitting code.
     pub obj_paths: Vec<PathBuf>,
 }
 
-// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
-// code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
-//
-// `symbols` is the set to lower and generate code for — one compilation unit, or the whole program.
-// `global_types` types a global that a lowered function references as an LLVM operand, which under
-// separated compilation may be defined in another unit, so it covers the whole program.
+/// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
+/// code generation and the RC IR dump build on; the optimizations are separate
+/// (`optimize_rc_program`).
+///
+/// # Arguments
+/// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
+/// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
+///   Under separated compilation such a global may be defined in another unit, so this covers the
+///   whole program.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -79,11 +83,11 @@ fn lower_and_insert_rc(
     prog
 }
 
-// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
-// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
-// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
-// borrowed parameters on the functions (`RcFunc::borrowed_units`); read the owned complement back
-// with `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
+/// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
+/// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
+/// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
+/// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
+/// reads back as the owned complement.
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -111,17 +115,26 @@ fn optimize_rc_program(
         validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
-        prog = specialize(&prog, type_env);
+        prog = unique_check_elim::specialize(&prog, type_env);
         validate(&prog, "after specialize");
+        // Locality inference rests on nothing moving a live object out of the local state, which a
+        // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
+        // reaches. A threaded build keeps the runtime dispatch everywhere.
+        if !config.threaded {
+            prog = locality::specialize(&prog, type_env);
+            validate(&prog, "after locality");
+        }
     }
     prog
 }
 
-// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a file
-// under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
-// `--emit-rc-ir`, for compiler development. `rc_program` is the whole program at that stage; the module
-// filter is applied here, on the RC IR, so the dumped functions carry the whole-program context that
-// code generation actually compiles.
+/// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a
+/// file under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
+/// `--emit-rc-ir`, for compiler development.
+///
+/// # Arguments
+/// * `rc_program` — the whole program at that stage. The module filter is applied here, on the RC
+///   IR, so the dumped functions carry the whole-program context code generation compiles.
 fn dump_rc_ir(
     rc_program: &RcProgram,
     type_env: &TypeEnv,
@@ -190,9 +203,9 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
-// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
-// generation does at `Max`), then write it before and after the optimizations, filtered to the
-// requested module in each dump.
+/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
+/// generation does at `Max`), then write it before and after the optimizations, filtered to the
+/// requested module in each dump.
 fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let Some(filter) = &config.emit_rc_ir else {
         return;
@@ -357,7 +370,7 @@ pub fn build_object_files<'c>(
             }
 
             // LLVM level optimization.
-            optimize_and_verify(gc.module, &target_machine, &config);
+            optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
@@ -571,35 +584,74 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
-// Verify `module`, run the LLVM optimization pipeline the configuration selects over it, then
-// verify it again. A module LLVM rejects, or a pipeline it cannot build, aborts the compilation.
-fn optimize_and_verify<'c>(
+/// Hands each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if LLVM
+/// rejects one.
+fn run_passes_or_panic(
+    module: &Module,
+    passes: &[impl AsRef<str>],
+    target_machine: &TargetMachine,
+) {
+    for pass in passes {
+        let pass = pass.as_ref();
+        if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
+            panic_with_msg(&format!(
+                "Failed to run pass \"{}\": {}",
+                pass,
+                e.to_string()
+            ));
+        }
+    }
+}
+
+/// Verifies `module`, runs the LLVM optimization pipeline the configuration selects over it,
+/// instruments it for the configured sanitizer, then verifies it again. A module LLVM rejects, or a
+/// pipeline it cannot build, aborts the compilation.
+fn optimize_instrument_and_verify<'c>(
     module: &Module<'c>,
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
-    // Hand each pass-pipeline string to LLVM's pass builder in turn, aborting the compilation if
-    // LLVM rejects one.
-    fn run_passes_or_panic(
-        module: &Module,
-        passes: &[impl AsRef<str>],
-        target_machine: &TargetMachine,
-    ) {
-        for pass in passes {
-            let pass = pass.as_ref();
-            if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
-                panic_with_msg(&format!(
-                    "Failed to run pass \"{}\": {}",
-                    pass,
-                    e.to_string()
-                ));
-            }
-        }
-    }
-
     run_passes_or_panic(module, &["verify"], target_machine);
     run_passes_or_panic(module, &config.llvm_passes(), target_machine);
+    instrument_for_sanitizer(module, target_machine, config);
     run_passes_or_panic(module, &["verify"], target_machine);
+}
+
+/// Instruments `module` for the configured sanitizer, so that its runtime sees the program's memory
+/// accesses.
+///
+/// The instrumentation runs after the optimization pipeline, which is where clang puts it: an
+/// access the optimizer removes is one the program never makes.
+///
+/// It sits outside `Configuration::llvm_passes` because `--llvm-passes-file` replaces what that
+/// returns. Were the instrumentation part of it, a build could drop the instrumentation while
+/// still reporting itself as sanitized.
+fn instrument_for_sanitizer<'c>(
+    module: &Module<'c>,
+    target_machine: &TargetMachine,
+    config: &Configuration,
+) {
+    let Some((attribute_name, passes)) = config.sanitizer.instrumentation() else {
+        return;
+    };
+    add_attribute_to_defined_functions(module, attribute_name);
+    run_passes_or_panic(module, passes, target_machine);
+}
+
+/// Gives every function of `module` that has a body the attribute named `attribute_name`.
+///
+/// The instrumentation passes rewrite the functions carrying their attribute and leave the rest
+/// alone, which is how clang lets a translation unit opt out. Nothing else here sets it, so without
+/// this the passes would run over the module and change nothing.
+fn add_attribute_to_defined_functions<'c>(module: &Module<'c>, attribute_name: &str) {
+    let attribute = module
+        .get_context()
+        .create_enum_attribute(enum_attribute_kind_id(attribute_name), 0);
+    for function in module_functions(module) {
+        if function.count_basic_blocks() > 0 {
+            function.add_attribute(AttributeLoc::Function, attribute);
+        }
+    }
 }
 
 // Build exported c functions.

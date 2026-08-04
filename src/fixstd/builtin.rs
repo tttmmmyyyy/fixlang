@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::{unique_check_on_boxed_leaf, LLVMGen},
+    inline_llvm::{clone_path_rc_targets, unique_check_on_boxed_leaf, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -24,23 +24,26 @@ use crate::constants::{
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-    STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
-    STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
-    UNION_DATA_IDX,
+    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, IS_UNIQUE_VALUE_FIELD, LAZY_NAME, PTR_NAME,
+    PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
+    U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_elems_bytes, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, write_alloc_offset,
+    alloc_array_storage, build_abort_if, build_array_storage_shift, build_capacity_check,
+    build_elems_bytes, build_storage_is_aligned, create_obj, get_array_storage,
+    get_array_storage_buf, read_alloc_offset, refcnt_type, write_alloc_offset, CapacityCheck,
     ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
+use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
+use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
@@ -717,6 +720,15 @@ impl LLVMGen for InlineLLVMIntLit {
         true
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -762,6 +774,15 @@ impl LLVMGen for InlineLLVMFloatLit {
         true
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -795,6 +816,15 @@ impl LLVMGen for InlineLLVMNullPtrLit {
         true
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -819,7 +849,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-// Create a byte array by copying from given pointer.
+/// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
 pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
@@ -827,7 +857,7 @@ pub fn make_byte_array_copy<'c, 'm>(
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let storage = alloc_array_storage(gc, make_u8_ty(), len);
+    let storage = alloc_array_storage(gc, make_u8_ty(), len, CapacityCheck::Run);
     let array = create_obj(
         array_ty,
         &vec![],
@@ -840,21 +870,27 @@ pub fn make_byte_array_copy<'c, 'm>(
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
     let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
     let dst = get_array_storage_buf(gc, &array);
-    let len = gc
+    let len_ptr_int = gc
         .builder()
         .build_int_cast(
             len,
             gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr@make_byte_array_copy",
+            "len_ptr_int@make_byte_array_copy",
         )
         .unwrap();
-    gc.builder().build_memcpy(dst, 1, buf, 1, len).ok().unwrap();
+    gc.builder()
+        .build_memcpy(dst, 1, buf, 1, len_ptr_int)
+        .ok()
+        .unwrap();
 
     array
 }
 
+/// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
+/// null terminator, copied out of a global into a fresh array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
+    /// The literal's bytes, without the null terminator.
     string: String,
 }
 
@@ -890,6 +926,15 @@ impl LLVMGen for InlineLLVMStringBuf {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -922,10 +967,10 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
-    x_str: FullName,
+    x_name: FullName,
     /// The variable holding the recursion functional, which takes `self` and returns the recursive
     /// function.
-    f_str: FullName,
+    f_name: FullName,
     /// The variable holding the capture of the function being generated, which the rebuilt `fix(f)`
     /// closure carries so that it captures the same values.
     cap_name: FullName,
@@ -945,8 +990,8 @@ impl LLVMGen for InlineLLVMFixBody {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Get arguments
-        let x = gc.get_scoped_obj(&self.x_str);
-        let f = gc.get_scoped_obj(&self.f_str);
+        let x = gc.get_scoped_obj(&self.x_name);
+        let f = gc.get_scoped_obj(&self.f_name);
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
@@ -964,14 +1009,24 @@ impl LLVMGen for InlineLLVMFixBody {
     fn name(&self) -> String {
         format!(
             "fix({}, {}, {})",
-            self.f_str.to_string(),
-            self.x_str.to_string(),
+            self.f_name.to_string(),
+            self.x_name.to_string(),
             self.cap_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
+        vec![&mut self.x_name, &mut self.f_name, &mut self.cap_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The result comes out of calling a function operand, whose body may return a global.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -980,13 +1035,13 @@ impl LLVMGen for InlineLLVMFixBody {
 }
 
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
-    let f_str = FullName::local(f);
-    let x_str = FullName::local(x);
+    let f_name = FullName::local(f);
+    let x_name = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
     expr_llvm(
         Box::new(InlineLLVMFixBody {
-            x_str,
-            f_str,
+            x_name,
+            f_name,
             cap_name,
         }),
         type_tyvar_star(b),
@@ -1064,6 +1119,15 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1149,6 +1213,15 @@ impl LLVMGen for InlineLLVMCastFloatBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1241,6 +1314,15 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1340,6 +1422,15 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
         vec![&mut self.from_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1419,6 +1510,15 @@ impl LLVMGen for InlineLLVMShiftBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.value_name, &mut self.n_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1529,6 +1629,15 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1599,6 +1708,15 @@ impl LLVMGen for InlineLLVMBitNotBody {
         vec![&mut self.operand_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1627,8 +1745,12 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Array::_unsafe_empty_capacity_unchecked`: an array of size 0 whose storage has room
+/// for the given capacity, its elements left uninitialized.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeEmpty {
+    /// The local binding holding the capacity, in elements. The caller of the primitive is what
+    /// establishes it is non-negative.
     capacity_name: FullName,
 }
 
@@ -1643,7 +1765,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         // Allocate the storage with room for `cap` elements, then build the array value
         // `{ storage, size = 0, cap }`.
         let elem_ty = arr_ty.field_types(gc.type_env())[0].clone();
-        let storage = alloc_array_storage(gc, elem_ty, cap);
+        let storage = alloc_array_storage(gc, elem_ty, cap, CapacityCheck::Run);
         let array = create_obj(
             arr_ty.clone(),
             &vec![],
@@ -1675,6 +1797,15 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1709,6 +1840,9 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
     arr_name: FullName,
     idx_name: FullName,
+    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
+    /// reference-counting state, so that those operations need no state dispatch.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -1722,7 +1856,14 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         let buf = get_array_storage_buf(gc, &array);
 
         // Get element
-        let elem = ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx);
+        let elem = ObjectFieldType::read_from_array_buf(
+            gc,
+            None,
+            buf,
+            ty.clone(),
+            idx,
+            assumed_state(self.assume_local),
+        );
 
         elem
     }
@@ -1741,6 +1882,37 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The array is operand 0 and is a single boxed leaf, so the element comes out of it by
+        // the take-out rule.
+        let container = LeafCond::input_leaf(0, vec![]);
+        ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // `read_from_array_buf` retains the element it read out.
+        vec![RcTarget::Result(vec![])]
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1763,6 +1935,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayUnsafeGetBoundsUnchecked {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
                 }),
@@ -1790,6 +1963,9 @@ pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     // When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
     // array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -1800,7 +1976,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
 
         // Force the array to be unique before shrinking it in place.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -1817,6 +1993,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
             size,
             elem_ty,
             TraverserWorkType::release(),
+            assumed_state(self.assume_local),
         );
         array.insert_field(gc, ARRAY_SIZE_IDX, new_len)
     }
@@ -1845,6 +2022,16 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -1858,6 +2045,23 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // `release_or_mark_array_slice` releases the elements the shrink drops, whatever
+        // `force_unique` says.
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
+        targets.push(RcTarget::Contents(0, vec![]));
+        targets
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1883,6 +2087,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayTruncateBoundsUnchecked {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     len_name: FullName::local(LEN_NAME),
                     force_unique: true,
@@ -1912,6 +2117,9 @@ pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     // When true, clone the array first if it is shared, so the appended slots land in a uniquely
     // owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -1925,7 +2133,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
 
         // Force the array to be unique before appending in place.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -1934,7 +2142,14 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         // caller guarantees `count >= 0` and `size + count <= capacity`.
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::append_value_into_array_buf(gc, buf, size, count, value);
+        ObjectFieldType::append_value_into_array_buf(
+            gc,
+            buf,
+            size,
+            count,
+            value,
+            assumed_state(self.assume_local),
+        );
         let new_size = gc.builder().build_int_add(size, count, "new_size").unwrap();
         array.insert_field(gc, ARRAY_SIZE_IDX, new_size)
     }
@@ -1968,6 +2183,16 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -1981,6 +2206,23 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // `append_value_into_array_buf` gives every filled slot its own reference to the value and
+        // then consumes the operand's, whatever `force_unique` says.
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
+        targets.push(RcTarget::Operand(APPEND_VALUE_ELEMENT_ARG, vec![]));
+        targets
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2008,6 +2250,7 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
                     Box::new(InlineLLVMArrayAppendValueCapacityUnchecked {
+                        assume_local: false,
                         arr_name: FullName::local(ARR_NAME),
                         value_name: FullName::local(VALUE_NAME),
                         count_name: FullName::local(COUNT_NAME),
@@ -2035,18 +2278,20 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
-// field. The elements move as raw bytes, with their reference counts left alone: the caller must
-// ensure the array is unique.
-//
-// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
-// large enough to have its own pages, by remapping them, which costs nothing per element. What comes
-// back starts wherever the allocator put it, so the object is placed in it afresh, and the contents
-// move only in the case where that lands the object somewhere other than `realloc` left it.
+/// Resize a uniquely owned array's storage to hold `new_cap` elements, then update its capacity
+/// field. The elements move as raw bytes, with their reference counts left alone: the caller must
+/// ensure the array is unique.
+///
+/// The whole block goes to `realloc`, base and all, so that it can resize in place -- for a block
+/// large enough to have its own pages, by remapping them, which costs nothing per element. What
+/// comes back starts wherever the allocator put it, so the object is placed in it afresh, and the
+/// contents move only in the case where that lands the object somewhere other than `realloc` left
+/// it.
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     new_cap: IntValue<'c>,
+    capacity_check: CapacityCheck,
 ) -> Object<'c> {
     let i64_ty = gc.context.i64_type();
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
@@ -2054,6 +2299,7 @@ fn realloc_array<'c, 'm>(
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
+    build_capacity_check(gc, &elem_ty, new_cap, capacity_check);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
     let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
@@ -2206,10 +2452,13 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     arr_name: FullName,
     /// The local binding holding the new capacity, in elements.
     cap_name: FullName,
-    // When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
-    // retain-copy a shared array's elements. Set false only where the array is statically known to
-    // be unique, leaving just the `realloc`.
+    /// When true, branch on uniqueness: `realloc` a unique array in place, or allocate a new one and
+    /// retain-copy a shared array's elements. Set false only where the array is statically known to
+    /// be unique, leaving just the `realloc`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2219,7 +2468,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
 
         if !self.force_unique {
-            return realloc_array(gc, array, new_cap);
+            return realloc_array(gc, array, new_cap, CapacityCheck::Run);
         }
 
         // Branch on whether the storage is unique. `build_branch_by_is_unique` routes a GLOBAL
@@ -2227,7 +2476,9 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let storage = get_array_storage(gc, &array);
         let storage_ptr = storage.value(gc).into_pointer_value();
-        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+        build_capacity_check(gc, &elem_ty, new_cap, CapacityCheck::Run);
+        let (unique_bb, shared_bb) =
+            gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
         let current_func = unique_bb.get_parent().unwrap();
         let end_bb = gc
             .context
@@ -2235,7 +2486,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
 
         // Unique: resize the storage in place with `realloc`.
         gc.builder().position_at_end(unique_bb);
-        let realloced = realloc_array(gc, array.clone(), new_cap);
+        let realloced = realloc_array(gc, array.clone(), new_cap, CapacityCheck::Skip);
         let succ_of_unique_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2243,11 +2494,23 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         // reference to the old shared storage.
         gc.builder().position_at_end(shared_bb);
         let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-        let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap);
+        let new_storage = alloc_array_storage(gc, elem_ty.clone(), new_cap, CapacityCheck::Skip);
         let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
         let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        ObjectFieldType::clone_array_buf(gc, len, src_buf, dst_buf, elem_ty, None);
-        gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+        ObjectFieldType::clone_array_buf(
+            gc,
+            len,
+            src_buf,
+            dst_buf,
+            elem_ty,
+            None,
+            assumed_state(self.assume_local),
+        );
+        gc.build_release_mark(
+            storage.clone(),
+            TraverserWorkType::release(),
+            assumed_state(self.assume_local),
+        );
         let new_storage_val = new_storage.value(gc);
         let cloned = array
             .clone()
@@ -2288,6 +2551,16 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2301,6 +2574,15 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2326,6 +2608,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArraySetCapacityBoundsUnchecked {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     cap_name: FullName::local(CAP_NAME),
                     force_unique: true,
@@ -2356,6 +2639,9 @@ pub struct InlineLLVMArrayAppendCapacityBoundsUnchecked {
     // When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
     // array. Set false only where `dst` is statically known to be unique. `src` is read either way.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2373,7 +2659,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
 
         // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
         let dst = if self.force_unique {
-            make_array_unique(gc, dst)
+            make_array_unique(gc, dst, assumed_state(self.assume_local))
         } else {
             dst
         };
@@ -2418,8 +2704,13 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .unwrap();
 
         // Full range: move the elements if `src` is unique, otherwise fall through to the copy.
+        //
+        // This check is not the one `unique_check_operand` declares -- it is emitted whatever
+        // `force_unique` says, because moving the elements instead of retaining them is sound only
+        // for a unique `src`. Nothing proved `src` local, so it reads the state.
         gc.builder().position_at_end(maybe_move_bb);
-        let (src_unique_bb, src_shared_bb) = gc.build_branch_by_is_unique(src_ptr);
+        let (src_unique_bb, src_shared_bb) =
+            gc.build_branch_by_is_unique(src_ptr, RcState::Unknown);
 
         // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
         // without touching the moved-out elements. No reference counting.
@@ -2430,7 +2721,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .ok()
             .unwrap();
         let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
-        gc.release(src_emptied);
+        gc.release(src_emptied, assumed_state(self.assume_local));
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Shared `src`: the elements stay in `src`, so join the copy path.
@@ -2444,8 +2735,16 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
                 .build_gep(elem_value_ty, src_buf, &[begin], "append_src_copy_start")
                 .unwrap()
         };
-        ObjectFieldType::clone_array_buf(gc, n, src_copy_start, dst_write, elem_ty, None);
-        gc.release(src.clone());
+        ObjectFieldType::clone_array_buf(
+            gc,
+            n,
+            src_copy_start,
+            dst_write,
+            elem_ty,
+            None,
+            assumed_state(self.assume_local),
+        );
+        gc.release(src.clone(), assumed_state(self.assume_local));
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Grow `dst`'s length by the number of appended elements.
@@ -2488,6 +2787,16 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2501,6 +2810,24 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // Both paths consume `src`: the move path releases it emptied, and the copy path retains
+        // each element it takes out of it and then releases it. Neither depends on `force_unique`.
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
+        targets.push(RcTarget::Operand(APPEND_RANGE_SRC_ARG, vec![]));
+        targets.push(RcTarget::Contents(APPEND_RANGE_SRC_ARG, vec![]));
+        targets
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2532,6 +2859,7 @@ pub fn array_append_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) 
         ],
         expr_llvm(
             Box::new(InlineLLVMArrayAppendCapacityBoundsUnchecked {
+                assume_local: false,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
                 begin_name: FullName::local(BEGIN_NAME),
@@ -2565,6 +2893,9 @@ pub struct InlineLLVMArrayGrowSizeBody {
     // When true, clone the array first if it is shared, so the length grows on a uniquely owned
     // array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2586,7 +2917,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         // Force the array to be unique before growing it in place, so the length is written only on a
         // uniquely owned array.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -2617,6 +2948,16 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2630,6 +2971,15 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2658,6 +3008,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayGrowSizeBody {
+                    assume_local: false,
                     arr_name,
                     len_name,
                     force_unique: true,
@@ -2679,20 +3030,27 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// Force array object to be unique.
-// If it is unique, do nothing.
-// If it is shared, clone the object.
-fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> Object<'c> {
-    make_array_unique_with_hole(gc, array, None)
+/// Force an array object to be unique: a unique array is returned as it is, and a shared one is
+/// cloned.
+fn make_array_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
+    make_array_unique_with_hole(gc, array, None, state)
 }
 
-// Force array object to be unique: a unique array is returned as it is, and a shared one is cloned.
-// When `hole` is `Some(idx)`, the clone skips the element at `idx`, leaving that slot
-// uninitialized.
+/// Force an array object to be unique: a unique array is returned as it is, and a shared one is
+/// cloned.
+///
+/// # Arguments
+/// * `hole` — `Some(idx)` makes the clone skip the element at `idx`, leaving that slot
+///   uninitialized for the caller to fill.
 fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
     hole: Option<IntValue<'c>>,
+    state: RcState,
 ) -> Object<'c> {
     assert!(array.ty.is_array());
 
@@ -2702,7 +3060,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let current_func = gc.current_function();
 
     // Branch by whether the storage, which carries the reference count, is unique.
-    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr, state);
     let end_bb = gc.context.append_basic_block(current_func, "end_bb");
 
     // Implement shared_bb: allocate a new storage, copy the elements into it, and drop the reference
@@ -2710,11 +3068,11 @@ fn make_array_unique_with_hole<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
     let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
-    let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap);
+    let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap, CapacityCheck::Skip);
     let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
-    ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole);
-    gc.build_release_mark(storage.clone(), TraverserWorkType::release());
+    ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole, state);
+    gc.build_release_mark(storage.clone(), TraverserWorkType::release(), state);
     let new_storage_val = new_storage.value(gc);
     let cloned_array = array
         .clone()
@@ -2745,6 +3103,9 @@ pub struct InlineLLVMArraySetBody {
     // When true, panic if `idx` is out of range (unless `--no-runtime-check`). `set` sets this;
     // `unsafe_set_bounds_unchecked` clears it. Fixed at registration, not folded.
     bounds_checked: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2757,7 +3118,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
         // Force array to be unique
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -2770,7 +3131,15 @@ impl LLVMGen for InlineLLVMArraySetBody {
             None
         };
         let array_buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true);
+        ObjectFieldType::write_to_array_buf(
+            gc,
+            len,
+            array_buf,
+            idx,
+            value,
+            true,
+            assumed_state(self.assume_local),
+        );
         array
     }
 
@@ -2808,6 +3177,16 @@ impl LLVMGen for InlineLLVMArraySetBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2823,16 +3202,36 @@ impl LLVMGen for InlineLLVMArraySetBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // `write_to_array_buf` releases the element it overwrites, whatever `force_unique` says, so
+        // the array's contents are a target beside the clone path the default declares.
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
+        targets.push(RcTarget::Contents(ARRAY_SET_ARRAY_ARG, vec![]));
+        targets
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+/// The body and type scheme of `Array::set`, shared by the bounds-checked and the unchecked
+/// version. `bounds_checked` selects which of the two is built.
 fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_llvm(
         Box::new(InlineLLVMArraySetBody {
+            assume_local: false,
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
@@ -2883,6 +3282,9 @@ pub struct InlineLLVMArraySwapBody {
     pub(crate) force_unique: bool,
     // When true, panic if `i` or `j` is out of range.
     bounds_checked: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -2895,7 +3297,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 
         // Force array to be unique.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -2916,8 +3318,8 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         let elem_i =
             ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty.clone(), i);
         let elem_j = ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty, j);
-        ObjectFieldType::write_to_array_buf(gc, len, array_buf, i, elem_j, false);
-        ObjectFieldType::write_to_array_buf(gc, len, array_buf, j, elem_i, false);
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, i, elem_j, false, RcState::Unknown);
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, j, elem_i, false, RcState::Unknown);
         array
     }
 
@@ -2951,6 +3353,16 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -2966,6 +3378,15 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -2974,6 +3395,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_llvm(
         Box::new(InlineLLVMArraySwapBody {
+            assume_local: false,
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
             j_name: FullName::local("j"),
@@ -3020,6 +3442,9 @@ pub struct InlineLLVMArrayPunchBody {
     pub(crate) force_unique: bool,
     idx_name: FullName,
     arr_name: FullName,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -3032,7 +3457,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
         if self.force_unique {
-            array = make_array_unique(gc, array);
+            array = make_array_unique(gc, array, assumed_state(self.assume_local));
         }
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
@@ -3076,6 +3501,16 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -3098,6 +3533,17 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The result is `(punched array, element)`, and the punched array is uniquely owned either
+        // way (see `result_prov`).
+        punched_out_locality(result_ty, type_env, 0, PUNCHED_ARRAY_FIELD)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3105,6 +3551,35 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
 const PUNCHED_ARRAY_FIELD: usize = 0;
+
+/// The index of the array a `PunchedArray a` holds, in `unbox struct { _arr, _idx }`.
+const PUNCHED_ARRAY_ARR_FIELD: usize = 0;
+
+/// The locality of the result of a punch — the punched container, at `container_field` of the
+/// result, beside the value moved out of it — given the operand position of the container.
+///
+/// The punched container is uniquely owned either way (force-uniquing clones it when it is shared,
+/// and the version without that check runs where uniqueness is established already), so its root is
+/// local and it holds what the operand held. The moved-out value comes out of the container by the
+/// take-out rule.
+fn punched_out_locality(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    container_arg: usize,
+    container_field: usize,
+) -> ExtShape {
+    let container = LeafCond::input_leaf(container_arg, vec![]);
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        let (head, _) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed pair has a non-empty path");
+        if *head == container_field {
+            LeafCond::new(ExtCond::bottom(), container.deep.clone())
+        } else {
+            LeafCond::take_out_of(&container)
+        }
+    })
+}
 
 // Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
 // returns the punched array together with the moved-out element.
@@ -3123,6 +3598,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMArrayPunchBody {
+                assume_local: false,
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
                 arr_name: FullName::local(ARR_NAME),
@@ -3145,6 +3621,9 @@ pub struct InlineLLVMPunchedArrayPlugBody {
     pub(crate) force_unique: bool,
     elem_name: FullName,
     punched_name: FullName,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -3160,12 +3639,13 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
         if self.force_unique {
-            array = make_array_unique_with_hole(gc, array, Some(idx));
+            array =
+                make_array_unique_with_hole(gc, array, Some(idx), assumed_state(self.assume_local));
         }
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::write_to_array_buf(gc, None, buf, idx, elem, false);
+        ObjectFieldType::write_to_array_buf(gc, None, buf, idx, elem, false, RcState::Unknown);
         array
     }
 
@@ -3190,7 +3670,17 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_FIELD], arg_tys, type_env)
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARR_FIELD], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3206,6 +3696,15 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3228,6 +3727,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
         expr_llvm(
             Box::new(InlineLLVMPunchedArrayPlugBody {
+                assume_local: false,
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
                 punched_name: FullName::local(PUNCHED_NAME),
@@ -3272,6 +3772,15 @@ impl LLVMGen for InlineLLVMArrayCheckRange {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.idx_name, &mut self.size_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3325,6 +3834,15 @@ impl LLVMGen for InlineLLVMArrayCheckSize {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.size_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3385,6 +3903,15 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3448,6 +3975,15 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3501,6 +4037,15 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3530,6 +4075,9 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMStructGetBody {
     pub var_name: FullName,
     field_idx: usize,
+    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
+    /// reference-counting state, so that those operations need no state dispatch.
+    pub(crate) assume_local: bool,
 }
 
 impl InlineLLVMStructGetBody {
@@ -3554,11 +4102,17 @@ impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         if Self::borrows_container(ty, gc.type_env()) {
-            let str = gc.get_scoped_obj_noretain(&self.var_name);
-            return ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+            let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
+            return ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
         }
-        let str = gc.get_scoped_obj(&self.var_name);
-        ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
+        let struct_obj = gc.get_scoped_obj(&self.var_name);
+        ObjectFieldType::get_struct_fields(
+            gc,
+            &struct_obj,
+            &[self.field_idx as u32],
+            assumed_state(self.assume_local),
+        )[0]
+        .clone()
     }
 
     fn name(&self) -> String {
@@ -3601,6 +4155,38 @@ impl LLVMGen for InlineLLVMStructGetBody {
         }
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // A field getter takes exactly the container, so `arg_tys[0]` is it.
+        read_component_locality(result_ty, arg_tys, type_env, self.field_index())
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // A field getter takes exactly the container, so `arg_tys[0]` is it. A borrowed read moves
+        // the field out and counts nothing; otherwise `get_struct_fields` retains the field and
+        // releases the container it came out of -- or, for an unboxed container, releases the fields
+        // nobody asked for, which the whole operand covers.
+        let field_ty = &arg_tys[0].field_types(type_env)[self.field_idx];
+        if Self::borrows_container(field_ty, type_env) {
+            return vec![];
+        }
+        vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3611,6 +4197,7 @@ pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>
     let var_name_clone = FullName::local(var_name);
     expr_llvm(
         Box::new(InlineLLVMStructGetBody {
+            assume_local: false,
             var_name: var_name_clone,
             field_idx,
         }),
@@ -3686,16 +4273,37 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         })
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // A boxed struct is a fresh allocation holding the operands; an unboxed struct lays out
+        // its fields, so field `i`'s boxed leaves carry constructor operand `i` (the path's head is
+        // the field index, its tail the position within that field).
+        if result_ty.is_box(type_env) {
+            return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
+        }
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            let (i, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed struct has a non-empty path");
+            LeafCond::input_leaf(*i, rest.to_vec())
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
-// Allocate an array whose length equals the number of operands and fill it with them. The array
-// type is the value type of the enclosing expression. This is the RC IR counterpart of the
-// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
+/// Allocate an array whose length equals the number of operands and fill it with them. The array
+/// type is the value type of the enclosing expression. This is the RC IR counterpart of the
+/// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayLitBody {
+    /// The local bindings holding the elements, in the order they are written into the array.
     pub elem_names: Vec<FullName>,
 }
 
@@ -3707,17 +4315,17 @@ impl LLVMGen for InlineLLVMArrayLitBody {
             .i64_type()
             .const_int(self.elem_names.len() as u64, false);
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
-        let storage = alloc_array_storage(gc, elem_ty, len);
+        let storage = alloc_array_storage(gc, elem_ty, len, CapacityCheck::Run);
         let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
         let storage_val = storage.value(gc);
         let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
         let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
         let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
-        let buffer = get_array_storage_buf(gc, &array);
+        let buf = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);
             let idx = gc.context.i64_type().const_int(i as u64, false);
-            ObjectFieldType::write_to_array_buf(gc, None, buffer, idx, value, false);
+            ObjectFieldType::write_to_array_buf(gc, None, buf, idx, value, false, RcState::Unknown);
         }
         array
     }
@@ -3744,6 +4352,15 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3808,6 +4425,16 @@ impl LLVMGen for InlineLLVMFFICallBody {
         self.arg_names.iter_mut().collect()
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // It calls C.
+        ExtShape::always(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3821,12 +4448,21 @@ pub struct InlineLLVMCaptureProjectBody {
     pub cap_name: FullName,
     pub cap_idx: usize,
     pub cap_tys: Vec<Arc<TypeNode>>,
+    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
+    /// reference-counting state, so that those operations need no state dispatch.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMCaptureProjectBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        gc.build_capture_project(&self.cap_name, self.cap_idx, &self.cap_tys, ty)
+        gc.build_capture_project(
+            &self.cap_name,
+            self.cap_idx,
+            &self.cap_tys,
+            ty,
+            assumed_state(self.assume_local),
+        )
     }
 
     fn name(&self) -> String {
@@ -3845,6 +4481,37 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The capture object is operand 0 and is always boxed (lowering fixes its type), so a
+        // captured value comes out of it by the take-out rule.
+        let container = LeafCond::input_leaf(0, vec![]);
+        ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // `build_capture_project` retains the captured value it read out.
+        vec![RcTarget::Result(vec![])]
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3855,26 +4522,29 @@ pub struct InlineLLVMStructPunchBody {
     pub var_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructPunchBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument object (the struct value).
-        let mut str = gc.get_scoped_obj(&self.var_name);
+        let mut struct_obj = gc.get_scoped_obj(&self.var_name);
 
         if self.force_unique {
             // If the struct is shared, we should clone it to make it unique.
-            str = make_struct_unique(gc, str);
+            struct_obj = make_struct_unique(gc, struct_obj, assumed_state(self.assume_local));
         }
 
         // Move out struct field value without releasing the struct itself.
-        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+        let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
 
         // Create the return value.
         let pair = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"));
         let pair = pair.insert_field_object(gc, 0, &field);
-        let pair = pair.insert_field_object(gc, 1, &str);
+        let pair = pair.insert_field_object(gc, 1, &struct_obj);
 
         pair
     }
@@ -3901,6 +4571,16 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return None;
         }
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -3954,6 +4634,37 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         })
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The result is `(field, punched struct)`.
+        //
+        // A punched boxed struct is uniquely owned either way, so the punch rule decides it.
+        //
+        // Punching an unboxed struct only takes it apart in registers, so every result leaf names
+        // the same object the operand's does — the field component the operand's leaf at the punched
+        // field, the punched-struct component the operand's leaf at the same path.
+        let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
+        if punched_ty.is_box(type_env) {
+            return punched_out_locality(result_ty, type_env, 0, PUNCHED_STRUCT_FIELD);
+        }
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            let (head, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed pair has a non-empty path");
+            if *head == PUNCHED_STRUCT_FIELD {
+                LeafCond::input_leaf(0, rest.to_vec())
+            } else {
+                let mut p = vec![self.field_idx];
+                p.extend_from_slice(rest);
+                LeafCond::input_leaf(0, p)
+            }
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3995,6 +4706,7 @@ pub fn struct_punch(
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMStructPunchBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
                 force_unique,
@@ -4009,10 +4721,13 @@ pub fn struct_punch(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
-    punched_str_name: FullName,
+    punched_struct_name: FullName,
     pub field_name: FullName,
     field_idx: usize,
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -4023,22 +4738,24 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         struct_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
-        let mut punched_str = gc.get_scoped_obj(&self.punched_str_name);
+        let mut punched_struct = gc.get_scoped_obj(&self.punched_struct_name);
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
         if self.force_unique {
-            punched_str = make_struct_unique(gc, punched_str);
+            punched_struct =
+                make_struct_unique(gc, punched_struct, assumed_state(self.assume_local));
         }
 
-        // Convert type of punched_str into the struct type.
-        let punched_value = punched_str.value(gc);
-        let str = Object::new(punched_value, struct_ty.clone(), gc);
+        // Convert type of punched_struct into the struct type.
+        let punched_value = punched_struct.value(gc);
+        let struct_obj = Object::new(punched_value, struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
-        let str = ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field);
+        let struct_obj =
+            ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &field);
 
-        str
+        struct_obj
     }
 
     fn name(&self) -> String {
@@ -4047,12 +4764,12 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
             self.field_idx,
             if self.force_unique { "" } else { "[unique]" },
             self.field_name.to_string(),
-            self.punched_str_name.to_string(),
+            self.punched_struct_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.punched_str_name, &mut self.field_name]
+        vec![&mut self.punched_struct_name, &mut self.field_name]
     }
 
     fn unique_check_operand(
@@ -4064,6 +4781,16 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
             return None;
         }
         unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
     }
 
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
@@ -4080,6 +4807,22 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
     ) -> Provenance {
         replaced_field_prov(
             result_ty,
+            type_env,
+            self.field_idx,
+            PLUG_IN_PUNCHED_ARG,
+            PLUG_IN_FIELD_ARG,
+        )
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        replaced_field_locality(
+            result_ty,
+            arg_tys,
             type_env,
             self.field_idx,
             PLUG_IN_PUNCHED_ARG,
@@ -4134,6 +4877,60 @@ fn replaced_field_prov(
     })
 }
 
+/// The locality of component `component` read out of a container that is the op's sole operand —
+/// a struct's field, a union's payload.
+///
+/// Out of a boxed container the component is read by the take-out rule; out of an unboxed one it is
+/// a pure projection carrying the container's leaf at that component.
+fn read_component_locality(
+    result_ty: &Arc<TypeNode>,
+    arg_tys: &[Arc<TypeNode>],
+    type_env: &TypeEnv,
+    component: usize,
+) -> ExtShape {
+    const CONTAINER_ARG: usize = 0;
+    if arg_tys[CONTAINER_ARG].is_box(type_env) {
+        let container = LeafCond::input_leaf(CONTAINER_ARG, vec![]);
+        return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
+    }
+    ExtShape::build_shape(result_ty, type_env, &|path: &FieldPath| {
+        let mut p = vec![component];
+        p.extend_from_slice(path);
+        LeafCond::input_leaf(CONTAINER_ARG, p)
+    })
+}
+
+/// The locality of a struct rebuilt with the field at `field_idx` replaced, given the operand
+/// positions of the struct and of the new field value.
+///
+/// A boxed struct comes back force-uniqued (or unique by the caller's promise, where the check is
+/// dropped), so its root is local and it holds what the operands held. An unboxed struct is
+/// repackaged in registers, so the replaced field names the value operand's object and every other
+/// field the struct operand's.
+fn replaced_field_locality(
+    result_ty: &Arc<TypeNode>,
+    arg_tys: &[Arc<TypeNode>],
+    type_env: &TypeEnv,
+    field_idx: usize,
+    struct_arg: usize,
+    value_arg: usize,
+) -> ExtShape {
+    if result_ty.is_box(type_env) {
+        return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
+    }
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        // A boxed leaf of an unboxed struct starts with a field index.
+        let (field, rest) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed struct has a non-empty path");
+        if *field == field_idx {
+            LeafCond::input_leaf(value_arg, rest.to_vec())
+        } else {
+            LeafCond::input_leaf(struct_arg, path.clone())
+        }
+    })
+}
+
 // Field plugging-in function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `Sx -> F -> S` where `Sx` is the punched struct type.
 //
@@ -4152,15 +4949,16 @@ pub fn struct_plug_in(
     let ty = type_fun(punched_ty, type_fun(field.ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
 
-    const PUNCHED_STR_NAME: &str = "punched_str_obj";
+    const PUNCHED_STRUCT_NAME: &str = "punched_struct_obj";
     const FIELD_NAME: &str = "field_obj";
     let expr = expr_abs(
-        vec![var_local(PUNCHED_STR_NAME)],
+        vec![var_local(PUNCHED_STRUCT_NAME)],
         expr_abs(
             vec![var_local(FIELD_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMStructPlugInBody {
-                    punched_str_name: FullName::local(PUNCHED_STR_NAME),
+                    assume_local: false,
+                    punched_struct_name: FullName::local(PUNCHED_STRUCT_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
                     force_unique,
@@ -4855,17 +5653,23 @@ pub fn struct_act_const(
     (expr, scm)
 }
 
-// Make struct object unique.
-// If it is (unboxed or) unique, do nothing.
-// If it is shared, clone the object.
-fn make_struct_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, str: Object<'c>) -> Object<'c> {
-    make_struct_union_unique(gc, str)
+/// Force a struct object to be unique: an unboxed or unique struct is returned as it is, and a
+/// shared boxed one is cloned.
+fn make_struct_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    struct_obj: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
+    make_struct_union_unique(gc, struct_obj, state)
 }
 
-// Make struct / union object unique.
-// If it is (unboxed or) unique, do nothing.
-// If it is shared, clone the object.
-fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<'c>) -> Object<'c> {
+/// Force a struct or union object to be unique: an unboxed or unique object is returned as it is,
+/// and a shared boxed one is cloned.
+fn make_struct_union_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    mut obj: Object<'c>,
+    state: RcState,
+) -> Object<'c> {
     assert!(obj.ty.is_union(gc.type_env()) || obj.ty.is_struct(gc.type_env()));
 
     let is_unbox = obj.ty.is_unbox(gc.type_env());
@@ -4877,7 +5681,7 @@ fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<
 
     // Branch by if refcnt is one.
     let obj_ptr = obj.value(gc).into_pointer_value();
-    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr, state);
     let end_bb = gc
         .context
         .append_basic_block(unique_bb.get_parent().unwrap(), "end_bb");
@@ -4888,15 +5692,15 @@ fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<
     // Create new object and clone fields.
     let cloned_obj = create_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
     let cloned_obj = if obj.ty.is_struct(gc.type_env()) {
-        ObjectFieldType::clone_struct(gc, &obj, cloned_obj)
+        ObjectFieldType::clone_struct(gc, &obj, cloned_obj, state)
     } else if obj.ty.is_union(gc.type_env()) {
-        ObjectFieldType::clone_union(gc, &obj, cloned_obj)
+        ObjectFieldType::clone_union(gc, &obj, cloned_obj, state)
     } else {
         unreachable!()
     };
 
     // Release the old object.
-    gc.release(obj.clone());
+    gc.release(obj.clone(), state);
 
     let cloned_obj_ptr = cloned_obj.value(gc);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
@@ -4930,28 +5734,32 @@ pub struct InlineLLVMStructSetBody {
     // When true, clone the struct first if it is shared, so the write lands in a uniquely owned
     // struct. Set false only where the struct is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructSetBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _str_ty: &Arc<TypeNode>) -> Object<'c> {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
-        let str = gc.get_scoped_obj(&self.struct_name);
+        let struct_obj = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let str = if self.force_unique {
-            make_struct_unique(gc, str)
+        let struct_obj = if self.force_unique {
+            make_struct_unique(gc, struct_obj, assumed_state(self.assume_local))
         } else {
-            str
+            struct_obj
         };
 
         // Release old value
-        let old_value = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
-        gc.release(old_value);
+        let old_value =
+            ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
+        gc.release(old_value, assumed_state(self.assume_local));
 
         // Set new value
-        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &value)
+        ObjectFieldType::move_into_struct_field(gc, struct_obj, self.field_idx as u32, &value)
     }
 
     fn name(&self) -> String {
@@ -4979,6 +5787,16 @@ impl LLVMGen for InlineLLVMStructSetBody {
         unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -4998,6 +5816,36 @@ impl LLVMGen for InlineLLVMStructSetBody {
             STRUCT_SET_STRUCT_ARG,
             STRUCT_SET_VALUE_ARG,
         )
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        replaced_field_locality(
+            result_ty,
+            arg_tys,
+            type_env,
+            self.field_idx as usize,
+            STRUCT_SET_STRUCT_ARG,
+            STRUCT_SET_VALUE_ARG,
+        )
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // The old field value is released whatever `force_unique` says. Out of a boxed struct it is
+        // something the struct reaches; out of an unboxed one it is the struct operand's own leaves
+        // under the replaced field.
+        let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
+        let field = self.field_idx as usize;
+        if arg_tys[STRUCT_SET_STRUCT_ARG].is_box(type_env) {
+            targets.push(RcTarget::Contents(STRUCT_SET_STRUCT_ARG, vec![]));
+        } else {
+            targets.push(RcTarget::Operand(STRUCT_SET_STRUCT_ARG, vec![field]));
+        }
+        targets
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5029,6 +5877,7 @@ pub fn struct_set(
             vec![var_local(STRUCT_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMStructSetBody {
+                    assume_local: false,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
                     field_count,
@@ -5119,6 +5968,31 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         })
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // A boxed union is a fresh allocation holding the operand; an unboxed union lays out its
+        // variants, so the constructed variant's leaves carry the sole operand and the other
+        // variants' leaves are the bottom.
+        if result_ty.is_box(type_env) {
+            return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
+        }
+        let active = self.variant_index();
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            let (k, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed union has a non-empty path");
+            if *k == active {
+                LeafCond::input_leaf(0, rest.to_vec())
+            } else {
+                LeafCond::bottom()
+            }
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -5198,6 +6072,9 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
 pub struct InlineLLVMUnionAsBody {
     union_arg_name: FullName,
     field_idx: usize,
+    /// Whether the objects this op reference-counts inside `generate` are known to be in the local
+    /// reference-counting state, so that those operations need no state dispatch.
+    pub(crate) assume_local: bool,
 }
 
 impl InlineLLVMUnionAsBody {
@@ -5243,7 +6120,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         if borrows {
             ObjectFieldType::get_union_value_noretain_norelease(gc, obj, ty)
         } else {
-            ObjectFieldType::get_union_value(gc, obj, ty)
+            ObjectFieldType::get_union_value(gc, obj, ty, assumed_state(self.assume_local))
         }
     }
 
@@ -5286,6 +6163,37 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         }
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // `as` takes exactly the union, so `arg_tys[0]` is it.
+        read_component_locality(result_ty, arg_tys, type_env, self.variant_index())
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
+    fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
+        // `as` takes exactly the union, so `arg_tys[0]` is it. A borrowed read counts nothing;
+        // otherwise `get_union_value` retains the payload out of a boxed union and releases the
+        // union.
+        let payload_ty = &arg_tys[0].field_types(type_env)[self.field_idx];
+        if Self::borrows_union(payload_ty, type_env) {
+            return vec![];
+        }
+        vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -5300,6 +6208,7 @@ pub fn union_as_body(
     let union_arg_name = FullName::local(union_arg_name);
     expr_llvm(
         Box::new(InlineLLVMUnionAsBody {
+            assume_local: false,
             union_arg_name,
             field_idx,
         }),
@@ -5387,6 +6296,15 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -5448,7 +6366,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
         let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
-        let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty);
+        let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty, RcState::Unknown);
         let value = gc
             .apply_lambda(modifier.clone(), vec![value], false)
             .unwrap();
@@ -5468,7 +6386,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
         // Implement mismatch_bb
         gc.builder().position_at_end(mismatch_bb);
-        gc.release(modifier);
+        gc.release(modifier, RcState::Unknown);
         mismatch_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
@@ -5491,6 +6409,17 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.union_name, &mut self.modifier_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // It applies a function to the payload and puts the result back, and where the tag does not
+        // match it returns the argument union itself. Both rule out `fresh_holding`.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5607,6 +6536,18 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
         Provenance::uniform_bottom(result_ty, type_env)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // It aborts (`unreachable` under `--no-runtime-check`), so there is no result value and every
+        // claim about one holds vacuously. Not `fresh_holding`: its operand is the message's `Array U8`, whose
+        // condition would otherwise flow into the arms joined with this one.
+        ExtShape::bottom(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -5668,6 +6609,16 @@ impl LLVMGen for InlineLLVMHoleBody {
         vec![]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // It emits `unreachable`, so there is no result value.
+        ExtShape::bottom(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -5704,13 +6655,13 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
         let x = gc.get_scoped_obj(&self.x_name);
 
         // Retain "x" around the call so that "f" sees it as shared and cannot mutate it in place.
-        gc.retain(x.clone());
+        gc.retain(x.clone(), RcState::Unknown);
 
         // Call "f" with "x".
         let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
 
         // Release "x".
-        gc.release(x);
+        gc.release(x, RcState::Unknown);
 
         // Return the result.
         ret
@@ -5726,6 +6677,16 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.f_name, &mut self.x_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The result comes out of calling a function operand, whose body may return a global.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5778,10 +6739,29 @@ pub struct InlineLLVMIsUniqueFunctionBody {
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
     /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
     pub(crate) assume_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 /// The operand `is_unique` reports on: the value whose reference count it tests and hands back.
 pub const IS_UNIQUE_VALUE_ARG: usize = 0;
+
+/// The locality of the result of a uniqueness test, `(flag, value)`. The flag holds no boxed leaf,
+/// so every result leaf descends through the value and names the operand's own object. Not `fresh_holding`:
+/// such an op reads the operand's reference count without uniquing it, so a shared or global value
+/// comes straight back out.
+fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        let (field, rest) = path
+            .split_first()
+            .expect("an is_unique result is an unboxed pair, so its leaves have non-empty paths");
+        if *field != IS_UNIQUE_VALUE_FIELD {
+            unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
+        }
+        LeafCond::input_leaf(IS_UNIQUE_VALUE_ARG, rest.to_vec())
+    })
+}
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
@@ -5811,7 +6791,8 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+            let (unique_bb, shared_bb) =
+                gc.build_branch_by_is_unique(obj_ptr, assumed_state(self.assume_local));
             // Add continuing basic block.
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
@@ -5866,6 +6847,27 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // `is_unique` reads the count and hands the value back, so it has no clone path and counts
+        // no reference. The default would give it the clone path's targets, whose deep requirement
+        // would then withhold the annotation from a container holding a global.
+        vec![]
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.assume_unique = true;
@@ -5886,6 +6888,15 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         // the argument a passthrough here would suppress that retain and report a shared container
         // as unique.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        is_unique_result_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5915,6 +6926,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMIsUniqueFunctionBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -5939,6 +6951,9 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
     /// As in `InlineLLVMIsUniqueFunctionBody`: set where the caller proved the array statically
     /// unique, so the runtime check is dropped and the flag is the constant `true`.
     pub(crate) assume_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -5968,7 +6983,8 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
                 .into_pointer_value();
             let current_func = gc.current_function();
 
-            let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(storage_ptr);
+            let (unique_bb, shared_bb) =
+                gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local));
             let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
 
             gc.builder().position_at_end(unique_bb);
@@ -6021,6 +7037,26 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         unique_check_on_boxed_leaf(IS_UNIQUE_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
+    fn internal_rc_targets(
+        &self,
+        _arg_tys: &[Arc<TypeNode>],
+        _type_env: &TypeEnv,
+    ) -> Vec<RcTarget> {
+        // As in `InlineLLVMIsUniqueFunctionBody`: reading the count counts no reference, so the
+        // clone path's targets the default would supply are not this op's.
+        vec![]
+    }
+
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.assume_unique = true;
@@ -6039,6 +7075,15 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        is_unique_result_locality(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -6055,6 +7100,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             Box::new(InlineLLVMArrayIsStorageUniqueBody {
+                assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -6118,6 +7164,15 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.val_name, &mut self.ios_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6197,6 +7252,17 @@ impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
         vec![&mut self.ptr_name, &mut self.ios_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // A door out of the local state: the value is rebuilt from a raw pointer, which says
+        // nothing about the state of the graph it names.
+        ExtShape::always(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -6273,7 +7339,7 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
             // Create object.
             let obj = Object::new(obj_ptr, target_ty.clone(), gc);
             // Release object.
-            gc.release(obj);
+            gc.release(obj, RcState::Unknown);
             // Return.
             gc.builder().build_return(None).unwrap();
 
@@ -6301,6 +7367,15 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6375,7 +7450,7 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
             // Create object.
             let obj = Object::new(obj_ptr, target_ty, gc);
             // retain object.
-            gc.retain(obj);
+            gc.retain(obj, RcState::Unknown);
             // Return.
             gc.builder().build_return(None).unwrap();
 
@@ -6403,6 +7478,15 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6474,6 +7558,15 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -6529,6 +7622,9 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
     /// one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -6542,7 +7638,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique);
+        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -6585,6 +7681,16 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -6604,6 +7710,21 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        mutated_in_place_locality(
+            result_ty,
+            arg_tys,
+            type_env,
+            MUTATE_BOXED_VALUE_ARG,
+            &[MUTATE_BOXED_VALUE_FIELD],
+        )
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -6614,21 +7735,114 @@ const MUTATE_BOXED_VALUE_ARG: usize = 0;
 /// The path of that value in the result of `_mutate_boxed_internal`, `(value, action result)`.
 const MUTATE_BOXED_VALUE_FIELD: usize = 0;
 
+/// The locality of the result of an op that hands a callback a raw pointer into a container's
+/// payload and returns that container at `value_path` of its result, alongside the callback's own
+/// result.
+///
+/// The container comes back force-uniqued (or unique by the caller's promise, where the check is
+/// dropped), so its root is local. What it reaches is another matter: the callback may write a
+/// reference to any object through the pointer it was given, so a payload that can hold one loses
+/// the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The callback's
+/// result comes out of an indirect call.
+fn mutated_in_place_locality(
+    result_ty: &Arc<TypeNode>,
+    arg_tys: &[Arc<TypeNode>],
+    type_env: &TypeEnv,
+    value_arg: usize,
+    value_path: &[usize],
+) -> ExtShape {
+    let payload_holds_boxed = arg_tys[value_arg]
+        .field_types(type_env)
+        .iter()
+        .any(|fty| !boxed_leaf_paths(fty, type_env).is_empty());
+    let value_leaf = if payload_holds_boxed {
+        LeafCond::new(ExtCond::bottom(), ExtCond::Always)
+    } else {
+        LeafCond::bottom()
+    };
+    ExtShape::build_shape(result_ty, type_env, &|path| {
+        if path.starts_with(value_path) {
+            value_leaf.clone()
+        } else {
+            LeafCond::always()
+        }
+    })
+}
+
+/// The operand position of the array an `Array::set` writes into.
+const ARRAY_SET_ARRAY_ARG: usize = 0;
+/// The operand position of the value `_unsafe_append_value_capacity_unchecked` fills slots with.
+const APPEND_VALUE_ELEMENT_ARG: usize = 1;
+/// The operand position of the array `_unsafe_append_capacity_bounds_unchecked` reads from.
+const APPEND_RANGE_SRC_ARG: usize = 1;
+
+/// The reference-counting state an op's own checks and reference counting run under: `Local` where
+/// locality inference proved the objects they touch local, `Unknown` otherwise.
+fn assumed_state(assume_local: bool) -> RcState {
+    if assume_local {
+        RcState::Local
+    } else {
+        RcState::Unknown
+    }
+}
+
 /// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
 /// nothing when `force_unique` is false, which is set only where the value is known to be unique.
 fn force_unique_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
     force_unique: bool,
+    state: RcState,
 ) -> Object<'c> {
     if !force_unique {
+        assert_proven_unique(gc, &val);
         return val;
     }
     if val.ty.is_array() {
-        make_array_unique(gc, val)
+        make_array_unique(gc, val, state)
     } else {
-        make_struct_union_unique(gc, val)
+        make_struct_union_unique(gc, val, state)
     }
+}
+
+/// Abort, in compiler development mode, if `val` is shared where the uniqueness analysis proved it
+/// unique.
+///
+/// Dropping the check that clones a shared container is what makes an in-place write legal, so a
+/// wrong proof turns a value another holder can see into one this code overwrites. Between threads
+/// that other holder may be running, which makes the mistake a data race that the write's own thread
+/// never sees. The check the analysis removed is exactly the observation that would have caught it,
+/// so it is made again here, where a violated proof stops at the write rather than at whatever reads
+/// the value later.
+///
+/// Development mode only: this restores the cost the analysis exists to remove.
+fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
+    if !gc.config.develop_mode || !val.is_box(gc.type_env()) {
+        return;
+    }
+    let obj_ptr = val.value(gc).into_pointer_value();
+    let refcnt_ptr = gc.get_refcnt_ptr(obj_ptr);
+    let refcnt = gc
+        .builder()
+        .build_load(refcnt_type(gc.context), refcnt_ptr, "proven_unique_refcnt")
+        .unwrap()
+        .into_int_value();
+    let is_shared = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGT,
+            refcnt,
+            refcnt_type(gc.context).const_int(1, false),
+            "is_shared_though_proven_unique",
+        )
+        .unwrap();
+    build_abort_if(
+        gc,
+        is_shared,
+        RUNTIME_ABORT,
+        &[],
+        "shared_though_proven_unique",
+    );
 }
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
@@ -6655,6 +7869,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(VAL_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
+                    assume_local: false,
                     val_name: FullName::local(VAL_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
                     force_unique: true,
@@ -6676,6 +7891,9 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     iostate_name: FullName,
     /// As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -6690,7 +7908,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique);
+        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -6747,6 +7965,16 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -6764,6 +7992,21 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         Provenance::fresh_under(
             result_ty,
             type_env,
+            &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
+        )
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        mutated_in_place_locality(
+            result_ty,
+            arg_tys,
+            type_env,
+            MUTATE_BOXED_VALUE_ARG,
             &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
         )
     }
@@ -6805,6 +8048,7 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_llvm(
             Box::new(InlineLLVMUnsafeMutateBoxedIOSInternalBody {
+                assume_local: false,
                 io_act_name: FullName::local(IO_ACT_NAME),
                 val_name: FullName::local(VAL_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
@@ -6862,6 +8106,16 @@ impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
         i == 0
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // The result comes out of calling a function operand, whose body may return a global.
+        ExtShape::always(result_ty, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -6909,6 +8163,9 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
     /// As in `InlineLLVMArrayTruncateBoundsUnchecked`: clone the array when shared so the write lands
     /// in a uniquely owned one. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -6920,7 +8177,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -6962,6 +8219,16 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -6977,6 +8244,15 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         // The array field comes back uniquely owned (cloned when shared, given unique otherwise); the
         // action result comes out of an indirect call and stays `Unknown`.
         Provenance::fresh_under(result_ty, type_env, &[0])
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        mutated_in_place_locality(result_ty, arg_tys, type_env, 0, &[0])
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7007,6 +8283,7 @@ pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMArrayMutateElementsInternalBody {
+                    assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
                     force_unique: true,
@@ -7028,6 +8305,9 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
     iostate_name: FullName,
     /// As in `InlineLLVMArrayMutateElementsInternalBody`.
     pub(crate) force_unique: bool,
+    /// Whether the object this op's declared uniqueness check tests is known to be in the local
+    /// reference-counting state, so that the check reads the count without reading the state.
+    pub(crate) assume_local: bool,
 }
 
 #[typetag::serde]
@@ -7040,7 +8320,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
         let array = if self.force_unique {
-            make_array_unique(gc, array)
+            make_array_unique(gc, array, assumed_state(self.assume_local))
         } else {
             array
         };
@@ -7096,6 +8376,16 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
+    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.assume_local = true;
+        Box::new(c)
+    }
+
+    fn assumes_local(&self) -> bool {
+        self.assume_local
+    }
+
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
@@ -7111,6 +8401,15 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         // As in `InlineLLVMArrayMutateElementsInternalBody`, with the pair wrapped in the threaded
         // `IOState`: result is `(ios, (array, action result))`.
         Provenance::fresh_under(result_ty, type_env, &[1, 0])
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        mutated_in_place_locality(result_ty, arg_tys, type_env, 0, &[1, 0])
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7146,6 +8445,7 @@ pub fn array_mutate_elements_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         ],
         expr_llvm(
             Box::new(InlineLLVMArrayMutateElementsIosInternalBody {
+                assume_local: false,
                 arr_name: FullName::local(ARR_NAME),
                 io_act_name: FullName::local(IO_ACT_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
@@ -7173,6 +8473,15 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7257,6 +8566,15 @@ impl LLVMGen for InlineLLVMDestructorMake {
         Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -7339,7 +8657,8 @@ pub fn run_ios_runner<'b, 'm, 'c>(
         create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
     };
     let ios_res_pair = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
-    let iostate_res = ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1]);
+    let iostate_res =
+        ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1], RcState::Unknown);
     let ios = iostate_res[0].clone();
     let res = iostate_res[1].clone();
     (ios, res)
@@ -7388,6 +8707,16 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
         // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
         // published to other threads, and a write through that handle would race.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        // A door out of the local state: it marks the argument's whole graph threaded.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7576,6 +8905,15 @@ impl LLVMGen for InlineLLVMIntEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -7646,6 +8984,15 @@ impl LLVMGen for InlineLLVMPtrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -7711,6 +9058,15 @@ impl LLVMGen for InlineLLVMFloatEqBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7801,6 +9157,15 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -7871,6 +9236,15 @@ impl LLVMGen for InlineLLVMFloatLessThanBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -7959,6 +9333,15 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8031,6 +9414,15 @@ impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8097,6 +9489,15 @@ impl LLVMGen for InlineLLVMIntAddBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8152,6 +9553,15 @@ impl LLVMGen for InlineLLVMFloatAddBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8220,6 +9630,15 @@ impl LLVMGen for InlineLLVMIntSubBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8275,6 +9694,15 @@ impl LLVMGen for InlineLLVMFloatSubBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8343,6 +9771,15 @@ impl LLVMGen for InlineLLVMIntMulBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8398,6 +9835,15 @@ impl LLVMGen for InlineLLVMFloatMulBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8474,6 +9920,15 @@ impl LLVMGen for InlineLLVMIntDivBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8529,6 +9984,15 @@ impl LLVMGen for InlineLLVMFloatDivBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8605,6 +10069,15 @@ impl LLVMGen for InlineLLVMIntRemBody {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8664,6 +10137,15 @@ impl LLVMGen for InlineLLVMIntNegBody {
         vec![&mut self.rhs_name]
     }
 
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -8712,6 +10194,15 @@ impl LLVMGen for InlineLLVMFloatNegBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -8779,6 +10270,15 @@ impl LLVMGen for InlineLLVMBoolNegBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.rhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {

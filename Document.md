@@ -82,6 +82,7 @@
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
         - [Accessing elements of Fix's array from C](#accessing-elements-of-fixs-array-from-c)
     - [Multithreading](#multithreading)
+        - [Checking for data races](#checking-for-data-races)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
@@ -2452,6 +2453,20 @@ The pointer carries the responsibility for the reference count described in [Man
 
 While another thread holds a reference to a value, the value is shared, so a function such as `Std::Array::set` copies it instead of updating it in place.
 
+### Checking for data races
+
+`--sanitize thread`, or the `sanitize` field of the project file, builds the program with
+[ThreadSanitizer](https://clang.llvm.org/docs/ThreadSanitizer.html), which reports a data race when one occurs while
+the program runs, so that you can check that every value another thread reaches has been passed
+through `Std::mark_threaded`.
+
+`fix run` runs the program the way ThreadSanitizer needs. Run a program built by `fix build` as
+follows on Linux, where ThreadSanitizer requires address space layout randomization to be off:
+
+```
+setarch $(uname -m) -R ./a.out
+```
+
 ## `eval` syntax
 
 The expression `eval {expr0}; {expr1}` evaluates both `{expr0}` and `{expr1}`, and returns the value of `{expr1}`.
@@ -2881,6 +2896,13 @@ The following table shows how each setting is handled.
             <td>Merge (OR)</td>
             <td>Does not affect</td>
             <td>Enable multi-threading</td>
+        </tr>
+        <tr>
+            <td>sanitize</td>
+            <td>--sanitize</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Sanitizer to instrument the program with</td>
         </tr>
         <tr>
             <td>debug</td>

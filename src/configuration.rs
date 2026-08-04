@@ -10,7 +10,9 @@ use crate::constants::{
 use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::misc::{platform_valgrind_supported, warn_msg, Finally, Map};
+use crate::misc::{
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+};
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -111,6 +113,62 @@ impl fmt::Display for ValgrindTool {
         match self {
             ValgrindTool::None => write!(f, "none"),
             ValgrindTool::MemCheck => write!(f, "memcheck"),
+        }
+    }
+}
+
+/// The sanitizer the generated program is instrumented with.
+///
+/// A build asks for at most one: the sanitizers that give a program shadow memory place it at
+/// addresses derived from the program's own, so two of them cannot share a program.
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Sanitizer {
+    /// Generate the program as it is built for use.
+    None,
+    /// Instrument every memory access so that ThreadSanitizer can report data races.
+    Thread,
+}
+
+impl fmt::Display for Sanitizer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Sanitizer::None => write!(f, "none"),
+            Sanitizer::Thread => write!(f, "thread"),
+        }
+    }
+}
+
+impl Sanitizer {
+    /// What instrumenting a module for this sanitizer takes: the function attribute the passes look
+    /// for, and the passes themselves.
+    ///
+    /// The two travel together because a pass without its attribute rewrites nothing.
+    pub fn instrumentation(&self) -> Option<(&'static str, &'static [&'static str])> {
+        match self {
+            Sanitizer::None => None,
+            // The module pass registers the runtime's initializer; the function pass rewrites the
+            // accesses.
+            Sanitizer::Thread => Some(("sanitize_thread", &["tsan-module", "function(tsan)"])),
+        }
+    }
+
+    /// Whether this platform can build and run a program instrumented with this sanitizer.
+    pub fn platform_supported(&self) -> bool {
+        match self {
+            Sanitizer::None => true,
+            Sanitizer::Thread => platform_thread_sanitizer_supported(),
+        }
+    }
+
+    /// Reads the value a `sanitize` setting names, or reports the names there are.
+    pub fn from_str(name: &str) -> Result<Sanitizer, Errors> {
+        match name {
+            "none" => Ok(Sanitizer::None),
+            "thread" => Ok(Sanitizer::Thread),
+            _ => Err(Errors::from_msg(format!(
+                "Unknown sanitizer \"{}\". Available sanitizers are \"none\" and \"thread\".",
+                name
+            ))),
         }
     }
 }
@@ -287,6 +345,10 @@ pub struct Configuration {
     pub max_cu_size: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,
+    /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
+    /// program that is built, so the project being built decides it, as it does the optimization
+    /// level.
+    pub sanitizer: Sanitizer,
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
     // Regex patterns of disabled CPU features.
@@ -398,6 +460,7 @@ impl Configuration {
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
             valgrind_tool: ValgrindTool::None,
+            sanitizer: Sanitizer::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             disable_cpu_features_regex: vec![],
@@ -721,6 +784,10 @@ impl Configuration {
         hash_source.push_str(&self.fix_opt_level.to_string());
         hash_source.push_str(&self.debug_info.to_string());
         hash_source.push_str(&self.threaded.to_string());
+        // The instrumentation is part of the code that is generated, so an object built without it
+        // cannot stand in for one built with it. Leaving this out would let a build reuse
+        // uninstrumented objects and report a clean run of a program nothing was checking.
+        hash_source.push_str(&self.sanitizer.to_string());
         hash_source.push_str(&self.backtrace.to_string());
         hash_source.push_str(&self.no_runtime_check.to_string());
         hash_source.push_str(&self.skip_eval.to_string());
@@ -751,7 +818,7 @@ impl Configuration {
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
     /// configuration and for the errors the Fix runtime's memory management can produce.
-    pub fn valgrind_command(&self) -> Result<Command, Errors> {
+    fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
         let which_output = Command::new("which").arg("valgrind").output();
         if which_output.is_err() || !which_output.unwrap().status.success() {
@@ -798,6 +865,64 @@ impl Configuration {
         } else {
             Linkage::Internal
         }
+    }
+
+    /// Instrument the generated program with `sanitizer`.
+    ///
+    /// A sanitizer this platform cannot provide is an error. Everything else here works to keep a
+    /// build from calling itself sanitized while carrying no instrumentation, and quietly dropping
+    /// the setting is that same failure arriving through the front door. A test that wants the
+    /// instrumentation asks `platform_thread_sanitizer_supported` first and says that it skipped.
+    pub fn set_sanitizer(&mut self, sanitizer: Sanitizer) -> Result<&mut Configuration, Errors> {
+        if !sanitizer.platform_supported() {
+            return Err(Errors::from_msg(format!(
+                "The `{}` sanitizer is not available on this platform.",
+                sanitizer
+            )));
+        }
+        self.sanitizer = sanitizer;
+        Ok(self)
+    }
+
+    /// Whether the settings this configuration carries can be met together.
+    ///
+    /// An instrumented program brings its own runtime, which lays out memory the way the sanitizer
+    /// needs. Valgrind gives the program a machine of its own instead, and the two arrangements do
+    /// not survive each other: the instrumented program dies at startup with a message that names
+    /// neither setting.
+    pub fn validate_run_settings(&self) -> Result<(), Errors> {
+        if self.sanitizer != Sanitizer::None && self.valgrind_tool != ValgrindTool::None {
+            return Err(Errors::from_msg(format!(
+                "A program instrumented with the `{}` sanitizer cannot also be run under {}. \
+                 Choose one of the two.",
+                self.sanitizer, self.valgrind_tool
+            )));
+        }
+        Ok(())
+    }
+
+    /// The command that runs the built program at `exec_path`, under whatever the run settings ask
+    /// to run it under.
+    pub fn program_run_command(&self, exec_path: &str) -> Result<Command, Errors> {
+        assert!(
+            self.validate_run_settings().is_ok(),
+            "the run settings pick at most one of valgrind and a sanitizer"
+        );
+        if self.valgrind_tool != ValgrindTool::None {
+            let mut com = self.valgrind_command()?;
+            com.arg(exec_path);
+            return Ok(com);
+        }
+        if self.sanitizer != Sanitizer::None {
+            // A sanitizer maps its shadow memory to addresses it derives from the program's own, so
+            // it needs the program where it expects to find it. `setarch -R` lays the address space
+            // out the same way on every run, which is what lets the sanitizer start. A program built
+            // by `fix build` is run by hand, so the same wrapper is what its user writes.
+            let mut com = Command::new("setarch");
+            com.arg(env::consts::ARCH).arg("-R").arg(exec_path);
+            return Ok(com);
+        }
+        Ok(Command::new(exec_path))
     }
 
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {

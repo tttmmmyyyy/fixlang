@@ -1,21 +1,32 @@
-"""Measure a case's C or Rust counterpart the way the case itself is measured.
+"""Build and measure a case's C or Rust counterpart the way the case itself is measured.
 
 A case may carry `ref.c` and `ref.rs`: the same program on the same input, checking the
-same answer. Measured under the same cachegrind, they give the Fix line a reference to be
-read against -- how far the language is from C on that program, tracked over time rather
-than sampled once.
+same answer. Measured under the same cachegrind and the same hardware counters, they give
+the Fix line a reference to be read against -- how far the language is from C on that
+program, tracked over time rather than sampled once.
 
-Run from inside a case directory. Prints `<inst>,<mem>`, or exits 2 when the case carries
-no counterpart for the language asked for.
+Building and measuring are separate commands so that the harness can get every build out
+of the way before it reads a counter: the cycle count is dropped on a machine that is busy,
+and a compiler running between two measurements is what makes it busy.
 
-    python3 reference.py <c|rust>
+Run from inside a case directory. Exits 2 when the case carries no counterpart for the
+language asked for.
+
+    python3 reference.py build <c|rust>
+    python3 reference.py measure <c|rust> [--repeat N]
+
+`measure` prints `<inst>,<mem>,<splits>,<cycles>,<contention>`. The last three come back
+empty, empty and `0.00` where the hardware counters are out of reach, as they do for the case
+itself.
 """
 
 import subprocess
 import sys
 from pathlib import Path
 
-CACHEGRIND = Path(__file__).resolve().parent / "cachegrind-benchmarking" / "cachegrind.py"
+HERE = Path(__file__).resolve().parent
+CACHEGRIND = HERE / "cachegrind-benchmarking" / "cachegrind.py"
+PERF_COUNTERS = HERE / "perf_counters.py"
 
 # The Fix case is built for this host with avx512 left out, since cachegrind cannot
 # simulate it. The counterparts get the same deal, so the comparison is between the
@@ -27,27 +38,64 @@ BUILD = {
 }
 
 
-def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in BUILD:
-        sys.exit("usage: reference.py <c|rust>")
-    command, source, binary = BUILD[sys.argv[1]]
+def source_and_binary(language):
+    """The counterpart's source file and program file for `language`, exiting 2 where this
+    case carries no counterpart in it."""
+    _command, source, binary = BUILD[language]
     if not Path(source).exists():
         sys.exit(2)
+    return source, binary
 
-    build = subprocess.run(command, capture_output=True, text=True)
-    if build.returncode != 0:
-        sys.exit(f"building {source} failed:\n{build.stderr.strip()}")
 
+def build(language):
+    """Compile the counterpart for `language`."""
+    command, source, _binary = BUILD[language]
+    source_and_binary(language)
+    built = subprocess.run(command, capture_output=True, text=True)
+    if built.returncode != 0:
+        sys.exit(f"building {source} failed:\n{built.stderr.strip()}")
+
+
+def measure(language, repeat):
+    """The counters for the counterpart of `language`, as one
+    `<inst>,<mem>,<splits>,<cycles>,<contention>` line.
+
+    # Arguments
+    * `repeat` - how many times the hardware counters are read; the cycle count reported is
+      the lowest of them.
+    """
+    _source, binary = source_and_binary(language)
     # The counterpart checks its own answer, so a reference that drifted away from the case
     # fails here instead of quietly becoming a number on the chart.
-    measured = subprocess.run(["python3", str(CACHEGRIND), f"./{binary}"],
-                              capture_output=True, text=True)
-    if measured.returncode != 0:
-        sys.exit(f"measuring {binary} failed:\n{measured.stderr.strip()}")
-    last = measured.stdout.strip().splitlines()[-1]
-    if len(last.split(",")) != 2:
-        sys.exit(f"measuring {binary} produced \"{last}\"")
-    print(last)
+    simulated = subprocess.run(["python3", str(CACHEGRIND), f"./{binary}"],
+                               capture_output=True, text=True)
+    if simulated.returncode != 0:
+        sys.exit(f"measuring {binary} failed:\n{simulated.stderr.strip()}")
+    cachegrind = simulated.stdout.strip().splitlines()[-1]
+    if len(cachegrind.split(",")) != 2:
+        sys.exit(f"measuring {binary} produced \"{cachegrind}\"")
+    # A machine without the counters leaves these three fields the way the case's own
+    # measurement leaves them, so a row is short of the same columns on both lines.
+    counted = subprocess.run(
+        ["python3", str(PERF_COUNTERS), "--repeat", str(repeat), f"./{binary}"],
+        capture_output=True, text=True)
+    hardware = counted.stdout.strip() if counted.returncode == 0 else ",,0.00"
+    return f"{cachegrind},{hardware}"
+
+
+def main():
+    argv = sys.argv[1:]
+    repeat = 1
+    if len(argv) >= 2 and argv[-2] == "--repeat":
+        repeat = int(argv[-1])
+        argv = argv[:-2]
+    if len(argv) != 2 or argv[0] not in ("build", "measure") or argv[1] not in BUILD:
+        sys.exit("usage: reference.py build <c|rust>\n"
+                 "       reference.py measure <c|rust> [--repeat N]")
+    if argv[0] == "build":
+        build(argv[1])
+    else:
+        print(measure(argv[1], repeat))
 
 
 main()

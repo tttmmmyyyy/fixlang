@@ -107,7 +107,7 @@ pub enum RcExpr {
     /// whole-container extraction. Representing the whole destructure as one node (rather than
     /// per-field getters) lets that retain be decided once, from the container's liveness after the
     /// destructure, and placed before the extraction.
-    Destructure(RcVar, Vec<(usize, RcVar)>, RcExprNode),
+    Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
     /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
@@ -131,19 +131,43 @@ pub type FieldPath = Vec<usize>;
 /// container, and the path to the leaf within that operand's value. Unlike `VarPath`, `container_index`
 /// is an operand slot (resolved against the op's arguments), not a bound variable name.
 pub struct UniqueCheckOperand {
+    /// The position, among the operation's arguments, of the operand holding the container.
     pub container_index: usize,
+    /// The path from the root of that operand's value down to the checked boxed leaf.
     pub path: FieldPath,
 }
 
-/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, and the arm
-/// body, whose value is its final `Ret`. `tag` is `Some` for a variant arm, whose payload is that
-/// variant's value; it is `None` for a catch-all arm, whose payload is the whole scrutinee.
+/// A value an inline-LLVM operation reference-counts inside its own `generate`, named the way the
+/// operation sees it. Locality inference resolves each against the operation's operands and result,
+/// and annotates the operation only where all of them are local.
+pub enum RcTarget {
+    /// A boxed leaf of the result, under this path — an element, field or payload the operation
+    /// retained on its way out of a container.
+    Result(FieldPath),
+    /// A boxed leaf of operand `.0`, under the path — a container the operation released.
+    Operand(usize, FieldPath),
+    /// What operand `.0`'s leaf at the path reaches — an element the operation overwrote or dropped,
+    /// or one it retain-copied while cloning a shared container. Such a value is no variable of the
+    /// IR, so the judgement is the operand leaf's deep fact.
+    Contents(usize, FieldPath),
+}
+
+/// One arm of a `Match`: the variant it matches, the variable its payload is bound to, the state of
+/// the payload it retains out of a boxed union, and the arm body, whose value is its final `Ret`.
+/// `tag` is `Some` for a variant arm, whose payload is that variant's value; it is `None` for a
+/// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
 #[derive(Clone)]
 pub struct MatchArm {
+    /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
+    /// The variable `body` reads the matched value through.
     pub payload: RcVar,
+    /// What is known about the payload a variant arm of a boxed union retains out of the container.
+    /// A catch-all arm binds the scrutinee itself and retains nothing, so its state is `Unknown`.
+    pub payload_state: RcState,
+    /// The expression this arm evaluates to, in the scope extended with `payload`.
     pub body: RcExprNode,
 }
 
@@ -169,17 +193,47 @@ pub enum RcRhs {
 }
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
-/// which is always sound; later state inference can specialize it.
+/// which is always sound; locality inference specializes it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
     Unknown,
-    /// Known local: non-atomic increment/decrement, no state check.
+    /// Known local: non-atomic increment/decrement on the object itself, no state check. What it
+    /// reaches is unknown, so the traverser a release runs at zero still dispatches per child.
     Local,
+    /// Known local, and so is everything reachable from it.
+    DeepLocal,
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
     /// Known global: a no-op, emitting no code.
     Global,
+}
+
+impl RcState {
+    /// Whether code generation must read the object's state byte to decide how to count it.
+    pub fn dispatches(self) -> bool {
+        match self {
+            RcState::Unknown => true,
+            RcState::Local | RcState::DeepLocal => false,
+            RcState::Threaded | RcState::Global => unreachable!(
+                "no pass produces {:?}; code generation for it is not implemented",
+                self
+            ),
+        }
+    }
+
+    /// The suffix a reference-counting helper generated under this state carries in its name. The
+    /// helpers and traversers are memoized by name, so this is what keys one per (type, state) and
+    /// gives the states that generate the same code a single definition.
+    pub fn name_suffix(self) -> &'static str {
+        if self.dispatches() {
+            ""
+        } else {
+            // A `DeepLocal` release could also drop the dispatch on the objects it reaches; until
+            // the stateless traverser exists it emits the `Local` code, so the two share a helper.
+            "_local"
+        }
+    }
 }
 
 /// The ownership of a single reference-counting unit. `Own` receives ownership: the callee consumes it (by

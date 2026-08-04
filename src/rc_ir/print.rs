@@ -189,17 +189,18 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out.push_str(&expr_to_string(cont, level, ann));
             out
         }
-        RcExpr::Destructure(container, fields, cont) => {
+        RcExpr::Destructure(container, fields, state, cont) => {
             let binds = fields
                 .iter()
                 .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var, ann)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let mut out = format!(
-                "{}destructure {} {{ {} }}\n",
+                "{}destructure {} {{ {} }}{}\n",
                 ind,
                 var_name(container),
-                binds
+                binds,
+                state_to_string(state)
             );
             out.push_str(&expr_to_string(cont, level, ann));
             out
@@ -224,8 +225,15 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
             format!("closure {}[{}]", func.name.name.to_string(), operands(caps))
         }
         RcRhs::Llvm(llvm_gen, _args) => {
-            // The op's name spells out its operands, so it is the whole right-hand side here.
-            llvm_gen.name()
+            // The op's name spells out its operands, so it is the whole right-hand side here. A
+            // trailing `@local` says locality inference proved the objects the op's own checks and
+            // reference counting touch to be local.
+            let mark = if llvm_gen.assumes_local() {
+                " @local"
+            } else {
+                ""
+            };
+            format!("{}{}", llvm_gen.name(), mark)
         }
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));
@@ -235,10 +243,11 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
                     None => "_".to_string(),
                 };
                 out.push_str(&format!(
-                    "{}case {}({}):\n",
+                    "{}case {}({}):{}\n",
                     indent(level + 1),
                     variant,
-                    var_to_string(&arm.payload, ann)
+                    var_to_string(&arm.payload, ann),
+                    state_to_string(&arm.payload_state)
                 ));
                 out.push_str(&expr_to_string(&arm.body, level + 2, ann));
             }
@@ -259,12 +268,13 @@ fn path_to_string(path: &FieldPath) -> String {
     path.iter().map(|i| format!(".{}", i)).collect::<String>()
 }
 
-/// A known reference-counting state renders as a trailing `@local` / `@threaded` / `@global` tag;
-/// `Unknown` renders as the empty string.
+/// A known reference-counting state renders as a trailing `@local` / `@deeplocal` / `@threaded` /
+/// `@global` tag; `Unknown` renders as the empty string.
 fn state_to_string(state: &RcState) -> String {
     match state {
         RcState::Unknown => String::new(),
         RcState::Local => " @local".to_string(),
+        RcState::DeepLocal => " @deeplocal".to_string(),
         RcState::Threaded => " @threaded".to_string(),
         RcState::Global => " @global".to_string(),
     }

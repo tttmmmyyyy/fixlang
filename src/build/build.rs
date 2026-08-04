@@ -1,5 +1,5 @@
 use crate::build::build_object_files::build_object_files;
-use crate::configuration::{Configuration, LinkType, OutputFileType};
+use crate::configuration::{Configuration, LinkType, OutputFileType, Sanitizer};
 use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
@@ -8,25 +8,77 @@ use build_time::build_time_utc;
 use rand::Rng;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Run `gcc` as prepared in `com`, passing on whatever it writes to standard error.
+/// The C compiler a build drives, prepared with the flags the configuration calls for.
+///
+/// A sanitized build goes through clang. The instrumentation the code generator inserts calls into
+/// the sanitizer runtime, which ships with clang, and clang is what knows where to find it and how
+/// to link it. Every other build goes through gcc.
+fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
+    match config.sanitizer {
+        Sanitizer::None => Ok(Command::new("gcc")),
+        Sanitizer::Thread => {
+            let mut com = Command::new(clang_path()?);
+            com.arg("-fsanitize=thread");
+            Ok(com)
+        }
+    }
+}
+
+/// The clang a sanitized build is compiled and linked by.
+///
+/// The instrumentation the code generator inserts calls into the sanitizer runtime, which is
+/// distributed with clang. Taking the clang that sits beside the LLVM this compiler was built
+/// against is what pairs the two: the instrumentation and the runtime answering it come from one
+/// release.
+fn clang_path() -> Result<PathBuf, Errors> {
+    // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
+    // inkwell's `llvm17-0` feature. Raising one without the other leaves this looking for a prefix
+    // nothing sets, so say so rather than reach for whatever clang the path happens to hold.
+    let Some(prefix) = option_env!("LLVM_SYS_170_PREFIX") else {
+        return Err(Errors::from_msg(
+            "This compiler was built without recording where its LLVM lives, so the clang a \
+             sanitized build needs cannot be found. Build it with `LLVM_SYS_170_PREFIX` set."
+                .to_string(),
+        ));
+    };
+    let clang_beside_llvm = Path::new(prefix).join("bin").join("clang");
+    if !clang_beside_llvm.exists() {
+        return Err(Errors::from_msg(format!(
+            "A sanitized build is compiled and linked by the clang beside the LLVM this compiler \
+             was built against, and there is none at `{}`. The sanitizer runtime the \
+             instrumentation calls into is distributed with clang, so the two have to come from \
+             one release.",
+            clang_beside_llvm.display()
+        )));
+    }
+    Ok(clang_beside_llvm)
+}
+
+/// Runs a prepared C compiler command, passing on what it writes to standard error and reporting a
+/// non-zero exit as a failure of `step`.
 ///
 /// # Arguments
 /// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
-///   a failure says which of the compiler's several `gcc` calls it was.
-fn run_gcc(com: &mut Command, step: &str) -> Result<(), Errors> {
-    let output = com
-        .output()
-        .map_err(|e| Errors::from_msg(format!("Failed to {}: {:?}", step, e)))?;
+///   a failure says which of the build's several C compiler calls it was.
+fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
+    let program = com.get_program().to_string_lossy().to_string();
+    let output = com.output().map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to {}: could not run `{}`: {}.",
+            step, program, e
+        ))
+    })?;
     if output.stderr.len() > 0 {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     }
     if !output.status.success() {
         return Err(Errors::from_msg(format!(
-            "Failed to {}: gcc exited with code {}.",
+            "Failed to {}: {} exited with code {}.",
             step,
+            program,
             output.status.code().unwrap_or(-1)
         )));
     }
@@ -88,6 +140,9 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     runtime_obj_hash_source += build_time_utc!();
     runtime_obj_hash_source += &config.runtime_c_macro.join("_");
     runtime_obj_hash_source += config.output_file_type.to_str();
+    // A sanitized build compiles the runtime with the instrumentation, so an object built without it
+    // is a different object.
+    runtime_obj_hash_source += &config.sanitizer.to_string();
     let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
         "fixruntime.{:x}.o",
         md5::compute(runtime_obj_hash_source)
@@ -108,7 +163,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
             runtime_c_path.to_string_lossy().to_string()
         ));
         // Create library object file.
-        let mut com = Command::new("gcc");
+        let mut com = c_compiler_command(&config)?;
         let mut com = com.arg("-ffunction-sections").arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
@@ -125,7 +180,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com = com.arg("-fPIC");
         }
-        run_gcc(com, "compile the runtime")?;
+        run_c_compiler(com, "compile the runtime")?;
 
         // Rename the temporary file to the final file.
         fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
@@ -135,7 +190,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         ));
     }
 
-    let mut com = Command::new("gcc");
+    let mut com = c_compiler_command(&config)?;
     com.arg("-Wno-unused-command-line-argument");
     if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         com.arg("-shared");
@@ -157,7 +212,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     com.arg(runtime_obj_path.to_str().unwrap())
         .args(library_search_path_opts)
         .args(libs_opts);
-    run_gcc(&mut com, "link the output file")?;
+    run_c_compiler(&mut com, "link the output file")?;
 
     Ok(())
 }

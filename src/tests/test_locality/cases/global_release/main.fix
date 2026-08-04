@@ -1,0 +1,18 @@
+module Main;
+
+g : Array I64;
+g = [10, 20, 30];
+
+// Recursive, so it survives inlining and gets a borrow version. Passing the global to that version
+// makes borrow-ification leave a release naming the global itself in the caller.
+tally : I64 -> Array I64 -> I64;
+tally = |i, a| (
+    if i >= a.get_size { 0 };
+    a.@(i) + a.tally(i + 1)
+);
+
+main : IO ();
+main = (
+    let t = g.tally(0);
+    println $ (t + g.get_size).to_string
+);

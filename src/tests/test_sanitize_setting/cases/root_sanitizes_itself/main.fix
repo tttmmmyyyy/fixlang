@@ -1,0 +1,6 @@
+module Main;
+
+import SanitizingLib;
+
+main : IO ();
+main = println(SanitizingLib::doubled(21).to_string);

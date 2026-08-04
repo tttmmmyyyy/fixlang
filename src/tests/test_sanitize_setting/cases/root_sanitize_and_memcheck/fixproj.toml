@@ -1,0 +1,12 @@
+[general]
+name = "root-sanitize-and-memcheck"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]
+sanitize = "thread"
+memcheck = true

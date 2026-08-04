@@ -169,7 +169,7 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
         RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k)
         | RcExpr::Eval(_, k)
-        | RcExpr::Destructure(_, _, k) => for_each_rhs(k, f),
+        | RcExpr::Destructure(_, _, _, k) => for_each_rhs(k, f),
         RcExpr::Ret(_) => {}
     })
 }
@@ -287,7 +287,7 @@ impl<'a> Validator<'a> {
                 self.use_var(&v.name);
                 self.check_expr(k);
             }
-            RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container, fields, _state, k) => {
                 self.use_var(&container.name);
                 for (_, field) in fields {
                     self.bind(&field.name);
@@ -587,11 +587,13 @@ mod tests {
         // let m = match s { _ -> c; 1 -> p }; ret m   (a catch-all arm before a tagged arm)
         let arms = vec![
             MatchArm {
+                payload_state: RcState::Unknown,
                 tag: None,
                 payload: var("c"),
                 body: node(RcExpr::Ret(var("c"))),
             },
             MatchArm {
+                payload_state: RcState::Unknown,
                 tag: Some(1),
                 payload: var("p"),
                 body: node(RcExpr::Ret(var("p"))),
@@ -637,6 +639,7 @@ mod tests {
     fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
         let proj = Box::new(InlineLLVMCaptureProjectBody {
+            assume_local: false,
             cap_name: read_var.name.clone(),
             cap_idx,
             cap_tys,

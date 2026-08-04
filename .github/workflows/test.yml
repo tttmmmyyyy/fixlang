@@ -61,4 +61,40 @@ jobs:
           sudo apt-get install -y valgrind=1:3.22.*
 
       - name: Run tests
-        run: cargo test --release
+        run: cargo test --release -- --skip tests::test_thread_safety
+
+  # ThreadSanitizer instruments every memory access, so a program built with it runs several times
+  # slower. Only the tests that share a value between threads have a race to find, so only they are
+  # built that way; every other test runs in the job above.
+  #
+  # No optimization-level matrix: these tests name the levels they build at, one of them `none` and
+  # one `max`, and `FIX_MAX_OPT_LEVEL` bounds a level from above rather than choosing it, so a
+  # matrix would lower what they asked for instead of adding to it.
+  thread-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install LLVM
+        shell: bash
+        run: |
+          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+          mkdir -p llvm
+          wget -q "$LLVM_URL" -O llvm.tar.xz
+          tar -xf llvm.tar.xz -C llvm --strip-components=1
+          echo "LLVM_SYS_170_PREFIX=${GITHUB_WORKSPACE}/llvm" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev libmpfr-dev lldb
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Run the thread safety tests
+        run: cargo test --release tests::test_thread_safety
