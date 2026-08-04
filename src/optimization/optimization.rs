@@ -1,5 +1,5 @@
 use super::{
-    dead_symbol_elimination, decapturing, defunctionalize_fix, inline, remove_tyanno,
+    closure_specialization, dead_symbol_elimination, defunctionalize_fix, inline, remove_tyanno,
     simplify_symbol_names, uncurry, unwrap_newtype,
 };
 use crate::{
@@ -68,7 +68,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
-    // inlining and decapturing, which would otherwise rewrite the `fix` argument out of the literal
+    // inlining and closure specialization, which would otherwise rewrite the `fix` argument out of
+    // the literal
     // lambda form this pass matches; uncurrying (later) then turns each self-call into a direct call
     // that LLVM folds into a loop.
     if config.enable_defunctionalize_fix() {
@@ -100,12 +101,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform decapturing optimization
-    if config.enable_decapturing_optimization() {
-        let _sw = StopWatch::new("decapturing::run", config.show_build_times);
-        decapturing::run(prg, config.show_build_times);
+    // Lift lambdas to global functions and specialize the functions they are passed to.
+    if config.enable_closure_specialization() {
+        let _sw = StopWatch::new("closure_specialization::run", config.show_build_times);
+        closure_specialization::run(prg, config.show_build_times);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.decapturing", prg.optimization_step));
+            prg.emit_symbols(&format!("{}.closure_specialization", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }

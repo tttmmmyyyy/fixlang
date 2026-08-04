@@ -182,7 +182,7 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted decap lambdas
+        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted lambdas
         // have an extra segment.
         let main = func_block(&dump, "fn Main::main", |n| {
             n.split('#').count() == 3 && n.ends_with("#funptr1")

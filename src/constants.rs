@@ -100,8 +100,8 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
-/// The name of the parameter through which a decaptured lambda receives its capture list.
-pub const DECAP_NAME: &str = "#decap";
+/// The name of the parameter through which a lifted lambda receives its capture list.
+pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";

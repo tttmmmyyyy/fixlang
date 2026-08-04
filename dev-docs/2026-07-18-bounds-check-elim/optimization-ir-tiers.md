@@ -32,7 +32,7 @@ over the result.)
 `Arc<TypeNode>` on every variable and passes receive `&TypeEnv`, so type-directed dispatch
 works there too. And the current AST passes are not lowering prerequisites — lowering
 absorbs `TyAnno` (it lowers through it) and lambda-lifts capturing closures itself, so
-`remove_tyanno` and `decapturing` are optimizations/normalizations placed on the AST by
+`remove_tyanno` and `closure_specialization` are optimizations/normalizations placed on the AST by
 convenience, not necessity. Even a type-*directed* optimization like `optimize_act` (swap
 `act` at functor `Identity`/`Const`/`Tuple2` for a specialized implementation) is really a
 term rewrite — read the monomorphic functor type, change the call target — which the RC IR
@@ -59,7 +59,7 @@ the RC IR. What stays on the AST is the short list above, not "everything type-d
 - **Not "everything to RC IR."** The split is the standard compiler shape: a high-level phase
   for type/representation work, a normalized mid-level IR for the bulk of optimization.
 - **Some passes may exist at both tiers.** Inlining is the clearest case: AST-level inlining
-  feeds `decapturing`'s higher-order specialization (it must run there), while a small
+  feeds `closure_specialization`'s higher-order specialization (it must run there), while a small
   RC-level "inline a funptr called once" pass drives the RC simplifier's fixpoint. Different
   jobs, both legitimate.
 - **Invest in the RC-IR term-rewriting framework.** Today the RC IR has only RC-specific

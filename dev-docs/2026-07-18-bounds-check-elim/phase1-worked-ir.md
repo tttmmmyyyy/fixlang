@@ -22,7 +22,7 @@ fn fold_specialized(#v0 : I64 [acc], #v1 : CapList<arr>, #v2 : RangeIterator) ->
         case 0(p0 : ()):                     release #v1; destructure p0 {}; ret #v0
         case 1(p1 : (RangeIterator, I64)):   destructure p1 { .0 -> iter, .1 -> a };
                                              retain #v1;
-                                             let cb  = decap_lam1(#v1, a, #v0);   // acc + arr[a]
+                                             let cb  = closure_lam1(#v1, a, #v0);   // acc + arr[a]
                                              let rec = fold_specialized(cb, #v1, iter);
                                              ret rec
     }
@@ -60,7 +60,7 @@ fn fold_specialized(acc, cap, iter):
         case 0:  let next' = next+1;
                  let iter' = make_struct(next', end);              // RangeIterator{next+1, end}
                  retain cap;
-                 let cb  = decap_lam1(cap, next, acc);
+                 let cb  = closure_lam1(cap, next, acc);
                  let rec = fold_specialized(cb, cap, iter');
                  ret rec
     }
