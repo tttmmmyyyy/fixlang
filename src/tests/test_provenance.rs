@@ -149,6 +149,10 @@ mod integration_tests {
         block
     }
 
+    /// Verifies which functions get a borrow version and what it buys: a function that only reads
+    /// its array is materialized in an owning and a borrowing version, one that consumes its array
+    /// stays single, a call site routes to the borrowing version, and that version performs no
+    /// reference counting on the borrowed parameter.
     #[test]
     fn test_borrow_rewrite() {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
@@ -182,7 +186,7 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted decap lambdas
+        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted lambdas
         // have an extra segment.
         let main = func_block(&dump, "fn Main::main", |n| {
             n.split('#').count() == 3 && n.ends_with("#funptr1")

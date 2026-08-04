@@ -7,7 +7,7 @@ use crate::constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL,
     OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
-use crate::elaboration::typecheckcache::{self, TypeCheckCache};
+use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
@@ -468,7 +468,7 @@ impl Configuration {
             disable_cpu_features_regex: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
-            type_check_cache: Arc::new(typecheckcache::FileCache::new()),
+            type_check_cache: Arc::new(FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_override: None,
             run_program_args: vec![],
@@ -710,7 +710,7 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn enable_decapturing_optimization(&self) -> bool {
+    pub fn enable_closure_specialization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
@@ -718,17 +718,17 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function
-    /// only reads, then cancels the reference counting the borrow makes net-zero. Its full benefit
-    /// relies on decapturing and inlining (which are also `Max`-only), and it adds compile-time
+    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
+    /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
+    /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
-    /// It composes with the same decapturing that borrow-ification needs — a specialized loop's body
-    /// is a known function whose union it can cancel — so it shares that opt-level threshold.
+    /// It composes with the same closure specialization that borrow-ification needs — a specialized
+    /// loop's body is a known function whose union it can cancel — so it shares that threshold.
     pub fn enable_simplify(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }

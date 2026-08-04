@@ -1,6 +1,7 @@
 use super::{
-    dead_symbol_elimination, decapturing, defunctionalize_fix, inline, inline_local, optimize_act,
-    remove_hktvs, remove_tyanno, simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
+    closure_specialization, dead_symbol_elimination, defunctionalize_fix, inline, inline_local,
+    optimize_act, remove_hktvs, remove_tyanno, simplify_symbol_names, skip_eval, uncurry,
+    unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -60,9 +61,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     );
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
-    // inlining and decapturing, which would otherwise rewrite the `fix` argument out of the literal
-    // lambda form this pass matches; uncurrying (later) then turns each self-call into a direct call
-    // that LLVM folds into a loop.
+    // inlining and closure specialization, which would otherwise rewrite the `fix` argument out of
+    // the literal lambda form this pass matches; uncurrying (later) then turns each self-call into a
+    // direct call that LLVM folds into a loop.
     run_pass(
         prg,
         config,
@@ -90,9 +91,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_decapturing_optimization(),
-        "decapturing",
-        |prg| decapturing::run(prg, config.show_build_times),
+        config.enable_closure_specialization(),
+        "closure_specialization",
+        |prg| closure_specialization::run(prg, config.show_build_times),
     );
 
     run_pass(

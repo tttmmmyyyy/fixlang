@@ -1,9 +1,7 @@
 // Shared machinery for lifting a lambda that captures local variables into a global function: the
 // unboxed struct that threads the captured environment through the call, and generation of a
-// collision-free global name for the lifted function. `decapturing` and `defunctionalize_fix` both
-// lift lambdas this way and build on these.
-
-use std::sync::Arc;
+// collision-free global name for the lifted function. `closure_specialization` and
+// `defunctionalize_fix` both lift lambdas this way and build on these.
 
 use crate::{
     ast::{
@@ -16,6 +14,7 @@ use crate::{
     constants::STD_NAME,
     misc::Set,
 };
+use std::sync::Arc;
 
 // The unboxed struct that carries a lambda's captured environment across the call to its lifted
 // global function. The type constructor is named `{prefix}<{signature}>`, where `signature` encodes
@@ -23,13 +22,22 @@ use crate::{
 // while callers using different prefixes keep their capture structs distinct.
 pub struct CaptureStruct {
     pub tycon: Arc<TyCon>,
+    // The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
+    // The type of a capture struct value, i.e. `tycon` applied to no arguments.
     pub ty: Arc<TypeNode>,
     // Captured names paired with their types, in the caller's order.
     fields: Vec<(FullName, Arc<TypeNode>)>,
 }
 
 impl CaptureStruct {
+    // Build the capture struct carrying `fields`. It only describes the type; the caller registers
+    // `tycon_info` into the program's type environment.
+    //
+    // # Arguments
+    // * `prefix` - the head of the type constructor's name, which keeps the capture structs of one
+    //   caller distinct from those of another that captures the same fields.
+    // * `fields` - the captured names paired with their types, in the order the struct holds them.
     pub fn new(prefix: &str, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let signature = fields
             .iter()

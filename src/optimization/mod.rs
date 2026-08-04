@@ -1,7 +1,7 @@
 mod application_inlining;
 mod capture_struct;
+mod closure_specialization;
 mod dead_symbol_elimination;
-mod decapturing;
 mod defunctionalize_fix;
 #[allow(dead_code)]
 mod eta_expansion;

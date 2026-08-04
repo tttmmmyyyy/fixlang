@@ -1,0 +1,9 @@
+module Main;
+
+// `fold` receives a lambda that captures `n`, which is the shape both techniques of the pass act
+// on: the lambda is lifted to a global function, and `fold` is copied into a version that calls
+// that function by name.
+main : IO () = (
+    let n = 3;
+    println(Iterator::range(0, 10).fold(0, |i, acc| acc + i * n).to_string)
+);
