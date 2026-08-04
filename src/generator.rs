@@ -1431,7 +1431,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Whether `ty` holds more than `limit` scalars, counting through nested structs. A non-struct
-    // type is one scalar and a zero-sized type is none.
+    // type is one scalar -- an array included, however many elements it holds -- and a zero-sized
+    // type is none; see `MAX_SPLIT_SCALARS` for what that count is of.
     //
     // A type whose fields nest holds a number of scalars exponential in the nesting depth, so the
     // count stops as soon as it settles the answer: counting the rest would cost what the limit is

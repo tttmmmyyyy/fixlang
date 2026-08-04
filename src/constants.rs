@@ -147,6 +147,13 @@ pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
 // into and carried as separate LLVM values, above which it stays one aggregate wherever it is
 // carried.
 //
+// A scalar here is one LLVM value: a struct contributes the scalars of its fields, and everything
+// else is one, an array included however many elements it holds. That is the quantity this limit
+// exists to bound -- the LLVM values a Fix value occupies, which is what a union's payload buffer
+// costs whatever its width. `return_abi.rs`'s `demand_of` counts the same array element by element,
+// because it answers the other question: how many registers the return lowering asks for, and that
+// lowering flattens an array into its elements.
+//
 // Splitting is what keeps a loop-carried field visible to LLVM (see `Generator::type_parts`), and
 // the widest type in the benchmark suite holds 21 scalars, the widest across the minilib libraries
 // 37, so this is well above what real code splits. Above it the count is what matters: a value of
