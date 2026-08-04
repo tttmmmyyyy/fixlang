@@ -20,10 +20,10 @@ mod integration_tests {
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let mut cases = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cases.push("src/tests/test_closure_specialization/cases");
+        let mut cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        cases_dir.push("src/tests/test_closure_specialization/cases");
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        copy_dir_recursive(&cases, &temp_dir.path().to_path_buf())
+        copy_dir_recursive(&cases_dir, &temp_dir.path().to_path_buf())
             .expect("Failed to copy test cases");
         let project_dir = temp_dir.path().join(case);
         (temp_dir, project_dir)
@@ -75,12 +75,12 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
-    /// The names of the functions in `dump` whose name carries `suffix`.
-    fn functions_named_with<'a>(dump: &'a str, suffix: &str) -> Vec<&'a str> {
+    /// The names of the functions in `dump` whose name contains `name_part`.
+    fn functions_named_with<'a>(dump: &'a str, name_part: &str) -> Vec<&'a str> {
         dump.lines()
             .filter_map(|line| line.strip_prefix("fn "))
-            .map(|line| line.split('(').next().unwrap().trim())
-            .filter(|name| name.contains(suffix))
+            .map(|rest| rest.split('(').next().unwrap().trim())
+            .filter(|name| name.contains(name_part))
             .collect()
     }
 
