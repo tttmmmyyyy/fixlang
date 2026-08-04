@@ -238,13 +238,12 @@ pub fn run_one(
         sym.expr = Some(trav_res.expr);
         specializations.append(&mut visitor.required_specializations); // Specialization requests are processed later
 
-        // Extract the generated decaptured lambdas and type constructors
-        for decap_lam in visitor.decap_lambdas {
-            let decap_lam_sym = decap_lam.make_symbol();
-            global_names.insert(decap_lam_sym.name.clone());
-            new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
-            new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
-        }
+        register_decaptured_lambdas(
+            visitor.decap_lambdas,
+            &mut new_symbols,
+            &mut global_names,
+            &mut new_tycons,
+        );
 
         new_symbols.insert(name.clone(), sym.clone());
     }
@@ -298,13 +297,12 @@ pub fn run_one(
             let trav_res = visitor.traverse(&expr);
             let expr = trav_res.expr;
 
-            // Extract the generated decaptured lambdas and type constructors
-            for decap_lam in visitor.decap_lambdas {
-                let decap_lam_sym = decap_lam.make_symbol();
-                global_names.insert(decap_lam_sym.name.clone());
-                symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
-                new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
-            }
+            register_decaptured_lambdas(
+                visitor.decap_lambdas,
+                &mut symbols,
+                &mut global_names,
+                &mut new_tycons,
+            );
 
             // Register the specialized function
             let specialized_func = Symbol {
@@ -326,6 +324,22 @@ pub fn run_one(
     prg.type_env.add_tycons(new_tycons);
     prg.symbols = symbols;
     changed
+}
+
+// Register the global function each decaptured lambda became into `symbols` and `global_names`, and
+// the type constructor of its capture list into `new_tycons`.
+fn register_decaptured_lambdas(
+    decap_lambdas: Vec<DecapturedLambdaInfo>,
+    symbols: &mut Map<FullName, Symbol>,
+    global_names: &mut Set<FullName>,
+    new_tycons: &mut Map<TyCon, TyConInfo>,
+) {
+    for decap_lam in decap_lambdas {
+        let decap_lam_sym = decap_lam.make_symbol();
+        global_names.insert(decap_lam_sym.name.clone());
+        symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+        new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
+    }
 }
 
 // Compute the set of specializable functions.
