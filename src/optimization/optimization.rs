@@ -9,6 +9,8 @@ use crate::{
     tool::stopwatch::StopWatch,
 };
 
+// Run the AST-level optimization passes over `prg`, each one gated by the optimization level in
+// `config`. The order is fixed: several of the passes rely on the shape an earlier one leaves.
 pub fn run(prg: &mut Program, config: &Configuration) {
     let _sw = StopWatch::new("optimization::run", config.show_build_times);
 

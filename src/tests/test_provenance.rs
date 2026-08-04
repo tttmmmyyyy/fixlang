@@ -149,6 +149,10 @@ mod integration_tests {
         block
     }
 
+    /// Verifies which functions get a borrow version and what it buys: a function that only reads
+    /// its array is materialized in an owning and a borrowing version, one that consumes its array
+    /// stays single, a call site routes to the borrowing version, and that version performs no
+    /// reference counting on the borrowed parameter.
     #[test]
     fn test_borrow_rewrite() {
         let (_temp_dir, project_dir) = setup_test_env("ownership");

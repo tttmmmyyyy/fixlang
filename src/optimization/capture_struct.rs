@@ -22,13 +22,22 @@ use std::sync::Arc;
 // while callers using different prefixes keep their capture structs distinct.
 pub struct CaptureStruct {
     pub tycon: Arc<TyCon>,
+    // The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
+    // The type of a capture struct value, i.e. `tycon` applied to no arguments.
     pub ty: Arc<TypeNode>,
     // Captured names paired with their types, in the caller's order.
     fields: Vec<(FullName, Arc<TypeNode>)>,
 }
 
 impl CaptureStruct {
+    // Build the capture struct carrying `fields`. It only describes the type; the caller registers
+    // `tycon_info` into the program's type environment.
+    //
+    // # Arguments
+    // * `prefix` - the head of the type constructor's name, which keeps the capture structs of one
+    //   caller distinct from those of another that captures the same fields.
+    // * `fields` - the captured names paired with their types, in the order the struct holds them.
     pub fn new(prefix: &str, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let signature = fields
             .iter()
