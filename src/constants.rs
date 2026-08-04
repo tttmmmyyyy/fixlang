@@ -100,16 +100,16 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
-/// The name of the parameter through which a lifted lambda receives its capture list.
+/// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
-/// The suffix, followed by a counter, of the global function a lifted lambda becomes.
-pub const CLOSURE_LAM_NAME: &str = "#closure_lam";
-/// The suffix, followed by a hash of which argument received which lifted lambda, of a function
-/// specialized on the lambdas passed to it.
-pub const CLOSURE_SPEC_NAME: &str = "#closure_spec";
-/// The suffix of the local binding holding the call of a lifted lambda, which an inline-LLVM
+/// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
+pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
+/// The suffix, followed by a hash of which argument received which decaptured lambda, of a
+/// function specialized on the lambdas passed to it.
+pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
+/// The suffix of the local binding holding the call of a decaptured lambda, which an inline-LLVM
 /// expression reads in place of the variable that held the lambda's capture list.
-pub const CLOSURE_CALL_LAM_NAME: &str = "#closure_call_lam";
+pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";

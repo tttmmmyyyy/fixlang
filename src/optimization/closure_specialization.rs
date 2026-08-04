@@ -12,7 +12,8 @@ use crate::{
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
     constants::{
-        CAP_NAME, CLOSURE_CALL_LAM_NAME, CLOSURE_CAP_NAME, CLOSURE_LAM_NAME, CLOSURE_SPEC_NAME,
+        CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
+        CLOSURE_SPEC_SUFFIX,
     },
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
@@ -123,13 +124,13 @@ Example: `let (_, f) = (0, |acm, i| acm + i); iter.fold(s0, f)`
 
 The names carry one `#closure` stem, so that a dump says which pass produced them:
 
-* `<symbol>#closure_lam<n>` — the global function a lifted lambda becomes.
+* `<symbol>#closure_lam<n>` — the global function a decaptured lambda becomes.
 * `<symbol>#closure_spec_<hash>` — the copy of a global function specialized on the lambdas passed
-  to it, where the hash stands for which argument received which lifted lambda.
+  to it, where the hash stands for which argument received which decaptured lambda.
 * `<local>#closure_call_lam` — a local binding. Where an inline-LLVM expression reads a variable
-  holding a lifted lambda's capture list, the call of that lambda is bound to a local of this name
-  and the expression reads that instead.
-* `CLOSURE_CAP_NAME` — the parameter a lifted function receives its capture list through.
+  holding a decaptured lambda's capture list, the call of that lambda is bound to a local of this
+  name and the expression reads that instead.
+* `CLOSURE_CAP_NAME` — the parameter a decaptured lambda receives its capture list through.
 
 The capture struct's type constructor is named by `CaptureStruct`, which this pass gives the prefix
 `#CapList` and `defunctionalize_fix` gives `#FixCap`: those two are chosen together at that
@@ -610,7 +611,7 @@ impl ClosureSpecializationVisitor {
         let new_lam = internalize_let_to_var_at_head(&new_lam);
         let lambda_func_name = fresh_global_name(
             &self.current_symbol,
-            CLOSURE_LAM_NAME,
+            CLOSURE_LAM_SUFFIX,
             &mut self.lam_func_counter,
             &mut self.global_names,
         );
@@ -648,7 +649,7 @@ impl SpecializationRequest {
     fn specialized_func_name(&self) -> FullName {
         let mut full_name = self.org_func_name.clone();
         let name = full_name.name_as_mut();
-        *name += CLOSURE_SPEC_NAME;
+        *name += CLOSURE_SPEC_SUFFIX;
         let mut hash_data = String::new();
         for (i, decap_lam) in self.specialized_args.iter() {
             hash_data += &format!(",{}", i);
@@ -795,7 +796,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         let make_new_name = |name: &FullName| {
             let mut new_name = name.clone();
-            new_name.name_as_mut().push_str(CLOSURE_CALL_LAM_NAME);
+            new_name.name_as_mut().push_str(CLOSURE_CALL_LAM_SUFFIX);
             new_name
         };
 

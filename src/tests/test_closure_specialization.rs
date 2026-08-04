@@ -15,7 +15,7 @@ mod integration_tests {
     use tempfile::TempDir;
 
     /// What `specialized_fold` prints: the sum of `3 * i` over `0..9`.
-    const EXPECTED_OUTPUT: &str = "135";
+    const SPECIALIZED_FOLD_OUTPUT: &str = "135";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -65,7 +65,7 @@ mod integration_tests {
         );
         assert_eq!(
             String::from_utf8_lossy(&run.stdout).trim(),
-            EXPECTED_OUTPUT,
+            SPECIALIZED_FOLD_OUTPUT,
             "the program should answer the same at -O {}",
             opt_level
         );
