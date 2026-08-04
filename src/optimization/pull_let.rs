@@ -2,8 +2,7 @@
 # Overview
 
 `Pulls let` transformation.
-This transformation is used to increase the number of places where the decapturing of
-`closure_specialization` can be applied.
+This transformation is used to increase the number of places where the decapturing of `closure_specialization` can be applied.
 
 # Transformation
 

@@ -1,8 +1,7 @@
 // Shared machinery for lifting a lambda that captures local variables into a global function: the
 // unboxed struct that threads the captured environment through the call, and generation of a
 // collision-free global name for the lifted function. `closure_specialization` and
-// `defunctionalize_fix` both
-// lift lambdas this way and build on these.
+// `defunctionalize_fix` both lift lambdas this way and build on these.
 
 use crate::{
     ast::{

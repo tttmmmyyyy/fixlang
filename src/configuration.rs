@@ -708,10 +708,9 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function
-    /// only reads, then cancels the reference counting the borrow makes net-zero. Its full benefit
-    /// relies on closure specialization and inlining (which are also `Max`-only), and it adds
-    /// compile-time
+    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
+    /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
+    /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
@@ -719,8 +718,7 @@ impl Configuration {
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
     /// It composes with the same closure specialization that borrow-ification needs — a specialized
-    /// loop's body
-    /// is a known function whose union it can cancel — so it shares that opt-level threshold.
+    /// loop's body is a known function whose union it can cancel — so it shares that threshold.
     pub fn enable_simplify(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }

@@ -172,8 +172,7 @@ fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
 
 // The function called in tail position comes out of an array, so the call stays indirect at every
 // optimization level. Inlining and closure specialization cannot fold this chain into a
-// self-recursive loop;
-// only turning the tail call into a jump keeps the stack flat.
+// self-recursive loop; only turning the tail call into a jump keeps the stack flat.
 #[test]
 fn test_dispatch_through_array_runs_in_constant_stack() {
     let source = r#"

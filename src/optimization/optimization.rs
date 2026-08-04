@@ -69,9 +69,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
     // inlining and closure specialization, which would otherwise rewrite the `fix` argument out of
-    // the literal
-    // lambda form this pass matches; uncurrying (later) then turns each self-call into a direct call
-    // that LLVM folds into a loop.
+    // the literal lambda form this pass matches; uncurrying (later) then turns each self-call into
+    // a direct call that LLVM folds into a loop.
     if config.enable_defunctionalize_fix() {
         let _sw = StopWatch::new("defunctionalize_fix::run", config.show_build_times);
         defunctionalize_fix::run(prg, config.show_build_times);
