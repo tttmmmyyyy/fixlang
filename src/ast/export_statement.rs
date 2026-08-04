@@ -182,12 +182,20 @@ impl ExportStatement {
 fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
     let embedded_ty = ty.get_embedded_type(gc);
     let parts = gc.type_parts(embedded_ty);
-    assert_eq!(
-        parts.len(),
-        1,
-        "`{}` reached an exported signature with {} scalars",
-        ty.to_string(),
-        parts.len()
+    // The one part has to be the scalar itself. Counting the parts alone would let an aggregate
+    // through, since a value too wide to split is carried as one part holding the whole of it, and
+    // C would then be handed a structure whose layout it classifies by its own rules.
+    let is_scalar = parts.len() == 1
+        && !matches!(
+            parts[0],
+            BasicTypeEnum::StructType(_)
+                | BasicTypeEnum::ArrayType(_)
+                | BasicTypeEnum::VectorType(_)
+        );
+    assert!(
+        is_scalar,
+        "`{}` reached an exported signature, where a value has to be one scalar",
+        ty.to_string()
     );
     parts[0]
 }
