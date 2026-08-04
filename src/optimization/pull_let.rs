@@ -94,8 +94,8 @@ it.fold(s0, f)
 into
 
 ```
-let f = #DecapF { n : n };
-it.fold#lamf(s0, f)
+let f = #Cap { n : n };
+it.fold#spec(s0, f)
 ```
 
 On the other hand, decapturing cannot be applied to the following code:

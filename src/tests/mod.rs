@@ -12,6 +12,7 @@ mod test_basic;
 mod test_bool_union;
 mod test_build_exit_status;
 mod test_check;
+mod test_closure_specialization;
 mod test_debug_info;
 mod test_deep_expression;
 mod test_defunctionalize_fix;

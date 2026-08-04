@@ -11,7 +11,9 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
-    constants::{CAP_NAME, CLOSURE_CAP_NAME},
+    constants::{
+        CAP_NAME, CLOSURE_CALL_LAM_NAME, CLOSURE_CAP_NAME, CLOSURE_LAM_NAME, CLOSURE_SPEC_NAME,
+    },
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
@@ -45,28 +47,29 @@ For example, consider the following lambda expression:
 let f = |x| x + n;
 ```
 
-Then, the following structure and global function are defined:
+Then, the following structure and global function are defined. The names below are written short
+for reading; see "The names this pass mints" for the shape they really take.
 ```
-type #DecapF = unbox struct { n: I64 };
+type #Cap = unbox struct { n: I64 };
 
-#lamf : #DecapF -> I64 -> I64;
-#lamf = |{ n : n }, x| x + n;
+#lam : #Cap -> I64 -> I64;
+#lam = |{ n : n }, x| x + n;
 ```
 
-The creation of the lambda value is replaced with `#DecapF { n : n }`.
+The creation of the lambda value is replaced with `#Cap { n : n }`.
 ```
-let f = #DecapF { n : n };
+let f = #Cap { n : n };
 ```
 
 ### Rewriting the usage of the lambda
 
 The call of the decaptured lambda expression `f(x)` is transformed into the following code.
 ```
-#lamf(f, x)
+#lam(f, x)
 ```
 
-In principle, `f` is replaced with `#lamf(f)` in places where `f` appears alone (i.e., not in a call expression).
-However, in cases where "closure specialization" can be applied, `f` is left as is.
+In principle, `f` is replaced with `#lam(f)` in places where `f` appears alone (i.e., not in a call expression).
+However, in cases where specialization can be applied, `f` is left as is.
 
 ### Specializing a function on the lambda it is given
 
@@ -88,20 +91,19 @@ it.fold(s0, f)
 ```
 
 In this case, the following code is generated.
-This is called as "closure specialization".
 
 ```
-fold#lamf : S -> #DecapF -> Iter -> S;
-fold#lamf = |s, op, iter| (
+fold#spec : S -> #Cap -> Iter -> S;
+fold#spec = |s, op, iter| (
     match iter.advance {
         none() => s,
-        some((iter, a)) => iter.fold#lamf(#lamf(op, a, s), op)
+        some((iter, a)) => iter.fold#spec(#lam(op, a, s), op)
     }
 );
 ```
 
 ```
-it.fold#lamf(s0, f)
+it.fold#spec(s0, f)
 ```
 
 ## Applicable range and limitations
@@ -119,11 +121,19 @@ Example: `let (_, f) = (0, |acm, i| acm + i); iter.fold(s0, f)`
 
 ## The names this pass mints
 
-A function this pass creates carries the technique that created it, behind one `#closure` stem so
-that a dump says which pass produced it: `#closure_lam<n>` for a lifted lambda, `#closure_spec_<hash>`
-for a function specialized on the lambdas passed to it, and `#closure_call_lam` for the copy of an
-inline-LLVM expression whose free variables call a lifted lambda. The lifted function receives its
-capture list through the parameter named `CLOSURE_CAP_NAME`.
+The names carry one `#closure` stem, so that a dump says which pass produced them:
+
+* `<symbol>#closure_lam<n>` — the global function a lifted lambda becomes.
+* `<symbol>#closure_spec_<hash>` — the copy of a global function specialized on the lambdas passed
+  to it, where the hash stands for which argument received which lifted lambda.
+* `<local>#closure_call_lam` — a local binding. Where an inline-LLVM expression reads a variable
+  holding a lifted lambda's capture list, the call of that lambda is bound to a local of this name
+  and the expression reads that instead.
+* `CLOSURE_CAP_NAME` — the parameter a lifted function receives its capture list through.
+
+The capture struct's type constructor is named by `CaptureStruct`, which this pass gives the prefix
+`#CapList` and `defunctionalize_fix` gives `#FixCap`: those two are chosen together at that
+constructor and read against each other, so they sit outside this stem.
 
 ## Relations to other optimizations
 
@@ -170,7 +180,10 @@ pub fn run_one(
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut specializations: Vec<SpecializationRequest> = Vec::new();
 
-    let sw = StopWatch::new("decapturing::run_one first loop", show_build_times);
+    let sw = StopWatch::new(
+        "closure_specialization::run_one first loop",
+        show_build_times,
+    );
 
     for (name, mut sym) in symbols {
         // Skip symbols that are already known to be stable and will not change.
@@ -185,28 +198,28 @@ pub fn run_one(
             global_names.clone(),
         );
 
-        // Perform decapturing optimization
+        // Lift the lambdas of this symbol and record the specializations they enable.
         let expr = sym.expr.as_ref().unwrap();
         let sw = StopWatch::new(
-            "decapturing::run_one pull_let::run_on_expr",
+            "closure_specialization::run_one pull_let::run_on_expr",
             show_build_times,
         );
-        let expr = pull_let::run_on_expr(expr); // Increase the number of places where decapturing optimization can be applied.
+        let expr = pull_let::run_on_expr(expr); // Increase the number of places decapturing applies to.
         drop(sw);
 
         let sw = StopWatch::new(
             &format!(
-                "decapturing::run_one unique_local_names::run_on_expr on {}",
+                "closure_specialization::run_one unique_local_names::run_on_expr on {}",
                 &name.to_string()
             ),
             show_build_times,
         );
-        let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Ensure preconditions for implementation of decapturing optimization.
+        let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Ensure the preconditions decapturing is implemented against.
         drop(sw);
 
         let sw = StopWatch::new(
             &format!(
-                "decapturing::run_one visitor.traverse on {}",
+                "closure_specialization::run_one visitor.traverse on {}",
                 &name.to_string()
             ),
             show_build_times,
@@ -239,7 +252,10 @@ pub fn run_one(
 
     let mut symbols = new_symbols;
 
-    let sw = StopWatch::new("decapturing::run_one second loop", show_build_times);
+    let sw = StopWatch::new(
+        "closure_specialization::run_one second loop",
+        show_build_times,
+    );
     // Process specialization requests
     while specializations.len() > 0 {
         let mut new_specializations = Vec::new();
@@ -476,7 +492,7 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
     specializable_funcs
 }
 
-// Expression visitor for decapturing optimization
+// The visitor that lifts a symbol's lambdas and records the specializations they enable.
 struct ClosureSpecializationVisitor {
     /* Decapturing */
     // Information of decaptured lambdas generated by this optimization
@@ -580,7 +596,7 @@ impl ClosureSpecializationVisitor {
         let new_lam = internalize_let_to_var_at_head(&new_lam);
         let lambda_func_name = fresh_global_name(
             &self.current_symbol,
-            "#closure_lam",
+            CLOSURE_LAM_NAME,
             &mut self.lam_func_counter,
             &mut self.global_names,
         );
@@ -618,7 +634,7 @@ impl SpecializationRequest {
     fn specialized_func_name(&self) -> FullName {
         let mut full_name = self.org_func_name.clone();
         let name = full_name.name_as_mut();
-        *name += "#closure_spec";
+        *name += CLOSURE_SPEC_NAME;
         let mut hash_data = String::new();
         for (i, decap_lam) in self.specialized_args.iter() {
             hash_data += &format!(",{}", i);
@@ -765,7 +781,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         let make_new_name = |name: &FullName| {
             let mut new_name = name.clone();
-            new_name.name_as_mut().push_str("#closure_call_lam");
+            new_name.name_as_mut().push_str(CLOSURE_CALL_LAM_NAME);
             new_name
         };
 
