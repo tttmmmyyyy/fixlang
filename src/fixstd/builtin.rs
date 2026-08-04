@@ -34,10 +34,9 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_shift, build_capacity_check,
-    build_elems_bytes, build_storage_is_aligned, create_obj, get_array_storage,
-    get_array_storage_buf, read_alloc_offset, refcnt_type, write_alloc_offset, CapacityCheck,
-    ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, refcnt_type, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -7817,14 +7816,14 @@ fn force_unique_boxed<'c, 'm>(
 ///
 /// Development mode only: this restores the cost the analysis exists to remove.
 fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
-    if !gc.config.develop_mode || !val.is_box(gc.type_env()) {
+    if !gc.config.develop_mode {
         return;
     }
     let obj_ptr = val.value(gc).into_pointer_value();
     let refcnt_ptr = gc.get_refcnt_ptr(obj_ptr);
     let refcnt = gc
         .builder()
-        .build_load(refcnt_type(gc.context), refcnt_ptr, "proven_unique_refcnt")
+        .build_load(refcnt_type(gc.context), refcnt_ptr, "refcnt@assert_unique")
         .unwrap()
         .into_int_value();
     let is_shared = gc
@@ -7833,16 +7832,25 @@ fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
             IntPredicate::UGT,
             refcnt,
             refcnt_type(gc.context).const_int(1, false),
-            "is_shared_though_proven_unique",
+            "is_shared@assert_unique",
         )
         .unwrap();
-    build_abort_if(
-        gc,
-        is_shared,
-        RUNTIME_ABORT,
-        &[],
-        "shared_though_proven_unique",
-    );
+    let current_func = gc.current_function();
+    let shared_bb = gc
+        .context
+        .append_basic_block(current_func, "shared_bb@assert_unique");
+    let unique_bb = gc
+        .context
+        .append_basic_block(current_func, "unique_bb@assert_unique");
+    gc.builder()
+        .build_conditional_branch(is_shared, shared_bb, unique_bb)
+        .unwrap();
+
+    gc.builder().position_at_end(shared_bb);
+    gc.panic("A write inferred to be into a unique object reached a shared one.\n");
+    gc.builder().build_unconditional_branch(unique_bb).unwrap();
+
+    gc.builder().position_at_end(unique_bb);
 }
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)

@@ -30,6 +30,28 @@ fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
         .expect("Failed to execute fix")
 }
 
+/// Asserts that `output` succeeded, quoting both streams otherwise.
+fn assert_succeeded(output: &Output, what: &str) {
+    assert!(
+        output.status.success(),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// Asserts that `output` failed, quoting both streams otherwise.
+fn assert_failed(output: &Output, what: &str) {
+    assert!(
+        !output.status.success(),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
 /// Skips the caller unless this platform can build an instrumented program, saying so.
 fn skip_unless_thread_sanitizer_available(test_name: &str) -> bool {
     if platform_thread_sanitizer_supported() {
@@ -54,12 +76,7 @@ fn test_dependency_does_not_sanitize_the_project_being_built() {
     // depending on a library should mean.
     let (_temp_dir, project_dir) = setup_test_env("root_with_sanitizing_dep");
     let output = run_fix(&project_dir, &["build", "-O", "none", "--emit-llvm"]);
-    assert!(
-        output.status.success(),
-        "the build should succeed.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    assert_succeeded(&output, "the build should succeed.");
     assert!(
         !is_instrumented(&project_dir),
         "the dependency's `sanitize` should leave the program being built as it is built for use."
@@ -76,12 +93,7 @@ fn test_project_file_sanitizes_the_project_being_built() {
     }
     let (_temp_dir, project_dir) = setup_test_env("root_sanitizes_itself");
     let output = run_fix(&project_dir, &["build", "-O", "none", "--emit-llvm"]);
-    assert!(
-        output.status.success(),
-        "the build should succeed.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    assert_succeeded(&output, "the build should succeed.");
     assert!(
         is_instrumented(&project_dir),
         "the project's own `sanitize` should instrument the program it builds."
@@ -95,11 +107,9 @@ fn test_unknown_sanitizer_is_reported() {
     let (_temp_dir, project_dir) = setup_test_env("root_unknown_sanitizer");
     let output = run_fix(&project_dir, &["build"]);
 
-    assert!(
-        !output.status.success(),
-        "a sanitizer the compiler does not have should fail the build.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
+    assert_failed(
+        &output,
+        "a sanitizer the compiler does not have should fail the build.",
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -120,12 +130,7 @@ fn test_sanitizer_and_valgrind_together_are_refused() {
     let (_temp_dir, project_dir) = setup_test_env("root_sanitize_and_memcheck");
     let output = run_fix(&project_dir, &["test"]);
 
-    assert!(
-        !output.status.success(),
-        "asking for both should fail.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    assert_failed(&output, "asking for both should fail.");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("cannot also be run under"),
