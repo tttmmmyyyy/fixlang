@@ -7573,7 +7573,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
 
 /// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
 /// yields.
-fn apply_to_data_ptr<'c, 'm>(
+fn apply_io_act_to_data_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     io_act: Object<'c>,
     data_ptr: PointerValue<'c>,
@@ -7659,7 +7659,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
 
         // Run the IO action.
-        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value.
@@ -7948,7 +7948,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
 
         // Run the IO action.
-        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value.
@@ -8216,7 +8216,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
 
         // Run the callback with a pointer to the first element.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value `(array, action result)`.
@@ -8357,7 +8357,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
 
         // Run the callback with a pointer to the first element, threading the real `ios`.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let io_act = apply_to_data_ptr(gc, io_act, data_ptr);
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value `(ios, (array, action result))`.
