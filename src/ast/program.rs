@@ -2245,7 +2245,7 @@ impl Program {
         errors.to_result()
     }
 
-    pub fn validate_trait_env(&mut self) -> Result<(), Errors> {
+    pub fn validate_trait_env(&self) -> Result<(), Errors> {
         self.trait_env.validate()
     }
 
