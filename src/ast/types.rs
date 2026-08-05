@@ -46,8 +46,14 @@ pub struct TyVar {
 }
 
 impl PartialEq for TyVar {
+    /// Compares the name alone, which is what decides which variable this is; see the note on
+    /// `Hash`.
+    ///
+    /// Every place the compiler compares two type variables by hand reads the name alone, and the
+    /// kind a variable carries is set later than the variable itself, so reading it here answers a
+    /// question about kinds with whichever value happened to be stored.
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.kind == other.kind
+        self.name == other.name
     }
 }
 
