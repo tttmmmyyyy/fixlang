@@ -7482,6 +7482,119 @@ pub fn test_make_struct_to_union() {
     );
 }
 
+// The head of a struct pattern has to name a struct: the sub-patterns are matched against that
+// struct's fields. Read as a field list, a union's variant list would make the pattern bind the
+// tag of the value in place of the payload it names.
+
+#[test]
+pub fn test_struct_pattern_head_is_union() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let Foo { foo: x } = Foo::foo(1);
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+#[test]
+pub fn test_struct_pattern_head_is_union_in_match_arm() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let x = match Foo::foo(1) {
+                Foo { foo: x } => x
+            };
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+#[test]
+pub fn test_struct_pattern_head_is_union_in_lambda_parameter() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let get_foo = |Foo { foo: x }| x;
+            println(get_foo(Foo::foo(1)).to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+#[test]
+pub fn test_struct_pattern_head_is_primitive_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let I64 { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Std::I64` is not a struct.",
+    );
+}
+
+// An associated type name resolves like a type name, so it reaches the pattern as a type
+// constructor that no type declares.
+#[test]
+pub fn test_struct_pattern_head_is_associated_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let Item { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unknown type name `Std::Iterator::Item`.",
+    );
+}
+
 #[test]
 pub fn test_regression_issue_46() {
     let source = r##"

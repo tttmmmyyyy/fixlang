@@ -42,6 +42,10 @@
 
 ### Fixed
 
+#### Language
+
+- A struct pattern now requires the type at its head to be a struct. `let MyUnion { a : x } = u;` read the union's variant list as a field list and bound `x` to the union's tag, which aborted the build inside LLVM; a pattern headed by an associated type name, such as `let Item { data : x } = 42;`, aborted the compiler.
+
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.

@@ -132,19 +132,32 @@ impl PatternNode {
                 Ok((self.set_type(ty), var_to_ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
-                let ty = tc.get_struct_union_value_type(typechcker);
+                // `validate_pattern` requires the head to name a struct, so `None` arrives
+                // only in `error_tolerant` mode: the pattern then takes a fresh type
+                // variable, and its sub-patterns have no field type to match against.
+                let struct_info = typechcker.resolve_struct_tycon(tc, &self.info.source, false)?;
+                let (ty, field_name_to_ty) = match struct_info {
+                    Some(ti) => {
+                        let ty = tc.get_struct_union_value_type(typechcker);
+                        let field_tys = ty.field_types(&typechcker.type_env);
+                        assert_eq!(ti.fields.len(), field_tys.len());
+                        let field_name_to_ty = ti
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .map(|(i, field)| (field.name.clone(), field_tys[i].clone()))
+                            .collect::<Map<_, _>>();
+                        (ty, field_name_to_ty)
+                    }
+                    None => {
+                        debug_assert!(typechcker.error_tolerant);
+                        (
+                            typechcker.fresh_ty_with_src(&self.info.source),
+                            Map::default(),
+                        )
+                    }
+                };
                 let mut var_to_ty = Map::default();
-                let field_tys = ty.field_types(&typechcker.type_env);
-                let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
-                assert_eq!(fields.len(), field_tys.len());
-                let field_name_to_ty = fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        let ty = field_tys[i].clone();
-                        (field.name.clone(), ty)
-                    })
-                    .collect::<Map<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
                 for (field_name, _, pat) in &mut field_to_pat {
                     // Type each sub-pattern. In `error_tolerant` mode
@@ -156,11 +169,9 @@ impl PatternNode {
                     let (typed_pat, var_ty) = typechcker.tolerate_pattern_typed(typed, pat)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
-                    // Unknown field name (filtered by
-                    // `validate_pattern` in strict mode, but tolerated
-                    // there in `error_tolerant` mode): skip the unify
-                    // — the struct definition has no field type to
-                    // match against.
+                    // No field type to unify against: the head names no struct, or the
+                    // struct has no such field. `validate_pattern` rejects both in strict
+                    // mode and tolerates them in `error_tolerant` mode.
                     let Some(field_ty) = field_name_to_ty.get(field_name) else {
                         debug_assert!(typechcker.error_tolerant);
                         continue;

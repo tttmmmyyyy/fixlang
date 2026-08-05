@@ -610,11 +610,12 @@ impl TypeCheckContext {
         }))
     }
 
-    /// Resolve `tc` to its struct definition for `Expr::MakeStruct`
-    /// elaboration. In strict mode, an unknown or non-struct tycon
-    /// is an error; in tolerant mode it degrades to `None`, letting
-    /// the caller type each field expression against a fresh tyvar.
-    fn resolve_struct_tycon(
+    /// Resolve `tc`, the head of a struct literal or of a struct
+    /// pattern, to its struct definition. In strict mode, an unknown
+    /// or non-struct tycon is an error; in tolerant mode it degrades
+    /// to `None`, letting the caller fall back to fresh type
+    /// variables for the fields.
+    pub fn resolve_struct_tycon(
         &self,
         tc: &Arc<TyCon>,
         source: &Option<Span>,
@@ -1516,8 +1517,9 @@ impl TypeCheckContext {
                 }
             }
             Pattern::Struct(tc, pats) => {
-                let ti = self.type_env.tycons.get(&tc).unwrap();
-                let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                // The head has to name a struct: the sub-patterns are matched against that
+                // struct's fields, and the value is destructured in its field order.
+                let struct_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
                 let fields_pat = pats
                     .iter()
                     .map(|(name, _, _)| name.clone())
@@ -1528,16 +1530,19 @@ impl TypeCheckContext {
                         &[&pat.info.source],
                     ));
                 }
-                for f in fields_pat {
-                    if !fields_str.contains(&f) && !tolerate {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Unknown field `{}` for struct `{}`.",
-                                f,
-                                tc.name.to_string()
-                            ),
-                            &[&pat.info.source],
-                        ));
+                if let Some(ti) = struct_info {
+                    let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                    for f in fields_pat {
+                        if !fields_str.contains(&f) && !tolerate {
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "Unknown field `{}` for struct `{}`.",
+                                    f,
+                                    tc.name.to_string()
+                                ),
+                                &[&pat.info.source],
+                            ));
+                        }
                     }
                 }
                 for (_, _, p) in pats {

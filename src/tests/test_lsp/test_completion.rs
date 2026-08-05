@@ -932,6 +932,43 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A struct pattern whose head names no struct — here `Item`, an
+    /// associated type of `Std::Iterator` — is an error the strict
+    /// typechecker reports. The completion pipeline runs
+    /// `error_tolerant`, so it walks past that pattern and has to
+    /// keep serving the rest of the body: the `arr.` receiver two
+    /// lines below still earns its `Array I64` type, which puts
+    /// `Std::Array::push_back` in Tier 0.
+    #[test]
+    fn test_completion_dot_sort_past_bad_struct_pattern() {
+        let mut ctx = LspCompletionCtx::setup("completion-struct-pattern-head", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: main : IO () = (
+        //   3:     let Item { data : d } = 42;
+        //   4:     let arr = [1, 2, 3];
+        //   5:     let _ = arr.   <-- cursor right after the dot
+        //   6:     pure()
+        //   7: );
+        //
+        // Column 16 = byte just after `.` on `    let _ = arr.`.
+        let items = ctx.complete("main.fix", 5, 16);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with('0'),
+            "Std::Array::push_back should land in Tier 0 for an Array I64 \
+             receiver even though an earlier pattern in the same body has a \
+             bad head; got {:?}",
+            sort_push_back,
+        );
+
+        ctx.shutdown();
+    }
+
     /// When the user types a bare identifier (`mpq`) in a non-dot
     /// context after `import GMP.Q;`, the `GMP.Q::mpq` global must
     /// (a) appear in the completion response and (b) carry a
