@@ -2244,6 +2244,7 @@ impl Program {
         errors.to_result()
     }
 
+    /// Validates the traits, the trait aliases and the trait implementations, structurally.
     pub fn validate_trait_env(&self) -> Result<(), Errors> {
         self.trait_env.validate()
     }

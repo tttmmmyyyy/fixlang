@@ -5817,8 +5817,8 @@ pub fn test_overlapping_instances_4() {
     );
 }
 
-/// A head taking a type variable of a higher kind overlaps a head applying that parameter to a type
-/// constructor, and the pair is reported.
+/// An instance head whose argument is a type variable of a higher kind overlaps a head whose
+/// argument is a type constructor of that kind, and the pair is reported.
 ///
 /// Which types a head denotes depends on the kinds of the type variables in it: a variable still
 /// carrying the default kind `*` fails to unify with the type constructor it stands for, and the
@@ -5855,8 +5855,8 @@ pub fn test_overlapping_instances_higher_kinded_head() {
     );
 }
 
-/// Two heads that apply the same higher-kinded parameter to different type constructors denote
-/// disjoint sets of types, and both implementations stand.
+/// Two instance heads whose arguments are different type constructors of the same higher kind
+/// denote disjoint sets of types, and both implementations stand.
 #[test]
 pub fn test_disjoint_instances_higher_kinded_head() {
     let source = r##"
