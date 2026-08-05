@@ -1233,8 +1233,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// own. It leaves the state as it found it, the operation it guards having none of its own to
     /// mark.
     ///
+    /// The state is read rather than assumed. An op declares the uniqueness check it emits through
+    /// `LLVMGen::unique_check_operand`, and it withdraws that declaration exactly where the proof
+    /// was accepted, which is where this check stands; a locality annotation resting on the
+    /// withdrawn declaration therefore says nothing about the object here.
+    ///
     /// Development mode only: this restores the cost the proof exists to remove.
-    pub fn build_assert_unique(&mut self, obj_ptr: PointerValue<'c>, state: RcState) {
+    pub fn build_assert_unique(&mut self, obj_ptr: PointerValue<'c>) {
         if !self.config.develop_mode {
             return;
         }
@@ -1247,7 +1252,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             .append_basic_block(current_func, "shared_bb@assert_unique");
         let one = refcnt_type(self.context).const_int(1, false);
 
-        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr, state);
+        let (local_bb, threaded_bb, global_bb) =
+            self.build_branch_by_refcnt_state(obj_ptr, RcState::Unknown);
 
         // Implement local_bb: read the count and compare it against one.
         self.builder().position_at_end(local_bb);

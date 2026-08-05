@@ -21,6 +21,11 @@ module Main;
 //   to `array_append_range [unique]`.
 // - `_unsafe_grow_size` on a fresh array -> `array_grow_size [unique]`.
 // - `unsafe_set_bounds_unchecked` on a fresh array -> `array_set_unchecked [unique]`.
+// - a boxed-struct field `act` on a fresh struct -> the `struct_punch_0 [unique]` and
+//   `struct_plug_in_0 [unique]` it carries the update out with.
+// - `unsafe_is_unique` on a fresh boxed value -> `is_unique [unique]`, the flag folded to `true`.
+// - `mutate_boxed` and `mutate_boxed_io` on a fresh boxed value -> `mutate_boxed [unique]` and
+//   `mutate_boxed_ios [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 namespace Array {
@@ -41,6 +46,11 @@ main = (
 
     let rec = Rec { x : 1, y : 2 };
     let rec = rec.set_x(10);
+
+    let acted_rec = Rec { x : 3, y : 4 }.act_x(|v| Option::some(v + 1)).as_some;
+    let (rec_unique, checked_rec) = Rec { x : 5, y : 6 }.unsafe_is_unique;
+    let (mutated, _) = Rec { x : 7, y : 8 }.mutate_boxed(|_| pure());
+    let (mutated_io, _) = *Rec { x : 9, y : 10 }.mutate_boxed_io(|_| pure());
 
     let guarded = Array::fill(4, 0).assert_unique(|_|"the array is shared");
     let guarded = guarded.set(0, 7);
@@ -66,5 +76,6 @@ main = (
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + grown.@size + unsafe_set.@(1)).to_string
+    let rec_fields = acted_rec.@x + checked_rec.@x + mutated.@x + mutated_io.@x + (if rec_unique { 1 } else { 0 });
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + grown.@size + unsafe_set.@(1) + rec_fields).to_string
 );

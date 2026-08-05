@@ -2483,7 +2483,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         if !self.force_unique {
             // `realloc` resizes the storage where it stands, so the proof that nobody else holds it
             // is what makes the resize legal.
-            assert_array_storage_unique(gc, &array, assumed_state(self.assume_local));
+            assert_array_storage_unique(gc, &array);
             return realloc_array(gc, array, new_cap, CapacityCheck::Run);
         }
 
@@ -6779,7 +6779,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         let is_unique = if self.assume_unique {
             // The caller proved the argument unique, so the flag is the constant `true`.
             let obj_ptr = obj.value(gc).into_pointer_value();
-            gc.build_assert_unique(obj_ptr, assumed_state(self.assume_local));
+            gc.build_assert_unique(obj_ptr);
             bool_ty.const_int(1, false)
         } else {
             // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
@@ -7003,7 +7003,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             flag.as_basic_value().into_int_value()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.
-            assert_array_storage_unique(gc, &array, assumed_state(self.assume_local));
+            assert_array_storage_unique(gc, &array);
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
@@ -7804,14 +7804,14 @@ fn assumed_state(assume_local: bool) -> RcState {
 /// Clone `val` when it is shared, so that a write into it is not observed elsewhere, or check the
 /// proof that let the clone go.
 ///
-/// Every operation that writes into a value it must own reaches this, so the decision to trust a
-/// uniqueness proof is taken in one place, and the check on that proof stands wherever it is taken.
+/// The operations that write into a value they must own reach this, so that whether a uniqueness
+/// proof is trusted, and what checks the trust, are decided together.
 ///
 /// # Arguments
 /// * `force_unique` — false where the uniqueness analysis proved the value already unique; the value
 ///   is then returned as it stands, and compiler development mode checks that proof against the
 ///   value's reference count.
-/// * `state` — the reference-counting state the uniqueness check reads the count under.
+/// * `state` — the reference-counting state the clone's uniqueness check reads the count under.
 fn force_unique_or_assert<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -7839,35 +7839,28 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
         if force_unique {
             return make_array_unique_with_hole(gc, val, hole, state);
         }
-        assert_array_storage_unique(gc, &val, state);
-        return val;
-    }
-    if !val.is_box(gc.type_env()) {
-        // An unboxed value holds no reference count: it has nothing to share, hence nothing to
-        // clone and nothing to check.
+        assert_array_storage_unique(gc, &val);
         return val;
     }
     if force_unique {
         return make_struct_union_unique(gc, val, state);
     }
-    let obj_ptr = val.value(gc).into_pointer_value();
-    gc.build_assert_unique(obj_ptr, state);
+    if val.is_box(gc.type_env()) {
+        let obj_ptr = val.value(gc).into_pointer_value();
+        gc.build_assert_unique(obj_ptr);
+    }
     val
 }
 
 /// Check the proof that an array is uniquely owned, which is a proof about its storage: that is
 /// where an array's reference count lives.
-fn assert_array_storage_unique<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    array: &Object<'c>,
-    state: RcState,
-) {
+fn assert_array_storage_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>) {
     if !gc.config.develop_mode {
         return;
     }
     let storage = get_array_storage(gc, array);
     let storage_ptr = storage.value(gc).into_pointer_value();
-    gc.build_assert_unique(storage_ptr, state);
+    gc.build_assert_unique(storage_ptr);
 }
 
 /// The definition of `Std::FFI::_mutate_boxed_internal`, which makes the boxed value unique, applies

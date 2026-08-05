@@ -420,6 +420,14 @@ mod integration_tests {
             "array_grow_size[unique]",
             // An `unsafe_set_bounds_unchecked` on the fresh array folds its check.
             "array_set_unchecked[unique]",
+            // The punch and the plug that a boxed-struct field `act` carries the update out with.
+            "struct_punch_0[unique]",
+            "struct_plug_in_0[unique]",
+            // An `unsafe_is_unique`, whose flag folds to the constant `true`.
+            "is_unique[unique]",
+            // The two `_mutate_boxed_internal` cores, on the value allocated a line earlier.
+            "mutate_boxed[unique]",
+            "mutate_boxed_ios[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -514,6 +522,28 @@ mod integration_tests {
                 dump
             );
         }
+    }
+
+    /// Verifies that a write into an array read out of a global keeps its uniqueness check.
+    ///
+    /// A global object is shared whatever its reference count says, and the count is not raised to
+    /// record that, so proving one unique would licence a write everything else in the program can
+    /// see. The elimination is sound for globals only as long as this holds.
+    #[test]
+    fn test_global_value_keeps_its_check() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_global");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert!(
+            dump.contains("array_set("),
+            "the set on an array read out of a global should keep its check:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("array_set[unique]"),
+            "the set on an array read out of a global should not be proven unique:\n{}",
+            dump
+        );
     }
 
     /// Verifies that a value updated through a field of an unboxed struct keeps the provenance that
