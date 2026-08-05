@@ -1304,12 +1304,12 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Implement global_bb: a global object is shared, so the proof is wrong wherever it names
         // one.
-        if let Some(global_bb) = global_bb {
-            self.builder().position_at_end(global_bb);
-            self.builder()
-                .build_unconditional_branch(shared_bb)
-                .unwrap();
-        }
+        let global_bb =
+            global_bb.expect("the state is read under `RcState::Unknown`, so a global arm exists.");
+        self.builder().position_at_end(global_bb);
+        self.builder()
+            .build_unconditional_branch(shared_bb)
+            .unwrap();
 
         self.builder().position_at_end(shared_bb);
         self.panic("A value proven uniquely owned was reached while shared.\n");

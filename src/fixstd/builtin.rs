@@ -3457,12 +3457,12 @@ pub struct InlineLLVMArrayPunchBody {
 impl LLVMGen for InlineLLVMArrayPunchBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // ret_ty = (PunchedArray a, a)
-        let mut array = gc.get_scoped_obj(&self.arr_name);
+        let array = gc.get_scoped_obj(&self.arr_name);
         let idx_obj = gc.get_scoped_obj(&self.idx_name);
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
-        array = force_unique_or_assert(
+        let array = force_unique_or_assert(
             gc,
             array,
             self.force_unique,
@@ -3642,12 +3642,12 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         let punched = gc.get_scoped_obj(&self.punched_name);
 
         // Deconstruct PunchedArray { _arr : array, _idx : idx }.
-        let mut array = ObjectFieldType::move_out_struct_field(gc, &punched, 0);
+        let array = ObjectFieldType::move_out_struct_field(gc, &punched, 0);
         let idx_obj = ObjectFieldType::move_out_struct_field(gc, &punched, 1);
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
-        array = force_unique_or_assert_with_hole(
+        let array = force_unique_or_assert_with_hole(
             gc,
             array,
             Some(idx),
@@ -4543,10 +4543,10 @@ pub struct InlineLLVMStructPunchBody {
 impl LLVMGen for InlineLLVMStructPunchBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument object (the struct value).
-        let mut struct_obj = gc.get_scoped_obj(&self.var_name);
+        let struct_obj = gc.get_scoped_obj(&self.var_name);
 
         // Punching moves a field out of the struct, so the struct has to be uniquely owned.
-        struct_obj = force_unique_or_assert(
+        let struct_obj = force_unique_or_assert(
             gc,
             struct_obj,
             self.force_unique,
@@ -4753,11 +4753,11 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         struct_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
-        let mut punched_struct = gc.get_scoped_obj(&self.punched_struct_name);
+        let punched_struct = gc.get_scoped_obj(&self.punched_struct_name);
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
-        punched_struct = force_unique_or_assert(
+        let punched_struct = force_unique_or_assert(
             gc,
             punched_struct,
             self.force_unique,
@@ -6771,6 +6771,13 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
+        // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
+        // reference count to read.
+        assert!(
+            obj.is_box(gc.type_env()),
+            "is_unique is applied to a value of the unboxed type {}.",
+            obj.ty.to_string()
+        );
 
         // Prepare returned object.
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
@@ -6782,13 +6789,6 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             gc.build_assert_unique(obj_ptr);
             bool_ty.const_int(1, false)
         } else {
-            // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
-            // reference count to branch on.
-            assert!(
-                obj.is_box(gc.type_env()),
-                "is_unique is applied to a value of the unboxed type {}.",
-                obj.ty.to_string()
-            );
             let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
@@ -7808,9 +7808,10 @@ fn assumed_state(assume_local: bool) -> RcState {
 /// proof is trusted, and what checks the trust, are decided together.
 ///
 /// # Arguments
-/// * `force_unique` — false where the uniqueness analysis proved the value already unique; the value
-///   is then returned as it stands, and compiler development mode checks that proof against the
-///   value's reference count.
+/// * `force_unique` — false where the value is already known unique, either because the uniqueness
+///   analysis proved it or because the op is registered for a caller that guarantees it, as `act_x`
+///   registers the punch and the plug it carries its update out with. The value is then returned as
+///   it stands, and compiler development mode checks that against its reference count.
 /// * `state` — the reference-counting state the clone's uniqueness check reads the count under.
 fn force_unique_or_assert<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
@@ -7845,6 +7846,8 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
     if force_unique {
         return make_struct_union_unique(gc, val, state);
     }
+    // `act_x` punches and plugs with the check already dropped, so an unboxed struct reaches here.
+    // Such a value carries no reference count, and is unique by being held in registers.
     if val.is_box(gc.type_env()) {
         let obj_ptr = val.value(gc).into_pointer_value();
         gc.build_assert_unique(obj_ptr);
