@@ -2205,10 +2205,12 @@ impl Scheme {
                 continue;
             }
             let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gv.name) else {
-                // Variable does not appear anywhere in the body; it cannot be
-                // used and would be ambiguous, but this situation should not
-                // arise because `Scheme::generalize` only collects free vars
-                // into `gen_vars`. Skip defensively.
+                // A generalized variable can be absent from the body:
+                // `gen_vars` is determined when the scheme is generalized, and
+                // expanding a type alias that drops a parameter (`type Ignore
+                // a = I64;` used as `f : Ignore a -> I64;`) afterwards removes
+                // the variable from the body. Such a variable constrains
+                // nothing at a use site, so there is no ambiguity to report.
                 continue;
             };
             return Err(Errors::from_msg_srcs(

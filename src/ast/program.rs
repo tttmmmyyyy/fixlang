@@ -33,7 +33,9 @@ use crate::fixstd::builtin::{
     union_new,
 };
 use crate::graph::Graph;
-use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
+use crate::misc::{
+    collect_results, insert_to_map_vec_many, spawn_compiler_thread, to_absolute_path, Map, Set,
+};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -160,9 +162,6 @@ impl Symbol {
         let mut data = String::new();
         data.push_str("<name>");
         data.push_str(&self.name.to_string());
-
-        // data.push_str("<generic name>");
-        // data.push_str(&self.generic_name.to_string());
 
         data.push_str("<type>");
         data.push_str(&self.ty.to_string());
@@ -2545,12 +2544,7 @@ impl Program {
 
         // Merge `mod_to_import_stmts`.
         for (importer, importee) in &other.mod_to_import_stmts {
-            if let Some(old_importee) = self.mod_to_import_stmts.get_mut(importer) {
-                old_importee.extend(importee.iter().cloned());
-            } else {
-                self.mod_to_import_stmts
-                    .insert(importer.clone(), importee.clone());
-            }
+            insert_to_map_vec_many(&mut self.mod_to_import_stmts, importer, importee.clone());
         }
 
         // Merge types.

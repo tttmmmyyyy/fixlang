@@ -674,15 +674,6 @@ impl TraitImpl {
         let mut eqs = self.qual_pred.eq_constraints.clone();
         eqs.append(&mut method_qualty.eqs);
 
-        // Commented out: likely unnecessary and inappropriate, as the source location set here
-        // is never actually used by callers. Kept as a comment for easier debugging if a bug is found.
-        // let source = self
-        //     .member_expr(method_name)
-        //     .source
-        //     .as_ref()
-        //     .map(|src| src.to_head_character());
-        // let ty = ty.set_source(source);
-
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
 
@@ -1005,7 +996,7 @@ impl TraitEnv {
                     );
                     if inst_i.trait_id() == make_boxed_trait() {
                         msg +=
-                            "NOTE: `Std::Boxed` is automatically implemented for all boxed types by compiler."
+                            " NOTE: `Std::Boxed` is automatically implemented for all boxed types by compiler."
                     }
                     errors.append(Errors::from_msg_srcs(
                         msg,
@@ -1243,10 +1234,7 @@ impl TraitEnv {
                 errors.eat_err(impl_.resolve_namespace(ctx));
 
                 // Insert to new_impls
-                if !new_impls.contains_key(&trait_id) {
-                    new_impls.insert(trait_id.clone(), vec![]);
-                }
-                new_impls.get_mut(&trait_id).unwrap().push(impl_);
+                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
             }
         }
 
@@ -1272,10 +1260,7 @@ impl TraitEnv {
                 errors.eat_err(impl_.resolve_type_aliases(type_env));
 
                 // Insert to new_impls
-                if !new_impls.contains_key(&trait_id) {
-                    new_impls.insert(trait_id.clone(), vec![]);
-                }
-                new_impls.get_mut(&trait_id).unwrap().push(impl_);
+                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
             }
         }
         errors.to_result()?; // Throw errors if any.
@@ -1323,10 +1308,7 @@ impl TraitEnv {
     // Add an instance.
     pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
-        if !self.impls.contains_key(&trait_id) {
-            self.impls.insert(trait_id.clone(), vec![]);
-        }
-        self.impls.get_mut(&trait_id).unwrap().push(inst);
+        insert_to_map_vec(&mut self.impls, &trait_id, inst);
         Ok(())
     }
 
