@@ -13,7 +13,7 @@ use crate::ast::types::{
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
-use crate::elaboration::typecheckcache;
+use crate::elaboration::typecheckcache::FileCache;
 use crate::fixstd::builtin::make_boxed_trait;
 use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -22,6 +22,7 @@ use crate::{
     error::{Error, Errors},
 };
 use serde::{Deserialize, Serialize};
+use std::mem;
 use std::sync::Arc;
 
 // Information about missing items in a trait implementation, used for error messages and quick fixes.
@@ -975,7 +976,7 @@ impl TraitEnv {
             TypeEnv::default(),
             kind_env,
             Map::default(),
-            Arc::new(typecheckcache::FileCache::new()),
+            Arc::new(FileCache::new()),
             0,
             false,
         );
@@ -1216,7 +1217,7 @@ impl TraitEnv {
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
-        let old_impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, trait_impls) in old_impls {
             for mut impl_ in trait_impls {
@@ -1252,7 +1253,7 @@ impl TraitEnv {
         }
 
         // Resolve aliases in trait implementations.
-        let old_impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, trait_impls) in old_impls {
             for mut impl_ in trait_impls {
