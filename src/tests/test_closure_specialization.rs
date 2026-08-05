@@ -1,6 +1,7 @@
 //! The two techniques of the closure specialization pass, read off the `--emit-rc-ir` dump: a
 //! lambda is lifted to a global function, and the function it is passed to gets a copy that calls
-//! that function by name.
+//! that function by name. A recursion that hands the next round a closure built from the one it
+//! was given gets no such copy.
 //!
 //! The dump is what these assert against because a program cannot observe either one — both leave
 //! the answer unchanged, so a suite that only runs the program stays green with the whole pass
@@ -16,6 +17,10 @@ mod integration_tests {
 
     /// What `specialized_fold` prints: the sum of `3 * i` over `0..9`.
     const SPECIALIZED_FOLD_OUTPUT: &str = "135";
+
+    /// What `changing_closure` prints: `grow`'s four wrappers around the identity answer 10, and
+    /// `tick` / `tock`'s two wrappers around `|x| x * 100` answer 302.
+    const CHANGING_CLOSURE_OUTPUT: &str = "312";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -37,7 +42,12 @@ mod integration_tests {
     /// # Arguments
     /// * `opt_level` - pinned through `FIX_MAX_OPT_LEVEL`, so the level is the one this test asks
     ///   for whatever the level the suite is being run at.
-    fn build_run_and_read_rc_ir(project_dir: &Path, opt_level: &str) -> String {
+    /// * `expected_output` - what the case prints on stdout.
+    fn build_run_and_read_rc_ir(
+        project_dir: &Path,
+        opt_level: &str,
+        expected_output: &str,
+    ) -> String {
         let build = fix_command()
             .args(["build", "-O", opt_level, "--emit-rc-ir", "all"])
             .env("FIX_MAX_OPT_LEVEL", opt_level)
@@ -65,7 +75,7 @@ mod integration_tests {
         );
         assert_eq!(
             String::from_utf8_lossy(&run.stdout).trim(),
-            SPECIALIZED_FOLD_OUTPUT,
+            expected_output,
             "the program should answer the same at -O {}",
             opt_level
         );
@@ -89,7 +99,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_lambda_passed_to_a_function_is_lifted_and_specialized_on() {
         let (_temp_dir, project_dir) = setup_test_env("specialized_fold");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", SPECIALIZED_FOLD_OUTPUT);
 
         let lifted = functions_named_with(&dump, "#closure_lam");
         assert!(
@@ -111,13 +121,46 @@ mod integration_tests {
     #[test]
     pub fn test_the_pass_leaves_a_lower_optimization_level_alone() {
         let (_temp_dir, project_dir) = setup_test_env("specialized_fold");
-        let dump = build_run_and_read_rc_ir(&project_dir, "basic");
+        let dump = build_run_and_read_rc_ir(&project_dir, "basic", SPECIALIZED_FOLD_OUTPUT);
 
         let minted = functions_named_with(&dump, "#closure_");
         assert!(
             minted.is_empty(),
             "the pass should not run below `max`, but the dump names: {:?}",
             minted
+        );
+    }
+
+    /// The pass specializes a function on a closure parameter only where the recursion passes that
+    /// parameter on unchanged, so a recursion that wraps it on every round gets no specialized
+    /// copy — neither where the recursion is a function's own nor where it goes around a cycle of
+    /// two. The lifted lambdas are what show the pass looked at these functions at all.
+    #[test]
+    pub fn test_a_recursion_carrying_a_new_closure_each_round_is_not_specialized_on() {
+        let (_temp_dir, project_dir) = setup_test_env("changing_closure");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", CHANGING_CLOSURE_OUTPUT);
+
+        let lifted = functions_named_with(&dump, "#closure_lam");
+        // The two the inliner leaves standing as recursions of their own.
+        for recursive_fn in ["Main::grow#", "Main::tock#"] {
+            assert!(
+                lifted.iter().any(|name| name.starts_with(recursive_fn)),
+                "the pass should lift the lambda that `{}` carries into the next round, but the \
+                 dump names only: {:?}",
+                recursive_fn,
+                lifted
+            );
+        }
+
+        let specialized = functions_named_with(&dump, "#closure_spec")
+            .into_iter()
+            .filter(|name| name.starts_with("Main::"))
+            .collect::<Vec<_>>();
+        assert!(
+            specialized.is_empty(),
+            "neither recursion passes its closure parameter on unchanged, so the pass should mint \
+             none of: {:?}",
+            specialized
         );
     }
 }

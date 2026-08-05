@@ -483,9 +483,18 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
                 }
             }
 
+            // A specialized copy pays for itself where the parameter is reached without an
+            // indirect call: the copy calls the lambda by name where this function calls it, and
+            // where this function forwards it, the copy hands a known lambda to the function
+            // downstream, which specializes in turn. A function that only forwards is usually
+            // neither self-recursive nor small enough to inline, so forwarding has to count on its
+            // own for the chain to reach past it.
             let inline_cost = inline_costs.costs.get(sym_name).unwrap();
-            let worth_specialized = (self_recursive || inline_cost.inline_at_call_site())
-                && (called || passed_to_specializable_parameter);
+            let reached_without_indirection = called || passed_to_specializable_parameter;
+            let copy_is_worth_making = self_recursive
+                || inline_cost.inline_at_call_site()
+                || passed_to_specializable_parameter;
+            let worth_specialized = copy_is_worth_making && reached_without_indirection;
 
             if !worth_specialized {
                 continue;

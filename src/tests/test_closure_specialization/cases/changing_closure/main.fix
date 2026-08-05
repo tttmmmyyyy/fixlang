@@ -1,0 +1,30 @@
+module Main;
+
+// Two recursions that hand the next round a closure wrapping the one they were given, so the
+// closure argument is a different one on every round.
+
+// Self-recursive: the recursive call wraps the closure it was given.
+grow : I64 -> (I64 -> I64) -> I64;
+grow = |n, op| (
+    if n == 0 { op(0) };
+    grow(n - 1, |x| op(x) + n)
+);
+
+// Mutually recursive: the closure is wrapped once per trip around the cycle, so neither function on
+// its own sees it change.
+tick : I64 -> (I64 -> I64) -> I64;
+tick = |n, op| (
+    if n == 0 { op(3) };
+    tock(n - 1, |x| op(x) + 1)
+);
+tock : I64 -> (I64 -> I64) -> I64;
+tock = |n, op| (
+    if n == 0 { op(4) };
+    tick(n - 1, op)
+);
+
+main : IO () = (
+    let grown = grow(4, |x| x);
+    let ticked = tick(4, |x| x * 100);
+    println((grown + ticked).to_string)
+);
