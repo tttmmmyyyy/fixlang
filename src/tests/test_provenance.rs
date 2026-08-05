@@ -108,13 +108,16 @@ mod integration_tests {
         assert_binding_prov(&dump, "r", "[fresh]");
     }
 
-    /// The first signature line of a function whose name starts with `fn <name_prefix>` and whose
-    /// name segment (up to the first space) satisfies `name_pred`.
+    /// Whether `line` is the signature of a function whose name starts with `fn <name_prefix>` and
+    /// whose name segment (up to the first space or parenthesis) satisfies `name_pred`.
+    fn is_sig(line: &str, name_prefix: &str, name_pred: &impl Fn(&str) -> bool) -> bool {
+        line.starts_with(name_prefix) && name_pred(line.split(['(', ' ']).nth(1).unwrap_or(""))
+    }
+
+    /// The first signature line satisfying `is_sig`.
     fn sig_line<'a>(dump: &'a str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> &'a str {
         dump.lines()
-            .find(|l| {
-                l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
-            })
+            .find(|l| is_sig(l, name_prefix, &name_pred))
             .unwrap_or_else(|| {
                 panic!(
                     "no matching `{}` function in the RC IR dump:\n{}",
@@ -123,12 +126,9 @@ mod integration_tests {
             })
     }
 
-    /// Whether the dump has a function whose name starts with `fn <name_prefix>` and satisfies
-    /// `name_pred` on its name segment.
+    /// Whether the dump has a signature line satisfying `is_sig`.
     fn has_sig(dump: &str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> bool {
-        dump.lines().any(|l| {
-            l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
-        })
+        dump.lines().any(|l| is_sig(l, name_prefix, &name_pred))
     }
 
     /// The body block of the first function whose signature satisfies the predicates: the lines from

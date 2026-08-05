@@ -6783,13 +6783,12 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
 
         // Get whether argument is unique.
+        let obj_ptr = obj.value(gc).into_pointer_value();
         let is_unique = if self.assume_unique {
             // The caller proved the argument unique, so the flag is the constant `true`.
-            let obj_ptr = obj.value(gc).into_pointer_value();
             gc.build_assert_unique(obj_ptr);
             bool_ty.const_int(1, false)
         } else {
-            let obj_ptr = obj.value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) =
@@ -6977,9 +6976,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 
         // Get whether the storage is uniquely referenced.
         let is_unique = if !self.assume_unique {
-            let storage_ptr = array
-                .extract_field(gc, ARRAY_STORAGE_IDX)
-                .into_pointer_value();
+            let storage_ptr = get_array_storage(gc, &array).value(gc).into_pointer_value();
             let current_func = gc.current_function();
 
             let (unique_bb, shared_bb) =
@@ -7846,12 +7843,18 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
     if force_unique {
         return make_struct_union_unique(gc, val, state);
     }
-    // `act_x` punches and plugs with the check already dropped, so an unboxed struct reaches here.
-    // Such a value carries no reference count, and is unique by being held in registers.
-    if val.is_box(gc.type_env()) {
-        let obj_ptr = val.value(gc).into_pointer_value();
-        gc.build_assert_unique(obj_ptr);
+    if !val.is_box(gc.type_env()) {
+        // `act_x` punches and plugs with the check already dropped, so an unboxed struct reaches
+        // here. Such a value carries no reference count, and is unique by being held in registers.
+        assert!(
+            val.ty.is_struct(gc.type_env()) || val.ty.is_union(gc.type_env()),
+            "an unboxed value reaching here is a struct or a union, and `{}` is neither.",
+            val.ty.to_string()
+        );
+        return val;
     }
+    let obj_ptr = val.value(gc).into_pointer_value();
+    gc.build_assert_unique(obj_ptr);
     val
 }
 

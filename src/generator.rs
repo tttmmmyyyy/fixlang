@@ -982,6 +982,50 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
+    /// Whether the object's reference count is one, read in the current block.
+    ///
+    /// `acquire` makes the load an acquire one, which is what an object in the threaded state needs:
+    /// the writes a unique answer licences must be ordered after the reads the other holders did
+    /// before releasing the object. Keep the acquire on the load itself: ThreadSanitizer draws no
+    /// happens-before edge from a standalone `fence acquire`, so an acquire moved into one leaves
+    /// the code correct while making the race detector report the writes that follow as racing.
+    ///
+    /// `name_suffix` distinguishes the emitted values from those of the other counts a function
+    /// reads.
+    fn build_is_refcnt_one(
+        &mut self,
+        obj_ptr: PointerValue<'c>,
+        acquire: bool,
+        name_suffix: &str,
+    ) -> IntValue<'c> {
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let refcnt = self
+            .builder()
+            .build_load(
+                refcnt_type(self.context),
+                ptr_to_refcnt,
+                &format!("refcnt{}", name_suffix),
+            )
+            .unwrap()
+            .into_int_value();
+        if acquire {
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(AtomicOrdering::Acquire)
+                .expect("Set atomic ordering failed");
+        }
+        let one = refcnt_type(self.context).const_int(1, false);
+        self.builder()
+            .build_int_compare(
+                IntPredicate::EQ,
+                refcnt,
+                one,
+                &format!("is_unique{}", name_suffix),
+            )
+            .unwrap()
+    }
+
     /// Branch on whether the object's reference count is one, returning the block for each answer.
     ///
     /// A global object is never unique, so the count is read only after the state says the object
@@ -1002,53 +1046,21 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
-        // Load refcnt.
-        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-        let refcnt = self
-            .builder()
-            .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
-            .unwrap()
-            .into_int_value();
         // Jump to shared_bb if refcnt > 1.
-        let one = refcnt_type(self.context).const_int(1, false);
-        let is_unique: IntValue<'_> = self
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
-            .unwrap();
+        let is_unique = self.build_is_refcnt_one(obj_ptr, false, "");
         self.builder()
             .build_conditional_branch(is_unique, unique_bb, shared_bb)
             .unwrap();
 
         // Implement threaded_bb.
-        if threaded_bb.is_some() {
-            let threaded_bb = threaded_bb.clone().unwrap();
+        if let Some(threaded_bb) = threaded_bb {
             let unique_threaded_bb = self
                 .context
                 .append_basic_block(current_func, "unique_threaded_bb");
 
             self.builder().position_at_end(threaded_bb);
-            // Load refcnt atomically. The load acquires, so that the writes this thread is about to
-            // make are ordered after the reads another thread did before releasing this object.
-            // Keep the acquire on the load itself: ThreadSanitizer draws no happens-before edge
-            // from a standalone `fence acquire`, so an acquire moved into one on the unique path
-            // leaves the code correct while making the race detector report the writes that follow
-            // as racing.
-            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-            let refcnt = self
-                .builder()
-                .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
-                .unwrap()
-                .into_int_value();
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(AtomicOrdering::Acquire)
-                .expect("Set atomic ordering failed");
             // Jump to shared_bb if refcnt > 1.
-            let is_unique = self
-                .builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
-                .unwrap();
+            let is_unique = self.build_is_refcnt_one(obj_ptr, true, "");
             self.builder()
                 .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb)
                 .unwrap();
@@ -1250,27 +1262,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         let shared_bb = self
             .context
             .append_basic_block(current_func, "shared_bb@assert_unique");
-        let one = refcnt_type(self.context).const_int(1, false);
 
         let (local_bb, threaded_bb, global_bb) =
             self.build_branch_by_refcnt_state(obj_ptr, RcState::Unknown);
 
         // Implement local_bb: read the count and compare it against one.
         self.builder().position_at_end(local_bb);
-        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-        let refcnt = self
-            .builder()
-            .build_load(
-                refcnt_type(self.context),
-                ptr_to_refcnt,
-                "refcnt@assert_unique",
-            )
-            .unwrap()
-            .into_int_value();
-        let is_unique = self
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique@assert_unique")
-            .unwrap();
+        let is_unique = self.build_is_refcnt_one(obj_ptr, false, "@assert_unique");
         self.builder()
             .build_conditional_branch(is_unique, unique_bb, shared_bb)
             .unwrap();
@@ -1278,25 +1276,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Implement threaded_bb: the same, reading the count atomically.
         if let Some(threaded_bb) = threaded_bb {
             self.builder().position_at_end(threaded_bb);
-            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-            let refcnt = self
-                .builder()
-                .build_load(
-                    refcnt_type(self.context),
-                    ptr_to_refcnt,
-                    "refcnt@assert_unique",
-                )
-                .unwrap()
-                .into_int_value();
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(AtomicOrdering::Acquire)
-                .expect("Set atomic ordering failed");
-            let is_unique = self
-                .builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique@assert_unique")
-                .unwrap();
+            let is_unique = self.build_is_refcnt_one(obj_ptr, true, "@assert_unique");
             self.builder()
                 .build_conditional_branch(is_unique, unique_bb, shared_bb)
                 .unwrap();
