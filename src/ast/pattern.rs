@@ -36,11 +36,6 @@ impl PatternNode {
         match &self.pattern {
             Pattern::Var(_v, _ty) => {
                 // IGNORES user-provided type annotation!
-                // if let Some(ty) = ty {
-                //     if ty.to_string_normalize() != type_.to_string_normalize() {
-                //         return None;
-                //     }
-                // }
                 let pat = self.set_type(type_.clone());
                 Some(pat)
             }
@@ -431,7 +426,10 @@ impl PatternNode {
             Pattern::Var(v, _) => {
                 node.pattern = Pattern::Var(v.clone(), tyanno);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_var_tyanno` requires a variable pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
@@ -442,7 +440,10 @@ impl PatternNode {
             Pattern::Struct(_, field_to_pat) => {
                 node.pattern = Pattern::Struct(tc, field_to_pat.clone());
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_struct_tycon` requires a struct pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
@@ -456,7 +457,10 @@ impl PatternNode {
             Pattern::Struct(tc, _) => {
                 node.pattern = Pattern::Struct(tc.clone(), field_to_pat);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_struct_field_to_pat` requires a struct pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
@@ -467,7 +471,10 @@ impl PatternNode {
             Pattern::Union(variant, variant_src, _) => {
                 node.pattern = Pattern::Union(variant.clone(), variant_src.clone(), pat);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_union_pat` requires a union pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
@@ -483,7 +490,10 @@ impl PatternNode {
     pub fn get_var(&self) -> Arc<Var> {
         match &self.pattern {
             Pattern::Var(v, _) => v.clone(),
-            _ => panic!(),
+            _ => panic!(
+                "`get_var` requires a variable pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
     }
 
@@ -520,10 +530,7 @@ impl PatternNode {
         fields: Vec<(Name, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let fields = fields.into_iter().map(|(n, p)| (n, None, p)).collect();
-        Arc::new(PatternNode {
-            pattern: Pattern::Struct(tycon, fields),
-            info: PatternInfo::default(),
-        })
+        PatternNode::make_struct_with_spans(tycon, fields)
     }
 
     // Construct a struct destructuring pattern from `(field name,
@@ -593,7 +600,10 @@ impl PatternNode {
                     info: self.info.clone(),
                 }))
             }
-            _ => panic!(),
+            _ => panic!(
+                "`validate_variant_name` requires a union pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
     }
 

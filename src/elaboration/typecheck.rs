@@ -1390,9 +1390,10 @@ impl TypeCheckContext {
                 // literal as-is so the user can keep typing inside a
                 // partially written struct literal.
                 if strict {
-                    if let Some(ti) = tycon_info.as_ref() {
-                        self.validate_make_struct_field_set(ti, tc, fields, &ei.source)?;
-                    }
+                    let ti = tycon_info
+                        .as_ref()
+                        .expect("strict mode resolves the head to a struct or reports an error");
+                    self.validate_make_struct_field_set(ti, tc, fields, &ei.source)?;
                 }
 
                 // 3. Compute the `name -> expected field type` map
@@ -1406,14 +1407,25 @@ impl TypeCheckContext {
                 // 4. Type each provided field expression in source
                 // order — matching the `Expr::App` convention that
                 // sub-expression side effects happen in the order
-                // the user wrote them. Unknown field names fall back
-                // to a fresh tyvar.
+                // the user wrote them.
                 let mut typed_fields = fields.clone();
                 for (name, _, field_expr) in typed_fields.iter_mut() {
-                    let field_ty = known_field_tys
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_else(|| self.fresh_ty_with_src(&field_expr.source));
+                    let field_ty = match known_field_tys.get(name) {
+                        Some(field_ty) => field_ty.clone(),
+                        None => {
+                            // No expected type to check the field expression against: the head
+                            // names no struct, or the struct has no such field.
+                            // `validate_make_struct_field_set` rejects both in strict mode and
+                            // tolerates them in `error_tolerant` mode.
+                            assert!(
+                                self.error_tolerant,
+                                "struct `{}` has no field `{}`",
+                                tc.to_string(),
+                                name
+                            );
+                            self.fresh_ty_with_src(&field_expr.source)
+                        }
+                    };
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
                 }
 
@@ -1423,9 +1435,10 @@ impl TypeCheckContext {
                 // tree may be structurally ill-formed for codegen,
                 // but tolerant elaborates aren't fed to codegen.
                 if strict {
-                    if let Some(ti) = tycon_info.as_ref() {
-                        typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
-                    }
+                    let ti = tycon_info
+                        .as_ref()
+                        .expect("strict mode resolves the head to a struct or reports an error");
+                    typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
                 }
 
                 Ok(ei.set_make_struct_fields(typed_fields))
