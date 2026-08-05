@@ -425,6 +425,8 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// A copy of this variable pattern carrying `tyanno` as the type the user
+    /// wrote for the bound variable. Panics unless this is a variable pattern.
     pub fn set_var_tyanno(self: &PatternNode, tyanno: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -439,6 +441,8 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// A copy of this struct pattern headed by `tc`, keeping its field
+    /// sub-patterns. Panics unless this is a struct pattern.
     pub fn set_struct_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -453,6 +457,10 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// A copy of this struct pattern matching the fields in `field_to_pat`,
+    /// keeping its head. Each entry is a field name, the span of that name in
+    /// the source, and the sub-pattern the field's value is matched against.
+    /// Panics unless this is a struct pattern.
     pub fn set_struct_field_to_pat(
         self: &PatternNode,
         field_to_pat: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
@@ -470,6 +478,8 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// A copy of this union pattern matching the variant's payload against
+    /// `pat`, keeping its variant name. Panics unless this is a union pattern.
     pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -492,6 +502,8 @@ impl PatternNode {
         matches!(&self.pattern, Pattern::Var(_, _))
     }
 
+    /// The variable this pattern binds. Panics unless this is a variable
+    /// pattern.
     pub fn get_var(&self) -> Arc<Var> {
         match &self.pattern {
             Pattern::Var(v, _) => v.clone(),

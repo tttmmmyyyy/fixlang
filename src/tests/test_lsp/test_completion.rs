@@ -14,12 +14,20 @@ mod tests {
     };
     use tempfile::TempDir;
 
+    /// The directory holding the LSP test projects, one subdirectory per
+    /// project, named as the tests name it.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
+    /// Copy the test project `project_name` into a temporary directory of its
+    /// own, so tests that build and edit it can run in parallel.
+    ///
+    /// # Returns
+    /// The guard whose drop deletes the copy, and the canonicalized path of
+    /// the copied project.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -74,13 +82,23 @@ mod tests {
         }
     }
 
+    /// A language server running over a private copy of one test project,
+    /// ready to answer completion requests against that copy's files.
     struct LspCompletionCtx {
+        /// The client end of the server's stdio connection.
         client: LspClient,
+        /// Absolute path of the project copy, the base of every file URI.
         project_dir: PathBuf,
+        /// Kept alive so the copy outlives the server; its drop deletes the
+        /// copy.
         _temp_dir: TempDir,
     }
 
     impl LspCompletionCtx {
+        /// Start a server over a fresh copy of `project_name` and open each of
+        /// `files`, paths relative to the project root, in the given order.
+        /// Returns once the server has published diagnostics for the last of
+        /// them, so the project has been type-checked.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -101,6 +119,8 @@ mod tests {
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path
+        /// relative to the project root.
         fn file_uri(&self, file: &str) -> String {
             format!("file://{}", self.project_dir.join(file).display())
         }

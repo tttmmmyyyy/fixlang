@@ -1060,6 +1060,10 @@ impl TypeCheckContext {
         })
     }
 
+    /// Elaborate `ei` against the expected type `ty`, one arm per `Expr`
+    /// variant, returning the expression annotated with its inferred type.
+    /// Each arm tolerates what it can in `error_tolerant` mode; what it
+    /// cannot is raised as an error.
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1399,8 +1403,8 @@ impl TypeCheckContext {
                 // 3. Compute the `name -> expected field type` map
                 // (after unifying the outer expected type with the
                 // constructed struct type). An empty map when the
-                // tycon didn't resolve, signalling step 4 to use
-                // fresh tyvars throughout.
+                // tycon didn't resolve, leaving every field
+                // expression to be typed against a fresh tyvar.
                 let known_field_tys =
                     self.compute_make_struct_field_tys(tc, tycon_info.as_ref(), &ty, &ei.source)?;
 
@@ -1511,7 +1515,10 @@ impl TypeCheckContext {
         }
     }
 
-    // Validate pattern and raise error if invalid,
+    /// Reject a pattern the elaboration cannot make sense of: a struct head
+    /// that names no struct, an unknown or duplicated field name, an
+    /// ill-formed type annotation, or a variable name bound twice. Recurses
+    /// into the sub-patterns.
     fn validate_pattern(&mut self, pat: &PatternNode) -> Result<(), Errors> {
         // In `error_tolerant` mode every gate below is downgraded to a
         // no-op so a single bad sub-check doesn't bail out of the whole
@@ -1584,6 +1591,14 @@ impl TypeCheckContext {
         Ok(())
     }
 
+    /// Say where each of `tvs` came from: for every type variable whose source
+    /// expression is known, a sentence naming it paired with that expression's
+    /// span, to hang off an error as extra source pointers.
+    ///
+    /// # Arguments
+    /// * `ref_no` — when the error text refers to several types by number, the
+    ///   number of the one these variables belong to; it is printed alongside
+    ///   each variable's name.
     pub fn create_tyvar_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
@@ -1620,6 +1635,10 @@ impl TypeCheckContext {
         msg_srcs
     }
 
+    /// Build the "Type mismatch" error pointed at `source`: `expected_ty` and
+    /// `found_ty` with the current substitution applied, the constraint of
+    /// `unif_err` that could not be deduced, and a source pointer for every
+    /// type variable still free in them.
     fn create_type_mismatch_error(
         &self,
         expected_ty: &Arc<TypeNode>,

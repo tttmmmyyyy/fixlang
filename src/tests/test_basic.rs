@@ -7421,6 +7421,10 @@ pub fn test_tuple_functor() {
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Verifies that a struct declared with no fields can be constructed as
+/// `Empty {}` and given a trait implementation, in each of the plain, `box`
+/// and `unbox` forms.
 #[test]
 pub fn test_empty_struct() {
     let source = r##"
@@ -7455,6 +7459,8 @@ pub fn test_empty_struct() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct literal whose head names a union is reported as an
+/// error.
 #[test]
 pub fn test_make_struct_to_union() {
     let source = r##"
@@ -7606,6 +7612,8 @@ pub fn test_struct_pattern_head_is_associated_type() {
     );
 }
 
+/// Verifies that `!` parses as negation whether or not a space separates it
+/// from its operand, so `if ! (1 == 2) { .. }` compiles like `if !(1 == 2)`.
 #[test]
 pub fn test_regression_issue_46() {
     let source = r##"
@@ -7626,6 +7634,8 @@ pub fn test_regression_issue_46() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that reading from a handle already given to `close_file` raises a
+/// catchable error naming the closed handle, rather than reading anything.
 #[test]
 pub fn test_read_file_after_close() {
     let source = r##"
@@ -7645,6 +7655,8 @@ pub fn test_read_file_after_close() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct and a union may each name their own type inside a
+/// field, as long as the occurrence sits behind a function arrow.
 #[test]
 pub fn test_circular_type_definition() {
     let source = r##"
