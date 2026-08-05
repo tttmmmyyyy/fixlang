@@ -1244,7 +1244,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// own. It leaves the state as it found it, the operation it guards having none of its own to
     /// mark.
     ///
-    /// The state is read rather than assumed. An op declares the uniqueness check it emits through
+    /// The object's state is read at run time. An op declares the uniqueness check it emits through
     /// `LLVMGen::unique_check_operand`, and it withdraws that declaration exactly where the proof
     /// was accepted, which is where this check stands; a locality annotation resting on the
     /// withdrawn declaration therefore says nothing about the object here.

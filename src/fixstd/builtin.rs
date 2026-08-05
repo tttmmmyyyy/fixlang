@@ -7819,8 +7819,8 @@ fn force_unique_or_assert<'c, 'm>(
     force_unique_or_assert_with_hole(gc, val, None, force_unique, state)
 }
 
-/// `force_unique_or_assert` where the value is an array and the clone leaves the element at `hole`
-/// uninitialized for the caller to fill.
+/// `force_unique_or_assert`, where `Some(hole)` makes a clone of the array `val` leave the element
+/// at that index uninitialized for the caller to fill.
 fn force_unique_or_assert_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,

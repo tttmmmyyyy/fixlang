@@ -108,13 +108,14 @@ mod integration_tests {
         assert_binding_prov(&dump, "r", "[fresh]");
     }
 
-    /// Whether `line` is the signature of a function whose name starts with `fn <name_prefix>` and
-    /// whose name segment (up to the first space or parenthesis) satisfies `name_pred`.
+    /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`
+    /// keyword) and whose name segment, up to the first space or parenthesis, satisfies `name_pred`.
     fn is_sig(line: &str, name_prefix: &str, name_pred: &impl Fn(&str) -> bool) -> bool {
         line.starts_with(name_prefix) && name_pred(line.split(['(', ' ']).nth(1).unwrap_or(""))
     }
 
-    /// The first signature line satisfying `is_sig`.
+    /// The first function signature in `dump` starting with `name_prefix` and whose name segment
+    /// satisfies `name_pred`.
     fn sig_line<'a>(dump: &'a str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> &'a str {
         dump.lines()
             .find(|l| is_sig(l, name_prefix, &name_pred))
@@ -126,7 +127,8 @@ mod integration_tests {
             })
     }
 
-    /// Whether the dump has a signature line satisfying `is_sig`.
+    /// Whether `dump` has a function signature starting with `name_prefix` and whose name segment
+    /// satisfies `name_pred`.
     fn has_sig(dump: &str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> bool {
         dump.lines().any(|l| is_sig(l, name_prefix, &name_pred))
     }
@@ -425,7 +427,7 @@ mod integration_tests {
             "struct_plug_in_0[unique]",
             // An `unsafe_is_unique`, whose flag folds to the constant `true`.
             "is_unique[unique]",
-            // The two `_mutate_boxed_internal` cores, on the value allocated a line earlier.
+            // The two `_mutate_boxed_internal` cores, on a freshly allocated value.
             "mutate_boxed[unique]",
             "mutate_boxed_ios[unique]",
         ] {
