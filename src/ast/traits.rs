@@ -1,3 +1,4 @@
+use crate::ast::collect_annotation_tyvars::collect_annotation_tyvars;
 use crate::ast::deprecation::DeprecationInfo;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
@@ -14,13 +15,10 @@ use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::FileCache;
+use crate::error::{Error, Errors};
 use crate::fixstd::builtin::make_boxed_trait;
 use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
-use crate::{
-    ast::collect_annotation_tyvars::collect_annotation_tyvars,
-    error::{Error, Errors},
-};
 use serde::{Deserialize, Serialize};
 use std::mem;
 use std::sync::Arc;
@@ -1471,7 +1469,7 @@ impl TraitEnv {
         for (_trait_id, trait_impls) in &mut self.impls {
             for inst in trait_impls {
                 errors.eat_err(inst.set_kinds_in_qual_pred_and_member_sigs(kind_env));
-                let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, Map::default());
+                let mut assoc_tys = mem::replace(&mut inst.assoc_types, Map::default());
                 for (_, assoc_ty_impl) in &mut assoc_tys {
                     errors.eat_err(assoc_ty_impl.set_kinds(&inst, kind_env));
                 }
