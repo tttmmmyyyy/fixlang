@@ -133,17 +133,19 @@ impl PatternNode {
                 // `validate_pattern` requires the head to name a struct, so `None` arrives
                 // only in `error_tolerant` mode: the pattern then takes a fresh type
                 // variable, and its sub-patterns have no field type to match against.
-                let tycon_info = typechecker.resolve_struct_tycon(tc, &self.info.source, false)?;
-                let (ty, field_name_to_ty) = match tycon_info {
-                    Some(ti) => {
+                // The field names are taken by value because the steps below borrow the
+                // type checker mutably.
+                let field_names = typechecker
+                    .resolve_struct_tycon(tc, &self.info.source, false)?
+                    .map(|ti| ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>());
+                let (ty, field_name_to_ty) = match field_names {
+                    Some(field_names) => {
                         let ty = tc.get_struct_union_value_type(typechecker);
                         let field_tys = ty.field_types(&typechecker.type_env);
-                        assert_eq!(ti.fields.len(), field_tys.len());
-                        let field_name_to_ty = ti
-                            .fields
-                            .iter()
-                            .enumerate()
-                            .map(|(i, field)| (field.name.clone(), field_tys[i].clone()))
+                        assert_eq!(field_names.len(), field_tys.len());
+                        let field_name_to_ty = field_names
+                            .into_iter()
+                            .zip(field_tys)
                             .collect::<Map<_, _>>();
                         (ty, field_name_to_ty)
                     }

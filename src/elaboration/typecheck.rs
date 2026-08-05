@@ -620,9 +620,9 @@ impl TypeCheckContext {
         tc: &Arc<TyCon>,
         source: &Option<Span>,
         strict: bool,
-    ) -> Result<Option<TyConInfo>, Errors> {
+    ) -> Result<Option<&TyConInfo>, Errors> {
         match self.type_env.tycons.get(tc) {
-            Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti.clone())),
+            Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti)),
             Some(_) if strict => Err(Errors::from_msg_srcs(
                 format!("Type `{}` is not a struct.", tc.to_string()),
                 &[source],
@@ -1387,7 +1387,9 @@ impl TypeCheckContext {
                 // mode errors out on unknown / non-struct names;
                 // tolerant degrades to `None` so we can still type
                 // each field expression against a fresh tyvar.
-                let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?;
+                // The definition is taken by value because the steps below
+                // borrow the type checker mutably.
+                let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?.cloned();
 
                 // 2. Strict-only: reject missing or unknown fields
                 // with a rich diagnostic. Tolerant accepts the
