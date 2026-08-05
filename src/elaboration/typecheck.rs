@@ -1532,7 +1532,7 @@ impl TypeCheckContext {
             Pattern::Struct(tc, pats) => {
                 // The head has to name a struct: the sub-patterns are matched against that
                 // struct's fields, and the value is destructured in its field order.
-                let struct_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
+                let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
                 let fields_pat = pats
                     .iter()
                     .map(|(name, _, _)| name.clone())
@@ -1543,10 +1543,11 @@ impl TypeCheckContext {
                         &[&pat.info.source],
                     ));
                 }
-                if let Some(ti) = struct_info {
-                    let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                if let Some(ti) = tycon_info {
+                    let struct_field_names =
+                        ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
                     for f in fields_pat {
-                        if !fields_str.contains(&f) && !tolerate {
+                        if !struct_field_names.contains(&f) && !tolerate {
                             return Err(Errors::from_msg_srcs(
                                 format!(
                                     "Unknown field `{}` for struct `{}`.",

@@ -130,8 +130,8 @@ impl PatternNode {
                 // `validate_pattern` requires the head to name a struct, so `None` arrives
                 // only in `error_tolerant` mode: the pattern then takes a fresh type
                 // variable, and its sub-patterns have no field type to match against.
-                let struct_info = typechcker.resolve_struct_tycon(tc, &self.info.source, false)?;
-                let (ty, field_name_to_ty) = match struct_info {
+                let tycon_info = typechcker.resolve_struct_tycon(tc, &self.info.source, false)?;
+                let (ty, field_name_to_ty) = match tycon_info {
                     Some(ti) => {
                         let ty = tc.get_struct_union_value_type(typechcker);
                         let field_tys = ty.field_types(&typechcker.type_env);
