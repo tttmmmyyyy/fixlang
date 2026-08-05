@@ -97,17 +97,17 @@ impl ExportStatement {
             io_type,
         } = self.function_type.clone().unwrap();
 
-        // Create the LLVM type of the exported C function. Each exchanged value is its own scalar
-        // leaf — an integer, a floating point number or a pointer — which is the type a C
+        // Create the LLVM type of the exported C function. Each exchanged value is its own
+        // scalar — an integer, a floating point number or a pointer — which is the type a C
         // declaration of the same function names. `has_c_abi` admits nothing with another shape.
         let dom_llvm_tys = doms
             .iter()
-            .map(|dom| c_leaf_type(dom, gc).into())
+            .map(|dom| c_scalar_type(dom, gc).into())
             .collect::<Vec<_>>();
         let func_ty = if codom.is_unit() {
             gc.context.void_type().fn_type(&dom_llvm_tys, false)
         } else {
-            c_leaf_type(&codom, gc).fn_type(&dom_llvm_tys, false)
+            c_scalar_type(&codom, gc).fn_type(&dom_llvm_tys, false)
         };
 
         // Declare the function.
@@ -125,12 +125,12 @@ impl ExportStatement {
         let bb = gc.context.append_basic_block(func, "entry");
         gc.builder().position_at_end(bb);
 
-        // Create Fix values from arguments. Each parameter is the value's one scalar leaf.
+        // Create Fix values from arguments. Each parameter is the value's one scalar.
         let params = func.get_params();
         let mut args = params
             .iter()
             .enumerate()
-            .map(|(i, arg)| Object::from_leaves(vec![*arg], doms[i].clone(), gc))
+            .map(|(i, arg)| Object::from_parts(vec![*arg], doms[i].clone(), gc))
             .collect::<Vec<_>>();
 
         // Get the Fix value to be exported. `value_expr` is a reference to the instantiated symbol
@@ -167,35 +167,43 @@ impl ExportStatement {
             }
         }
 
-        // Return the result as its one scalar leaf.
+        // Return the result as its one scalar.
         if codom.is_unit() {
             gc.builder().build_return(None).unwrap();
         } else {
-            let ret_val = fix_value.leaves()[0];
+            let ret_val = fix_value.parts()[0];
             gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
 }
 
-/// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar leaf,
+/// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar,
 /// which is the type a C declaration of the same function names.
-fn c_leaf_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
-    let embedded_ty = ty.get_embedded_type(gc, &vec![]);
-    let leaves = gc.flatten_to_scalar_leaves(embedded_ty);
-    assert_eq!(
-        leaves.len(),
-        1,
-        "`{}` reached an exported signature with {} scalar leaves",
-        ty.to_string(),
-        leaves.len()
+fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
+    let embedded_ty = ty.get_embedded_type(gc);
+    let parts = gc.type_parts(embedded_ty);
+    // The one part has to be the scalar itself. Counting the parts alone would let an aggregate
+    // through, since a value too wide to split is carried as one part holding the whole of it, and
+    // C would then be handed a structure whose layout it classifies by its own rules.
+    let is_scalar = parts.len() == 1
+        && !matches!(
+            parts[0],
+            BasicTypeEnum::StructType(_)
+                | BasicTypeEnum::ArrayType(_)
+                | BasicTypeEnum::VectorType(_)
+        );
+    assert!(
+        is_scalar,
+        "`{}` reached an exported signature, where a value has to be one scalar",
+        ty.to_string()
     );
-    leaves[0]
+    parts[0]
 }
 
 /// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
 /// passed.
 ///
-/// A value with one scalar leaf — an integer, a floating point number, or a pointer — is laid down
+/// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
 /// identically by Fix and by C. An aggregate is laid down differently: the C ABI classifies a
 /// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
 /// it is a homogeneous floating-point aggregate (AAPCS64), and the shapes on which that agrees with
@@ -286,10 +294,10 @@ impl ExportedFunctionType {
         // Resolve type aliases in `ty`.
         let ty = ty.resolve_type_aliases(type_env)?;
 
-        // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
+        // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], B)`.
         let (doms, mut codom) = ty.collect_app_src(usize::MAX);
 
-        // If `B` is `IO C`, then replace `B` with `C` and set `is_io` to `true`.
+        // If `B` is `IO C`, then replace `B` with `C` and set `io_type` to `IO`.
         let mut io_type = IOType::Pure;
         match &codom.ty {
             Type::TyApp(fun, arg) => {

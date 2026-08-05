@@ -36,8 +36,8 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_abort_if, build_array_storage_shift, build_capacity_check,
     build_elems_bytes, build_storage_is_aligned, create_obj, get_array_storage,
-    get_array_storage_buf, read_alloc_offset, refcnt_type, write_alloc_offset, CapacityCheck,
-    ObjectFieldType,
+    get_array_storage_buf, read_alloc_offset, refcnt_type, union_tag_type, write_alloc_offset,
+    CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -700,7 +700,7 @@ impl LLVMGen for InlineLLVMIntLit {
             Some(&format!("LLVM<int_lit_{}>", self.val)),
         );
         let int_ty = ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
@@ -754,7 +754,7 @@ impl LLVMGen for InlineLLVMFloatLit {
             Some(&format!("float_lit_{}", self.val)),
         );
         let float_ty = ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_float_type();
@@ -1066,10 +1066,16 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Converts an integer to another integer type, truncating it to the target width or widening it by
+/// sign- or zero-extension. The target type is the one the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntegralBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
+    /// Whether the source type is a signed integer, which decides whether widening sign-extends or
+    /// zero-extends.
     is_source_signed: bool,
+    /// Whether the target type is a signed integer.
     is_target_signed: bool,
 }
 
@@ -1081,7 +1087,7 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
 
         // Get target type.
         let to_int = to_ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
@@ -1170,8 +1176,11 @@ pub fn cast_between_integral_function(
     (expr, scm)
 }
 
+/// Converts a floating point number to another floating point type, which is the one the operation
+/// is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
 }
 
@@ -1185,7 +1194,7 @@ impl LLVMGen for InlineLLVMCastFloatBody {
 
         // Get target type.
         let to_float = to_ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_float_type();
@@ -1258,9 +1267,12 @@ pub fn cast_between_float_function(
     (expr, scm)
 }
 
+/// Converts an integer to a floating point number of the type the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntToFloatBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
+    /// Whether the source type is a signed integer, which decides how the bits are read.
     is_signed: bool,
 }
 
@@ -1272,7 +1284,7 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
 
         // Get target type.
         let to_float = to_ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_float_type();
@@ -1375,7 +1387,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
 
         // Get target type.
         let to_int = to_ty
-            .get_struct_type(gc, &vec![])
+            .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
@@ -2298,7 +2310,7 @@ fn realloc_array<'c, 'm>(
     let storage = get_array_storage(gc, &array);
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, vec![]);
+    let struct_type = object_type.to_struct_type(gc, &[]);
     build_capacity_check(gc, &elem_ty, new_cap, capacity_check);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
@@ -2654,7 +2666,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
             .into_int_value();
         let end = gc.get_scoped_obj_field(&self.end_name, 0).into_int_value();
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
-        let elem_value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elem_value_ty = elem_ty.get_embedded_type(gc);
         let n = gc.builder().build_int_sub(end, begin, "append_n").unwrap();
 
         // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
@@ -5928,10 +5940,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         );
 
         // Set tag value.
-        let tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, vec![])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let tag_value = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
         let obj = ObjectFieldType::set_union_tag(gc, obj, tag_value);
 
         // Set value.
@@ -6106,10 +6115,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         };
 
         if gc.config.runtime_check() {
-            let expected_tag = ObjectFieldType::UnionTag
-                .to_basic_type(gc, vec![])
-                .into_int_type()
-                .const_int(self.field_idx as u64, false);
+            let expected_tag = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
             // If tag mismatch, panic.
             ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
@@ -6237,9 +6243,13 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     (expr, scm)
 }
 
+/// Tests whether a union holds a given variant, by comparing its tag. It reads the union without
+/// taking a reference to it, and the result is a `Std::Bool`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionIsBody {
+    /// The local binding holding the union to test.
     union_arg_name: FullName,
+    /// The variant tested for, as its index among the union's variants.
     field_idx: usize,
 }
 
@@ -6250,10 +6260,7 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         // Create specified tag value.
-        let expected_tag = ObjectFieldType::UnionTag
-            .to_basic_type(gc, vec![])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let expected_tag = union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
@@ -6337,10 +6344,8 @@ impl LLVMGen for InlineLLVMUnionModBody {
         let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Create specified tag value.
-        let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, vec![])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        let specified_tag_value =
+            union_tag_type(gc.context).const_int(self.field_idx as u64, false);
 
         // Get tag value.
         let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
@@ -6766,9 +6771,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8
-            .to_basic_type(gc, vec![])
-            .into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
 
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
@@ -6814,7 +6817,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
         };
-        let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_unique")
@@ -6959,9 +6962,7 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8
-            .to_basic_type(gc, vec![])
-            .into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
 
         // Get argument.
         let array = gc.get_scoped_obj(&self.var_name);
@@ -7006,7 +7007,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             // Where the caller proved the array unique, the check is known to succeed.
             bool_ty.const_int(1, false)
         };
-        let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_storage_unique")
@@ -8877,9 +8878,7 @@ impl LLVMGen for InlineLLVMIntEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 "eq",
             )
             .unwrap();
@@ -8956,9 +8955,7 @@ impl LLVMGen for InlineLLVMPtrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 "eq_of_ptr",
             )
             .unwrap();
@@ -9032,9 +9029,7 @@ impl LLVMGen for InlineLLVMFloatEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 "eq_of_float",
             )
             .unwrap();
@@ -9129,9 +9124,7 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 LESS_THAN_TRAIT_LT_NAME,
             )
             .unwrap();
@@ -9210,9 +9203,7 @@ impl LLVMGen for InlineLLVMFloatLessThanBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 LESS_THAN_TRAIT_LT_NAME,
             )
             .unwrap();
@@ -9305,9 +9296,7 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -9386,9 +9375,7 @@ impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8
-                    .to_basic_type(gc, vec![])
-                    .into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -10231,8 +10218,10 @@ pub fn not_trait_id() -> TraitId {
     }
 }
 
+/// Negates a `Std::Bool`, the implementation of `Std::Not::not` for it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoolNegBody {
+    /// The local binding holding the value to negate.
     rhs_name: FullName,
 }
 
@@ -10242,9 +10231,7 @@ impl LLVMGen for InlineLLVMBoolNegBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let bool_ty = ObjectFieldType::I8
-            .to_basic_type(gc, vec![])
-            .into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
         let false_val = bool_ty.const_zero();
         let value = gc
             .builder()
