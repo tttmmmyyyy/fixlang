@@ -1533,11 +1533,11 @@ impl TypeCheckContext {
                 // The head has to name a struct: the sub-patterns are matched against that
                 // struct's fields, and the value is destructured in its field order.
                 let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
-                let fields_pat = pats
+                let pattern_field_names = pats
                     .iter()
                     .map(|(name, _, _)| name.clone())
                     .collect::<Set<_>>();
-                if fields_pat.len() < pats.len() && !tolerate {
+                if pattern_field_names.len() < pats.len() && !tolerate {
                     return Err(Errors::from_msg_srcs(
                         "Duplicate field in struct pattern.".to_string(),
                         &[&pat.info.source],
@@ -1546,12 +1546,12 @@ impl TypeCheckContext {
                 if let Some(ti) = tycon_info {
                     let struct_field_names =
                         ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                    for f in fields_pat {
-                        if !struct_field_names.contains(&f) && !tolerate {
+                    for field_name in pattern_field_names {
+                        if !struct_field_names.contains(&field_name) && !tolerate {
                             return Err(Errors::from_msg_srcs(
                                 format!(
                                     "Unknown field `{}` for struct `{}`.",
-                                    f,
+                                    field_name,
                                     tc.name.to_string()
                                 ),
                                 &[&pat.info.source],

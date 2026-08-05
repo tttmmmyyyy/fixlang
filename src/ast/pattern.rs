@@ -104,23 +104,23 @@ impl PatternNode {
     // Returns the pattern itself with a map which maps variable names to their types.
     pub fn get_typed(
         self: &Arc<PatternNode>,
-        typechcker: &mut TypeCheckContext,
+        typechecker: &mut TypeCheckContext,
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
         match &self.pattern {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
                 let ty = if ty.is_none() {
-                    typechcker.fresh_ty_with_src(&self.info.source)
+                    typechecker.fresh_ty_with_src(&self.info.source)
                 } else {
                     // If the annotation is ill-formed (e.g. references
                     // an unknown type), `error_tolerant` mode still
                     // wants this binder to participate in scope so the
                     // body can reference `var_name`; fall back to a
                     // fresh tyvar.
-                    let validated = typechcker.validate_type_annotation(ty.as_ref().unwrap());
-                    typechcker
+                    let validated = typechecker.validate_type_annotation(ty.as_ref().unwrap());
+                    typechecker
                         .tolerate(validated)?
-                        .unwrap_or_else(|| typechcker.fresh_ty_with_src(&self.info.source))
+                        .unwrap_or_else(|| typechecker.fresh_ty_with_src(&self.info.source))
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
@@ -130,11 +130,11 @@ impl PatternNode {
                 // `validate_pattern` requires the head to name a struct, so `None` arrives
                 // only in `error_tolerant` mode: the pattern then takes a fresh type
                 // variable, and its sub-patterns have no field type to match against.
-                let tycon_info = typechcker.resolve_struct_tycon(tc, &self.info.source, false)?;
+                let tycon_info = typechecker.resolve_struct_tycon(tc, &self.info.source, false)?;
                 let (ty, field_name_to_ty) = match tycon_info {
                     Some(ti) => {
-                        let ty = tc.get_struct_union_value_type(typechcker);
-                        let field_tys = ty.field_types(&typechcker.type_env);
+                        let ty = tc.get_struct_union_value_type(typechecker);
+                        let field_tys = ty.field_types(&typechecker.type_env);
                         assert_eq!(ti.fields.len(), field_tys.len());
                         let field_name_to_ty = ti
                             .fields
@@ -146,12 +146,12 @@ impl PatternNode {
                     }
                     None => {
                         assert!(
-                            typechcker.error_tolerant,
+                            typechecker.error_tolerant,
                             "struct pattern head `{}` names no struct",
                             tc.to_string()
                         );
                         (
-                            typechcker.fresh_ty_with_src(&self.info.source),
+                            typechecker.fresh_ty_with_src(&self.info.source),
                             Map::default(),
                         )
                     }
@@ -164,8 +164,8 @@ impl PatternNode {
                     // type mismatch, …) substitutes a fresh-tyvar
                     // typed sub-pattern with no bindings, so the
                     // sibling fields are still walked.
-                    let typed = pat.get_typed(typechcker);
-                    let (typed_pat, var_ty) = typechcker.tolerate_pattern_typed(typed, pat)?;
+                    let typed = pat.get_typed(typechecker);
+                    let (typed_pat, var_ty) = typechecker.tolerate_pattern_typed(typed, pat)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     // No field type to unify against: the head names no struct, or the
@@ -173,7 +173,7 @@ impl PatternNode {
                     // mode and tolerates them in `error_tolerant` mode.
                     let Some(field_ty) = field_name_to_ty.get(field_name) else {
                         assert!(
-                            typechcker.error_tolerant,
+                            typechecker.error_tolerant,
                             "struct `{}` has no field `{}`",
                             tc.to_string(),
                             field_name
@@ -181,9 +181,9 @@ impl PatternNode {
                         continue;
                     };
                     let unify_res = UnifOrOtherErr::extract_others(
-                        typechcker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
+                        typechecker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
                     )?;
-                    if unify_res.is_err() && !typechcker.error_tolerant {
+                    if unify_res.is_err() && !typechecker.error_tolerant {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
@@ -206,25 +206,25 @@ impl PatternNode {
             }
             Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, tc, _ti) =
-                    Pattern::get_variant_info(&variant_name, &typechcker.type_env);
+                    Pattern::get_variant_info(&variant_name, &typechecker.type_env);
 
                 // Get the union type and variant type.
-                let union_ty = tc.get_struct_union_value_type(typechcker);
-                let variant_ty = union_ty.field_types(&typechcker.type_env)[variant_idx].clone();
+                let union_ty = tc.get_struct_union_value_type(typechecker);
+                let variant_ty = union_ty.field_types(&typechecker.type_env)[variant_idx].clone();
 
                 // Infer the type of the subpattern. In
                 // `error_tolerant` mode, a failure becomes a
                 // fresh-tyvar typed sub-pattern with no bindings — the
                 // surrounding union pattern still gets `union_ty`
                 // assigned, so the match arm can proceed.
-                let typed = subpat.get_typed(typechcker);
-                let (subpat, var_ty) = typechcker.tolerate_pattern_typed(typed, subpat)?;
+                let typed = subpat.get_typed(typechecker);
+                let (subpat, var_ty) = typechecker.tolerate_pattern_typed(typed, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
-                    typechcker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
+                    typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
                 )?;
-                if unify_res.is_err() && !typechcker.error_tolerant {
+                if unify_res.is_err() && !typechecker.error_tolerant {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
@@ -303,8 +303,8 @@ impl PatternNode {
             Pattern::Struct(tc, field_to_pat) => {
                 // Check if cursor is on any field-name span first.
                 for (name, name_src, pat) in field_to_pat {
-                    if let Some(ns) = name_src {
-                        if ns.includes_pos_lsp(pos) {
+                    if let Some(field_name_span) = name_src {
+                        if field_name_span.includes_pos_lsp(pos) {
                             return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }
@@ -316,8 +316,10 @@ impl PatternNode {
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
             Pattern::Union(variant, variant_src, subpat) => {
-                if let Some(vs) = variant_src {
-                    if vs.includes_pos_lsp(pos) && !variant.namespace.names.is_empty() {
+                if let Some(variant_name_span) = variant_src {
+                    if variant_name_span.includes_pos_lsp(pos)
+                        && !variant.namespace.names.is_empty()
+                    {
                         let tc = TyCon::new(variant.namespace.clone().to_fullname());
                         return Some(EndNode::Variant(tc, variant.name.clone()));
                     }
@@ -789,12 +791,12 @@ impl Pattern {
         match_src: &Option<Span>,
         pats: impl Iterator<Item = Arc<PatternNode>>,
     ) -> Result<(), Errors> {
-        let mut variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
+        let mut uncovered_variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
         let mut found_otherwise = false;
         for pat in pats {
             match &pat.pattern {
                 Pattern::Union(variant, _, _) => {
-                    if !variants.contains(&variant.name) {
+                    if !uncovered_variants.contains(&variant.name) {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "`{}` is not a variant of union `{}`.",
@@ -804,24 +806,24 @@ impl Pattern {
                             &[&pat.info.source],
                         ));
                     }
-                    variants.remove(&variant.name);
+                    uncovered_variants.remove(&variant.name);
                 }
                 _ => {
                     found_otherwise = true;
                 }
             }
         }
-        if !found_otherwise && !variants.is_empty() {
-            let msg = if variants.len() == 1 {
+        if !found_otherwise && !uncovered_variants.is_empty() {
+            let msg = if uncovered_variants.len() == 1 {
                 format!(
                     "Variant `{}` of union `{}` is not covered.",
-                    variants.iter().next().unwrap(),
+                    uncovered_variants.iter().next().unwrap(),
                     cond_tc.to_string()
                 )
             } else {
                 format!(
                     "Variants {} of union `{}` are not covered.",
-                    variants
+                    uncovered_variants
                         .iter()
                         .map(|var| format!("`{}`", var))
                         .collect::<Vec<_>>()
