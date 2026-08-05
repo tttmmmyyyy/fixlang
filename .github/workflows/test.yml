@@ -65,11 +65,11 @@ jobs:
 
   # ThreadSanitizer instruments every memory access, so a program built with it runs several times
   # slower. Only the tests that share a value between threads have a race to find, so only they are
-  # built that way; every other test runs in the job above.
+  # built that way; every other test runs in the `test` job.
   #
-  # No optimization-level matrix: these tests name the levels they build at, one of them `none` and
-  # one `max`, and `FIX_MAX_OPT_LEVEL` bounds a level from above rather than choosing it, so a
-  # matrix would lower what they asked for instead of adding to it.
+  # These tests name the optimization levels they build at, one of them `none` and one `max`, and
+  # `FIX_MAX_OPT_LEVEL` caps the level a build may reach, so this job leaves it unset and each test
+  # runs at the level it asks for.
   thread-safety:
     runs-on: ubuntu-latest
     steps:

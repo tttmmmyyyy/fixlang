@@ -475,3 +475,17 @@ pub fn assert_succeeded(output: &Output, what: &str) {
         String::from_utf8_lossy(&output.stderr),
     );
 }
+
+/// Asserts that `output` failed, quoting both streams otherwise.
+///
+/// # Arguments
+/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+pub fn assert_failed(output: &Output, what: &str) {
+    assert!(
+        !output.status.success(),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}

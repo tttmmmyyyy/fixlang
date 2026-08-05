@@ -34,10 +34,10 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_shift, build_capacity_check,
-    build_elems_bytes, build_storage_is_aligned, create_obj, get_array_storage,
-    get_array_storage_buf, read_alloc_offset, refcnt_type, union_tag_type, write_alloc_offset,
-    CapacityCheck, ObjectFieldType,
+    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, refcnt_type, union_tag_type, write_alloc_offset, CapacityCheck,
+    ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -7573,6 +7573,20 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 }
 
+/// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
+/// yields.
+fn apply_io_act_to_data_ptr<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    io_act: Object<'c>,
+    data_ptr: PointerValue<'c>,
+) -> Object<'c> {
+    let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+    let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
+    gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap()
+}
+
+/// The pointer to the payload of a boxed value: the fields of a boxed struct, or the payload buffer
+/// past the tag of a boxed union.
 fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
@@ -7616,6 +7630,8 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Std::FFI::_mutate_boxed_internal`: makes the boxed value unique, runs the action on a
+/// pointer to the value's payload, and evaluates to the value paired with the action's result.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
@@ -7643,11 +7659,9 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value.
@@ -7787,23 +7801,29 @@ fn assumed_state(assume_local: bool) -> RcState {
     }
 }
 
-/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
-/// nothing when `force_unique` is false, which is set only where the value is known to be unique.
+/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere.
+///
+/// # Arguments
+/// * `force_unique` — false where the uniqueness analysis proved the value already unique; the value
+///   is then returned as it stands, and compiler development mode checks that proof against the
+///   value's reference count.
+/// * `state` — the reference-counting state the uniqueness check reads the count under.
 fn force_unique_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
     force_unique: bool,
     state: RcState,
 ) -> Object<'c> {
+    assert!(
+        val.is_box(gc.type_env()),
+        "force_unique_boxed on the unboxed type {}.",
+        val.ty.to_string()
+    );
     if !force_unique {
         assert_proven_unique(gc, &val);
         return val;
     }
-    if val.ty.is_array() {
-        make_array_unique(gc, val, state)
-    } else {
-        make_struct_union_unique(gc, val, state)
-    }
+    make_struct_union_unique(gc, val, state)
 }
 
 /// Abort, in compiler development mode, if `val` is shared where the uniqueness analysis proved it
@@ -7818,14 +7838,14 @@ fn force_unique_boxed<'c, 'm>(
 ///
 /// Development mode only: this restores the cost the analysis exists to remove.
 fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
-    if !gc.config.develop_mode || !val.is_box(gc.type_env()) {
+    if !gc.config.develop_mode {
         return;
     }
     let obj_ptr = val.value(gc).into_pointer_value();
     let refcnt_ptr = gc.get_refcnt_ptr(obj_ptr);
     let refcnt = gc
         .builder()
-        .build_load(refcnt_type(gc.context), refcnt_ptr, "proven_unique_refcnt")
+        .build_load(refcnt_type(gc.context), refcnt_ptr, "refcnt@assert_unique")
         .unwrap()
         .into_int_value();
     let is_shared = gc
@@ -7834,19 +7854,31 @@ fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
             IntPredicate::UGT,
             refcnt,
             refcnt_type(gc.context).const_int(1, false),
-            "is_shared_though_proven_unique",
+            "is_shared@assert_unique",
         )
         .unwrap();
-    build_abort_if(
-        gc,
-        is_shared,
-        RUNTIME_ABORT,
-        &[],
-        "shared_though_proven_unique",
-    );
+    let current_func = gc.current_function();
+    let shared_bb = gc
+        .context
+        .append_basic_block(current_func, "shared_bb@assert_unique");
+    let unique_bb = gc
+        .context
+        .append_basic_block(current_func, "unique_bb@assert_unique");
+    gc.builder()
+        .build_conditional_branch(is_shared, shared_bb, unique_bb)
+        .unwrap();
+
+    gc.builder().position_at_end(shared_bb);
+    gc.panic("A write inferred to be into a unique object reached a shared one.\n");
+    gc.builder().build_unconditional_branch(unique_bb).unwrap();
+
+    gc.builder().position_at_end(unique_bb);
 }
 
-// _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
+/// The definition of `Std::FFI::_mutate_boxed_internal`, which makes the boxed value unique, applies
+/// the action to a pointer to the value's payload, and returns the value with the action's result.
+///
+/// `_mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)`
 pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_A_NAME: &str = "a";
     const TYPE_B_NAME: &str = "b";
@@ -7885,6 +7917,9 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Std::FFI::_mutate_boxed_ios_internal`: makes the boxed value unique, runs the action on
+/// a pointer to the value's payload while threading the caller's `IOState`, and evaluates to that
+/// state paired with the value and the action's result.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
@@ -7913,26 +7948,24 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value.
-        let pair_ab = create_obj(
+        let val_and_res = create_obj(
             make_tuple_ty(vec![val.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
             gc,
-            Some("pair_ab"),
+            Some("val_and_res"),
         );
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &val);
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 0, &val);
+        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 1, &io_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &val_and_res);
 
         res
     }
@@ -8185,9 +8218,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
 
         // Run the callback with a pointer to the first element.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value `(array, action result)`.
@@ -8328,24 +8359,22 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
 
         // Run the callback with a pointer to the first element, threading the real `ios`.
         let data_ptr = get_array_storage_buf(gc, &array);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
+        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
         let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value `(ios, (array, action result))`.
-        let pair_ab = create_obj(
+        let array_and_res = create_obj(
             make_tuple_ty(vec![array.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
             gc,
-            Some("pair_ab"),
+            Some("array_and_res"),
         );
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &array);
-        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 0, &array);
+        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 1, &io_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab)
+        ObjectFieldType::move_into_struct_field(gc, res, 1, &array_and_res)
     }
 
     fn name(&self) -> String {
