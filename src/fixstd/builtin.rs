@@ -1971,8 +1971,8 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     arr_name: FullName,
     len_name: FullName,
-    // When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
-    // array. Set false only where the array is statically known to be unique.
+    /// When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
+    /// array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -3443,6 +3443,9 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(false)
 }
 
+/// The body of the array punch: the element at the index bound to `idx_name` is moved out of the
+/// array bound to `arr_name`, leaving that slot as the hole, and is returned together with the
+/// punched array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayPunchBody {
     pub(crate) force_unique: bool,
@@ -4529,6 +4532,8 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 }
 
+/// The body of a struct's `punch_x`: field `field_idx` is moved out of the struct bound to
+/// `var_name`, and is returned together with the punched struct, whose type records the hole.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
     pub var_name: FullName,
@@ -5732,14 +5737,16 @@ fn make_struct_union_unique<'c, 'm>(
     obj
 }
 
+/// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
+/// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
     pub struct_name: FullName,
     field_count: u32,
     field_idx: u32,
-    // When true, clone the struct first if it is shared, so the write lands in a uniquely owned
-    // struct. Set false only where the struct is statically known to be unique.
+    /// When true, clone the struct first if it is shared, so the write lands in a uniquely owned
+    /// struct. Set false only where the struct is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.

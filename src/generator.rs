@@ -956,7 +956,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj.extract_field(self, field_idx)
     }
 
-    // Push scope.
+    /// Bind `var` to `obj` in the innermost scope, shadowing any binding `var` already has there.
     pub fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
             .borrow_mut()
@@ -965,12 +965,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             .push_local(var, obj)
     }
 
-    // Pop scope.
+    /// Drop the innermost binding of `var`, revealing the binding it shadowed.
     pub fn scope_pop(self: &mut Self, var: &FullName) {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    // Get pointer to reference counter of a given object.
+    /// The pointer to the reference count in the control block of the boxed object at `obj`.
     pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
@@ -1299,7 +1299,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(unique_bb);
     }
 
-    // Get pointer to state of reference counter of a given object.
+    /// The pointer to the reference-count state in the control block of the boxed object at `obj`.
     pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
@@ -1311,7 +1311,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    // Take a lambda object and return function pointer.
+    /// The code pointer to call a lambda through: the funcptr field of a closure, or the value
+    /// itself when the lambda is a bare function pointer.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         // Get the pointer value.
         if obj.ty.is_closure() {

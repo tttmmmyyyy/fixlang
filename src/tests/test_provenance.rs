@@ -11,14 +11,16 @@ mod integration_tests {
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
+    /// The directory in the source tree holding the case projects these tests build.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_provenance/cases");
         path
     }
 
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    // and return the directory of the named case project.
+    /// Copy the test cases into a temporary directory of this test's own, so that parallel test
+    /// runs stay out of each other's way, and return that directory together with the directory of
+    /// the case project named by `case`.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dst = temp_dir.path().to_path_buf();
@@ -341,6 +343,9 @@ mod integration_tests {
         assert_binding_prov(&dump, "arr", "[fresh]");
     }
 
+    /// Verifies that the borrow version of a function that wraps its borrowed argument in a union
+    /// reference-counts nothing: the union lays the borrowed payload in place without owning it, so
+    /// releasing the union would free an array its caller still holds.
     #[test]
     fn test_borrow_union_no_double_release() {
         let (_temp_dir, project_dir) = setup_test_env("union");
@@ -374,6 +379,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a locally fresh value carries its provenance through a guard and through a
+    /// fill loop, so that every in-place operation reached with it drops its uniqueness check,
+    /// while an operation on a value read out of a boxed container keeps one.
     #[test]
     fn test_unique_check_elim_local_fresh() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim");
@@ -568,6 +576,12 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a loop entered with a shared array pays its uniqueness check on the first
+    /// iteration alone.
+    ///
+    /// Specialization clones the loop body per input uniqueness, so the source-level `set` appears
+    /// in two functions: a checked one, whose check clones the shared array, and one reached with
+    /// that fresh clone, which writes in place.
     #[test]
     fn test_unique_check_elim_shared_loop_entry() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
