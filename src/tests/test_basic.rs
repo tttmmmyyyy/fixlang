@@ -5703,11 +5703,11 @@ pub fn test_overlapping_instances_1() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl [a : ToString] Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5733,11 +5733,11 @@ pub fn test_overlapping_instances_2() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl Array I64 : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5793,11 +5793,11 @@ pub fn test_overlapping_instances_4() {
     }
 
     impl [e : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl [a : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl I64 : MyToString {

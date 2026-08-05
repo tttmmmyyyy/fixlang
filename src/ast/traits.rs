@@ -623,14 +623,14 @@ impl TraitImpl {
     pub fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
-        let tv = &trait_defn.type_var.name; // `a` in the above example.
+        let tyvar_name = &trait_defn.type_var.name; // `a` in the above example.
         let mut method_qualty = trait_defn.member_ty(method_name); // `a -> String` in the above example.
 
         // Next, see the trait implementation to get the type for which the trait is implemented.
         let impl_type = self.impl_type(); // `(a, b)` in the above example.
 
-        // We are going to substitute `tv` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
-        // This is OK if FV(method_qualty) \ {tv} is disjoint from FV(impl_type).
+        // We are going to substitute `tyvar_name` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
+        // This is OK if FV(method_qualty) \ {tyvar_name} is disjoint from FV(impl_type).
         // Otherwise, we need to rename the type variables in `method_qualty` to avoid name collision.
         // Example:
         // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
@@ -643,7 +643,7 @@ impl TraitImpl {
         // Collect type variables that need renaming (those that collide with fv_impl_type).
         let vars_to_rename: Vec<_> = fv_method_qualty
             .iter()
-            .filter(|fv| &fv.name != tv && fv_impl_type.contains_key(&fv.name))
+            .filter(|fv| &fv.name != tyvar_name && fv_impl_type.contains_key(&fv.name))
             .collect();
         let used_names: Set<String> = fv_impl_type
             .keys()
@@ -660,9 +660,9 @@ impl TraitImpl {
         // Rename type variables in `method_qualty`.
         s.substitute_qualtype(&mut method_qualty);
 
-        // Then substitute `tv` with `impl_type`.
+        // Then substitute `tyvar_name` with `impl_type`.
         // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
-        let s = Substitution::single(&tv, impl_type);
+        let s = Substitution::single(&tyvar_name, impl_type);
         s.substitute_qualtype(&mut method_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
@@ -1216,10 +1216,10 @@ impl TraitEnv {
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
-        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = std::mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, impls) in impls {
-            for mut impl_ in impls {
+        for (trait_id, trait_impls) in old_impls {
+            for mut impl_ in trait_impls {
                 // Set up NameResolutionContext.
                 ctx.set_current_module(impl_.define_module.clone());
 
@@ -1252,10 +1252,10 @@ impl TraitEnv {
         }
 
         // Resolve aliases in trait implementations.
-        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = std::mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, impls) in impls {
-            for mut impl_ in impls {
+        for (trait_id, trait_impls) in old_impls {
+            for mut impl_ in trait_impls {
                 // Resolve names in TraitImpls.
                 errors.eat_err(impl_.resolve_type_aliases(type_env));
 

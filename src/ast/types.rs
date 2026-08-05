@@ -2196,15 +2196,15 @@ impl Scheme {
         // appears under an associated type application (or only in a class
         // predicate) would not be determined by unification at a use site,
         // which would make the scheme ambiguous.
-        let fixed = self.fixed_vars();
+        let fixed_vars = self.fixed_vars();
         // First occurrence wins, which gives a useful span pointing at the
         // offending position.
         let occurrences = self.all_tyvar_occurrences_with_span();
-        for gv in &self.gen_vars {
-            if fixed.contains(&gv.name) {
+        for gen_var in &self.gen_vars {
+            if fixed_vars.contains(&gen_var.name) {
                 continue;
             }
-            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gv.name) else {
+            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gen_var.name) else {
                 // A generalized variable can be absent from the body:
                 // `gen_vars` is determined when the scheme is generalized, and
                 // expanding a type alias that drops a parameter (`type Ignore
@@ -2217,7 +2217,7 @@ impl Scheme {
                 format!(
                     "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
                      NOTE: `{}` must appear outside of any associated type application.",
-                    gv.name, gv.name,
+                    gen_var.name, gen_var.name,
                 ),
                 &[span],
             ));

@@ -159,19 +159,19 @@ impl Symbol {
 
     // Calculate MD5 hash of this symbol.
     pub fn hash(&self) -> String {
-        let mut data = String::new();
-        data.push_str("<name>");
-        data.push_str(&self.name.to_string());
+        let mut hash_source = String::new();
+        hash_source.push_str("<name>");
+        hash_source.push_str(&self.name.to_string());
 
-        data.push_str("<type>");
-        data.push_str(&self.ty.to_string());
+        hash_source.push_str("<type>");
+        hash_source.push_str(&self.ty.to_string());
 
-        data.push_str("<expr>");
+        hash_source.push_str("<expr>");
         if let Some(expr) = &self.expr {
-            data.push_str(&expr.expr.stringify().to_string());
+            hash_source.push_str(&expr.expr.stringify().to_string());
         }
 
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 }
 
@@ -2543,8 +2543,8 @@ impl Program {
         }
 
         // Merge `mod_to_import_stmts`.
-        for (importer, importee) in &other.mod_to_import_stmts {
-            insert_to_map_vec_many(&mut self.mod_to_import_stmts, importer, importee.clone());
+        for (importer, stmts) in &other.mod_to_import_stmts {
+            insert_to_map_vec_many(&mut self.mod_to_import_stmts, importer, stmts.clone());
         }
 
         // Merge types.
