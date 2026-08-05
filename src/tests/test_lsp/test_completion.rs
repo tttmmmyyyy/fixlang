@@ -8,6 +8,7 @@ mod tests {
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::{Duration, Instant},
     };
@@ -543,8 +544,6 @@ mod tests {
     /// any fix lands; once it passes the regression is closed.
     #[test]
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
-        use std::fs;
-
         let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client
@@ -712,7 +711,7 @@ mod tests {
         // dot-context extractor actually observed as the receiver
         // type (it logs `dot-context receiver type: <ty>`).
         let log_path = ctx.project_dir.join(".fixlang/fix.log");
-        if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+        if let Ok(log_content) = fs::read_to_string(&log_path) {
             let completion_log: String = log_content
                 .lines()
                 .filter(|l| l.contains("[completion]"))
