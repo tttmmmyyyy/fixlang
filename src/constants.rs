@@ -101,7 +101,15 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
 /// The name of the parameter through which a decaptured lambda receives its capture list.
-pub const DECAP_NAME: &str = "#decap";
+pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
+/// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
+pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
+/// The suffix, followed by a hash of which argument received which decaptured lambda, of a
+/// function specialized on the lambdas passed to it.
+pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
+/// The suffix of the local binding holding the call of a decaptured lambda, which an inline-LLVM
+/// expression reads in place of the variable that held the lambda's capture list.
+pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
@@ -143,6 +151,24 @@ pub const ARRAY_STORAGE_ALLOC_SLACK: u64 = ARRAY_BUF_ALIGNMENT - 1;
 // alignment costs, and such arrays are numerous enough that those bytes show up on their own.
 pub const ARRAY_ALIGNED_ALLOC_THRESHOLD: u64 = 256;
 
+// The default for `Configuration::max_split_scalars`: the most scalars an unboxed value is split
+// into and carried as separate LLVM values, above which it stays one aggregate wherever it is
+// carried.
+//
+// A scalar here is one LLVM value: a struct contributes the scalars of its fields, and everything
+// else is one, an array included however many elements it holds. That is the quantity this limit
+// exists to bound -- the LLVM values a Fix value occupies, which is what a union's payload buffer
+// costs whatever its width. `return_abi.rs`'s `demand_of` counts the same array element by element,
+// because it answers the other question: how many registers the return lowering asks for, and that
+// lowering flattens an array into its elements.
+//
+// Splitting is what keeps a loop-carried field visible to LLVM (see `Generator::type_parts`), and
+// the widest type in the benchmark suite holds 21 scalars, the widest across the minilib libraries
+// 37, so this is well above what real code splits. Above it the count is what matters: a value of
+// 4096 scalars costs one LLVM value per scalar at every function boundary it crosses, and the
+// backend's per-block work grows faster than the count.
+pub const MAX_SPLIT_SCALARS: usize = 128;
+
 // The variant tags of `Std::Bool = unbox union { _false : (), _true : () }`.
 pub const BOOL_FALSE_TAG: usize = 0;
 pub const BOOL_TRUE_TAG: usize = 1;
@@ -157,6 +183,10 @@ pub const IS_UNIQUE_VALUE_FIELD: usize = 1;
 // of `ObjectFieldType::to_debug_type` in object.rs and the debugging section of
 // Document.md.
 pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
+
+// Field layout of the `#DynamicObject` a closure keeps its captured values in: a control block, the
+// traverse function that drives the captures' lifetimes, then the captures themselves. The captures
+// vary with the closure, which is why the object carries its own traverse function.
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
@@ -165,6 +195,8 @@ pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that 
 pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
 pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
 
+// Field layout of the control block every boxed object begins with: the reference count, then the
+// `REFCNT_STATE_*` value saying how that count is to be maintained.
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // How far the object sits above the base of its allocation. Nonzero where the object was placed

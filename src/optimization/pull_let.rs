@@ -2,7 +2,7 @@
 # Overview
 
 `Pulls let` transformation.
-This transformation is used to increase the number of places where decapturing optimization can be applied.
+This transformation is used to increase the number of places where the decapturing of `closure_specialization` can be applied.
 
 # Transformation
 
@@ -65,13 +65,13 @@ where `{pat'}` and `{expr1'}` are the same as `{pat}` and `{expr1}`, but with al
 # Expected Effects
 
 (1)
-As described in the comment for decapturing optimization, the following code can be optimized with decapturing:
+As described in the comment for `closure_specialization`, the following code can be optimized with decapturing:
 
 ```
 let f = |x| x + n;
 ```
 
-On the other hand, decapturing optimization cannot be applied to the following code:
+On the other hand, decapturing cannot be applied to the following code:
 
 ```
 let f = (
@@ -80,10 +80,10 @@ let f = (
 );
 ```
 
-After applying the pull-let transformation (1), the second code can be transformed into a form that can be applied with decapturing optimization.
+After applying the pull-let transformation (1), the second code can be transformed into a form that decapturing applies to.
 
 (2) and (3)
-The following code can be optimized with decapturing optimization
+The following code can be optimized with decapturing
 
 ```
 let f = |i, s| s + n;
@@ -93,17 +93,17 @@ it.fold(s0, f)
 into
 
 ```
-let f = #DecapF { n : n };
-it.fold#lamf(s0, f)
+let f = #Cap { n : n };
+it.fold#spec(s0, f)
 ```
 
-On the other hand, decapturing optimization cannot be applied to the following code:
+On the other hand, decapturing cannot be applied to the following code:
 
 ```
 it.fold(s0, |i, s| s + n)
 ```
 
-After applying the pull-let transformation (2) and (3), the second code can be transformed into a form that can be applied with decapturing optimization.
+After applying the pull-let transformation (2) and (3), the second code can be transformed into a form that decapturing applies to.
 
 # Evaluation order
 

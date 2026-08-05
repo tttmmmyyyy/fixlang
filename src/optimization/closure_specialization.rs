@@ -1,5 +1,10 @@
-use std::{rc::Rc, sync::Arc};
-
+use super::{
+    capture_struct::{fresh_global_name, CaptureStruct},
+    find_usage_of_name::{self, UsageType},
+    inline,
+    uncurry::internalize_let_to_var_at_head,
+    unique_local_names,
+};
 use crate::{
     ast::{
         expr::{
@@ -8,27 +13,28 @@ use crate::{
         name::FullName,
         pattern::PatternNode,
         program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
-    constants::{CAP_NAME, DECAP_NAME},
+    constants::{
+        CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
+        CLOSURE_SPEC_SUFFIX,
+    },
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
-
-use super::{
-    capture_struct::{fresh_global_name, CaptureStruct},
-    find_usage_of_name::{self, UsageType},
-    inline::{self},
-    uncurry::internalize_let_to_var_at_head,
-    unique_local_names,
-};
+use std::{mem, rc::Rc, sync::Arc};
 
 /*
-# Decapturing optimization
+# Closure specialization
 
 ## Overview
+
+This pass makes a lambda cheaper to call, by two techniques that feed each other. **Decapturing**
+lifts a lambda to a global function taking its captured environment as an argument, which leaves a
+plain value where a closure was. **Specialization** then copies a global function that receives such
+a value, one copy per lifted lambda it is given, so the copy calls that lambda by name.
 
 ### Decapturing
 
@@ -40,30 +46,31 @@ For example, consider the following lambda expression:
 let f = |x| x + n;
 ```
 
-Then, the following structure and global function are defined:
+Then, the following structure and global function are defined. The names below are written short
+for reading; see "The names this pass mints" for the shape they really take.
 ```
-type #DecapF = unbox struct { n: I64 };
+type #Cap = unbox struct { n: I64 };
 
-#lamf : #DecapF -> I64 -> I64;
-#lamf = |{ n : n }, x| x + n;
+#lam : #Cap -> I64 -> I64;
+#lam = |{ n : n }, x| x + n;
 ```
 
-The creation of the lambda value is replaced with `#DecapF { n : n }`.
+The creation of the lambda value is replaced with `#Cap { n : n }`.
 ```
-let f = #DecapF { n : n };
+let f = #Cap { n : n };
 ```
 
 ### Rewriting the usage of the lambda
 
 The call of the decaptured lambda expression `f(x)` is transformed into the following code.
 ```
-#lamf(f, x)
+#lam(f, x)
 ```
 
-In principle, `f` is replaced with `#lamf(f)` in places where `f` appears alone (i.e., not in a call expression).
-However, in cases where "closure specialization" can be applied, `f` is left as is.
+In principle, `f` is replaced with `#lam(f)` in places where `f` appears alone (i.e., not in a call expression).
+However, in cases where specialization can be applied, `f` is left as is.
 
-### Closure specialization
+### Specializing a function on the lambda it is given
 
 Consider the case where a lambda is given as an argument to a global function.
 As an example, consider the case where `f` is passed as the second argument to `fold`.
@@ -83,44 +90,61 @@ it.fold(s0, f)
 ```
 
 In this case, the following code is generated.
-This is called as "closure specialization".
 
 ```
-fold#lamf : S -> #DecapF -> Iter -> S;
-fold#lamf = |s, op, iter| (
+fold#spec : S -> #Cap -> Iter -> S;
+fold#spec = |s, op, iter| (
     match iter.advance {
         none() => s,
-        some((iter, a)) => iter.fold#lamf(#lamf(op, a, s), op)
+        some((iter, a)) => iter.fold#spec(#lam(op, a, s), op)
     }
 );
 ```
 
 ```
-it.fold#lamf(s0, f)
+it.fold#spec(s0, f)
 ```
 
 ## Applicable range and limitations
 
 ### The path from defining a lambda to using it
 
-If a lambda is defined and used as is, decapturing optimization is applied.
+If a lambda is defined and used as is, decapturing is applied.
 Example: `iter.fold(s0, |acm, i| acm + i)`
 
-If a lambda is defined in the right-hand side of a let statement and its name is used, decapturing optimization is applied.
+If a lambda is defined in the right-hand side of a let statement and its name is used, decapturing is applied.
 Example: `let f = |acm, i| acm + i; iter.fold(s0, f)`
 
-However, if the path from defining a lambda to using it is more complex than this, this optimization is not applied.
+However, if the path from defining a lambda to using it is more complex than this, decapturing is not applied.
 Example: `let (_, f) = (0, |acm, i| acm + i); iter.fold(s0, f)`
+
+## The names this pass mints
+
+The names carry one `#closure` stem, so that a dump says which pass produced them:
+
+* `<symbol>#closure_lam<n>` — the global function a decaptured lambda becomes.
+* `<symbol>#closure_spec_<hash>` — the copy of a global function specialized on the lambdas passed
+  to it, where the hash stands for which argument received which decaptured lambda.
+* `<local>#closure_call_lam` — a local binding. Where an inline-LLVM expression reads a variable
+  holding a decaptured lambda's capture list, the call of that lambda is bound to a local of this
+  name and the expression reads that instead.
+* `CLOSURE_CAP_NAME` — the parameter a decaptured lambda receives its capture list through.
+
+The capture struct's type constructor is named by `CaptureStruct`, which this pass gives the prefix
+`#CapList` and `defunctionalize_fix` gives `#FixCap`: those two are chosen together at that
+constructor and read against each other, so they sit outside this stem.
 
 ## Relations to other optimizations
 
-* We perform `pull-let` transformation before decapturing optimization.
+* We perform `pull-let` transformation before decapturing.
 * Inline expansion should be performed before this optimization. For example, the expression `f >> g` is replaced with a lambda expression by inline expansion, making it a target of this optimization.
 * It may be worth performing inline expansion after this optimization. This is because global functions are generated by this optimization, and inline expansion may be performed on them.
 * It may be worth performing inline expansion before this optimization. This is because the number of arguments that can be specialized increases due to eta expansion.
 * To improve the performance of global functions generated by this optimization, uncurrying should be performed after this optimization.
 */
 
+// Run the optimization over `prg` until it reaches a fixed point: each round can leave lambdas
+// inside the functions it has just specialized, which the next round lifts in turn.
 pub fn run(prg: &mut Program, show_build_times: bool) {
     let mut stable_symbols = Set::default();
     while run_one(prg, &mut stable_symbols, show_build_times) {}
@@ -135,7 +159,7 @@ pub fn run_one(
     stable_symbols: &mut Set<FullName>,
     show_build_times: bool,
 ) -> bool {
-    let _sw = StopWatch::new("decapturing::run_one", show_build_times);
+    let _sw = StopWatch::new("closure_specialization::run_one", show_build_times);
 
     // Whether optimization has been performed on any symbol.
     let mut changed = false;
@@ -144,7 +168,7 @@ pub fn run_one(
     let specializable_funcs = specializable_functions(prg);
     let specializable_funcs = Rc::new(specializable_funcs);
 
-    let symbols = std::mem::take(&mut prg.symbols);
+    let symbols = mem::take(&mut prg.symbols);
     let mut new_tycons = Map::default();
 
     // Create a set of global names
@@ -157,7 +181,10 @@ pub fn run_one(
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut specializations: Vec<SpecializationRequest> = Vec::new();
 
-    let sw = StopWatch::new("decapturing::run_one first loop", show_build_times);
+    let sw = StopWatch::new(
+        "closure_specialization::run_one first loop",
+        show_build_times,
+    );
 
     for (name, mut sym) in symbols {
         // Skip symbols that are already known to be stable and will not change.
@@ -166,34 +193,34 @@ pub fn run_one(
             continue;
         }
 
-        let mut visitor = DecapturingVisitor::new(
+        let mut visitor = ClosureSpecializationVisitor::new(
             name.clone(),
             specializable_funcs.clone(),
             global_names.clone(),
         );
 
-        // Perform decapturing optimization
+        // Lift the lambdas of this symbol and record the specializations they enable.
         let expr = sym.expr.as_ref().unwrap();
         let sw = StopWatch::new(
-            "decapturing::run_one pull_let::run_on_expr",
+            "closure_specialization::run_one pull_let::run_on_expr",
             show_build_times,
         );
-        let expr = pull_let::run_on_expr(expr); // Increase the number of places where decapturing optimization can be applied.
+        let expr = pull_let::run_on_expr(expr); // Increase the number of places decapturing applies to.
         drop(sw);
 
         let sw = StopWatch::new(
             &format!(
-                "decapturing::run_one unique_local_names::run_on_expr on {}",
+                "closure_specialization::run_one unique_local_names::run_on_expr on {}",
                 &name.to_string()
             ),
             show_build_times,
         );
-        let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Ensure preconditions for implementation of decapturing optimization.
+        let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Ensure the preconditions decapturing is implemented against.
         drop(sw);
 
         let sw = StopWatch::new(
             &format!(
-                "decapturing::run_one visitor.traverse on {}",
+                "closure_specialization::run_one visitor.traverse on {}",
                 &name.to_string()
             ),
             show_build_times,
@@ -212,13 +239,12 @@ pub fn run_one(
         sym.expr = Some(trav_res.expr);
         specializations.append(&mut visitor.required_specializations); // Specialization requests are processed later
 
-        // Extract the generated decaptured lambdas and type constructors
-        for decap_lam in visitor.decap_lambdas {
-            let decap_lam_sym = decap_lam.make_symbol();
-            global_names.insert(decap_lam_sym.name.clone());
-            new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
-            new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
-        }
+        register_decaptured_lambdas(
+            visitor.decap_lambdas,
+            &mut new_symbols,
+            &mut global_names,
+            &mut new_tycons,
+        );
 
         new_symbols.insert(name.clone(), sym.clone());
     }
@@ -226,7 +252,10 @@ pub fn run_one(
 
     let mut symbols = new_symbols;
 
-    let sw = StopWatch::new("decapturing::run_one second loop", show_build_times);
+    let sw = StopWatch::new(
+        "closure_specialization::run_one second loop",
+        show_build_times,
+    );
     // Process specialization requests
     while specializations.len() > 0 {
         let mut new_specializations = Vec::new();
@@ -260,7 +289,7 @@ pub fn run_one(
             }
 
             // Perform specialization
-            let mut visitor = DecapturingVisitor::new(
+            let mut visitor = ClosureSpecializationVisitor::new(
                 specialized_func_name.clone(),
                 specializable_funcs.clone(),
                 global_names.clone(),
@@ -269,13 +298,12 @@ pub fn run_one(
             let trav_res = visitor.traverse(&expr);
             let expr = trav_res.expr;
 
-            // Extract the generated decaptured lambdas and type constructors
-            for decap_lam in visitor.decap_lambdas {
-                let decap_lam_sym = decap_lam.make_symbol();
-                global_names.insert(decap_lam_sym.name.clone());
-                symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
-                new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
-            }
+            register_decaptured_lambdas(
+                visitor.decap_lambdas,
+                &mut symbols,
+                &mut global_names,
+                &mut new_tycons,
+            );
 
             // Register the specialized function
             let specialized_func = Symbol {
@@ -297,6 +325,22 @@ pub fn run_one(
     prg.type_env.add_tycons(new_tycons);
     prg.symbols = symbols;
     changed
+}
+
+// Register the global function each decaptured lambda became into `symbols` and `global_names`, and
+// the type constructor of its capture list into `new_tycons`.
+fn register_decaptured_lambdas(
+    decap_lambdas: Vec<DecapturedLambdaInfo>,
+    symbols: &mut Map<FullName, Symbol>,
+    global_names: &mut Set<FullName>,
+    new_tycons: &mut Map<TyCon, TyConInfo>,
+) {
+    for decap_lam in decap_lambdas {
+        let decap_lam_sym = decap_lam.make_symbol();
+        global_names.insert(decap_lam_sym.name.clone());
+        symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+        new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
+    }
 }
 
 // Compute the set of specializable functions.
@@ -463,8 +507,8 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
     specializable_funcs
 }
 
-// Expression visitor for decapturing optimization
-struct DecapturingVisitor {
+// The visitor that lifts a symbol's lambdas and records the specializations they enable.
+struct ClosureSpecializationVisitor {
     /* Decapturing */
     // Information of decaptured lambdas generated by this optimization
     decap_lambdas: Vec<DecapturedLambdaInfo>,
@@ -488,14 +532,14 @@ struct DecapturingVisitor {
     global_names: Set<FullName>,
 }
 
-impl DecapturingVisitor {
+impl ClosureSpecializationVisitor {
     // Create a new visitor
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
         global_names: Set<FullName>,
     ) -> Self {
-        DecapturingVisitor {
+        ClosureSpecializationVisitor {
             decap_lambdas: Vec::new(),
             local_decap_lambdas: Map::default(),
             specializable_funcs,
@@ -506,7 +550,9 @@ impl DecapturingVisitor {
         }
     }
 
-    // Is the `decapture_lambda` function applicable?
+    // Whether `expr` is a lambda whose captured environment can be read off it, so that it can be
+    // lifted to a global function taking that environment as an argument. The free variables of an
+    // expression leave `CAP_NAME` out, so a body that reads it captures more than this can see.
     fn decapturable(expr: &Arc<ExprNode>) -> bool {
         // If the expression is a not lambda expression, it is not decapturable.
         if !expr.is_lam() {
@@ -527,7 +573,7 @@ impl DecapturingVisitor {
     fn decapture_lambda(
         &mut self,
         mut lam: Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
+        state: &mut VisitState,
     ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // Get the capture list.
         let cap_names = lam.lambda_cap_names();
@@ -559,15 +605,15 @@ impl DecapturingVisitor {
         // at the head of the body.
         let new_body = expr_let_typed(
             cap.pattern(),
-            expr_var(FullName::local(DECAP_NAME), None).set_type(cap.ty.clone()),
+            expr_var(FullName::local(CLOSURE_CAP_NAME), None).set_type(cap.ty.clone()),
             lam.clone(),
         );
-        let new_arg = var_local(DECAP_NAME);
+        let new_arg = var_local(CLOSURE_CAP_NAME);
         let new_lam = expr_abs_typed(new_arg, cap.ty.clone(), new_body);
         let new_lam = internalize_let_to_var_at_head(&new_lam);
         let lambda_func_name = fresh_global_name(
             &self.current_symbol,
-            "#decap_lam",
+            CLOSURE_LAM_SUFFIX,
             &mut self.lam_func_counter,
             &mut self.global_names,
         );
@@ -605,7 +651,7 @@ impl SpecializationRequest {
     fn specialized_func_name(&self) -> FullName {
         let mut full_name = self.org_func_name.clone();
         let name = full_name.name_as_mut();
-        *name += "#specialized";
+        *name += CLOSURE_SPEC_SUFFIX;
         let mut hash_data = String::new();
         for (i, decap_lam) in self.specialized_args.iter() {
             hash_data += &format!(",{}", i);
@@ -641,11 +687,13 @@ impl SpecializationRequest {
     }
 }
 
-// デキャプチャしたラムダ式の情報を保持する構造体
+// What a lambda expression became once decaptured: the global function carrying its body, and the
+// capture list struct that threads its captured environment into that function.
 #[derive(Clone)]
 struct DecapturedLambdaInfo {
     // Type constructor for the capture list
     tycon: TyCon,
+    // The definition of `tycon`, which the pass registers into the program's type environment.
     tycon_info: TyConInfo,
     // Type of the capture list
     cap_list_ty: Arc<TypeNode>,
@@ -667,12 +715,12 @@ impl DecapturedLambdaInfo {
     }
 }
 
-impl ExprVisitor for DecapturingVisitor {
+impl ExprVisitor for ClosureSpecializationVisitor {
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If `expr` refers to a decaptured lambda, and
         // the type of this expression is T, and the lambda function type is C->T (C is the capture list type),
         // replace it with an expression that applies the lambda function to the capture list.
@@ -710,19 +758,15 @@ impl ExprVisitor for DecapturingVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If any free variable in the LLVM expression refers to a decaptured lambda,
         // replace it with an expression that applies the lambda function to the capture list.
 
@@ -752,7 +796,7 @@ impl ExprVisitor for DecapturingVisitor {
 
         let make_new_name = |name: &FullName| {
             let mut new_name = name.clone();
-            new_name.name_as_mut().push_str("#call_decap_lam");
+            new_name.name_as_mut().push_str(CLOSURE_CALL_LAM_SUFFIX);
             new_name
         };
 
@@ -779,22 +823,17 @@ impl ExprVisitor for DecapturingVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
+    // Specialize the called function when it is a specializable global and a specializable argument
+    // is either a lambda expression or an already decaptured lambda (i.e., a capture list).
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        // Perform closure specialization if this application expression meets the following conditions:
-        // - The called function is specializable, and a specializable argument is either a lambda expression or an already decaptured lambda (i.e., a capture list).
-
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         let (func, args) = expr.destructure_app();
 
         // Check that `func` is a global function.
@@ -828,7 +867,7 @@ impl ExprVisitor for DecapturingVisitor {
                     specialized_args.insert(i, decap_info.clone());
                     decaptured_args[i] = arg.set_type(decap_info.cap_list_ty.clone());
                 }
-            } else if DecapturingVisitor::decapturable(arg) {
+            } else if ClosureSpecializationVisitor::decapturable(arg) {
                 // TODO: maybe we don't need to handle this case, because pull-let transformation converts this argument to a variable?
                 let (decap_info, expr) = self.decapture_lambda(arg.clone(), state); // Visits `arg` inside this call
                 specialized_args.insert(i, decap_info.clone());
@@ -857,19 +896,15 @@ impl ExprVisitor for DecapturingVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
         let arg = expr.get_lam_params();
         assert_eq!(arg.len(), 1);
@@ -894,11 +929,7 @@ impl ExprVisitor for DecapturingVisitor {
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
         // Example: In `expr` is a lambda `|x| |y| (...)`, if `y` is a decaptured lambda, visiting `|y| (...)` may change its type, so the codomain of `|x| |y| (...)` may need to be fixed.
         let lam_ty = expr.type_.as_ref().unwrap();
@@ -914,15 +945,18 @@ impl ExprVisitor for DecapturingVisitor {
         EndVisitResult::changed(expr)
     }
 
+    // Decapture a lambda bound by this `let`, and record the bound name in `local_decap_lambdas` so
+    // that later uses of it are read as the capture list the binding now holds. A binding of a name
+    // already standing for a decaptured lambda passes that reading on to the new name.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
         let value = expr.get_let_value();
-        if DecapturingVisitor::decapturable(&bound) {
+        if ClosureSpecializationVisitor::decapturable(&bound) {
             // If the bound expression is a lambda, perform decapturing.
             assert!(pat.is_var());
             let var_name = pat.get_var().name.clone();
@@ -966,123 +1000,107 @@ impl ExprVisitor for DecapturingVisitor {
         }
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_if(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_eval(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

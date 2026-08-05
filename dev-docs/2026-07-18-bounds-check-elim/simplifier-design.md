@@ -35,9 +35,9 @@ pass runs) and the RC IR `RcProgram`. Relevant existing passes:
 - **Copy propagation + dead-let**: `let_elimination.rs` (AST).
 - **Dead global elimination**: `dead_symbol_elimination.rs` (AST).
 - **Newtype unwrap**: `unwrap_newtype.rs` (AST, type-driven, single-field unbox struct).
-- **Higher-order specialization**: `decapturing.rs` specializes functions — including
+- **Higher-order specialization**: `closure_specialization.rs` specializes functions — including
   **self-recursive** ones — on their lambda arguments (`worth_specialized =
-  self_recursive || inline_at_call_site`), minting `#specialized` names. **This is the
+  self_recursive || inline_at_call_site`), minting `#closure_spec` names. **This is the
   enabling fact**: after decapturing, a `fold`/`loop`/`loop_iter` call is a specialized
   function whose closure body is a *known* function, so the body-into-driver inline
   below has a concrete target.

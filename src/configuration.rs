@@ -4,10 +4,10 @@ use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
     C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE, OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL,
-    OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
+    DEFAULT_COMPILATION_UNIT_MAX_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
+    OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
-use crate::elaboration::typecheckcache::{self, TypeCheckCache};
+use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
@@ -345,6 +345,10 @@ pub struct Configuration {
     pub verbose: bool,
     // Maximum size of compilation unit.
     pub max_cu_size: usize,
+    // The most scalars a value is split into and carried as separate LLVM values; a type holding
+    // more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
+    // under the same treatment.
+    pub max_split_scalars: usize,
     // Run program with valgrind. Effective only in `run` mode.
     pub valgrind_tool: ValgrindTool,
     /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
@@ -420,6 +424,7 @@ pub enum FixOptimizationLevel {
 }
 
 impl fmt::Display for FixOptimizationLevel {
+    /// Writes the level under the name `--opt-level` accepts for it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
@@ -431,6 +436,7 @@ impl fmt::Display for FixOptimizationLevel {
 }
 
 impl FixOptimizationLevel {
+    /// The level `--opt-level` spells `opt_level`, the inverse of `Display`.
     pub fn from_str(opt_level: &str) -> Option<Self> {
         match opt_level {
             OPTIMIZATION_LEVEL_NONE => Some(FixOptimizationLevel::None),
@@ -443,6 +449,9 @@ impl FixOptimizationLevel {
 }
 
 impl Configuration {
+    /// The configuration a run of `subcommand` starts from, which the command line and the project
+    /// file then override. The optimization level comes from the environment and the C type sizes
+    /// from the C compiler; every other setting takes its default.
     fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,
@@ -461,6 +470,7 @@ impl Configuration {
             show_build_times: false,
             verbose: false,
             max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            max_split_scalars: MAX_SPLIT_SCALARS,
             valgrind_tool: ValgrindTool::None,
             sanitizer: Sanitizer::None,
             library_search_paths: vec![],
@@ -468,7 +478,7 @@ impl Configuration {
             disable_cpu_features_regex: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
-            type_check_cache: Arc::new(typecheckcache::FileCache::new()),
+            type_check_cache: Arc::new(FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_override: None,
             run_program_args: vec![],
@@ -500,9 +510,7 @@ impl Configuration {
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
         config.set_fix_opt_level(FixOptimizationLevel::Experimental);
-        // config.set_sanitize_memory();
         config.emit_llvm = true;
-        // config.debug_info = true;
         config.emit_symbols = true;
         config
     }
@@ -570,6 +578,14 @@ impl Configuration {
         self.root_source_files.push(path);
     }
 
+    /// Where `--emit-llvm` writes one compilation unit's LLVM IR: a `.ll` file beside the output
+    /// file, or in the working directory where the build names no output file.
+    ///
+    /// # Arguments
+    /// * `optimized` - whether this is the IR as the LLVM pipeline left it, which takes a file of
+    ///   its own alongside the IR as first emitted.
+    /// * `unit_name` - the compilation unit the IR belongs to, which is what distinguishes the files
+    ///   one build writes.
     pub fn get_output_llvm_ir_path(&self, optimized: bool, unit_name: &str) -> PathBuf {
         match &self.out_file_path {
             None => {
@@ -710,7 +726,7 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn enable_decapturing_optimization(&self) -> bool {
+    pub fn enable_closure_specialization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
@@ -718,21 +734,24 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function
-    /// only reads, then cancels the reference counting the borrow makes net-zero. Its full benefit
-    /// relies on decapturing and inlining (which are also `Max`-only), and it adds compile-time
+    /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
+    /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
+    /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
-    /// It composes with the same decapturing that borrow-ification needs — a specialized loop's body
-    /// is a known function whose union it can cancel — so it shares that opt-level threshold.
+    /// It composes with the same closure specialization that borrow-ification needs — a specialized
+    /// loop's body is a known function whose union it can cancel — so it shares that threshold.
     pub fn enable_simplify(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Shorten the compiler-added suffixes of global symbol names to serial numbers, so that a
+    /// symbol dump shows `Std::func#0` where the name is `Std::func#{...}#{...}`. Runs at
+    /// `Experimental`.
     pub fn enable_simplify_symbol_names(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
@@ -794,6 +813,7 @@ impl Configuration {
         hash_source.push_str(&self.no_runtime_check.to_string());
         hash_source.push_str(&self.skip_eval.to_string());
         hash_source.push_str(&self.c_type_sizes.to_string());
+        hash_source.push_str(&self.max_split_scalars.to_string());
         push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level

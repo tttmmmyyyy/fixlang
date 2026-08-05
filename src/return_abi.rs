@@ -23,8 +23,8 @@
 //! **The arguments whose values change must fit in the argument registers.** Beyond them arguments
 //! travel on the stack, and an x86-64 sibcall may only reuse a stack slot that already holds the
 //! value being passed — six changing integer arguments is the limit there. Fix passes an unbox
-//! struct as its leaf scalars, so a loop carrying its state in arguments reaches that quickly: an
-//! out-pointer, a four-leaf state and a capture pointer already fill it. On that target
+//! struct as its parts, so a loop carrying its state in arguments reaches that quickly: an
+//! out-pointer, a four-part state and a capture pointer already fill it. On that target
 //! `lambda_calling_convention_of_target` lifts the limit for every Fix lambda.
 
 use inkwell::types::BasicTypeEnum;
@@ -68,9 +68,9 @@ fn architecture_of_target(triple: &str) -> &str {
 /// How many registers of each class a target returns a value in.
 #[derive(Clone, Copy)]
 pub struct ReturnRegisters {
-    /// Registers holding the integer and pointer leaves of a return value.
+    /// Registers holding the integer and pointer scalars of a return value.
     integer: usize,
-    /// Registers holding the floating-point leaves of a return value.
+    /// Registers holding the floating-point scalars of a return value.
     float: usize,
 }
 
@@ -109,11 +109,11 @@ pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
 /// The registers of each class that returning a value costs.
 #[derive(Clone, Copy, Default)]
 struct RegisterDemand {
-    /// Integer and pointer leaves, one register each.
+    /// Integer and pointer scalars, one register each.
     integer: usize,
-    /// Floating-point leaves, one register each.
+    /// Floating-point scalars, one register each.
     float: usize,
-    /// Leaves whose register class this module does not model. Any of them sends the value through
+    /// Scalars whose register class this module does not model. Any of them sends the value through
     /// the out-pointer, since the alternative is to guess.
     unmodeled: usize,
 }
@@ -162,14 +162,14 @@ fn demand_of(ty: BasicTypeEnum) -> RegisterDemand {
     }
 }
 
-/// Whether a function returning these leaf scalars takes an out-pointer for its result and returns
-/// `void`. The leaves are a return value in `flatten_to_scalar_leaves` order.
+/// Whether a function returning these parts takes an out-pointer for its result and returns
+/// `void`. The parts are a return value in `type_parts` order.
 ///
-/// This must depend on the leaf types and the target alone. Under separated compilation the units
+/// This must depend on the part types and the target alone. Under separated compilation the units
 /// that define a function and that call it are generated apart, so a decision reading anything else
 /// could differ between the two and break the ABI between them.
-pub fn returns_through_out_pointer(leaf_tys: &[BasicTypeEnum], budget: ReturnRegisters) -> bool {
-    let demand = leaf_tys
+pub fn returns_through_out_pointer(part_tys: &[BasicTypeEnum], budget: ReturnRegisters) -> bool {
+    let demand = part_tys
         .iter()
         .map(|ty| demand_of(*ty))
         .fold(RegisterDemand::default(), RegisterDemand::plus);

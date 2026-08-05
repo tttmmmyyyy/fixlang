@@ -53,7 +53,18 @@ impl PartialEq for TyVar {
 
 impl Eq for TyVar {}
 
+impl Hash for TyVar {
+    /// Hashes the name alone. The kind is an attribute of a variable rather than part of which
+    /// variable it is, so two variables of one name are one variable whatever kinds they carry --
+    /// a shape a well-formed program does not produce, and one a hash should not distinguish.
+    /// Leaving the kind out also keeps this consistent with an equality that stopped reading it.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
 impl TyVar {
+    /// A copy of this type variable carrying `kind`, leaving this one as it is.
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.kind = kind;
@@ -118,9 +129,13 @@ impl AssocType {
     }
 }
 
+/// The kind of a type, which classifies types the way a type classifies values.
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
+    /// `*`, the kind of a type that has values of its own.
     Star,
+    /// `k -> l`, the kind of a type constructor that yields a type of kind `l` when applied to a
+    /// type of kind `k`.
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
@@ -426,7 +441,17 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
+impl Hash for TypeNode {
+    /// Hashes the type expression, which is what `PartialEq` compares; the source information the
+    /// node carries stays out of both.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ty.hash(state);
+    }
+}
+
 impl Debug for TypeNode {
+    /// Writes the type in source syntax, with its free type variables renamed to `t0`, `t1`, ... in
+    /// order of appearance, so that two types differing only in variable names print alike.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
     }
@@ -1325,22 +1350,21 @@ impl TypeNode {
         ty_to_object_ty(self, capture, type_env)
     }
 
+    /// The LLVM struct a value of this type is laid out as.
     pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
     ) -> StructType<'c> {
-        self.get_object_type(capture, gc.type_env())
-            .to_struct_type(gc, vec![])
+        gc.struct_type_of(self)
     }
 
+    /// The LLVM type a value of this type takes where it is embedded in another value: the struct
+    /// it is laid out as when it is unboxed, a pointer when it is boxed.
     pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
-        capture: &Vec<Arc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
-        self.get_object_type(capture, gc.type_env())
-            .to_embedded_type(gc, vec![])
+        gc.embedded_type_of(self, &[])
     }
 
     // Check if the type takes the form of the definition of associated type.
@@ -1491,7 +1515,7 @@ impl Clone for TypeNode {
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),

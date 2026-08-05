@@ -16,7 +16,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{global_accessor_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_return_leaf_types, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
@@ -83,23 +83,23 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         let _scope_guard = self.push_scope();
 
-        // Each parameter arrives as its flat leaf scalars (see `lambda_function_type`), which are
-        // exactly an object's leaves and become its `Object` directly. The CAP pointer follows all
+        // Each parameter arrives as its parts (see `lambda_function_type`), which are exactly an
+        // object's parts and become its `Object` directly. The CAP pointer follows all
         // of them, and the out-pointer of a wide result precedes them.
-        let ret_leaf_tys = lambda_return_leaf_types(&func.fn_ty, self);
-        let mut next_param = if self.returns_through_out_pointer(&ret_leaf_tys) {
+        let ret_part_tys = lambda_return_part_types(&func.fn_ty, self);
+        let mut next_param = if self.returns_through_out_pointer(&ret_part_tys) {
             1u32
         } else {
             0u32
         };
         for param in func.params.iter() {
-            let embedded = param.ty.get_embedded_type(self, &vec![]);
-            let leaf_count = self.flatten_to_scalar_leaves(embedded).len() as u32;
-            let leaf_vals: Vec<_> = (0..leaf_count)
+            let embedded = param.ty.get_embedded_type(self);
+            let part_count = self.type_parts(embedded).len() as u32;
+            let part_vals: Vec<_> = (0..part_count)
                 .map(|k| fn_val.get_nth_param(next_param + k).unwrap())
                 .collect();
-            next_param += leaf_count;
-            let obj = Object::from_leaves(leaf_vals, param.ty.clone(), self);
+            next_param += part_count;
+            let obj = Object::from_parts(part_vals, param.ty.clone(), self);
             self.scope_push(&param.name, &obj);
         }
         if let Some(cap) = &func.capture {
@@ -108,16 +108,16 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_push(&cap.name, &obj);
         }
 
-        // The flattened parameters consumed here must exhaust the function's parameters: the leaf
-        // scalars of every argument, plus the capture pointer for a closure. A mismatch means the
-        // call site (`apply_lambda`) and the signature (`lambda_function_type`) disagree on the
-        // flattening. Checked under develop mode (the unit tests).
+        // The parameters consumed here must exhaust the function's parameters: the parts of every
+        // argument, plus the capture pointer for a closure. A mismatch means the call site
+        // (`apply_lambda`) and the signature (`lambda_function_type`) disagree on the split.
+        // Checked under develop mode (the unit tests).
         if self.config.develop_mode {
             let expected = next_param + if func.capture.is_some() { 1 } else { 0 };
             assert_eq!(
                 expected,
                 fn_val.count_params(),
-                "flattened parameter count desync for `{}`",
+                "the parameters of `{}` disagree with the split of its arguments",
                 func.name.name.to_string()
             );
         }
@@ -407,7 +407,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             let capture_struct_ty = dyn_ty
                 .get_object_type(&capture_tys, self.type_env())
-                .to_struct_type(self, vec![]);
+                .to_struct_type(self, &[]);
             for (i, cap) in captures.iter().enumerate() {
                 let cap_obj = self.get_scoped_obj(&cap.name);
                 let val = cap_obj.value(self);
@@ -460,10 +460,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let tag = arm
                 .tag
                 .expect("a non-final match arm must be a variant arm");
-            let tag_val = ObjectFieldType::UnionTag
-                .to_basic_type(self, vec![])
-                .into_int_type()
-                .const_int(tag as u64, false);
+            let tag_val = union_tag_type(self.context).const_int(tag as u64, false);
             cases.push((tag_val, arm_bbs[i]));
         }
         if cases.is_empty() {
@@ -567,7 +564,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .declare_program_global(&global_init.symbol)
                 .expect("a global initializer's symbol is a global of the program"),
         };
-        let obj_embed_ty = global_init.ty.get_embedded_type(self, &vec![]);
+        let obj_embed_ty = global_init.ty.get_embedded_type(self);
 
         // The storage for the initialized value, and the call-once flag.
         let global_var = self.module.add_global(
