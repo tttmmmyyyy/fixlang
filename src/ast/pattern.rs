@@ -150,7 +150,11 @@ impl PatternNode {
                         (ty, field_name_to_ty)
                     }
                     None => {
-                        debug_assert!(typechcker.error_tolerant);
+                        assert!(
+                            typechcker.error_tolerant,
+                            "struct pattern head `{}` names no struct",
+                            tc.to_string()
+                        );
                         (
                             typechcker.fresh_ty_with_src(&self.info.source),
                             Map::default(),
@@ -173,7 +177,12 @@ impl PatternNode {
                     // struct has no such field. `validate_pattern` rejects both in strict
                     // mode and tolerates them in `error_tolerant` mode.
                     let Some(field_ty) = field_name_to_ty.get(field_name) else {
-                        debug_assert!(typechcker.error_tolerant);
+                        assert!(
+                            typechcker.error_tolerant,
+                            "struct `{}` has no field `{}`",
+                            tc.to_string(),
+                            field_name
+                        );
                         continue;
                     };
                     let unify_res = UnifOrOtherErr::extract_others(
