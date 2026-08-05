@@ -2548,3 +2548,30 @@ pub struct OpaqueTyConResolution {
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{kind_arrow, kind_star, make_tyvar};
+    use crate::misc::Set;
+
+    /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
+    /// with that.
+    ///
+    /// The kind a variable carries is set later than the variable itself, so a container keyed by a
+    /// type would otherwise hold one variable under two keys, one of them stale.
+    #[test]
+    fn a_type_variable_is_identified_by_its_name_alone() {
+        let star = make_tyvar("a", &kind_star());
+        let higher = make_tyvar("a", &kind_arrow(kind_star(), kind_star()));
+        let other_name = make_tyvar("b", &kind_star());
+
+        assert!(star == higher, "`a : *` and `a : *->*` are one variable.");
+        assert!(star != other_name, "`a` and `b` are two variables.");
+
+        let mut set = Set::default();
+        set.insert(star.clone());
+        set.insert(higher.clone());
+        set.insert(other_name.clone());
+        assert_eq!(set.len(), 2);
+    }
+}
