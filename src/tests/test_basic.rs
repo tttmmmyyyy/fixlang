@@ -5693,6 +5693,8 @@ pub fn test_implement_trait_on_arrow_2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two instance heads of the same shape overlap even when one of them carries a context: the
+/// overlap check compares the heads and disregards the contexts.
 #[test]
 pub fn test_overlapping_instances_1() {
     let source = r##"
@@ -5723,6 +5725,8 @@ pub fn test_overlapping_instances_1() {
     );
 }
 
+/// An instance head whose argument is a type variable overlaps a head that fixes that argument to
+/// a concrete type, since the types the second head denotes are among those the first denotes.
 #[test]
 pub fn test_overlapping_instances_2() {
     let source = r##"
@@ -5753,6 +5757,8 @@ pub fn test_overlapping_instances_2() {
     );
 }
 
+/// The overlap check reaches function types: a head implementing the trait for every arrow type
+/// overlaps a head that fixes the domain of the arrow.
 #[test]
 pub fn test_overlapping_instances_3() {
     let source = r##"
@@ -5783,6 +5789,8 @@ pub fn test_overlapping_instances_3() {
     );
 }
 
+/// Two heads that are identical up to the naming of their type parameters overlap even when their
+/// contexts constrain different parameters.
 #[test]
 pub fn test_overlapping_instances_4() {
     let source = r##"
@@ -5886,6 +5894,7 @@ pub fn test_disjoint_instances_higher_kinded_head() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `eval` accepts an expression of any type, evaluating it and discarding its value.
 #[test]
 pub fn test_eval_non_unit() {
     let source = r##"

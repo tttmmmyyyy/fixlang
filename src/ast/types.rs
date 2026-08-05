@@ -39,9 +39,13 @@ use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// A type variable, identified by its name.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
+    /// The name the variable is written with, e.g. `a`.
     pub name: Name,
+    /// The kind of the types this variable stands for. A variable built by the parser carries `*`
+    /// until `Program::set_kinds` reads the kind signatures of the declaration it appears in.
     pub kind: Arc<Kind>,
 }
 
@@ -60,10 +64,8 @@ impl PartialEq for TyVar {
 impl Eq for TyVar {}
 
 impl Hash for TyVar {
-    /// Hashes the name alone. The kind is an attribute of a variable rather than part of which
-    /// variable it is, so two variables of one name are one variable whatever kinds they carry --
-    /// a shape a well-formed program does not produce, and one a hash should not distinguish.
-    /// Leaving the kind out also keeps this consistent with an equality that stopped reading it.
+    /// Hashes the name alone, agreeing with the equality of `PartialEq`: the name is what decides
+    /// which variable this is, and the kind is an attribute the variable carries.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
@@ -77,6 +79,7 @@ impl TyVar {
         Arc::new(ret)
     }
 
+    /// A copy of this type variable named `name`, leaving this one as it is.
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
@@ -1899,7 +1902,7 @@ impl TypeNode {
     }
 
     // Collect type variables that are "fixed" in this type, in the sense of
-    // `Fixv` from section 5.1 of "Associated Type Synonyms"
+    // `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms"
     // (Chakravarty, Keller, Peyton Jones, ICFP '05).
     //
     // A type variable is fixed if unifying the type with a ground type would
@@ -2189,13 +2192,13 @@ impl Scheme {
         }
 
         // Each generalized type variable that appears in the scheme body must
-        // be "fixed" in the sense of `Fixv` from section 5.1 of "Associated
-        // Type Synonyms". A variable is fixed iff it appears outside of any
-        // associated type application, either in the main type or on the
-        // right-hand side of an equality constraint. A variable that only
-        // appears under an associated type application (or only in a class
-        // predicate) would not be determined by unification at a use site,
-        // which would make the scheme ambiguous.
+        // be "fixed" in the sense of `Fixv` from the section "Well-formed
+        // programs" of "Associated Type Synonyms". A variable is fixed iff it
+        // appears outside of any associated type application, either in the
+        // main type or on the right-hand side of an equality constraint. A
+        // variable that only appears under an associated type application (or
+        // only in a class predicate) would not be determined by unification at
+        // a use site, which would make the scheme ambiguous.
         let fixed_vars = self.fixed_vars();
         // First occurrence wins, which gives a useful span pointing at the
         // offending position.
@@ -2309,7 +2312,7 @@ impl Scheme {
     }
 
     // Collect type variables that are "fixed" by this scheme's body, in the
-    // sense of `Fixv` from section 5.1 of "Associated Type Synonyms".
+    // sense of `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms".
     //
     // Contributions:
     // - the main type `self.ty`

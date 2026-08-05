@@ -142,9 +142,10 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    // The set of modules that this symbol depends on.
-    // If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
-    // Note that this set may not be fully spanned in the importing graph.
+    /// The set of modules that this symbol depends on directly.
+    /// If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
+    /// The full set of modules a change can reach is obtained by walking the importing graph from
+    /// this set.
     pub fn dependent_modules(&self) -> Set<Name> {
         let mut dep_mods = Set::default();
         dep_mods.insert(self.name.module());
@@ -157,7 +158,7 @@ impl Symbol {
         // so the type the trait is implemented appears in the type of the symbol.
     }
 
-    // Calculate MD5 hash of this symbol.
+    /// The MD5 hash of this symbol's name, type and expression, in hexadecimal.
     pub fn hash(&self) -> String {
         let mut hash_source = String::new();
         hash_source.push_str("<name>");
@@ -175,56 +176,60 @@ impl Symbol {
     }
 }
 
-// Declaration (name and its type) of global value.
-// e.g., `main : IO()`
+/// Declaration (name and its type) of global value.
+/// e.g., `main : IO()`
 pub struct GlobalValueDecl {
+    /// The declared name.
     pub name: FullName,
+    /// The declared type scheme.
     pub ty: Arc<Scheme>,
-    // This is the left hand side of the declaration of this value,
-    // e.g., `main` in `main : IO ()`.
+    /// The left hand side of the declaration of this value,
+    /// e.g., `main` in `main : IO ()`.
     pub src: Option<Span>,
 }
 
-// Definition (name and its value) of global value.
-// e.g., `main = println("Hello World")`
+/// Definition (name and its value) of global value.
+/// e.g., `main = println("Hello World")`
 pub struct GlobalValueDefn {
+    /// The defined name.
     pub name: FullName,
+    /// The expression the name is bound to.
     pub expr: Arc<ExprNode>,
-    // This is the left hand side of the definition of this value,
-    // e.g., `main` in `main = println("Hello World")`.
+    /// The left hand side of the definition of this value,
+    /// e.g., `main` in `main = println("Hello World")`.
     pub src: Option<Span>,
 }
 
-// The global value, which is either a value or trait method.
+/// The global value, which is either a value or trait method.
 pub struct GlobalValue {
-    // Type of this symbol.
-    // For example, in case `trait a : Show { show : a -> String; }`, the type of method `show` is `[a : Show] a -> String`.
+    /// Type of this symbol.
+    /// For example, in case `trait a : Show { show : a -> String; }`, the type of method `show` is `[a : Show] a -> String`.
     pub scm: Arc<Scheme>,
-    // Type of this symbol, with aliases retained.
+    /// Type of this symbol, with aliases retained.
     pub syn_scm: Option<Arc<Scheme>>,
-    // The expression or implementation of this value.
+    /// The expression or implementation of this value.
     pub expr: SymbolExpr,
-    // Source code where this value is declared.
-    //
-    // This is the left hand side of the declaration of this value,
-    // e.g., `main` in `main : IO ()`.
-    //
-    // For trait methods, this is the source code for the trait method definition (declaration),
-    // not the implementation.
+    /// Source code where this value is declared.
+    ///
+    /// This is the left hand side of the declaration of this value,
+    /// e.g., `main` in `main : IO ()`.
+    ///
+    /// For a trait method, this is the source code of the member declaration in the trait
+    /// definition.
     pub decl_src: Option<Span>,
-    // The source code position of the left hand side of the definition of this value.
-    // For example, if there is a definition `main = println("Hello World")`, this is the position of `main`.
-    // If the definition is written together with the declaration, e.g., `main : IO () = println("Hello World")`,
-    // this is the same as `decl_src`.
-    // For trait members, this is also the same as `decl_src`.
+    /// The source code position of the left hand side of the definition of this value.
+    /// For example, if there is a definition `main = println("Hello World")`, this is the position of `main`.
+    /// If the definition is written together with the declaration, e.g., `main : IO () = println("Hello World")`,
+    /// this is the same as `decl_src`.
+    /// For trait members, this is also the same as `decl_src`.
     pub defn_src: Option<Span>,
-    // The document of this value.
-    // If `decl_src` is available, we can also get document from the source code.
-    // We use this field only when document is not available in the source code.
+    /// The document of this value.
+    /// This field carries the document of a value whose `decl_src` is unavailable; otherwise the
+    /// document is read from the source code.
     pub document: Option<String>,
-    // Is this value compiler-defined method?
-    // True for methods such as `@{field}`, `set_{field}`, etc.
-    // If true, this value is not shown in the document generated by `fix docs`.
+    /// Is this value compiler-defined method?
+    /// True for methods such as `@{field}`, `set_{field}`, etc.
+    /// Such a value is omitted from the document generated by `fix docs`.
     pub compiler_defined_method: bool,
     /// Deprecation metadata, set during elaboration when a matching
     /// `DEPRECATED[...]` pragma exists.
@@ -2255,7 +2260,8 @@ impl Program {
             .validate_overlapping_instances(self.kind_env())
     }
 
-    // Validate name confliction between types, traits and global values.
+    /// Reports each name that is used by more than one of the types, the traits and the associated
+    /// types, aliases included.
     pub fn validate_capital_name_confliction(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 

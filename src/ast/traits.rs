@@ -23,11 +23,12 @@ use serde::{Deserialize, Serialize};
 use std::mem;
 use std::sync::Arc;
 
-// Information about missing items in a trait implementation, used for error messages and quick fixes.
+/// Information about missing items in a trait implementation, used for error messages and quick fixes.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MissingTraitImplInfo {
+    /// The members and associated types the trait declares and the implementation leaves out.
     pub items: Vec<MissingTraitImplItem>,
-    // The impl type (e.g. `Main::MyData`).
+    /// The impl type (e.g. `Main::MyData`).
     pub impl_type: Arc<TypeNode>,
 }
 
@@ -613,12 +614,12 @@ impl TraitImpl {
         }
     }
 
-    // Get type-scheme of a method implementation.
-    // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
-    // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
-    //
-    // Users can also write type annotations in trait implementations.
-    // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
+    /// Get type-scheme of a method implementation.
+    /// Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
+    /// this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
+    ///
+    /// Users can also write type annotations in trait implementations.
+    /// The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
     pub fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
@@ -676,12 +677,14 @@ impl TraitImpl {
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
 
-    // Get expression that implements a member.
+    /// Get expression that implements a member.
+    /// Panics when this implementation has no member of that name.
     pub fn member_expr(&self, name: &Name) -> Arc<ExprNode> {
         self.members.get(name).unwrap().clone()
     }
 
-    // Get the type implementing the trait.
+    /// The type the trait is implemented for, i.e., the head of this implementation: `(a, b)` in
+    /// `impl [a : ToString, b : ToString] (a, b) : ToString`.
     pub fn impl_type(&self) -> Arc<TypeNode> {
         self.qual_pred.predicate.ty.clone()
     }
@@ -912,12 +915,12 @@ impl TraitEnv {
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
-                // Note: the previous "unrelated member" check (that the trait
-                // type variable appears syntactically in each member's type)
-                // has been superseded by the Fixv well-formedness check in
-                // `Scheme::validate_constraints`, which rejects both "does
-                // not appear" and "appears only as an argument of an
-                // associated type application" with a single condition.
+                // That a use site determines the trait type variable from the
+                // member's type is checked by the Fixv well-formedness
+                // condition in `Scheme::validate_constraints`: it rejects a
+                // member whose type leaves the variable out, and one that
+                // mentions it only as an argument of an associated type
+                // application.
 
                 // The "impl type" cannot be constrained.
                 //
@@ -1304,7 +1307,7 @@ impl TraitEnv {
         Ok(())
     }
 
-    // Add an instance.
+    /// Appends `inst` to the implementations recorded for the trait it implements.
     pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
         insert_to_map_vec(&mut self.impls, &trait_id, inst);
