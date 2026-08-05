@@ -1219,6 +1219,101 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(local_bb);
     }
 
+    /// Abort, in compiler development mode, when the object at `obj_ptr` is shared where the
+    /// uniqueness analysis proved it unique.
+    ///
+    /// Dropping the check that clones a shared container is what makes an in-place write legal, so
+    /// a wrong proof turns a value another holder can see into one this code overwrites. The check
+    /// the proof removed is the observation that would have caught it, so it is made again here,
+    /// where a violated proof stops at the write rather than at whatever reads the value later.
+    ///
+    /// It reads the count the way `build_branch_by_is_unique` does, so that it answers as the check
+    /// it stands in for would: a global object is shared whatever its count says, and a threaded
+    /// one is read by an acquire load, which is also what keeps this check from being a race of its
+    /// own. It leaves the state as it found it, the operation it guards having none of its own to
+    /// mark.
+    ///
+    /// Development mode only: this restores the cost the proof exists to remove.
+    pub fn build_assert_unique(&mut self, obj_ptr: PointerValue<'c>, state: RcState) {
+        if !self.config.develop_mode {
+            return;
+        }
+        let current_func = self.current_function();
+        let unique_bb = self
+            .context
+            .append_basic_block(current_func, "unique_bb@assert_unique");
+        let shared_bb = self
+            .context
+            .append_basic_block(current_func, "shared_bb@assert_unique");
+        let one = refcnt_type(self.context).const_int(1, false);
+
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr, state);
+
+        // Implement local_bb: read the count and compare it against one.
+        self.builder().position_at_end(local_bb);
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let refcnt = self
+            .builder()
+            .build_load(
+                refcnt_type(self.context),
+                ptr_to_refcnt,
+                "refcnt@assert_unique",
+            )
+            .unwrap()
+            .into_int_value();
+        let is_unique = self
+            .builder()
+            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique@assert_unique")
+            .unwrap();
+        self.builder()
+            .build_conditional_branch(is_unique, unique_bb, shared_bb)
+            .unwrap();
+
+        // Implement threaded_bb: the same, reading the count atomically.
+        if let Some(threaded_bb) = threaded_bb {
+            self.builder().position_at_end(threaded_bb);
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+            let refcnt = self
+                .builder()
+                .build_load(
+                    refcnt_type(self.context),
+                    ptr_to_refcnt,
+                    "refcnt@assert_unique",
+                )
+                .unwrap()
+                .into_int_value();
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(AtomicOrdering::Acquire)
+                .expect("Set atomic ordering failed");
+            let is_unique = self
+                .builder()
+                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique@assert_unique")
+                .unwrap();
+            self.builder()
+                .build_conditional_branch(is_unique, unique_bb, shared_bb)
+                .unwrap();
+        }
+
+        // Implement global_bb: a global object is shared, so the proof is wrong wherever it names
+        // one.
+        if let Some(global_bb) = global_bb {
+            self.builder().position_at_end(global_bb);
+            self.builder()
+                .build_unconditional_branch(shared_bb)
+                .unwrap();
+        }
+
+        self.builder().position_at_end(shared_bb);
+        self.panic("A value proven uniquely owned was reached while shared.\n");
+        self.builder()
+            .build_unconditional_branch(unique_bb)
+            .unwrap();
+
+        self.builder().position_at_end(unique_bb);
+    }
+
     // Get pointer to state of reference counter of a given object.
     pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()

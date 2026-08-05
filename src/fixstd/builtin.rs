@@ -36,8 +36,7 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
     build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, refcnt_type, union_tag_type, write_alloc_offset, CapacityCheck,
-    ObjectFieldType,
+    read_alloc_offset, union_tag_type, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -1987,11 +1986,12 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         let new_len = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
         // Force the array to be unique before shrinking it in place.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Release the dropped tail `[new_len, size)`, then lower the length to `new_len`. The caller
         // guarantees `0 <= new_len <= size`, so there is no size check.
@@ -2144,11 +2144,12 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
             .into_int_value();
 
         // Force the array to be unique before appending in place.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Write `value` into the `count` uninitialized slots at the end and grow the length. The
         // caller guarantees `count >= 0` and `size + count <= capacity`.
@@ -2480,6 +2481,9 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
 
         if !self.force_unique {
+            // `realloc` resizes the storage where it stands, so the proof that nobody else holds it
+            // is what makes the resize legal.
+            assert_array_storage_unique(gc, &array, assumed_state(self.assume_local));
             return realloc_array(gc, array, new_cap, CapacityCheck::Run);
         }
 
@@ -2670,11 +2674,8 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityBoundsUnchecked {
         let n = gc.builder().build_int_sub(end, begin, "append_n").unwrap();
 
         // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
-        let dst = if self.force_unique {
-            make_array_unique(gc, dst, assumed_state(self.assume_local))
-        } else {
-            dst
-        };
+        let dst =
+            force_unique_or_assert(gc, dst, self.force_unique, assumed_state(self.assume_local));
         let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let dst_buf = get_array_storage_buf(gc, &dst);
         let dst_write = unsafe {
@@ -2928,11 +2929,12 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
 
         // Force the array to be unique before growing it in place, so the length is written only on a
         // uniquely owned array.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
         array.insert_field(gc, ARRAY_SIZE_IDX, length)
     }
 
@@ -3044,16 +3046,6 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Force an array object to be unique: a unique array is returned as it is, and a shared one is
 /// cloned.
-fn make_array_unique<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    array: Object<'c>,
-    state: RcState,
-) -> Object<'c> {
-    make_array_unique_with_hole(gc, array, None, state)
-}
-
-/// Force an array object to be unique: a unique array is returned as it is, and a shared one is
-/// cloned.
 ///
 /// # Arguments
 /// * `hole` — `Some(idx)` makes the clone skip the element at `idx`, leaving that slot
@@ -3129,11 +3121,12 @@ impl LLVMGen for InlineLLVMArraySetBody {
         let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Perform write and return. `set` bounds-checks unless `--no-runtime-check` is set;
         // `unsafe_set_bounds_unchecked` never bounds-checks.
@@ -3308,11 +3301,12 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         let j = gc.get_scoped_obj_field(&self.j_name, 0).into_int_value();
 
         // Force array to be unique.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         // `swap` bounds-checks unless `--no-runtime-check` is set; `unsafe_swap_bounds_unchecked`
@@ -3468,9 +3462,12 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // The array has no hole yet, so this is an ordinary clone-if-shared.
-        if self.force_unique {
-            array = make_array_unique(gc, array, assumed_state(self.assume_local));
-        }
+        array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
         // length is unchanged.
@@ -3650,10 +3647,13 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
-        if self.force_unique {
-            array =
-                make_array_unique_with_hole(gc, array, Some(idx), assumed_state(self.assume_local));
-        }
+        array = force_unique_or_assert_with_hole(
+            gc,
+            array,
+            Some(idx),
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Write the element back into the hole (no bounds check, and no release of the hole slot).
         let buf = get_array_storage_buf(gc, &array);
@@ -4545,10 +4545,13 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // Get the argument object (the struct value).
         let mut struct_obj = gc.get_scoped_obj(&self.var_name);
 
-        if self.force_unique {
-            // If the struct is shared, we should clone it to make it unique.
-            struct_obj = make_struct_unique(gc, struct_obj, assumed_state(self.assume_local));
-        }
+        // Punching moves a field out of the struct, so the struct has to be uniquely owned.
+        struct_obj = force_unique_or_assert(
+            gc,
+            struct_obj,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Move out struct field value without releasing the struct itself.
         let field = ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
@@ -4754,10 +4757,12 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
-        if self.force_unique {
-            punched_struct =
-                make_struct_unique(gc, punched_struct, assumed_state(self.assume_local));
-        }
+        punched_struct = force_unique_or_assert(
+            gc,
+            punched_struct,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Convert type of punched_struct into the struct type.
         let punched_value = punched_struct.value(gc);
@@ -5665,16 +5670,6 @@ pub fn struct_act_const(
     (expr, scm)
 }
 
-/// Force a struct object to be unique: an unboxed or unique struct is returned as it is, and a
-/// shared boxed one is cloned.
-fn make_struct_unique<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    struct_obj: Object<'c>,
-    state: RcState,
-) -> Object<'c> {
-    make_struct_union_unique(gc, struct_obj, state)
-}
-
 /// Force a struct or union object to be unique: an unboxed or unique object is returned as it is,
 /// and a shared boxed one is cloned.
 fn make_struct_union_unique<'c, 'm>(
@@ -5759,11 +5754,12 @@ impl LLVMGen for InlineLLVMStructSetBody {
         let struct_obj = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let struct_obj = if self.force_unique {
-            make_struct_unique(gc, struct_obj, assumed_state(self.assume_local))
-        } else {
-            struct_obj
-        };
+        let struct_obj = force_unique_or_assert(
+            gc,
+            struct_obj,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Release old value
         let old_value =
@@ -6782,6 +6778,8 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         // Get whether argument is unique.
         let is_unique = if self.assume_unique {
             // The caller proved the argument unique, so the flag is the constant `true`.
+            let obj_ptr = obj.value(gc).into_pointer_value();
+            gc.build_assert_unique(obj_ptr, assumed_state(self.assume_local));
             bool_ty.const_int(1, false)
         } else {
             // The `[a : Boxed]` bound of `is_unique` makes the argument boxed, so it carries a
@@ -7005,6 +7003,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             flag.as_basic_value().into_int_value()
         } else {
             // Where the caller proved the array unique, the check is known to succeed.
+            assert_array_storage_unique(gc, &array, assumed_state(self.assume_local));
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
@@ -7655,7 +7654,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
+        let val =
+            force_unique_or_assert(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -7801,78 +7801,73 @@ fn assumed_state(assume_local: bool) -> RcState {
     }
 }
 
-/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere.
+/// Clone `val` when it is shared, so that a write into it is not observed elsewhere, or check the
+/// proof that let the clone go.
+///
+/// Every operation that writes into a value it must own reaches this, so the decision to trust a
+/// uniqueness proof is taken in one place, and the check on that proof stands wherever it is taken.
 ///
 /// # Arguments
 /// * `force_unique` — false where the uniqueness analysis proved the value already unique; the value
 ///   is then returned as it stands, and compiler development mode checks that proof against the
 ///   value's reference count.
 /// * `state` — the reference-counting state the uniqueness check reads the count under.
-fn force_unique_boxed<'c, 'm>(
+fn force_unique_or_assert<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
     force_unique: bool,
     state: RcState,
 ) -> Object<'c> {
-    assert!(
-        val.is_box(gc.type_env()),
-        "force_unique_boxed on the unboxed type {}.",
-        val.ty.to_string()
-    );
-    if !force_unique {
-        assert_proven_unique(gc, &val);
-        return val;
-    }
-    make_struct_union_unique(gc, val, state)
+    force_unique_or_assert_with_hole(gc, val, None, force_unique, state)
 }
 
-/// Abort, in compiler development mode, if `val` is shared where the uniqueness analysis proved it
-/// unique.
-///
-/// Dropping the check that clones a shared container is what makes an in-place write legal, so a
-/// wrong proof turns a value another holder can see into one this code overwrites. Between threads
-/// that other holder may be running, which makes the mistake a data race that the write's own thread
-/// never sees. The check the analysis removed is exactly the observation that would have caught it,
-/// so it is made again here, where a violated proof stops at the write rather than at whatever reads
-/// the value later.
-///
-/// Development mode only: this restores the cost the analysis exists to remove.
-fn assert_proven_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) {
+/// `force_unique_or_assert` where the value is an array and the clone leaves the element at `hole`
+/// uninitialized for the caller to fill.
+fn force_unique_or_assert_with_hole<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    val: Object<'c>,
+    hole: Option<IntValue<'c>>,
+    force_unique: bool,
+    state: RcState,
+) -> Object<'c> {
+    assert!(
+        hole.is_none() || val.ty.is_array(),
+        "a hole is left in an array, and `{}` is not one.",
+        val.ty.to_string()
+    );
+    if val.ty.is_array() {
+        if force_unique {
+            return make_array_unique_with_hole(gc, val, hole, state);
+        }
+        assert_array_storage_unique(gc, &val, state);
+        return val;
+    }
+    if !val.is_box(gc.type_env()) {
+        // An unboxed value holds no reference count: it has nothing to share, hence nothing to
+        // clone and nothing to check.
+        return val;
+    }
+    if force_unique {
+        return make_struct_union_unique(gc, val, state);
+    }
+    let obj_ptr = val.value(gc).into_pointer_value();
+    gc.build_assert_unique(obj_ptr, state);
+    val
+}
+
+/// Check the proof that an array is uniquely owned, which is a proof about its storage: that is
+/// where an array's reference count lives.
+fn assert_array_storage_unique<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: &Object<'c>,
+    state: RcState,
+) {
     if !gc.config.develop_mode {
         return;
     }
-    let obj_ptr = val.value(gc).into_pointer_value();
-    let refcnt_ptr = gc.get_refcnt_ptr(obj_ptr);
-    let refcnt = gc
-        .builder()
-        .build_load(refcnt_type(gc.context), refcnt_ptr, "refcnt@assert_unique")
-        .unwrap()
-        .into_int_value();
-    let is_shared = gc
-        .builder()
-        .build_int_compare(
-            IntPredicate::UGT,
-            refcnt,
-            refcnt_type(gc.context).const_int(1, false),
-            "is_shared@assert_unique",
-        )
-        .unwrap();
-    let current_func = gc.current_function();
-    let shared_bb = gc
-        .context
-        .append_basic_block(current_func, "shared_bb@assert_unique");
-    let unique_bb = gc
-        .context
-        .append_basic_block(current_func, "unique_bb@assert_unique");
-    gc.builder()
-        .build_conditional_branch(is_shared, shared_bb, unique_bb)
-        .unwrap();
-
-    gc.builder().position_at_end(shared_bb);
-    gc.panic("A write inferred to be into a unique object reached a shared one.\n");
-    gc.builder().build_unconditional_branch(unique_bb).unwrap();
-
-    gc.builder().position_at_end(unique_bb);
+    let storage = get_array_storage(gc, array);
+    let storage_ptr = storage.value(gc).into_pointer_value();
+    gc.build_assert_unique(storage_ptr, state);
 }
 
 /// The definition of `Std::FFI::_mutate_boxed_internal`, which makes the boxed value unique, applies
@@ -7944,7 +7939,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let val = force_unique_boxed(gc, val, self.force_unique, assumed_state(self.assume_local));
+        let val =
+            force_unique_or_assert(gc, val, self.force_unique, assumed_state(self.assume_local));
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -8210,11 +8206,12 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         assert!(array.ty.is_array());
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Run the callback with a pointer to the first element.
         let data_ptr = get_array_storage_buf(gc, &array);
@@ -8351,11 +8348,12 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         assert!(array.ty.is_array());
 
         // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
-        let array = if self.force_unique {
-            make_array_unique(gc, array, assumed_state(self.assume_local))
-        } else {
-            array
-        };
+        let array = force_unique_or_assert(
+            gc,
+            array,
+            self.force_unique,
+            assumed_state(self.assume_local),
+        );
 
         // Run the callback with a pointer to the first element, threading the real `ios`.
         let data_ptr = get_array_storage_buf(gc, &array);
