@@ -5863,6 +5863,115 @@ pub fn test_overlapping_instances_higher_kinded_head() {
     );
 }
 
+/// A variable whose higher kind comes from a trait constraint rather than a kind signature reaches
+/// the overlap check with that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_higher_kind_from_constraint() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait [f : *->*] f : MyFunctor {
+        fmap : (a -> b) -> f a -> f b;
+    }
+
+    impl Array : MyFunctor {
+        fmap = |g, xs| xs.to_iter.map(g).to_array;
+    }
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : MyFunctor] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// A head whose argument is a partially applied type constructor overlaps one taking a variable of
+/// that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_partially_applied_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar (Result String) : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : Result::ok(true) }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two heads that both take a variable of the same higher kind overlap, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_two_higher_kinded_heads() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl [g : *->*] Bar g : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
 /// Two instance heads whose arguments are different type constructors of the same higher kind
 /// denote disjoint sets of types, and both implementations stand.
 #[test]
