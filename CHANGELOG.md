@@ -44,7 +44,7 @@
 
 #### Language
 
-- A struct pattern now requires the type at its head to be a struct. `let MyUnion { a : x } = u;` read the union's variant list as a field list and bound `x` to the union's tag, which aborted the build inside LLVM; a pattern headed by an associated type name, such as `let Item { data : x } = 42;`, aborted the compiler.
+- A struct pattern now requires the type at its head to be a struct, and reports an error otherwise. `let MyUnion { a : x } = u;` took the union's tag for the payload of `a`, and the build aborted; `let Item { data : x } = 42;`, whose head names an associated type, aborted the compiler.
 
 #### Std
 

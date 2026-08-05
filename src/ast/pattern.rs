@@ -100,8 +100,11 @@ impl PatternNode {
         }
     }
 
-    // Set `self.info.type_`.
-    // Returns the pattern itself with a map which maps variable names to their types.
+    /// Assign a type to the pattern and to each of its sub-patterns, taking a
+    /// fresh type variable wherever the source leaves the type open.
+    ///
+    /// # Returns
+    /// The typed pattern, and the type assigned to each variable name it binds.
     pub fn get_typed(
         self: &Arc<PatternNode>,
         typechecker: &mut TypeCheckContext,

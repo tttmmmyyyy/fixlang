@@ -7486,6 +7486,8 @@ pub fn test_make_struct_to_union() {
 // struct's fields. Read as a field list, a union's variant list would make the pattern bind the
 // tag of the value in place of the payload it names.
 
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `let` binding.
 #[test]
 pub fn test_struct_pattern_head_is_union() {
     let source = r##"
@@ -7509,6 +7511,9 @@ pub fn test_struct_pattern_head_is_union() {
     );
 }
 
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `match` arm, where the type of the matched value already agrees
+/// with the head.
 #[test]
 pub fn test_struct_pattern_head_is_union_in_match_arm() {
     let source = r##"
@@ -7534,6 +7539,9 @@ pub fn test_struct_pattern_head_is_union_in_match_arm() {
     );
 }
 
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a lambda parameter, where the pattern drives the inference of the
+/// parameter's type.
 #[test]
 pub fn test_struct_pattern_head_is_union_in_lambda_parameter() {
     let source = r##"
@@ -7557,6 +7565,8 @@ pub fn test_struct_pattern_head_is_union_in_lambda_parameter() {
     );
 }
 
+/// Verifies that a struct pattern headed by a primitive type, which carries no
+/// fields at all, is reported as an error.
 #[test]
 pub fn test_struct_pattern_head_is_primitive_type() {
     let source = r##"
@@ -7575,8 +7585,9 @@ pub fn test_struct_pattern_head_is_primitive_type() {
     );
 }
 
-// An associated type name resolves like a type name, so it reaches the pattern as a type
-// constructor that no type declares.
+/// Verifies that a struct pattern headed by an associated type name is reported
+/// as an error: such a name resolves like a type name, so it reaches the
+/// pattern as a type constructor that no type declares.
 #[test]
 pub fn test_struct_pattern_head_is_associated_type() {
     let source = r##"

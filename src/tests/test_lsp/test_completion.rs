@@ -935,8 +935,8 @@ mod tests {
     /// associated type of `Std::Iterator` — is an error the strict
     /// typechecker reports. The completion pipeline runs
     /// `error_tolerant`, so it walks past that pattern and has to
-    /// keep serving the rest of the body: the `arr.` receiver two
-    /// lines below still earns its `Array I64` type, which puts
+    /// keep serving the rest of the body: the `arr.` receiver further
+    /// down the same body still earns its `Array I64` type, which puts
     /// `Std::Array::push_back` in Tier 0.
     #[test]
     fn test_completion_dot_sort_past_bad_struct_pattern() {
