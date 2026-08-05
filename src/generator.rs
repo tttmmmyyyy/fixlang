@@ -1142,9 +1142,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
         } else {
             // In multi-threaded program,
-            let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
-            threaded_bb = Some(th_bb);
-            let threaded_bb = threaded_bb.clone().unwrap();
+            threaded_bb = Some(self.context.append_basic_block(current_func, "threaded_bb"));
+            let threaded_bb = threaded_bb.unwrap();
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 

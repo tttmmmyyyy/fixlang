@@ -580,14 +580,14 @@ mod integration_tests {
         // iteration would re-check a value already proven unique.
         let mut checked = vec![];
         let mut elided = vec![];
-        let mut current = "";
+        let mut current_fn = "";
         for line in dump.lines() {
             if line.starts_with("fn ") {
-                current = line;
+                current_fn = line;
             } else if line.contains("array_set[unique]") {
-                elided.push(current);
+                elided.push(current_fn);
             } else if line.contains("array_set(") {
-                checked.push(current);
+                checked.push(current_fn);
             }
         }
         assert!(

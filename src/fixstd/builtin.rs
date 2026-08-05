@@ -5709,7 +5709,7 @@ fn make_struct_union_unique<'c, 'm>(
     // Release the old object.
     gc.release(obj.clone(), state);
 
-    let cloned_obj_ptr = cloned_obj.value(gc);
+    let cloned_obj_val = cloned_obj.value(gc);
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -5725,7 +5725,7 @@ fn make_struct_union_unique<'c, 'm>(
         .builder()
         .build_phi(obj_ptr.get_type(), "obj_phi")
         .unwrap();
-    obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_ptr, succ_of_shared_bb)]);
+    obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_val, succ_of_shared_bb)]);
 
     obj = Object::new(obj_phi.as_basic_value(), obj.ty.clone(), gc);
 
