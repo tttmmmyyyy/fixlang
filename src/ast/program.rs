@@ -2246,7 +2246,13 @@ impl Program {
     }
 
     pub fn validate_trait_env(&mut self) -> Result<(), Errors> {
-        self.trait_env.validate(self.kind_env())
+        self.trait_env.validate()
+    }
+
+    /// Reports each pair of implementations of one trait whose heads can denote the same type.
+    pub fn validate_overlapping_instances(&self) -> Result<(), Errors> {
+        self.trait_env
+            .validate_overlapping_instances(self.kind_env())
     }
 
     // Validate name confliction between types, traits and global values.

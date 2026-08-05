@@ -863,7 +863,11 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&self, kind_env: KindEnv) -> Result<(), Errors> {
+    /// Validates the traits, the trait aliases and the trait implementations, structurally.
+    ///
+    /// Whether two implementations overlap is asked by `validate_overlapping_instances`, once the
+    /// kinds of the type variables in their heads are known.
+    pub fn validate(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.
@@ -947,16 +951,6 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        // Prepare TypeCheckContext to use `unify`.
-        let tc = TypeCheckContext::new(
-            TraitEnv::default(),
-            TypeEnv::default(),
-            kind_env,
-            Map::default(),
-            Arc::new(typecheckcache::FileCache::new()),
-            0,
-            false,
-        );
         // Validate trait implementations.
         for (trait_id, impls) in &self.impls {
             for impl_ in impls.iter() {
@@ -971,10 +965,30 @@ impl TraitEnv {
                 let defn = self.traits.get(trait_id).unwrap();
                 errors.eat_err(Self::validate_trait_impl(impl_, defn));
             }
-            // Throw errors if any.
-            errors.to_result()?;
+        }
 
-            // Check overlapping instance.
+        errors.to_result()
+    }
+
+    /// Reports each pair of implementations of one trait whose heads can denote the same type.
+    ///
+    /// Which types a head denotes depends on the kinds of the type variables in it, so this runs
+    /// once those kinds are set: a variable still carrying the default kind `*` fails to unify with
+    /// the type it stands for, and the pair reads as disjoint.
+    pub fn validate_overlapping_instances(&self, kind_env: KindEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        // Prepare TypeCheckContext to use `unify`.
+        let tc = TypeCheckContext::new(
+            TraitEnv::default(),
+            TypeEnv::default(),
+            kind_env,
+            Map::default(),
+            Arc::new(typecheckcache::FileCache::new()),
+            0,
+            false,
+        );
+        for (trait_id, impls) in &self.impls {
             for i in 0..impls.len() {
                 for j in (i + 1)..impls.len() {
                     let inst_i = &impls[i];

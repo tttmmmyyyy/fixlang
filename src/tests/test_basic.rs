@@ -5817,6 +5817,75 @@ pub fn test_overlapping_instances_4() {
     );
 }
 
+/// A head taking a type variable of a higher kind overlaps a head applying that parameter to a type
+/// constructor, and the pair is reported.
+///
+/// Which types a head denotes depends on the kinds of the type variables in it: a variable still
+/// carrying the default kind `*` fails to unify with the type constructor it stands for, and the
+/// pair reads as disjoint.
+#[test]
+pub fn test_overlapping_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two heads that apply the same higher-kinded parameter to different type constructors denote
+/// disjoint sets of types, and both implementations stand.
+#[test]
+pub fn test_disjoint_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    impl Bar Option : MyTrait {
+        m = |_| 2;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 1);;
+        assert_eq(|_|"fail", Bar { data : Option::some(true) }.m, 2);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_eval_non_unit() {
     let source = r##"

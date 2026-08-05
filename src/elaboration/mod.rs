@@ -76,6 +76,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // NOTE: kinds of type variables appearing in type annotations in expressions are set not at this stage but at the type inference stage.
     program.set_kinds()?;
 
+    // Check that no two implementations of one trait can apply to the same type.
+    // Runs after `set_kinds`, since which types an instance head denotes depends on the kinds of
+    // the type variables in it.
+    program.validate_overlapping_instances()?;
+
     // If typechecking is not needed, return here.
     if !config.subcommand.typecheck() {
         assert!(!config.subcommand.build_binary());
