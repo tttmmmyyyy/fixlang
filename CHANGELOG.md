@@ -42,6 +42,10 @@
 
 ### Fixed
 
+#### Language
+
+- Two implementations of one trait are now reported as overlapping when one of their heads takes a type parameter of a higher kind, as `impl [f : *->*] Bar f : MyTrait` does beside `impl Bar Array : MyTrait`. Both used to be accepted, and the order they were written in decided which one a call reached.
+
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
