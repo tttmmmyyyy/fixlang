@@ -956,7 +956,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj.extract_field(self, field_idx)
     }
 
-    // Push scope.
+    /// Bind `var` to `obj` in the innermost scope, shadowing any binding `var` already has there.
     pub fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
             .borrow_mut()
@@ -965,12 +965,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             .push_local(var, obj)
     }
 
-    // Pop scope.
+    /// Drop the innermost binding of `var`, revealing the binding it shadowed.
     pub fn scope_pop(self: &mut Self, var: &FullName) {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    // Get pointer to reference counter of a given object.
+    /// The pointer to the reference count in the control block of the boxed object at `obj`.
     pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
@@ -978,6 +978,50 @@ impl<'c, 'm> Generator<'c, 'm> {
                 obj,
                 CTRL_BLK_REFCNT_IDX,
                 "ptr_to_refcnt",
+            )
+            .unwrap()
+    }
+
+    /// Whether the object's reference count is one, read in the current block.
+    ///
+    /// `acquire` makes the load an acquire one, which is what an object in the threaded state needs:
+    /// the writes a unique answer licences must be ordered after the reads the other holders did
+    /// before releasing the object. Keep the acquire on the load itself: ThreadSanitizer draws no
+    /// happens-before edge from a standalone `fence acquire`, so an acquire moved into one leaves
+    /// the code correct while making the race detector report the writes that follow as racing.
+    ///
+    /// `name_suffix` distinguishes the emitted values from those of the other counts a function
+    /// reads.
+    fn build_is_refcnt_one(
+        &mut self,
+        obj_ptr: PointerValue<'c>,
+        acquire: bool,
+        name_suffix: &str,
+    ) -> IntValue<'c> {
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+        let refcnt = self
+            .builder()
+            .build_load(
+                refcnt_type(self.context),
+                ptr_to_refcnt,
+                &format!("refcnt{}", name_suffix),
+            )
+            .unwrap()
+            .into_int_value();
+        if acquire {
+            refcnt
+                .as_instruction_value()
+                .unwrap()
+                .set_atomic_ordering(AtomicOrdering::Acquire)
+                .expect("Set atomic ordering failed");
+        }
+        let one = refcnt_type(self.context).const_int(1, false);
+        self.builder()
+            .build_int_compare(
+                IntPredicate::EQ,
+                refcnt,
+                one,
+                &format!("is_unique{}", name_suffix),
             )
             .unwrap()
     }
@@ -1002,53 +1046,21 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
-        // Load refcnt.
-        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-        let refcnt = self
-            .builder()
-            .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
-            .unwrap()
-            .into_int_value();
         // Jump to shared_bb if refcnt > 1.
-        let one = refcnt_type(self.context).const_int(1, false);
-        let is_unique: IntValue<'_> = self
-            .builder()
-            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
-            .unwrap();
+        let is_unique = self.build_is_refcnt_one(obj_ptr, false, "");
         self.builder()
             .build_conditional_branch(is_unique, unique_bb, shared_bb)
             .unwrap();
 
         // Implement threaded_bb.
-        if threaded_bb.is_some() {
-            let threaded_bb = threaded_bb.clone().unwrap();
+        if let Some(threaded_bb) = threaded_bb {
             let unique_threaded_bb = self
                 .context
                 .append_basic_block(current_func, "unique_threaded_bb");
 
             self.builder().position_at_end(threaded_bb);
-            // Load refcnt atomically. The load acquires, so that the writes this thread is about to
-            // make are ordered after the reads another thread did before releasing this object.
-            // Keep the acquire on the load itself: ThreadSanitizer draws no happens-before edge
-            // from a standalone `fence acquire`, so an acquire moved into one on the unique path
-            // leaves the code correct while making the race detector report the writes that follow
-            // as racing.
-            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-            let refcnt = self
-                .builder()
-                .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
-                .unwrap()
-                .into_int_value();
-            refcnt
-                .as_instruction_value()
-                .unwrap()
-                .set_atomic_ordering(AtomicOrdering::Acquire)
-                .expect("Set atomic ordering failed");
             // Jump to shared_bb if refcnt > 1.
-            let is_unique = self
-                .builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
-                .unwrap();
+            let is_unique = self.build_is_refcnt_one(obj_ptr, true, "");
             self.builder()
                 .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb)
                 .unwrap();
@@ -1130,9 +1142,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
         } else {
             // In multi-threaded program,
-            let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
-            threaded_bb = Some(th_bb);
-            let threaded_bb = threaded_bb.clone().unwrap();
+            threaded_bb = Some(self.context.append_basic_block(current_func, "threaded_bb"));
+            let threaded_bb = threaded_bb.unwrap();
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
@@ -1219,7 +1230,76 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(local_bb);
     }
 
-    // Get pointer to state of reference counter of a given object.
+    /// Abort, in compiler development mode, when the object at `obj_ptr` is shared where the
+    /// uniqueness analysis proved it unique.
+    ///
+    /// Dropping the check that clones a shared container is what makes an in-place write legal, so
+    /// a wrong proof turns a value another holder can see into one this code overwrites. The check
+    /// the proof removed is the observation that would have caught it, so it is made again here,
+    /// where a violated proof stops at the write rather than at whatever reads the value later.
+    ///
+    /// It reads the count the way `build_branch_by_is_unique` does, so that it answers as the check
+    /// it stands in for would: a global object is shared whatever its count says, and a threaded
+    /// one is read by an acquire load, which is also what keeps this check from being a race of its
+    /// own. It leaves the state as it found it, the operation it guards having none of its own to
+    /// mark.
+    ///
+    /// The object's state is read at run time. An op declares the uniqueness check it emits through
+    /// `LLVMGen::unique_check_operand`, and it withdraws that declaration exactly where the proof
+    /// was accepted, which is where this check stands; a locality annotation resting on the
+    /// withdrawn declaration therefore says nothing about the object here.
+    ///
+    /// Development mode only: this restores the cost the proof exists to remove.
+    pub fn build_assert_unique(&mut self, obj_ptr: PointerValue<'c>) {
+        if !self.config.develop_mode {
+            return;
+        }
+        let current_func = self.current_function();
+        let unique_bb = self
+            .context
+            .append_basic_block(current_func, "unique_bb@assert_unique");
+        let shared_bb = self
+            .context
+            .append_basic_block(current_func, "shared_bb@assert_unique");
+
+        let (local_bb, threaded_bb, global_bb) =
+            self.build_branch_by_refcnt_state(obj_ptr, RcState::Unknown);
+
+        // Implement local_bb: read the count and compare it against one.
+        self.builder().position_at_end(local_bb);
+        let is_unique = self.build_is_refcnt_one(obj_ptr, false, "@assert_unique");
+        self.builder()
+            .build_conditional_branch(is_unique, unique_bb, shared_bb)
+            .unwrap();
+
+        // Implement threaded_bb: the same, reading the count atomically.
+        if let Some(threaded_bb) = threaded_bb {
+            self.builder().position_at_end(threaded_bb);
+            let is_unique = self.build_is_refcnt_one(obj_ptr, true, "@assert_unique");
+            self.builder()
+                .build_conditional_branch(is_unique, unique_bb, shared_bb)
+                .unwrap();
+        }
+
+        // Implement global_bb: a global object is shared, so the proof is wrong wherever it names
+        // one.
+        let global_bb =
+            global_bb.expect("the state is read under `RcState::Unknown`, so a global arm exists.");
+        self.builder().position_at_end(global_bb);
+        self.builder()
+            .build_unconditional_branch(shared_bb)
+            .unwrap();
+
+        self.builder().position_at_end(shared_bb);
+        self.panic("A value proven uniquely owned was reached while shared.\n");
+        self.builder()
+            .build_unconditional_branch(unique_bb)
+            .unwrap();
+
+        self.builder().position_at_end(unique_bb);
+    }
+
+    /// The pointer to the reference-count state in the control block of the boxed object at `obj`.
     pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
@@ -1231,7 +1311,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    // Take a lambda object and return function pointer.
+    /// The code pointer to call a lambda through: the funcptr field of a closure, or the value
+    /// itself when the lambda is a bare function pointer.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         // Get the pointer value.
         if obj.ty.is_closure() {
