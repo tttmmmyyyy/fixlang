@@ -1,9 +1,13 @@
 ---
 name: devdoc
-description: 'Writing conventions for dev docs — design docs, plans, handoffs, investigation write-ups (e.g. under dev-docs/). Use when: writing a new dev doc, revising an existing one, or reviewing one for quality.'
+description: 'Writing conventions for the prose that explains a change — design docs, plans, handoffs, investigation write-ups (e.g. under dev-docs/), pull request bodies, issue bodies. Use when: writing or revising any of these, or reviewing one for quality.'
 ---
 
-# Writing dev docs
+# Writing dev docs, pull requests and issues
+
+## What this covers
+
+A dev doc under `dev-docs/`, a pull request body, and an issue body. All three are addressed to the people working on the change and are read the same way, so all three follow the conventions below. A pull request body and the dev doc of the change it carries are often the same text.
 
 ## The fundamental theorem of readability
 
@@ -19,6 +23,20 @@ Two things make that time longer, and the rest of this skill is how to keep both
 
 The two pull against each other — an explanation that leaves a question is short but costly, and one that answers everything is complete but long. The doc is right where the total is smallest.
 
+## The body and the appendix
+
+The body is what the reader must read to understand. The appendix comes after it and holds everything else the doc is worth carrying; the body is complete without it.
+
+That split is what makes the appendix cheap. A sentence in the body costs every reader time, so the body has to be necessary and sufficient. A sentence in the appendix costs only the reader who goes looking for it, so the appendix can be as long as the material deserves. The question to ask of a piece of writing is therefore not "is this worth keeping?" but "does understanding require it?" — and what fails that question is moved rather than deleted.
+
+Into the appendix:
+
+- **Evidence.** Measurements, benchmark numbers, the output of a run, the experiment that confirmed a claim. The body states the claim and the argument for it; the appendix holds what was run and what came back.
+- **Investigation results.** What was searched, what was found, which reading turned out to be wrong.
+- **History and work records.** The alternatives that were tried, why one was dropped, what the earlier version did.
+
+Write a measurement into the body instead when the argument at that point does not hold without it — and then only the part the argument uses.
+
 ## Language
 
 Write the doc in the implementers' language. It does not have to be English.
@@ -32,7 +50,7 @@ Write for a reader who knows the project thinly and broadly, but knows nothing a
 
 ## Readable front to back
 
-The doc must be readable from the front in a single pass. A sentence that cannot be understood without knowledge that appears only later in the doc is not acceptable.
+The body must be readable from the front in a single pass. A sentence that cannot be understood without knowledge that appears only later is not acceptable. The body may point into the appendix, since the reader who skips it still understands.
 
 ## Pseudocode
 
@@ -41,7 +59,3 @@ When conveying the concept of a computation, consider using pseudocode. Pseudoco
 ## Type definitions and function declarations
 
 Type and trait definitions pack much of the information about a computation, and well-chosen names and type names convey a lot to the reader. For type definitions, writing out the Rust code first is effective. A function declaration is the function's type, so writing out just the function declarations first is also good.
-
-## Measured results
-
-Measured results (findings from investigation) about the code's behavior can be noise to the reader. When the argument is written out solidly, the doc is understandable without them. Make the doc necessary and sufficient for reaching the required understanding. Putting measured results in an appendix is one option. When a measured result is needed for the reader's understanding at that point in the doc, write it inline.
