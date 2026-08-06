@@ -1220,19 +1220,27 @@ impl TraitEnv {
         // Resolve names in trait implementations.
         let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, trait_impls) in old_impls {
+        for (trait_id_key, trait_impls) in old_impls {
             for mut impl_ in trait_impls {
                 // Set up NameResolutionContext.
                 ctx.set_current_module(impl_.define_module.clone());
 
+                // `add_instance` keys the map by the implementation's own trait id.
+                assert!(
+                    impl_.trait_id().name == trait_id_key.name,
+                    "`{}` is filed under `{}`.",
+                    impl_.trait_id().name.to_string(),
+                    trait_id_key.name.to_string()
+                );
+
                 // Resolve trait_id's namespace.
-                let mut trait_id = trait_id.clone();
+                let mut trait_id = trait_id_key.clone();
                 errors.eat_err(
                     trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.src.clone()),
                 );
 
-                // Resolve names in TrantImpl
-                impl_.trait_id_mut().name = trait_id.name.clone(); // This is a "just in case" process, and may not be necessary.
+                // Give the implementation the resolved name before resolving the rest of it.
+                impl_.trait_id_mut().name = trait_id.name.clone();
                 errors.eat_err(impl_.resolve_namespace(ctx));
 
                 // Insert to new_impls

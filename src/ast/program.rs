@@ -2560,11 +2560,15 @@ impl Program {
         // Merge traits and instances.
         errors.eat_err(self.trait_env.import(other.trait_env));
 
-        // Merge global values.
+        // Merge global values. A trait member's symbol is built by `create_trait_member_symbols`,
+        // which runs after every link, so each value here is a simple one.
         for (name, gv) in other.global_values {
-            if gv.is_simple_value() {
-                errors.eat_err(self.add_global_value_gv(name, gv));
-            }
+            assert!(
+                gv.is_simple_value(),
+                "`{}` is a trait member before its symbols are created.",
+                name.to_string()
+            );
+            errors.eat_err(self.add_global_value_gv(name, gv));
         }
 
         // Merge export statements.

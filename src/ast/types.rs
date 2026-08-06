@@ -1560,10 +1560,11 @@ impl TypeNode {
             }
             appeared.insert(fv.name.clone());
             let new_name = number_to_varname(next_tyvar_no);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
+            assert!(merge_ok, "`{}` is renamed twice.", fv.name);
             next_tyvar_no += 1;
         }
 
@@ -2279,10 +2280,11 @@ impl Scheme {
         for tyvar in &self.gen_vars {
             tyvar_num += 1;
             let new_name = number_to_varname(tyvar_num as usize);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &tyvar.name,
                 type_tyvar(&new_name, &tyvar.kind.clone()),
             ));
+            assert!(merge_ok, "`{}` is generalized twice.", tyvar.name);
         }
         self.to_string_substituted(&s)
     }
