@@ -45,6 +45,7 @@
 #### Language
 
 - A struct pattern now requires the type at its head to be a struct, and reports an error otherwise. `let MyUnion { a : x } = u;` took the union's tag for the payload of `a`, and the build aborted; `let Item { data : x } = 42;`, whose head names an associated type, aborted the compiler.
+- Two implementations of one trait are now reported as overlapping when one of their heads takes a type parameter of a higher kind, as `impl [f : *->*] Bar f : MyTrait` does beside `impl Bar Array : MyTrait`. Both used to be accepted, and the order they were written in decided which one a call reached.
 
 #### Std
 

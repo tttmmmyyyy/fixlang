@@ -1,3 +1,4 @@
+use crate::ast::collect_annotation_tyvars::collect_annotation_tyvars;
 use crate::ast::deprecation::DeprecationInfo;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
@@ -13,22 +14,21 @@ use crate::ast::types::{
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
-use crate::elaboration::typecheckcache;
+use crate::elaboration::typecheckcache::FileCache;
+use crate::error::{Error, Errors};
 use crate::fixstd::builtin::make_boxed_trait;
 use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
-use crate::{
-    ast::collect_annotation_tyvars::collect_annotation_tyvars,
-    error::{Error, Errors},
-};
 use serde::{Deserialize, Serialize};
+use std::mem;
 use std::sync::Arc;
 
-// Information about missing items in a trait implementation, used for error messages and quick fixes.
+/// Information about missing items in a trait implementation, used for error messages and quick fixes.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MissingTraitImplInfo {
+    /// The members and associated types the trait declares and the implementation leaves out.
     pub items: Vec<MissingTraitImplItem>,
-    // The impl type (e.g. `Main::MyData`).
+    /// The impl type (e.g. `Main::MyData`).
     pub impl_type: Arc<TypeNode>,
 }
 
@@ -614,23 +614,23 @@ impl TraitImpl {
         }
     }
 
-    // Get type-scheme of a method implementation.
-    // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
-    // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
-    //
-    // Users can also write type annotations in trait implementations.
-    // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
+    /// Get type-scheme of a method implementation.
+    /// Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
+    /// this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
+    ///
+    /// Users can also write type annotations in trait implementations.
+    /// The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
     pub fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
-        let tv = &trait_defn.type_var.name; // `a` in the above example.
+        let tyvar_name = &trait_defn.type_var.name; // `a` in the above example.
         let mut method_qualty = trait_defn.member_ty(method_name); // `a -> String` in the above example.
 
         // Next, see the trait implementation to get the type for which the trait is implemented.
         let impl_type = self.impl_type(); // `(a, b)` in the above example.
 
-        // We are going to substitute `tv` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
-        // This is OK if FV(method_qualty) \ {tv} is disjoint from FV(impl_type).
+        // We are going to substitute `tyvar_name` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
+        // This is OK if FV(method_qualty) \ {tyvar_name} is disjoint from FV(impl_type).
         // Otherwise, we need to rename the type variables in `method_qualty` to avoid name collision.
         // Example:
         // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
@@ -643,7 +643,7 @@ impl TraitImpl {
         // Collect type variables that need renaming (those that collide with fv_impl_type).
         let vars_to_rename: Vec<_> = fv_method_qualty
             .iter()
-            .filter(|fv| &fv.name != tv && fv_impl_type.contains_key(&fv.name))
+            .filter(|fv| &fv.name != tyvar_name && fv_impl_type.contains_key(&fv.name))
             .collect();
         let used_names: Set<String> = fv_impl_type
             .keys()
@@ -660,9 +660,9 @@ impl TraitImpl {
         // Rename type variables in `method_qualty`.
         s.substitute_qualtype(&mut method_qualty);
 
-        // Then substitute `tv` with `impl_type`.
+        // Then substitute `tyvar_name` with `impl_type`.
         // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
-        let s = Substitution::single(&tv, impl_type);
+        let s = Substitution::single(&tyvar_name, impl_type);
         s.substitute_qualtype(&mut method_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
@@ -674,24 +674,17 @@ impl TraitImpl {
         let mut eqs = self.qual_pred.eq_constraints.clone();
         eqs.append(&mut method_qualty.eqs);
 
-        // Commented out: likely unnecessary and inappropriate, as the source location set here
-        // is never actually used by callers. Kept as a comment for easier debugging if a bug is found.
-        // let source = self
-        //     .member_expr(method_name)
-        //     .source
-        //     .as_ref()
-        //     .map(|src| src.to_head_character());
-        // let ty = ty.set_source(source);
-
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
 
-    // Get expression that implements a member.
+    /// Get expression that implements a member.
+    /// Panics when this implementation has no member of that name.
     pub fn member_expr(&self, name: &Name) -> Arc<ExprNode> {
         self.members.get(name).unwrap().clone()
     }
 
-    // Get the type implementing the trait.
+    /// The type the trait is implemented for, i.e., the head of this implementation: `(a, b)` in
+    /// `impl [a : ToString, b : ToString] (a, b) : ToString`.
     pub fn impl_type(&self) -> Arc<TypeNode> {
         self.qual_pred.predicate.ty.clone()
     }
@@ -863,7 +856,11 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&self, kind_env: KindEnv) -> Result<(), Errors> {
+    /// Validates the traits, the trait aliases and the trait implementations, structurally.
+    ///
+    /// Whether two implementations overlap is asked by `validate_overlapping_instances`, once the
+    /// kinds of the type variables in their heads are known.
+    pub fn validate_structure(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.
@@ -918,12 +915,12 @@ impl TraitEnv {
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
-                // Note: the previous "unrelated member" check (that the trait
-                // type variable appears syntactically in each member's type)
-                // has been superseded by the Fixv well-formedness check in
-                // `Scheme::validate_constraints`, which rejects both "does
-                // not appear" and "appears only as an argument of an
-                // associated type application" with a single condition.
+                // That a use site determines the trait type variable from the
+                // member's type is checked by the Fixv well-formedness
+                // condition in `Scheme::validate_constraints`: it rejects a
+                // member whose type leaves the variable out, and one that
+                // mentions it only as an argument of an associated type
+                // application.
 
                 // The "impl type" cannot be constrained.
                 //
@@ -947,16 +944,6 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        // Prepare TypeCheckContext to use `unify`.
-        let tc = TypeCheckContext::new(
-            TraitEnv::default(),
-            TypeEnv::default(),
-            kind_env,
-            Map::default(),
-            Arc::new(typecheckcache::FileCache::new()),
-            0,
-            false,
-        );
         // Validate trait implementations.
         for (trait_id, impls) in &self.impls {
             for impl_ in impls.iter() {
@@ -971,10 +958,30 @@ impl TraitEnv {
                 let defn = self.traits.get(trait_id).unwrap();
                 errors.eat_err(Self::validate_trait_impl(impl_, defn));
             }
-            // Throw errors if any.
-            errors.to_result()?;
+        }
 
-            // Check overlapping instance.
+        errors.to_result()
+    }
+
+    /// Reports each pair of implementations of one trait whose heads can denote the same type.
+    ///
+    /// Which types a head denotes depends on the kinds of the type variables in it, so this runs
+    /// once those kinds are set: a variable still carrying the default kind `*` fails to unify with
+    /// the type it stands for, and the pair reads as disjoint.
+    pub fn validate_overlapping_instances(&self, kind_env: KindEnv) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+
+        // Prepare TypeCheckContext to use `unify`.
+        let tc = TypeCheckContext::new(
+            TraitEnv::default(),
+            TypeEnv::default(),
+            kind_env,
+            Map::default(),
+            Arc::new(FileCache::new()),
+            0,
+            false,
+        );
+        for (trait_id, impls) in &self.impls {
             for i in 0..impls.len() {
                 for j in (i + 1)..impls.len() {
                     let inst_i = &impls[i];
@@ -991,7 +998,7 @@ impl TraitEnv {
                     );
                     if inst_i.trait_id() == make_boxed_trait() {
                         msg +=
-                            "NOTE: `Std::Boxed` is automatically implemented for all boxed types by compiler."
+                            " NOTE: `Std::Boxed` is automatically implemented for all boxed types by compiler."
                     }
                     errors.append(Errors::from_msg_srcs(
                         msg,
@@ -1211,28 +1218,33 @@ impl TraitEnv {
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
-        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, impls) in impls {
-            for mut impl_ in impls {
+        for (trait_id_key, trait_impls) in old_impls {
+            for mut impl_ in trait_impls {
                 // Set up NameResolutionContext.
                 ctx.set_current_module(impl_.define_module.clone());
 
+                // `add_instance` keys the map by the implementation's own trait id.
+                assert!(
+                    impl_.trait_id().name == trait_id_key.name,
+                    "`{}` is filed under `{}`.",
+                    impl_.trait_id().name.to_string(),
+                    trait_id_key.name.to_string()
+                );
+
                 // Resolve trait_id's namespace.
-                let mut trait_id = trait_id.clone();
+                let mut trait_id = trait_id_key.clone();
                 errors.eat_err(
                     trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.src.clone()),
                 );
 
-                // Resolve names in TrantImpl
-                impl_.trait_id_mut().name = trait_id.name.clone(); // This is a "just in case" process, and may not be necessary.
+                // Give the implementation the resolved name before resolving the rest of it.
+                impl_.trait_id_mut().name = trait_id.name.clone();
                 errors.eat_err(impl_.resolve_namespace(ctx));
 
                 // Insert to new_impls
-                if !new_impls.contains_key(&trait_id) {
-                    new_impls.insert(trait_id.clone(), vec![]);
-                }
-                new_impls.get_mut(&trait_id).unwrap().push(impl_);
+                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
             }
         }
 
@@ -1250,18 +1262,15 @@ impl TraitEnv {
         }
 
         // Resolve aliases in trait implementations.
-        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, impls) in impls {
-            for mut impl_ in impls {
+        for (trait_id, trait_impls) in old_impls {
+            for mut impl_ in trait_impls {
                 // Resolve names in TraitImpls.
                 errors.eat_err(impl_.resolve_type_aliases(type_env));
 
                 // Insert to new_impls
-                if !new_impls.contains_key(&trait_id) {
-                    new_impls.insert(trait_id.clone(), vec![]);
-                }
-                new_impls.get_mut(&trait_id).unwrap().push(impl_);
+                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
             }
         }
         errors.to_result()?; // Throw errors if any.
@@ -1306,13 +1315,10 @@ impl TraitEnv {
         Ok(())
     }
 
-    // Add an instance.
+    /// Appends `inst` to the implementations recorded for the trait it implements.
     pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
-        if !self.impls.contains_key(&trait_id) {
-            self.impls.insert(trait_id.clone(), vec![]);
-        }
-        self.impls.get_mut(&trait_id).unwrap().push(inst);
+        insert_to_map_vec(&mut self.impls, &trait_id, inst);
         Ok(())
     }
 
@@ -1474,7 +1480,7 @@ impl TraitEnv {
         for (_trait_id, trait_impls) in &mut self.impls {
             for inst in trait_impls {
                 errors.eat_err(inst.set_kinds_in_qual_pred_and_member_sigs(kind_env));
-                let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, Map::default());
+                let mut assoc_tys = mem::replace(&mut inst.assoc_types, Map::default());
                 for (_, assoc_ty_impl) in &mut assoc_tys {
                     errors.eat_err(assoc_ty_impl.set_kinds(&inst, kind_env));
                 }

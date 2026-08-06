@@ -5693,6 +5693,8 @@ pub fn test_implement_trait_on_arrow_2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two instance heads of the same shape overlap even when one of them carries a context: the
+/// overlap check compares the heads and disregards the contexts.
 #[test]
 pub fn test_overlapping_instances_1() {
     let source = r##"
@@ -5703,11 +5705,11 @@ pub fn test_overlapping_instances_1() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl [a : ToString] Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5723,6 +5725,8 @@ pub fn test_overlapping_instances_1() {
     );
 }
 
+/// An instance head whose argument is a type variable overlaps a head that fixes that argument to
+/// a concrete type, since the types the second head denotes are among those the first denotes.
 #[test]
 pub fn test_overlapping_instances_2() {
     let source = r##"
@@ -5733,11 +5737,11 @@ pub fn test_overlapping_instances_2() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl Array I64 : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5753,6 +5757,8 @@ pub fn test_overlapping_instances_2() {
     );
 }
 
+/// The overlap check reaches function types: a head implementing the trait for every arrow type
+/// overlaps a head that fixes the domain of the arrow.
 #[test]
 pub fn test_overlapping_instances_3() {
     let source = r##"
@@ -5783,6 +5789,8 @@ pub fn test_overlapping_instances_3() {
     );
 }
 
+/// Two heads that are identical up to the naming of their type parameters overlap even when their
+/// contexts constrain different parameters.
 #[test]
 pub fn test_overlapping_instances_4() {
     let source = r##"
@@ -5793,11 +5801,11 @@ pub fn test_overlapping_instances_4() {
     }
 
     impl [e : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl [a : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl I64 : MyToString {
@@ -5817,6 +5825,185 @@ pub fn test_overlapping_instances_4() {
     );
 }
 
+/// An instance head whose argument is a type variable of a higher kind overlaps a head whose
+/// argument is a type constructor of that kind, and the pair is reported.
+///
+/// Which types a head denotes depends on the kinds of the type variables in it: a variable still
+/// carrying the default kind `*` fails to unify with the type constructor it stands for, and the
+/// pair reads as disjoint.
+#[test]
+pub fn test_overlapping_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// A variable whose higher kind comes from a trait constraint rather than a kind signature reaches
+/// the overlap check with that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_higher_kind_from_constraint() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait [f : *->*] f : MyFunctor {
+        fmap : (a -> b) -> f a -> f b;
+    }
+
+    impl Array : MyFunctor {
+        fmap = |g, xs| xs.to_iter.map(g).to_array;
+    }
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : MyFunctor] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// A head whose argument is a partially applied type constructor overlaps one taking a variable of
+/// that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_partially_applied_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar (Result String) : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : Result::ok(true) }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two heads that both take a variable of the same higher kind overlap, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_two_higher_kinded_heads() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl [g : *->*] Bar g : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two instance heads whose arguments are different type constructors of the same higher kind
+/// denote disjoint sets of types, and both implementations stand.
+#[test]
+pub fn test_disjoint_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    impl Bar Option : MyTrait {
+        m = |_| 2;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 1);;
+        assert_eq(|_|"fail", Bar { data : Option::some(true) }.m, 2);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `eval` accepts an expression of any type, evaluating it and discarding its value.
 #[test]
 pub fn test_eval_non_unit() {
     let source = r##"
