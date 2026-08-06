@@ -864,6 +864,13 @@ Fix types are divided into **boxed** and **unboxed** types, which are similar to
 
 In general, it's recommended that types containing a large amount of data be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
 
+An unboxed value holds its unboxed fields in place, so those fields have to lead to an end. A type whose unboxed fields lead back to itself, or to an ever larger type, has no size, and a program that uses one is rejected. Make one of the types on the way boxed, which bounds the size there at a pointer:
+
+```
+type Tree = unbox union { leaf : (), node : (Tree, Tree) };  // rejected: no size
+type Tree = box union { leaf : (), node : (Tree, Tree) };    // fine
+```
+
 ### Functions
 
 Functions are unboxed, but captured values are stored to an unnamed boxed struct.
