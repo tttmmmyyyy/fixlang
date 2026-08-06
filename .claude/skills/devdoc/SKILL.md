@@ -5,6 +5,20 @@ description: 'Writing conventions for dev docs — design docs, plans, handoffs,
 
 # Writing dev docs
 
+## The fundamental theorem of readability
+
+*The Art of Readable Code* states it of code: code should be written to minimize the time it would take someone else to understand it. It holds of a document just as well.
+
+**Write the doc so that the time it takes to understand is as short as possible.**
+
+Two things make that time longer, and the rest of this skill is how to keep both down.
+
+**What the reader has to do.** Do not make the reader think. Do not leave the reader with a question. Do not send the reader looking for another document. Each of these costs time, and the cost is the reader's, paid on every reading.
+
+**What the reader has to read.** Say what it takes to reach the understanding the doc is for, and no more. Every sentence beyond that is time spent reading it.
+
+The two pull against each other — an explanation that leaves a question is short but costly, and one that answers everything is complete but long. The doc is right where the total is smallest.
+
 ## Language
 
 Write the doc in the implementers' language. It does not have to be English.

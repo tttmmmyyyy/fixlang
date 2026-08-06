@@ -855,9 +855,11 @@ Comments are read by people coming to the code fresh. They want to know *what th
 
 **Keep** a "why" reference to history *only* when the implementation departs from what a reader would naturally expect, and the past explains the departure — e.g., "we don't use approach X here because of bug #1234" or "the obvious recursion is unrolled to avoid stack overflow on deeply nested input." The test: would a fresh reader, seeing the code, be surprised by the choice and benefit from knowing why?
 
-#### Comments and prose must be in English — [Rust + Markdown]
+#### The project's own text is in English — [Rust + Markdown]
 
-This project's source comments are written in English (`Document.md`, `std.fix`, prior code, and PRs all assume English). A comment in any other language — Japanese, Chinese, etc. — is a style violation.
+The Rust source comments, `std.fix`'s doc comments, and the documents the project publishes to its users are written in English, so a comment or a paragraph in another language is a style violation. The exception is a document that exists as a translation, such as `Document-ja.md`, which is written in the language it translates into.
+
+This convention covers the text the project ships. Writing addressed to the people working on the change — a dev doc under `dev-docs/`, a pull request body, an issue — is in the language of the people who read it, and this convention does not reach it. The `devdoc` skill governs a dev doc's writing.
 
 **Rewrite**: translate the comment into clear English while preserving its meaning.
 
@@ -940,7 +942,7 @@ The test: could a user of the latest release hit this bug? A bug whose cause is 
 
 1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
-   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
    - **`CHANGELOG.md`**: the **[Rust + Markdown]** and **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
