@@ -200,7 +200,8 @@ impl ObjectFieldType {
                     let variant_debug_ty = ty_to_debug_embedded_ty(ty.clone(), gc);
                     let size_in_bits = gc.target_data.get_bit_size(&variant_ty);
                     let align_in_bits = gc.target_data.get_abi_alignment(&variant_ty) * 8;
-                    let offset_in_bits = 0; // Union buffer has alignment 8.
+                    // Every variant starts at the beginning of the union buffer.
+                    let offset_in_bits = 0;
                     let mem_ty = gc
                         .get_di_builder()
                         .create_member_type(
@@ -1116,8 +1117,8 @@ pub struct ObjectType {
     /// Whether a value of this type is held in place. A boxed value is a pointer to a heap block
     /// whose contents this layout describes.
     pub is_unbox: bool,
-    /// The Fix type this is the layout of, which `to_struct_type` compares against `unboxed_path`
-    /// to find a cycle of unboxed types.
+    /// The Fix type this is the layout of, which `to_struct_type` passes to
+    /// `TypeNode::check_layout_exists` to report a type whose layout has no end.
     pub ty: Arc<TypeNode>,
 }
 

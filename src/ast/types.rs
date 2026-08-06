@@ -284,8 +284,6 @@ impl TyCon {
         })
     }
 
-    // Whether this is an integer type that carries a sign. Panics for a type that is not an
-    // integer type of `Std`.
     // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
     // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
     // which side of the call extends it; a wider type fills the register and needs no extension.
@@ -300,6 +298,8 @@ impl TyCon {
             )
     }
 
+    // Whether this is an integer type that carries a sign. Panics for a type that is not an
+    // integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
@@ -1193,8 +1193,10 @@ impl TypeNode {
         !self.is_unbox(type_env)
     }
 
-    // Check if `self` is fully unboxed.
-    // Here, a type is fully unboxed if and only if it does not contain any boxed type.
+    /// Whether this type contains no boxed type.
+    ///
+    /// Deciding this walks the fields of unboxed types, so a type whose layout has no end is
+    /// reported here (`check_layout_exists`) and ends the compilation.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         self.is_fully_unboxed_inside(type_env, &mut vec![])
     }

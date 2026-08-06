@@ -53,8 +53,7 @@ use std::{
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    /// The object files generated. Empty when the build ran for the language server, which
-    /// type-checks without emitting code.
+    /// The object files generated, one per compilation unit.
     pub obj_paths: Vec<PathBuf>,
 }
 
