@@ -25,7 +25,16 @@ use std::sync::Arc;
 /// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
 /// has none. It is the single source of truth for which of a type's paths are boxed leaves.
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
-    fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut FieldPath, out: &mut Vec<FieldPath>) {
+    /// # Arguments
+    /// * `unboxed_path` - the types this descent came through, which `check_layout_exists` reads to
+    ///   report a type that has no layout instead of descending into it forever.
+    fn go(
+        ty: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        path: &mut FieldPath,
+        unboxed_path: &mut Vec<Arc<TypeNode>>,
+        out: &mut Vec<FieldPath>,
+    ) {
         if ty.is_fully_unboxed(type_env) {
             return;
         }
@@ -46,13 +55,16 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             return;
         }
         for (i, fty) in ty.field_types(type_env).iter().enumerate() {
+            fty.check_layout_exists(unboxed_path);
             path.push(i);
-            go(fty, type_env, path, out);
+            unboxed_path.push(fty.clone());
+            go(fty, type_env, path, unboxed_path, out);
+            unboxed_path.pop();
             path.pop();
         }
     }
     let mut out = Vec::new();
-    go(ty, type_env, &mut Vec::new(), &mut out);
+    go(ty, type_env, &mut Vec::new(), &mut Vec::new(), &mut out);
     out
 }
 

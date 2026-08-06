@@ -7693,6 +7693,25 @@ pub fn test_circular_unboxed_types_have_no_layout() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A boxed field settles whether a type is fully unboxed before the walk that answers it reaches
+/// the field holding the type itself, so this type is reported by the reference-counting passes'
+/// own descent through the fields.
+#[test]
+#[should_panic(expected = "There are circular definitions by unboxed types")]
+pub fn test_unboxed_cycle_behind_a_boxed_field() {
+    let source = r##"
+        module Main;
+        type T = unbox struct { p : Box I64, y : T, n : I64 };
+
+        depth : T -> I64;
+        depth = |t| t.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Unboxed fields that lead to an ever larger type of the same type constructor have no layout
 /// either. The type never repeats here, so the report rests on the type growing.
 #[test]
