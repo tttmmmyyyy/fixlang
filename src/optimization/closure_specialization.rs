@@ -4,10 +4,12 @@ use super::{
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
+use crate::graph::Graph;
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local, var_var, ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct_with_spans, expr_var,
+            var_local, var_var, ExprNode,
         },
         name::FullName,
         pattern::PatternNode,
@@ -223,12 +225,17 @@ fn run_one(
     let mut changed = false;
 
     // Compute the set of specializable functions.
-    let specializable_funcs = specializable_functions(prg, lifted_lambdas);
+    let specializable_funcs = specializable_functions(&prg.symbols, lifted_lambdas);
     let specializable_funcs = Rc::new(specializable_funcs);
 
     // Requests are only ever raised against functions that were present when this round started,
     // so a snapshot taken here answers every origin lookup the round makes.
     let origins_snapshot = Rc::new(origins.clone());
+    let capture_lists = Rc::new(capture_lists_by_tycon(lifted_lambdas));
+    let narrowable_fields = Rc::new(narrowable_capture_fields(
+        lifted_lambdas,
+        &specializable_funcs,
+    ));
 
     let symbols = mem::take(&mut prg.symbols);
     let mut new_tycons = Map::default();
@@ -258,6 +265,8 @@ fn run_one(
         let mut visitor = ClosureSpecializationVisitor::new(
             name.clone(),
             specializable_funcs.clone(),
+            capture_lists.clone(),
+            narrowable_fields.clone(),
             global_names.clone(),
             origins_snapshot.clone(),
             pinned_of.get(&name).cloned().unwrap_or_default(),
@@ -309,6 +318,9 @@ fn run_one(
             pinned_of.insert(decap_lam.lambda_func_name.clone(), visitor.pinned.clone());
             lifted_lambdas.insert(decap_lam.lambda_func_name.clone(), decap_lam.clone());
         }
+        for cap in &visitor.narrowed_caps {
+            new_tycons.insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
+        }
         register_decaptured_lambdas(
             visitor.decap_lambdas,
             &mut new_symbols,
@@ -321,6 +333,18 @@ fn run_one(
     drop(sw);
 
     let mut symbols = new_symbols;
+
+    // The lambdas the first stage lifted are not in the tables computed before it ran, and what
+    // reaches their capture slots is known only to the walk about to happen: a capture list built
+    // with a lambda in one of its fields is wrapped back into a closure the moment that walk passes
+    // it by, and the next round finds nothing left to read. So the tables are solved again, over
+    // the program the first stage left behind.
+    let specializable_funcs = Rc::new(specializable_functions(&symbols, lifted_lambdas));
+    let capture_lists = Rc::new(capture_lists_by_tycon(lifted_lambdas));
+    let narrowable_fields = Rc::new(narrowable_capture_fields(
+        lifted_lambdas,
+        &specializable_funcs,
+    ));
 
     let sw = StopWatch::new(
         "closure_specialization::run_one second loop",
@@ -339,37 +363,69 @@ fn run_one(
                 continue;
             }
 
-            let expr = symbols
-                .get(&specialize_info.org_func_name)
-                .unwrap()
-                .expr
-                .as_ref()
-                .unwrap()
-                .clone();
+            // Where the function being specialized is a lifted lambda and what narrows is the
+            // capture list it receives, build it again around the narrowed capture struct: the head
+            // destructuring then matches by construction, rather than by patching a copy of it.
+            let narrowed_lambda = specialize_info.narrowed_lifted_lambda(
+                lifted_lambdas.get(&specialize_info.org_func_name),
+                specialized_func_name.clone(),
+            );
+
+            let expr = match &narrowed_lambda {
+                Some(narrowed) => narrowed.lam.clone(),
+                None => symbols
+                    .get(&specialize_info.org_func_name)
+                    .unwrap()
+                    .expr
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+            };
             let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing optimization
 
             // Tell the walk what each specialized slot holds, by the local name it arrives under.
-            let mut local_decap_lambdas = Map::default();
-            let (args, _) = expr.destructure_lam_sequence();
-            for (slot, decap_lam) in &specialize_info.specialized_args {
-                assert!(slot.field.is_none());
-                assert!(slot.arg < args.len());
-                assert_eq!(args[slot.arg].len(), 1);
-                let arg_name = &args[slot.arg][0].name;
-                local_decap_lambdas.insert(arg_name.clone(), decap_lam.clone());
-            }
+            let (local_decap_lambdas, local_capture_lists) = match &narrowed_lambda {
+                Some(narrowed) => (
+                    specialize_info.captured_lambdas_by_name(narrowed),
+                    Map::default(),
+                ),
+                None => specialize_info.slot_contents_by_arg_name(&expr),
+            };
 
             // Perform specialization
             let mut visitor = ClosureSpecializationVisitor::new(
                 specialized_func_name.clone(),
                 specializable_funcs.clone(),
+                capture_lists.clone(),
+                narrowable_fields.clone(),
                 global_names.clone(),
                 origins_snapshot.clone(),
                 specialize_info.pinned.clone(),
             );
             visitor.local_decap_lambdas = local_decap_lambdas;
+            visitor.local_capture_lists = local_capture_lists;
             let trav_res = visitor.traverse(&expr);
             let expr = trav_res.expr;
+
+            // A narrowed lifted lambda is the function it is wrapped into, not the lambda itself.
+            let narrowed_lambda = narrowed_lambda.map(|narrowed| DecapturedLambdaInfo {
+                lam: expr.clone(),
+                ..narrowed
+            });
+            let expr = match &narrowed_lambda {
+                Some(narrowed) => narrowed.lambda_func(),
+                None => expr,
+            };
+            if let Some(narrowed) = &narrowed_lambda {
+                lifted_lambdas.insert(specialized_func_name.clone(), narrowed.clone());
+                new_tycons.insert(
+                    narrowed.cap.tycon.as_ref().clone(),
+                    narrowed.cap.tycon_info.clone(),
+                );
+            }
+            for cap in &visitor.narrowed_caps {
+                new_tycons.insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
+            }
 
             // The copy carries the chain that produced it, and so does anything lifted out of it.
             origins.insert(
@@ -459,22 +515,26 @@ fn register_decaptured_lambdas(
 //
 // Finally, even if a parameter is a specializable, if it is not worth specializing or the inline cost of the function is high, it is returned as impossible to specialize.
 fn specializable_functions(
-    prg: &Program,
+    symbols: &Map<FullName, Symbol>,
     lifted_lambdas: &Map<FullName, DecapturedLambdaInfo>,
 ) -> Map<FullName, SpecializableFunctionInfo> {
     let capture_lists = capture_lists_by_tycon(lifted_lambdas);
-    let call_graph = prg.call_graph();
+    let call_graph = call_graph_of(symbols);
     let call_graph_scc = call_graph.compute_sccs();
     let name_to_idx = (0..call_graph.len())
         .map(|idx| (call_graph.get(idx).clone(), idx))
         .collect::<Map<FullName, usize>>();
 
-    // Callers of each function, which is who has to be judged again once it enters the table.
+    // Callers of each function, which is who has to be judged again once it enters the table. A
+    // callee absent from `symbols` is a specialization whose body is not made yet, and nothing
+    // reads its slots until it is.
     let mut callers = vec![Vec::<usize>::new(); call_graph.len()];
-    for (caller, sym) in &prg.symbols {
+    for (caller, sym) in symbols {
         let caller_idx = name_to_idx[caller];
         for callee in sym.expr.as_ref().unwrap().free_vars() {
-            callers[name_to_idx[&callee]].push(caller_idx);
+            if let Some(callee_idx) = name_to_idx.get(&callee) {
+                callers[*callee_idx].push(caller_idx);
+            }
         }
     }
 
@@ -494,10 +554,10 @@ fn specializable_functions(
     while let Some(idx) = queue.pop_front() {
         queued[idx] = false;
         let sym_name = call_graph.get(idx);
-        let sym = prg.symbols.get(sym_name).unwrap();
+        let sym = symbols.get(sym_name).unwrap();
         let specializable_slots = specializable_slots_of(
             sym,
-            lifted_lambdas.contains_key(sym_name),
+            lifted_lambdas.get(sym_name),
             &capture_lists,
             &specializable_funcs,
         );
@@ -551,7 +611,7 @@ fn reaches_a_direct_call(
 // here, never remove one.
 fn specializable_slots_of(
     sym: &Symbol,
-    is_lifted_lambda: bool,
+    lifted_from: Option<&DecapturedLambdaInfo>,
     capture_lists: &Map<FullName, CaptureStruct>,
     specializable_funcs: &Map<FullName, SpecializableFunctionInfo>,
 ) -> Set<Slot> {
@@ -591,15 +651,22 @@ fn specializable_slots_of(
         // this symbol is the lifted lambda that destructures it, a field is reached through the
         // name the destructuring binds it to; where the capture list is only passed on, a field is
         // reached wherever it is reached downstream.
-        let Some(cap) = capture_list_of(&param_tys[param_idx], capture_lists) else {
+        // The lambda this symbol was lifted from is where a captured name is still free, and so is
+        // where its uses can be found: in the body, the head destructuring has bound it, and a name
+        // in scope reads as one this walk must leave alone.
+        let lifted_from = lifted_from.filter(|_| param_idx == 0);
+        let Some(cap) = lifted_from
+            .map(|info| &info.cap)
+            .or_else(|| capture_list_of(&param_tys[param_idx], capture_lists))
+        else {
             continue;
         };
         for (field_idx, (field_name, field_ty)) in cap.fields().iter().enumerate() {
             if !field_ty.is_closure() {
                 continue;
             }
-            let reached = if is_lifted_lambda && param_idx == 0 {
-                reaches_a_direct_call(field_name, &body, specializable_funcs)
+            let reached = if let Some(info) = lifted_from {
+                reaches_a_direct_call(field_name, &info.lam, specializable_funcs)
             } else {
                 find_usage_of_name::run(&body, param_name)
                     .into_iter()
@@ -638,6 +705,61 @@ fn capture_lists_by_tycon(
         .collect()
 }
 
+// The call graph of `symbols`: an edge from A to B means A calls B.
+//
+// A call site is rewritten to name a specialized function before that function's body is made, so
+// a callee absent from `symbols` is one about to be created and carries no edge yet.
+fn call_graph_of(symbols: &Map<FullName, Symbol>) -> Graph<FullName> {
+    let names = symbols.keys().cloned().collect::<Vec<_>>();
+    let idx_of = names
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| (name.clone(), idx))
+        .collect::<Map<FullName, usize>>();
+    let mut graph = Graph::new(names);
+    for (caller, sym) in symbols {
+        for callee in sym.expr.as_ref().unwrap().free_vars() {
+            if let Some(callee_idx) = idx_of.get(&callee) {
+                graph.connect_idx(idx_of[caller], *callee_idx);
+            }
+        }
+    }
+    graph
+}
+
+// Per capture list type constructor, the fields it is worth threading a known lambda through as a
+// capture list rather than as a closure.
+//
+// Narrowing a field changes the type of every capture list built with that type constructor, and so
+// commits every lambda receiving one to a specialized copy. A field therefore only narrows where
+// all of those lambdas are worth copying for it.
+fn narrowable_capture_fields(
+    lifted_lambdas: &Map<FullName, DecapturedLambdaInfo>,
+    specializable_funcs: &Map<FullName, SpecializableFunctionInfo>,
+) -> Map<FullName, Set<usize>> {
+    let mut narrowable: Map<FullName, Set<usize>> = Map::default();
+    for info in lifted_lambdas.values() {
+        let worth_copying_for = specializable_funcs
+            .get(&info.lambda_func_name)
+            .map(|specialization| {
+                specialization
+                    .specializable_slots
+                    .iter()
+                    .filter(|slot| slot.arg == 0)
+                    .filter_map(|slot| slot.field)
+                    .collect::<Set<usize>>()
+            })
+            .unwrap_or_default();
+        match narrowable.get_mut(&info.cap.tycon.name) {
+            Some(fields) => fields.retain(|field| worth_copying_for.contains(field)),
+            None => {
+                narrowable.insert(info.cap.tycon.name.clone(), worth_copying_for);
+            }
+        }
+    }
+    narrowable
+}
+
 // The capture struct a value of `ty` is, where it is one.
 fn capture_list_of<'a>(
     ty: &Arc<TypeNode>,
@@ -654,10 +776,21 @@ struct ClosureSpecializationVisitor {
     decap_lambdas: Vec<DecapturedLambdaInfo>,
     // When a decaptured lambda is given a local name, it is stored here.
     local_decap_lambdas: Map<FullName, DecapturedLambdaInfo>,
+    // When a capture list holding lambdas this walk knows is given a local name, it is stored here.
+    local_capture_lists: Map<FullName, KnownCaptureList>,
+    // The capture structs narrowed by this walk, whose type constructors the caller registers into
+    // the program's type environment.
+    narrowed_caps: Vec<CaptureStruct>,
 
     /* Specialization */
     // Specializable functions
     specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
+    // The capture structs decapturing has built, by the name of the type constructor naming each.
+    capture_lists: Rc<Map<FullName, CaptureStruct>>,
+    // Per capture list type constructor, the fields every lambda receiving it can be specialized
+    // on. Narrowing a field commits every lambda that receives that capture list to a copy, so a
+    // field only narrows where all of them are worth copying.
+    narrowable_capture_fields: Rc<Map<FullName, Set<usize>>>,
     // Specialization requests generated by decapturing
     required_specializations: Vec<SpecializationRequest>,
 
@@ -678,11 +811,21 @@ struct ClosureSpecializationVisitor {
     pinned: Pinned,
 }
 
+// What a local naming a capture list is known to hold: the type it arrives as, once the fields
+// below are threaded through as capture lists rather than as closures, and which lambda is in each.
+#[derive(Clone)]
+struct KnownCaptureList {
+    ty: Arc<TypeNode>,
+    lambda_of_field: Map<usize, DecapturedLambdaInfo>,
+}
+
 impl ClosureSpecializationVisitor {
     // Create a new visitor
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
+        capture_lists: Rc<Map<FullName, CaptureStruct>>,
+        narrowable_capture_fields: Rc<Map<FullName, Set<usize>>>,
         global_names: Set<FullName>,
         origins: Rc<Origins>,
         pinned: Pinned,
@@ -690,7 +833,11 @@ impl ClosureSpecializationVisitor {
         ClosureSpecializationVisitor {
             decap_lambdas: Vec::new(),
             local_decap_lambdas: Map::default(),
+            local_capture_lists: Map::default(),
+            narrowed_caps: Vec::new(),
             specializable_funcs,
+            capture_lists,
+            narrowable_capture_fields,
             required_specializations: Vec::new(),
             lam_func_counter: 0,
             current_symbol,
@@ -698,6 +845,91 @@ impl ClosureSpecializationVisitor {
             origins,
             pinned,
         }
+    }
+
+    // The capture list `bound` builds, narrowed so that every field holding a lambda this walk
+    // knows carries it as a capture list rather than as a closure, where the lambdas receiving that
+    // capture list are all worth copying for it.
+    //
+    // Returns the narrowed construction together with what it is now known to hold, or `None` where
+    // there is nothing to narrow.
+    fn narrow_capture_list(
+        &mut self,
+        name: &FullName,
+        bound: &Arc<ExprNode>,
+        value: &Arc<ExprNode>,
+    ) -> Option<(Arc<ExprNode>, KnownCaptureList)> {
+        let (tycon, fields) = bound.destructure_make_struct()?;
+        let cap = self.capture_lists.get(&tycon.name)?;
+        let narrowable = self.narrowable_capture_fields.get(&tycon.name)?;
+
+        // Narrowing changes the type this capture list arrives as, so every function it is handed
+        // to has to be one that can be specialized on the narrowed field. Anything else reaching
+        // it — a call, a value carried elsewhere — leaves the narrowing with nowhere to land.
+        let usages = find_usage_of_name::run(value, name);
+        let accepted_by = |field_idx: usize| {
+            usages.iter().all(|usage| match usage {
+                UsageType::CalledAsFunction => false,
+                UsageType::FunctionArgument(fun, idx) => {
+                    self.specializable_funcs.get(fun).is_some_and(|info| {
+                        info.specializable_slots.contains(&Slot {
+                            arg: *idx,
+                            field: Some(field_idx),
+                        })
+                    })
+                }
+            })
+        };
+
+        let mut lambda_of_field = Map::default();
+        let mut narrowed = cap.clone();
+        for (field_idx, (field_name, _)) in cap.fields().iter().enumerate() {
+            if !narrowable.contains(&field_idx) || !accepted_by(field_idx) {
+                continue;
+            }
+            let value = fields
+                .iter()
+                .find(|(name, _, _)| name == &field_name.name)
+                .map(|(_, _, value)| value)?;
+            if !value.is_var() {
+                continue;
+            }
+            let Some(inner) = self.local_decap_lambdas.get(&value.get_var().name) else {
+                continue;
+            };
+            narrowed = narrowed.with_field_type(CAP_LIST_PREFIX, field_idx, inner.cap_list_ty());
+            lambda_of_field.insert(field_idx, inner.clone());
+        }
+        if lambda_of_field.is_empty() {
+            return None;
+        }
+
+        let new_fields = fields
+            .iter()
+            .map(|(name, span, value)| {
+                let field_idx = narrowed
+                    .fields()
+                    .iter()
+                    .position(|(field_name, _)| field_name.name == *name)
+                    .unwrap();
+                let value = match lambda_of_field.get(&field_idx) {
+                    Some(inner) => value.set_type(inner.cap_list_ty()),
+                    None => value.clone(),
+                };
+                (name.clone(), span.clone(), value)
+            })
+            .collect::<Vec<_>>();
+        let ty = narrowed.ty.clone();
+        let construction =
+            expr_make_struct_with_spans(narrowed.tycon.clone(), new_fields).set_type(ty.clone());
+        self.narrowed_caps.push(narrowed);
+        Some((
+            construction,
+            KnownCaptureList {
+                ty,
+                lambda_of_field,
+            },
+        ))
     }
 
     // Commit the chain reaching here to specializing `slot` of the function whose origin is
@@ -805,6 +1037,9 @@ struct SpecializationRequest {
     org_func_ty: Arc<TypeNode>,
     // Map from the slot specialized on to the decaptured lambda that reaches it
     specialized_args: Map<Slot, DecapturedLambdaInfo>,
+    // For an argument reached through its capture slots, the type it arrives as: its capture list
+    // with those slots holding capture lists rather than closures.
+    narrowed_arg_tys: Map<usize, Arc<TypeNode>>,
     // What the chain producing this request has committed to. The specialized function carries it
     // on, so the requests raised while walking its body are judged against the same chain.
     pinned: Pinned,
@@ -844,8 +1079,12 @@ impl SpecializationRequest {
         let org_ty = self.org_func_ty.clone();
         let (mut doms, codom) = org_ty.collect_app_src(usize::MAX);
         for (slot, decap_lam) in self.specialized_args_in_order() {
-            assert!(slot.field.is_none());
-            doms[slot.arg] = decap_lam.cap_list_ty();
+            if slot.field.is_none() {
+                doms[slot.arg] = decap_lam.cap_list_ty();
+            }
+        }
+        for (arg, ty) in self.narrowed_arg_tys.iter() {
+            doms[*arg] = ty.clone();
         }
 
         // Convert back to a function type
@@ -860,6 +1099,77 @@ impl SpecializationRequest {
     // Create an expression to refer to the specialized function.
     fn specialized_func_expr(&self) -> Arc<ExprNode> {
         expr_var(self.specialized_func_name(), None).set_type(self.specialized_func_ty())
+    }
+
+    // Where this request narrows the capture list a lifted lambda receives, that lambda reached
+    // through the narrowed capture struct, under `name`.
+    fn narrowed_lifted_lambda(
+        &self,
+        org: Option<&DecapturedLambdaInfo>,
+        name: FullName,
+    ) -> Option<DecapturedLambdaInfo> {
+        let org = org?;
+        let mut narrowed = None;
+        for (slot, inner) in self.specialized_args_in_order() {
+            let field = slot.field?;
+            assert_eq!(slot.arg, 0);
+            narrowed = Some(
+                narrowed
+                    .unwrap_or_else(|| org.clone())
+                    .with_specialized_capture_slot(field, inner, name.clone()),
+            );
+        }
+        narrowed
+    }
+
+    // What each narrowed capture field of `narrowed` holds, by the name its head destructuring
+    // binds it to.
+    fn captured_lambdas_by_name(
+        &self,
+        narrowed: &DecapturedLambdaInfo,
+    ) -> Map<FullName, DecapturedLambdaInfo> {
+        self.specialized_args_in_order()
+            .into_iter()
+            .map(|(slot, inner)| {
+                let field = slot.field.unwrap();
+                (narrowed.cap.fields()[field].0.clone(), inner.clone())
+            })
+            .collect()
+    }
+
+    // What each specialized slot holds, by the name of the parameter it arrives through: whole
+    // capture lists for argument slots, and the fields of one for capture slots.
+    fn slot_contents_by_arg_name(
+        &self,
+        expr: &Arc<ExprNode>,
+    ) -> (
+        Map<FullName, DecapturedLambdaInfo>,
+        Map<FullName, KnownCaptureList>,
+    ) {
+        let (args, _) = expr.destructure_lam_sequence();
+        let mut decap_lambdas = Map::default();
+        let mut capture_lists: Map<FullName, KnownCaptureList> = Map::default();
+        for (slot, inner) in self.specialized_args_in_order() {
+            assert!(slot.arg < args.len());
+            assert_eq!(args[slot.arg].len(), 1);
+            let arg_name = args[slot.arg][0].name.clone();
+            match slot.field {
+                None => {
+                    decap_lambdas.insert(arg_name, inner.clone());
+                }
+                Some(field) => {
+                    capture_lists
+                        .entry(arg_name)
+                        .or_insert_with(|| KnownCaptureList {
+                            ty: self.narrowed_arg_tys[&slot.arg].clone(),
+                            lambda_of_field: Map::default(),
+                        })
+                        .lambda_of_field
+                        .insert(field, inner.clone());
+                }
+            }
+        }
+        (decap_lambdas, capture_lists)
     }
 }
 
@@ -951,6 +1261,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // Check that the variable name is local.
         if !name.is_local() {
+            return StartVisitResult::VisitChildren;
+        }
+
+        // A name arriving as a narrowed capture list carries a type this walk chose, which the
+        // occurrences copied from the original still miss.
+        if let Some(known) = self.local_capture_lists.get(name) {
+            if expr.type_.as_ref().unwrap().to_string() != known.ty.to_string() {
+                return StartVisitResult::ReplaceAndRevisit(expr.set_type(known.ty.clone()));
+            }
             return StartVisitResult::VisitChildren;
         }
 
@@ -1078,9 +1397,32 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         let func_origin = origin_of(&self.origins, func_name);
         let mut pinned = self.pinned.clone();
         let mut specialized_args = Map::default();
+        let mut narrowed_arg_tys: Map<usize, Arc<TypeNode>> = Map::default();
         let mut decaptured_args = args.clone();
         for (i, arg) in args.iter().enumerate() {
             // Check if this is a specializable argument.
+            // A capture list arriving here whose fields hold lambdas this walk knows: each field
+            // the function downstream is worth copying for becomes a slot to specialize on.
+            if arg.is_var() {
+                if let Some(known) = self.local_capture_lists.get(&arg.get_var().name).cloned() {
+                    for (field_idx, inner) in known.lambda_of_field {
+                        let slot = Slot {
+                            arg: i,
+                            field: Some(field_idx),
+                        };
+                        if !specialize_info.specializable_slots.contains(&slot) {
+                            continue;
+                        }
+                        if !self.commit(&mut pinned, &func_origin, slot, &inner.lambda_func_name) {
+                            continue;
+                        }
+                        narrowed_arg_tys.insert(i, known.ty.clone());
+                        specialized_args.insert(slot, inner);
+                    }
+                    decaptured_args[i] = arg.set_type(known.ty);
+                }
+            }
+
             let slot = Slot::arg(i);
             if !specialize_info.specializable_slots.contains(&slot) {
                 continue;
@@ -1125,6 +1467,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             org_func_name: func_name.clone(),
             org_func_ty: func.type_.as_ref().unwrap().clone(),
             specialized_args,
+            narrowed_arg_tys,
             pinned,
         };
         let specialized_func_expr = specialization.specialized_func_expr();
@@ -1153,13 +1496,14 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         assert_eq!(arg.len(), 1);
         let arg = &arg[0];
         let arg_name = &arg.name;
-        let opt_local_decap_lambda = self.local_decap_lambdas.get(arg_name);
-        // If the argument does not refer to a decaptured lambda, do nothing.
-        if opt_local_decap_lambda.is_none() {
-            return StartVisitResult::VisitChildren;
-        }
-        let local_decap_lambda = opt_local_decap_lambda.unwrap();
-        let cap_list_ty = local_decap_lambda.cap_list_ty();
+        let cap_list_ty = match self.local_capture_lists.get(arg_name) {
+            Some(known) => known.ty.clone(),
+            None => match self.local_decap_lambdas.get(arg_name) {
+                Some(local_decap_lambda) => local_decap_lambda.cap_list_ty(),
+                // If the argument does not refer to a decaptured lambda, do nothing.
+                None => return StartVisitResult::VisitChildren,
+            },
+        };
         let lam_ty = expr.type_.as_ref().unwrap();
         let arg_ty = lam_ty.get_lambda_srcs()[0].clone();
         // If the argument type is already correct, do nothing.
@@ -1237,6 +1581,18 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             let pat = pat.set_type(cap_list_ty.clone());
             let bound = bound.set_type(cap_list_ty);
             let expr = expr_let_typed(pat, bound, value);
+            return StartVisitResult::ReplaceAndRevisit(expr);
+        } else if pat.is_var() {
+            // A capture list built here may hold lambdas this walk knows. Threading those through
+            // as capture lists lets the lambda receiving this one be specialized on them.
+            let var_name = pat.get_var().name.clone();
+            let Some((construction, known)) = self.narrow_capture_list(&var_name, &bound, &value)
+            else {
+                return StartVisitResult::VisitChildren;
+            };
+            self.local_capture_lists.insert(var_name, known.clone());
+            let pat = pat.set_var_tyanno(None).set_type(known.ty);
+            let expr = expr_let_typed(pat, construction, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
         } else {
             return StartVisitResult::VisitChildren;

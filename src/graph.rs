@@ -57,24 +57,6 @@ impl<T> Graph<T> {
         self.edges.get_mut(from).unwrap().push(to);
     }
 
-    // Connect two nodes.
-    pub fn connect(&mut self, from: &T, to: &T)
-    where
-        T: Eq,
-    {
-        let from = self.elem_to_idx(from).unwrap();
-        let to = self.elem_to_idx(to).unwrap();
-        self.connect_idx(from, to);
-    }
-
-    // Get the index of an element.
-    pub fn elem_to_idx(&self, elem: &T) -> Option<usize>
-    where
-        T: Eq,
-    {
-        self.elems.iter().position(|e| e == elem)
-    }
-
     // Collect nodes reachable from a node.
     fn reachable_nodes_inner(&self, from: usize, visited: &mut Set<usize>) {
         if visited.contains(&from) {

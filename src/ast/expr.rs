@@ -235,6 +235,16 @@ impl ExprNode {
         }
     }
 
+    // The type constructor and fields of a struct construction, or `None` for anything else.
+    pub fn destructure_make_struct(
+        &self,
+    ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<Span>, Arc<ExprNode>)>)> {
+        match &*self.expr {
+            Expr::MakeStruct(tc, fields) => Some((tc.clone(), fields)),
+            _ => None,
+        }
+    }
+
     // `f(x, y, ..., z)` -> `(f, [x, y, ..., z])`
     // Panics if multivariable function (currently such functions are defined only by the optimization, and not by the user) is found.
     pub fn destructure_app(&self) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
