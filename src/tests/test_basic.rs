@@ -13,7 +13,7 @@ use crate::{
         test_source_with_c, EmittedIr,
     },
 };
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::{
     fs::{self, remove_file, File},
     io::Write,
@@ -3208,7 +3208,7 @@ pub fn test98() {
 #[test]
 pub fn test99() {
     // Test cast between integral types.
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let mut cases: Vec<String> = vec![];
     let tys = &[
         I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,

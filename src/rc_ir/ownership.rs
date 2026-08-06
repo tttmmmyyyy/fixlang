@@ -654,9 +654,9 @@ pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPa
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
-                let leaf = (p.name.clone(), unit);
-                if !func.borrowed_units.contains(&leaf) {
-                    owned.insert(leaf);
+                let unit_path = (p.name.clone(), unit);
+                if !func.borrowed_units.contains(&unit_path) {
+                    owned.insert(unit_path);
                 }
             }
         }
@@ -707,9 +707,13 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{as_arg_projection, origin, Binding, Origin, VarTable};
+    use crate::ast::name::FullName;
+    use crate::ast::program::TypeEnv;
     use crate::fixstd::builtin::make_i64_ty;
-    use crate::rc_ir::provenance::Provenance;
+    use crate::misc::Set;
+    use crate::rc_ir::ast::{RcVar, VarPath};
+    use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {

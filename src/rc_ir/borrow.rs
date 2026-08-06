@@ -209,9 +209,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         let mut borrowed = Set::default();
         for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
-                let leaf = (p.name.clone(), unit);
-                if !owned_units.contains(&leaf) {
-                    borrowed.insert(leaf);
+                let unit_path = (p.name.clone(), unit);
+                if !owned_units.contains(&unit_path) {
+                    borrowed.insert(unit_path);
                 }
             }
         }
@@ -292,7 +292,7 @@ fn param_ownership_shape(
         path: &mut FieldPath,
         unboxed_path: &mut Vec<Arc<TypeNode>>,
     ) -> OwnershipShape {
-        let owned = |path: &FieldPath| {
+        let ownership_at = |path: &FieldPath| {
             if owned_units.contains(&(var.clone(), path.clone())) {
                 Ownership::Own
             } else {
@@ -304,12 +304,15 @@ fn param_ownership_shape(
         }
         if ty.is_closure() {
             path.push(CLOSURE_CAPTURE_IDX as usize);
-            let cap = owned(path);
+            let capture_ownership = ownership_at(path);
             path.pop();
-            return OwnershipShape::Fields(vec![OwnershipShape::NoUnit, OwnershipShape::Unit(cap)]);
+            return OwnershipShape::Fields(vec![
+                OwnershipShape::NoUnit,
+                OwnershipShape::Unit(capture_ownership),
+            ]);
         }
         if ty.is_rc_unit_root(type_env) {
-            return OwnershipShape::Unit(owned(path));
+            return OwnershipShape::Unit(ownership_at(path));
         }
         let fields = ty.field_types(type_env);
         let mut children = Vec::with_capacity(fields.len());
