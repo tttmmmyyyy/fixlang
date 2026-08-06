@@ -14,8 +14,7 @@ pub enum UsageType {
     // of the argument the name was passed as.
     FunctionArgument(FullName, usize),
     // The name is used as a function and is called.
-    // The component is the arguments of the function call.
-    CalledAsFunction(Vec<Arc<ExprNode>>),
+    CalledAsFunction,
 }
 
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
@@ -83,8 +82,7 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (fun, args) = expr.destructure_app();
         if fun.is_var() && &fun.get_var().name == self.name {
-            let usage = UsageType::CalledAsFunction(args.clone());
-            self.add_usage(usage);
+            self.add_usage(UsageType::CalledAsFunction);
         }
         // A call whose callee is not a variable has no name to record the argument against, and the
         // consumer looks the name up among the program's globals, so such a call is passed over.

@@ -1,7 +1,7 @@
 //! The two techniques of the closure specialization pass, read off the `--emit-rc-ir` dump: a
 //! lambda is lifted to a global function, and the function it is passed to gets a copy that calls
 //! that function by name. A recursion that hands the next round a closure built from the one it
-//! was given gets no such copy.
+//! was given could ask for one copy per round, and runs out instead.
 //!
 //! The dump is what these assert against because a program cannot observe either one — both leave
 //! the answer unchanged, so a suite that only runs the program stays green with the whole pass
@@ -131,12 +131,13 @@ mod integration_tests {
         );
     }
 
-    /// The pass specializes a function on a closure parameter only where the recursion passes that
-    /// parameter on unchanged, so a recursion that wraps it on every round gets no specialized
-    /// copy — neither where the recursion is a function's own nor where it goes around a cycle of
-    /// two. The lifted lambdas are what show the pass looked at these functions at all.
+    /// A recursion that wraps the closure it was given on every round could ask for one specialized
+    /// copy per round. Along one chain of requests the pass commits each function, argument and
+    /// lambda origin to a single lambda, so the copies run out: none of them is itself specialized
+    /// again. Both shapes are covered — the recursion a function does on its own, and the one that
+    /// goes around a cycle of two.
     #[test]
-    pub fn test_a_recursion_carrying_a_new_closure_each_round_is_not_specialized_on() {
+    pub fn test_a_recursion_carrying_a_new_closure_each_round_runs_out_of_copies() {
         let (_temp_dir, project_dir) = setup_test_env("changing_closure");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", CHANGING_CLOSURE_OUTPUT);
 
@@ -157,10 +158,17 @@ mod integration_tests {
             .filter(|name| name.starts_with("Main::"))
             .collect::<Vec<_>>();
         assert!(
-            specialized.is_empty(),
-            "neither recursion passes its closure parameter on unchanged, so the pass should mint \
-             none of: {:?}",
-            specialized
+            !specialized.is_empty(),
+            "the pass should specialize these recursions, but the dump names no copy of them"
+        );
+        let copies_of_copies = specialized
+            .iter()
+            .filter(|name| name.matches("#closure_spec").count() > 1)
+            .collect::<Vec<_>>();
+        assert!(
+            copies_of_copies.is_empty(),
+            "a copy specialized again means the chain of requests never runs out: {:?}",
+            copies_of_copies
         );
     }
 }
