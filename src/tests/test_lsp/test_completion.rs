@@ -8,17 +8,26 @@ mod tests {
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::{Duration, Instant},
     };
     use tempfile::TempDir;
 
+    /// The directory holding the LSP test projects, one subdirectory per
+    /// project, named as the tests name it.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
+    /// Copy the test project `project_name` into a temporary directory of its
+    /// own, so tests that build and edit it can run in parallel.
+    ///
+    /// # Returns
+    /// The guard whose drop deletes the copy, and the canonicalized path of
+    /// the copied project.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -73,13 +82,23 @@ mod tests {
         }
     }
 
+    /// A language server running over a private copy of one test project,
+    /// ready to answer completion requests against that copy's files.
     struct LspCompletionCtx {
+        /// The client end of the server's stdio connection.
         client: LspClient,
+        /// Absolute path of the project copy, the base of every file URI.
         project_dir: PathBuf,
+        /// Kept alive so the copy outlives the server; its drop deletes the
+        /// copy.
         _temp_dir: TempDir,
     }
 
     impl LspCompletionCtx {
+        /// Start a server over a fresh copy of `project_name` and open each of
+        /// `files`, paths relative to the project root, in the given order.
+        /// Returns once the server has published diagnostics for the last of
+        /// them, so the project has been type-checked.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -100,6 +119,8 @@ mod tests {
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path
+        /// relative to the project root.
         fn file_uri(&self, file: &str) -> String {
             format!("file://{}", self.project_dir.join(file).display())
         }
@@ -543,8 +564,6 @@ mod tests {
     /// any fix lands; once it passes the regression is closed.
     #[test]
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
-        use std::fs;
-
         let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client
@@ -712,7 +731,7 @@ mod tests {
         // dot-context extractor actually observed as the receiver
         // type (it logs `dot-context receiver type: <ty>`).
         let log_path = ctx.project_dir.join(".fixlang/fix.log");
-        if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+        if let Ok(log_content) = fs::read_to_string(&log_path) {
             let completion_log: String = log_content
                 .lines()
                 .filter(|l| l.contains("[completion]"))
@@ -927,6 +946,43 @@ mod tests {
              receiver it must stay at Tier 1 (bucket match, unify fails); \
              got {:?}",
             sort_specific,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// A struct pattern whose head names no struct — here `Item`, an
+    /// associated type of `Std::Iterator` — is an error the strict
+    /// typechecker reports. The completion pipeline runs
+    /// `error_tolerant`, so it walks past that pattern and has to
+    /// keep serving the rest of the body: the `arr.` receiver further
+    /// down the same body still earns its `Array I64` type, which puts
+    /// `Std::Array::push_back` in Tier 0.
+    #[test]
+    fn test_completion_dot_sort_past_bad_struct_pattern() {
+        let mut ctx = LspCompletionCtx::setup("completion-struct-pattern-head", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: main : IO () = (
+        //   3:     let Item { data : d } = 42;
+        //   4:     let arr = [1, 2, 3];
+        //   5:     let _ = arr.   <-- cursor right after the dot
+        //   6:     pure()
+        //   7: );
+        //
+        // Column 16 = byte just after `.` on `    let _ = arr.`.
+        let items = ctx.complete("main.fix", 5, 16);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with('0'),
+            "Std::Array::push_back should land in Tier 0 for an Array I64 \
+             receiver even though an earlier pattern in the same body has a \
+             bad head; got {:?}",
+            sort_push_back,
         );
 
         ctx.shutdown();

@@ -1,0 +1,14 @@
+module Main;
+
+// A write into an array read out of a global. A global object is shared for as long as the program
+// runs and its reference count is never raised to say so, so the count alone cannot answer whether
+// the array is uniquely owned. The write therefore keeps its check, and the check reads the state
+// before the count.
+shared : Array I64;
+shared = Array::fill(4, 0);
+
+main : IO ();
+main = (
+    let written = shared.set(0, 1);
+    println $ (written.@(0) + shared.@(1)).to_string
+);
