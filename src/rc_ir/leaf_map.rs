@@ -25,6 +25,9 @@ use std::sync::Arc;
 /// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
 /// has none. It is the single source of truth for which of a type's paths are boxed leaves.
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
+    /// Descend a type, pushing onto `out` the path of each boxed leaf reached. `path` is the field
+    /// path from the value's root down to `ty`, which each pushed leaf is named relative to.
+    ///
     /// # Arguments
     /// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout`
     ///   reads to report a type that has no layout instead of descending into it forever.

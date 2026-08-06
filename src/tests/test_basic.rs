@@ -7730,8 +7730,8 @@ pub fn test_growing_unboxed_type_has_no_layout() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Whether a layout exists is decided by the type arguments and not by the declarations alone:
-/// `C U` holds a `C U` in place, while the same declarations with a boxed argument, in
+/// Whether a layout exists is decided by the declarations together with the type arguments: `C U`
+/// holds a `C U` in place, while the same declarations with a boxed argument, in
 /// `test_boxed_type_argument_bounds_the_layout`, stop at a pointer.
 #[test]
 #[should_panic(expected = "There are circular definitions by unboxed types")]

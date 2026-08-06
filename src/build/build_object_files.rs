@@ -384,8 +384,8 @@ pub fn build_object_files<'c>(
     // Every thread is joined before a panic is carried on: a thread still running holds the state
     // that unwinding tears down, and the process crashes under it. `resume_unwind` carries the
     // payload of the thread that panicked, which has already reported through the panic hook; a
-    // fresh panic here would report a second time, and as an unknown error, since a joined payload
-    // is not a string.
+    // joined payload is a `Box<dyn Any>`, so a fresh panic here would report a second time, and as
+    // an unknown error.
     let mut panic_payload = None;
     for t in threads {
         if let Err(payload) = t.join() {
