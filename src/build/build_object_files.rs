@@ -386,13 +386,13 @@ pub fn build_object_files<'c>(
     // payload of the thread that panicked, which has already reported through the panic hook; a
     // fresh panic here would report a second time, and as an unknown error, since a joined payload
     // is not a string.
-    let mut panicked = None;
+    let mut panic_payload = None;
     for t in threads {
         if let Err(payload) = t.join() {
-            panicked = panicked.or(Some(payload));
+            panic_payload = panic_payload.or(Some(payload));
         }
     }
-    if let Some(payload) = panicked {
+    if let Some(payload) = panic_payload {
         resume_unwind(payload);
     }
 
