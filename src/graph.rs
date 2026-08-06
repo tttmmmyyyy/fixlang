@@ -32,13 +32,6 @@ impl<T> Graph<T> {
         self.elems.len()
     }
 
-    pub fn find_index(&self, elem: &T) -> Option<usize>
-    where
-        T: Eq,
-    {
-        self.elems.iter().position(|e| e == elem)
-    }
-
     // Create a graph from a set of elements.
     // Returns a map from element to a node.
     pub fn from_set(elems: Set<T>) -> (Self, Map<T, usize>)

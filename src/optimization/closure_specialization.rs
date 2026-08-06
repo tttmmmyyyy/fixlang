@@ -23,7 +23,7 @@ use crate::{
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
-use std::{mem, rc::Rc, sync::Arc};
+use std::{collections::VecDeque, mem, rc::Rc, sync::Arc};
 
 /*
 # Closure specialization
@@ -368,52 +368,109 @@ fn register_decaptured_lambdas(
 fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunctionInfo> {
     let call_graph = prg.call_graph();
     let call_graph_scc = call_graph.compute_sccs();
+    let name_to_idx = (0..call_graph.len())
+        .map(|idx| (call_graph.get(idx).clone(), idx))
+        .collect::<Map<FullName, usize>>();
 
-    // Sort the indices of the nodes in the call graph in the order from downstream to upstream of the SCC to which they belong.
-    let mut call_graph_indices = (0..call_graph.len()).collect::<Vec<_>>();
-    call_graph_indices.sort_by(|a, b| {
-        let a_scc = call_graph_scc[*a];
-        let b_scc = call_graph_scc[*b];
-        b_scc.cmp(&a_scc)
-    });
-
-    let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
-    for call_graph_idx in call_graph_indices {
-        let sym_name = call_graph.get(call_graph_idx);
-        let sym = prg.symbols.get(sym_name).unwrap();
-        let expr = sym.expr.as_ref().unwrap();
-
-        // If `sym` calls other nodes in the same SCC, avoid specialization to prevent the risk of an infinite loop.
-        let mut prevent_specialization = false;
-        for other_sym in expr.free_vars() {
-            let other_sym_idx = call_graph.find_index(&other_sym).unwrap();
-            if call_graph_scc[call_graph_idx] != call_graph_scc[other_sym_idx] {
-                assert!(call_graph_scc[call_graph_idx] < call_graph_scc[other_sym_idx]);
+    // A function calling another member of its own strongly connected component is excluded
+    // wholesale, to prevent the risk of an infinite loop.
+    let mut excluded = vec![false; call_graph.len()];
+    for idx in 0..call_graph.len() {
+        let sym = prg.symbols.get(call_graph.get(idx)).unwrap();
+        for other_sym in sym.expr.as_ref().unwrap().free_vars() {
+            let other_idx = name_to_idx[&other_sym];
+            if call_graph_scc[idx] != call_graph_scc[other_idx] {
+                assert!(call_graph_scc[idx] < call_graph_scc[other_idx]);
                 continue;
             }
-            if call_graph_idx != other_sym_idx {
-                prevent_specialization = true;
+            if idx != other_idx {
+                excluded[idx] = true;
                 break;
             }
         }
-        if prevent_specialization {
+    }
+
+    // Callers of each function, which is who has to be judged again once it enters the table.
+    let mut callers = vec![Vec::<usize>::new(); call_graph.len()];
+    for (caller, sym) in &prg.symbols {
+        let caller_idx = name_to_idx[caller];
+        for callee in sym.expr.as_ref().unwrap().free_vars() {
+            callers[name_to_idx[&callee]].push(caller_idx);
+        }
+    }
+
+    // Whether a parameter is specializable is defined in terms of the table being built: a
+    // parameter forwarded to a specializable parameter of another function is specializable in
+    // turn. Growing the table can only make more parameters qualify, so starting from the empty
+    // table and adding what qualifies reaches the least fixed point.
+    //
+    // Seeding the queue callees-first means most functions are judged once, since what they
+    // forward to has settled by the time they come up.
+    let mut order = (0..call_graph.len()).collect::<Vec<_>>();
+    order.sort_by(|a, b| call_graph_scc[*b].cmp(&call_graph_scc[*a]));
+    let mut queue = order.into_iter().collect::<VecDeque<_>>();
+    let mut queued = vec![true; call_graph.len()];
+
+    let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
+    while let Some(idx) = queue.pop_front() {
+        queued[idx] = false;
+        if excluded[idx] {
             continue;
         }
+        let sym_name = call_graph.get(idx);
+        let sym = prg.symbols.get(sym_name).unwrap();
+        let specializable_arg_indices =
+            specializable_params_of(sym_name, sym, &specializable_funcs);
+        if specializable_arg_indices.is_empty() {
+            continue;
+        }
+        let settled = specializable_funcs
+            .get(sym_name)
+            .is_some_and(|info| info.specializable_arg_indices == specializable_arg_indices);
+        if settled {
+            continue;
+        }
+        specializable_funcs.insert(
+            sym_name.clone(),
+            SpecializableFunctionInfo {
+                specializable_arg_indices,
+            },
+        );
+        for caller_idx in &callers[idx] {
+            if !queued[*caller_idx] {
+                queued[*caller_idx] = true;
+                queue.push_back(*caller_idx);
+            }
+        }
+    }
+    specializable_funcs
+}
 
-        // Compute information on how `sym` calls itself.
-        let self_usages = find_usage_of_name::run(expr, &sym_name);
+// The parameters of `sym` a specialized copy is worth making for, judged against the table of
+// specializable functions as it stands. Adding entries to `specializable_funcs` can only add
+// parameters here, never remove one.
+fn specializable_params_of(
+    sym_name: &FullName,
+    sym: &Symbol,
+    specializable_funcs: &Map<FullName, SpecializableFunctionInfo>,
+) -> Vec<usize> {
+    let expr = sym.expr.as_ref().unwrap();
 
-        // Check if each parameter of `sym` is specializable.
-        let (params, body) = expr.destructure_lam_sequence();
-        let params = params
-            .iter()
-            .map(|may_multi_param| {
-                assert_eq!(may_multi_param.len(), 1);
-                may_multi_param[0].name.clone()
-            })
-            .collect::<Vec<_>>();
-        let param_tys = sym.ty.collect_app_src(usize::MAX).0;
-        let mut specializable_arg_indices = Vec::new();
+    // Compute information on how `sym` calls itself.
+    let self_usages = find_usage_of_name::run(expr, sym_name);
+
+    // Check if each parameter of `sym` is specializable.
+    let (params, body) = expr.destructure_lam_sequence();
+    let params = params
+        .iter()
+        .map(|may_multi_param| {
+            assert_eq!(may_multi_param.len(), 1);
+            may_multi_param[0].name.clone()
+        })
+        .collect::<Vec<_>>();
+    let param_tys = sym.ty.collect_app_src(usize::MAX).0;
+    let mut specializable_arg_indices = Vec::new();
+    {
         for param_idx in 0..params.len() {
             // Determine whether the parameter of `sym` is specializable.
 
@@ -495,17 +552,8 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
             // After all, this parmeter is specializable!
             specializable_arg_indices.push(param_idx);
         }
-        if specializable_arg_indices.is_empty() {
-            continue;
-        }
-        specializable_funcs.insert(
-            sym_name.clone(),
-            SpecializableFunctionInfo {
-                specializable_arg_indices,
-            },
-        );
     }
-    specializable_funcs
+    specializable_arg_indices
 }
 
 // The visitor that lifts a symbol's lambdas and records the specializations they enable.
