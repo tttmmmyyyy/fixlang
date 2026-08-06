@@ -28,10 +28,10 @@ Every scope reviews the working tree as it stands, so uncommitted changes are al
 A completed review records how far it got, so the next one can pick up from there. The record lives in the session memory directory (the path is in the memory instructions the orchestrator already carries), as a single memory file named `code-review-checkpoints`, type `project`, holding one line per branch:
 
 ```
-- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>
+- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>; cleanup PR #<n>
 ```
 
-The recorded hash is `HEAD` **after** the review's own commits land, so the next review starts past the cleanup commits this one made. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. The cleanup pull request is named because its commits sit on another branch and the hash alone would not lead anyone to them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
 
 The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
 
@@ -67,7 +67,17 @@ Ring-2 work is opportunistic, so it is capped: **at most five edits per file per
 
 ### Modes
 
-Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied). Each mode is committed on its own, so the cleanup near the change is a separate commit the author can weigh — or revert — as one unit.
+Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied).
+
+**The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own, cut from `main`, in a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
+
+The cleanup branch is cut from **`main`**, and its pull request targets `main` — not the branch under review. A pull request into the branch under review would put the cleanup back into that branch's diff, which is the thing being avoided. This works because ring 2 is, by definition, code outside the change's hunks: it is already on `main`, so an edit to it applies there.
+
+The two pull requests touch the same files, so whichever merges second resolves the overlap. That is one merge resolution, against a diff each side can read on its own.
+
+**A candidate that does not apply to `main`** — because the code it names is code this change introduces — is not ring-2 work at all. Fold it into the `in-diff` pass on the branch under review, or report it.
+
+When the branch under review **is** `main`, there is no split: both modes commit where they are.
 
 ## Aspect Sequence
 
@@ -87,11 +97,11 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 1. **Avoid conflicting edits.** The editing aspects modify files. Parallel runs would fight each other.
 2. **Each aspect should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
-3. **Per-aspect commits need it.** Each editing aspect is committed on its own, and each of its two modes separately again (see the Procedure), which means running and committing them one at a time.
+3. **Per-aspect commits need it.** Each editing aspect is committed on its own, on the branch its mode belongs to (see the Procedure), which means running and committing them one at a time.
 
 ## Procedure
 
-**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the worktree it edits, the base ref or the touched-file list, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
 
 1. **Resolve the base ref** from the argument:
    - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
@@ -113,15 +123,20 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. They only report findings; they make no edits.
    - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
 3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. On a clean tree, skip this step.
-4. **Run the editing aspects, committing each mode separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. For each aspect, in turn:
-   - Run it in **`in-diff` mode**. If it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`).
-   - If it reported ring-2 candidates, run it again in **`neighborhood` mode**, handing it that list as its starting point, and commit what it changed as `code-review: <what this aspect did> — cleanup near the change`. An aspect that reported no candidates skips this second run.
+4. **Run the editing aspects in `in-diff` mode**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. Run each one, and if it changed any files, commit exactly those changes on the branch under review — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). Collect the ring-2 candidates each aspect reports, keyed by aspect.
 
-   A mode that changed nothing produces no commit. **Per-aspect, per-mode, fine-grained commits are the goal — never bundle several into one commit.**
-5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Record the checkpoint.** Take `git rev-parse --short HEAD` and write it to the `code-review-checkpoints` memory under the current branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-7. **Summarize.** For each editing aspect, give a one-line description of what it changed in each mode (or note it changed nothing), keeping the cleanup near the change visible as its own line so the author can judge it separately; surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
-8. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+   An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
+5. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
+6. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, and go to step 7.
+
+   Otherwise:
+   - `git fetch origin`, then create a worktree for a branch cut from `origin/main`: `git worktree add <path> -b cleanup/<branch-under-review> origin/main`.
+   - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode** *in that worktree*, handing it the candidate list and the list of files the change touched. A candidate whose code is absent there belongs to the change; it is reported rather than applied.
+   - Commit each aspect's edits on their own — `code-review: <what this aspect did> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the build (and the test suite where the edits could reach behavior).
+   - Push the branch and open a pull request **into `main`**, whose body follows the `devdoc` skill: what the cleanups are, which convention each comes from, and why they are behavior-preserving. Name the branch under review as the occasion, not as a dependency.
+7. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+8. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
+9. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -130,26 +145,41 @@ You are running one aspect of a code review.
 
 Aspect: <aspect-name>
 Mode: <in-diff | neighborhood>
+Work in: <absolute path of the worktree to edit>
+
+How far your edits may reach is set by the mode and by the radius rules
+below.
+
+--- for an `in-diff` run, include: ---
+
 Base ref: <base>
 
 The base ref is the comparison point: review the diff between <base>
 and the current working tree, i.e. run your own `git diff <base>` to
 find the files and hunks to operate on.
 
-How far your edits may reach is set by the mode and by the radius rules
-below.
+Edit inside the diff hunks (ring 1). Wherever the aspect would also fix
+something in the rest of a touched file, collect it as a **ring-2
+candidate** — file, location, the one-line fix, and which convention it
+comes from — and leave that code alone.
 
-In `in-diff` mode, edit inside the diff hunks (ring 1). Wherever the
-aspect would also fix something in the rest of a touched file, collect
-it as a **ring-2 candidate** — file, location, the one-line fix, and
-which convention it comes from — and leave that code alone.
+--- for a `neighborhood` run, include instead: ---
 
-In `neighborhood` mode, work ring 2 of the touched files: start from
-the candidate list below, add anything it missed, keep the edits the
-radius rules allow, and turn the rest into findings.
+The worktree you are editing is checked out from `main` and does not
+carry the change under review. Work ring 2 of the files listed below:
+start from the candidate list, add anything it missed, keep the edits
+the radius rules allow, and turn the rest into findings. A candidate
+whose code is absent here belongs to the change rather than to the
+neighborhood — report it and leave it.
+
+Files the change under review touched:
+<the list>
+
+That list stands in for any `git diff` step the aspect's own procedure
+describes: the change is not in this worktree to diff against.
 
 Ring-2 candidates carried over from the in-diff pass:
-<the list the in-diff run reported, or "none — this is the in-diff pass">
+<the list the in-diff run reported>
 
 ----- BEGIN RADIUS RULES -----
 <paste the full text of the `## Review Radius` section here, including
@@ -182,7 +212,8 @@ edits; findings and candidates are added on top of it.
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base and the mode.
 - Don't let a `neighborhood` pass edit past the radius rules: an interface change or a behavior change outside the hunks is a finding, whatever the mode.
-- Don't let neighborhood edits ride along in an `in-diff` commit — the split is what lets the author revert the cleanup on its own.
+- Don't let neighborhood edits reach the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
+- Don't point the cleanup pull request at the branch under review — it targets `main`, or the cleanup lands back in the diff it was taken out of.
 - Don't continue the chain if a step fails.
 - Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
