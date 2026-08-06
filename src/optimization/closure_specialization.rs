@@ -1,7 +1,6 @@
 use super::{
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
-    inline,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
@@ -367,7 +366,6 @@ fn register_decaptured_lambdas(
 //
 // Finally, even if a parameter is a specializable, if it is not worth specializing or the inline cost of the function is high, it is returned as impossible to specialize.
 fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunctionInfo> {
-    let inline_costs = inline::calculate_inline_costs(prg);
     let call_graph = prg.call_graph();
     let call_graph_scc = call_graph.compute_sccs();
 
@@ -404,7 +402,6 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
 
         // Compute information on how `sym` calls itself.
         let self_usages = find_usage_of_name::run(expr, &sym_name);
-        let self_recursive = self_usages.len() > 0;
 
         // Check if each parameter of `sym` is specializable.
         let (params, body) = expr.destructure_lam_sequence();
@@ -486,15 +483,10 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
             // A specialized copy pays for itself where the parameter is reached without an
             // indirect call: the copy calls the lambda by name where this function calls it, and
             // where this function forwards it, the copy hands a known lambda to the function
-            // downstream, which specializes in turn. A function that only forwards is usually
-            // neither self-recursive nor small enough to inline, so forwarding has to count on its
-            // own for the chain to reach past it.
-            let inline_cost = inline_costs.costs.get(sym_name).unwrap();
-            let reached_without_indirection = called || passed_to_specializable_parameter;
-            let copy_is_worth_making = self_recursive
-                || inline_cost.inline_at_call_site()
-                || passed_to_specializable_parameter;
-            let worth_specialized = copy_is_worth_making && reached_without_indirection;
+            // downstream, which specializes in turn. What the copy gains is proportional to how
+            // often the parameter is reached, so the size of the function holding it does not
+            // enter the judgement.
+            let worth_specialized = called || passed_to_specializable_parameter;
 
             if !worth_specialized {
                 continue;
