@@ -860,7 +860,7 @@ impl TraitEnv {
     ///
     /// Whether two implementations overlap is asked by `validate_overlapping_instances`, once the
     /// kinds of the type variables in their heads are known.
-    pub fn validate(&self) -> Result<(), Errors> {
+    pub fn validate_structure(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.

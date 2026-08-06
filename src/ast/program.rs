@@ -2250,8 +2250,8 @@ impl Program {
     }
 
     /// Validates the traits, the trait aliases and the trait implementations, structurally.
-    pub fn validate_trait_env(&self) -> Result<(), Errors> {
-        self.trait_env.validate()
+    pub fn validate_trait_env_structure(&self) -> Result<(), Errors> {
+        self.trait_env.validate_structure()
     }
 
     /// Reports each pair of implementations of one trait whose heads can denote the same type.

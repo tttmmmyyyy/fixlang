@@ -59,8 +59,8 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Add `Std::Boxed` trait implementations.
     program.add_boxed_impls()?;
 
-    // Validate trait env.
-    program.validate_trait_env()?;
+    // Validate the traits, the trait aliases and the trait implementations, structurally.
+    program.validate_trait_env_structure()?;
 
     // Create symbols.
     program.create_trait_member_symbols();
