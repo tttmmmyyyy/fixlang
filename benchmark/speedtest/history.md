@@ -10,6 +10,37 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+**The split columns are comparable from `b2de6116d89ff9d43449c2a12fe5c29dd1304bb4` down, and not
+across it.** The counters were read with whatever environment the harness inherited until that row,
+and a split count moves with the environment for the reason given there.
+
+## b2de6116d89ff9d43449c2a12fe5c29dd1304bb4
+
+The compiler emits the same code as at the row below. Each of the 46 cases was built with both
+compilers and the two binaries hold the same machine code: 43 of them byte for byte in `.text`, and
+`sort`, `cp_lib_scc` and `cp_lib_bipartite` under a renaming of the numbers a specialization carries
+in its symbol. Every instruction count agrees to within a fiftieth of a percent, which is what the
+loader and libc cost before `main`.
+
+**Read the split column against this row, not against the ones above it.** `perf_counters.py` gave
+the measured command whatever environment the harness inherited, and a program's initial stack is
+laid out above the environment block, so every address on the stack moved with how much the caller
+happened to export. One unchanged binary reported 70,765 splits from one shell and 170,766 from
+another, and `array_mod` reported 23 and 3,153. The counters are now read with the fixed environment
+`cachegrind.py` reads its simulation with, which is why `cp_lib_unionfind` (7,374 above, 207,242
+here) and `cp_lib_lsegtree` (400,155 above, 23 here) move by a factor with the code unchanged.
+
+**A split count belongs to the way the harness invokes the program.** A case whose hot stack object
+sits a few bytes from a line boundary flips by a large factor whenever a frame moves — measured
+under one environment but from a longer path, `cp_lib_lsegtree` reports 400,026 and `cp_lib_scc`
+70,765 — so a jump of that shape is worth attributing before it is read as a change in what the
+program touches.
+
+**What the cycle column reads when nothing changed at all.** The two compilers' binaries, alternated
+within one run under one environment, differ by up to 5% on the cases below a few million cycles and
+by about 1% on the large ones, with the code identical on both sides. Seven cases carry a cycle count
+here; the machine took 11.52 cores for other work while the rest were read.
+
 ## 0fa42cadaaac5aa40e2b9bbf1e2cff3ab34502ff
 
 The capacity check that #178 put in front of every array write which clones a shared array is now
