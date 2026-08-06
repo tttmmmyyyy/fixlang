@@ -7421,6 +7421,10 @@ pub fn test_tuple_functor() {
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Verifies that a struct declared with no fields can be constructed as
+/// `Empty {}` and given a trait implementation, in each of the plain, `box`
+/// and `unbox` forms.
 #[test]
 pub fn test_empty_struct() {
     let source = r##"
@@ -7455,6 +7459,8 @@ pub fn test_empty_struct() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct literal whose head names a union is reported as an
+/// error.
 #[test]
 pub fn test_make_struct_to_union() {
     let source = r##"
@@ -7482,6 +7488,132 @@ pub fn test_make_struct_to_union() {
     );
 }
 
+// The head of a struct pattern has to name a struct: the sub-patterns are matched against that
+// struct's fields. Read as a field list, a union's variant list would make the pattern bind the
+// tag of the value in place of the payload it names.
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `let` binding.
+#[test]
+pub fn test_struct_pattern_head_is_union() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let Foo { foo: x } = Foo::foo(1);
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `match` arm, where the type of the matched value already agrees
+/// with the head.
+#[test]
+pub fn test_struct_pattern_head_is_union_in_match_arm() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let x = match Foo::foo(1) {
+                Foo { foo: x } => x
+            };
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a lambda parameter, where the pattern drives the inference of the
+/// parameter's type.
+#[test]
+pub fn test_struct_pattern_head_is_union_in_lambda_parameter() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let get_foo = |Foo { foo: x }| x;
+            println(get_foo(Foo::foo(1)).to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a primitive type, which carries no
+/// fields at all, is reported as an error.
+#[test]
+pub fn test_struct_pattern_head_is_primitive_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let I64 { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Std::I64` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by an associated type name is reported
+/// as an error: such a name resolves like a type name, so it reaches the
+/// pattern as a type constructor that no type declares.
+#[test]
+pub fn test_struct_pattern_head_is_associated_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let Item { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unknown type name `Std::Iterator::Item`.",
+    );
+}
+
+/// Verifies that `!` parses as negation whether or not a space separates it
+/// from its operand, so `if ! (1 == 2) { .. }` compiles like `if !(1 == 2)`.
 #[test]
 pub fn test_regression_issue_46() {
     let source = r##"
@@ -7502,6 +7634,8 @@ pub fn test_regression_issue_46() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that reading from a handle already given to `close_file` raises a
+/// catchable error naming the closed handle, rather than reading anything.
 #[test]
 pub fn test_read_file_after_close() {
     let source = r##"
@@ -7521,6 +7655,8 @@ pub fn test_read_file_after_close() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct and a union may each name their own type inside a
+/// field, as long as the occurrence sits behind a function arrow.
 #[test]
 pub fn test_circular_type_definition() {
     let source = r##"

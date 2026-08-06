@@ -36,11 +36,6 @@ impl PatternNode {
         match &self.pattern {
             Pattern::Var(_v, _ty) => {
                 // IGNORES user-provided type annotation!
-                // if let Some(ty) = ty {
-                //     if ty.to_string_normalize() != type_.to_string_normalize() {
-                //         return None;
-                //     }
-                // }
                 let pat = self.set_type(type_.clone());
                 Some(pat)
             }
@@ -105,46 +100,68 @@ impl PatternNode {
         }
     }
 
-    // Set `self.info.type_`.
-    // Returns the pattern itself with a map which maps variable names to their types.
+    /// Assign a type to the pattern and to each of its sub-patterns, taking a
+    /// fresh type variable wherever the source leaves the type open.
+    ///
+    /// # Returns
+    /// The typed pattern, and the type assigned to each variable name it binds.
     pub fn get_typed(
         self: &Arc<PatternNode>,
-        typechcker: &mut TypeCheckContext,
+        typechecker: &mut TypeCheckContext,
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
         match &self.pattern {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
                 let ty = if ty.is_none() {
-                    typechcker.fresh_ty_with_src(&self.info.source)
+                    typechecker.fresh_ty_with_src(&self.info.source)
                 } else {
                     // If the annotation is ill-formed (e.g. references
                     // an unknown type), `error_tolerant` mode still
                     // wants this binder to participate in scope so the
                     // body can reference `var_name`; fall back to a
                     // fresh tyvar.
-                    let validated = typechcker.validate_type_annotation(ty.as_ref().unwrap());
-                    typechcker
+                    let validated = typechecker.validate_type_annotation(ty.as_ref().unwrap());
+                    typechecker
                         .tolerate(validated)?
-                        .unwrap_or_else(|| typechcker.fresh_ty_with_src(&self.info.source))
+                        .unwrap_or_else(|| typechecker.fresh_ty_with_src(&self.info.source))
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
                 Ok((self.set_type(ty), var_to_ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
-                let ty = tc.get_struct_union_value_type(typechcker);
+                // `validate_pattern` requires the head to name a struct, so `None` arrives
+                // only in `error_tolerant` mode: the pattern then takes a fresh type
+                // variable, and its sub-patterns have no field type to match against.
+                // The field names are taken by value because the steps below borrow the
+                // type checker mutably.
+                let field_names = typechecker
+                    .resolve_struct_tycon(tc, &self.info.source, false)?
+                    .map(|ti| ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>());
+                let (ty, field_name_to_ty) = match field_names {
+                    Some(field_names) => {
+                        let ty = tc.get_struct_union_value_type(typechecker);
+                        let field_tys = ty.field_types(&typechecker.type_env);
+                        assert_eq!(field_names.len(), field_tys.len());
+                        let field_name_to_ty = field_names
+                            .into_iter()
+                            .zip(field_tys)
+                            .collect::<Map<_, _>>();
+                        (ty, field_name_to_ty)
+                    }
+                    None => {
+                        assert!(
+                            typechecker.error_tolerant,
+                            "struct pattern head `{}` names no struct",
+                            tc.to_string()
+                        );
+                        (
+                            typechecker.fresh_ty_with_src(&self.info.source),
+                            Map::default(),
+                        )
+                    }
+                };
                 let mut var_to_ty = Map::default();
-                let field_tys = ty.field_types(&typechcker.type_env);
-                let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
-                assert_eq!(fields.len(), field_tys.len());
-                let field_name_to_ty = fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        let ty = field_tys[i].clone();
-                        (field.name.clone(), ty)
-                    })
-                    .collect::<Map<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
                 for (field_name, _, pat) in &mut field_to_pat {
                     // Type each sub-pattern. In `error_tolerant` mode
@@ -152,23 +169,26 @@ impl PatternNode {
                     // type mismatch, …) substitutes a fresh-tyvar
                     // typed sub-pattern with no bindings, so the
                     // sibling fields are still walked.
-                    let typed = pat.get_typed(typechcker);
-                    let (typed_pat, var_ty) = typechcker.tolerate_pattern_typed(typed, pat)?;
+                    let typed = pat.get_typed(typechecker);
+                    let (typed_pat, var_ty) = typechecker.tolerate_pattern_typed(typed, pat)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
-                    // Unknown field name (filtered by
-                    // `validate_pattern` in strict mode, but tolerated
-                    // there in `error_tolerant` mode): skip the unify
-                    // — the struct definition has no field type to
-                    // match against.
+                    // No field type to unify against: the head names no struct, or the
+                    // struct has no such field. `validate_pattern` rejects both in strict
+                    // mode and tolerates them in `error_tolerant` mode.
                     let Some(field_ty) = field_name_to_ty.get(field_name) else {
-                        debug_assert!(typechcker.error_tolerant);
+                        assert!(
+                            typechecker.error_tolerant,
+                            "struct `{}` has no field `{}`",
+                            tc.to_string(),
+                            field_name
+                        );
                         continue;
                     };
                     let unify_res = UnifOrOtherErr::extract_others(
-                        typechcker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
+                        typechecker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
                     )?;
-                    if unify_res.is_err() && !typechcker.error_tolerant {
+                    if unify_res.is_err() && !typechecker.error_tolerant {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
@@ -191,25 +211,25 @@ impl PatternNode {
             }
             Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, tc, _ti) =
-                    Pattern::get_variant_info(&variant_name, &typechcker.type_env);
+                    Pattern::get_variant_info(&variant_name, &typechecker.type_env);
 
                 // Get the union type and variant type.
-                let union_ty = tc.get_struct_union_value_type(typechcker);
-                let variant_ty = union_ty.field_types(&typechcker.type_env)[variant_idx].clone();
+                let union_ty = tc.get_struct_union_value_type(typechecker);
+                let variant_ty = union_ty.field_types(&typechecker.type_env)[variant_idx].clone();
 
                 // Infer the type of the subpattern. In
                 // `error_tolerant` mode, a failure becomes a
                 // fresh-tyvar typed sub-pattern with no bindings — the
                 // surrounding union pattern still gets `union_ty`
                 // assigned, so the match arm can proceed.
-                let typed = subpat.get_typed(typechcker);
-                let (subpat, var_ty) = typechcker.tolerate_pattern_typed(typed, subpat)?;
+                let typed = subpat.get_typed(typechecker);
+                let (subpat, var_ty) = typechecker.tolerate_pattern_typed(typed, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
-                    typechcker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
+                    typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
                 )?;
-                if unify_res.is_err() && !typechcker.error_tolerant {
+                if unify_res.is_err() && !typechecker.error_tolerant {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
@@ -288,8 +308,8 @@ impl PatternNode {
             Pattern::Struct(tc, field_to_pat) => {
                 // Check if cursor is on any field-name span first.
                 for (name, name_src, pat) in field_to_pat {
-                    if let Some(ns) = name_src {
-                        if ns.includes_pos_lsp(pos) {
+                    if let Some(field_name_span) = name_src {
+                        if field_name_span.includes_pos_lsp(pos) {
                             return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }
@@ -301,8 +321,10 @@ impl PatternNode {
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
             Pattern::Union(variant, variant_src, subpat) => {
-                if let Some(vs) = variant_src {
-                    if vs.includes_pos_lsp(pos) && !variant.namespace.names.is_empty() {
+                if let Some(variant_name_span) = variant_src {
+                    if variant_name_span.includes_pos_lsp(pos)
+                        && !variant.namespace.names.is_empty()
+                    {
                         let tc = TyCon::new(variant.namespace.clone().to_fullname());
                         return Some(EndNode::Variant(tc, variant.name.clone()));
                     }
@@ -405,28 +427,42 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// A copy of this variable pattern carrying `tyanno` as the type the user
+    /// wrote for the bound variable. Panics unless this is a variable pattern.
     pub fn set_var_tyanno(self: &PatternNode, tyanno: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Var(v, _) => {
                 node.pattern = Pattern::Var(v.clone(), tyanno);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_var_tyanno` requires a variable pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
 
+    /// A copy of this struct pattern headed by `tc`, keeping its field
+    /// sub-patterns. Panics unless this is a struct pattern.
     pub fn set_struct_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Struct(_, field_to_pat) => {
                 node.pattern = Pattern::Struct(tc, field_to_pat.clone());
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_struct_tycon` requires a struct pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
 
+    /// A copy of this struct pattern matching the fields in `field_to_pat`,
+    /// keeping its head. Each entry is a field name, the span of that name in
+    /// the source, and the sub-pattern the field's value is matched against.
+    /// Panics unless this is a struct pattern.
     pub fn set_struct_field_to_pat(
         self: &PatternNode,
         field_to_pat: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
@@ -436,18 +472,26 @@ impl PatternNode {
             Pattern::Struct(tc, _) => {
                 node.pattern = Pattern::Struct(tc.clone(), field_to_pat);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_struct_field_to_pat` requires a struct pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
 
+    /// A copy of this union pattern matching the variant's payload against
+    /// `pat`, keeping its variant name. Panics unless this is a union pattern.
     pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
             Pattern::Union(variant, variant_src, _) => {
                 node.pattern = Pattern::Union(variant.clone(), variant_src.clone(), pat);
             }
-            _ => panic!(),
+            _ => panic!(
+                "`set_union_pat` requires a union pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
         Arc::new(node)
     }
@@ -460,10 +504,15 @@ impl PatternNode {
         matches!(&self.pattern, Pattern::Var(_, _))
     }
 
+    /// The variable this pattern binds. Panics unless this is a variable
+    /// pattern.
     pub fn get_var(&self) -> Arc<Var> {
         match &self.pattern {
             Pattern::Var(v, _) => v.clone(),
-            _ => panic!(),
+            _ => panic!(
+                "`get_var` requires a variable pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
     }
 
@@ -500,10 +549,7 @@ impl PatternNode {
         fields: Vec<(Name, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let fields = fields.into_iter().map(|(n, p)| (n, None, p)).collect();
-        Arc::new(PatternNode {
-            pattern: Pattern::Struct(tycon, fields),
-            info: PatternInfo::default(),
-        })
+        PatternNode::make_struct_with_spans(tycon, fields)
     }
 
     // Construct a struct destructuring pattern from `(field name,
@@ -573,7 +619,10 @@ impl PatternNode {
                     info: self.info.clone(),
                 }))
             }
-            _ => panic!(),
+            _ => panic!(
+                "`validate_variant_name` requires a union pattern, but got `{}`.",
+                self.to_string()
+            ),
         }
     }
 
@@ -759,12 +808,12 @@ impl Pattern {
         match_src: &Option<Span>,
         pats: impl Iterator<Item = Arc<PatternNode>>,
     ) -> Result<(), Errors> {
-        let mut variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
+        let mut uncovered_variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
         let mut found_otherwise = false;
         for pat in pats {
             match &pat.pattern {
                 Pattern::Union(variant, _, _) => {
-                    if !variants.contains(&variant.name) {
+                    if !uncovered_variants.contains(&variant.name) {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "`{}` is not a variant of union `{}`.",
@@ -774,24 +823,24 @@ impl Pattern {
                             &[&pat.info.source],
                         ));
                     }
-                    variants.remove(&variant.name);
+                    uncovered_variants.remove(&variant.name);
                 }
                 _ => {
                     found_otherwise = true;
                 }
             }
         }
-        if !found_otherwise && !variants.is_empty() {
-            let msg = if variants.len() == 1 {
+        if !found_otherwise && !uncovered_variants.is_empty() {
+            let msg = if uncovered_variants.len() == 1 {
                 format!(
                     "Variant `{}` of union `{}` is not covered.",
-                    variants.iter().next().unwrap(),
+                    uncovered_variants.iter().next().unwrap(),
                     cond_tc.to_string()
                 )
             } else {
                 format!(
                     "Variants {} of union `{}` are not covered.",
-                    variants
+                    uncovered_variants
                         .iter()
                         .map(|var| format!("`{}`", var))
                         .collect::<Vec<_>>()
