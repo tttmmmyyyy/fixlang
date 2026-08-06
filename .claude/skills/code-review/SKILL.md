@@ -69,13 +69,18 @@ Ring-2 work is opportunistic, so it is capped: **at most five edits per file per
 
 Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied).
 
-**The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own, cut from `main`, in a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
+**The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own with a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
 
-The cleanup branch is cut from **`main`**, and its pull request targets `main` — not the branch under review. A pull request into the branch under review would put the cleanup back into that branch's diff, which is the thing being avoided. This works because ring 2 is, by definition, code outside the change's hunks: it is already on `main`, so an edit to it applies there.
+The cleanup branch is cut from **the branch under review**, at its tip once the `in-diff` commits have landed, and its pull request targets that branch. Each pull request then reads as one thing: the change against `main`, and the cleanup against the change.
 
-The two pull requests touch the same files, so whichever merges second resolves the overlap. That is one merge resolution, against a diff each side can read on its own.
+The one requirement is that **the cleanup stay out of the change's diff until the change has been read**. Once it has, the two land whichever way suits:
 
-**A candidate that does not apply to `main`** — because the code it names is code this change introduces — is not ring-2 work at all. Fold it into the `in-diff` pass on the branch under review, or report it.
+- Merge the cleanup into the branch under review, then that branch into `main`. One merge into `main`, carrying both.
+- Merge the branch into `main`, and delete it. Deleting a merged head branch makes GitHub retarget every open pull request based on it to that branch's own base, so the cleanup's pull request becomes a pull request into `main` by itself. The deletion is what triggers this, at any point after the merge — it does not have to happen at merge time.
+
+That is the author's call, and it is worth saying in the summary so the choice is in front of them.
+
+Cutting the cleanup branch from the change rather than from `main` also means the two never conflict: the cleanup is a descendant of what it cleans up around.
 
 When the branch under review **is** `main`, there is no split: both modes commit where they are.
 
@@ -101,7 +106,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 ## Procedure
 
-**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the worktree it edits, the base ref or the touched-file list, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
 
 1. **Resolve the base ref** from the argument:
    - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
@@ -130,10 +135,11 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 6. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, and go to step 7.
 
    Otherwise:
-   - `git fetch origin`, then create a worktree for a branch cut from `origin/main`: `git worktree add <path> -b cleanup/<branch-under-review> origin/main`.
-   - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode** *in that worktree*, handing it the candidate list and the list of files the change touched. A candidate whose code is absent there belongs to the change; it is reported rather than applied.
+   - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
+   - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode**, handing it that list as its starting point.
    - Commit each aspect's edits on their own — `code-review: <what this aspect did> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the build (and the test suite where the edits could reach behavior).
-   - Push the branch and open a pull request **into `main`**, whose body follows the `devdoc` skill: what the cleanups are, which convention each comes from, and why they are behavior-preserving. Name the branch under review as the occasion, not as a dependency.
+   - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what the cleanups are, which convention each comes from, and why they are behavior-preserving.
+   - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
 7. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
 8. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
 9. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
@@ -145,41 +151,26 @@ You are running one aspect of a code review.
 
 Aspect: <aspect-name>
 Mode: <in-diff | neighborhood>
-Work in: <absolute path of the worktree to edit>
-
-How far your edits may reach is set by the mode and by the radius rules
-below.
-
---- for an `in-diff` run, include: ---
-
 Base ref: <base>
 
 The base ref is the comparison point: review the diff between <base>
 and the current working tree, i.e. run your own `git diff <base>` to
 find the files and hunks to operate on.
 
-Edit inside the diff hunks (ring 1). Wherever the aspect would also fix
-something in the rest of a touched file, collect it as a **ring-2
-candidate** — file, location, the one-line fix, and which convention it
-comes from — and leave that code alone.
+How far your edits may reach is set by the mode and by the radius rules
+below.
 
---- for a `neighborhood` run, include instead: ---
+In `in-diff` mode, edit inside the diff hunks (ring 1). Wherever the
+aspect would also fix something in the rest of a touched file, collect
+it as a **ring-2 candidate** — file, location, the one-line fix, and
+which convention it comes from — and leave that code alone.
 
-The worktree you are editing is checked out from `main` and does not
-carry the change under review. Work ring 2 of the files listed below:
-start from the candidate list, add anything it missed, keep the edits
-the radius rules allow, and turn the rest into findings. A candidate
-whose code is absent here belongs to the change rather than to the
-neighborhood — report it and leave it.
-
-Files the change under review touched:
-<the list>
-
-That list stands in for any `git diff` step the aspect's own procedure
-describes: the change is not in this worktree to diff against.
+In `neighborhood` mode, work ring 2 of the touched files: start from
+the candidate list below, add anything it missed, keep the edits the
+radius rules allow, and turn the rest into findings.
 
 Ring-2 candidates carried over from the in-diff pass:
-<the list the in-diff run reported>
+<the list the in-diff run reported, or "none — this is the in-diff pass">
 
 ----- BEGIN RADIUS RULES -----
 <paste the full text of the `## Review Radius` section here, including
@@ -212,8 +203,8 @@ edits; findings and candidates are added on top of it.
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base and the mode.
 - Don't let a `neighborhood` pass edit past the radius rules: an interface change or a behavior change outside the hunks is a finding, whatever the mode.
-- Don't let neighborhood edits reach the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
-- Don't point the cleanup pull request at the branch under review — it targets `main`, or the cleanup lands back in the diff it was taken out of.
+- Don't commit neighborhood edits on the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
+- Don't merge the cleanup pull request yourself. Merging it before the change has been read puts the cleanup back into the diff the split exists to keep clear, and either way the merge is the author's.
 - Don't continue the chain if a step fails.
 - Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
