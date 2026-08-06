@@ -525,8 +525,8 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 /// from the value's root down to `ty`, which each pushed unit is named relative to.
 ///
 /// # Arguments
-/// * `unboxed_path` - the types this descent came through, which `check_layout_exists` reads to
-///   report a type that has no layout instead of descending into it forever.
+/// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout` reads
+///   to report a type that has no layout instead of descending into it forever.
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -554,11 +554,10 @@ fn rc_units_go(
         if fields[i].is_punched {
             continue;
         }
-        fty.check_layout_exists(unboxed_path);
         path.push(i);
-        unboxed_path.push(fty.clone());
-        rc_units_go(fty, type_env, path, unboxed_path, out);
-        unboxed_path.pop();
+        fty.descend_layout(unboxed_path, |unboxed_path| {
+            rc_units_go(fty, type_env, path, unboxed_path, out)
+        });
         path.pop();
     }
 }

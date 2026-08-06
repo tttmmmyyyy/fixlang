@@ -1228,12 +1228,25 @@ impl TypeNode {
         }
         let field_types = self.field_types(type_env);
         field_types.iter().all(|field_ty| {
-            field_ty.check_layout_exists(unboxed_path);
-            unboxed_path.push(field_ty.clone());
-            let fully_unboxed = field_ty.is_fully_unboxed_inside(type_env, unboxed_path);
-            unboxed_path.pop();
-            fully_unboxed
+            field_ty.descend_layout(unboxed_path, |unboxed_path| {
+                field_ty.is_fully_unboxed_inside(type_env, unboxed_path)
+            })
         })
+    }
+
+    /// Walk into the layout of `self`, a field of the unboxed types `unboxed_path` names: report a
+    /// type whose layout has no end (`check_layout_exists`), then run `descend` with `self` appended
+    /// to the path, so that the walk below `self` sees the types it came through.
+    pub fn descend_layout<R>(
+        self: &Arc<TypeNode>,
+        unboxed_path: &mut Vec<Arc<TypeNode>>,
+        descend: impl FnOnce(&mut Vec<Arc<TypeNode>>) -> R,
+    ) -> R {
+        self.check_layout_exists(unboxed_path);
+        unboxed_path.push(self.clone());
+        let descended = descend(unboxed_path);
+        unboxed_path.pop();
+        descended
     }
 
     /// Report a type whose layout cannot be determined, and end the compilation.

@@ -282,8 +282,8 @@ fn param_ownership_shape(
     /// path from the parameter root down to that subtree.
     ///
     /// # Arguments
-    /// * `unboxed_path` - the types this descent came through, which `check_layout_exists` reads to
-    ///   report a type that has no layout instead of descending into it forever.
+    /// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout`
+    ///   reads to report a type that has no layout instead of descending into it forever.
     fn go(
         var: &FullName,
         ty: &Arc<TypeNode>,
@@ -314,11 +314,10 @@ fn param_ownership_shape(
         let fields = ty.field_types(type_env);
         let mut children = Vec::with_capacity(fields.len());
         for (i, fty) in fields.iter().enumerate() {
-            fty.check_layout_exists(unboxed_path);
             path.push(i);
-            unboxed_path.push(fty.clone());
-            children.push(go(var, fty, owned_units, type_env, path, unboxed_path));
-            unboxed_path.pop();
+            children.push(fty.descend_layout(unboxed_path, |unboxed_path| {
+                go(var, fty, owned_units, type_env, path, unboxed_path)
+            }));
             path.pop();
         }
         OwnershipShape::Fields(children)

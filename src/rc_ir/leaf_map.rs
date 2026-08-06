@@ -26,8 +26,8 @@ use std::sync::Arc;
 /// has none. It is the single source of truth for which of a type's paths are boxed leaves.
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     /// # Arguments
-    /// * `unboxed_path` - the types this descent came through, which `check_layout_exists` reads to
-    ///   report a type that has no layout instead of descending into it forever.
+    /// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout`
+    ///   reads to report a type that has no layout instead of descending into it forever.
     fn go(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -55,11 +55,10 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             return;
         }
         for (i, fty) in ty.field_types(type_env).iter().enumerate() {
-            fty.check_layout_exists(unboxed_path);
             path.push(i);
-            unboxed_path.push(fty.clone());
-            go(fty, type_env, path, unboxed_path, out);
-            unboxed_path.pop();
+            fty.descend_layout(unboxed_path, |unboxed_path| {
+                go(fty, type_env, path, unboxed_path, out)
+            });
             path.pop();
         }
     }
