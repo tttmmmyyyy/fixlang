@@ -189,11 +189,13 @@ type Pinned = Map<(FullName, Slot, FullName), FullName>;
 // inside the functions it has just specialized, which the next round lifts in turn.
 pub fn run(prg: &mut Program, show_build_times: bool) {
     let mut stable_symbols = Set::default();
+    let mut lifted_lambdas: Map<FullName, DecapturedLambdaInfo> = Map::default();
     let mut origins = Origins::default();
     let mut pinned_of: Map<FullName, Pinned> = Map::default();
     while run_one(
         prg,
         &mut stable_symbols,
+        &mut lifted_lambdas,
         &mut origins,
         &mut pinned_of,
         show_build_times,
@@ -204,11 +206,13 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 // If any optimization is performed, return `true`.
 //
 // * `stable_symbols`: A set of symbols that are known to be stable (i.e., will not be optimized further).
+// * `lifted_lambdas`: Every lambda decapturing has lifted so far, by the name of the function it became.
 // * `origins`: What each function generated so far is a copy of.
 // * `pinned_of`: The pinning table each function generated so far carries.
 fn run_one(
     prg: &mut Program,
     stable_symbols: &mut Set<FullName>,
+    lifted_lambdas: &mut Map<FullName, DecapturedLambdaInfo>,
     origins: &mut Origins,
     pinned_of: &mut Map<FullName, Pinned>,
     show_build_times: bool,
@@ -219,7 +223,7 @@ fn run_one(
     let mut changed = false;
 
     // Compute the set of specializable functions.
-    let specializable_funcs = specializable_functions(prg);
+    let specializable_funcs = specializable_functions(prg, lifted_lambdas);
     let specializable_funcs = Rc::new(specializable_funcs);
 
     // Requests are only ever raised against functions that were present when this round started,
@@ -303,6 +307,7 @@ fn run_one(
         // requests raised from inside it are judged against the same pinning table.
         for decap_lam in &visitor.decap_lambdas {
             pinned_of.insert(decap_lam.lambda_func_name.clone(), visitor.pinned.clone());
+            lifted_lambdas.insert(decap_lam.lambda_func_name.clone(), decap_lam.clone());
         }
         register_decaptured_lambdas(
             visitor.decap_lambdas,
@@ -380,6 +385,7 @@ fn run_one(
                     decap_lam.lambda_func_name.clone(),
                     specialize_info.pinned.clone(),
                 );
+                lifted_lambdas.insert(decap_lam.lambda_func_name.clone(), decap_lam.clone());
             }
             register_decaptured_lambdas(
                 visitor.decap_lambdas,
@@ -452,7 +458,11 @@ fn register_decaptured_lambdas(
 // This is a more difficult problem than the Feedback Vertex Set problem, so we need to rely on heuristics.
 //
 // Finally, even if a parameter is a specializable, if it is not worth specializing or the inline cost of the function is high, it is returned as impossible to specialize.
-fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunctionInfo> {
+fn specializable_functions(
+    prg: &Program,
+    lifted_lambdas: &Map<FullName, DecapturedLambdaInfo>,
+) -> Map<FullName, SpecializableFunctionInfo> {
+    let capture_lists = capture_lists_by_tycon(lifted_lambdas);
     let call_graph = prg.call_graph();
     let call_graph_scc = call_graph.compute_sccs();
     let name_to_idx = (0..call_graph.len())
@@ -485,7 +495,12 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
         queued[idx] = false;
         let sym_name = call_graph.get(idx);
         let sym = prg.symbols.get(sym_name).unwrap();
-        let specializable_slots = specializable_slots_of(sym, &specializable_funcs);
+        let specializable_slots = specializable_slots_of(
+            sym,
+            lifted_lambdas.contains_key(sym_name),
+            &capture_lists,
+            &specializable_funcs,
+        );
         if specializable_slots.is_empty() {
             continue;
         }
@@ -511,11 +526,33 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
     specializable_funcs
 }
 
-// The parameters of `sym` a specialized copy is worth making for, judged against the table of
-// specializable functions as it stands. Adding entries to `specializable_funcs` can only add
-// parameters here, never remove one.
+// Whether a value arriving under `name` inside `body` is reached without an indirect call: it is
+// either called there, or handed to a slot of another function that is itself specializable. That
+// is what a specialized copy gains — the call becomes direct, or the function downstream gets a
+// known lambda and specializes in turn — so the size of the function holding it does not enter the
+// judgement.
+fn reaches_a_direct_call(
+    name: &FullName,
+    body: &Arc<ExprNode>,
+    specializable_funcs: &Map<FullName, SpecializableFunctionInfo>,
+) -> bool {
+    find_usage_of_name::run(body, name)
+        .into_iter()
+        .any(|usage| match usage {
+            UsageType::CalledAsFunction => true,
+            UsageType::FunctionArgument(fun, idx) => specializable_funcs
+                .get(&fun)
+                .is_some_and(|info| info.specializable_slots.contains(&Slot::arg(idx))),
+        })
+}
+
+// The slots of `sym` a specialized copy is worth making for, judged against the table of
+// specializable functions as it stands. Adding entries to `specializable_funcs` can only add slots
+// here, never remove one.
 fn specializable_slots_of(
     sym: &Symbol,
+    is_lifted_lambda: bool,
+    capture_lists: &Map<FullName, CaptureStruct>,
     specializable_funcs: &Map<FullName, SpecializableFunctionInfo>,
 ) -> Set<Slot> {
     let expr = sym.expr.as_ref().unwrap();
@@ -532,63 +569,82 @@ fn specializable_slots_of(
     let param_tys = sym.ty.collect_app_src(usize::MAX).0;
     let mut specializable_slots = Set::default();
     for param_idx in 0..params.len() {
-        // Determine whether the parameter of `sym` is specializable.
+        // A parameter shadowed by a later one is never the one in scope where the body uses that
+        // name, so nothing arrives through it.
+        let param_name = &params[param_idx];
+        if params[param_idx + 1..]
+            .iter()
+            .any(|name| name == param_name)
+        {
+            continue;
+        }
 
         // A specializable argument must have a type of function.
-        if !param_tys[param_idx].is_closure() {
+        if param_tys[param_idx].is_closure() {
+            if reaches_a_direct_call(param_name, &body, specializable_funcs) {
+                specializable_slots.insert(Slot::arg(param_idx));
+            }
             continue;
         }
 
-        // Collect the usage information of the parameter.
-        let param_name = &params[param_idx];
-        let param_is_shadowd_by_another_param = params[param_idx + 1..]
-            .iter()
-            .any(|name| name == param_name);
-        let usages = if param_is_shadowd_by_another_param {
-            // If the parameter is shadowed by another parameter, it is not used.
-            vec![]
-        } else {
-            find_usage_of_name::run(&body, param_name)
+        // A capture list arriving here carries a lambda in each of its closure-typed fields. Where
+        // this symbol is the lifted lambda that destructures it, a field is reached through the
+        // name the destructuring binds it to; where the capture list is only passed on, a field is
+        // reached wherever it is reached downstream.
+        let Some(cap) = capture_list_of(&param_tys[param_idx], capture_lists) else {
+            continue;
         };
-
-        // Check each usage of the parameter.
-        let mut passed_to_specializable_parameter = false;
-        let mut called = false;
-        for usage in usages {
-            match usage {
-                UsageType::CalledAsFunction => {
-                    called = true;
-                    continue;
-                }
-                UsageType::FunctionArgument(fun, idx) => {
-                    if fun.is_local() {
-                        continue;
-                    }
-                    if let Some(specialization) = specializable_funcs.get(&fun) {
-                        if specialization.specializable_slots.contains(&Slot::arg(idx)) {
-                            passed_to_specializable_parameter = true;
+        for (field_idx, (field_name, field_ty)) in cap.fields().iter().enumerate() {
+            if !field_ty.is_closure() {
+                continue;
+            }
+            let reached = if is_lifted_lambda && param_idx == 0 {
+                reaches_a_direct_call(field_name, &body, specializable_funcs)
+            } else {
+                find_usage_of_name::run(&body, param_name)
+                    .into_iter()
+                    .any(|usage| match usage {
+                        UsageType::CalledAsFunction => false,
+                        UsageType::FunctionArgument(fun, idx) => {
+                            specializable_funcs.get(&fun).is_some_and(|info| {
+                                info.specializable_slots.contains(&Slot {
+                                    arg: idx,
+                                    field: Some(field_idx),
+                                })
+                            })
                         }
-                    }
-                }
+                    })
+            };
+            if reached {
+                specializable_slots.insert(Slot {
+                    arg: param_idx,
+                    field: Some(field_idx),
+                });
             }
         }
-
-        // A specialized copy pays for itself where the parameter is reached without an
-        // indirect call: the copy calls the lambda by name where this function calls it, and
-        // where this function forwards it, the copy hands a known lambda to the function
-        // downstream, which specializes in turn. What the copy gains is proportional to how
-        // often the parameter is reached, so the size of the function holding it does not
-        // enter the judgement.
-        let worth_specialized = called || passed_to_specializable_parameter;
-
-        if !worth_specialized {
-            continue;
-        }
-
-        // After all, this parmeter is specializable!
-        specializable_slots.insert(Slot::arg(param_idx));
     }
     specializable_slots
+}
+
+// The capture structs decapturing has built, by the name of the type constructor naming each. Two
+// lambdas capturing the same names at the same types share one type constructor, and so one entry:
+// what a capture list holds in each field is settled by the type, which is all this answers.
+fn capture_lists_by_tycon(
+    lifted_lambdas: &Map<FullName, DecapturedLambdaInfo>,
+) -> Map<FullName, CaptureStruct> {
+    lifted_lambdas
+        .values()
+        .map(|info| (info.cap.tycon.name.clone(), info.cap.clone()))
+        .collect()
+}
+
+// The capture struct a value of `ty` is, where it is one.
+fn capture_list_of<'a>(
+    ty: &Arc<TypeNode>,
+    capture_lists: &'a Map<FullName, CaptureStruct>,
+) -> Option<&'a CaptureStruct> {
+    let tycon = ty.toplevel_tycon()?;
+    capture_lists.get(&tycon.name)
 }
 
 // The visitor that lifts a symbol's lambdas and records the specializations they enable.
