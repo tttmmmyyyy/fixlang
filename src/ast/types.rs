@@ -15,7 +15,7 @@ use crate::constants::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
-use crate::error::Errors;
+use crate::error::{panic_with_msg, Errors};
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
@@ -1196,6 +1196,21 @@ impl TypeNode {
     // Check if `self` is fully unboxed.
     // Here, a type is fully unboxed if and only if it does not contain any boxed type.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
+        self.is_fully_unboxed_inside(type_env, &mut vec![])
+    }
+
+    /// Whether this type contains no boxed type, given the types it is nested in.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - the types this one is nested in, outermost first, which
+    ///   `check_layout_exists` reads to report a type that has no layout. Deciding whether a type
+    ///   is fully unboxed walks the fields of unboxed types, and that walk ends only for a type
+    ///   whose layout exists.
+    fn is_fully_unboxed_inside(
+        &self,
+        type_env: &TypeEnv,
+        unboxed_path: &mut Vec<Arc<TypeNode>>,
+    ) -> bool {
         if self.is_box(type_env) {
             return false;
         }
@@ -1212,9 +1227,64 @@ impl TypeNode {
             return true;
         }
         let field_types = self.field_types(type_env);
-        field_types
-            .iter()
-            .all(|field_ty| field_ty.is_fully_unboxed(type_env))
+        field_types.iter().all(|field_ty| {
+            field_ty.check_layout_exists(unboxed_path);
+            unboxed_path.push(field_ty.clone());
+            let fully_unboxed = field_ty.is_fully_unboxed_inside(type_env, unboxed_path);
+            unboxed_path.pop();
+            fully_unboxed
+        })
+    }
+
+    /// Report a type whose layout cannot be determined, and end the compilation.
+    ///
+    /// The layout of an unboxed type holds the layout of each of its unboxed fields in place, so
+    /// determining it descends into those fields. `unboxed_path` is the types that descent came
+    /// through, outermost first. The descent has no end, and the type at hand therefore no layout,
+    /// in two cases: it is a type the descent already passed, or it is a larger type of the same
+    /// type constructor, from which the same fields lead to a larger one again.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
+    ///   since a pointer bounds the layout there.
+    pub fn check_layout_exists(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
+        let tycon = match self.toplevel_tycon() {
+            Some(tycon) => tycon,
+            None => return,
+        };
+        for (i, ancestor) in unboxed_path.iter().enumerate() {
+            if ancestor.toplevel_tycon().as_deref() != Some(tycon.as_ref()) {
+                continue;
+            }
+            let cause = if ancestor == self {
+                "There are circular definitions by unboxed types"
+            } else if self.count_symbols() > ancestor.count_symbols() {
+                "Unboxed types nest into ever larger types"
+            } else {
+                continue;
+            };
+            let mut descent = unboxed_path[i..]
+                .iter()
+                .map(|ty| format!("`{}`", ty.to_string()))
+                .collect::<Vec<_>>();
+            descent.push(format!("`{}`", self.to_string()));
+            panic_with_msg(&format!(
+                "Cannot determine the layout of type `{}`. {}: {}. Please change some types to boxed.",
+                self.to_string(),
+                cause,
+                descent.join(" -> "),
+            ));
+        }
+    }
+
+    /// The number of type constructors and type variables this type is built from.
+    fn count_symbols(&self) -> usize {
+        match &self.ty {
+            Type::TyVar(_) => 1,
+            Type::TyCon(_) => 1,
+            Type::TyApp(fun, arg) => fun.count_symbols() + arg.count_symbols(),
+            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.count_symbols()).sum::<usize>(),
+        }
     }
 
     /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by

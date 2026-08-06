@@ -10,7 +10,6 @@ use crate::constants::{
     STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
     TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
-use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
     make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
@@ -1127,18 +1126,16 @@ impl ObjectType {
     ///
     /// # Arguments
     /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first, which
-    ///   is what turns a circular definition by unboxed types into a diagnostic instead of an
-    ///   infinite recursion. A call from outside passes an empty slice; the recursion extends it,
-    ///   and a boxed type on the way clears it, since a pointer bounds the layout there.
+    ///   `TypeNode::check_layout_exists` reads to turn a layout that has no end into a diagnostic.
+    ///   A call from outside passes an empty slice; the recursion extends it, and a boxed type on
+    ///   the way clears it, since a pointer bounds the layout there.
     pub fn to_struct_type<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
         unboxed_path: &[Arc<TypeNode>],
     ) -> StructType<'c> {
         let unboxed_path = if self.is_unbox {
-            if unboxed_path.contains(&self.ty) {
-                panic_with_msg(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", self.ty.to_string()));
-            }
+            self.ty.check_layout_exists(unboxed_path);
             let mut extended = unboxed_path.to_vec();
             extended.push(self.ty.clone());
             extended
