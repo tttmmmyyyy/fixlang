@@ -20,6 +20,7 @@ use std::sync::Arc;
 // global function. The type constructor is named `{prefix}<{signature}>`, where `signature` encodes
 // the captured fields; two captures with identical fields therefore share one type constructor,
 // while callers using different prefixes keep their capture structs distinct.
+#[derive(Clone)]
 pub struct CaptureStruct {
     pub tycon: Arc<TyCon>,
     // The definition of `tycon`, which the caller registers into the program's type environment.
@@ -78,6 +79,21 @@ impl CaptureStruct {
                 .collect(),
         )
         .set_type(self.ty.clone())
+    }
+
+    // The captured names paired with their types, in the order the struct holds them.
+    pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
+        &self.fields
+    }
+
+    // The same capture struct with the type of one field narrowed, as happens when the lambda in
+    // that field turns out to be a known one and is threaded through as its capture list instead of
+    // as a closure. The prefix has to be given again because the type constructor's name is built
+    // from it and from the fields.
+    pub fn with_field_type(&self, prefix: &str, field: usize, ty: Arc<TypeNode>) -> Self {
+        let mut fields = self.fields.clone();
+        fields[field].1 = ty;
+        CaptureStruct::new(prefix, &fields)
     }
 
     // Pattern destructuring the capture struct back into its original captured names.
