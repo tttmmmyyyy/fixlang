@@ -51,4 +51,45 @@ main = println("hi");
             }
         );
     }
+
+    /// A type whose unboxed fields lead back to itself has no layout, which is reported from one of
+    /// the threads a build generates code in. The build ends through its exit status, with the
+    /// diagnostic on stderr, rather than through a signal raised while the other threads are still
+    /// in the middle of generating code.
+    #[test]
+    fn test_build_fails_with_a_status_when_a_type_has_no_layout() {
+        const CIRCULAR_SOURCE: &str = r#"module Main;
+
+type A = unbox struct { b : B, n : I64 };
+type B = unbox struct { a : A, m : I64 };
+
+depth : A -> I64;
+depth = |x| x.@n;
+
+main : IO ();
+main = println(depth(undefined("no value")).to_string);
+"#;
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let output = fix_build_source_command(temp_dir.path(), CIRCULAR_SOURCE, "none")
+            .arg("-o")
+            .arg(temp_dir.path().join("out"))
+            .output()
+            .expect("Failed to execute fix build");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("There are circular definitions by unboxed types"),
+            "the build did not report the type that has no layout:\nstderr: {}",
+            stderr
+        );
+        assert!(
+            output.status.code().is_some(),
+            "the build was ended by a signal ({}) instead of an exit status:\nstderr: {}",
+            output.status,
+            stderr
+        );
+        assert!(
+            !output.status.success(),
+            "the build reported success for a program it could not lay out"
+        );
+    }
 }
