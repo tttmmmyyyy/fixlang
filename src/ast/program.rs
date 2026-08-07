@@ -1799,6 +1799,56 @@ impl Program {
         errors.to_result()
     }
 
+    /// Report every value of the instantiated program whose type has no layout, at the expression
+    /// the value appears as.
+    ///
+    /// A value of an unboxed type holds its unboxed fields in place, so a type reaching itself that
+    /// way — or an ever larger type of the same type constructor — describes a value of no size.
+    /// Code generation would meet such a type as a descent through the fields that never ends, so
+    /// this runs once the program's types are instantiated and before any of them is laid out.
+    pub fn validate_layouts(&self) -> Result<(), Errors> {
+        let type_env = self.type_env();
+
+        // The entry point and the exported values come first, so that a type they carry is reported
+        // in the program's own code rather than in a library function instantiated at it. The
+        // symbols follow in name order, so that a program rejected twice is rejected the same way.
+        let mut roots: Vec<&Arc<ExprNode>> = vec![];
+        roots.extend(self.entry_io_value.iter());
+        roots.extend(
+            self.export_statements
+                .iter()
+                .filter_map(|stmt| stmt.value_expr.as_ref()),
+        );
+        let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
+        symbol_names.sort();
+        roots.extend(
+            symbol_names
+                .iter()
+                .filter_map(|name| self.symbols[*name].expr.as_ref()),
+        );
+
+        let mut checked: Set<Arc<TypeNode>> = Set::default();
+        let mut errors = Errors::empty();
+        // A node the compiler built carries no source location, so a round that reports only at
+        // located nodes runs first; the second round takes the types that appear at no located node.
+        for located_only in [true, false] {
+            for expr in &roots {
+                expr.walk_nodes(&mut |node| {
+                    if located_only && node.source.is_none() {
+                        return;
+                    }
+                    let Some(ty) = node.type_.as_ref() else {
+                        return;
+                    };
+                    if let Some(msg) = ty.no_layout_reason(&type_env, &mut checked) {
+                        errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
+                    }
+                })
+            }
+        }
+        errors.to_result()
+    }
+
     // Validate and update export statements.
     pub fn validate_export_statements(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();

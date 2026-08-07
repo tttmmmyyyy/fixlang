@@ -1261,6 +1261,19 @@ impl TypeNode {
     /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
     ///   since a pointer bounds the layout there.
     pub fn panic_if_no_layout(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
+        if let Some(msg) = self.no_layout_message(unboxed_path) {
+            panic_with_msg(&msg);
+        }
+    }
+
+    /// Why the layout of `self` cannot be determined, given the types the descent came through, and
+    /// `None` where it can be. `Program::validate_layouts` reports this at the value whose type it
+    /// is; the descents through a type's fields report it where they would otherwise walk forever.
+    ///
+    /// # Arguments
+    /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
+    ///   since a pointer bounds the layout there.
+    fn no_layout_message(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) -> Option<String> {
         // A type whose layout is asked for has been instantiated, so a type constructor heads it;
         // `field_types` could not say what the fields of a type variable are either.
         let tycon = self.toplevel_tycon().unwrap_or_else(|| {
@@ -1285,13 +1298,69 @@ impl TypeNode {
                 .map(|ty| format!("`{}`", ty.to_string()))
                 .collect::<Vec<_>>();
             descent.push(format!("`{}`", self.to_string()));
-            panic_with_msg(&format!(
+            return Some(format!(
                 "Cannot determine the layout of type `{}`. {}: {}. Please change some types to boxed.",
                 self.to_string(),
                 cause,
                 descent.join(" -> "),
             ));
         }
+        None
+    }
+
+    /// Why a value of this type has no layout, walking the fields whose layout the code generator
+    /// holds in place: the fields of a struct or union, and of the types those reach the same way. A
+    /// boxed, closure, array or function-pointer field is a pointer, so the walk stops there and the
+    /// type behind it is laid out on its own.
+    ///
+    /// # Arguments
+    /// * `checked` - the types walked so far, which the walk both reads and adds to. Whether the
+    ///   layout of a type exists is a property of that type, so a type it holds is passed over —
+    ///   the way down to it is still compared against it, which is what catches a type reaching
+    ///   itself.
+    pub fn no_layout_reason(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        checked: &mut Set<Arc<TypeNode>>,
+    ) -> Option<String> {
+        /// The same walk below `ty`, which `unboxed_path` names the way down to.
+        fn below(
+            ty: &Arc<TypeNode>,
+            type_env: &TypeEnv,
+            unboxed_path: &mut Vec<Arc<TypeNode>>,
+            checked: &mut Set<Arc<TypeNode>>,
+        ) -> Option<String> {
+            if ty.is_closure() || ty.is_funptr() || ty.is_array() {
+                return None;
+            }
+            for field_ty in ty.field_types(type_env) {
+                // A pointer bounds the layout here, and what it points at is laid out on its own.
+                if field_ty.is_box(type_env)
+                    || field_ty.is_closure()
+                    || field_ty.is_funptr()
+                    || field_ty.is_array()
+                {
+                    continue;
+                }
+                if let Some(msg) = field_ty.no_layout_message(unboxed_path) {
+                    return Some(msg);
+                }
+                if !checked.insert(field_ty.clone()) {
+                    continue;
+                }
+                unboxed_path.push(field_ty.clone());
+                let reason = below(&field_ty, type_env, unboxed_path, checked);
+                unboxed_path.pop();
+                if reason.is_some() {
+                    return reason;
+                }
+            }
+            None
+        }
+        if !checked.insert(self.clone()) {
+            return None;
+        }
+        below(self, type_env, &mut vec![self.clone()], checked)
     }
 
     /// The number of type constructors and type variables this type is built from.

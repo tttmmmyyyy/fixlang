@@ -7677,7 +7677,6 @@ pub fn test_circular_type_definition() {
 /// A value of an unboxed type holds its unboxed fields in place, so a cycle of them has no layout,
 /// which the compiler reports rather than following the cycle forever.
 #[test]
-#[should_panic(expected = "`Main::B` -> `Main::A` -> `Main::B`")]
 pub fn test_circular_unboxed_types_have_no_layout() {
     let source = r##"
         module Main;
@@ -7690,14 +7689,17 @@ pub fn test_circular_unboxed_types_have_no_layout() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::A` -> `Main::B` -> `Main::A`",
+    );
 }
 
 /// A cycle through a union has no layout either: a union holds its active variant's payload in
 /// place, so the payload's fields lead back to the union. This is the declaration the manual gives
 /// as the one to write with `box` instead.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
 pub fn test_circular_unboxed_union_has_no_layout() {
     let source = r##"
         module Main;
@@ -7709,7 +7711,11 @@ pub fn test_circular_unboxed_union_has_no_layout() {
             println(t.is_leaf.to_string)
         );
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "There are circular definitions by unboxed types",
+    );
 }
 
 /// The same declarations with `box` do have a layout, since a pointer bounds it at the union.
@@ -7748,7 +7754,6 @@ pub fn test_unused_circular_unboxed_types_compile() {
 /// the field holding the type itself, so this type is reported by the reference-counting passes'
 /// own descent through the fields.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
 pub fn test_unboxed_cycle_behind_a_boxed_field() {
     let source = r##"
         module Main;
@@ -7760,13 +7765,16 @@ pub fn test_unboxed_cycle_behind_a_boxed_field() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "There are circular definitions by unboxed types",
+    );
 }
 
 /// Unboxed fields that lead to an ever larger type of the same type constructor have no layout
 /// either. The type never repeats here, so the report rests on the type growing.
 #[test]
-#[should_panic(expected = "Unboxed types nest into ever larger types")]
 pub fn test_growing_unboxed_type_has_no_layout() {
     let source = r##"
         module Main;
@@ -7778,14 +7786,17 @@ pub fn test_growing_unboxed_type_has_no_layout() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unboxed types nest into ever larger types",
+    );
 }
 
 /// Whether a layout exists is decided by the declarations together with the type arguments: `C U`
 /// holds a `C U` in place, while the same declarations with a boxed argument, in
 /// `test_boxed_type_argument_bounds_the_layout`, stop at a pointer.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
 pub fn test_unboxed_cycle_closed_by_a_type_argument() {
     let source = r##"
         module Main;
@@ -7798,7 +7809,11 @@ pub fn test_unboxed_cycle_closed_by_a_type_argument() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "There are circular definitions by unboxed types",
+    );
 }
 
 /// A boxed type argument bounds the layout of the same declarations that `C U` cannot lay out in
