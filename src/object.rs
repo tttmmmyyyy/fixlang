@@ -1625,6 +1625,14 @@ pub fn no_layout_reason(
                     let in_place = elem_ty.is_unbox(type_env);
                     held.push((elem_ty, in_place));
                 }
+                ObjectFieldType::LambdaFunction(fn_ty) => {
+                    // What a function takes and returns is laid out where the function is compiled,
+                    // which is outside this object.
+                    for param_ty in fn_ty.get_lambda_srcs() {
+                        held.push((param_ty, false));
+                    }
+                    held.push((fn_ty.get_lambda_dst(), false));
+                }
                 _ => {}
             }
         }

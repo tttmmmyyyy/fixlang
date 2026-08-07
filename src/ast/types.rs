@@ -1234,6 +1234,12 @@ impl TypeNode {
         in_place: &[Arc<TypeNode>],
         across_pointers: &[Arc<TypeNode>],
     ) -> Option<String> {
+        // A function value is a pair of pointers whatever it takes and returns, so its size is
+        // settled here. Every function type shares one type constructor, so comparing two of them
+        // would take the sizes of unrelated functions for a type growing without end.
+        if self.is_closure() || self.is_funptr() {
+            return None;
+        }
         // A type whose layout is asked for has been instantiated, so a type constructor heads it;
         // `ty_to_object_ty` could not say what the fields of a type variable are either.
         let tycon = self.toplevel_tycon().unwrap_or_else(|| {

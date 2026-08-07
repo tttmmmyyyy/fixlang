@@ -7750,6 +7750,29 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A function value is a pair of pointers, but what it takes and returns is laid out where the
+/// function is compiled. Here a field accessor is the only place the type is named at all.
+#[test]
+pub fn test_function_taking_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        main : IO ();
+        main = (
+            let get_n = A::@n;
+            eval get_n;
+            println("ok")
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::A` has no size",
+    );
+}
+
 /// The elements of an array are laid out inside its storage, so a type with no size has none there
 /// either — the manual's rejected declaration, put in an array.
 #[test]
