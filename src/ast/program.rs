@@ -579,18 +579,24 @@ impl Program {
         None
     }
 
+    // The expressions the entry point and the exported functions were instantiated as.
+    pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
+        self.entry_io_value
+            .iter()
+            .chain(
+                self.export_statements
+                    .iter()
+                    .filter_map(|stmt| stmt.value_expr.as_ref()),
+            )
+            .collect()
+    }
+
     // Get the names of entry pointes / exported functions.
     pub fn root_value_names(&self) -> Vec<FullName> {
-        let mut res = vec![];
-        if let Some(entry) = self.entry_io_value.as_ref() {
-            res.push(entry.get_var().name.clone());
-        }
-        for stmt in &self.export_statements {
-            if let Some(exported) = stmt.value_expr.as_ref() {
-                res.push(exported.get_var().name.clone());
-            }
-        }
-        res
+        self.root_value_exprs()
+            .iter()
+            .map(|expr| expr.get_var().name.clone())
+            .collect()
     }
 
     // Get the list of module names from a list of files.
@@ -1814,13 +1820,7 @@ impl Program {
         // The entry point and the exported values come first, so that a type they carry is reported
         // in the program's own code rather than in a library function instantiated at it. The
         // symbols follow in name order, so that a program rejected twice is rejected the same way.
-        let mut roots: Vec<&Arc<ExprNode>> = vec![];
-        roots.extend(self.entry_io_value.iter());
-        roots.extend(
-            self.export_statements
-                .iter()
-                .filter_map(|stmt| stmt.value_expr.as_ref()),
-        );
+        let mut roots = self.root_value_exprs();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
         symbol_names.sort();
         roots.extend(
@@ -1839,9 +1839,12 @@ impl Program {
                     if located_only && node.source.is_none() {
                         return;
                     }
-                    let Some(ty) = node.type_.as_ref() else {
-                        return;
-                    };
+                    let ty = node.type_.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "Instantiation left an expression with no type: `{}`.",
+                            node.expr.stringify().to_string()
+                        )
+                    });
                     if let Some(msg) = no_layout_reason(ty, &type_env, &mut checked) {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }

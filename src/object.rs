@@ -1606,42 +1606,26 @@ pub fn no_layout_reason(
         if !checked.insert(ty.clone()) {
             return None;
         }
-        // The types this object holds, each with whether it is laid out in place or behind a
-        // pointer.
-        let mut held: Vec<(Arc<TypeNode>, bool)> = vec![];
+        // The types this object holds.
+        let mut held: Vec<Arc<TypeNode>> = vec![];
         for field in ty_to_object_ty(ty, &vec![], type_env).field_types {
             match field {
-                ObjectFieldType::SubObject(field_ty, _is_punched) => {
-                    let in_place = field_ty.is_unbox(type_env);
-                    held.push((field_ty, in_place));
-                }
-                ObjectFieldType::UnionBuf(payload_tys) => {
-                    for payload_ty in payload_tys {
-                        let in_place = payload_ty.is_unbox(type_env);
-                        held.push((payload_ty, in_place));
-                    }
-                }
-                ObjectFieldType::ArrayStorageBuf(elem_ty) => {
-                    let in_place = elem_ty.is_unbox(type_env);
-                    held.push((elem_ty, in_place));
-                }
+                ObjectFieldType::SubObject(field_ty, _is_punched) => held.push(field_ty),
+                ObjectFieldType::UnionBuf(payload_tys) => held.extend(payload_tys),
+                ObjectFieldType::ArrayStorageBuf(elem_ty) => held.push(elem_ty),
                 _ => {}
             }
         }
 
         in_place.push(ty.clone());
         across_pointers.push(ty.clone());
-        let mut reason = None;
-        for (held_ty, held_in_place) in held {
-            reason = if held_in_place {
-                walk(&held_ty, type_env, in_place, across_pointers, checked)
+        let reason = held.iter().find_map(|held_ty| {
+            if held_ty.is_unbox(type_env) {
+                walk(held_ty, type_env, in_place, across_pointers, checked)
             } else {
-                walk(&held_ty, type_env, &mut vec![], across_pointers, checked)
-            };
-            if reason.is_some() {
-                break;
+                walk(held_ty, type_env, &mut vec![], across_pointers, checked)
             }
-        }
+        });
         across_pointers.pop();
         in_place.pop();
         reason
@@ -1650,24 +1634,19 @@ pub fn no_layout_reason(
     // the function is compiled. A function type reaching here is one the program has a value of, so
     // that function is compiled and its signature laid out.
     if ty.is_closure() || ty.is_funptr() {
-        let mut reason = None;
-        for signature_ty in ty
+        return ty
             .get_lambda_srcs()
             .into_iter()
             .chain([ty.get_lambda_dst()])
-        {
-            reason = walk(
-                &signature_ty,
-                type_env,
-                &mut vec![],
-                &mut vec![ty.clone()],
-                checked,
-            );
-            if reason.is_some() {
-                break;
-            }
-        }
-        return reason;
+            .find_map(|signature_ty| {
+                walk(
+                    &signature_ty,
+                    type_env,
+                    &mut vec![],
+                    &mut vec![ty.clone()],
+                    checked,
+                )
+            });
     }
     walk(ty, type_env, &mut vec![], &mut vec![], checked)
 }

@@ -1315,7 +1315,8 @@ impl TypeNode {
             .collect::<Vec<_>>();
         // A type holding itself directly is the whole story already, so the way down is spelled
         // out only where it passes through another type.
-        let (way_down, remedy) = if descent.iter().all(|ty| *ty == descent[0]) {
+        let holds_itself = from_ancestor.iter().all(|ty| ty == self);
+        let (way_down, remedy) = if holds_itself {
             (String::new(), format!("Make `{}` boxed.", descent[0]))
         } else {
             (
