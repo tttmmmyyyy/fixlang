@@ -34,6 +34,7 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
+use crate::object::no_layout_reason;
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -1841,7 +1842,7 @@ impl Program {
                     let Some(ty) = node.type_.as_ref() else {
                         return;
                     };
-                    if let Some(msg) = ty.no_layout_reason(&type_env, &mut checked) {
+                    if let Some(msg) = no_layout_reason(ty, &type_env, &mut checked) {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }
                 })

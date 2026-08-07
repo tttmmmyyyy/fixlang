@@ -21,6 +21,7 @@ use crate::fixstd::runtime::{
 };
 use crate::generator::{is_const_one, Generator, Object};
 use crate::misc::Map;
+use crate::misc::Set;
 use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
@@ -1574,6 +1575,78 @@ pub fn ty_to_object_ty(
         }
     }
     ret
+}
+
+/// Why a value of `ty` has no size, and `None` where the code generator can lay one out.
+///
+/// The walk follows what `ty_to_object_ty` puts in the object: the fields of a struct, the payloads
+/// of a union, and the elements an array storage holds are laid out in place, so it descends into
+/// them. A field of a boxed type is a pointer, so what it points at is an object of its own: the
+/// walk goes on there with the in-place chain started afresh.
+///
+/// # Arguments
+/// * `checked` - the types walked so far. Whether a type has a size is a property of that type, so
+///   one it holds is passed over; the ways down to it are compared against it first, which is what
+///   catches a type reaching itself.
+pub fn no_layout_reason(
+    ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    checked: &mut Set<Arc<TypeNode>>,
+) -> Option<String> {
+    fn walk(
+        ty: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        in_place: &mut Vec<Arc<TypeNode>>,
+        across_pointers: &mut Vec<Arc<TypeNode>>,
+        checked: &mut Set<Arc<TypeNode>>,
+    ) -> Option<String> {
+        if let Some(msg) = ty.no_layout_message(in_place, across_pointers) {
+            return Some(msg);
+        }
+        if !checked.insert(ty.clone()) {
+            return None;
+        }
+        // The types this object holds, each with whether it is laid out in place or behind a
+        // pointer.
+        let mut held: Vec<(Arc<TypeNode>, bool)> = vec![];
+        for field in ty_to_object_ty(ty, &vec![], type_env).field_types {
+            match field {
+                ObjectFieldType::SubObject(field_ty, _is_punched) => {
+                    let in_place = field_ty.is_unbox(type_env);
+                    held.push((field_ty, in_place));
+                }
+                ObjectFieldType::UnionBuf(payload_tys) => {
+                    for payload_ty in payload_tys {
+                        let in_place = payload_ty.is_unbox(type_env);
+                        held.push((payload_ty, in_place));
+                    }
+                }
+                ObjectFieldType::ArrayStorageBuf(elem_ty) => {
+                    let in_place = elem_ty.is_unbox(type_env);
+                    held.push((elem_ty, in_place));
+                }
+                _ => {}
+            }
+        }
+
+        in_place.push(ty.clone());
+        across_pointers.push(ty.clone());
+        let mut reason = None;
+        for (held_ty, held_in_place) in held {
+            reason = if held_in_place {
+                walk(&held_ty, type_env, in_place, across_pointers, checked)
+            } else {
+                walk(&held_ty, type_env, &mut vec![], across_pointers, checked)
+            };
+            if reason.is_some() {
+                break;
+            }
+        }
+        across_pointers.pop();
+        in_place.pop();
+        reason
+    }
+    walk(ty, type_env, &mut vec![], &mut vec![], checked)
 }
 
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real

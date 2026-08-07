@@ -7750,6 +7750,71 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The elements of an array are laid out inside its storage, so a type with no size has none there
+/// either — the manual's rejected declaration, put in an array.
+#[test]
+pub fn test_array_of_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Tree = unbox union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let ts : Array Tree = Array::empty(4);
+            println(ts.@size.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Tree` has no size",
+    );
+}
+
+/// What a pointer points at is laid out too, so a type with no size is reported through a boxed
+/// field — here the only type the program names is the one holding that field.
+#[test]
+pub fn test_type_with_no_size_behind_a_pointer() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { x : Bad, n : I64 };
+        type Wrapper = box struct { p : Bad };
+        type Outer = unbox struct { w : Wrapper, k : I64 };
+
+        depth : Outer -> I64;
+        depth = |o| o.@k;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
+/// Growth reaches past a pointer as well: each level's field type is larger than the last, so the
+/// objects the pointers lead to never repeat and never end.
+#[test]
+pub fn test_growing_type_behind_a_pointer() {
+    let source = r##"
+        module Main;
+        type P a = box struct { x : P (a, a), n : I64 };
+
+        depth : P I64 -> I64;
+        depth = |p| p.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "its fields reach ever larger types",
+    );
+}
+
 /// A boxed field is a pointer, so the walk passes over it and goes on to the field that holds the
 /// type itself. A type whose fields are read in that order has no size all the same.
 #[test]
@@ -7788,7 +7853,7 @@ pub fn test_growing_unboxed_type_has_no_layout() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "its unboxed fields reach ever larger types",
+        "its fields reach ever larger types",
     );
 }
 
