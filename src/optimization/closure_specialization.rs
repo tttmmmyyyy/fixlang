@@ -359,6 +359,16 @@ impl LiftedLambdas {
         self.trees.get(tycon).cloned()
     }
 
+    // The value a capture list of type `ty` carries, where `ty` is one.
+    fn tree_of_capture_list_type(&self, ty: &Arc<TypeNode>) -> Option<Tree> {
+        self.tree_of_capture_list(&ty.toplevel_tycon()?.name)
+    }
+
+    // Whether `name` is the global function a lambda was lifted to.
+    fn is_lifted(&self, name: &FullName) -> bool {
+        self.lambdas.contains_key(name)
+    }
+
     // The capture struct a value of `tree` is: the lifted lambda's, with each known field narrowed
     // to the capture struct of what it holds. The type constructor is named after the unit that
     // receives it, so the type and the tree determine each other.
@@ -558,11 +568,7 @@ fn narrowed_capture_list(
         .tycon
         .clone();
     let cap = lifted.borrow_mut().capture_struct_of(&tree);
-    Some(NarrowedCaptureList {
-        original,
-        cap,
-        fields: tree.fields,
-    })
+    Some(NarrowedCaptureList { original, cap })
 }
 
 // What each substituted argument of `unit` holds, by the local name it arrives under, which is what
@@ -850,8 +856,6 @@ struct NarrowedCaptureList {
     original: Arc<TyCon>,
     // The capture list this copy receives instead.
     cap: CaptureStruct,
-    // What each narrowed field holds, by position.
-    fields: Vec<(usize, Tree)>,
 }
 
 // The visitor that lifts a symbol's lambdas and records the copies they enable.
@@ -1006,14 +1010,25 @@ impl ClosureSpecializationVisitor {
         if args.len() != 1 || !func.is_var() {
             return None;
         }
-        let known = self.known_value(&args[0])?;
-        let name = &func.get_var().name;
-        if *name != known.tree.lambda && *name != known.tree.unit().name() {
+        let name = func.get_var().name.clone();
+        if let Some(known) = self.known_value(&args[0]) {
+            if name != known.tree.lambda && name != known.tree.unit().name() {
+                return None;
+            }
+            return Some(Known {
+                is_bare: false,
+                ..known
+            });
+        }
+        // The capture list behind the wrap carries no identity of its own, so the lambda the wrap
+        // names is all there is to say.
+        if !self.lifted.borrow().is_lifted(&name) {
             return None;
         }
         Some(Known {
+            tree: Tree::leaf(name),
+            cap_list: args[0].clone(),
             is_bare: false,
-            ..known
         })
     }
 
@@ -1520,11 +1535,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         let value = expr.get_let_value();
 
         // The capture list this copy receives is narrowed, so the pattern destructuring it takes the
-        // narrowed types, and each narrowed field hands its identity to the name it binds.
+        // narrowed types.
         if self.destructures_narrowed_capture_list(&pat) {
             let narrowed = self.narrowed_capture_list.take().unwrap();
             return self.destructure_narrowed_capture_list(&narrowed, &pat, &bound, &value);
         }
+        // A field of a capture list that holds another capture list hands that value's identity to
+        // the name it binds. The field's type is what says so: a capture list's type constructor is
+        // one-to-one with the value it carries.
+        self.record_capture_list_fields(&pat);
 
         if Self::decapturable(&bound) {
             // If the bound expression is a lambda, perform decapturing.
@@ -1696,8 +1715,33 @@ impl ClosureSpecializationVisitor {
         }
     }
 
-    // Retype the pattern destructuring the capture list to the narrowed one, and record what each
-    // narrowed field hands to the name it binds.
+    // Hand the identity of every field that holds a capture list to the name that field binds, where
+    // `pat` destructures a capture list this pass built.
+    fn record_capture_list_fields(&mut self, pat: &Arc<PatternNode>) {
+        let Pattern::Struct(tycon, field_to_pat) = &pat.pattern else {
+            return;
+        };
+        if self
+            .lifted
+            .borrow()
+            .tree_of_capture_list(&tycon.name)
+            .is_none()
+        {
+            return;
+        }
+        for (_, _, field_pat) in field_to_pat {
+            let field_ty = field_pat.info.type_.as_ref().unwrap();
+            let Some(tree) = self.lifted.borrow().tree_of_capture_list_type(field_ty) else {
+                continue;
+            };
+            let field_name = field_pat.get_var().name.clone();
+            let cap_list = expr_var(field_name.clone(), None).set_type(field_ty.clone());
+            self.local_decap_lambdas
+                .insert(field_name, Known::bare(tree, cap_list));
+        }
+    }
+
+    // Retype the pattern destructuring the capture list to the narrowed one.
     fn destructure_narrowed_capture_list(
         &mut self,
         narrowed: &NarrowedCaptureList,
@@ -1710,18 +1754,6 @@ impl ClosureSpecializationVisitor {
         };
         let cap_fields = narrowed.cap.fields();
         assert_eq!(field_to_pat.len(), cap_fields.len());
-
-        for (position, tree) in &narrowed.fields {
-            let field_name = field_to_pat[*position].2.get_var().name.clone();
-            let cap_list_ty = self.cap_of(tree).ty;
-            self.local_decap_lambdas.insert(
-                field_name.clone(),
-                Known::bare(
-                    tree.clone(),
-                    expr_var(field_name, None).set_type(cap_list_ty),
-                ),
-            );
-        }
 
         let field_to_pat = field_to_pat
             .iter()

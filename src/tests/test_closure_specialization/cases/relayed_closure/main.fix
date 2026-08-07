@@ -1,0 +1,25 @@
+module Main;
+
+// `relay` never calls the closure it is given. The closure reaches `terminal`, which does call it,
+// only by being captured into the lambda that `relay` hands to `fold`. Following the argument alone
+// stops at `relay`; the chain continues to `terminal` only if the field of that lambda's capture
+// list is narrowed to the closure it holds.
+
+// Both are recursive, so that they stay functions of their own rather than being expanded into
+// their callers. `relay` standing on its own is what puts the closure into the capture list while
+// its type is still a closure: that is the state narrowing has to act on.
+terminal : (I64 -> I64) -> I64 -> I64;
+terminal = |op, n| (
+    if n == 0 { 0 };
+    op(n) + terminal(op, n - 1)
+);
+
+relay : (I64 -> I64) -> I64 -> I64;
+relay = |op, n| (
+    if n == 0 { 0 };
+    Iterator::range(0, n).fold(0, |i, acc| acc + terminal(op, i)) + relay(op, n - 1)
+);
+
+main : IO () = (
+    println(relay(|x| x * 2, 4).to_string)
+);

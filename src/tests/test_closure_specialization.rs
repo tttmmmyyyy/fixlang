@@ -22,6 +22,15 @@ mod integration_tests {
     /// `tick` / `tock`'s two wrappers around `|x| x * 100` answer 302.
     const CHANGING_CLOSURE_OUTPUT: &str = "312";
 
+    /// What `relayed_closure` prints: `relay(op, n)` sums `terminal(op, i)` over `0..n` and recurses
+    /// on `n - 1`, with `op = |x| x * 2` and `n = 4`.
+    const RELAYED_CLOSURE_OUTPUT: &str = "30";
+
+    /// How many copies `changing_closure` asks for today, counted over the names below. The chain of
+    /// requests is what bounds this: each function, way in and lambda gets committed to one value,
+    /// so `grow` and `tock` reach three copies each and so do the lambdas they carry.
+    const CHANGING_CLOSURE_COPIES: usize = 12;
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -86,10 +95,15 @@ mod integration_tests {
     }
 
     /// The names of the functions in `dump` whose name contains `name_part`.
+    ///
+    /// A lambda inside a function is dumped under the enclosing function's name followed by
+    /// `::closure#<n>`, and those are left out: they are parts of one function, so counting them
+    /// would say a function was copied when it was not.
     fn functions_named_with<'a>(dump: &'a str, name_part: &str) -> Vec<&'a str> {
         dump.lines()
             .filter_map(|line| line.strip_prefix("fn "))
             .map(|rest| rest.split('(').next().unwrap().trim())
+            .filter(|name| !name.contains("::closure#"))
             .filter(|name| name.contains(name_part))
             .collect()
     }
@@ -161,14 +175,42 @@ mod integration_tests {
             !specialized.is_empty(),
             "the pass should specialize these recursions, but the dump names no copy of them"
         );
-        let copies_of_copies = specialized
-            .iter()
-            .filter(|name| name.matches("#closure_spec").count() > 1)
+        assert!(
+            specialized.len() <= CHANGING_CLOSURE_COPIES,
+            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
+            CHANGING_CLOSURE_COPIES,
+            specialized.len(),
+            specialized
+        );
+    }
+
+    /// The chain has to pass through a capture list to reach the end. `relay` never calls the closure
+    /// it is given; the function that does call it is reached only from the lambda `relay` hands to
+    /// `fold`, which captures the closure. Following the argument alone stops at `relay`, so the
+    /// copies below exist only if the field of that lambda's capture list is narrowed to the closure
+    /// it holds.
+    #[test]
+    pub fn test_the_chain_continues_through_a_capture_list() {
+        let (_temp_dir, project_dir) = setup_test_env("relayed_closure");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", RELAYED_CLOSURE_OUTPUT);
+
+        let narrowed = functions_named_with(&dump, "#closure_spec")
+            .into_iter()
+            .filter(|name| name.contains("#closure_lam"))
             .collect::<Vec<_>>();
         assert!(
-            copies_of_copies.is_empty(),
-            "a copy specialized again means the chain of requests never runs out: {:?}",
-            copies_of_copies
+            !narrowed.is_empty(),
+            "the lambda `relay` hands to `fold` should get a copy receiving the narrowed capture \
+             list, but the dump names no copy of a lifted lambda. It names: {:?}",
+            functions_named_with(&dump, "Main::")
+        );
+
+        let terminal = functions_named_with(&dump, "Main::terminal");
+        assert!(
+            terminal.iter().any(|name| name.contains("#closure_spec")),
+            "the chain should reach `terminal` through that capture list and copy it, but the dump \
+             names only: {:?}",
+            terminal
         );
     }
 }
