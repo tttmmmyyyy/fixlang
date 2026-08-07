@@ -20,8 +20,7 @@ use crate::fixstd::runtime::{
     RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
-use crate::misc::Map;
-use crate::misc::Set;
+use crate::misc::{Map, Set};
 use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
