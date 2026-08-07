@@ -87,6 +87,27 @@ impl CaptureStruct {
         .set_type(self.ty.clone())
     }
 
+    // The captured names paired with their types, in the order the struct holds them.
+    pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
+        &self.fields
+    }
+
+    // The same capture struct with the type of one field narrowed, as happens when the lambda in
+    // that field turns out to be a known one and is threaded through as its capture list instead of
+    // as a closure. The prefix and the owner are given again because the type constructor's name is
+    // built from them.
+    pub fn with_field_type(
+        &self,
+        prefix: &str,
+        owner: &FullName,
+        field: usize,
+        ty: Arc<TypeNode>,
+    ) -> Self {
+        let mut fields = self.fields.clone();
+        fields[field].1 = ty;
+        CaptureStruct::new(prefix, owner, &fields)
+    }
+
     // Pattern destructuring the capture struct back into its original captured names.
     pub fn pattern(&self) -> Arc<PatternNode> {
         let field_pats = self

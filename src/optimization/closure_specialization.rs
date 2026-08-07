@@ -24,7 +24,7 @@ use crate::{
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
-use std::{collections::VecDeque, mem, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::VecDeque, mem, rc::Rc, sync::Arc};
 
 /*
 # Closure specialization
@@ -169,6 +169,105 @@ impl Slot {
     }
 }
 
+// A closure value whose identity is known: which lambda it is, and which of the fields of the
+// capture list it carries are themselves known.
+//
+// This is what a specialization is keyed on, and what the type constructor of a capture list is
+// named after, so that a value of that type says what to call it with.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+struct Tree {
+    // The lambda decapturing lifted, which is what a call through this value reaches.
+    lambda: FullName,
+    // The capture fields whose own identity is known, by position, in ascending order.
+    fields: Vec<(usize, Tree)>,
+}
+
+impl Tree {
+    // The value of a lambda whose capture fields are all still closures.
+    fn leaf(lambda: FullName) -> Self {
+        Tree {
+            lambda,
+            fields: Vec::new(),
+        }
+    }
+
+    // How the tree reads in a name, and so in the hash that name carries.
+    fn to_string(&self) -> String {
+        let mut text = self.lambda.to_string();
+        for (field, tree) in &self.fields {
+            text += &format!("|{}:{}", field, tree.to_string());
+        }
+        text
+    }
+
+    // The unit that receives a value of this tree: the lambda, with its known capture fields
+    // substituted.
+    fn unit(&self) -> UnitKey {
+        UnitKey {
+            origin: self.lambda.clone(),
+            subst: self
+                .fields
+                .iter()
+                .map(|(field, tree)| {
+                    (
+                        Slot {
+                            arg: 0,
+                            field: Some(*field),
+                        },
+                        tree.clone(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
+// One copy of a function: the function it copies, and what each of its slots is known to receive.
+// An empty substitution names the function itself.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+struct UnitKey {
+    origin: FullName,
+    // Slots in ascending order, so that the name below is a function of the key alone.
+    subst: Vec<(Slot, Tree)>,
+}
+
+impl UnitKey {
+    fn name(&self) -> FullName {
+        if self.subst.is_empty() {
+            return self.origin.clone();
+        }
+        let mut full_name = self.origin.clone();
+        let name = full_name.name_as_mut();
+        *name += CLOSURE_SPEC_SUFFIX;
+        let mut hash_data = String::new();
+        for (slot, tree) in &self.subst {
+            hash_data += &format!(",{},{}", slot.to_string(), tree.to_string());
+        }
+        *name += &format!("_{:x}", md5::compute(hash_data));
+        full_name
+    }
+}
+
+// The capture struct a value of `tree` is: the lifted lambda's, with each known field narrowed to
+// the capture struct of what it holds. The type constructor is named after the unit that receives
+// it, so the type and the tree determine each other.
+fn capture_struct_of(tree: &Tree, lifted: &Map<FullName, DecapturedLambdaInfo>) -> CaptureStruct {
+    let mut cap = lifted
+        .get(&tree.lambda)
+        .unwrap_or_else(|| panic!("no lifted lambda named {}", tree.lambda.to_string()))
+        .cap
+        .clone();
+    for (field, inner) in &tree.fields {
+        cap = cap.with_field_type(
+            CAP_LIST_PREFIX,
+            &tree.unit().name(),
+            *field,
+            capture_struct_of(inner, lifted).ty,
+        );
+    }
+    cap
+}
+
 // What a specialized copy is a copy of, followed to the root: `L` specialized on some slot, and
 // that copy specialized again, both have origin `L`. A function absent from the map is its own
 // origin, which covers everything the program was written with and every lifted lambda.
@@ -190,13 +289,13 @@ type Pinned = Map<(FullName, Slot, FullName), FullName>;
 // inside the functions it has just specialized, which the next round lifts in turn.
 pub fn run(prg: &mut Program, show_build_times: bool) {
     let mut stable_symbols = Set::default();
-    let mut lifted_lambdas: Map<FullName, DecapturedLambdaInfo> = Map::default();
+    let lifted_lambdas = Rc::new(RefCell::new(Map::default()));
     let mut origins = Origins::default();
     let mut pinned_of: Map<FullName, Pinned> = Map::default();
     while run_one(
         prg,
         &mut stable_symbols,
-        &mut lifted_lambdas,
+        &lifted_lambdas,
         &mut origins,
         &mut pinned_of,
         show_build_times,
@@ -213,7 +312,7 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 fn run_one(
     prg: &mut Program,
     stable_symbols: &mut Set<FullName>,
-    lifted_lambdas: &mut Map<FullName, DecapturedLambdaInfo>,
+    lifted_lambdas: &Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
     origins: &mut Origins,
     pinned_of: &mut Map<FullName, Pinned>,
     show_build_times: bool,
@@ -259,6 +358,7 @@ fn run_one(
         let mut visitor = ClosureSpecializationVisitor::new(
             name.clone(),
             specializable_funcs.clone(),
+            lifted_lambdas.clone(),
             global_names.clone(),
             origins_snapshot.clone(),
             pinned_of.get(&name).cloned().unwrap_or_default(),
@@ -308,7 +408,6 @@ fn run_one(
         // requests raised from inside it are judged against the same pinning table.
         for decap_lam in &visitor.decap_lambdas {
             pinned_of.insert(decap_lam.lambda_func_name.clone(), visitor.pinned.clone());
-            lifted_lambdas.insert(decap_lam.lambda_func_name.clone(), decap_lam.clone());
         }
         register_decaptured_lambdas(
             visitor.decap_lambdas,
@@ -340,7 +439,7 @@ fn run_one(
         for specialize_info in &specializations {
             // Generate the name and type of the specialized function
             let specialized_func_name = specialize_info.specialized_func_name();
-            let specialized_func_ty = specialize_info.specialized_func_ty();
+            let specialized_func_ty = specialize_info.specialized_func_ty(&lifted_lambdas.borrow());
 
             // If it is already implemented, skip
             if symbols.contains_key(&specialized_func_name) {
@@ -370,6 +469,7 @@ fn run_one(
             let mut visitor = ClosureSpecializationVisitor::new(
                 specialized_func_name.clone(),
                 specializable_funcs.clone(),
+                lifted_lambdas.clone(),
                 global_names.clone(),
                 origins_snapshot.clone(),
                 specialize_info.pinned.clone(),
@@ -392,7 +492,6 @@ fn run_one(
                     decap_lam.lambda_func_name.clone(),
                     specialize_info.pinned.clone(),
                 );
-                lifted_lambdas.insert(decap_lam.lambda_func_name.clone(), decap_lam.clone());
             }
             register_decaptured_lambdas(
                 visitor.decap_lambdas,
@@ -621,8 +720,11 @@ struct ClosureSpecializationVisitor {
     /* Decapturing */
     // Information of decaptured lambdas generated by this optimization
     decap_lambdas: Vec<DecapturedLambdaInfo>,
-    // When a decaptured lambda is given a local name, it is stored here.
-    local_decap_lambdas: Map<FullName, DecapturedLambdaInfo>,
+    // When a value whose identity is known is given a local name, it is stored here.
+    local_decap_lambdas: Map<FullName, Tree>,
+    // Every lambda decapturing has lifted, which is what a tree is read against. A lambda lifted by
+    // this walk is in here the moment it is made, so a tree naming it can be read at once.
+    lifted: Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
 
     /* Specialization */
     // Specializable functions
@@ -647,13 +749,12 @@ struct ClosureSpecializationVisitor {
     pinned: Pinned,
 }
 
-// What a local naming a capture list is known to hold: the type it arrives as, once the fields
-// below are threaded through as capture lists rather than as closures, and which lambda is in each.
 impl ClosureSpecializationVisitor {
     // Create a new visitor
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
+        lifted: Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
         global_names: Set<FullName>,
         origins: Rc<Origins>,
         pinned: Pinned,
@@ -661,6 +762,7 @@ impl ClosureSpecializationVisitor {
         ClosureSpecializationVisitor {
             decap_lambdas: Vec::new(),
             local_decap_lambdas: Map::default(),
+            lifted,
             specializable_funcs,
             required_specializations: Vec::new(),
             lam_func_counter: 0,
@@ -698,6 +800,25 @@ impl ClosureSpecializationVisitor {
         }
     }
 
+    // The capture struct a value of `tree` is.
+    fn cap_of(&self, tree: &Tree) -> CaptureStruct {
+        capture_struct_of(tree, &self.lifted.borrow())
+    }
+
+    // The function a value of `tree` is called through, as an expression, together with its type.
+    // For a tree whose fields are all still closures this is the lifted lambda itself; otherwise it
+    // is the copy that receives the narrowed capture list, whose body the second stage makes.
+    fn lambda_func_of(&self, tree: &Tree) -> Arc<ExprNode> {
+        let base = self.lifted.borrow()[&tree.lambda].lambda_func();
+        let (mut doms, codom) = base.type_.as_ref().unwrap().collect_app_src(usize::MAX);
+        doms[0] = self.cap_of(tree).ty;
+        let mut ty = codom;
+        for dom in doms.iter().rev() {
+            ty = type_fun(dom.clone(), ty);
+        }
+        expr_var(tree.unit().name(), None).set_type(ty)
+    }
+
     // Whether `expr` is a lambda whose captured environment can be read off it, so that it can be
     // lifted to a global function taking that environment as an argument. The free variables of an
     // expression leave `CAP_NAME` out, so a body that reads it captures more than this can see.
@@ -722,7 +843,7 @@ impl ClosureSpecializationVisitor {
         &mut self,
         mut lam: Arc<ExprNode>,
         state: &mut VisitState,
-    ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
+    ) -> (Tree, Arc<ExprNode>) {
         // Get the capture list.
         let cap_names = lam.lambda_cap_names();
 
@@ -758,9 +879,12 @@ impl ClosureSpecializationVisitor {
         let cap = CaptureStruct::new(CAP_LIST_PREFIX, &lambda_func_name, &cap_names_types);
         let cap_list_expr = cap.struct_expr();
 
-        let decap_lam = DecapturedLambdaInfo::new(cap, lam, lambda_func_name);
+        let decap_lam = DecapturedLambdaInfo::new(cap, lam, lambda_func_name.clone());
         self.decap_lambdas.push(decap_lam.clone());
-        (decap_lam, cap_list_expr)
+        self.lifted
+            .borrow_mut()
+            .insert(lambda_func_name.clone(), decap_lam);
+        (Tree::leaf(lambda_func_name), cap_list_expr)
     }
 }
 
@@ -777,49 +901,42 @@ struct SpecializationRequest {
     org_func_name: FullName,
     // Type of the function to be specialized
     org_func_ty: Arc<TypeNode>,
-    // Map from the slot specialized on to the decaptured lambda that reaches it
-    specialized_args: Map<Slot, DecapturedLambdaInfo>,
+    // Map from the slot specialized on to the value that reaches it
+    specialized_args: Map<Slot, Tree>,
     // What the chain producing this request has committed to. The specialized function carries it
     // on, so the requests raised while walking its body are judged against the same chain.
     pinned: Pinned,
 }
 
 impl SpecializationRequest {
-    // The slots specialized on, paired with the lambda each receives, in slot order. Sorting is
-    // what keeps the name below a function of the request alone.
-    fn specialized_args_in_order(&self) -> Vec<(Slot, &DecapturedLambdaInfo)> {
-        let mut args = self
+    // The unit this request asks for.
+    fn unit(&self) -> UnitKey {
+        let mut subst = self
             .specialized_args
             .iter()
-            .map(|(slot, decap_lam)| (*slot, decap_lam))
+            .map(|(slot, tree)| (*slot, tree.clone()))
             .collect::<Vec<_>>();
-        args.sort_by_key(|(slot, _)| *slot);
-        args
+        subst.sort_by_key(|(slot, _)| *slot);
+        UnitKey {
+            origin: self.org_func_name.clone(),
+            subst,
+        }
     }
 
     // Generate the name of the specialized function.
     fn specialized_func_name(&self) -> FullName {
-        let mut full_name = self.org_func_name.clone();
-        let name = full_name.name_as_mut();
-        *name += CLOSURE_SPEC_SUFFIX;
-        let mut hash_data = String::new();
-        for (slot, decap_lam) in self.specialized_args_in_order() {
-            hash_data += &format!(",{}", slot.to_string());
-            hash_data += &format!(",{}", decap_lam.lambda_func_name.to_string());
-        }
-        *name += &format!("_{:x}", md5::compute(hash_data));
-        full_name
+        self.unit().name()
     }
 
     // Create the type of the specialized function
-    fn specialized_func_ty(&self) -> Arc<TypeNode> {
+    fn specialized_func_ty(&self, lifted: &Map<FullName, DecapturedLambdaInfo>) -> Arc<TypeNode> {
         // Decompose the function type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], B)`,
         // and replace the type of the specialized arguments with the type of the capture list.
         let org_ty = self.org_func_ty.clone();
         let (mut doms, codom) = org_ty.collect_app_src(usize::MAX);
-        for (slot, decap_lam) in self.specialized_args_in_order() {
+        for (slot, tree) in self.unit().subst {
             assert!(slot.field.is_none());
-            doms[slot.arg] = decap_lam.cap_list_ty();
+            doms[slot.arg] = capture_struct_of(&tree, lifted).ty;
         }
 
         // Convert back to a function type
@@ -832,8 +949,8 @@ impl SpecializationRequest {
     }
 
     // Create an expression to refer to the specialized function.
-    fn specialized_func_expr(&self) -> Arc<ExprNode> {
-        expr_var(self.specialized_func_name(), None).set_type(self.specialized_func_ty())
+    fn specialized_func_expr(&self, lifted: &Map<FullName, DecapturedLambdaInfo>) -> Arc<ExprNode> {
+        expr_var(self.specialized_func_name(), None).set_type(self.specialized_func_ty(lifted))
     }
 }
 
@@ -863,12 +980,6 @@ impl DecapturedLambdaInfo {
             lam,
             lambda_func_name,
         }
-    }
-
-    // The type of the capture list, which is what a value of this lambda looks like once the
-    // closure around it is gone.
-    fn cap_list_ty(&self) -> Arc<TypeNode> {
-        self.cap.ty.clone()
     }
 
     // The global function the lambda became.
@@ -913,7 +1024,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         }
 
         // Check if this name refers to a decaptured lambda.
-        let decap_lambda = self.local_decap_lambdas.get(name);
+        let decap_lambda = self.local_decap_lambdas.get(name).cloned();
         if decap_lambda.is_none() {
             return StartVisitResult::VisitChildren;
         }
@@ -921,19 +1032,17 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // If the required type for this expression is already the capture list type, do nothing.
         let expr_ty = expr.type_.as_ref().unwrap().clone();
-        let cap_list_ty = decap_lambda.cap_list_ty();
+        let cap_list_ty = self.cap_of(&decap_lambda).ty;
         if expr_ty.to_string() == cap_list_ty.to_string() {
             return StartVisitResult::VisitChildren;
         }
 
         // Check that the required type for this expression matches the codomain of the lambda function.
-        let lambda_func = decap_lambda.lambda_func();
-        let lambda_ty = lambda_func.type_.as_ref().unwrap();
-        let lambda_codom_ty = lambda_ty.get_lambda_dst();
+        let lam = self.lambda_func_of(&decap_lambda);
+        let lambda_codom_ty = lam.type_.as_ref().unwrap().get_lambda_dst();
         assert_eq!(expr_ty.to_string(), lambda_codom_ty.to_string());
 
         // Replace with an expression that applies the lambda function to the capture list.
-        let lam = expr_var(decap_lambda.lambda_func_name.clone(), None).set_type(lambda_ty.clone());
         let expr = expr_app_typed(lam, vec![expr.set_type(cap_list_ty)]);
         StartVisitResult::ReplaceAndRevisit(expr)
     }
@@ -952,18 +1061,16 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
         for free_name in llvm_expr.free_vars() {
-            let opt_decap_lambda = self.local_decap_lambdas.get(&free_name);
+            let opt_decap_lambda = self.local_decap_lambdas.get(&free_name).cloned();
             if opt_decap_lambda.is_none() {
                 continue;
             }
             let decap_lambda = opt_decap_lambda.unwrap();
 
             // Create an expression that applies the lambda function to the capture list.
-            let lambda_func = decap_lambda.lambda_func();
-            let lambda_ty = lambda_func.type_.as_ref().unwrap();
-            let lam =
-                expr_var(decap_lambda.lambda_func_name.clone(), None).set_type(lambda_ty.clone());
-            let name_expr = expr_var(free_name.clone(), None).set_type(decap_lambda.cap_list_ty());
+            let lam = self.lambda_func_of(&decap_lambda);
+            let name_expr =
+                expr_var(free_name.clone(), None).set_type(self.cap_of(&decap_lambda).ty);
             let expr = expr_app_typed(lam, vec![name_expr]);
 
             replace.insert(free_name.clone(), expr);
@@ -1046,31 +1153,20 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             // Get or generate decaptured lambda information.
             if arg.is_var() {
                 let arg_name = &arg.get_var().name;
-                if let Some(decap_info) = self.local_decap_lambdas.get(arg_name) {
-                    let decap_info = decap_info.clone();
-                    if !self.commit(
-                        &mut pinned,
-                        &func_origin,
-                        slot,
-                        &decap_info.lambda_func_name,
-                    ) {
+                if let Some(tree) = self.local_decap_lambdas.get(arg_name).cloned() {
+                    if !self.commit(&mut pinned, &func_origin, slot, &tree.lambda) {
                         continue;
                     }
-                    decaptured_args[i] = arg.set_type(decap_info.cap_list_ty());
-                    specialized_args.insert(slot, decap_info);
+                    decaptured_args[i] = arg.set_type(self.cap_of(&tree).ty);
+                    specialized_args.insert(slot, tree);
                 }
             } else if ClosureSpecializationVisitor::decapturable(arg) {
                 // TODO: maybe we don't need to handle this case, because pull-let transformation converts this argument to a variable?
-                let (decap_info, expr) = self.decapture_lambda(arg.clone(), state); // Visits `arg` inside this call
-                                                                                    // A lambda written at the call site is one no chain can have met before, so this
-                                                                                    // only records it.
-                self.commit(
-                    &mut pinned,
-                    &func_origin,
-                    slot,
-                    &decap_info.lambda_func_name,
-                );
-                specialized_args.insert(slot, decap_info);
+                let (tree, expr) = self.decapture_lambda(arg.clone(), state); // Visits `arg` inside this call
+                                                                              // A lambda written at the call site is one no chain can have met before, so this
+                                                                              // only records it.
+                self.commit(&mut pinned, &func_origin, slot, &tree.lambda);
+                specialized_args.insert(slot, tree);
                 decaptured_args[i] = expr;
             }
         }
@@ -1085,7 +1181,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             specialized_args,
             pinned,
         };
-        let specialized_func_expr = specialization.specialized_func_expr();
+        let specialized_func_expr = specialization.specialized_func_expr(&self.lifted.borrow());
         self.required_specializations.push(specialization);
 
         // Replace with an expression that calls the specialized function.
@@ -1111,8 +1207,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         assert_eq!(arg.len(), 1);
         let arg = &arg[0];
         let arg_name = &arg.name;
-        let cap_list_ty = match self.local_decap_lambdas.get(arg_name) {
-            Some(local_decap_lambda) => local_decap_lambda.cap_list_ty(),
+        let cap_list_ty = match self.local_decap_lambdas.get(arg_name).cloned() {
+            Some(tree) => self.cap_of(&tree).ty,
             // If the argument does not refer to a decaptured lambda, do nothing.
             None => return StartVisitResult::VisitChildren,
         };
@@ -1159,9 +1255,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             // If the bound expression is a lambda, perform decapturing.
             assert!(pat.is_var());
             let var_name = pat.get_var().name.clone();
-            let (decap_lam, cap_list) = self.decapture_lambda(bound, state); // visit `bound` inside this call
-            self.decap_lambdas.push(decap_lam.clone());
-            self.local_decap_lambdas.insert(var_name.clone(), decap_lam);
+            let (tree, cap_list) = self.decapture_lambda(bound, state); // visit `bound` inside this call
+            self.local_decap_lambdas.insert(var_name.clone(), tree);
             let pat = pat
                 .set_var_tyanno(None) // Discard type annotation since it may become incorrect
                 .set_type(cap_list.type_.as_ref().unwrap().clone());
@@ -1175,14 +1270,14 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             }
             // In the case the bound expression is a variable referring to a decaptured lambda,
             // add the variable introduced by this let binding to `self.local_decap_lambdas`.
-            let local_decap_lambda = opt_local_decap_lambda.unwrap().clone();
+            let tree = opt_local_decap_lambda.unwrap().clone();
             self.local_decap_lambdas
-                .insert(pat.get_var().name.clone(), local_decap_lambda.clone());
+                .insert(pat.get_var().name.clone(), tree.clone());
 
             // Set the type of the pattern and the bound expression to the capture list type.
             let bound_old_ty = bound.type_.as_ref().unwrap();
             let pat_old_ty = pat.info.type_.as_ref().unwrap();
-            let cap_list_ty = local_decap_lambda.cap_list_ty();
+            let cap_list_ty = self.cap_of(&tree).ty;
             if bound_old_ty.to_string() == cap_list_ty.to_string()
                 && pat_old_ty.to_string() == cap_list_ty.to_string()
             {
