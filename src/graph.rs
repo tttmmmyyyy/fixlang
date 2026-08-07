@@ -39,12 +39,12 @@ impl<T> Graph<T> {
         T: Clone + Eq + Hash,
     {
         let elems = elems.into_iter().collect::<Vec<_>>();
-        let inv_map = elems
+        let elem_to_idx = elems
             .iter()
             .enumerate()
             .map(|(idx, elem)| (elem.clone(), idx))
             .collect::<Map<_, _>>();
-        (Graph::new(elems), inv_map)
+        (Graph::new(elems), elem_to_idx)
     }
 
     // Get an element
@@ -115,12 +115,12 @@ impl<T> Graph<T> {
 
         let mut path_set: Set<usize> = Default::default();
         let mut path_vec: Vec<usize> = Default::default();
-        let mut visited: Set<usize> = Default::default();
+        let mut verified: Set<usize> = Default::default();
         path_set.reserve(self.elems.len());
-        visited.reserve(self.elems.len());
+        verified.reserve(self.elems.len());
 
         for pos in 0..self.elems.len() {
-            let maybe_loop = visit(pos, &mut path_set, &mut path_vec, &mut visited, self);
+            let maybe_loop = visit(pos, &mut path_set, &mut path_vec, &mut verified, self);
             if !maybe_loop.is_empty() {
                 return maybe_loop;
             }

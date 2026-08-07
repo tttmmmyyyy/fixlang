@@ -741,9 +741,9 @@ fn specializable_slots_of(
     let (params, body) = expr.destructure_lam_sequence();
     let params = params
         .iter()
-        .map(|may_multi_param| {
-            assert_eq!(may_multi_param.len(), 1);
-            may_multi_param[0].name.clone()
+        .map(|lam_params| {
+            assert_eq!(lam_params.len(), 1);
+            lam_params[0].name.clone()
         })
         .collect::<Vec<_>>();
     let param_tys = sym.ty.collect_app_src(usize::MAX).0;
@@ -1314,7 +1314,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // If any free variable in the LLVM expression refers to a decaptured lambda,
         // replace it with an expression that applies the lambda function to the capture list.
 
-        let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
+        // The call of the lambda function, by the free variable holding the capture list it is
+        // applied to.
+        let mut call_lam_exprs = Map::default();
         for free_name in llvm_expr.free_vars() {
             let Some(tree) = self.bare_value_of(&free_name) else {
                 continue;
@@ -1325,11 +1327,11 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             let name_expr = expr_var(free_name.clone(), None).set_type(self.cap_of(&tree).ty);
             let expr = expr_app_typed(lam, vec![name_expr]);
 
-            replace.insert(free_name.clone(), expr);
+            call_lam_exprs.insert(free_name.clone(), expr);
         }
 
         // If none of the free variables in the LLVM expression refer to a decaptured lambda, do nothing.
-        if replace.is_empty() {
+        if call_lam_exprs.is_empty() {
             return StartVisitResult::VisitChildren;
         }
 
@@ -1342,14 +1344,14 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // Rename free variables in the LLVM expression
         let mut llvm_expr = llvm_expr.clone();
         let mut rename: Map<FullName, FullName> = Default::default();
-        for (name, _) in replace.iter() {
+        for (name, _) in call_lam_exprs.iter() {
             rename.insert(name.clone(), make_new_name(name));
         }
         llvm_expr = rename_free_names(&llvm_expr, rename);
 
         // Insert `let (new name) = (lambda function call);` before the LLVM expression
         let mut expr = llvm_expr.clone();
-        for (name, call_lam_expr) in replace.iter() {
+        for (name, call_lam_expr) in call_lam_exprs.iter() {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
                 PatternNode::make_var(var_var(new_name.clone()), None)
@@ -1482,9 +1484,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
-        let arg = expr.get_lam_params();
-        assert_eq!(arg.len(), 1);
-        let arg = &arg[0];
+        let params = expr.get_lam_params();
+        assert_eq!(params.len(), 1);
+        let arg = &params[0];
         let arg_name = &arg.name;
         // If the argument does not hold a capture list, do nothing.
         let Some(tree) = self.bare_value_of(arg_name) else {

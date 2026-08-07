@@ -277,9 +277,9 @@ impl ExprNode {
         let mut args = vec![];
         let mut body = self.clone();
         while body.is_lam() {
-            let (args_loc, body_loc) = body.destructure_lam();
-            args.push(args_loc);
-            body = body_loc;
+            let (lam_args, lam_body) = body.destructure_lam();
+            args.push(lam_args);
+            body = lam_body;
         }
         (args, body)
     }

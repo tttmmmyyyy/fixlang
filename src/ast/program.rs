@@ -2785,9 +2785,9 @@ impl Program {
         for sym in self.symbols.values() {
             let mut sym_text = Text::empty();
 
-            let type_sgn_str = format!("{} : {};", sym.name.to_string(), sym.ty.to_string());
-            let type_sgn = Text::from_str(&type_sgn_str);
-            sym_text = sym_text.append(type_sgn);
+            let type_signature = format!("{} : {};", sym.name.to_string(), sym.ty.to_string());
+            let type_signature_text = Text::from_str(&type_signature);
+            sym_text = sym_text.append(type_signature_text);
 
             let code = Text::from_str(&format!("{} = ", sym.name.to_string()))
                 .append_nobreak(
@@ -2801,7 +2801,7 @@ impl Program {
                 .append_to_last_line(";");
             sym_text = sym_text.append(code);
 
-            sym_texts.push((type_sgn_str, sym_text));
+            sym_texts.push((type_signature, sym_text));
         }
         sym_texts.sort_by(|(a, _), (b, _)| a.cmp(b));
 
