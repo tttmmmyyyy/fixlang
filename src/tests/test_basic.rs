@@ -7750,6 +7750,27 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A struct holding a callback that takes the struct itself has a size: the field is a pair of
+/// pointers, whatever the callback's own type mentions.
+#[test]
+pub fn test_struct_holding_a_callback_over_itself() {
+    let source = r##"
+        module Main;
+        type S = unbox struct { f : (S, I64) -> I64 };
+
+        run : S -> I64;
+        run = |s| (s.@f)((s, 41)) + 1;
+
+        main : IO ();
+        main = (
+            let s = S { f : |(_s, n)| n };
+            assert_eq(|_|"", run(s), 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// A type constructor reached again at an unrelated argument still has a size: laying out `Array E`
 /// needs `E`, which needs the `Array (I64, I64)` it holds, and there it ends.
 #[test]

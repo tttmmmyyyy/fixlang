@@ -1238,6 +1238,12 @@ impl TypeNode {
             let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
             return Some(self.no_size_report(&in_place[i..], cause));
         }
+        // A function value is a pair of pointers whatever it takes and returns, so its size is
+        // settled. Every function type shares the `->` constructor, so the growth of one function's
+        // argument would otherwise be read off another's.
+        if self.is_closure() || self.is_funptr() {
+            return None;
+        }
         // The same type constructor with arguments that have grown: the fields that led from that
         // one here lead on to a larger one again. A type merely appearing inside another (`Tree`
         // inside `(Tree, Tree)`) is how an ordinary recursive type is written, and the walk ends
