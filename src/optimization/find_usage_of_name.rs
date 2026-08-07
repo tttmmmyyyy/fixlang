@@ -46,6 +46,11 @@ impl UsageFinder<'_> {
     fn shadowed(&self, state: &VisitState) -> bool {
         self.name.is_local() && state.scope.has_value(&self.name.name)
     }
+
+    // Whether `expr` is an occurrence of the name being searched for.
+    fn is_the_name(&self, expr: &Arc<ExprNode>) -> bool {
+        expr.is_var() && &expr.get_var().name == self.name
+    }
 }
 
 impl ExprVisitor for UsageFinder<'_> {
@@ -90,7 +95,7 @@ impl ExprVisitor for UsageFinder<'_> {
             return StartVisitResult::VisitChildren;
         }
         let (fun, args) = expr.destructure_app();
-        if fun.is_var() && &fun.get_var().name == self.name {
+        if self.is_the_name(&fun) {
             self.add_usage(UsageType::CalledAsFunction);
         }
         // A call whose callee is not a variable has no name to record the argument against, and the
@@ -98,7 +103,7 @@ impl ExprVisitor for UsageFinder<'_> {
         if fun.is_var() {
             let fun_name = fun.get_var().name.clone();
             for (i, arg) in args.iter().enumerate() {
-                if arg.is_var() && &arg.get_var().name == self.name {
+                if self.is_the_name(arg) {
                     self.add_usage(UsageType::FunctionArgument(fun_name.clone(), i));
                 }
             }
@@ -204,7 +209,7 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (tycon, fields) = expr.destructure_make_struct().unwrap();
         for (position, (_, _, value)) in fields.iter().enumerate() {
-            if value.is_var() && &value.get_var().name == self.name {
+            if self.is_the_name(value) {
                 self.add_usage(UsageType::CapturedInto(tycon.name.clone(), position));
             }
         }
