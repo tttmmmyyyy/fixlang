@@ -7677,7 +7677,7 @@ pub fn test_circular_type_definition() {
 /// A value of an unboxed type holds its unboxed fields in place, so a cycle of them has no layout,
 /// which the compiler reports rather than following the cycle forever.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
+#[should_panic(expected = "`Main::B` -> `Main::A` -> `Main::B`")]
 pub fn test_circular_unboxed_types_have_no_layout() {
     let source = r##"
         module Main;
@@ -7689,6 +7689,57 @@ pub fn test_circular_unboxed_types_have_no_layout() {
 
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A cycle through a union has no layout either: a union holds its active variant's payload in
+/// place, so the payload's fields lead back to the union. This is the declaration the manual gives
+/// as the one to write with `box` instead.
+#[test]
+#[should_panic(expected = "There are circular definitions by unboxed types")]
+pub fn test_circular_unboxed_union_has_no_layout() {
+    let source = r##"
+        module Main;
+        type Tree = unbox union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let t : Tree = Tree::leaf();
+            println(t.is_leaf.to_string)
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The same declarations with `box` do have a layout, since a pointer bounds it at the union.
+#[test]
+pub fn test_circular_boxed_union_has_a_layout() {
+    let source = r##"
+        module Main;
+        type Tree = box union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let t : Tree = Tree::node((Tree::leaf(), Tree::leaf()));
+            assert_eq(|_|"", t.as_node.@0.is_leaf, true);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Declaring a cycle of unboxed types compiles as long as no value of one is used: nothing asks for
+/// a layout, so nothing has to report that it does not exist.
+#[test]
+pub fn test_unused_circular_unboxed_types_compile() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        main : IO ();
+        main = println("ok");
     "##;
     test_source(&source, Configuration::develop_mode());
 }

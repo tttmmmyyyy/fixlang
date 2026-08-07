@@ -1196,17 +1196,17 @@ impl TypeNode {
     // Check if `self` is fully unboxed.
     // Here, a type is fully unboxed if and only if it does not contain any boxed type.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
-        self.is_fully_unboxed_inside(type_env, &mut vec![])
+        self.is_fully_unboxed_inner(type_env, &mut vec![])
     }
 
     /// Whether this type contains no boxed type, given the types it is nested in.
     ///
     /// # Arguments
     /// * `unboxed_path` - the types this one is nested in, outermost first, which
-    ///   `check_layout_exists` reads to report a type that has no layout. Deciding whether a type
+    ///   `panic_if_no_layout` reads to report a type that has no layout. Deciding whether a type
     ///   is fully unboxed walks the fields of unboxed types, and that walk ends only for a type
     ///   whose layout exists.
-    fn is_fully_unboxed_inside(
+    fn is_fully_unboxed_inner(
         &self,
         type_env: &TypeEnv,
         unboxed_path: &mut Vec<Arc<TypeNode>>,
@@ -1229,20 +1229,20 @@ impl TypeNode {
         let field_types = self.field_types(type_env);
         field_types.iter().all(|field_ty| {
             field_ty.descend_layout(unboxed_path, |unboxed_path| {
-                field_ty.is_fully_unboxed_inside(type_env, unboxed_path)
+                field_ty.is_fully_unboxed_inner(type_env, unboxed_path)
             })
         })
     }
 
     /// Walk into the layout of `self`, a field of the unboxed types `unboxed_path` names: report a
-    /// type whose layout has no end (`check_layout_exists`), then run `descend` with `self` appended
+    /// type whose layout has no end (`panic_if_no_layout`), then run `descend` with `self` appended
     /// to the path, so that the walk below `self` sees the types it came through.
     pub fn descend_layout<R>(
         self: &Arc<TypeNode>,
         unboxed_path: &mut Vec<Arc<TypeNode>>,
         descend: impl FnOnce(&mut Vec<Arc<TypeNode>>) -> R,
     ) -> R {
-        self.check_layout_exists(unboxed_path);
+        self.panic_if_no_layout(unboxed_path);
         unboxed_path.push(self.clone());
         let descended = descend(unboxed_path);
         unboxed_path.pop();
@@ -1260,18 +1260,22 @@ impl TypeNode {
     /// # Arguments
     /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
     ///   since a pointer bounds the layout there.
-    pub fn check_layout_exists(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
-        let tycon = match self.toplevel_tycon() {
-            Some(tycon) => tycon,
-            None => return,
-        };
+    pub fn panic_if_no_layout(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
+        // A type whose layout is asked for has been instantiated, so a type constructor heads it;
+        // `field_types` could not say what the fields of a type variable are either.
+        let tycon = self.toplevel_tycon().unwrap_or_else(|| {
+            unreachable!(
+                "`{}` heads its layout with no type constructor",
+                self.to_string()
+            )
+        });
         for (i, ancestor) in unboxed_path.iter().enumerate() {
             if ancestor.toplevel_tycon().as_deref() != Some(tycon.as_ref()) {
                 continue;
             }
             let cause = if ancestor == self {
                 "There are circular definitions by unboxed types"
-            } else if self.count_symbols() > ancestor.count_symbols() {
+            } else if self.count_type_atoms() > ancestor.count_type_atoms() {
                 "Unboxed types nest into ever larger types"
             } else {
                 continue;
@@ -1291,12 +1295,14 @@ impl TypeNode {
     }
 
     /// The number of type constructors and type variables this type is built from.
-    fn count_symbols(&self) -> usize {
+    fn count_type_atoms(&self) -> usize {
         match &self.ty {
             Type::TyVar(_) => 1,
             Type::TyCon(_) => 1,
-            Type::TyApp(fun, arg) => fun.count_symbols() + arg.count_symbols(),
-            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.count_symbols()).sum::<usize>(),
+            Type::TyApp(fun, arg) => fun.count_type_atoms() + arg.count_type_atoms(),
+            Type::AssocTy(_, args) => {
+                1 + args.iter().map(|arg| arg.count_type_atoms()).sum::<usize>()
+            }
         }
     }
 

@@ -1126,7 +1126,7 @@ impl ObjectType {
     ///
     /// # Arguments
     /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first, which
-    ///   `TypeNode::check_layout_exists` reads to turn a layout that has no end into a diagnostic.
+    ///   `TypeNode::panic_if_no_layout` reads to turn a layout that has no end into a diagnostic.
     ///   A call from outside passes an empty slice; the recursion extends it, and a boxed type on
     ///   the way clears it, since a pointer bounds the layout there.
     pub fn to_struct_type<'c, 'm>(
@@ -1135,7 +1135,7 @@ impl ObjectType {
         unboxed_path: &[Arc<TypeNode>],
     ) -> StructType<'c> {
         let unboxed_path = if self.is_unbox {
-            self.ty.check_layout_exists(unboxed_path);
+            self.ty.panic_if_no_layout(unboxed_path);
             let mut extended = unboxed_path.to_vec();
             extended.push(self.ty.clone());
             extended
