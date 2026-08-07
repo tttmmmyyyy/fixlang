@@ -453,7 +453,8 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
         }
     }
 
-    prg.type_env.add_tycons(lifted.borrow_mut().take_new_tycons());
+    prg.type_env
+        .add_tycons(lifted.borrow_mut().take_new_tycons());
 }
 
 // Make every copy the program asks for, starting from the functions themselves.
@@ -538,7 +539,8 @@ fn realize_all(
         queue.extend(visitor.required_specializations);
     }
 
-    prg.type_env.add_tycons(lifted.borrow_mut().take_new_tycons());
+    prg.type_env
+        .add_tycons(lifted.borrow_mut().take_new_tycons());
     prg.symbols = symbols;
 }
 
@@ -713,15 +715,15 @@ fn reaches_a_direct_call(
             // pass did not mint — one the program declares, or the capture list
             // `defunctionalize_fix` builds — carries no such way in, so the value is reached there
             // only by an indirect call.
-            UsageType::CapturedInto(tycon, position) => lifted
-                .tree_of_capture_list(&tycon)
-                .is_some_and(|tree| {
+            UsageType::CapturedInto(tycon, position) => {
+                lifted.tree_of_capture_list(&tycon).is_some_and(|tree| {
                     is_specializable(
                         specializable_funcs,
                         &tree.lambda,
                         Slot::capture_field(position),
                     )
-                }),
+                })
+            }
         })
 }
 
@@ -1532,10 +1534,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             let cap_list_ty = cap_list.type_.as_ref().unwrap().clone();
             self.local_decap_lambdas.insert(
                 var_name.clone(),
-                Known::bare(
-                    tree,
-                    expr_var(var_name, None).set_type(cap_list_ty.clone()),
-                ),
+                Known::bare(tree, expr_var(var_name, None).set_type(cap_list_ty.clone())),
             );
             let pat = pat
                 .set_var_tyanno(None) // Discard type annotation since it may become incorrect
