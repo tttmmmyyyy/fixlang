@@ -7750,6 +7750,110 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The report points at the expression whose value has no size, so the message carries that line of
+/// the program with it.
+#[test]
+pub fn test_a_type_with_no_size_is_reported_at_its_expression() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        depth : A -> I64;
+        depth = |x| x.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "depth = |x| x.@n;");
+}
+
+/// A function returning a type with no size is caught as well as one taking it.
+#[test]
+pub fn test_function_returning_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { x : Bad, n : I64 };
+
+        build_bad : I64 -> Bad;
+        build_bad = |_| undefined("no value");
+
+        main : IO ();
+        main = (
+            let f = build_bad;
+            eval f;
+            println("ok")
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
+/// A type constructor of two arguments grows when either of them does, and the arguments are
+/// matched up one by one — `Q b (a, b)` grows its second argument out of both of `Q a b`'s.
+#[test]
+pub fn test_growing_type_with_two_arguments() {
+    let source = r##"
+        module Main;
+        type Q a b = unbox struct { x : Q b (a, b), n : I64 };
+
+        depth : Q I64 I64 -> I64;
+        depth = |q| q.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "its fields reach ever larger types",
+    );
+}
+
+/// Growth is read argument by argument, so a type constructor reached again with one argument
+/// unrelated to the first still has a size, however the other argument compares.
+#[test]
+pub fn test_two_argument_constructor_with_an_unrelated_argument() {
+    let source = r##"
+        module Main;
+        type K a b = unbox struct { v : a, w : b };
+        type E = unbox struct { z : K (I64, I64) I64 };
+
+        main : IO ();
+        main = (
+            let k : K E I64 = K { v : E { z : K { v : (1, 2), w : 3 } }, w : 4 };
+            assert_eq(|_|"", k.@v.@z.@w + k.@w, 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Making the function a union variant holds is what asks for the layout of the types it takes.
+#[test]
+pub fn test_making_a_function_over_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { b : Bad, n : I64 };
+        type Holder = box union { none : (), f : Bad -> I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder::f(|b| b.@n);
+            assert_eq(|_|"", h.is_none, false);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
 /// A struct holding a callback that takes the struct itself has a size: the field is a pair of
 /// pointers, whatever the callback's own type mentions.
 #[test]

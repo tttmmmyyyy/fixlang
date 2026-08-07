@@ -1831,15 +1831,6 @@ impl Program {
 
         let mut checked: Set<Arc<TypeNode>> = Set::default();
         let mut errors = Errors::empty();
-        // Every instantiated symbol is compiled, so its own type is laid out whether or not an
-        // expression of that type appears — a compiler-generated accessor has no such expression.
-        for name in &symbol_names {
-            let symbol = &self.symbols[*name];
-            if let Some(msg) = no_layout_reason(&symbol.ty, &type_env, &mut checked) {
-                let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
-                errors.append(Errors::from_msg_srcs(msg, &[&source]));
-            }
-        }
         // A node the compiler built carries no source location, so a round that reports only at
         // located nodes runs first; the second round takes the types that appear at no located node.
         for located_only in [true, false] {
@@ -1855,6 +1846,16 @@ impl Program {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }
                 })
+            }
+        }
+        // Every instantiated symbol is compiled, so its own type is laid out whether or not an
+        // expression carries it — a compiler-generated accessor has none. These come last because
+        // such a symbol has no source location of its own to report at.
+        for name in &symbol_names {
+            let symbol = &self.symbols[*name];
+            if let Some(msg) = no_layout_reason(&symbol.ty, &type_env, &mut checked) {
+                let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
+                errors.append(Errors::from_msg_srcs(msg, &[&source]));
             }
         }
         errors.to_result()
