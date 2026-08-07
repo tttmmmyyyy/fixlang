@@ -15,6 +15,10 @@ pub enum UsageType {
     FunctionArgument(FullName, usize),
     // The name is used as a function and is called.
     CalledAsFunction,
+    // The name is stored into a field of a struct being built. The first component names the type
+    // constructor of that struct, and the second the position of the field among the fields the
+    // type constructor declares.
+    CapturedInto(FullName, usize),
 }
 
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
@@ -35,6 +39,12 @@ struct UsageFinder<'a> {
 impl UsageFinder<'_> {
     fn add_usage(&mut self, usage: UsageType) {
         self.usages.push(usage);
+    }
+
+    // Whether an inner binding stands between here and the name being searched for, which makes an
+    // occurrence here one about something else.
+    fn shadowed(&self, state: &crate::ast::traverse::VisitState) -> bool {
+        self.name.is_local() && state.scope.has_value(&self.name.name)
     }
 }
 
@@ -76,8 +86,7 @@ impl ExprVisitor for UsageFinder<'_> {
         expr: &Arc<ExprNode>,
         state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        if self.name.is_local() && state.scope.has_value(&self.name.name) {
-            // The name is shadowed in the current scope.
+        if self.shadowed(state) {
             return StartVisitResult::VisitChildren;
         }
         let (fun, args) = expr.destructure_app();
@@ -187,9 +196,18 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_make_struct(
         &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        expr: &Arc<ExprNode>,
+        state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        if self.shadowed(state) {
+            return StartVisitResult::VisitChildren;
+        }
+        let (tycon, fields) = expr.destructure_make_struct().unwrap();
+        for (position, (_, _, value)) in fields.iter().enumerate() {
+            if value.is_var() && &value.get_var().name == self.name {
+                self.add_usage(UsageType::CapturedInto(tycon.name.clone(), position));
+            }
+        }
         StartVisitResult::VisitChildren
     }
 

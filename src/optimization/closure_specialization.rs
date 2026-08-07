@@ -547,6 +547,8 @@ fn reaches_a_direct_call(
             UsageType::FunctionArgument(fun, idx) => specializable_funcs
                 .get(&fun)
                 .is_some_and(|info| info.specializable_slots.contains(&Slot::arg(idx))),
+            // Reaching a capture list is what the capture slots are for, which nothing raises yet.
+            UsageType::CapturedInto(_, _) => false,
         })
 }
 
