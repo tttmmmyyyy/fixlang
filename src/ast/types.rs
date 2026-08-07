@@ -1222,11 +1222,11 @@ impl TypeNode {
 
     /// Why the layout of `self` cannot be determined, given the types the descent came through, and
     /// `None` where it can be. `Program::validate_layouts` reports this at the value whose type it
-    /// is; the descents through a type's fields report it where they would otherwise walk forever.
+    /// is.
     ///
     /// # Arguments
-    /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
-    ///   since a pointer bounds the layout there.
+    /// * `unboxed_path` - the types `self` is nested in, outermost first. A field of a boxed type is
+    ///   a pointer, so the descent stops rather than passing one.
     fn no_layout_message(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) -> Option<String> {
         // A type whose layout is asked for has been instantiated, so a type constructor heads it;
         // `field_types` could not say what the fields of a type variable are either.
@@ -1280,10 +1280,10 @@ impl TypeNode {
         None
     }
 
-    /// Why a value of this type has no layout, walking the fields whose layout the code generator
-    /// holds in place: the fields of a struct or union, and of the types those reach the same way. A
-    /// boxed, closure, array or function-pointer field is a pointer, so the walk stops there and the
-    /// type behind it is laid out on its own.
+    /// Why a value of this type has no layout, walking the fields the code generator lays out in
+    /// place: the fields of a struct or union, and of the types those reach the same way. A field of
+    /// a boxed, closure, array or function-pointer type is a pointer, so the walk stops there and
+    /// the type behind it is laid out on its own.
     ///
     /// # Arguments
     /// * `checked` - the types walked so far, which the walk both reads and adds to. Whether the

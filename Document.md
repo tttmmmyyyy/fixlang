@@ -864,7 +864,7 @@ Fix types are divided into **boxed** and **unboxed** types, which are similar to
 
 In general, it's recommended that types containing a large amount of data be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
 
-An unboxed value holds its unboxed fields inside itself, so following those fields has to end somewhere. A type whose fields reach itself again, or reach an ever larger type, has no size, and a program using one is rejected. Make one of the types along the way boxed: the field becomes a pointer there, and the size is settled.
+A type's size therefore follows its unboxed fields, and following them has to end somewhere. A type whose unboxed fields reach the type itself again, or reach an ever larger type, has no size, and a program using one is rejected. Make one of the types along the way boxed: the field holding it becomes a pointer, and the size is settled.
 
 ```
 type Tree = unbox union { leaf : (), node : (Tree, Tree) };  // rejected: no size

@@ -7674,8 +7674,8 @@ pub fn test_circular_type_definition() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A value of an unboxed type holds its unboxed fields in place, so a cycle of them has no layout,
-/// which the compiler reports rather than following the cycle forever.
+/// A field of an unboxed type is laid out in place, so a cycle of such fields describes a value of
+/// no size, which the compiler reports rather than following the cycle forever.
 #[test]
 pub fn test_circular_unboxed_types_have_no_layout() {
     let source = r##"

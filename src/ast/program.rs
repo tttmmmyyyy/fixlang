@@ -1802,10 +1802,11 @@ impl Program {
     /// Report every value of the instantiated program whose type has no layout, at the expression
     /// the value appears as.
     ///
-    /// A value of an unboxed type holds its unboxed fields in place, so a type reaching itself that
-    /// way — or an ever larger type of the same type constructor — describes a value of no size.
-    /// Code generation would meet such a type as a descent through the fields that never ends, so
-    /// this runs once the program's types are instantiated and before any of them is laid out.
+    /// A field of an unboxed type is laid out in place, so a type's size follows its unboxed fields:
+    /// a type they reach again — or an ever larger type of the same type constructor — describes a
+    /// value of no size. Code generation would meet such a type as a descent through the fields that
+    /// never ends, so this runs once the program's types are instantiated and before any of them is
+    /// laid out.
     pub fn validate_layouts(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
 
