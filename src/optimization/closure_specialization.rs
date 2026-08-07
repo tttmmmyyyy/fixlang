@@ -458,16 +458,16 @@ fn realize_all(
 ) {
     let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
 
-    let bodies = mem::take(&mut prg.symbols);
-    let mut global_names = bodies.keys().cloned().collect::<Set<_>>();
+    let originals = mem::take(&mut prg.symbols);
+    let mut global_names = originals.keys().cloned().collect::<Set<_>>();
     let mut symbols: Map<FullName, Symbol> = Map::default();
 
     // Every function stands for the copy of itself that substitutes nothing.
-    let mut queue = bodies
+    let mut queue = originals
         .keys()
         .map(|origin| SpecializationRequest {
             unit: UnitKey::new(origin.clone(), Map::default()),
-            org_func_ty: bodies[origin].ty.clone(),
+            org_func_ty: originals[origin].ty.clone(),
             pinned: Pinned::default(),
         })
         .collect::<VecDeque<_>>();
@@ -477,8 +477,8 @@ fn realize_all(
         if symbols.contains_key(&name) {
             continue;
         }
-        let org = &bodies[&request.unit.origin];
-        let expr = unique_local_names::run_on_expr(org.expr.as_ref().unwrap(), Set::default());
+        let original = &originals[&request.unit.origin];
+        let expr = unique_local_names::run_on_expr(original.expr.as_ref().unwrap(), Set::default());
 
         // A copy of a lifted lambda whose capture list is narrowed receives it through the same
         // parameter, at the narrowed type. The walk retypes the pattern destructuring it when it
@@ -815,7 +815,7 @@ fn capture_list_destructuring(
 // `symbols` is one about to be created and carries no edge yet.
 fn call_graph_of(symbols: &Map<FullName, Symbol>) -> (Graph<FullName>, Map<FullName, usize>) {
     let names = symbols.keys().cloned().collect::<Vec<_>>();
-    let idx_of = names
+    let name_to_idx = names
         .iter()
         .enumerate()
         .map(|(idx, name)| (name.clone(), idx))
@@ -823,12 +823,12 @@ fn call_graph_of(symbols: &Map<FullName, Symbol>) -> (Graph<FullName>, Map<FullN
     let mut graph = Graph::new(names);
     for (caller, sym) in symbols {
         for callee in sym.expr.as_ref().unwrap().free_vars() {
-            if let Some(callee_idx) = idx_of.get(&callee) {
-                graph.connect_idx(idx_of[caller], *callee_idx);
+            if let Some(callee_idx) = name_to_idx.get(&callee) {
+                graph.connect_idx(name_to_idx[caller], *callee_idx);
             }
         }
     }
-    (graph, idx_of)
+    (graph, name_to_idx)
 }
 
 // The capture list a copy of a lifted lambda receives in place of the one the lambda was built with.
@@ -1025,15 +1025,15 @@ impl ClosureSpecializationVisitor {
             if !info.specializable_slots.contains(&slot) {
                 continue;
             }
-            let field = match self.known_value(value) {
-                Some(field) => field,
+            let known_field = match self.known_value(value) {
+                Some(known_field) => known_field,
                 None => continue,
             };
-            if !commit(pinned, &known.tree.lambda, slot, &field.tree) {
+            if !commit(pinned, &known.tree.lambda, slot, &known_field.tree) {
                 continue;
             }
-            *value = field.cap_list;
-            narrowed_fields.push((position, field.tree));
+            *value = known_field.cap_list;
+            narrowed_fields.push((position, known_field.tree));
         }
         if narrowed_fields == known.tree.fields {
             return known;
@@ -1241,25 +1241,25 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // Check if this name holds the capture list of a lambda this walk knows. A name bound to
         // the closure wrapped around one already has the type its uses call for.
-        let decap_lambda = self.local_decap_lambdas.get(name).cloned();
-        if decap_lambda.is_none() {
+        let known = self.local_decap_lambdas.get(name).cloned();
+        if known.is_none() {
             return StartVisitResult::VisitChildren;
         }
-        let decap_lambda = decap_lambda.unwrap();
-        if !decap_lambda.is_bare {
+        let known = known.unwrap();
+        if !known.is_bare {
             return StartVisitResult::VisitChildren;
         }
-        let decap_lambda = decap_lambda.tree;
+        let tree = known.tree;
 
         // If the required type for this expression is already the capture list type, do nothing.
         let expr_ty = expr.type_.as_ref().unwrap().clone();
-        let cap_list_ty = self.cap_of(&decap_lambda).ty;
+        let cap_list_ty = self.cap_of(&tree).ty;
         if expr_ty.to_string() == cap_list_ty.to_string() {
             return StartVisitResult::VisitChildren;
         }
 
         // Check that the required type for this expression matches the codomain of the lambda function.
-        let lam = self.lambda_func_of(&decap_lambda);
+        let lam = self.lambda_func_of(&tree);
         let lambda_codom_ty = lam.type_.as_ref().unwrap().get_lambda_dst();
         assert_eq!(expr_ty.to_string(), lambda_codom_ty.to_string());
 
@@ -1282,20 +1282,19 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
         for free_name in llvm_expr.free_vars() {
-            let opt_decap_lambda = self.local_decap_lambdas.get(&free_name).cloned();
-            if opt_decap_lambda.is_none() {
+            let known = self.local_decap_lambdas.get(&free_name).cloned();
+            if known.is_none() {
                 continue;
             }
-            let decap_lambda = opt_decap_lambda.unwrap();
-            if !decap_lambda.is_bare {
+            let known = known.unwrap();
+            if !known.is_bare {
                 continue;
             }
-            let decap_lambda = decap_lambda.tree;
+            let tree = known.tree;
 
             // Create an expression that applies the lambda function to the capture list.
-            let lam = self.lambda_func_of(&decap_lambda);
-            let name_expr =
-                expr_var(free_name.clone(), None).set_type(self.cap_of(&decap_lambda).ty);
+            let lam = self.lambda_func_of(&tree);
+            let name_expr = expr_var(free_name.clone(), None).set_type(self.cap_of(&tree).ty);
             let expr = expr_app_typed(lam, vec![name_expr]);
 
             replace.insert(free_name.clone(), expr);
