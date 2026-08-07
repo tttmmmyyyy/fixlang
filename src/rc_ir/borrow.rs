@@ -740,6 +740,7 @@ fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     grow_stack(|| split_body_inner(node, type_env))
 }
 
+/// One node of `split_body`'s rebuild, over its rebuilt continuation.
 fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
@@ -915,6 +916,7 @@ impl<'a> CancelAnalysis<'a> {
         grow_stack(|| self.walk_inner(node, pending, returns_from_func))
     }
 
+    /// The body of `walk`, which owns the stack growth.
     fn walk_inner(
         &mut self,
         node: &RcExprNode,
@@ -1105,6 +1107,7 @@ fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
+/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {

@@ -1087,11 +1087,9 @@ impl ExprNode {
         }
     }
 
-    /// Visit every `Expr::Var` occurrence in this expression tree, calling
-    /// `f` with the `Var` and the source span of the containing `ExprNode`.
-    ///
-    /// Pattern-bound variables in `Let` / `Match` patterns are NOT visited;
-    /// callers that need to inspect them should walk the patterns separately.
+    /// Visit each place this expression tree names a variable, calling `f` with the `Var` and the
+    /// source span of the `ExprNode` holding it. The variables a `Let` or a `Match` arm binds are
+    /// named by their patterns, which `walk_patterns` reaches.
     pub fn walk_var_uses<F: FnMut(&Var, &Option<Span>)>(&self, f: &mut F) {
         self.walk_nodes(&mut |node| {
             if let Expr::Var(var) = &*node.expr {
@@ -1153,8 +1151,8 @@ impl ExprNode {
         })
     }
 
-    /// Visit every pattern node attached to a `Let` or `Match` arm in this
-    /// expression tree, calling `f` with the pattern.
+    /// Visit the pattern of each `Let` and each `Match` arm of this expression tree, calling `f`
+    /// with the pattern as it stands, its subpatterns left to the callee.
     pub fn walk_patterns<F: FnMut(&Arc<PatternNode>)>(&self, f: &mut F) {
         self.walk_nodes(&mut |node| match &*node.expr {
             Expr::Let(pat, _, _) => f(pat),
@@ -1167,6 +1165,8 @@ impl ExprNode {
         })
     }
 
+    /// The names this expression uses without binding them itself, global names included, walked
+    /// afresh each time. `free_vars` reads the same set from this node's cache.
     fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
             Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),
@@ -1246,7 +1246,8 @@ impl ExprNode {
         }
     }
 
-    // Call `f` on the set of free vars, calculating it on the first call and reusing it afterwards.
+    /// Call `f` on the free variables of this expression, calculating the set on the first call and
+    /// reusing it afterwards.
     fn with_free_vars<T>(&self, f: impl FnOnce(&Set<FullName>) -> T) -> T {
         let mut lock = self.free_vars.lock().unwrap();
         if lock.is_none() {
@@ -1255,7 +1256,7 @@ impl ExprNode {
         f(lock.as_ref().unwrap())
     }
 
-    // Get the set of free vars.
+    /// The names this expression uses without binding them itself, global names included.
     pub fn free_vars(&self) -> Set<FullName> {
         self.with_free_vars(|free_vars| free_vars.clone())
     }

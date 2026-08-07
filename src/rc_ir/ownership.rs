@@ -82,6 +82,7 @@ impl VarTable {
         vars
     }
 
+    /// A table with no variable in it, to be filled by the constructor that knows what to put there.
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),

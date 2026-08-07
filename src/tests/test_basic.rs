@@ -7634,8 +7634,8 @@ pub fn test_regression_issue_46() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that reading from a handle already given to `close_file` raises a
-/// catchable error naming the closed handle, rather than reading anything.
+/// Reading from a handle already given to `close_file` raises a catchable error naming the closed
+/// handle.
 #[test]
 pub fn test_read_file_after_close() {
     let source = r##"
@@ -7655,8 +7655,8 @@ pub fn test_read_file_after_close() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that a struct and a union may each name their own type inside a
-/// field, as long as the occurrence sits behind a function arrow.
+/// A struct and a union may each name their own type inside a field, as long as the occurrence
+/// sits behind a function arrow.
 #[test]
 pub fn test_circular_type_definition() {
     let source = r##"
@@ -8202,6 +8202,8 @@ pub fn test_debug_println() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `Std::Boxed` is the compiler's own mark of a boxed type, so a hand-written implementation of it
+/// is rejected.
 #[test]
 pub fn test_impl_boxed_by_hand() {
     let source = r##"
@@ -8225,6 +8227,8 @@ pub fn test_impl_boxed_by_hand() {
     );
 }
 
+/// `_get_boxed_ptr` on a union points at the payload, so C reading an `I64` through it sees the
+/// value the union was built with.
 #[test]
 pub fn test_get_boxed_data_ptr_for_union() {
     let source = r##"

@@ -14,7 +14,7 @@ use crate::object::ty_to_object_ty;
 use inkwell::context::Context;
 use std::sync::Arc;
 
-// `Option a = union { none : (), some : a }`, applied as `Option a`.
+/// `Option a = union { none : (), some : a }`, applied as `Option a`.
 fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyapp(
         type_tycon(&tycon(FullName::from_strs(&[STD_NAME], "Option"))),
@@ -22,7 +22,7 @@ fn option_ty(elem: Arc<TypeNode>) -> Arc<TypeNode> {
     )
 }
 
-// `Result e o = union { ok : o, err : e }`, applied as `Result e o`.
+/// `Result e o = union { ok : o, err : e }`, applied as `Result e o`.
 fn result_ty(err: Arc<TypeNode>, ok: Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyapp(
         type_tyapp(
@@ -33,16 +33,16 @@ fn result_ty(err: Arc<TypeNode>, ok: Arc<TypeNode>) -> Arc<TypeNode> {
     )
 }
 
-// The (size, alignment) in bytes of a type's in-memory (embedded) representation.
+/// The (size, alignment) in bytes of a type's in-memory (embedded) representation.
 fn layout<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: Arc<TypeNode>) -> (u64, u64) {
     let object_ty = ty_to_object_ty(&ty, &vec![], gc.type_env());
     let embedded_ty = object_ty.to_embedded_type(gc);
     (gc.sizeof(&embedded_ty), gc.abi_alignment(&embedded_ty))
 }
 
-// The size and alignment of a union are those of its payload buffer plus its tag, and the buffer
-// takes the size and ABI alignment of the largest payload. A union of small or empty payloads
-// therefore stays small: `Bool` is one byte, and `Option U8` two.
+/// The size and alignment of a union are those of its payload buffer plus its tag, and the buffer
+/// takes the size and ABI alignment of the largest payload. A union of small or empty payloads
+/// therefore stays small: `Bool` is one byte, and `Option U8` two.
 #[test]
 fn test_union_memory_layout() {
     let config = panic_if_err(Configuration::check_mode());

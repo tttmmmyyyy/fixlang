@@ -1,8 +1,6 @@
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::name::FullName;
-use crate::ast::name::Name;
-use crate::ast::name::NameSpace;
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
@@ -23,10 +21,7 @@ use crate::fixstd::builtin::{
     make_tuple_name_abs,
 };
 use crate::generator::Generator;
-use crate::misc::collect_results;
-use crate::misc::number_to_varname;
-use crate::misc::Map;
-use crate::misc::Set;
+use crate::misc::{collect_results, number_to_varname, Map, Set};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::rc_ir::ast::RcState;
@@ -872,8 +867,9 @@ impl TypeNode {
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
 
-    // For structs and unions, return the fields.
-    // For Array, return the element type.
+    /// The fields declared for this type's outermost type constructor: one per field for a struct,
+    /// one per variant for a union, and the element field alone for `Array`. The field types carry
+    /// the type parameters of the declaration; `field_types` substitutes this type's arguments in.
     pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
@@ -889,8 +885,8 @@ impl TypeNode {
             .position(|f| f.name == field_name)
     }
 
-    // Flatten type application.
-    // ex. If given `f a b`, returns `vec![f, a, b]`.
+    /// This type split into the head being applied and the arguments applied to it: `f a b` gives
+    /// `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
         fn flatten_type_application_inner(ty: &TypeNode, tys: &mut Vec<Arc<TypeNode>>) {
             match &ty.ty {
@@ -1070,6 +1066,8 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
+    /// the values it captured.
     pub fn is_closure(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1079,6 +1077,8 @@ impl TypeNode {
         tc.name == make_arrow_name_abs()
     }
 
+    /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
+    /// arguments that carries no captured value.
     pub fn is_funptr(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1109,6 +1109,7 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {

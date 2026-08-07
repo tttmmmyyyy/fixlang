@@ -916,15 +916,15 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_mark_union(gc, union, None, amount, state);
     }
 
-    // The tag of a union value: the index, among the union's variants, of the variant it holds.
+    /// The tag of a union value: the index, among the union's variants, of the variant it holds.
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
         let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
         union.extract_field(gc, union_tag_idx).into_int_value()
     }
 
-    // The union with its tag set to `tag`, the index of the variant it is to hold. The payload
-    // buffer is left as it is, so the caller writes the variant's value into it.
+    /// The union with its tag set to `tag`, the index of the variant it is to hold. The payload
+    /// buffer keeps what it held, so the caller writes the variant's value into it.
     pub fn set_union_tag<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -984,6 +984,8 @@ impl ObjectFieldType {
         Object::new(value, elem_ty.clone(), gc)
     }
 
+    /// The contents of a union's payload buffer read as `elem_ty`, by a bit cast: the buffer is at
+    /// least as wide as the variant, and the variant starts at its beginning.
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
@@ -993,6 +995,8 @@ impl ObjectFieldType {
         gc.bit_cast(buf, elem_ty)
     }
 
+    /// The union with `value` bit cast into its payload buffer. The tag is left to `set_union_tag`,
+    /// which names the variant the payload is now to be read as.
     pub fn set_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1439,6 +1443,8 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
+/// The index at which a struct's own fields begin in its layout. A boxed struct leads with its
+/// control block, which pushes them along by one.
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0

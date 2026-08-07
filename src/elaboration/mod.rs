@@ -15,8 +15,8 @@ use std::io::Read;
 use std::path::Path;
 use std::{fs::create_dir_all, path::PathBuf};
 
-// Perform validations and type checking on the program, and return the updated program.
-// Changes made to the program include instantiation of symbols and setting of entry points.
+/// Perform validations and type checking on the program, and return the updated program.
+/// Changes made to the program include instantiation of symbols and setting of entry points.
 fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
     let _sw = StopWatch::new("check_program", config.show_build_times);
 
@@ -137,7 +137,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     Ok(program)
 }
 
-// Return file content and last modified.
+/// The contents of the file at `path`, or a message saying what went wrong reading it.
 pub fn read_file(path: &Path) -> Result<String, String> {
     let mut file = match File::open(&path) {
         Err(why) => {
@@ -163,7 +163,7 @@ pub fn read_file(path: &Path) -> Result<String, String> {
     Ok(s)
 }
 
-// Create a directory if it doesn't exist, and return its path.
+/// The path of the directory at `rel_path`, created along with its parents if it is not there yet.
 pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
     P: AsRef<Path>,
@@ -180,7 +180,7 @@ where
     res
 }
 
-// Load all source files specified in the configuration, link them, and return the resulting `Program`.
+/// Load all source files specified in the configuration, link them, and return the resulting `Program`.
 fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
@@ -225,7 +225,7 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     Ok(program)
 }
 
-// Load the program specified by the Configuration, perform validations and type checking.
+/// Load the program specified by the Configuration, perform validations and type checking.
 pub fn elaborate_via_config(config: &Configuration) -> Result<Program, Errors> {
     let program = load_source_files(&config)?;
     let program = elaborate(program, config)?;

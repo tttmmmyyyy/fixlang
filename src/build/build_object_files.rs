@@ -218,7 +218,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
-// Compile the program, and returns the path of object files to be linked.
+/// Compile the program into object files, and return their paths for the linker.
 pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
@@ -504,9 +504,9 @@ fn build_object_files_cache_hash_or_warn(
     )
 }
 
-// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
-// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
-// position-independent.
+/// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
+/// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
+/// position-independent.
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
@@ -542,9 +542,9 @@ pub(crate) fn get_target_machine(
     }
 }
 
-// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
-// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
-// once it holds a complete object.
+/// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
+/// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
+/// once it holds a complete object.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
     // Create directory if it doesn't exist.
     let dir_path = obj_path.parent().unwrap();
@@ -585,8 +585,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
-// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
-// optimization pipeline has already run over it.
+/// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
+/// optimization pipeline has already run over it.
 fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
@@ -665,7 +665,7 @@ fn add_attribute_to_defined_functions<'c>(module: &Module<'c>, attribute_name: &
     }
 }
 
-// Build exported c functions.
+/// Emit the C entry point of each `FFI_EXPORT` statement.
 fn build_exported_c_functions<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     export_stmts: &[ExportStatement],
