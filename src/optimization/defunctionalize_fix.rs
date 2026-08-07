@@ -46,6 +46,7 @@ use crate::{
     tool::stopwatch::StopWatch,
 };
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -103,7 +104,7 @@ fn run_one(
     // trivial variable-aliasing lets makes every self-reference name the parameter directly, so the
     // single substitution below reaches them all.
     let arity_map = let_elimination::create_global_lambda_to_arity_map(prg);
-    let symbols = std::mem::take(&mut prg.symbols);
+    let symbols = mem::take(&mut prg.symbols);
     let mut global_names: Set<FullName> = symbols.keys().cloned().collect();
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();

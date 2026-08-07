@@ -1,6 +1,5 @@
-use std::{collections::VecDeque, hash::Hash};
-
 use crate::misc::{Map, Set};
+use std::{collections::VecDeque, hash::Hash};
 
 pub struct Graph<T> {
     // Data stored in nodes;
@@ -213,7 +212,7 @@ impl<T> Graph<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Graph;
 
     #[test]
     fn test_scc_empty_graph() {
