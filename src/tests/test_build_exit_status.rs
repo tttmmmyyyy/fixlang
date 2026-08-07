@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::fix_build_source_command;
+    use std::fs::remove_file;
     use tempfile::TempDir;
 
     const SOURCE: &str = r#"module Main;
@@ -32,7 +33,7 @@ main = println("hi");
             String::from_utf8_lossy(&control.stdout),
             String::from_utf8_lossy(&control.stderr)
         );
-        std::fs::remove_file(&out_path).expect("Failed to remove the control build's output");
+        remove_file(&out_path).expect("Failed to remove the control build's output");
 
         let output = fix_build_source_command(temp_dir.path(), SOURCE, "none")
             .arg("-o")

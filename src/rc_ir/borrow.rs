@@ -209,9 +209,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         let mut borrowed = Set::default();
         for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
-                let leaf = (p.name.clone(), unit);
-                if !owned_units.contains(&leaf) {
-                    borrowed.insert(leaf);
+                let unit_path = (p.name.clone(), unit);
+                if !owned_units.contains(&unit_path) {
+                    borrowed.insert(unit_path);
                 }
             }
         }
@@ -225,8 +225,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     }
 }
 
-/// Each parameter/capture variable's ownership shape, derived from the functions' ownership
-/// annotations. The RC IR dump reads it to annotate parameters; it is not needed for code generation.
+/// The ownership shape of every parameter and capture variable of the program, keyed by the
+/// variable's name: which of the variable's reference-counting units its function owns and which it
+/// borrows.
 pub fn param_ownership_shapes(
     prog: &RcProgram,
     type_env: &TypeEnv,
@@ -287,7 +288,7 @@ fn param_ownership_shape(
         type_env: &TypeEnv,
         path: &mut FieldPath,
     ) -> OwnershipShape {
-        let owned = |path: &FieldPath| {
+        let ownership_at = |path: &FieldPath| {
             if owned_units.contains(&(var.clone(), path.clone())) {
                 Ownership::Own
             } else {
@@ -299,12 +300,15 @@ fn param_ownership_shape(
         }
         if ty.is_closure() {
             path.push(CLOSURE_CAPTURE_IDX as usize);
-            let cap = owned(path);
+            let capture_ownership = ownership_at(path);
             path.pop();
-            return OwnershipShape::Fields(vec![OwnershipShape::NoUnit, OwnershipShape::Unit(cap)]);
+            return OwnershipShape::Fields(vec![
+                OwnershipShape::NoUnit,
+                OwnershipShape::Unit(capture_ownership),
+            ]);
         }
         if ty.is_rc_unit_root(type_env) {
-            return OwnershipShape::Unit(owned(path));
+            return OwnershipShape::Unit(ownership_at(path));
         }
         let fields = ty.field_types(type_env);
         let mut children = Vec::with_capacity(fields.len());
@@ -730,10 +734,13 @@ pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     }
 }
 
+/// Rebuild a body with every `Retain`/`Release` in it replaced by one node per reference-counting
+/// unit its path covers.
 fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     grow_stack(|| split_body_inner(node, type_env))
 }
 
+/// One node of `split_body`'s rebuild, over its rebuilt continuation.
 fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
@@ -909,6 +916,7 @@ impl<'a> CancelAnalysis<'a> {
         grow_stack(|| self.walk_inner(node, pending, returns_from_func))
     }
 
+    /// The body of `walk`, which owns the stack growth.
     fn walk_inner(
         &mut self,
         node: &RcExprNode,
@@ -1099,6 +1107,7 @@ fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
+/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {

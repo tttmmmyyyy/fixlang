@@ -53,8 +53,7 @@ use std::{
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    /// The object files generated. Empty when the build ran for the language server, which
-    /// type-checks without emitting code.
+    /// The object files generated, one per compilation unit.
     pub obj_paths: Vec<PathBuf>,
 }
 
@@ -219,7 +218,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
-// Compile the program, and returns the path of object files to be linked.
+/// Compile the program into object files, and return their paths for the linker.
 pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
@@ -403,7 +402,8 @@ pub fn build_object_files<'c>(
     Ok(result)
 }
 
-// Load cache of "build_object_files" function.
+/// The object files a previous build of this program and configuration left behind, when the cache
+/// records them and every one of them is still on disk.
 fn load_build_object_files_cache(
     program: &Program,
     config: &Configuration,
@@ -430,7 +430,8 @@ fn load_build_object_files_cache(
     Some(cache)
 }
 
-// Save cache of "build_object_files" function.
+/// Record the object files a build produced under the hash of the program and configuration it
+/// built, so that an identical build reuses them.
 fn save_build_object_files_cache(
     program: &Program,
     config: &Configuration,
@@ -458,9 +459,9 @@ fn save_build_object_files_cache(
     );
 }
 
-// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
-// The object files cache is an optimization, so a step of reading or writing it that fails gives up
-// on the cache and lets the build go on.
+/// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
+/// The object files cache is an optimization, so a step of reading or writing it that fails gives up
+/// on the cache and lets the build go on.
 fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) -> Option<T> {
     match result {
         Ok(value) => Some(value),
@@ -471,7 +472,9 @@ fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) ->
     }
 }
 
-// Calculate hash used for cache of "build_object_files" function.
+/// The hash that names the object files cache of a build: it covers the configuration options that
+/// bear on code generation together with every module's source, so two builds share a hash exactly
+/// when they would produce the same object files.
 fn build_object_files_cache_hash(
     program: &Program,
     config: &Configuration,
@@ -488,9 +491,9 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
-// The hash naming the cache of "build_object_files", or `None` after warning that it could not be
-// calculated. The hash is the cache's file name, so without it the cache can be neither read nor
-// written.
+/// The hash naming a build's object files cache, or `None` after warning that it could not be
+/// calculated. The hash is the cache's file name, so a build that lacks it goes on without the
+/// cache.
 fn build_object_files_cache_hash_or_warn(
     program: &Program,
     config: &Configuration,
@@ -501,9 +504,9 @@ fn build_object_files_cache_hash_or_warn(
     )
 }
 
-// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
-// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
-// position-independent.
+/// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
+/// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
+/// position-independent.
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
@@ -539,9 +542,9 @@ pub(crate) fn get_target_machine(
     }
 }
 
-// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
-// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
-// once it holds a complete object.
+/// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
+/// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
+/// once it holds a complete object.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
     // Create directory if it doesn't exist.
     let dir_path = obj_path.parent().unwrap();
@@ -582,8 +585,8 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     }
 }
 
-// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
-// optimization pipeline has already run over it.
+/// Write `module`'s LLVM-IR to a text file whose name records the module and whether the LLVM
+/// optimization pipeline has already run over it.
 fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
@@ -662,7 +665,7 @@ fn add_attribute_to_defined_functions<'c>(module: &Module<'c>, attribute_name: &
     }
 }
 
-// Build exported c functions.
+/// Emit the C entry point of each `FFI_EXPORT` statement.
 fn build_exported_c_functions<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     export_stmts: &[ExportStatement],

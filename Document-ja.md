@@ -970,7 +970,7 @@ type Product = box struct { price: I64, sold: Bool };
 
 ### ユニオン
 
-ユニオンはデフォルトでアンボックス型です。ボックスユニオン型を定義するには、`struct`の前に`box`指定子を記述します。
+ユニオンはデフォルトでアンボックス型です。ボックスユニオン型を定義するには、`union`の前に`box`指定子を記述します。
 
 ```
 type Weight = box union { pound: I64, kilograms: I64 };
