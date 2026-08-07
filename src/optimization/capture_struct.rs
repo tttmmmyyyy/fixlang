@@ -17,9 +17,11 @@ use crate::{
 use std::sync::Arc;
 
 // The unboxed struct that carries a lambda's captured environment across the call to its lifted
-// global function. The type constructor is named `{prefix}<{signature}>`, where `signature` encodes
-// the captured fields; two captures with identical fields therefore share one type constructor,
-// while callers using different prefixes keep their capture structs distinct.
+// global function.
+//
+// The type constructor is named after the function the capture struct is built for, so that a value
+// of it says which function consumes it. Two lambdas capturing the same names at the same types are
+// distinct here, which is what lets a reader of the type answer "what do I call this with".
 #[derive(Clone)]
 pub struct CaptureStruct {
     pub tycon: Arc<TyCon>,
@@ -37,16 +39,20 @@ impl CaptureStruct {
     //
     // # Arguments
     // * `prefix` - the head of the type constructor's name, which keeps the capture structs of one
-    //   caller distinct from those of another that captures the same fields.
+    //   caller distinct from those of another.
+    // * `owner` - the function this capture struct is built for, which the name is made unique by.
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
-    pub fn new(prefix: &str, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
+    pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let signature = fields
             .iter()
             .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
             .collect::<Vec<_>>()
             .join(",");
         let tycon = Arc::new(TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("{}<{}>", prefix, signature)),
+            name: FullName::from_strs(
+                &[STD_NAME],
+                &format!("{}@{}<{}>", prefix, owner.to_string(), signature),
+            ),
         });
         let tycon_info = TyConInfo {
             kind: kind_star(),
@@ -79,21 +85,6 @@ impl CaptureStruct {
                 .collect(),
         )
         .set_type(self.ty.clone())
-    }
-
-    // The captured names paired with their types, in the order the struct holds them.
-    pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
-        &self.fields
-    }
-
-    // The same capture struct with the type of one field narrowed, as happens when the lambda in
-    // that field turns out to be a known one and is threaded through as its capture list instead of
-    // as a closure. The prefix has to be given again because the type constructor's name is built
-    // from it and from the fields.
-    pub fn with_field_type(&self, prefix: &str, field: usize, ty: Arc<TypeNode>) -> Self {
-        let mut fields = self.fields.clone();
-        fields[field].1 = ty;
-        CaptureStruct::new(prefix, &fields)
     }
 
     // Pattern destructuring the capture struct back into its original captured names.
