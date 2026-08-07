@@ -1234,33 +1234,65 @@ impl TypeNode {
         in_place: &[Arc<TypeNode>],
         across_pointers: &[Arc<TypeNode>],
     ) -> Option<String> {
-        // A function value is a pair of pointers whatever it takes and returns, so its size is
-        // settled here. Every function type shares one type constructor, so comparing two of them
-        // would take the sizes of unrelated functions for a type growing without end.
-        if self.is_closure() || self.is_funptr() {
-            return None;
-        }
-        // A type whose layout is asked for has been instantiated, so a type constructor heads it;
-        // `ty_to_object_ty` could not say what the fields of a type variable are either.
-        let tycon = self.toplevel_tycon().unwrap_or_else(|| {
-            unreachable!(
-                "`{}` heads its layout with no type constructor",
-                self.to_string()
-            )
-        });
         if let Some(i) = in_place.iter().position(|ancestor| ancestor == self) {
             let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
             return Some(self.no_size_report(&in_place[i..], cause));
         }
-        let larger_than = |ancestor: &Arc<TypeNode>| {
-            ancestor.toplevel_tycon().as_deref() == Some(tycon.as_ref())
-                && self.count_type_atoms() > ancestor.count_type_atoms()
+        // The same type constructor with arguments that have grown: the fields that led from that
+        // one here lead on to a larger one again. A type merely appearing inside another (`Tree`
+        // inside `(Tree, Tree)`) is how an ordinary recursive type is written, and the walk ends
+        // there by meeting `Tree` a second time.
+        let mine = self.flatten_type_application();
+        let grows_from = |ancestor: &Arc<TypeNode>| {
+            if ancestor == self {
+                return false;
+            }
+            let theirs = ancestor.flatten_type_application();
+            theirs.len() == mine.len()
+                && theirs[0] == mine[0]
+                && theirs[1..]
+                    .iter()
+                    .zip(mine[1..].iter())
+                    .all(|(theirs, mine)| theirs.embeds_in(mine))
         };
-        if let Some(i) = across_pointers.iter().position(|a| larger_than(a)) {
+        if let Some(i) = across_pointers.iter().position(|a| grows_from(a)) {
             let cause = "its fields reach ever larger types".to_string();
             return Some(self.no_size_report(&across_pointers[i..], cause));
         }
         None
+    }
+
+    /// Whether this type is embedded in `other`: it appears there with its own shape intact, with
+    /// more type around it or inside its arguments. An argument grown this way is what tells a type
+    /// reached again at a larger argument from one reached at a smaller or unrelated one, which a
+    /// count of symbols cannot tell apart.
+    fn embeds_in(self: &Arc<TypeNode>, other: &Arc<TypeNode>) -> bool {
+        // Inside one of `other`'s parts.
+        let inside = match &other.ty {
+            Type::TyApp(fun, arg) => self.embeds_in(fun) || self.embeds_in(arg),
+            Type::AssocTy(_, args) => args.iter().any(|arg| self.embeds_in(arg)),
+            Type::TyVar(_) | Type::TyCon(_) => false,
+        };
+        if inside {
+            return true;
+        }
+        // The same shape at the top, each part embedded in the part facing it.
+        match (&self.ty, &other.ty) {
+            (Type::TyVar(mine), Type::TyVar(theirs)) => mine.name == theirs.name,
+            (Type::TyCon(mine), Type::TyCon(theirs)) => mine == theirs,
+            (Type::TyApp(my_fun, my_arg), Type::TyApp(their_fun, their_arg)) => {
+                my_fun.embeds_in(their_fun) && my_arg.embeds_in(their_arg)
+            }
+            (Type::AssocTy(mine, my_args), Type::AssocTy(theirs, their_args)) => {
+                mine == theirs
+                    && my_args.len() == their_args.len()
+                    && my_args
+                        .iter()
+                        .zip(their_args.iter())
+                        .all(|(mine, theirs)| mine.embeds_in(theirs))
+            }
+            _ => false,
+        }
     }
 
     /// The report for a type with no size: what its fields do, the way down to it from the type that
@@ -1296,18 +1328,6 @@ impl TypeNode {
             "`{}` has no size: {}{}. {}",
             descent[0], cause, way_down, remedy,
         )
-    }
-
-    /// The number of type constructors and type variables this type is built from.
-    fn count_type_atoms(&self) -> usize {
-        match &self.ty {
-            Type::TyVar(_) => 1,
-            Type::TyCon(_) => 1,
-            Type::TyApp(fun, arg) => fun.count_type_atoms() + arg.count_type_atoms(),
-            Type::AssocTy(_, args) => {
-                1 + args.iter().map(|arg| arg.count_type_atoms()).sum::<usize>()
-            }
-        }
     }
 
     /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by

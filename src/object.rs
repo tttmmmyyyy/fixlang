@@ -1625,14 +1625,6 @@ pub fn no_layout_reason(
                     let in_place = elem_ty.is_unbox(type_env);
                     held.push((elem_ty, in_place));
                 }
-                ObjectFieldType::LambdaFunction(fn_ty) => {
-                    // What a function takes and returns is laid out where the function is compiled,
-                    // which is outside this object.
-                    for param_ty in fn_ty.get_lambda_srcs() {
-                        held.push((param_ty, false));
-                    }
-                    held.push((fn_ty.get_lambda_dst(), false));
-                }
                 _ => {}
             }
         }
@@ -1653,6 +1645,29 @@ pub fn no_layout_reason(
         across_pointers.pop();
         in_place.pop();
         reason
+    }
+    // A function value is a pair of pointers, but the types it takes and returns are laid out where
+    // the function is compiled. A function type reaching here is one the program has a value of, so
+    // that function is compiled and its signature laid out.
+    if ty.is_closure() || ty.is_funptr() {
+        let mut reason = None;
+        for signature_ty in ty
+            .get_lambda_srcs()
+            .into_iter()
+            .chain([ty.get_lambda_dst()])
+        {
+            reason = walk(
+                &signature_ty,
+                type_env,
+                &mut vec![],
+                &mut vec![ty.clone()],
+                checked,
+            );
+            if reason.is_some() {
+                break;
+            }
+        }
+        return reason;
     }
     walk(ty, type_env, &mut vec![], &mut vec![], checked)
 }

@@ -7750,6 +7750,43 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type constructor reached again at an unrelated argument still has a size: laying out `Array E`
+/// needs `E`, which needs the `Array (I64, I64)` it holds, and there it ends.
+#[test]
+pub fn test_array_of_a_struct_holding_an_array() {
+    let source = r##"
+        module Main;
+        type E = unbox struct { a : Array (I64, I64) };
+
+        main : IO ();
+        main = (
+            let arr : Array E = [ E { a : [(1, 2)] } ];
+            assert_eq(|_|"", arr.@(0).@a.@(0).@0, 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A union variant holding a function keeps two pointers, so the types that function would take are
+/// laid out only where such a function is compiled — here the program makes none.
+#[test]
+pub fn test_function_variant_of_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { b : Bad, n : I64 };
+        type Holder = box union { none : (), f : Bad -> I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder::none();
+            assert_eq(|_|"", h.is_none, true);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// A function value is a pair of pointers, but what it takes and returns is laid out where the
 /// function is compiled. Here a field accessor is the only place the type is named at all.
 #[test]
