@@ -235,7 +235,7 @@ impl ExprNode {
         }
     }
 
-    // The type constructor and fields of a struct construction, or `None` for anything else.
+    // The type constructor and fields of a struct construction.
     pub fn destructure_make_struct(
         &self,
     ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<Span>, Arc<ExprNode>)>)> {

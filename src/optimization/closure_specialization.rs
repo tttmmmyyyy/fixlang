@@ -167,6 +167,7 @@ struct Slot {
 }
 
 impl Slot {
+    // The way in through the argument itself, at the given position.
     fn arg(arg: usize) -> Self {
         Slot { arg, field: None }
     }
@@ -238,18 +239,22 @@ impl Tree {
 // An empty substitution names the function itself.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 struct UnitKey {
+    // The function the copy is made from.
     origin: FullName,
-    // Slots in ascending order, so that the name below is a function of the key alone.
+    // Slots in ascending order, so that `name` is a function of the key alone.
     subst: Vec<(Slot, Tree)>,
 }
 
 impl UnitKey {
+    // The key of the copy of `origin` whose ways in receive the given values.
     fn new(origin: FullName, subst: Map<Slot, Tree>) -> Self {
         let mut subst = subst.into_iter().collect::<Vec<_>>();
         subst.sort_by_key(|(slot, _)| *slot);
         UnitKey { origin, subst }
     }
 
+    // The name the copy carries: the origin's, with a hash of the substitution appended. The copy
+    // that substitutes nothing is the function itself and keeps the origin's name.
     fn name(&self) -> FullName {
         if self.subst.is_empty() {
             return self.origin.clone();
@@ -333,6 +338,7 @@ struct LiftedLambdas {
 }
 
 impl LiftedLambdas {
+    // Record a lambda just lifted, under the name of the global function it became.
     fn insert(&mut self, name: FullName, cap: CaptureStruct, func_ty: Arc<TypeNode>) {
         self.record_capture_list(&cap, &Tree::leaf(name.clone()));
         self.lambdas.insert(name, LiftedLambda { cap, func_ty });
@@ -367,12 +373,16 @@ impl LiftedLambdas {
         cap
     }
 
+    // Remember the value a capture list of `cap`'s type constructor carries, and hold that type
+    // constructor until it is registered.
     fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &Tree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons
             .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
     }
 
+    // Take the type constructors minted so far, for the caller to register into the program's type
+    // environment.
     fn take_new_tycons(&mut self) -> Map<TyCon, TyConInfo> {
         mem::take(&mut self.new_tycons)
     }
@@ -884,6 +894,7 @@ struct ClosureSpecializationVisitor {
 // something to do again, and the two would take turns undoing each other.
 #[derive(Clone)]
 struct Known {
+    // Which lambda the value is, and which of its capture fields are themselves known.
     tree: Tree,
     // An expression yielding the bare capture list, evaluable wherever the value itself is.
     cap_list: Arc<ExprNode>,
@@ -893,6 +904,7 @@ struct Known {
 }
 
 impl Known {
+    // A known value carried by the bare capture list `cap_list`.
     fn bare(tree: Tree, cap_list: Arc<ExprNode>) -> Self {
         Known {
             tree,
@@ -945,7 +957,7 @@ impl ClosureSpecializationVisitor {
     }
 
     // The expression a known value is carried by: the bare capture list, or the closure wrapping it.
-    // A wrap names the copy of the lambda that receives the capture list as it now is (R3).
+    // A wrap names the copy of the lambda that receives the capture list as it now is.
     fn value_expr(&self, known: &Known) -> Arc<ExprNode> {
         if known.is_bare {
             return known.cap_list.clone();
@@ -1005,7 +1017,7 @@ impl ClosureSpecializationVisitor {
 
     // Narrow the capture list a known value is carried by, where it is built here: a field the table
     // is willing to specialize on takes the capture list of the value it holds, in place of the
-    // closure. R1.
+    // closure.
     //
     // Creating a narrowed value asks for the copy of the lambda that receives it, so that the value
     // can be wrapped back into a closure wherever one is called for.
@@ -1338,6 +1350,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Lift a lambda written among the arguments, name the copy of a lambda a call through a known
+    // value reaches, and specialize the called function on the arguments whose identity is known,
+    // where it is a specializable global.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -1360,9 +1375,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             return StartVisitResult::ReplaceAndRevisit(apply(func, lifted_args));
         }
 
-        // R3: a capture list reached through the lambda that consumes it names the copy of that
-        // lambda which receives the capture list as it now is. This covers the closure a capture
-        // list is wrapped into and a call made through such a closure alike.
+        // A capture list reached through the lambda that consumes it names the copy of that lambda
+        // which receives the capture list as it now is. This covers the closure a capture list is
+        // wrapped into and a call made through such a closure alike.
         if func.is_var() && !args.is_empty() {
             if let Some(known) = self.known_value(&args[0]) {
                 let called = func.get_var().name.clone();
@@ -1397,7 +1412,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             return StartVisitResult::VisitChildren;
         };
 
-        // R2: an argument whose identity is known is handed over as its bare capture list, where the
+        // An argument whose identity is known is handed over as its bare capture list, where the
         // table is willing to copy the function for that way in and the stopping rule allows it.
         let mut pinned = self.pinned.clone();
         let mut specialized_args = Map::default();
@@ -1419,7 +1434,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 continue;
             }
             // The value stays a closure here, but a narrowed capture list needs the copy that
-            // receives it named. R3.
+            // receives it named.
             if !known.is_bare && !self.is_up_to_date(arg, &known) {
                 new_args[i] = self.value_expr(&known);
                 changed = true;
@@ -1490,6 +1505,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::changed(expr)
     }
 
+    // Lift a lambda bound by this `let`, and record the bound name in `local_decap_lambdas` so that
+    // later uses of it are read as the value the binding now holds. A binding whose value already
+    // has a known identity passes that reading on to the new name.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
