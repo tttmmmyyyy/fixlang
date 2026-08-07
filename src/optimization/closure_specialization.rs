@@ -285,241 +285,169 @@ fn origin_of(origins: &Origins, name: &FullName) -> FullName {
 // copy again continues the same chain rather than starting a fresh one.
 type Pinned = Map<(FullName, Slot, FullName), FullName>;
 
-// Run the optimization over `prg` until it reaches a fixed point: each round can leave lambdas
-// inside the functions it has just specialized, which the next round lifts in turn.
+// Run the optimization over `prg`, in three phases.
+//
+// Lifting runs to completion first, so that the set of functions a specialization can be keyed on is
+// settled before anything is keyed on it. The table of what is worth specializing is then solved
+// once over the program lifting left behind. Only then are copies made, from that same program, so
+// that a copy's body names the functions the table answers for.
 pub fn run(prg: &mut Program, show_build_times: bool) {
-    let mut stable_symbols = Set::default();
-    let lifted_lambdas = Rc::new(RefCell::new(Map::default()));
-    let mut origins = Origins::default();
-    let mut pinned_of: Map<FullName, Pinned> = Map::default();
-    while run_one(
-        prg,
-        &mut stable_symbols,
-        &lifted_lambdas,
-        &mut origins,
-        &mut pinned_of,
-        show_build_times,
-    ) {}
+    let _sw = StopWatch::new("closure_specialization::run", show_build_times);
+
+    let lifted = Rc::new(RefCell::new(Map::default()));
+    lift_all(prg, &lifted, show_build_times);
+
+    let specializable_funcs = Rc::new(specializable_functions(&prg.symbols));
+    realize_all(prg, &lifted, specializable_funcs, show_build_times);
 }
 
-// Run optimization on all symbols.
-// If any optimization is performed, return `true`.
-//
-// * `stable_symbols`: A set of symbols that are known to be stable (i.e., will not be optimized further).
-// * `lifted_lambdas`: Every lambda decapturing has lifted so far, by the name of the function it became.
-// * `origins`: What each function generated so far is a copy of.
-// * `pinned_of`: The pinning table each function generated so far carries.
-fn run_one(
+// Lift every lambda in the program to a global function, until lifting one leaves nothing more to
+// lift. A lambda lifted here is a global function of its own, which the next pass over the symbols
+// walks in turn.
+fn lift_all(
     prg: &mut Program,
-    stable_symbols: &mut Set<FullName>,
-    lifted_lambdas: &Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
-    origins: &mut Origins,
-    pinned_of: &mut Map<FullName, Pinned>,
+    lifted: &Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
     show_build_times: bool,
-) -> bool {
-    let _sw = StopWatch::new("closure_specialization::run_one", show_build_times);
+) {
+    let _sw = StopWatch::new("closure_specialization::lift_all", show_build_times);
 
-    // Whether optimization has been performed on any symbol.
-    let mut changed = false;
+    // Nothing is specializable during this phase, so the walk only lifts: a value whose identity is
+    // known is wrapped back into a closure wherever it is used, and no request is raised.
+    let nothing_specializable = Rc::new(Map::default());
+    let mut stable = Set::default();
 
-    // Compute the set of specializable functions.
-    let specializable_funcs = specializable_functions(&prg.symbols);
-    let specializable_funcs = Rc::new(specializable_funcs);
+    loop {
+        let mut changed = false;
+        let symbols = mem::take(&mut prg.symbols);
+        let mut new_symbols: Map<FullName, Symbol> = Map::default();
+        let mut new_tycons = Map::default();
+        let mut global_names = symbols.keys().cloned().collect::<Set<_>>();
 
-    // Requests are only ever raised against functions that were present when this round started,
-    // so a snapshot taken here answers every origin lookup the round makes.
-    let origins_snapshot = Rc::new(origins.clone());
-
-    let symbols = mem::take(&mut prg.symbols);
-    let mut new_tycons = Map::default();
-
-    // Create a set of global names
-    let mut global_names = Set::default();
-    for (name, _) in &symbols {
-        global_names.insert(name.clone());
-    }
-
-    // Perform decapturing optimization on each symbol
-    let mut new_symbols: Map<FullName, Symbol> = Map::default();
-    let mut specializations: Vec<SpecializationRequest> = Vec::new();
-
-    let sw = StopWatch::new(
-        "closure_specialization::run_one first loop",
-        show_build_times,
-    );
-
-    for (name, mut sym) in symbols {
-        // Skip symbols that are already known to be stable and will not change.
-        if stable_symbols.contains(&name) {
-            new_symbols.insert(name.clone(), sym.clone());
-            continue;
-        }
-
-        let mut visitor = ClosureSpecializationVisitor::new(
-            name.clone(),
-            specializable_funcs.clone(),
-            lifted_lambdas.clone(),
-            global_names.clone(),
-            origins_snapshot.clone(),
-            pinned_of.get(&name).cloned().unwrap_or_default(),
-        );
-
-        // Lift the lambdas of this symbol and record the specializations they enable.
-        let expr = sym.expr.as_ref().unwrap();
-        let sw = StopWatch::new(
-            "closure_specialization::run_one pull_let::run_on_expr",
-            show_build_times,
-        );
-        let expr = pull_let::run_on_expr(expr); // Increase the number of places decapturing applies to.
-        drop(sw);
-
-        let sw = StopWatch::new(
-            &format!(
-                "closure_specialization::run_one unique_local_names::run_on_expr on {}",
-                &name.to_string()
-            ),
-            show_build_times,
-        );
-        let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Ensure the preconditions decapturing is implemented against.
-        drop(sw);
-
-        let sw = StopWatch::new(
-            &format!(
-                "closure_specialization::run_one visitor.traverse on {}",
-                &name.to_string()
-            ),
-            show_build_times,
-        );
-        let trav_res = visitor.traverse(&expr);
-        drop(sw);
-
-        if !trav_res.changed {
-            // When no optimization is performed,
-            stable_symbols.insert(name.clone());
-            new_symbols.insert(name.clone(), sym.clone());
-            continue;
-        }
-
-        changed = true;
-        sym.expr = Some(trav_res.expr);
-        specializations.append(&mut visitor.required_specializations); // Specialization requests are processed later
-
-        // A lambda lifted out of this symbol carries on the chain the symbol was walking, so the
-        // requests raised from inside it are judged against the same pinning table.
-        for decap_lam in &visitor.decap_lambdas {
-            pinned_of.insert(decap_lam.lambda_func_name.clone(), visitor.pinned.clone());
-        }
-        register_decaptured_lambdas(
-            visitor.decap_lambdas,
-            &mut new_symbols,
-            &mut global_names,
-            &mut new_tycons,
-        );
-
-        new_symbols.insert(name.clone(), sym.clone());
-    }
-    drop(sw);
-
-    let mut symbols = new_symbols;
-
-    // The lambdas the first stage lifted are not in the tables computed before it ran, and what
-    // reaches their capture slots is known only to the walk about to happen: a capture list built
-    // with a lambda in one of its fields is wrapped back into a closure the moment that walk passes
-    // it by, and the next round finds nothing left to read. So the tables are solved again, over
-    // the program the first stage left behind.
-    let specializable_funcs = Rc::new(specializable_functions(&symbols));
-
-    let sw = StopWatch::new(
-        "closure_specialization::run_one second loop",
-        show_build_times,
-    );
-    // Process specialization requests
-    while specializations.len() > 0 {
-        let mut new_specializations = Vec::new();
-        for specialize_info in &specializations {
-            // Generate the name and type of the specialized function
-            let specialized_func_name = specialize_info.specialized_func_name();
-            let specialized_func_ty = specialize_info.specialized_func_ty(&lifted_lambdas.borrow());
-
-            // If it is already implemented, skip
-            if symbols.contains_key(&specialized_func_name) {
+        for (name, mut sym) in symbols {
+            if stable.contains(&name) {
+                new_symbols.insert(name, sym);
                 continue;
             }
-
-            let expr = symbols
-                .get(&specialize_info.org_func_name)
-                .unwrap()
-                .expr
-                .as_ref()
-                .unwrap()
-                .clone();
-            let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing optimization
-
-            // Tell the walk what each specialized slot holds, by the local name it arrives under.
-            let mut local_decap_lambdas = Map::default();
-            let (args, _) = expr.destructure_lam_sequence();
-            for (slot, decap_lam) in &specialize_info.specialized_args {
-                assert!(slot.field.is_none());
-                assert!(slot.arg < args.len());
-                assert_eq!(args[slot.arg].len(), 1);
-                local_decap_lambdas.insert(args[slot.arg][0].name.clone(), decap_lam.clone());
-            }
-
-            // Perform specialization
             let mut visitor = ClosureSpecializationVisitor::new(
-                specialized_func_name.clone(),
-                specializable_funcs.clone(),
-                lifted_lambdas.clone(),
+                name.clone(),
+                nothing_specializable.clone(),
+                lifted.clone(),
                 global_names.clone(),
-                origins_snapshot.clone(),
-                specialize_info.pinned.clone(),
+                Rc::new(Origins::default()),
+                Pinned::default(),
             );
-            visitor.local_decap_lambdas = local_decap_lambdas;
+            let expr = pull_let::run_on_expr(sym.expr.as_ref().unwrap()); // Increase the number of places decapturing applies to.
+            let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing.
             let trav_res = visitor.traverse(&expr);
-            let expr = trav_res.expr;
-
-            // The copy carries the chain that produced it, and so does anything lifted out of it.
-            origins.insert(
-                specialized_func_name.clone(),
-                origin_of(origins, &specialize_info.org_func_name),
-            );
-            pinned_of.insert(
-                specialized_func_name.clone(),
-                specialize_info.pinned.clone(),
-            );
-            for decap_lam in &visitor.decap_lambdas {
-                pinned_of.insert(
-                    decap_lam.lambda_func_name.clone(),
-                    specialize_info.pinned.clone(),
-                );
+            if !trav_res.changed {
+                stable.insert(name.clone());
+                new_symbols.insert(name, sym);
+                continue;
             }
+            changed = true;
+            sym.expr = Some(trav_res.expr);
             register_decaptured_lambdas(
                 visitor.decap_lambdas,
-                &mut symbols,
+                &mut new_symbols,
                 &mut global_names,
                 &mut new_tycons,
             );
-
-            // Register the specialized function
-            let specialized_func = Symbol {
-                name: specialized_func_name.clone(),
-                generic_name: specialize_info.org_func_name.clone(),
-                ty: specialized_func_ty,
-                expr: Some(expr),
-            };
-            symbols.insert(specialized_func_name.clone(), specialized_func);
-            global_names.insert(specialized_func_name.clone());
-
-            // Register the new specialization requests.
-            new_specializations.append(&mut visitor.required_specializations);
+            new_symbols.insert(name, sym);
         }
-        specializations = new_specializations;
+
+        prg.type_env.add_tycons(new_tycons);
+        prg.symbols = new_symbols;
+        if !changed {
+            return;
+        }
     }
-    drop(sw);
+}
+
+// Make every copy the program asks for, starting from the functions themselves.
+//
+// The bodies every copy is made from are the ones lifting left behind, so a copy names the same
+// functions its original does and the table answers for all of them.
+fn realize_all(
+    prg: &mut Program,
+    lifted: &Rc<RefCell<Map<FullName, DecapturedLambdaInfo>>>,
+    specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
+    show_build_times: bool,
+) {
+    let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
+
+    let bodies = mem::take(&mut prg.symbols);
+    let mut global_names = bodies.keys().cloned().collect::<Set<_>>();
+    let mut new_tycons = Map::default();
+    let mut symbols: Map<FullName, Symbol> = Map::default();
+    let mut origins = Origins::default();
+
+    // Every function stands for the copy of itself that substitutes nothing.
+    let mut queue = bodies
+        .keys()
+        .map(|origin| SpecializationRequest {
+            org_func_name: origin.clone(),
+            org_func_ty: bodies[origin].ty.clone(),
+            specialized_args: Map::default(),
+            pinned: Pinned::default(),
+        })
+        .collect::<VecDeque<_>>();
+
+    while let Some(request) = queue.pop_front() {
+        let name = request.specialized_func_name();
+        if symbols.contains_key(&name) {
+            continue;
+        }
+        let org = &bodies[&request.org_func_name];
+        let expr = unique_local_names::run_on_expr(org.expr.as_ref().unwrap(), Set::default());
+
+        // Tell the walk what each substituted slot holds, by the local name it arrives under.
+        let mut local_decap_lambdas = Map::default();
+        let (args, _) = expr.destructure_lam_sequence();
+        for (slot, tree) in &request.specialized_args {
+            assert!(slot.field.is_none());
+            assert!(slot.arg < args.len());
+            assert_eq!(args[slot.arg].len(), 1);
+            local_decap_lambdas.insert(args[slot.arg][0].name.clone(), tree.clone());
+        }
+
+        origins.insert(name.clone(), request.org_func_name.clone());
+        let mut visitor = ClosureSpecializationVisitor::new(
+            name.clone(),
+            specializable_funcs.clone(),
+            lifted.clone(),
+            global_names.clone(),
+            Rc::new(origins.clone()),
+            request.pinned.clone(),
+        );
+        visitor.local_decap_lambdas = local_decap_lambdas;
+        let trav_res = visitor.traverse(&expr);
+
+        let ty = if request.specialized_args.is_empty() {
+            org.ty.clone()
+        } else {
+            request.specialized_func_ty(&lifted.borrow())
+        };
+        symbols.insert(
+            name.clone(),
+            Symbol {
+                name: name.clone(),
+                generic_name: request.org_func_name.clone(),
+                ty,
+                expr: Some(trav_res.expr),
+            },
+        );
+        global_names.insert(name);
+        register_decaptured_lambdas(
+            visitor.decap_lambdas,
+            &mut symbols,
+            &mut global_names,
+            &mut new_tycons,
+        );
+        queue.extend(visitor.required_specializations);
+    }
 
     prg.type_env.add_tycons(new_tycons);
     prg.symbols = symbols;
-    changed
 }
 
 // Register the global function each decaptured lambda became into `symbols` and `global_names`, and
@@ -817,6 +745,32 @@ impl ClosureSpecializationVisitor {
             ty = type_fun(dom.clone(), ty);
         }
         expr_var(tree.unit().name(), None).set_type(ty)
+    }
+
+    // The value `expr` carries, where its identity is known, together with the bare capture list it
+    // is carried by.
+    //
+    // Identity arrives in two shapes: a local this walk was told about, and a capture list wrapped
+    // back into a closure by the function that receives it, which is what lifting leaves behind
+    // wherever it could not say more.
+    fn known_value(&self, expr: &Arc<ExprNode>) -> Option<(Tree, Arc<ExprNode>)> {
+        if expr.is_var() {
+            let tree = self.local_decap_lambdas.get(&expr.get_var().name)?.clone();
+            let cap_list_ty = self.cap_of(&tree).ty;
+            return Some((tree, expr.set_type(cap_list_ty)));
+        }
+        if !expr.is_app() {
+            return None;
+        }
+        let (func, args) = expr.destructure_app();
+        if args.len() != 1 || !func.is_var() {
+            return None;
+        }
+        let lambda = func.get_var().name.clone();
+        if !self.lifted.borrow().contains_key(&lambda) {
+            return None;
+        }
+        Some((Tree::leaf(lambda), args[0].clone()))
     }
 
     // Whether `expr` is a lambda whose captured environment can be read off it, so that it can be
@@ -1151,15 +1105,12 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 continue;
             }
             // Get or generate decaptured lambda information.
-            if arg.is_var() {
-                let arg_name = &arg.get_var().name;
-                if let Some(tree) = self.local_decap_lambdas.get(arg_name).cloned() {
-                    if !self.commit(&mut pinned, &func_origin, slot, &tree.lambda) {
-                        continue;
-                    }
-                    decaptured_args[i] = arg.set_type(self.cap_of(&tree).ty);
-                    specialized_args.insert(slot, tree);
+            if let Some((tree, cap_list)) = self.known_value(arg) {
+                if !self.commit(&mut pinned, &func_origin, slot, &tree.lambda) {
+                    continue;
                 }
+                decaptured_args[i] = cap_list;
+                specialized_args.insert(slot, tree);
             } else if ClosureSpecializationVisitor::decapturable(arg) {
                 // TODO: maybe we don't need to handle this case, because pull-let transformation converts this argument to a variable?
                 let (tree, expr) = self.decapture_lambda(arg.clone(), state); // Visits `arg` inside this call
