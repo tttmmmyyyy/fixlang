@@ -1588,7 +1588,7 @@ pub fn ty_to_object_ty(
 /// * `checked` - the types walked so far. Whether a type has a size is a property of that type, so
 ///   one it holds is passed over; the ways down to it are compared against it first, which is what
 ///   catches a type reaching itself.
-pub fn no_layout_reason(
+pub fn no_size_reason(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
     checked: &mut Set<Arc<TypeNode>>,
@@ -1603,7 +1603,7 @@ pub fn no_layout_reason(
         across_pointers: &mut Vec<Arc<TypeNode>>,
         checked: &mut Set<Arc<TypeNode>>,
     ) -> Option<String> {
-        if let Some(msg) = ty.no_layout_message(in_place, across_pointers) {
+        if let Some(msg) = ty.no_size_cause(in_place, across_pointers) {
             return Some(msg);
         }
         if !checked.insert(ty.clone()) {

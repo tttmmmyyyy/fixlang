@@ -1229,14 +1229,14 @@ impl TypeNode {
     /// * `across_pointers` - every type the layout came through, the ones behind a pointer included.
     ///   Reaching a larger type of the same type constructor there has no end either: the same
     ///   fields lead from that one to a larger one again.
-    pub(crate) fn no_layout_message(
+    pub(crate) fn no_size_cause(
         self: &Arc<TypeNode>,
         in_place: &[Arc<TypeNode>],
         across_pointers: &[Arc<TypeNode>],
     ) -> Option<String> {
         if let Some(i) = in_place.iter().position(|ancestor| ancestor == self) {
             let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
-            return Some(self.no_size_report(&in_place[i..], cause));
+            return Some(self.format_no_size_error(&in_place[i..], cause));
         }
         // A function value is a pair of pointers whatever it takes and returns, so its size is
         // settled. Every function type shares the `->` constructor, so the growth of one function's
@@ -1263,7 +1263,7 @@ impl TypeNode {
         };
         if let Some(i) = across_pointers.iter().position(grows_from) {
             let cause = "its fields reach ever larger types".to_string();
-            return Some(self.no_size_report(&across_pointers[i..], cause));
+            return Some(self.format_no_size_error(&across_pointers[i..], cause));
         }
         None
     }
@@ -1302,7 +1302,11 @@ impl TypeNode {
 
     /// The report for a type with no size: what its fields do, the way down to it from the type that
     /// shows it, and which types the fix is among.
-    fn no_size_report(self: &Arc<TypeNode>, ancestors: &[Arc<TypeNode>], cause: String) -> String {
+    fn format_no_size_error(
+        self: &Arc<TypeNode>,
+        ancestors: &[Arc<TypeNode>],
+        cause: String,
+    ) -> String {
         let descent = ancestors
             .iter()
             .chain([self])

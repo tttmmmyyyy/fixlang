@@ -34,7 +34,7 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
-use crate::object::no_layout_reason;
+use crate::object::no_size_reason;
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -1845,7 +1845,7 @@ impl Program {
                             node.expr.stringify().to_string()
                         )
                     });
-                    if let Some(msg) = no_layout_reason(ty, &type_env, &mut checked) {
+                    if let Some(msg) = no_size_reason(ty, &type_env, &mut checked) {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }
                 })
@@ -1856,7 +1856,7 @@ impl Program {
         // such a symbol has no source location of its own to report at.
         for name in &symbol_names {
             let symbol = &self.symbols[*name];
-            if let Some(msg) = no_layout_reason(&symbol.ty, &type_env, &mut checked) {
+            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut checked) {
                 let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
                 errors.append(Errors::from_msg_srcs(msg, &[&source]));
             }

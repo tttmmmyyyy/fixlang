@@ -7677,7 +7677,7 @@ pub fn test_circular_type_definition() {
 /// A field of an unboxed type is laid out in place, so a cycle of such fields describes a value of
 /// no size, which the compiler reports rather than following the cycle forever.
 #[test]
-pub fn test_circular_unboxed_types_have_no_layout() {
+pub fn test_circular_unboxed_types_have_no_size() {
     let source = r##"
         module Main;
         type A = unbox struct { b : B, n : I64 };
@@ -7700,7 +7700,7 @@ pub fn test_circular_unboxed_types_have_no_layout() {
 /// place, so the payload's fields lead back to the union. This is the declaration the manual gives
 /// as the one to write with `box` instead.
 #[test]
-pub fn test_circular_unboxed_union_has_no_layout() {
+pub fn test_circular_unboxed_union_has_no_size() {
     let source = r##"
         module Main;
         type Tree = unbox union { leaf : (), node : (Tree, Tree) };
@@ -7718,10 +7718,10 @@ pub fn test_circular_unboxed_union_has_no_layout() {
     );
 }
 
-/// The declaration `test_circular_unboxed_union_has_no_layout` rejects does have a layout once the
+/// The declaration `test_circular_unboxed_union_has_no_size` rejects does have a layout once the
 /// union is `box`, since a pointer bounds it there.
 #[test]
-pub fn test_circular_boxed_union_has_a_layout() {
+pub fn test_circular_boxed_union_has_a_size() {
     let source = r##"
         module Main;
         type Tree = box union { leaf : (), node : (Tree, Tree) };
@@ -7817,7 +7817,7 @@ pub fn test_growing_type_with_two_arguments() {
 /// Growth is read argument by argument, so a type constructor reached again with one argument
 /// unrelated to the first still has a size, however the other argument compares.
 #[test]
-pub fn test_two_argument_constructor_with_an_unrelated_argument() {
+pub fn test_two_argument_constructor_with_an_unrelated_argument_compiles() {
     let source = r##"
         module Main;
         type K a b = unbox struct { v : a, w : b };
@@ -7858,7 +7858,7 @@ pub fn test_making_a_function_over_a_type_with_no_size() {
 /// A struct holding a callback that takes the struct itself has a size: the field is a pair of
 /// pointers, whatever the callback's own type mentions.
 #[test]
-pub fn test_struct_holding_a_callback_over_itself() {
+pub fn test_struct_holding_a_callback_over_itself_compiles() {
     let source = r##"
         module Main;
         type S = unbox struct { f : (S, I64) -> I64 };
@@ -7879,7 +7879,7 @@ pub fn test_struct_holding_a_callback_over_itself() {
 /// A type constructor reached again at an unrelated argument still has a size: laying out `Array E`
 /// needs `E`, which needs the `Array (I64, I64)` it holds, and there it ends.
 #[test]
-pub fn test_array_of_a_struct_holding_an_array() {
+pub fn test_array_of_a_struct_holding_an_array_compiles() {
     let source = r##"
         module Main;
         type E = unbox struct { a : Array (I64, I64) };
@@ -7897,7 +7897,7 @@ pub fn test_array_of_a_struct_holding_an_array() {
 /// A union variant holding a function keeps two pointers, so the types that function would take are
 /// laid out only where such a function is compiled — here the program makes none.
 #[test]
-pub fn test_function_variant_of_a_type_with_no_size() {
+pub fn test_union_variant_holding_a_function_compiles() {
     let source = r##"
         module Main;
         type Bad = unbox struct { b : Bad, n : I64 };
@@ -8025,7 +8025,7 @@ pub fn test_unboxed_cycle_behind_a_boxed_field() {
 /// Unboxed fields that lead to an ever larger type of the same type constructor have no layout
 /// either. The type never repeats here, so the report rests on the type growing.
 #[test]
-pub fn test_growing_unboxed_type_has_no_layout() {
+pub fn test_growing_unboxed_type_has_no_size() {
     let source = r##"
         module Main;
         type P a = unbox struct { x : P (a, a), n : I64 };
@@ -8045,9 +8045,9 @@ pub fn test_growing_unboxed_type_has_no_layout() {
 
 /// Whether a layout exists is decided by the declarations together with the type arguments: `C U`
 /// holds a `C U` in place, while the same declarations with a boxed argument, in
-/// `test_boxed_type_argument_bounds_the_layout`, stop at a pointer.
+/// `test_boxed_type_argument_bounds_the_size`, stop at a pointer.
 #[test]
-pub fn test_unboxed_cycle_closed_by_a_type_argument() {
+pub fn test_unboxed_cycle_closed_by_a_type_argument_has_no_size() {
     let source = r##"
         module Main;
         type U b = unbox struct { y : b, m : I64 };
@@ -8067,11 +8067,11 @@ pub fn test_unboxed_cycle_closed_by_a_type_argument() {
 }
 
 /// A boxed type argument bounds the layout of the same declarations that `C U` cannot lay out in
-/// `test_unboxed_cycle_closed_by_a_type_argument`, so this program compiles. The argument count
+/// `test_unboxed_cycle_closed_by_a_type_argument_has_no_size`, so this program compiles. The argument count
 /// decides the branch at run time, which keeps `depth` — and with it the layout of `C Bx` — in the
 /// program.
 #[test]
-pub fn test_boxed_type_argument_bounds_the_layout() {
+pub fn test_boxed_type_argument_bounds_the_size() {
     let source = r##"
         module Main;
         type Bx b = box struct { y : b, m : I64 };
