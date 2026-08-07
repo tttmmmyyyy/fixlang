@@ -7714,7 +7714,7 @@ pub fn test_circular_unboxed_union_has_no_layout() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "There are circular definitions by unboxed types",
+        "`Main::Tree` -> `(Main::Tree, Main::Tree)` -> `Main::Tree`",
     );
 }
 
@@ -7768,7 +7768,7 @@ pub fn test_unboxed_cycle_behind_a_boxed_field() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "There are circular definitions by unboxed types",
+        "`Main::T` has no size: its unboxed fields reach `Main::T` itself.",
     );
 }
 
@@ -7789,7 +7789,7 @@ pub fn test_growing_unboxed_type_has_no_layout() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Unboxed types nest into ever larger types",
+        "its unboxed fields reach ever larger types",
     );
 }
 
@@ -7812,7 +7812,7 @@ pub fn test_unboxed_cycle_closed_by_a_type_argument() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "There are circular definitions by unboxed types",
+        "`Main::C Main::U` has no size",
     );
 }
 

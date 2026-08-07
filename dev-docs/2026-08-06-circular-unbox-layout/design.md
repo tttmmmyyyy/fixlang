@@ -82,8 +82,8 @@ type P a = unbox struct { x : P (a, a), n : I64 };
 現れる式を指して報告する。
 
 ```
-error: Cannot determine the layout of type `Main::A`. There are circular definitions by unboxed
-types: `Main::A` -> `Main::B` -> `Main::A`. Please change some types to boxed.
+error: `Main::A` has no size: its unboxed fields reach `Main::A` itself (`Main::A` -> `Main::B` ->
+`Main::A`). Make one of these types boxed.
 
 7:6-7:7 in "main.fix",
   |

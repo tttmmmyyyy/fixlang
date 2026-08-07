@@ -1287,22 +1287,40 @@ impl TypeNode {
                 continue;
             }
             let cause = if ancestor == self {
-                "There are circular definitions by unboxed types"
+                format!("its unboxed fields reach `{}` itself", ancestor.to_string())
             } else if self.count_type_atoms() > ancestor.count_type_atoms() {
-                "Unboxed types nest into ever larger types"
+                "its unboxed fields reach ever larger types".to_string()
             } else {
                 continue;
             };
-            let mut descent = unboxed_path[i..]
+            let descent = unboxed_path[i..]
                 .iter()
-                .map(|ty| format!("`{}`", ty.to_string()))
+                .chain([self])
+                .map(|ty| ty.to_string())
                 .collect::<Vec<_>>();
-            descent.push(format!("`{}`", self.to_string()));
+            // A type holding itself directly is the whole story already, so the way down is spelled
+            // out only where it passes through another type.
+            let (way_down, remedy) = if descent.iter().all(|ty| *ty == descent[0]) {
+                (String::new(), format!("Make `{}` boxed.", descent[0]))
+            } else {
+                (
+                    format!(
+                        " ({})",
+                        descent
+                            .iter()
+                            .map(|ty| format!("`{}`", ty))
+                            .collect::<Vec<_>>()
+                            .join(" -> ")
+                    ),
+                    "Make one of these types boxed.".to_string(),
+                )
+            };
             return Some(format!(
-                "Cannot determine the layout of type `{}`. {}: {}. Please change some types to boxed.",
-                self.to_string(),
+                "`{}` has no size: {}{}. {}",
+                ancestor.to_string(),
                 cause,
-                descent.join(" -> "),
+                way_down,
+                remedy,
             ));
         }
         None
