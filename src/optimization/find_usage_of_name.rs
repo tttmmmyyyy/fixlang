@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::ast::{
     expr::ExprNode,
     name::FullName,
-    traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 
 pub enum UsageType {
@@ -43,7 +43,7 @@ impl UsageFinder<'_> {
 
     // Whether an inner binding stands between here and the name being searched for, which makes an
     // occurrence here one about something else.
-    fn shadowed(&self, state: &crate::ast::traverse::VisitState) -> bool {
+    fn shadowed(&self, state: &VisitState) -> bool {
         self.name.is_local() && state.scope.has_value(&self.name.name)
     }
 }
@@ -84,8 +84,8 @@ impl ExprVisitor for UsageFinder<'_> {
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         if self.shadowed(state) {
             return StartVisitResult::VisitChildren;
         }
@@ -197,8 +197,8 @@ impl ExprVisitor for UsageFinder<'_> {
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        state: &mut VisitState,
+    ) -> StartVisitResult {
         if self.shadowed(state) {
             return StartVisitResult::VisitChildren;
         }
