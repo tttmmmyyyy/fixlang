@@ -7750,9 +7750,8 @@ pub fn test_unused_circular_unboxed_types_compile() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A boxed field settles whether a type is fully unboxed before the walk that answers it reaches
-/// the field holding the type itself, so this type is reported by the reference-counting passes'
-/// own descent through the fields.
+/// A boxed field is a pointer, so the walk passes over it and goes on to the field that holds the
+/// type itself. A type whose fields are read in that order has no size all the same.
 #[test]
 pub fn test_unboxed_cycle_behind_a_boxed_field() {
     let source = r##"

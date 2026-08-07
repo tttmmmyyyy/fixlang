@@ -674,36 +674,24 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// The LLVM struct a value of `ty` is laid out as.
-    ///
-    /// A kept answer is returned without checking for a cycle of unboxed types: an entry exists
-    /// only where the layout completed, and a type that reaches itself through unboxed fields
-    /// completes by no path, so such a type is never kept.
     pub fn struct_type_of(&mut self, ty: &Arc<TypeNode>) -> StructType<'c> {
         if let Some(struct_ty) = self.struct_types.get(ty) {
             return *struct_ty;
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
-        let struct_ty = object_ty.to_struct_type(self, &[]);
+        let struct_ty = object_ty.to_struct_type(self);
         self.struct_types.insert(ty.clone(), struct_ty);
         struct_ty
     }
 
     /// The LLVM type a value of `ty` takes where it is embedded in another value: the struct it is
     /// laid out as when it is unboxed, a pointer when it is boxed.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`; a kept answer is returned without
-    ///   consulting it, for the reason given at `struct_type_of`.
-    pub fn embedded_type_of(
-        &mut self,
-        ty: &Arc<TypeNode>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> BasicTypeEnum<'c> {
+    pub fn embedded_type_of(&mut self, ty: &Arc<TypeNode>) -> BasicTypeEnum<'c> {
         if let Some(embedded_ty) = self.embedded_types.get(ty) {
             return *embedded_ty;
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
-        let embedded_ty = object_ty.to_embedded_type(self, unboxed_path);
+        let embedded_ty = object_ty.to_embedded_type(self);
         self.embedded_types.insert(ty.clone(), embedded_ty);
         embedded_ty
     }
@@ -2674,7 +2662,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         let cap_obj = self.get_scoped_obj_noretain(cap_name);
         let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
-        let cap_obj_struct_ty = cap_obj_ty.to_struct_type(self, &[]);
+        let cap_obj_struct_ty = cap_obj_ty.to_struct_type(self);
         let cap_val = cap_obj.extract_field_as(
             self,
             cap_obj_struct_ty,

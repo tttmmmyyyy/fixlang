@@ -15,7 +15,7 @@ use crate::constants::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
-use crate::error::{panic_with_msg, Errors};
+use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
@@ -1195,22 +1195,10 @@ impl TypeNode {
 
     // Check if `self` is fully unboxed.
     // Here, a type is fully unboxed if and only if it does not contain any boxed type.
+    //
+    // A type reaching itself through unboxed fields has no layout, and this walk would not end on
+    // one; `Program::validate_layouts` rejects such a type before any of this runs.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
-        self.is_fully_unboxed_inner(type_env, &mut vec![])
-    }
-
-    /// Whether this type contains no boxed type, given the types it is nested in.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - the types this one is nested in, outermost first, which
-    ///   `panic_if_no_layout` reads to report a type that has no layout. Deciding whether a type
-    ///   is fully unboxed walks the fields of unboxed types, and that walk ends only for a type
-    ///   whose layout exists.
-    fn is_fully_unboxed_inner(
-        &self,
-        type_env: &TypeEnv,
-        unboxed_path: &mut Vec<Arc<TypeNode>>,
-    ) -> bool {
         if self.is_box(type_env) {
             return false;
         }
@@ -1227,43 +1215,9 @@ impl TypeNode {
             return true;
         }
         let field_types = self.field_types(type_env);
-        field_types.iter().all(|field_ty| {
-            field_ty.descend_layout(unboxed_path, |unboxed_path| {
-                field_ty.is_fully_unboxed_inner(type_env, unboxed_path)
-            })
-        })
-    }
-
-    /// Walk into the layout of `self`, a field of the unboxed types `unboxed_path` names: report a
-    /// type whose layout has no end (`panic_if_no_layout`), then run `descend` with `self` appended
-    /// to the path, so that the walk below `self` sees the types it came through.
-    pub fn descend_layout<R>(
-        self: &Arc<TypeNode>,
-        unboxed_path: &mut Vec<Arc<TypeNode>>,
-        descend: impl FnOnce(&mut Vec<Arc<TypeNode>>) -> R,
-    ) -> R {
-        self.panic_if_no_layout(unboxed_path);
-        unboxed_path.push(self.clone());
-        let descended = descend(unboxed_path);
-        unboxed_path.pop();
-        descended
-    }
-
-    /// Report a type whose layout cannot be determined, and end the compilation.
-    ///
-    /// The layout of an unboxed type holds the layout of each of its unboxed fields in place, so
-    /// determining it descends into those fields. `unboxed_path` is the types that descent came
-    /// through, outermost first. The descent has no end, and the type at hand therefore no layout,
-    /// in two cases: it is a type the descent already passed, or it is a larger type of the same
-    /// type constructor, from which the same fields lead to a larger one again.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
-    ///   since a pointer bounds the layout there.
-    pub fn panic_if_no_layout(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
-        if let Some(msg) = self.no_layout_message(unboxed_path) {
-            panic_with_msg(&msg);
-        }
+        field_types
+            .iter()
+            .all(|field_ty| field_ty.is_fully_unboxed(type_env))
     }
 
     /// Why the layout of `self` cannot be determined, given the types the descent came through, and
@@ -1540,7 +1494,7 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> BasicTypeEnum<'c> {
-        gc.embedded_type_of(self, &[])
+        gc.embedded_type_of(self)
     }
 
     // Check if the type takes the form of the definition of associated type.

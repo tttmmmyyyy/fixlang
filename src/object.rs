@@ -71,12 +71,11 @@ pub enum ObjectFieldType {
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     field_tys: &[Arc<TypeNode>],
-    unboxed_path: &[Arc<TypeNode>],
 ) -> BasicTypeEnum<'c> {
     let mut max_size = 0;
     let mut max_align = 1;
     for field_ty in field_tys {
-        let struct_ty = gc.embedded_type_of(field_ty, unboxed_path);
+        let struct_ty = gc.embedded_type_of(field_ty);
         max_size = max_size.max(gc.sizeof(&struct_ty));
         // The buffer needs the payloads' ABI alignment, not the preferred alignment: the
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
@@ -96,21 +95,14 @@ fn union_buf_type<'c, 'm>(
 
 impl ObjectFieldType {
     /// The LLVM type this field occupies in the struct its object is laid out as.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
-    pub fn to_basic_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> BasicTypeEnum<'c> {
+    pub fn to_basic_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
             ObjectFieldType::TraverseFunction => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::LambdaFunction(_ty) => {
                 gc.context.ptr_type(AddressSpace::from(0)).into()
             }
-            ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty, unboxed_path),
+            ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty),
             ObjectFieldType::Ptr => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::U8 => gc.context.i8_type().into(),
@@ -123,9 +115,9 @@ impl ObjectFieldType {
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
-            ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty, unboxed_path),
+            ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
-            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, unboxed_path),
+            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys),
         }
     }
 
@@ -190,7 +182,7 @@ impl ObjectFieldType {
                 .as_type(),
             ObjectFieldType::SubObject(ty, _is_punched) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
-                let basic_ty = self.to_basic_type(gc, &[]);
+                let basic_ty = self.to_basic_type(gc);
                 let size_in_bits = gc.target_data.get_bit_size(&basic_ty);
                 let align_in_bits = gc.target_data.get_abi_alignment(&basic_ty) * 8;
 
@@ -1116,36 +1108,20 @@ pub struct ObjectType {
     /// Whether a value of this type is held in place. A boxed value is a pointer to a heap block
     /// whose contents this layout describes.
     pub is_unbox: bool,
-    /// The Fix type this is the layout of, which `to_struct_type` compares against `unboxed_path`
-    /// to find a cycle of unboxed types.
+    /// The Fix type this is the layout of.
     pub ty: Arc<TypeNode>,
 }
 
 impl ObjectType {
     /// The LLVM struct type this object is laid out as.
     ///
-    /// # Arguments
-    /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first, which
-    ///   `TypeNode::panic_if_no_layout` reads to turn a layout that has no end into a diagnostic.
-    ///   A call from outside passes an empty slice; the recursion extends it, and a boxed type on
-    ///   the way clears it, since a pointer bounds the layout there.
-    pub fn to_struct_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> StructType<'c> {
-        let unboxed_path = if self.is_unbox {
-            self.ty.panic_if_no_layout(unboxed_path);
-            let mut extended = unboxed_path.to_vec();
-            extended.push(self.ty.clone());
-            extended
-        } else {
-            vec![]
-        };
-
+    /// The layout of an unboxed field is held in place, so this descends into it. A type reaching
+    /// itself that way has no layout and no end to this descent; `Program::validate_layouts` rejects
+    /// such a type before code generation begins.
+    pub fn to_struct_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for (i, field_type) in self.field_types.iter().enumerate() {
-            fields.push(field_type.to_basic_type(gc, &unboxed_path));
+            fields.push(field_type.to_basic_type(gc));
             match field_type {
                 ObjectFieldType::Array(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
@@ -1156,7 +1132,7 @@ impl ObjectType {
                     // - to get the pointer to the first element by gep of this struct type.
                     // - used in implementation of size_of method.
                     // - in to_debug_type function.
-                    fields.push(gc.embedded_type_of(ty, &unboxed_path));
+                    fields.push(gc.embedded_type_of(ty));
                 }
                 _ => {}
             }
@@ -1177,7 +1153,7 @@ impl ObjectType {
                 self.ty.to_string()
             ),
         };
-        let struct_ty = self.to_struct_type(gc, &[]);
+        let struct_ty = self.to_struct_type(gc);
         let buf_field_idx = struct_ty.count_fields() - 1;
         ElementBufferLayout {
             header_size: gc
@@ -1229,22 +1205,15 @@ impl ObjectType {
                 )
                 .unwrap();
         } else {
-            self.to_struct_type(gc, &[]).size_of().unwrap()
+            self.to_struct_type(gc).size_of().unwrap()
         }
     }
 
     /// The type this object takes where it is embedded in another value: a struct for an unboxed
     /// type, a pointer for a boxed one.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
-    pub fn to_embedded_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> BasicTypeEnum<'c> {
+    pub fn to_embedded_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
         if self.is_unbox {
-            let struct_ty = self.to_struct_type(gc, unboxed_path);
+            let struct_ty = self.to_struct_type(gc);
             struct_ty.into()
         } else {
             gc.context.ptr_type(AddressSpace::from(0)).into()
@@ -2016,7 +1985,7 @@ pub fn create_obj<'c, 'm>(
 
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, &[]);
+    let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object. An array storage can be placed above the base of its allocation, so it
     // carries the distance it was placed by; every other object starts at the base.
@@ -2323,7 +2292,7 @@ fn build_traverse<'c, 'm>(
 
     // In this function, we need to access captured fields, which is not possible by `obj` only.
     let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, &[]);
+    let struct_type = object_type.to_struct_type(gc);
 
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
@@ -2508,7 +2477,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             }
 
             let element_di_ty = field.to_debug_type(gc);
-            let element_ty = field.to_basic_type(gc, &[]);
+            let element_ty = field.to_basic_type(gc);
             let size_in_bits = element_di_ty.get_size_in_bits();
             let align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
             let offset_in_bits = gc

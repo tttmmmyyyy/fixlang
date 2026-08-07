@@ -28,16 +28,7 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
     /// Descend a type, pushing onto `out` the path of each boxed leaf reached. `path` is the field
     /// path from the value's root down to `ty`, which each pushed leaf is named relative to.
     ///
-    /// # Arguments
-    /// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout`
-    ///   reads to report a type that has no layout instead of descending into it forever.
-    fn go(
-        ty: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-        path: &mut FieldPath,
-        unboxed_path: &mut Vec<Arc<TypeNode>>,
-        out: &mut Vec<FieldPath>,
-    ) {
+    fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut FieldPath, out: &mut Vec<FieldPath>) {
         if ty.is_fully_unboxed(type_env) {
             return;
         }
@@ -59,14 +50,12 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
         }
         for (i, fty) in ty.field_types(type_env).iter().enumerate() {
             path.push(i);
-            fty.descend_layout(unboxed_path, |unboxed_path| {
-                go(fty, type_env, path, unboxed_path, out)
-            });
+            go(fty, type_env, path, out);
             path.pop();
         }
     }
     let mut out = Vec::new();
-    go(ty, type_env, &mut Vec::new(), &mut Vec::new(), &mut out);
+    go(ty, type_env, &mut Vec::new(), &mut out);
     out
 }
 
