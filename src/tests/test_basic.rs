@@ -7797,8 +7797,8 @@ pub fn test_repeated_type_constructor_with_a_smaller_argument() {
     test_source(&source, Configuration::develop_mode());
 }
 
-// `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
-// that distinct numbers give distinct names.
+/// `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
+/// that distinct numbers give distinct names.
 #[test]
 pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(0), "a");
@@ -7810,8 +7810,8 @@ pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(52), "a2");
 }
 
-// Two `*` operators on one expression bind through two monad layers, so `**x` on a nested
-// `Option` reaches the innermost value.
+/// Two `*` operators on one expression bind through two monad layers, so `**x` on a nested
+/// `Option` reaches the innermost value.
 #[test]
 pub fn test_double_bind() {
     let source = r##"
@@ -7828,6 +7828,9 @@ pub fn test_double_bind() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A `;;` in the right-hand side of a `let` binds the value before it and discards it, in the monad
+/// of the value after: over the array monad, an array of two units ahead of `[1, 2, 3]` yields that
+/// array twice over.
 #[test]
 pub fn test_double_semicolon_in_let() {
     let source = r##"
@@ -7843,6 +7846,8 @@ pub fn test_double_semicolon_in_let() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A struct holding a boxed value, produced by an `IO` action that `unsafe_perform` runs, is intact
+/// once the action is over: the result outlives the action it came out of.
 #[test]
 pub fn test_regression_unsafe_perform_bug() {
     let source = r##"
@@ -7864,6 +7869,8 @@ pub fn test_regression_unsafe_perform_bug() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `debug_println` and `debug_eprintln` print from outside `IO`, so `eval` is enough to run them,
+/// writing to stdout and stderr respectively.
 #[test]
 pub fn test_debug_println() {
     let source = r##"

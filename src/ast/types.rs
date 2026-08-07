@@ -850,12 +850,16 @@ impl TypeNode {
         self.set_toplevel_tycon(Arc::new(tycon))
     }
 
-    // For structs and unions, return types of fields.
-    // For Array, return the element type.
+    /// The types the fields of a value of this type hold: one per field for a struct, one per
+    /// variant for a union, and the element type alone for `Array`, whose elements all share it.
+    /// This type's arguments are substituted in, so the results are the field types at this
+    /// instance.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.field_types_via_tycons(&type_env.tycons)
     }
 
+    /// The field types of this type, with the declaration of its outermost type constructor taken
+    /// from a table of type constructors held apart from a `TypeEnv`.
     pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info_via_tycons(tycons);
@@ -1139,8 +1143,8 @@ impl TypeNode {
         }
     }
 
-    // Whether the top-level type constructor of this type is a struct.
-    // Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
+    /// Whether the top-level type constructor of this type is a struct.
+    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1149,6 +1153,9 @@ impl TypeNode {
         }
     }
 
+    /// Whether the top-level type constructor of this type is a union, so that a value of it
+    /// carries one of the declared fields and a tag saying which.
+    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1157,6 +1164,9 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is `#DynamicObject`, the boxed object a closure keeps its captured values
+    /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
+    /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1166,6 +1176,8 @@ impl TypeNode {
         is_dynamic_object_tycon(tc.as_ref())
     }
 
+    /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
+    /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1175,20 +1187,29 @@ impl TypeNode {
         is_destructor_object_tycon(tc.as_ref())
     }
 
+    /// The declaration of this type's outermost type constructor: its variant, boxedness, type
+    /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
+    /// absent from `type_env`.
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
         self.toplevel_tycon_info_via_tycons(&type_env.tycons)
     }
 
+    /// The declaration of this type's outermost type constructor, taken from a table of type
+    /// constructors held apart from a `TypeEnv`.
     pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
         tycons.get(&tycon).unwrap().clone()
     }
 
+    /// Whether a value of this type is held in place, with its fields laid out where the value
+    /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
+    /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
+    /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }

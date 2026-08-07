@@ -36,14 +36,20 @@ use inkwell::{
 use inkwell::{AddressSpace, IntPredicate};
 use std::sync::{Arc, OnceLock};
 
-// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
-// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
-// subobject, a union's payload buffer, an array).
+/// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
+/// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
+/// subobject, a union's payload buffer, an array).
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
+    /// The reference count and the flags the runtime keeps for every boxed object, which a boxed
+    /// object's layout begins with.
     ControlBlock,
+    /// A pointer to the function that walks the fields following it, for an object whose fields the
+    /// type alone leaves open (`#DynamicObject`).
     TraverseFunction,
-    LambdaFunction(Arc<TypeNode>), // Specify type of lambda
+    /// The function pointer of a closure of the given type, called with the closure's capture.
+    LambdaFunction(Arc<TypeNode>),
+    /// A `Std::Ptr`: an address the program carries and whose target it leaves alone.
     Ptr,
     I8,
     U8,
@@ -55,19 +61,26 @@ pub enum ObjectFieldType {
     U64,
     F32,
     F64,
+    /// A value of the given type laid out in place. The flag marks a punched field, whose value has
+    /// been moved out: the space stays, and traversal passes over it.
     SubObject(Arc<TypeNode>, bool /* is_punched */),
-    UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
+    /// The payload buffer of a union, sized and aligned to hold whichever of the given variant
+    /// types the tag names.
+    UnionBuf(Vec<Arc<TypeNode>>),
+    /// The integer saying which variant a union carries.
     UnionTag,
-    Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
-    // The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
-    // type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
-    // value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
-    // contributes its element sizing to the object layout.
+    /// The tail of an `Array` object: a capacity slot followed by a flexible buffer of elements of
+    /// the given type.
+    Array(Arc<TypeNode>),
+    /// The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
+    /// type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
+    /// value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
+    /// contributes its element sizing to the object layout.
     ArrayStorageBuf(Arc<TypeNode>),
 }
 
-// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
-// largest variant.
+/// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
+/// largest variant.
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     field_tys: &[Arc<TypeNode>],
@@ -948,8 +961,8 @@ impl ObjectFieldType {
         union.extract_field(gc, union_buf_idx)
     }
 
-    // Get the value of union.
-    // The return value is retained and the union is released.
+    /// The value a union carries, read as `elem_ty`, owned by the caller: the value is retained and
+    /// the union released, which cancel each other out for an unboxed union.
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -967,8 +980,8 @@ impl ObjectFieldType {
         value
     }
 
-    // Get the value of union.
-    // None of the return value and the union is retained/released.
+    /// The value a union carries, read as `elem_ty` and borrowed: the reference count of neither the
+    /// value nor the union moves, so the value lives only as long as the union does.
     pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1035,8 +1048,9 @@ impl ObjectFieldType {
         gc.builder().position_at_end(match_bb);
     }
 
-    // Get field `Object` of a struct `Object`.
-    // This "moves out" the field; in other words, the returned object is not retained.
+    /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
+    /// retained, so the caller either reads it while the struct is alive or takes the reference over
+    /// by dropping the struct without releasing that field.
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1047,8 +1061,8 @@ impl ObjectFieldType {
         struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
 
-    // Set an `Object` into the field of a struct `Object`.
-    // This "moves into" the field; in other words, the old value isn't released.
+    /// The struct with `field` stored at `field_idx`, taking over the caller's reference to `field`.
+    /// The value the field held before stays live and is the caller's to account for.
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: Object<'c>,

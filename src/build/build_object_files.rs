@@ -402,7 +402,8 @@ pub fn build_object_files<'c>(
     Ok(result)
 }
 
-// Load cache of "build_object_files" function.
+/// The object files a previous build of this program and configuration left behind, when the cache
+/// records them and every one of them is still on disk.
 fn load_build_object_files_cache(
     program: &Program,
     config: &Configuration,
@@ -429,7 +430,8 @@ fn load_build_object_files_cache(
     Some(cache)
 }
 
-// Save cache of "build_object_files" function.
+/// Record the object files a build produced under the hash of the program and configuration it
+/// built, so that an identical build reuses them.
 fn save_build_object_files_cache(
     program: &Program,
     config: &Configuration,
@@ -457,9 +459,9 @@ fn save_build_object_files_cache(
     );
 }
 
-// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
-// The object files cache is an optimization, so a step of reading or writing it that fails gives up
-// on the cache and lets the build go on.
+/// The value `result` carries, or `None` after warning with `failure_msg` and the error behind it.
+/// The object files cache is an optimization, so a step of reading or writing it that fails gives up
+/// on the cache and lets the build go on.
 fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) -> Option<T> {
     match result {
         Ok(value) => Some(value),
@@ -470,7 +472,9 @@ fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) ->
     }
 }
 
-// Calculate hash used for cache of "build_object_files" function.
+/// The hash that names the object files cache of a build: it covers the configuration options that
+/// bear on code generation together with every module's source, so two builds share a hash exactly
+/// when they would produce the same object files.
 fn build_object_files_cache_hash(
     program: &Program,
     config: &Configuration,
@@ -487,9 +491,9 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
-// The hash naming the cache of "build_object_files", or `None` after warning that it could not be
-// calculated. The hash is the cache's file name, so without it the cache can be neither read nor
-// written.
+/// The hash naming a build's object files cache, or `None` after warning that it could not be
+/// calculated. The hash is the cache's file name, so a build that lacks it goes on without the
+/// cache.
 fn build_object_files_cache_hash_or_warn(
     program: &Program,
     config: &Configuration,

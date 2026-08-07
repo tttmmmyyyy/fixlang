@@ -225,8 +225,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     }
 }
 
-/// Each parameter/capture variable's ownership shape, derived from the functions' ownership
-/// annotations. The RC IR dump reads it to annotate parameters; it is not needed for code generation.
+/// The ownership shape of every parameter and capture variable of the program, keyed by the
+/// variable's name: which of the variable's reference-counting units its function owns and which it
+/// borrows.
 pub fn param_ownership_shapes(
     prog: &RcProgram,
     type_env: &TypeEnv,
@@ -740,6 +741,8 @@ pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     }
 }
 
+/// Rebuild a body with every `Retain`/`Release` in it replaced by one node per reference-counting
+/// unit its path covers.
 fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     grow_stack(|| split_body_inner(node, type_env))
 }
