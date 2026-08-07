@@ -11,7 +11,6 @@ use crate::{
         typedecl::Field,
         types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
-    constants::STD_NAME,
     misc::Set,
 };
 use std::sync::Arc;
@@ -19,9 +18,10 @@ use std::sync::Arc;
 // The unboxed struct that carries a lambda's captured environment across the call to its lifted
 // global function.
 //
-// The type constructor is named after the function the capture struct is built for, so that a value
-// of it says which function consumes it. Two lambdas capturing the same names at the same types are
-// distinct here, which is what lets a reader of the type answer "what do I call this with".
+// The type constructor lives in the namespace of the function the capture struct is built for, and
+// is named after it, so that a value of it says which function consumes it. Two lambdas capturing
+// the same names at the same types are distinct here, which is what lets a reader of the type answer
+// "what do I call this with".
 #[derive(Clone)]
 pub struct CaptureStruct {
     pub tycon: Arc<TyCon>,
@@ -49,9 +49,9 @@ impl CaptureStruct {
             .collect::<Vec<_>>()
             .join(",");
         let tycon = Arc::new(TyCon {
-            name: FullName::from_strs(
-                &[STD_NAME],
-                &format!("{}@{}<{}>", prefix, owner.to_string(), signature),
+            name: FullName::new(
+                &owner.namespace,
+                &format!("{}@{}<{}>", prefix, owner.name, signature),
             ),
         });
         let tycon_info = TyConInfo {
