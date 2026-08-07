@@ -483,20 +483,7 @@ fn realize_all(
         // A copy of a lifted lambda whose capture list is narrowed receives it through the same
         // parameter, at the narrowed type. The walk retypes the pattern destructuring it when it
         // meets that pattern.
-        let narrowed = request.unit.capture_list_tree().map(|tree| {
-            let original = lifted
-                .borrow()
-                .capture_struct(&request.unit.origin)
-                .unwrap()
-                .tycon
-                .clone();
-            let cap = lifted.borrow_mut().capture_struct_of(&tree);
-            NarrowedCaptureList {
-                original,
-                cap,
-                fields: tree.fields,
-            }
-        });
+        let narrowed = narrowed_capture_list(&request.unit, lifted);
         let expr = match &narrowed {
             Some(narrowed) => {
                 let codom = expr.type_.as_ref().unwrap().get_lambda_dst();
@@ -504,23 +491,7 @@ fn realize_all(
             }
             None => expr,
         };
-
-        // Tell the walk what each substituted argument holds, by the local name it arrives under.
-        let mut local_decap_lambdas = Map::default();
-        let (args, _) = expr.destructure_lam_sequence();
-        for (slot, tree) in &request.unit.subst {
-            if slot.field.is_some() {
-                continue;
-            }
-            assert!(slot.arg < args.len());
-            assert_eq!(args[slot.arg].len(), 1);
-            let arg_name = args[slot.arg][0].name.clone();
-            let cap_list_ty = lifted.borrow_mut().capture_struct_of(tree).ty;
-            local_decap_lambdas.insert(
-                arg_name.clone(),
-                Known::bare(tree.clone(), expr_var(arg_name, None).set_type(cap_list_ty)),
-            );
-        }
+        let local_decap_lambdas = known_arguments(&request.unit, &expr, lifted);
 
         let mut visitor = ClosureSpecializationVisitor::new(
             name.clone(),
@@ -561,6 +532,59 @@ fn realize_all(
     prg.symbols = symbols;
 }
 
+// The capture list a unit receives in place of the one its origin was built with, where the unit
+// copies a lifted lambda and narrows one of its capture fields.
+fn narrowed_capture_list(
+    unit: &UnitKey,
+    lifted: &RefCell<LiftedLambdas>,
+) -> Option<NarrowedCaptureList> {
+    let tree = unit.capture_list_tree()?;
+    let original = lifted
+        .borrow()
+        .capture_struct(&unit.origin)
+        .unwrap()
+        .tycon
+        .clone();
+    let cap = lifted.borrow_mut().capture_struct_of(&tree);
+    Some(NarrowedCaptureList {
+        original,
+        cap,
+        fields: tree.fields,
+    })
+}
+
+// What each substituted argument of `unit` holds, by the local name it arrives under, which is what
+// the walk over `body` is told. A substituted capture field is left out: the walk learns that one
+// from the pattern destructuring the capture list.
+fn known_arguments(
+    unit: &UnitKey,
+    body: &Arc<ExprNode>,
+    lifted: &RefCell<LiftedLambdas>,
+) -> Map<FullName, Known> {
+    let mut known_args = Map::default();
+    let (args, _) = body.destructure_lam_sequence();
+    for (slot, tree) in &unit.subst {
+        if slot.field.is_some() {
+            continue;
+        }
+        assert!(
+            slot.arg < args.len(),
+            "{} is substituted at argument {}, but takes {} of them",
+            unit.origin.to_string(),
+            slot.arg,
+            args.len()
+        );
+        assert_eq!(args[slot.arg].len(), 1);
+        let arg_name = args[slot.arg][0].name.clone();
+        let cap_list_ty = lifted.borrow_mut().capture_struct_of(tree).ty;
+        known_args.insert(
+            arg_name.clone(),
+            Known::bare(tree.clone(), expr_var(arg_name, None).set_type(cap_list_ty)),
+        );
+    }
+    known_args
+}
+
 // Register the global function each lambda lifted by a walk became.
 fn register_lifted_lambdas(
     new_symbols: Vec<Symbol>,
@@ -587,11 +611,8 @@ fn specializable_functions(
     symbols: &Map<FullName, Symbol>,
     lifted: &LiftedLambdas,
 ) -> Map<FullName, SpecializableFunctionInfo> {
-    let call_graph = call_graph_of(symbols);
+    let (call_graph, name_to_idx) = call_graph_of(symbols);
     let call_graph_scc = call_graph.compute_sccs();
-    let name_to_idx = (0..call_graph.len())
-        .map(|idx| (call_graph.get(idx).clone(), idx))
-        .collect::<Map<FullName, usize>>();
 
     // Callers of each function, which is who has to be judged again once it enters the table. A
     // callee absent from `symbols` is a copy whose body is not made yet, and nothing reads its slots
@@ -678,7 +699,10 @@ fn reaches_a_direct_call(
                 is_specializable(specializable_funcs, &func, Slot::arg(idx))
             }
             // A value captured into a lifted lambda's capture list arrives in that lambda's body
-            // through the field it was stored in, which is a way in like an argument.
+            // through the field it was stored in, which is a way in like an argument. A struct this
+            // pass did not mint — one the program declares, or the capture list
+            // `defunctionalize_fix` builds — carries no such way in, so the value is reached there
+            // only by an indirect call.
             UsageType::CapturedInto(tycon, position) => lifted
                 .tree_of_capture_list(&tycon)
                 .is_some_and(|tree| {
@@ -766,9 +790,12 @@ fn capture_list_destructuring(
         let pat = expr.get_let_pat();
         if let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern {
             if pat_tycon.as_ref() == tycon.as_ref() {
-                if !field_to_pat.iter().all(|(_, _, pat)| pat.is_var()) {
-                    return None;
-                }
+                assert!(
+                    field_to_pat.iter().all(|(_, _, pat)| pat.is_var()),
+                    "the capture list {} is destructured by a pattern that binds a field to \
+                     something other than a name",
+                    tycon.name.to_string()
+                );
                 let names = field_to_pat
                     .iter()
                     .map(|(_, _, pat)| pat.get_var().name.clone())
@@ -781,11 +808,12 @@ fn capture_list_destructuring(
     None
 }
 
-// The call graph of `symbols`: an edge from A to B means A calls B.
+// The call graph of `symbols` — an edge from A to B means A calls B — together with the node each
+// name is held at.
 //
 // A call site is rewritten to name a copy before that copy's body is made, so a callee absent from
 // `symbols` is one about to be created and carries no edge yet.
-fn call_graph_of(symbols: &Map<FullName, Symbol>) -> Graph<FullName> {
+fn call_graph_of(symbols: &Map<FullName, Symbol>) -> (Graph<FullName>, Map<FullName, usize>) {
     let names = symbols.keys().cloned().collect::<Vec<_>>();
     let idx_of = names
         .iter()
@@ -800,7 +828,7 @@ fn call_graph_of(symbols: &Map<FullName, Symbol>) -> Graph<FullName> {
             }
         }
     }
-    graph
+    (graph, idx_of)
 }
 
 // The capture list a copy of a lifted lambda receives in place of the one the lambda was built with.
@@ -986,9 +1014,10 @@ impl ClosureSpecializationVisitor {
             Some((_, fields)) => fields.clone(),
             None => return known,
         };
-        let info = match self.specializable_funcs.get(&known.tree.lambda) {
-            Some(info) => info.clone(),
-            None => return known,
+        // The table is held through the loop below, which takes `self` mutably.
+        let specializable_funcs = self.specializable_funcs.clone();
+        let Some(info) = specializable_funcs.get(&known.tree.lambda) else {
+            return known;
         };
         let mut narrowed_fields = Vec::new();
         for (position, (_, _, value)) in fields.iter_mut().enumerate() {
@@ -1363,9 +1392,10 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         if !func_name.is_global() {
             return StartVisitResult::VisitChildren;
         }
-        let specialize_info = match self.specializable_funcs.get(&func_name) {
-            Some(info) => info.clone(),
-            None => return StartVisitResult::VisitChildren,
+        // The table is held through the loop below, which takes `self` mutably.
+        let specializable_funcs = self.specializable_funcs.clone();
+        let Some(specialize_info) = specializable_funcs.get(&func_name) else {
+            return StartVisitResult::VisitChildren;
         };
 
         // R2: an argument whose identity is known is handed over as its bare capture list, where the
