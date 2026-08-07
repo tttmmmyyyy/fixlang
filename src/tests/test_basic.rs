@@ -7718,7 +7718,8 @@ pub fn test_circular_unboxed_union_has_no_layout() {
     );
 }
 
-/// The same declarations with `box` do have a layout, since a pointer bounds it at the union.
+/// The declaration `test_circular_unboxed_union_has_no_layout` rejects does have a layout once the
+/// union is `box`, since a pointer bounds it there.
 #[test]
 pub fn test_circular_boxed_union_has_a_layout() {
     let source = r##"

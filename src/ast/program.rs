@@ -579,7 +579,7 @@ impl Program {
         None
     }
 
-    // The expressions the entry point and the exported functions were instantiated as.
+    /// The expressions the entry point and the exported functions were instantiated as.
     pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
         self.entry_io_value
             .iter()

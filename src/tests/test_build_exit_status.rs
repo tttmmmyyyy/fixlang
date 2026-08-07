@@ -77,7 +77,7 @@ main = println(depth(undefined("no value")).to_string);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             stderr.contains("its unboxed fields reach `Main::A` itself"),
-            "the build did not report the type that has no layout:\nstderr: {}",
+            "the build did not report the type that has no size:\nstderr: {}",
             stderr
         );
         assert!(

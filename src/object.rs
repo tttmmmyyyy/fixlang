@@ -67,8 +67,8 @@ pub enum ObjectFieldType {
     ArrayStorageBuf(Arc<TypeNode>),
 }
 
-// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
-// largest variant.
+/// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
+/// largest variant.
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     field_tys: &[Arc<TypeNode>],
@@ -1593,6 +1593,9 @@ pub fn no_layout_reason(
     type_env: &TypeEnv,
     checked: &mut Set<Arc<TypeNode>>,
 ) -> Option<String> {
+    /// Walk the layout of `ty` and of the types it holds. `in_place` is the types `ty` sits inside
+    /// with no pointer in between, `across_pointers` every type the walk reached `ty` through, both
+    /// outermost first.
     fn walk(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,

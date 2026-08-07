@@ -1221,7 +1221,7 @@ impl TypeNode {
     }
 
     /// Why a value of `self` has no size, given the types its layout came through, and `None` where
-    /// it has one. `object::no_layout_reason` walks a type's layout and asks this at each step.
+    /// it has one.
     ///
     /// # Arguments
     /// * `in_place` - the types `self` sits inside with no pointer in between, outermost first.
@@ -1248,20 +1248,20 @@ impl TypeNode {
         // one here lead on to a larger one again. A type merely appearing inside another (`Tree`
         // inside `(Tree, Tree)`) is how an ordinary recursive type is written, and the walk ends
         // there by meeting `Tree` a second time.
-        let mine = self.flatten_type_application();
+        let my_app_seq = self.flatten_type_application();
         let grows_from = |ancestor: &Arc<TypeNode>| {
             if ancestor == self {
                 return false;
             }
-            let theirs = ancestor.flatten_type_application();
-            theirs.len() == mine.len()
-                && theirs[0] == mine[0]
-                && theirs[1..]
+            let their_app_seq = ancestor.flatten_type_application();
+            their_app_seq.len() == my_app_seq.len()
+                && their_app_seq[0] == my_app_seq[0]
+                && their_app_seq[1..]
                     .iter()
-                    .zip(mine[1..].iter())
-                    .all(|(theirs, mine)| theirs.embeds_in(mine))
+                    .zip(my_app_seq[1..].iter())
+                    .all(|(their_arg, my_arg)| their_arg.embeds_in(my_arg))
         };
-        if let Some(i) = across_pointers.iter().position(|a| grows_from(a)) {
+        if let Some(i) = across_pointers.iter().position(grows_from) {
             let cause = "its fields reach ever larger types".to_string();
             return Some(self.no_size_report(&across_pointers[i..], cause));
         }
@@ -1270,8 +1270,7 @@ impl TypeNode {
 
     /// Whether this type is embedded in `other`: it appears there with its own shape intact, with
     /// more type around it or inside its arguments. An argument grown this way is what tells a type
-    /// reached again at a larger argument from one reached at a smaller or unrelated one, which a
-    /// count of symbols cannot tell apart.
+    /// reached again at a larger argument from one reached at a smaller or unrelated one.
     fn embeds_in(self: &Arc<TypeNode>, other: &Arc<TypeNode>) -> bool {
         // Inside one of `other`'s parts.
         let inside = match &other.ty {
@@ -1284,18 +1283,18 @@ impl TypeNode {
         }
         // The same shape at the top, each part embedded in the part facing it.
         match (&self.ty, &other.ty) {
-            (Type::TyVar(mine), Type::TyVar(theirs)) => mine.name == theirs.name,
-            (Type::TyCon(mine), Type::TyCon(theirs)) => mine == theirs,
+            (Type::TyVar(my_var), Type::TyVar(their_var)) => my_var.name == their_var.name,
+            (Type::TyCon(my_tycon), Type::TyCon(their_tycon)) => my_tycon == their_tycon,
             (Type::TyApp(my_fun, my_arg), Type::TyApp(their_fun, their_arg)) => {
                 my_fun.embeds_in(their_fun) && my_arg.embeds_in(their_arg)
             }
-            (Type::AssocTy(mine, my_args), Type::AssocTy(theirs, their_args)) => {
-                mine == theirs
+            (Type::AssocTy(my_assoc, my_args), Type::AssocTy(their_assoc, their_args)) => {
+                my_assoc == their_assoc
                     && my_args.len() == their_args.len()
                     && my_args
                         .iter()
                         .zip(their_args.iter())
-                        .all(|(mine, theirs)| mine.embeds_in(theirs))
+                        .all(|(my_arg, their_arg)| my_arg.embeds_in(their_arg))
             }
             _ => false,
         }
@@ -1303,19 +1302,15 @@ impl TypeNode {
 
     /// The report for a type with no size: what its fields do, the way down to it from the type that
     /// shows it, and which types the fix is among.
-    fn no_size_report(
-        self: &Arc<TypeNode>,
-        from_ancestor: &[Arc<TypeNode>],
-        cause: String,
-    ) -> String {
-        let descent = from_ancestor
+    fn no_size_report(self: &Arc<TypeNode>, ancestors: &[Arc<TypeNode>], cause: String) -> String {
+        let descent = ancestors
             .iter()
             .chain([self])
             .map(|ty| ty.to_string())
             .collect::<Vec<_>>();
         // A type holding itself directly is the whole story already, so the way down is spelled
         // out only where it passes through another type.
-        let holds_itself = from_ancestor.iter().all(|ty| ty == self);
+        let holds_itself = ancestors.iter().all(|ty| ty == self);
         let (way_down, remedy) = if holds_itself {
             (String::new(), format!("Make `{}` boxed.", descent[0]))
         } else {
