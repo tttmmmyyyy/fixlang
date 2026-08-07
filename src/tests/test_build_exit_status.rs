@@ -53,12 +53,11 @@ main = println("hi");
         );
     }
 
-    /// A type whose unboxed fields lead back to itself has no layout, which is reported from one of
-    /// the threads a build generates code in. The build ends through its exit status, with the
-    /// diagnostic on stderr, rather than through a signal raised while the other threads are still
-    /// in the middle of generating code.
+    /// A program using a type whose unboxed fields lead back to itself is rejected, and the
+    /// rejection reaches a caller of `fix build` the way any other does: the diagnostic on stderr,
+    /// nothing after it, and a failing exit status.
     #[test]
-    fn test_build_fails_with_a_status_when_a_type_has_no_layout() {
+    fn test_build_fails_with_a_status_when_a_type_has_no_size() {
         const CIRCULAR_SOURCE: &str = r#"module Main;
 
 type A = unbox struct { b : B, n : I64 };
@@ -78,14 +77,19 @@ main = println(depth(undefined("no value")).to_string);
             .expect("Failed to execute fix build");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("There are circular definitions by unboxed types"),
-            "the build did not report the type that has no layout:\nstderr: {}",
+            stderr.contains("its unboxed fields reach `Main::A` itself"),
+            "the build did not report the type that has no size:\nstderr: {}",
             stderr
         );
         assert!(
             output.status.code().is_some(),
             "the build was ended by a signal ({}) instead of an exit status:\nstderr: {}",
             output.status,
+            stderr
+        );
+        assert!(
+            !stderr.contains("(unknown error)"),
+            "the diagnostic was followed by a second, contentless report:\nstderr: {}",
             stderr
         );
         assert!(

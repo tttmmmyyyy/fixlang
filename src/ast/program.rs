@@ -34,6 +34,7 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
+use crate::object::no_size_reason;
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -578,18 +579,24 @@ impl Program {
         None
     }
 
+    /// The expressions the entry point and the exported functions were instantiated as.
+    pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
+        self.entry_io_value
+            .iter()
+            .chain(
+                self.export_statements
+                    .iter()
+                    .filter_map(|stmt| stmt.value_expr.as_ref()),
+            )
+            .collect()
+    }
+
     // Get the names of entry pointes / exported functions.
     pub fn root_value_names(&self) -> Vec<FullName> {
-        let mut res = vec![];
-        if let Some(entry) = self.entry_io_value.as_ref() {
-            res.push(entry.get_var().name.clone());
-        }
-        for stmt in &self.export_statements {
-            if let Some(exported) = stmt.value_expr.as_ref() {
-                res.push(exported.get_var().name.clone());
-            }
-        }
-        res
+        self.root_value_exprs()
+            .iter()
+            .map(|expr| expr.get_var().name.clone())
+            .collect()
     }
 
     // Get the list of module names from a list of files.
@@ -1794,6 +1801,64 @@ impl Program {
                         errors.eat_err(impl_.scm_via_defn.validate_constraints(&self.trait_env));
                     }
                 }
+            }
+        }
+        errors.to_result()
+    }
+
+    /// Report every value of the instantiated program whose type has no layout, at the expression
+    /// the value appears as.
+    ///
+    /// A field of an unboxed type is laid out in place, so a type's size follows its unboxed fields:
+    /// a type they reach again — or an ever larger type of the same type constructor — describes a
+    /// value of no size. Code generation would meet such a type as a descent through the fields that
+    /// never ends, so this runs once the program's types are instantiated and before any of them is
+    /// laid out.
+    pub fn validate_layouts(&self) -> Result<(), Errors> {
+        let type_env = self.type_env();
+
+        // The entry point and the exported values come first, so that a type they carry is reported
+        // in the program's own code rather than in a library function instantiated at it. The
+        // symbols follow in name order, so that a program rejected twice is rejected the same way.
+        let mut roots = self.root_value_exprs();
+        let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
+        symbol_names.sort();
+        roots.extend(
+            symbol_names
+                .iter()
+                .filter_map(|name| self.symbols[*name].expr.as_ref()),
+        );
+
+        let mut checked: Set<Arc<TypeNode>> = Set::default();
+        let mut errors = Errors::empty();
+        // A node the compiler built carries no source location, so a round that reports only at
+        // located nodes runs first; the second round takes the types that appear at no located node.
+        for located_only in [true, false] {
+            for expr in &roots {
+                expr.walk_nodes(&mut |node| {
+                    if located_only && node.source.is_none() {
+                        return;
+                    }
+                    let ty = node.type_.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "Instantiation left an expression with no type: `{}`.",
+                            node.expr.stringify().to_string()
+                        )
+                    });
+                    if let Some(msg) = no_size_reason(ty, &type_env, &mut checked) {
+                        errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
+                    }
+                })
+            }
+        }
+        // Every instantiated symbol is compiled, so its own type is laid out whether or not an
+        // expression carries it — a compiler-generated accessor has none. These come last because
+        // such a symbol has no source location of its own to report at.
+        for name in &symbol_names {
+            let symbol = &self.symbols[*name];
+            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut checked) {
+                let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
+                errors.append(Errors::from_msg_srcs(msg, &[&source]));
             }
         }
         errors.to_result()

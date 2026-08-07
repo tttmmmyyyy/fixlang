@@ -2,7 +2,7 @@
 //
 // The boxed struct is not treated as a newtype pattern.
 //
-// If there is a circular definition of newtype, the optimization is skipped (it will result in an error in the code generation phase).
+// If there is a circular definition of newtype, the optimization is skipped (such a type is rejected before this runs, by `Program::validate_layouts`).
 //
 // This optimization should be run after the remove-hk-tyvar transform.
 // The unwrap-newtype optimization cannot be applied to programs with generic type definitions such as `type [f : * -> *] Foo f = box struct { data : f () };`.

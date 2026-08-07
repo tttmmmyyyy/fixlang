@@ -15,7 +15,7 @@ use crate::constants::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
-use crate::error::{panic_with_msg, Errors};
+use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
@@ -1216,24 +1216,10 @@ impl TypeNode {
 
     /// Whether this type contains no boxed type.
     ///
-    /// Deciding this walks the fields of unboxed types, so a type whose layout has no end is
-    /// reported here (`check_layout_exists`) and ends the compilation.
+    /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
+    /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
+    /// runs.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
-        self.is_fully_unboxed_inside(type_env, &mut vec![])
-    }
-
-    /// Whether this type contains no boxed type, given the types it is nested in.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - the types this one is nested in, outermost first, which
-    ///   `check_layout_exists` reads to report a type that has no layout. Deciding whether a type
-    ///   is fully unboxed walks the fields of unboxed types, and that walk ends only for a type
-    ///   whose layout exists.
-    fn is_fully_unboxed_inside(
-        &self,
-        type_env: &TypeEnv,
-        unboxed_path: &mut Vec<Arc<TypeNode>>,
-    ) -> bool {
         if self.is_box(type_env) {
             return false;
         }
@@ -1250,77 +1236,125 @@ impl TypeNode {
             return true;
         }
         let field_types = self.field_types(type_env);
-        field_types.iter().all(|field_ty| {
-            field_ty.descend_layout(unboxed_path, |unboxed_path| {
-                field_ty.is_fully_unboxed_inside(type_env, unboxed_path)
-            })
-        })
+        field_types
+            .iter()
+            .all(|field_ty| field_ty.is_fully_unboxed(type_env))
     }
 
-    /// Walk into the layout of `self`, a field of the unboxed types `unboxed_path` names: report a
-    /// type whose layout has no end (`check_layout_exists`), then run `descend` with `self` appended
-    /// to the path, so that the walk below `self` sees the types it came through.
-    pub fn descend_layout<R>(
-        self: &Arc<TypeNode>,
-        unboxed_path: &mut Vec<Arc<TypeNode>>,
-        descend: impl FnOnce(&mut Vec<Arc<TypeNode>>) -> R,
-    ) -> R {
-        self.check_layout_exists(unboxed_path);
-        unboxed_path.push(self.clone());
-        let descended = descend(unboxed_path);
-        unboxed_path.pop();
-        descended
-    }
-
-    /// Report a type whose layout cannot be determined, and end the compilation.
-    ///
-    /// The layout of an unboxed type holds the layout of each of its unboxed fields in place, so
-    /// determining it descends into those fields. `unboxed_path` is the types that descent came
-    /// through, outermost first. The descent has no end, and the type at hand therefore no layout,
-    /// in two cases: it is a type the descent already passed, or it is a larger type of the same
-    /// type constructor, from which the same fields lead to a larger one again.
+    /// Why a value of `self` has no size, given the types its layout came through, and `None` where
+    /// it has one.
     ///
     /// # Arguments
-    /// * `unboxed_path` - the types `self` is nested in, outermost first. A boxed type resets it,
-    ///   since a pointer bounds the layout there.
-    pub fn check_layout_exists(self: &Arc<TypeNode>, unboxed_path: &[Arc<TypeNode>]) {
-        let tycon = match self.toplevel_tycon() {
-            Some(tycon) => tycon,
-            None => return,
-        };
-        for (i, ancestor) in unboxed_path.iter().enumerate() {
-            if ancestor.toplevel_tycon().as_deref() != Some(tycon.as_ref()) {
-                continue;
+    /// * `in_place` - the types `self` sits inside with no pointer in between, outermost first.
+    ///   Reaching one of them again is a value that contains itself.
+    /// * `across_pointers` - every type the layout came through, the ones behind a pointer included.
+    ///   Reaching a larger type of the same type constructor there has no end either: the same
+    ///   fields lead from that one to a larger one again.
+    pub(crate) fn no_size_cause(
+        self: &Arc<TypeNode>,
+        in_place: &[Arc<TypeNode>],
+        across_pointers: &[Arc<TypeNode>],
+    ) -> Option<String> {
+        if let Some(i) = in_place.iter().position(|ancestor| ancestor == self) {
+            let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
+            return Some(self.format_no_size_error(&in_place[i..], cause));
+        }
+        // A function value is a pair of pointers whatever it takes and returns, so its size is
+        // settled. Every function type shares the `->` constructor, so the growth of one function's
+        // argument would otherwise be read off another's.
+        if self.is_closure() || self.is_funptr() {
+            return None;
+        }
+        // The same type constructor with arguments that have grown: the fields that led from that
+        // one here lead on to a larger one again. A type merely appearing inside another (`Tree`
+        // inside `(Tree, Tree)`) is how an ordinary recursive type is written, and the walk ends
+        // there by meeting `Tree` a second time.
+        let my_app_seq = self.flatten_type_application();
+        let grows_from = |ancestor: &Arc<TypeNode>| {
+            if ancestor == self {
+                return false;
             }
-            let cause = if ancestor == self {
-                "There are circular definitions by unboxed types"
-            } else if self.count_symbols() > ancestor.count_symbols() {
-                "Unboxed types nest into ever larger types"
-            } else {
-                continue;
-            };
-            let mut descent = unboxed_path[i..]
-                .iter()
-                .map(|ty| format!("`{}`", ty.to_string()))
-                .collect::<Vec<_>>();
-            descent.push(format!("`{}`", self.to_string()));
-            panic_with_msg(&format!(
-                "Cannot determine the layout of type `{}`. {}: {}. Please change some types to boxed.",
-                self.to_string(),
-                cause,
-                descent.join(" -> "),
-            ));
+            let their_app_seq = ancestor.flatten_type_application();
+            their_app_seq.len() == my_app_seq.len()
+                && their_app_seq[0] == my_app_seq[0]
+                && their_app_seq[1..]
+                    .iter()
+                    .zip(my_app_seq[1..].iter())
+                    .all(|(their_arg, my_arg)| their_arg.embeds_in(my_arg))
+        };
+        if let Some(i) = across_pointers.iter().position(grows_from) {
+            let cause = "its fields reach ever larger types".to_string();
+            return Some(self.format_no_size_error(&across_pointers[i..], cause));
+        }
+        None
+    }
+
+    /// Whether this type is embedded in `other`: it appears there with its own shape intact, with
+    /// more type around it or inside its arguments. An argument grown this way is what tells a type
+    /// reached again at a larger argument from one reached at a smaller or unrelated one.
+    fn embeds_in(self: &Arc<TypeNode>, other: &Arc<TypeNode>) -> bool {
+        // Inside one of `other`'s parts.
+        let inside = match &other.ty {
+            Type::TyApp(fun, arg) => self.embeds_in(fun) || self.embeds_in(arg),
+            Type::AssocTy(_, args) => args.iter().any(|arg| self.embeds_in(arg)),
+            Type::TyVar(_) | Type::TyCon(_) => false,
+        };
+        if inside {
+            return true;
+        }
+        // The same shape at the top, each part embedded in the part facing it.
+        match (&self.ty, &other.ty) {
+            (Type::TyVar(my_var), Type::TyVar(their_var)) => my_var.name == their_var.name,
+            (Type::TyCon(my_tycon), Type::TyCon(their_tycon)) => my_tycon == their_tycon,
+            (Type::TyApp(my_fun, my_arg), Type::TyApp(their_fun, their_arg)) => {
+                my_fun.embeds_in(their_fun) && my_arg.embeds_in(their_arg)
+            }
+            (Type::AssocTy(my_assoc, my_args), Type::AssocTy(their_assoc, their_args)) => {
+                my_assoc == their_assoc
+                    && my_args.len() == their_args.len()
+                    && my_args
+                        .iter()
+                        .zip(their_args.iter())
+                        .all(|(my_arg, their_arg)| my_arg.embeds_in(their_arg))
+            }
+            _ => false,
         }
     }
 
-    /// The number of type constructors and type variables this type is built from.
-    fn count_symbols(&self) -> usize {
-        match &self.ty {
-            Type::TyVar(_) => 1,
-            Type::TyCon(_) => 1,
-            Type::TyApp(fun, arg) => fun.count_symbols() + arg.count_symbols(),
-            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.count_symbols()).sum::<usize>(),
-        }
+    /// The report for a type with no size: what its fields do, the way down to it from the type that
+    /// shows it, and which types the fix is among.
+    fn format_no_size_error(
+        self: &Arc<TypeNode>,
+        ancestors: &[Arc<TypeNode>],
+        cause: String,
+    ) -> String {
+        let descent = ancestors
+            .iter()
+            .chain([self])
+            .map(|ty| ty.to_string())
+            .collect::<Vec<_>>();
+        // A type holding itself directly is the whole story already, so the way down is spelled
+        // out only where it passes through another type.
+        let holds_itself = ancestors.iter().all(|ty| ty == self);
+        let (way_down, remedy) = if holds_itself {
+            (String::new(), format!("Make `{}` boxed.", descent[0]))
+        } else {
+            (
+                format!(
+                    " ({})",
+                    descent
+                        .iter()
+                        .map(|ty| format!("`{}`", ty))
+                        .collect::<Vec<_>>()
+                        .join(" -> ")
+                ),
+                "Make one of these types boxed.".to_string(),
+            )
+        };
+        format!(
+            "`{}` has no size: {}{}. {}",
+            descent[0], cause, way_down, remedy,
+        )
     }
 
     /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by
@@ -1470,7 +1504,7 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> BasicTypeEnum<'c> {
-        gc.embedded_type_of(self, &[])
+        gc.embedded_type_of(self)
     }
 
     // Check if the type takes the form of the definition of associated type.

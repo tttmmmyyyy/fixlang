@@ -2311,7 +2311,7 @@ fn realloc_array<'c, 'm>(
     let storage = get_array_storage(gc, &array);
     let storage_ptr = storage.value(gc).into_pointer_value();
     let object_type = storage.ty.get_object_type(&vec![], gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, &[]);
+    let struct_type = object_type.to_struct_type(gc);
     build_capacity_check(gc, &elem_ty, new_cap, capacity_check);
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
@@ -6774,7 +6774,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
@@ -6966,7 +6966,7 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
         // Get argument.
         let array = gc.get_scoped_obj(&self.var_name);
@@ -8911,7 +8911,7 @@ impl LLVMGen for InlineLLVMIntEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 "eq",
             )
             .unwrap();
@@ -8988,7 +8988,7 @@ impl LLVMGen for InlineLLVMPtrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 "eq_of_ptr",
             )
             .unwrap();
@@ -9062,7 +9062,7 @@ impl LLVMGen for InlineLLVMFloatEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 "eq_of_float",
             )
             .unwrap();
@@ -9157,7 +9157,7 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 LESS_THAN_TRAIT_LT_NAME,
             )
             .unwrap();
@@ -9236,7 +9236,7 @@ impl LLVMGen for InlineLLVMFloatLessThanBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 LESS_THAN_TRAIT_LT_NAME,
             )
             .unwrap();
@@ -9329,7 +9329,7 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -9408,7 +9408,7 @@ impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type(),
+                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -10264,7 +10264,7 @@ impl LLVMGen for InlineLLVMBoolNegBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc, &[]).into_int_type();
+        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
         let false_val = bool_ty.const_zero();
         let value = gc
             .builder()

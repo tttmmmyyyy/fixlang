@@ -517,21 +517,16 @@ pub(crate) fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldP
 /// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
-    rc_units_go(ty, type_env, &mut vec![], &mut vec![], &mut out);
+    rc_units_go(ty, type_env, &mut vec![], &mut out);
     out
 }
 
 /// Descend a type, pushing onto `out` the path of each unit root reached. `path` is the field path
 /// from the value's root down to `ty`, which each pushed unit is named relative to.
-///
-/// # Arguments
-/// * `unboxed_path` - the types this descent came through, which `TypeNode::descend_layout` reads
-///   to report a type that has no layout instead of descending into it forever.
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
     path: &mut FieldPath,
-    unboxed_path: &mut Vec<Arc<TypeNode>>,
     out: &mut Vec<FieldPath>,
 ) {
     if ty.is_fully_unboxed(type_env) {
@@ -555,9 +550,7 @@ fn rc_units_go(
             continue;
         }
         path.push(i);
-        fty.descend_layout(unboxed_path, |unboxed_path| {
-            rc_units_go(fty, type_env, path, unboxed_path, out)
-        });
+        rc_units_go(fty, type_env, path, out);
         path.pop();
     }
 }

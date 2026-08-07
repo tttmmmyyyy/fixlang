@@ -7674,11 +7674,10 @@ pub fn test_circular_type_definition() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A value of an unboxed type holds its unboxed fields in place, so a cycle of them has no layout,
-/// which the compiler reports rather than following the cycle forever.
+/// A field of an unboxed type is laid out in place, so a cycle of such fields describes a value of
+/// no size, which the compiler reports rather than following the cycle forever.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
-pub fn test_circular_unboxed_types_have_no_layout() {
+pub fn test_circular_unboxed_types_have_no_size() {
     let source = r##"
         module Main;
         type A = unbox struct { b : B, n : I64 };
@@ -7690,14 +7689,321 @@ pub fn test_circular_unboxed_types_have_no_layout() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::A` -> `Main::B` -> `Main::A`",
+    );
+}
+
+/// A cycle through a union has no layout either: a union holds its active variant's payload in
+/// place, so the payload's fields lead back to the union. This is the declaration the manual gives
+/// as the one to write with `box` instead.
+#[test]
+pub fn test_circular_unboxed_union_has_no_size() {
+    let source = r##"
+        module Main;
+        type Tree = unbox union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let t : Tree = Tree::leaf();
+            println(t.is_leaf.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Tree` -> `(Main::Tree, Main::Tree)` -> `Main::Tree`",
+    );
+}
+
+/// The declaration `test_circular_unboxed_union_has_no_size` rejects does have a layout once the
+/// union is `box`, since a pointer bounds it there.
+#[test]
+pub fn test_circular_boxed_union_has_a_size() {
+    let source = r##"
+        module Main;
+        type Tree = box union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let t : Tree = Tree::node((Tree::leaf(), Tree::leaf()));
+            assert_eq(|_|"", t.as_node.@0.is_leaf, true);;
+            pure()
+        );
+    "##;
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A boxed field settles whether a type is fully unboxed before the walk that answers it reaches
-/// the field holding the type itself, so this type is reported by the reference-counting passes'
-/// own descent through the fields.
+/// Declaring a cycle of unboxed types compiles as long as no value of one is used: nothing asks for
+/// a layout, so nothing has to report that it does not exist.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
+pub fn test_unused_circular_unboxed_types_compile() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The report points at the expression whose value has no size, so the message carries that line of
+/// the program with it.
+#[test]
+pub fn test_a_type_with_no_size_is_reported_at_its_expression() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        depth : A -> I64;
+        depth = |x| x.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "depth = |x| x.@n;");
+}
+
+/// A function returning a type with no size is caught as well as one taking it.
+#[test]
+pub fn test_function_returning_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { x : Bad, n : I64 };
+
+        build_bad : I64 -> Bad;
+        build_bad = |_| undefined("no value");
+
+        main : IO ();
+        main = (
+            let f = build_bad;
+            eval f;
+            println("ok")
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
+/// A type constructor of two arguments grows when either of them does, and the arguments are
+/// matched up one by one — `Q b (a, b)` grows its second argument out of both of `Q a b`'s.
+#[test]
+pub fn test_growing_type_with_two_arguments() {
+    let source = r##"
+        module Main;
+        type Q a b = unbox struct { x : Q b (a, b), n : I64 };
+
+        depth : Q I64 I64 -> I64;
+        depth = |q| q.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "its fields reach ever larger types",
+    );
+}
+
+/// Growth is read argument by argument, so a type constructor reached again with one argument
+/// unrelated to the first still has a size, however the other argument compares.
+#[test]
+pub fn test_two_argument_constructor_with_an_unrelated_argument_compiles() {
+    let source = r##"
+        module Main;
+        type K a b = unbox struct { v : a, w : b };
+        type E = unbox struct { z : K (I64, I64) I64 };
+
+        main : IO ();
+        main = (
+            let k : K E I64 = K { v : E { z : K { v : (1, 2), w : 3 } }, w : 4 };
+            assert_eq(|_|"", k.@v.@z.@w + k.@w, 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Making the function a union variant holds is what asks for the layout of the types it takes.
+#[test]
+pub fn test_making_a_function_over_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { b : Bad, n : I64 };
+        type Holder = box union { none : (), f : Bad -> I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder::f(|b| b.@n);
+            assert_eq(|_|"", h.is_none, false);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
+/// A struct holding a callback that takes the struct itself has a size: the field is a pair of
+/// pointers, whatever the callback's own type mentions.
+#[test]
+pub fn test_struct_holding_a_callback_over_itself_compiles() {
+    let source = r##"
+        module Main;
+        type S = unbox struct { f : (S, I64) -> I64 };
+
+        run : S -> I64;
+        run = |s| (s.@f)((s, 41)) + 1;
+
+        main : IO ();
+        main = (
+            let s = S { f : |(_s, n)| n };
+            assert_eq(|_|"", run(s), 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type constructor reached again at an unrelated argument still has a size: laying out `Array E`
+/// needs `E`, which needs the `Array (I64, I64)` it holds, and there it ends.
+#[test]
+pub fn test_array_of_a_struct_holding_an_array_compiles() {
+    let source = r##"
+        module Main;
+        type E = unbox struct { a : Array (I64, I64) };
+
+        main : IO ();
+        main = (
+            let arr : Array E = [ E { a : [(1, 2)] } ];
+            assert_eq(|_|"", arr.@(0).@a.@(0).@0, 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A union variant holding a function keeps two pointers, so the types that function would take are
+/// laid out only where such a function is compiled — here the program makes none.
+#[test]
+pub fn test_union_variant_holding_a_function_compiles() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { b : Bad, n : I64 };
+        type Holder = box union { none : (), f : Bad -> I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder::none();
+            assert_eq(|_|"", h.is_none, true);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A function value is a pair of pointers, but what it takes and returns is laid out where the
+/// function is compiled. Here a field accessor is the only place the type is named at all.
+#[test]
+pub fn test_function_taking_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        main : IO ();
+        main = (
+            let get_n = A::@n;
+            eval get_n;
+            println("ok")
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::A` has no size",
+    );
+}
+
+/// The elements of an array are laid out inside its storage, so a type with no size has none there
+/// either — the manual's rejected declaration, put in an array.
+#[test]
+pub fn test_array_of_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Tree = unbox union { leaf : (), node : (Tree, Tree) };
+
+        main : IO ();
+        main = (
+            let ts : Array Tree = Array::empty(4);
+            println(ts.@size.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Tree` has no size",
+    );
+}
+
+/// What a pointer points at is laid out too, so a type with no size is reported through a boxed
+/// field — here the only type the program names is the one holding that field.
+#[test]
+pub fn test_type_with_no_size_behind_a_pointer() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { x : Bad, n : I64 };
+        type Wrapper = box struct { p : Bad };
+        type Outer = unbox struct { w : Wrapper, k : I64 };
+
+        depth : Outer -> I64;
+        depth = |o| o.@k;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
+/// Growth reaches past a pointer as well: each level's field type is larger than the last, so the
+/// objects the pointers lead to never repeat and never end.
+#[test]
+pub fn test_growing_type_behind_a_pointer() {
+    let source = r##"
+        module Main;
+        type P a = box struct { x : P (a, a), n : I64 };
+
+        depth : P I64 -> I64;
+        depth = |p| p.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "its fields reach ever larger types",
+    );
+}
+
+/// A boxed field is a pointer, so the walk passes over it and goes on to the field that holds the
+/// type itself. A type whose fields are read in that order has no size all the same.
+#[test]
 pub fn test_unboxed_cycle_behind_a_boxed_field() {
     let source = r##"
         module Main;
@@ -7709,14 +8015,17 @@ pub fn test_unboxed_cycle_behind_a_boxed_field() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::T` has no size: its unboxed fields reach `Main::T` itself.",
+    );
 }
 
 /// Unboxed fields that lead to an ever larger type of the same type constructor have no layout
 /// either. The type never repeats here, so the report rests on the type growing.
 #[test]
-#[should_panic(expected = "Unboxed types nest into ever larger types")]
-pub fn test_growing_unboxed_type_has_no_layout() {
+pub fn test_growing_unboxed_type_has_no_size() {
     let source = r##"
         module Main;
         type P a = unbox struct { x : P (a, a), n : I64 };
@@ -7727,15 +8036,18 @@ pub fn test_growing_unboxed_type_has_no_layout() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "its fields reach ever larger types",
+    );
 }
 
 /// Whether a layout exists is decided by the declarations together with the type arguments: `C U`
 /// holds a `C U` in place, while the same declarations with a boxed argument, in
-/// `test_boxed_type_argument_bounds_the_layout`, stop at a pointer.
+/// `test_boxed_type_argument_bounds_the_size`, stop at a pointer.
 #[test]
-#[should_panic(expected = "There are circular definitions by unboxed types")]
-pub fn test_unboxed_cycle_closed_by_a_type_argument() {
+pub fn test_unboxed_cycle_closed_by_a_type_argument_has_no_size() {
     let source = r##"
         module Main;
         type U b = unbox struct { y : b, m : I64 };
@@ -7747,15 +8059,19 @@ pub fn test_unboxed_cycle_closed_by_a_type_argument() {
         main : IO ();
         main = println(depth(undefined("no value")).to_string);
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::C Main::U` has no size",
+    );
 }
 
 /// A boxed type argument bounds the layout of the same declarations that `C U` cannot lay out in
-/// `test_unboxed_cycle_closed_by_a_type_argument`, so this program compiles. The argument count
+/// `test_unboxed_cycle_closed_by_a_type_argument_has_no_size`, so this program compiles. The argument count
 /// decides the branch at run time, which keeps `depth` — and with it the layout of `C Bx` — in the
 /// program.
 #[test]
-pub fn test_boxed_type_argument_bounds_the_layout() {
+pub fn test_boxed_type_argument_bounds_the_size() {
     let source = r##"
         module Main;
         type Bx b = box struct { y : b, m : I64 };
