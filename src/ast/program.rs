@@ -2780,6 +2780,8 @@ impl Program {
         None
     }
 
+    // The symbols of this program rendered as Fix source, each as its type signature followed by its
+    // definition, ordered by signature.
     pub fn stringify_symbols(&self) -> Text {
         let mut sym_texts: Vec<(String, Text)> = vec![];
         for sym in self.symbols.values() {
@@ -2814,6 +2816,10 @@ impl Program {
         text
     }
 
+    // Write the symbols of this program, as Fix source, to `<DOT_FIXLANG>/<step_name>.symbols.fix`.
+    //
+    // # Arguments
+    // * `step_name` - names the compilation step the dump is taken at, and so the file it lands in.
     pub fn emit_symbols(&self, step_name: &str) {
         let file_name = format!("{}/{}.symbols.fix", DOT_FIXLANG, step_name);
         let file_path = PathBuf::from(file_name);
@@ -2823,6 +2829,8 @@ impl Program {
         file.write_all(text.as_bytes()).unwrap();
     }
 
+    // A type checker carrying this program's traits, types, kinds and imports, with the declared
+    // type of every global symbol already in scope.
     pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
         // Error tolerance is opt-in via the diagnostics-mode config;
         // every other subcommand stays strict.
@@ -2852,9 +2860,13 @@ impl Program {
     }
 }
 
+// The innermost thing the cursor rests on at a source position, which is what the position-driven
+// LSP requests — hover, goto-definition, rename, references — answer about.
 #[derive(Serialize, Deserialize)]
 pub enum EndNode {
+    // A use of a value, carrying the type inferred for it where one was recorded.
     Expr(Var, Option<Arc<TypeNode>>),
+    // A name a pattern binds, carrying the type inferred for it where one was recorded.
     Pattern(Var, Option<Arc<TypeNode>>),
     Type(TyCon),
     Trait(TraitId),

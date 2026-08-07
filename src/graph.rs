@@ -1,6 +1,8 @@
 use crate::misc::{Map, Set};
 use std::{collections::VecDeque, hash::Hash};
 
+// A directed graph over a fixed set of elements, where a node is addressed by the position of its
+// element.
 pub struct Graph<T> {
     // Data stored in nodes;
     elems: Vec<T>,
@@ -19,6 +21,8 @@ impl<T> Graph<T> {
         }
     }
 
+    // Create a graph from a vector of elements and the nodes each node has an edge to, given as one
+    // list of node indices per element.
     #[allow(dead_code)]
     pub fn new_with_edges(elems: Vec<T>, edges: Vec<Vec<usize>>) -> Self {
         let len = elems.len();
@@ -152,7 +156,7 @@ impl<T> Graph<T> {
         let mut reversed_edges: Vec<Vec<usize>> = vec![vec![]; num_nodes];
         for u in 0..num_nodes {
             for &v in &self.edges[u] {
-                reversed_edges[v].push(u); // 辺 u -> v を v -> u に反転
+                reversed_edges[v].push(u); // Reverse the edge u -> v into v -> u
             }
         }
 
@@ -186,7 +190,7 @@ impl<T> Graph<T> {
                 self.scc_dfs1(v, visited, finish_order);
             }
         }
-        // DFSが完了したノードをスタックに積む
+        // Push the node onto the stack once its DFS has finished
         finish_order.push_back(u);
     }
 
@@ -200,7 +204,7 @@ impl<T> Graph<T> {
         scc_ids: &mut Vec<usize>,
     ) {
         visited[u] = true;
-        scc_ids[u] = current_scc_id; // 現在のSCCのIDを割り当てる
+        scc_ids[u] = current_scc_id; // Assign the ID of the SCC being collected
 
         for &v in &reversed_edges[u] {
             if !visited[v] {

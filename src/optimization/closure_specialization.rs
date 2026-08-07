@@ -924,7 +924,8 @@ impl Known {
 }
 
 impl ClosureSpecializationVisitor {
-    // Create a new visitor
+    // A walk over the body of `current_symbol`, judging what to copy against `specializable_funcs`
+    // and carrying what the chain of requests reaching that symbol has already committed to.
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
@@ -1263,15 +1264,13 @@ fn apply(func: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
 }
 
 impl ExprVisitor for ClosureSpecializationVisitor {
+    // A name holding the bare capture list of a lifted lambda, read where the closure is called for,
+    // is wrapped back into one: the lambda's global function applied to that capture list.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If `expr` refers to a decaptured lambda, and
-        // the type of this expression is T, and the lambda function type is C->T (C is the capture list type),
-        // replace it with an expression that applies the lambda function to the capture list.
-
         // Get the name
         let name = &expr.get_var().name;
 
@@ -1306,14 +1305,14 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Where an inline-LLVM expression reads a free variable holding the bare capture list of a
+    // lifted lambda, the closure wrapping that capture list is bound to a local in front of the
+    // expression, and the expression reads that local instead.
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If any free variable in the LLVM expression refers to a decaptured lambda,
-        // replace it with an expression that applies the lambda function to the capture list.
-
         // The call of the lambda function, by the free variable holding the capture list it is
         // applied to.
         let mut call_lam_exprs = Map::default();
@@ -1478,12 +1477,13 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // A parameter holding a bare capture list leaves the domain of the recorded lambda type stale,
+    // so that domain is set to the type of the capture list before the body is visited.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
         let params = expr.get_lam_params();
         assert_eq!(params.len(), 1);
         let arg = &params[0];
@@ -1505,9 +1505,10 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
+    // Visiting the body can change its type, so the codomain of the lambda type is set to the type
+    // the body now has. In `|x| |y| (...)`, a `y` holding a capture list retypes `|y| (...)`, which
+    // is the codomain of the outer lambda.
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
-        // Example: In `expr` is a lambda `|x| |y| (...)`, if `y` is a decaptured lambda, visiting `|y| (...)` may change its type, so the codomain of `|x| |y| (...)` may need to be fixed.
         let lam_ty = expr.type_.as_ref().unwrap();
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();

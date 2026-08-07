@@ -176,6 +176,7 @@ struct LiftedFix {
 }
 
 impl LiftedFix {
+    // The program symbol defining `G`, typed by the type recorded on the lifted body.
     fn into_symbol(self) -> Symbol {
         Symbol {
             name: self.func_name.clone(),
@@ -186,6 +187,8 @@ impl LiftedFix {
     }
 }
 
+// The walk over one symbol that rewrites each `fix` application in it and collects the global
+// functions lifted out along the way.
 struct FixDefunctionalizer {
     // The symbol being processed; lifted-function names are derived from it.
     current_symbol: FullName,
@@ -206,6 +209,9 @@ struct FixDefunctionalizer {
 }
 
 impl FixDefunctionalizer {
+    // A walk over `current_symbol`, minting lifted-function names clear of `global_names` and sharing
+    // the global lambda definitions and the fixpoints built for them with the walks over the other
+    // symbols.
     fn new(
         current_symbol: FullName,
         global_names: Set<FullName>,
@@ -303,6 +309,8 @@ impl FixDefunctionalizer {
 }
 
 impl ExprVisitor for FixDefunctionalizer {
+    // An application of `Std::fix` becomes a call of the global function lifted from its recursion
+    // body, with any further arguments applied to the result.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -381,10 +389,10 @@ impl ExprVisitor for FixDefunctionalizer {
     fn end_visit_lam(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(e)
     }
+    // Record `let name = |..| ..` so a later `fix(name)` in this let's body resolves to the lambda.
+    // The `let` is an ancestor of any such use, so recording on the way down suffices; the binding
+    // stays even after a use is rewritten, since the lambda may be used elsewhere too.
     fn start_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        // Record `let name = |..| ..` so a later `fix(name)` in this let's body resolves to the
-        // lambda. The `let` is an ancestor of any such use, so recording on the way down suffices;
-        // the binding stays even after a use is rewritten, since the lambda may be used elsewhere too.
         if let Expr::Let(pat, bound, _) = &*e.expr {
             if bound.is_lam() {
                 let vars = pat.var_infos();

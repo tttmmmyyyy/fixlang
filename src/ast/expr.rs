@@ -202,6 +202,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // This application with its arguments replaced. Panics if the expression is not an application.
     pub fn set_app_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -215,6 +216,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // The function this application applies. Panics if the expression is not an application.
     #[allow(dead_code)]
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
@@ -225,6 +227,8 @@ impl ExprNode {
         }
     }
 
+    // The arguments this application applies its function to, at this single application node.
+    // Panics if the expression is not an application.
     #[allow(dead_code)]
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
@@ -284,6 +288,7 @@ impl ExprNode {
         (args, body)
     }
 
+    // This lambda with its parameters replaced. Panics if the expression is not a lambda.
     #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
@@ -298,6 +303,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // This lambda with its body replaced. Panics if the expression is not a lambda.
     pub fn set_lam_body(&self, body: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {

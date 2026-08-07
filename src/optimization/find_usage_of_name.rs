@@ -7,6 +7,7 @@ use crate::ast::{
 };
 use std::sync::Arc;
 
+// One way a name is used, at one occurrence of it.
 pub enum UsageType {
     // The name is passed as an argument to a function.
     // The first component is the name of the function called, and the second component is the index
@@ -20,6 +21,9 @@ pub enum UsageType {
     CapturedInto(FullName, usize),
 }
 
+// The uses of `name` within `expr`, one entry per occurrence that `UsageType` has a shape for, in
+// the order the walk meets them. An occurrence standing under an inner binding of the same name
+// belongs to that binding and is passed over.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     let mut usages = Vec::new();
     let mut finder = UsageFinder {
@@ -30,8 +34,11 @@ pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     usages
 }
 
+// The walk collecting the uses of one name.
 struct UsageFinder<'a> {
+    // The name whose uses are being collected.
     name: &'a FullName,
+    // The uses met so far, which the walk appends to.
     usages: &'a mut Vec<UsageType>,
 }
 
