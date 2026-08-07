@@ -373,12 +373,15 @@ impl LiftedLambdas {
     // to the capture struct of what it holds. The type constructor is named after the unit that
     // receives it, so the type and the tree determine each other.
     fn capture_struct_of(&mut self, tree: &Tree) -> CaptureStruct {
-        let mut cap = self.lambdas[&tree.lambda].cap.clone();
-        let owner = tree.unit().name();
-        for (field, inner) in &tree.fields {
-            let inner_ty = self.capture_struct_of(inner).ty;
-            cap = cap.with_field_type(CAP_LIST_PREFIX, &owner, *field, inner_ty);
+        let base = &self.lambdas[&tree.lambda].cap;
+        if tree.fields.is_empty() {
+            return base.clone();
         }
+        let mut fields = base.fields().to_vec();
+        for (field, inner) in &tree.fields {
+            fields[*field].1 = self.capture_struct_of(inner).ty;
+        }
+        let cap = CaptureStruct::new(CAP_LIST_PREFIX, &tree.unit().name(), &fields);
         self.record_capture_list(&cap, tree);
         cap
     }
@@ -713,9 +716,10 @@ fn reaches_a_direct_call(
         .into_iter()
         .any(|usage| match usage {
             UsageType::CalledAsFunction => true,
-            UsageType::FunctionArgument(func, idx) => {
-                is_specializable(specializable_funcs, &func, Slot::arg(idx))
-            }
+            // A call whose callee is an expression rather than a name is one no copy can be made
+            // of, so nothing arrives at a way in through it.
+            UsageType::FunctionArgument(func, idx) => func
+                .is_some_and(|func| is_specializable(specializable_funcs, &func, Slot::arg(idx))),
             // A value captured into a lifted lambda's capture list arrives in that lambda's body
             // through the field it was stored in, which is a way in like an argument. A struct this
             // pass did not mint — one the program declares, or the capture list

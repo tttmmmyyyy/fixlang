@@ -9,10 +9,10 @@ use crate::ast::{
 };
 
 pub enum UsageType {
-    // The name is passed as an argument to a function.
-    // The first component is the name of the function called, and the second component is the index
-    // of the argument the name was passed as.
-    FunctionArgument(FullName, usize),
+    // The name is passed as an argument to a call. The first component names the function called,
+    // and is `None` where the callee is an expression rather than a name; the second is the index of
+    // the argument the name was passed as.
+    FunctionArgument(Option<FullName>, usize),
     // The name is used as a function and is called.
     CalledAsFunction,
     // The name is stored into a field of a struct being built. The first component names the type
@@ -93,14 +93,14 @@ impl ExprVisitor for UsageFinder<'_> {
         if fun.is_var() && &fun.get_var().name == self.name {
             self.add_usage(UsageType::CalledAsFunction);
         }
-        // A call whose callee is not a variable has no name to record the argument against, and the
-        // consumer looks the name up among the program's globals, so such a call is passed over.
-        if fun.is_var() {
-            let fun_name = fun.get_var().name.clone();
-            for (i, arg) in args.iter().enumerate() {
-                if arg.is_var() && &arg.get_var().name == self.name {
-                    self.add_usage(UsageType::FunctionArgument(fun_name.clone(), i));
-                }
+        let fun_name = if fun.is_var() {
+            Some(fun.get_var().name.clone())
+        } else {
+            None
+        };
+        for (i, arg) in args.iter().enumerate() {
+            if arg.is_var() && &arg.get_var().name == self.name {
+                self.add_usage(UsageType::FunctionArgument(fun_name.clone(), i));
             }
         }
         StartVisitResult::VisitChildren

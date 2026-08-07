@@ -38,21 +38,14 @@ impl CaptureStruct {
     // `tycon_info` into the program's type environment.
     //
     // # Arguments
-    // * `prefix` - the head of the type constructor's name, which keeps the capture structs of one
-    //   caller distinct from those of another.
-    // * `owner` - the function this capture struct is built for, which the name is made unique by.
+    // * `prefix` - the head of the type constructor's name, which says which pass built the capture
+    //   struct.
+    // * `owner` - the function this capture struct is built for. It is a global name of its own, so
+    //   it alone tells one capture struct from another.
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
     pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
-        let signature = fields
-            .iter()
-            .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
-            .collect::<Vec<_>>()
-            .join(",");
         let tycon = Arc::new(TyCon {
-            name: FullName::new(
-                &owner.namespace,
-                &format!("{}@{}<{}>", prefix, owner.name, signature),
-            ),
+            name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),
         });
         let tycon_info = TyConInfo {
             kind: kind_star(),
@@ -90,22 +83,6 @@ impl CaptureStruct {
     // The captured names paired with their types, in the order the struct holds them.
     pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
         &self.fields
-    }
-
-    // The same capture struct with the type of one field narrowed, as happens when the lambda in
-    // that field turns out to be a known one and is threaded through as its capture list instead of
-    // as a closure. The prefix and the owner are given again because the type constructor's name is
-    // built from them.
-    pub fn with_field_type(
-        &self,
-        prefix: &str,
-        owner: &FullName,
-        field: usize,
-        ty: Arc<TypeNode>,
-    ) -> Self {
-        let mut fields = self.fields.clone();
-        fields[field].1 = ty;
-        CaptureStruct::new(prefix, owner, &fields)
     }
 
     // Pattern destructuring the capture struct back into its original captured names.
