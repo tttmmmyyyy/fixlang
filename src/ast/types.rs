@@ -1,6 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::sync::OnceLock;
-
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::FullName;
@@ -38,9 +35,10 @@ use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
@@ -436,10 +434,10 @@ pub struct TypeNode {
     pub info: TypeInfo,
     /// The hash of `ty`, kept once computed.
     ///
-    /// A type is a directed acyclic graph rather than a tree: substituting an argument that a
-    /// declaration mentions twice makes both occurrences the same node. Hashing such a type by
-    /// walking it costs as much as the tree it unfolds to, which doubles at every level of a type
-    /// like `P (a, a)`. Keeping the hash on the node makes the walk cost one visit per node.
+    /// A type is a directed acyclic graph: substituting an argument that a declaration mentions
+    /// twice makes both occurrences the same node. Hashing such a type by walking it costs as much
+    /// as the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. Keeping
+    /// the hash on the node makes the walk cost one visit per node.
     ///
     /// `Clone` leaves this empty: the clone-then-replace idiom the setters use would otherwise
     /// carry the hash of the type the node held before.
@@ -1567,6 +1565,9 @@ fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
 }
 
 impl PartialEq for Type {
+    /// Compares the parts of the type expression, taking two occurrences of one node as equal on
+    /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node
+    /// holds.
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::TyVar(lhs), Type::TyVar(rhs)) => lhs == rhs,
@@ -1900,9 +1901,9 @@ impl TypeNode {
     /// How deeply this type nests: a name is one, and an application or an associated type is one
     /// more than the deepest part it is made of.
     ///
-    /// This measures the type expression the program wrote or the compiler built, not the fields it
-    /// leads to: a chain of a thousand types that each hold the next is a thousand types of depth
-    /// one. What grows this is a type reached from itself at a larger type argument.
+    /// This measures the type expression the program wrote or the compiler built: a chain of a
+    /// thousand types that each hold the next is a thousand types of depth one. What grows this is
+    /// a type reached from itself at a larger type argument.
     pub fn depth(&self) -> usize {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,

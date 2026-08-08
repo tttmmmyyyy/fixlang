@@ -27,15 +27,14 @@
 //! The bound also settles termination: over a finite set of type constructors there are finitely
 //! many types of bounded depth, so the walk runs out of new types to visit.
 //!
-//! `Program::validate_layouts` runs this over an instantiated program, before code generation walks
-//! the fields of any type.
-
-use std::sync::Arc;
+//! The check runs over an instantiated program, before code generation walks the fields of any
+//! type.
 
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Set};
 use crate::object::{ty_to_object_ty, ObjectFieldType};
+use std::sync::Arc;
 
 /// How deeply a single type may nest before it is called endless.
 ///

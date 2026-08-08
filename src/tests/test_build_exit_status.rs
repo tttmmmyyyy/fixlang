@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{fix_build_source_command, fix_command};
+    use std::fs;
     use tempfile::TempDir;
 
     const SOURCE: &str = r#"module Main;
@@ -32,7 +33,7 @@ main = println("hi");
             String::from_utf8_lossy(&control.stdout),
             String::from_utf8_lossy(&control.stderr)
         );
-        std::fs::remove_file(&out_path).expect("Failed to remove the control build's output");
+        fs::remove_file(&out_path).expect("Failed to remove the control build's output");
 
         let output = fix_build_source_command(temp_dir.path(), SOURCE, "none")
             .arg("-o")
@@ -119,8 +120,8 @@ size_of_bad = |_| ( let a : Array Bad = Array::empty(0); a.get_size );
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let main_path = temp_dir.path().join("main.fix");
         let zzz_path = temp_dir.path().join("zzz.fix");
-        std::fs::write(&main_path, MAIN).expect("Failed to write main.fix");
-        std::fs::write(&zzz_path, ZZZ).expect("Failed to write zzz.fix");
+        fs::write(&main_path, MAIN).expect("Failed to write main.fix");
+        fs::write(&zzz_path, ZZZ).expect("Failed to write zzz.fix");
 
         let output = fix_command()
             .arg("build")
