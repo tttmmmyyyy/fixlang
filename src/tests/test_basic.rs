@@ -2880,8 +2880,8 @@ by_key : ((I64, I64), (I64, I64)) -> Bool;
 by_key = |((lhs, _), (rhs, _))| lhs < rhs;
 
 check : String -> I64 -> Array (I64, I64) -> IO ();
-check = |order, n, arr| (
-    let name = order + " input of size " + n.to_string;
+check = |input_kind, n, arr| (
+    let name = input_kind + " input of size " + n.to_string;
     let sorted = arr.sort_stable_by(by_key);
     assert(|_| name + ": sorted and stable", sorted.is_sorted_stably);;
     // Every position appears exactly once, so no element was dropped or duplicated.
