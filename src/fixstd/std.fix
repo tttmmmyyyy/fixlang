@@ -466,8 +466,11 @@ namespace Array {
     // - `arr`: An array of elements to be sorted.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, arr| (
+        // Twice the number of times the size halves down to nothing. Quicksort on a randomly
+        // ordered array recurses deeper than the logarithm of the size, so a budget of the
+        // logarithm alone hands most of the work to heap sort.
         let depth = loop((arr.@size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
-        arr._introsort_by_internal(less_than, 0, arr.@size, depth)
+        arr._introsort_by_internal(less_than, 0, arr.@size, 2_U8 * depth)
     );
 
     // Reverse an array.
@@ -503,8 +506,8 @@ namespace Array {
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
 
         let (arr, pivot_i) = range(start, end).fold((arr, start), |j, (arr, i)|
-            if less_than((arr.@(j), pivot)) {
-                // Found j such that `arr.@(j)` < pivot, then move it to the left.
+            if less_than((arr._unsafe_get_bounds_unchecked(j), pivot)) {
+                // Found j whose element compares less than the pivot, so move it to the left.
                 (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
             } else {
                 (arr, i)
@@ -513,6 +516,21 @@ namespace Array {
 
         // Move pivot to pivot_i.
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
+
+        // Nothing compared less than the pivot, so the partition moved one element into place, and
+        // a range whose elements all compare equal would go on doing that one element at a time.
+        // Gather everything equal to the pivot beside it instead, and drop all of it from the
+        // recursion at once.
+        if pivot_i == start {
+            let (arr, equal_end) = range(start + 1, end).fold((arr, start + 1), |j, (arr, k)|
+                if less_than((pivot, arr._unsafe_get_bounds_unchecked(j))) {
+                    (arr, k)
+                } else {
+                    (arr.unsafe_swap_bounds_unchecked(k, j), k + 1)
+                }
+            );
+            arr._introsort_by_internal(less_than, equal_end, end, depth - 1_U8)
+        };
 
         let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth - 1_U8);
         let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
