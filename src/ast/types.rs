@@ -1574,8 +1574,8 @@ impl PartialEq for Type {
             (Type::TyApp(lhs_fun, lhs_arg), Type::TyApp(rhs_fun, rhs_arg)) => {
                 type_node_eq(lhs_fun, rhs_fun) && type_node_eq(lhs_arg, rhs_arg)
             }
-            (Type::AssocTy(lhs_name, lhs_args), Type::AssocTy(rhs_name, rhs_args)) => {
-                lhs_name == rhs_name
+            (Type::AssocTy(lhs_assoc_ty, lhs_args), Type::AssocTy(rhs_assoc_ty, rhs_args)) => {
+                lhs_assoc_ty == rhs_assoc_ty
                     && lhs_args.len() == rhs_args.len()
                     && lhs_args
                         .iter()

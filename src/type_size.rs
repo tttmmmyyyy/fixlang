@@ -136,7 +136,7 @@ fn size_of(
     if ty.depth() > MAX_TYPE_DEPTH {
         return Some(depth_message(root));
     }
-    let in_place: Vec<Arc<TypeNode>> = held_types(ty, type_env)
+    let in_place_tys: Vec<Arc<TypeNode>> = held_types(ty, type_env)
         .into_iter()
         .filter(|held_ty| held_ty.is_unbox(type_env))
         .collect();
@@ -144,7 +144,7 @@ fn size_of(
     path.push(ty.clone());
     on_path.insert(ty.clone());
     let reason = grow_stack(|| {
-        in_place
+        in_place_tys
             .iter()
             .find_map(|held_ty| size_of(root, held_ty, type_env, path, on_path, walk))
     });
@@ -209,19 +209,25 @@ fn held_types(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
 
 /// The way down from the type that shows the defect to the type that has none, spelled out only
 /// where it passes through another type — a type holding itself directly is the whole story.
-fn way_down(path: &[Arc<TypeNode>], ty: &Arc<TypeNode>) -> String {
-    // The caller reports a way down only for a type the descent is inside, so `ty` is on `path`.
+fn way_down(path: &[Arc<TypeNode>], repeated_ty: &Arc<TypeNode>) -> String {
+    // The caller reports a way down only for a type the descent is inside, so `repeated_ty` is on
+    // `path`.
     let start = path
         .iter()
-        .position(|ancestor| ancestor == ty)
-        .unwrap_or_else(|| panic!("`{}` is not on the descent it was found on", ty.to_string()));
+        .position(|ancestor| ancestor == repeated_ty)
+        .unwrap_or_else(|| {
+            panic!(
+                "`{}` is not on the descent it was found on",
+                repeated_ty.to_string()
+            )
+        });
     if path.len() - start <= 1 {
         return String::new();
     }
     let descent = path[start..]
         .iter()
-        .chain([ty])
-        .map(|ty| format!("`{}`", ty.to_string()))
+        .chain([repeated_ty])
+        .map(|step_ty| format!("`{}`", step_ty.to_string()))
         .collect::<Vec<_>>();
     format!(" ({})", descent.join(" -> "))
 }
