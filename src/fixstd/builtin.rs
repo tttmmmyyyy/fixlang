@@ -2682,9 +2682,8 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         // The elements can be moved out of `src` (with no reference counting) only when `src` is
         // uniquely owned; another owner of a shared `src` would be left reading freed memory.
         //
-        // This check is not the one `unique_check_operand` declares -- it is emitted whatever
-        // `force_unique` says, because moving the elements instead of retaining them is sound only
-        // for a unique `src`. Nothing proved `src` local, so it reads the state.
+        // `unique_check_operand` declares the check on `dst`; this one is `src`'s, and stands
+        // whatever `force_unique` says. Nothing proved `src` local, so it reads the state.
         let (src_unique_bb, src_shared_bb) =
             gc.build_branch_by_is_unique(src_ptr, RcState::Unknown);
 
