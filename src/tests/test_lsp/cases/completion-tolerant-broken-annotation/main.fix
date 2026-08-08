@@ -1,0 +1,11 @@
+module Main;
+
+myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+
+myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+
+main : IO () = (
+    let x = (3 : b);
+    let y = 42.
+    pure()
+);

@@ -597,17 +597,125 @@ impl TypeCheckContext {
 
     /// Combine `tolerate` with the canonical fresh-tyvar fallback for a
     /// failed pattern elaboration: on `Err` in `error_tolerant` mode,
-    /// substitute a typed-but-empty-binding pattern so the surrounding
-    /// walk can continue.
+    /// substitute a typed-throughout, empty-binding pattern so the
+    /// surrounding walk can continue.
     pub fn tolerate_pattern_typed(
         &mut self,
         res: Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors>,
         pat: &Arc<PatternNode>,
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
-        Ok(self.tolerate(res)?.unwrap_or_else(|| {
-            let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-            (pat.set_type(pat_ty), Map::default())
-        }))
+        Ok(self
+            .tolerate(res)?
+            .unwrap_or_else(|| (self.set_fallback_types_on_pattern(pat), Map::default())))
+    }
+
+    /// Assign a type to every node of `ei`: `ty` at the root and a fresh type
+    /// variable at every descendant expression and pattern. The tolerant
+    /// fallbacks substitute an unelaborated subtree for one whose elaboration
+    /// failed, and every later tree walk relies on each node carrying a type
+    /// (see `fix_types`), so the substitute is typed throughout.
+    fn set_fallback_types(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+        let expr = ei.set_type(ty);
+        match &*expr.expr {
+            Expr::Var(_) => expr,
+            Expr::LLVM(_) => expr,
+            Expr::App(fun, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| self.set_fallback_types_fresh(arg))
+                    .collect();
+                let fun = self.set_fallback_types_fresh(fun);
+                expr.set_app_func(fun).set_app_args(args)
+            }
+            Expr::Lam(_args, body) => {
+                let body = self.set_fallback_types_fresh(body);
+                expr.set_lam_body(body)
+            }
+            Expr::Let(pat, val, body) => {
+                let pat = self.set_fallback_types_on_pattern(pat);
+                let val = self.set_fallback_types_fresh(val);
+                let body = self.set_fallback_types_fresh(body);
+                expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let cond = self.set_fallback_types_fresh(cond);
+                let then_expr = self.set_fallback_types_fresh(then_expr);
+                let else_expr = self.set_fallback_types_fresh(else_expr);
+                expr.set_if_cond(cond)
+                    .set_if_then(then_expr)
+                    .set_if_else(else_expr)
+            }
+            Expr::Match(cond, pat_vals) => {
+                let cond = self.set_fallback_types_fresh(cond);
+                let pat_vals = pat_vals
+                    .iter()
+                    .map(|(pat, val)| {
+                        (
+                            self.set_fallback_types_on_pattern(pat),
+                            self.set_fallback_types_fresh(val),
+                        )
+                    })
+                    .collect();
+                expr.set_match_cond(cond).set_match_pat_vals(pat_vals)
+            }
+            Expr::TyAnno(e, _) => {
+                let e = self.set_fallback_types_fresh(e);
+                expr.set_tyanno_expr(e)
+            }
+            Expr::MakeStruct(_tc, fields) => {
+                let mut fields = fields.clone();
+                for (_, _, field_expr) in fields.iter_mut() {
+                    *field_expr = self.set_fallback_types_fresh(field_expr);
+                }
+                expr.set_make_struct_fields(fields)
+            }
+            Expr::ArrayLit(elems) => {
+                let elems = elems
+                    .iter()
+                    .map(|e| self.set_fallback_types_fresh(e))
+                    .collect();
+                expr.set_array_lit_elems(elems)
+            }
+            Expr::FFICall(_, _, _, _, args, _) => {
+                let args = args
+                    .iter()
+                    .map(|arg| self.set_fallback_types_fresh(arg))
+                    .collect();
+                expr.set_ffi_call_args(args)
+            }
+            Expr::Eval(side, main) => {
+                let side = self.set_fallback_types_fresh(side);
+                let main = self.set_fallback_types_fresh(main);
+                expr.set_eval_side(side).set_eval_main(main)
+            }
+        }
+    }
+
+    /// `set_fallback_types` with a fresh type variable at the root.
+    fn set_fallback_types_fresh(&mut self, ei: &Arc<ExprNode>) -> Arc<ExprNode> {
+        let ty = self.fresh_ty_with_src(&ei.source);
+        self.set_fallback_types(ei, ty)
+    }
+
+    /// Pattern counterpart of `set_fallback_types`: a fresh type variable at
+    /// the pattern and at each of its sub-patterns.
+    fn set_fallback_types_on_pattern(&mut self, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
+        let ty = self.fresh_ty_with_src(&pat.info.source);
+        let pat = pat.set_type(ty);
+        match &pat.pattern {
+            Pattern::Var(_, _) => pat,
+            Pattern::Struct(_, field_to_pat) => {
+                let mut field_to_pat = field_to_pat.clone();
+                for (_, _, subpat) in field_to_pat.iter_mut() {
+                    *subpat = self.set_fallback_types_on_pattern(subpat);
+                }
+                pat.set_struct_field_to_pat(field_to_pat)
+            }
+            Pattern::Union(_, _, subpat) => {
+                let subpat = self.set_fallback_types_on_pattern(subpat);
+                pat.set_union_pat(subpat)
+            }
+        }
     }
 
     /// Resolve `tc`, the head of a struct literal or of a struct
@@ -1049,11 +1157,12 @@ impl TypeCheckContext {
             match self.unify_type_of_expr_inner(ei, ty) {
                 Ok(e) => Ok(e),
                 Err(errs) if self.error_tolerant => {
-                    // Swallow the failure and substitute a placeholder
-                    // annotated with the expected type, so enclosing
-                    // elaboration can keep going on sibling nodes.
+                    // Swallow the failure and substitute the original
+                    // subtree — the expected type at its root, fresh
+                    // type variables below — so enclosing elaboration
+                    // can keep going on sibling nodes.
                     let _ = errs;
-                    Ok(ei.set_type(ty_for_fallback))
+                    Ok(self.set_fallback_types(ei, ty_for_fallback))
                 }
                 Err(errs) => Err(errs),
             }
@@ -1370,7 +1479,12 @@ impl TypeCheckContext {
                     .set_if_else(else_expr))
             }
             Expr::TyAnno(e, anno_ty) => {
-                let anno_ty = self.validate_type_annotation(&anno_ty)?;
+                // In `error_tolerant` mode an ill-formed annotation
+                // (e.g. one naming an unknown type variable) is
+                // dropped, and the child is elaborated against the
+                // contextual type.
+                let validated = self.validate_type_annotation(&anno_ty);
+                let anno_ty = self.tolerate(validated)?.unwrap_or_else(|| ty.clone());
                 // After a successful unify, `ty` and `anno_ty` are
                 // substitution-equivalent, so either could be the
                 // child's expected type. After a tolerated mismatch
@@ -1776,6 +1890,15 @@ impl TypeCheckContext {
         // there is no useful typed expression to keep.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
+        // The tolerant path's only invariant is "every node has an
+        // inferred type". `check_all_typed` verifies it here, before
+        // `fix_types` reads the types and aborts the process on a
+        // missing one, so a fallback that leaves part of the tree
+        // untyped surfaces as a failed request.
+        if self.error_tolerant {
+            self.check_all_typed(&expr)?;
+        }
+
         // Hard step 2: substitute every node's type. This walks the
         // tree but does not check that types are fully determined.
         // Failure means substitute_and_reduce_type itself failed (e.g.
@@ -1815,12 +1938,7 @@ impl TypeCheckContext {
         //   constraints from partially failed sub-expressions, and
         //   surfacing them as diagnostics confuses the LSP without
         //   helping the user.
-        //
-        // The tolerant path's only invariant is "every node has an
-        // inferred type"; `check_all_typed` walks the tree to catch
-        // regressions.
         if self.error_tolerant {
-            self.check_all_typed(&expr)?;
             return Ok((expr, Errors::empty()));
         }
 
