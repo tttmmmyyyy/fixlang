@@ -86,6 +86,10 @@ fn statement_before_cursor(content: &str, cursor_byte: usize) -> Option<String> 
 /// the namespace path enclosing the cursor. Malformed text (this runs
 /// on half-typed statements) degrades to a nearby context rather than
 /// to an error.
+///
+/// The token shapes recognized here follow the `import_statement` rule
+/// in `src/parse/grammer.pest`; a change to the import syntax needs a
+/// matching change here.
 fn classify_fragment(rest: &str) -> ImportContext {
     let ident_chars = chars_allowed_in_identifiers();
     let is_ident_char = |c: char| ident_chars.contains(c);
@@ -242,6 +246,7 @@ fn module_name_items(
 
     // The typed module path consists of identifier characters and `.`,
     // all ASCII, so its UTF-16 length equals its byte length.
+    assert!(typed.is_ascii(), "non-ASCII module path: {:?}", typed);
     let end = position.position;
     let start = Position {
         line: end.line,
@@ -268,7 +273,12 @@ fn module_name_items(
                 range,
                 new_text: name.clone(),
             })),
-            data: Some(resolve_data(EndNode::Module(name), typing_text, position)),
+            data: Some(ResolveData::to_value(
+                EndNode::Module(name),
+                typing_text,
+                position,
+                true,
+            )),
             ..CompletionItem::default()
         })
         .collect()
@@ -445,23 +455,9 @@ fn leaf_item(
         tags: tags_field,
         filter_text: Some(name.clone()),
         insert_text: Some(name.clone()),
-        data: Some(resolve_data(node, typing_text, position)),
+        data: Some(ResolveData::to_value(node, typing_text, position, true)),
         ..CompletionItem::default()
     }
-}
-
-fn resolve_data(
-    node: EndNode,
-    typing_text: &str,
-    position: &TextDocumentPositionParams,
-) -> serde_json::Value {
-    serde_json::to_value(ResolveData {
-        node,
-        typing_text: typing_text.to_string(),
-        position: position.clone(),
-        in_import: true,
-    })
-    .unwrap()
 }
 
 #[cfg(test)]

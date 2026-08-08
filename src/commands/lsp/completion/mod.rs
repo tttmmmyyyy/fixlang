@@ -57,6 +57,24 @@ struct ResolveData {
     in_import: bool,
 }
 
+impl ResolveData {
+    /// Build the serialized payload to stash in `CompletionItem::data`.
+    fn to_value(
+        node: EndNode,
+        typing_text: &str,
+        position: &TextDocumentPositionParams,
+        in_import: bool,
+    ) -> serde_json::Value {
+        serde_json::to_value(ResolveData {
+            node,
+            typing_text: typing_text.to_string(),
+            position: position.clone(),
+            in_import,
+        })
+        .unwrap()
+    }
+}
+
 /// Handles the `textDocument/completion` LSP request: collects
 /// candidate symbols (globals, type constructors, traits, associated
 /// types) visible at the cursor and replies with a list of
@@ -203,15 +221,12 @@ pub(super) fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(
-                serde_json::to_value(ResolveData {
-                    node: end_node,
-                    typing_text: typing_text.to_string(),
-                    position: text_document_position.clone(),
-                    in_import: false,
-                })
-                .unwrap(),
-            ),
+            data: Some(ResolveData::to_value(
+                end_node,
+                typing_text,
+                text_document_position,
+                false,
+            )),
             tags: tags_field,
         }
     }
@@ -634,11 +649,13 @@ fn walk_for_hole(
             let take = match best {
                 None => true,
                 Some(prev) => {
-                    let prev_len = prev
+                    // `best` is only ever assigned an expr whose `source`
+                    // passed the let-else above, so it has a span.
+                    let prev_span = prev
                         .source
                         .as_ref()
-                        .map(|s| s.end - s.start)
-                        .unwrap_or(usize::MAX);
+                        .expect("hole candidate recorded without a span");
+                    let prev_len = prev_span.end - prev_span.start;
                     let cur_len = span.end - span.start;
                     cur_len <= prev_len
                 }

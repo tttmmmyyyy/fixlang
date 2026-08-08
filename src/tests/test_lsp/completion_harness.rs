@@ -122,43 +122,16 @@ impl LspCompletionCtx {
         format!("file://{}", self.project_dir.join(file).display())
     }
 
-    /// Send textDocument/completion and return the result items.
+    /// Send textDocument/completion and return the result items,
+    /// waiting up to 5 seconds for the response.
     pub fn complete(&mut self, file: &str, line: u32, col: u32) -> Vec<Value> {
-        let uri = self.file_uri(file);
-        let id = self
-            .client
-            .send_request(
-                "textDocument/completion",
-                json!({
-                    "textDocument": { "uri": uri },
-                    "position": { "line": line, "character": col }
-                }),
-            )
-            .expect("Failed to send completion request");
-        self.client.wait_for_server(Duration::from_secs(5));
-        let response = self
-            .client
-            .get_response(id)
-            .expect("Should receive a completion response");
-        let result = response
-            .get("result")
-            .expect("Response should have a result field");
-        // The result can be either an array or a CompletionList object.
-        if result.is_array() {
-            result.as_array().unwrap().clone()
-        } else {
-            result
-                .get("items")
-                .and_then(|items| items.as_array())
-                .cloned()
-                .unwrap_or_default()
-        }
+        self.complete_with_timeout(file, line, col, Duration::from_secs(5))
     }
 
     /// Send textDocument/completion and poll for the response with
     /// the given timeout. Use this in dot-completion tests where
     /// the server's first-time re-elaborate can take longer than
-    /// `complete`'s hard-coded 5s wait on a cold cache.
+    /// `complete`'s 5-second wait on a cold cache.
     pub fn complete_with_timeout(
         &mut self,
         file: &str,
