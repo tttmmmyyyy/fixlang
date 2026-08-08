@@ -7992,6 +7992,11 @@ fn array_append_destination<'c, 'm>(
     force_unique: bool,
     state: RcState,
 ) -> (Object<'c>, IntValue<'c>, PointerValue<'c>) {
+    assert!(
+        dst.ty.is_array(),
+        "an append writes past the length of an array, and `{}` is not one.",
+        dst.ty.to_string()
+    );
     let elem_value_ty = dst.ty.field_types(gc.type_env())[0].get_embedded_type(gc);
     let dst = force_unique_or_assert(gc, dst, force_unique, state);
     let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();

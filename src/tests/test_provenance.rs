@@ -113,7 +113,14 @@ mod integration_tests {
     /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`
     /// keyword) and whose name segment, up to the first space or parenthesis, satisfies `name_pred`.
     fn is_sig(line: &str, name_prefix: &str, name_pred: &impl Fn(&str) -> bool) -> bool {
-        line.starts_with(name_prefix) && name_pred(line.split(['(', ' ']).nth(1).unwrap_or(""))
+        if !line.starts_with(name_prefix) {
+            return false;
+        }
+        let name = line
+            .split(['(', ' '])
+            .nth(1)
+            .unwrap_or_else(|| panic!("a signature line carries no name segment:\n{}", line));
+        name_pred(name)
     }
 
     /// The first function signature in `dump` starting with `name_prefix` and whose name segment
@@ -299,11 +306,11 @@ mod integration_tests {
 
     /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
     fn borrow_call_first_arg(line: &str) -> &str {
-        line.split("#borrow(")
+        let after = line
+            .split("#borrow(")
             .nth(1)
-            .and_then(|after| after.split([',', ')']).next())
-            .unwrap_or("")
-            .trim()
+            .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
+        after.split([',', ')']).next().unwrap().trim()
     }
 
     /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
