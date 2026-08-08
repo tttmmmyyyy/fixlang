@@ -90,9 +90,9 @@ pub(super) fn position_to_bytes(string: &str, position: Position) -> usize {
     bytes
 }
 
-// Returns true when the cursor of `text_position` sits inside a comment
-// (`//` line comment or `/* */` block comment) in the latest content of
-// the file. If the content for the uri is unavailable, returns false.
+/// Returns true when the cursor of `text_position` sits inside a comment
+/// (`//` line comment or `/* */` block comment) in the latest content of
+/// the file. If the content for the uri is unavailable, returns false.
 pub(super) fn is_cursor_in_comment(
     uri_to_content: &Map<Uri, LatestContent>,
     text_position: &TextDocumentPositionParams,
@@ -106,8 +106,8 @@ pub(super) fn is_cursor_in_comment(
     is_byte_in_comment(content, cursor)
 }
 
-// Returns true when byte offset `cursor` in `content` falls inside a
-// `//` line comment or `/* */` block comment.
+/// Returns true when byte offset `cursor` in `content` falls inside a
+/// `//` line comment or `/* */` block comment.
 fn is_byte_in_comment(content: &str, cursor: usize) -> bool {
     let state = scan_outside_comments(content, cursor, &mut |_, _| {});
     matches!(state, ScanState::LineComment | ScanState::BlockComment)
@@ -274,11 +274,11 @@ pub(super) struct LocalOccurrences {
     pub uses: Vec<Span>,
 }
 
-// At cursor position `pos`, resolve the local name `target` to its
-// enclosing binding — the innermost `let` / lambda / match-arm binder of
-// `target` whose scope contains `pos` — and return that binding's
-// definition span together with every use that resolves to the *same*
-// binding. Uses captured by an inner re-binding of `target` are excluded.
+/// At cursor position `pos`, resolve the local name `target` to its
+/// enclosing binding — the innermost `let` / lambda / match-arm binder of
+/// `target` whose scope contains `pos` — and return that binding's
+/// definition span together with every use that resolves to the *same*
+/// binding. Uses captured by an inner re-binding of `target` are excluded.
 pub(super) fn find_local_occurrences(
     program: &Program,
     pos: &SourcePos,
@@ -591,7 +591,7 @@ fn collect_uses_of_binding(
     }
 }
 
-// Get the current directory, logging an error and returning None if it fails.
+/// Get the current directory, logging an error if it fails.
 pub(super) fn get_current_dir() -> Option<PathBuf> {
     match env::current_dir() {
         Ok(d) => Some(d),
@@ -633,8 +633,8 @@ pub(super) fn span_to_range(span: &Span) -> Range {
     }
 }
 
-// Convert a `Span` into an `lsp_types::Location` using `cdir` as the base directory.
-// Returns `None` if the path cannot be converted to a URI.
+/// Convert a `Span` into an `lsp_types::Location` using `cdir` as the base
+/// directory.
 pub(super) fn span_to_location(span: &Span, cdir: &PathBuf) -> Option<Location> {
     let uri = path_to_uri(&cdir.join(&span.input.file_path));
     match uri {
