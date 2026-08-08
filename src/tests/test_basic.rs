@@ -2647,9 +2647,14 @@ pub fn test89() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies every sorting routine of the standard library over one corpus of inputs: the empty
+/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays.
+/// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
+/// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
+/// Each runs over an unboxed and a boxed element type, and the stable one is also checked to leave
+/// equal elements in the order they came in.
 #[test]
 pub fn test_sort_by() {
-    // Test "sort_by" and related functions.
     let source = r#"
 module Main;
 
@@ -2825,6 +2830,8 @@ case_random_9 = [4811598823819225076, 945484849661270666, 3974642354777520028, 4
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_by` returns the order in a new array and leaves the array it was given as it
+/// was, over an array the caller goes on holding.
 #[test]
 pub fn test_sort_by_immutability() {
     let source = r#"
@@ -2907,6 +2914,9 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `sort` and `sort_stable`, which take their order from the `LessThan` trait rather than
+/// from a comparator the caller passes: the result is non-descending, elements the trait calls equal
+/// keep the order they came in, and the array the caller goes on holding is left as it was.
 #[test]
 pub fn test_sort() {
     let source = r#"

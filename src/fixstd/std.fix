@@ -89,8 +89,19 @@ loop = |s, body| (
 
 namespace Array {
 
-    // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
-    // and has a parameter to specify additional capacity of the returned `Array`.
+    // Copies `arr[begin, end)` into a new array, treating `arr` as having size `len` and giving the
+    // new array `additional_capacity` elements' worth of capacity beyond the elements copied.
+    //
+    // A negative `begin` reads as `0` and an `end` past `len` reads as `len`; a range that ends at
+    // or before it begins gives an array of no elements.
+    //
+    // # Parameters
+    //
+    // * `len` - The size to treat `arr` as having.
+    // * `additional_capacity` - The capacity of the returned array beyond the elements it holds.
+    // * `begin` - The start index of the range to copy.
+    // * `end` - The end index of the range to copy.
+    // * `arr` - The array to copy the range out of.
     _get_sub_size_with_length_and_additional_capacity : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
     _get_sub_size_with_length_and_additional_capacity = |len, additional_capacity, begin, end, arr| (
         let begin = max(0, begin);
@@ -538,12 +549,12 @@ namespace Array {
     );
 
     // Heap sort for the specified range in an array.
-    // 
-    // # parameters
+    //
+    // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
-    // - `start`
-    // - `end`
+    // - `start`: The start index of the range to sort.
+    // - `end`: The end index of the range to sort.
     // - `arr`: An array of elements to be sorted.
     _heap_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a;
     _heap_sort_by_ranged = |less_than, start, end, arr| (
@@ -564,13 +575,13 @@ namespace Array {
 
     // Down-heap (sift down) operation to maintain the heap property.
     //
-    // # parameters
+    // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
     // - `i`: The index of the element to sift down.
     // - `heap_end`: The end index of the heap.
-    // - `start`: the range of an array.
-    // - `end`: the range of an array.
+    // - `start`: The start index of the range being sorted, where the root of the heap sits.
+    // - `end`: The end index of the range being sorted.
     // - `heap`: An array representing the heap.
     _heap_down_ranged : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
     _heap_down_ranged = |less_than, i, heap_end, start, end, heap| (
@@ -588,18 +599,18 @@ namespace Array {
     );
 
     // Stable sort by `LessThan` trait.
-    // 
-    // Note: Currently this is implemented by merge sort, which is not in-place.
-    // 
+    //
+    // Implemented by merge sort, which allocates an array as large as the one being sorted.
+    //
     // # Parameters
     // - `arr`: An array of elements to be sorted.
     sort_stable : [a : LessThan] Array a -> Array a;
     sort_stable = |arr| arr.sort_stable_by(|(lhs, rhs)| lhs < rhs);    
 
     // Stable sort by a "less than" comparator.
-    // 
-    // Note: Currently this is implemented by merge sort, which is not in-place.
-    // 
+    //
+    // Implemented by merge sort, which allocates an array as large as the one being sorted.
+    //
     // # Parameters
     // 
     // * `less_than` - The comparator function.
