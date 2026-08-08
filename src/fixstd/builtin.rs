@@ -2664,18 +2664,8 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         let dst = gc.get_scoped_obj(&self.dst_name);
         let src = gc.get_scoped_obj(&self.src_name);
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
-        let elem_value_ty = elem_ty.get_embedded_type(gc);
-
-        // Clone `dst` if it is shared, so the append writes into a uniquely owned array.
-        let dst =
-            force_unique_or_assert(gc, dst, self.force_unique, assumed_state(self.assume_local));
-        let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-        let dst_buf = get_array_storage_buf(gc, &dst);
-        let dst_write = unsafe {
-            gc.builder()
-                .build_gep(elem_value_ty, dst_buf, &[dst_len], "append_dst_write")
-                .unwrap()
-        };
+        let (dst, dst_len, dst_write) =
+            array_append_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
 
         let src_storage = get_array_storage(gc, &src);
         let src_ptr = src_storage.value(gc).into_pointer_value();
@@ -2865,17 +2855,8 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
         let elem_value_ty = elem_ty.get_embedded_type(gc);
         let n = gc.builder().build_int_sub(end, begin, "copy_n").unwrap();
-
-        // Clone `dst` if it is shared, so the copy writes into a uniquely owned array.
-        let dst =
-            force_unique_or_assert(gc, dst, self.force_unique, assumed_state(self.assume_local));
-        let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
-        let dst_buf = get_array_storage_buf(gc, &dst);
-        let dst_write = unsafe {
-            gc.builder()
-                .build_gep(elem_value_ty, dst_buf, &[dst_len], "copy_dst_write")
-                .unwrap()
-        };
+        let (dst, dst_len, dst_write) =
+            array_append_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
 
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference, so there is nothing to release and no move to choose between.
@@ -8000,6 +7981,27 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
     let obj_ptr = val.value(gc).into_pointer_value();
     gc.build_assert_unique(obj_ptr);
     val
+}
+
+/// Where an append writes: `dst` made uniquely owned so the write is not observed elsewhere, the
+/// length it had, and a pointer to the first slot past that length. The caller guarantees the slots
+/// it fills are within `dst`'s capacity, and grows the length itself once they hold elements.
+fn array_append_destination<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    dst: Object<'c>,
+    force_unique: bool,
+    state: RcState,
+) -> (Object<'c>, IntValue<'c>, PointerValue<'c>) {
+    let elem_value_ty = dst.ty.field_types(gc.type_env())[0].get_embedded_type(gc);
+    let dst = force_unique_or_assert(gc, dst, force_unique, state);
+    let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+    let dst_buf = get_array_storage_buf(gc, &dst);
+    let dst_write = unsafe {
+        gc.builder()
+            .build_gep(elem_value_ty, dst_buf, &[dst_len], "append_dst_write")
+            .unwrap()
+    };
+    (dst, dst_len, dst_write)
 }
 
 /// Check the proof that an array is uniquely owned, which is a proof about its storage: that is

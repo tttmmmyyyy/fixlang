@@ -33,6 +33,21 @@ main : IO () = (
     assert_eq(|_|"append shared dst", a, [1, 2]);;
     assert_eq(|_|"append shared result", c, [1, 2, 3, 4]);;
 
+    // `append` of a shared empty source leaves it and the destination intact.
+    let e = ([] : Array (Array I64));
+    let d = [[1], [2]];
+    assert_eq(|_|"append shared empty src result", d.append(e), [[1], [2]]);;
+    assert_eq(|_|"append shared empty src intact", e, []);;
+    assert_eq(|_|"append shared empty src dst intact", d, [[1], [2]]);;
+
+    // Writing into an array after copying a range out of it. The copy borrows the array it reads,
+    // so the writes go into that same array, and the copy keeps the elements it took.
+    let base = [[1], [2], [3], [4]];
+    let head = base.get_sub(0, 2);
+    let swapped = base.set(0, head.@(1)).set(1, head.@(0));
+    assert_eq(|_|"write after copy", swapped, [[2], [1], [3], [4]]);;
+    assert_eq(|_|"copy intact after write", head, [[1], [2]]);;
+
     // `reserve` grows the capacity while keeping the elements.
     let r = [1, 2, 3].reserve(16);
     assert_eq(|_|"reserve keeps elements", r, [1, 2, 3]);;
@@ -106,6 +121,21 @@ main : IO () = (
     let g = [[1], [2], [3], [4]];
     assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
     assert_eq(|_|"get_sub boxed src intact", g, [[1], [2], [3], [4]]);;
+
+    // Writing into a boxed array after copying a range out of it. The copy retains each element it
+    // takes and borrows the array itself, so the writes reach that array in place while the copy
+    // keeps its own references to the elements.
+    let base = [[1], [2], [3], [4]];
+    let head = base.get_sub(0, 2);
+    let swapped = base.set(0, head.@(1)).set(1, head.@(0));
+    assert_eq(|_|"write after copy", swapped, [[2], [1], [3], [4]]);;
+    assert_eq(|_|"copy intact after write", head, [[1], [2]]);;
+
+    // `append` of a shared empty boxed source takes the copy path over an empty range.
+    let e = ([] : Array (Array I64));
+    let d = [[1], [2]];
+    assert_eq(|_|"append shared empty src result", d.append(e), [[1], [2]]);;
+    assert_eq(|_|"append shared empty src intact", e, []);;
 
     // `unsafe_set_bounds_unchecked` on a boxed array releases the overwritten element and, on a
     // shared array, clones so the original keeps its element.
