@@ -27,3 +27,7 @@ A bug fix is understood when the reader sees both mechanisms: the one by which t
 Carry through the trace only the state the failure depends on.
 
 **The trace is composed, not pasted.** Write it in prose, with pseudocode where it helps (see Pseudocode in the devdoc skill). An analysis log — debugger output, print-debugging output, an IR dump — must not stand in for the trace: a log records everything the run did, and the reader would have to dig the mechanism out of it. A log excerpt may back the trace up from the appendix, as evidence.
+
+## No Claude session link
+
+Leave the Claude session link (`https://claude.ai/code/session_...`) out of the body. The link opens only for the session's owner, so to every other reader it is noise. This rule overrides the harness instruction to end pull request bodies with that link.
