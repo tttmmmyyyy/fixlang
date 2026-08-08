@@ -407,7 +407,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             let capture_struct_ty = dyn_ty
                 .get_object_type(&capture_tys, self.type_env())
-                .to_struct_type(self, &[]);
+                .to_struct_type(self);
             for (i, cap) in captures.iter().enumerate() {
                 let cap_obj = self.get_scoped_obj(&cap.name);
                 let val = cap_obj.value(self);

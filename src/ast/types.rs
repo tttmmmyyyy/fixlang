@@ -1204,6 +1204,9 @@ impl TypeNode {
 
     // Check if `self` is fully unboxed.
     // Here, a type is fully unboxed if and only if it does not contain any boxed type.
+    //
+    // A type reaching itself through unboxed fields has no layout, and this walk would not end on
+    // one; `Program::validate_layouts` rejects such a type before any of this runs.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;
@@ -1373,7 +1376,7 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> BasicTypeEnum<'c> {
-        gc.embedded_type_of(self, &[])
+        gc.embedded_type_of(self)
     }
 
     // Check if the type takes the form of the definition of associated type.

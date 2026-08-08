@@ -6,7 +6,7 @@ use crate::ast::types::{type_fun, TyCon, TypeNode};
 use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
-use crate::misc::{collect_results, Set};
+use crate::misc::{collect_results, grow_stack, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use core::panic;
@@ -1093,104 +1093,78 @@ impl ExprNode {
     /// Pattern-bound variables in `Let` / `Match` patterns are NOT visited;
     /// callers that need to inspect them should walk the patterns separately.
     pub fn walk_var_uses<F: FnMut(&Var, &Option<Span>)>(&self, f: &mut F) {
-        match &*self.expr {
-            Expr::Var(var) => f(var, &self.source),
-            Expr::LLVM(_) => {}
-            Expr::App(func, args) => {
-                func.walk_var_uses(f);
-                for a in args {
-                    a.walk_var_uses(f);
+        self.walk_nodes(&mut |node| {
+            if let Expr::Var(var) = &*node.expr {
+                f(var, &node.source);
+            }
+        })
+    }
+
+    /// Visit every node of this expression tree, this one included. The tree's depth follows the
+    /// user's program, so the walk runs on a stack grown on demand.
+    pub fn walk_nodes<F: FnMut(&ExprNode)>(&self, f: &mut F) {
+        grow_stack(|| {
+            f(self);
+            match &*self.expr {
+                Expr::Var(_) | Expr::LLVM(_) => {}
+                Expr::App(func, args) => {
+                    func.walk_nodes(f);
+                    for a in args {
+                        a.walk_nodes(f);
+                    }
+                }
+                Expr::Lam(_, body) => body.walk_nodes(f),
+                Expr::Let(_, bound, val) => {
+                    bound.walk_nodes(f);
+                    val.walk_nodes(f);
+                }
+                Expr::If(c, t, e) => {
+                    c.walk_nodes(f);
+                    t.walk_nodes(f);
+                    e.walk_nodes(f);
+                }
+                Expr::Match(cond, arms) => {
+                    cond.walk_nodes(f);
+                    for (_pat, e) in arms {
+                        e.walk_nodes(f);
+                    }
+                }
+                Expr::TyAnno(e, _) => e.walk_nodes(f),
+                Expr::MakeStruct(_, fields) => {
+                    for (_n, _s, fe) in fields {
+                        fe.walk_nodes(f);
+                    }
+                }
+                Expr::ArrayLit(elems) => {
+                    for e in elems {
+                        e.walk_nodes(f);
+                    }
+                }
+                Expr::FFICall(_, _, _, _, args, _) => {
+                    for a in args {
+                        a.walk_nodes(f);
+                    }
+                }
+                Expr::Eval(a, b) => {
+                    a.walk_nodes(f);
+                    b.walk_nodes(f);
                 }
             }
-            Expr::Lam(_, body) => body.walk_var_uses(f),
-            Expr::Let(_, bound, val) => {
-                bound.walk_var_uses(f);
-                val.walk_var_uses(f);
-            }
-            Expr::If(c, t, e) => {
-                c.walk_var_uses(f);
-                t.walk_var_uses(f);
-                e.walk_var_uses(f);
-            }
-            Expr::Match(cond, arms) => {
-                cond.walk_var_uses(f);
-                for (_pat, e) in arms {
-                    e.walk_var_uses(f);
-                }
-            }
-            Expr::TyAnno(e, _) => e.walk_var_uses(f),
-            Expr::MakeStruct(_, fields) => {
-                for (_n, _s, fe) in fields {
-                    fe.walk_var_uses(f);
-                }
-            }
-            Expr::ArrayLit(elems) => {
-                for e in elems {
-                    e.walk_var_uses(f);
-                }
-            }
-            Expr::FFICall(_, _, _, _, args, _) => {
-                for a in args {
-                    a.walk_var_uses(f);
-                }
-            }
-            Expr::Eval(a, b) => {
-                a.walk_var_uses(f);
-                b.walk_var_uses(f);
-            }
-        }
+        })
     }
 
     /// Visit every pattern node attached to a `Let` or `Match` arm in this
     /// expression tree, calling `f` with the pattern.
     pub fn walk_patterns<F: FnMut(&Arc<PatternNode>)>(&self, f: &mut F) {
-        match &*self.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
-            Expr::App(func, args) => {
-                func.walk_patterns(f);
-                for a in args {
-                    a.walk_patterns(f);
-                }
-            }
-            Expr::Lam(_, body) => body.walk_patterns(f),
-            Expr::Let(pat, bound, val) => {
-                f(pat);
-                bound.walk_patterns(f);
-                val.walk_patterns(f);
-            }
-            Expr::If(c, t, e) => {
-                c.walk_patterns(f);
-                t.walk_patterns(f);
-                e.walk_patterns(f);
-            }
-            Expr::Match(cond, arms) => {
-                cond.walk_patterns(f);
-                for (pat, e) in arms {
+        self.walk_nodes(&mut |node| match &*node.expr {
+            Expr::Let(pat, _, _) => f(pat),
+            Expr::Match(_, arms) => {
+                for (pat, _) in arms {
                     f(pat);
-                    e.walk_patterns(f);
                 }
             }
-            Expr::TyAnno(e, _) => e.walk_patterns(f),
-            Expr::MakeStruct(_, fields) => {
-                for (_n, _s, fe) in fields {
-                    fe.walk_patterns(f);
-                }
-            }
-            Expr::ArrayLit(elems) => {
-                for e in elems {
-                    e.walk_patterns(f);
-                }
-            }
-            Expr::FFICall(_, _, _, _, args, _) => {
-                for a in args {
-                    a.walk_patterns(f);
-                }
-            }
-            Expr::Eval(a, b) => {
-                a.walk_patterns(f);
-                b.walk_patterns(f);
-            }
-        }
+            _ => {}
+        })
     }
 
     fn calc_free_vars(&self) -> Set<FullName> {

@@ -51,4 +51,49 @@ main = println("hi");
             }
         );
     }
+
+    /// A program using a type whose unboxed fields lead back to itself is rejected, and the
+    /// rejection reaches a caller of `fix build` the way any other does: the diagnostic on stderr,
+    /// nothing after it, and a failing exit status.
+    #[test]
+    fn test_build_fails_with_a_status_when_a_type_has_no_size() {
+        const CIRCULAR_SOURCE: &str = r#"module Main;
+
+type A = unbox struct { b : B, n : I64 };
+type B = unbox struct { a : A, m : I64 };
+
+depth : A -> I64;
+depth = |x| x.@n;
+
+main : IO ();
+main = println(depth(undefined("no value")).to_string);
+"#;
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let output = fix_build_source_command(temp_dir.path(), CIRCULAR_SOURCE, "none")
+            .arg("-o")
+            .arg(temp_dir.path().join("out"))
+            .output()
+            .expect("Failed to execute fix build");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("its unboxed fields reach `Main::A` itself"),
+            "the build did not report the type that has no size:\nstderr: {}",
+            stderr
+        );
+        assert!(
+            output.status.code().is_some(),
+            "the build was ended by a signal ({}) instead of an exit status:\nstderr: {}",
+            output.status,
+            stderr
+        );
+        assert!(
+            !stderr.contains("(unknown error)"),
+            "the diagnostic was followed by a second, contentless report:\nstderr: {}",
+            stderr
+        );
+        assert!(
+            !output.status.success(),
+            "the build reported success for a program it could not lay out"
+        );
+    }
 }

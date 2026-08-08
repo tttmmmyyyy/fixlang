@@ -45,7 +45,7 @@ use std::{
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
-    panic::panic_any,
+    panic::resume_unwind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -381,11 +381,19 @@ pub fn build_object_files<'c>(
             write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
         }));
     }
-    // Wait for all threads to finish.
+    // Every thread is joined before a panic is carried on: a thread still running holds the state
+    // that unwinding tears down, and the process crashes under it. `resume_unwind` carries the
+    // payload of the thread that panicked, which has already reported through the panic hook; a
+    // joined payload is a `Box<dyn Any>`, so a fresh panic here would report a second time, and as
+    // an unknown error.
+    let mut panic_payload = None;
     for t in threads {
-        if let Err(e) = t.join() {
-            panic_any(e);
+        if let Err(payload) = t.join() {
+            panic_payload = panic_payload.or(Some(payload));
         }
+    }
+    if let Some(payload) = panic_payload {
+        resume_unwind(payload);
     }
 
     // Save object files cache.
