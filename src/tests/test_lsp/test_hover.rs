@@ -11,6 +11,7 @@ mod tests {
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
@@ -391,7 +392,7 @@ mod tests {
     #[test]
     fn test_hover_type_wildcard_shows_inferred_type() {
         let mut ctx = LspTestCtx::setup("hover_type_wildcard", &["main.fix"]);
-        let src = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
+        let src = fs::read_to_string(ctx.project_dir.join("main.fix"))
             .expect("should read the copied main.fix");
         let lines: Vec<&str> = src.lines().collect();
 
