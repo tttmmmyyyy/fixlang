@@ -1819,10 +1819,16 @@ impl Program {
 
         // The entry point and the exported values come first, so that a type they carry is reported
         // in the program's own code rather than in a library function instantiated at it. The
-        // symbols follow in name order, so that a program rejected twice is rejected the same way.
+        // symbols follow, the standard library last: a library function instantiated at a type the
+        // program declared would otherwise take the report into the library's own source, which
+        // says nothing about the program. Within each group the order is by name, so that a program
+        // rejected twice is rejected the same way.
         let mut roots = self.root_value_exprs();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
-        symbol_names.sort();
+        symbol_names.sort_by_key(|name| {
+            let in_std = name.namespace.names.first().map(String::as_str) == Some(STD_NAME);
+            (in_std, *name)
+        });
         roots.extend(
             symbol_names
                 .iter()
