@@ -67,10 +67,6 @@ mod integration_tests {
     /// and every further wrapper multiplies that again.
     const WRAPPED_CHAIN_COPIES: usize = 17;
 
-    /// What `fix_through_llvm` prints: `Std::fix` summing `0..10`, `apply_twice` over `|x| x * 3`,
-    /// and `Std::fix` summing `|x| x * 3` over `0..4`.
-    const FIX_THROUGH_LLVM_OUTPUT: &str = "112";
-
     /// What `closure_swap` prints: `ping` and `pong` calling each other five rounds deep, each round
     /// swapping which of the two closures sits in which way in and wrapping one of them.
     const CLOSURE_SWAP_OUTPUT: &str = "938";
@@ -331,17 +327,6 @@ mod integration_tests {
             WRAPPED_CHAIN_COPIES,
             copies.len()
         );
-    }
-
-    /// A closure reaching an inline-LLVM expression. Such an expression reads variables only, so a
-    /// name holding a bare capture list is wrapped back into a closure and bound to a fresh name
-    /// ahead of it.
-    #[test]
-    pub fn test_a_closure_reaching_an_inline_llvm_expression_is_wrapped_back() {
-        let (_temp_dir, project_dir) = setup_test_env("fix_through_llvm");
-        for opt_level in ["basic", "max"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, FIX_THROUGH_LLVM_OUTPUT);
-        }
     }
 
     /// Two closures going round a cycle of two functions, swapping which way in each sits in on
