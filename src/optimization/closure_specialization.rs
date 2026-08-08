@@ -217,12 +217,20 @@ struct TreeData {
     // The capture fields whose own identity is known, by position, in ascending order.
     fields: Vec<(usize, Tree)>,
     // What the two above say. Two trees are the same value exactly when their digests agree.
-    digest: [u8; 16],
+    digest: md5::Digest,
 }
 
 impl Tree {
     // The value of `lambda` with the given capture fields narrowed to the values they hold.
     fn new(lambda: FullName, fields: Vec<(usize, Tree)>) -> Self {
+        // Both the digest below and the substitution `unit` reads off the fields are functions of
+        // their order, so the same value given in two orders would name two copies of one function.
+        assert!(
+            fields.windows(2).all(|pair| pair[0].0 < pair[1].0),
+            "the narrowed capture fields of {} are given as {:?}, which is not ascending",
+            lambda.to_string(),
+            fields.iter().map(|(field, _)| *field).collect::<Vec<_>>()
+        );
         // A field contributes its child's digest, which is of fixed width. That keeps the rendering
         // linear in this tree's own fields, and it closes each child off, so that a value nested one
         // level down reads differently from two values side by side.
@@ -230,7 +238,7 @@ impl Tree {
         for (field, tree) in &fields {
             rendered += &format!("|{}:{}", field, tree.digest_hex());
         }
-        let digest = md5::compute(rendered).0;
+        let digest = md5::compute(rendered);
         Tree(Rc::new(TreeData {
             lambda,
             fields,
@@ -255,7 +263,7 @@ impl Tree {
 
     // How the tree reads in a name, and so in the hash that name carries.
     fn digest_hex(&self) -> String {
-        self.0.digest.iter().map(|b| format!("{:02x}", b)).collect()
+        format!("{:x}", self.0.digest)
     }
 
     // The unit that receives a value of this tree: the lambda, with its known capture fields
@@ -431,8 +439,8 @@ impl LiftedLambdas {
             return base.clone();
         }
         let mut fields = base.fields().to_vec();
-        for (field, inner) in tree.fields().to_vec() {
-            fields[field].1 = self.capture_struct_of(&inner).ty;
+        for (field, inner) in tree.fields() {
+            fields[*field].1 = self.capture_struct_of(inner).ty;
         }
         let cap = CaptureStruct::new(CAP_LIST_PREFIX, &tree.unit().name(), &fields);
         self.record_capture_list(&cap, tree);
