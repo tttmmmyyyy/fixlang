@@ -122,9 +122,10 @@ fn classify_fragment(rest: &str) -> ImportContext {
     // `::`, whitespace, etc.).
     let mut pending = String::new();
     // True right after a complete element at brace depth 0 — the
-    // module path, a braceless single item, or a closed `{...}` — where
-    // the only word that can follow is the `hiding` keyword.
-    let mut expects_hiding_keyword = true;
+    // module path, a braceless single item, or a closed `{...}`. No
+    // item can start there; only the `hiding` keyword (at most once)
+    // or the end of the statement can follow.
+    let mut after_complete_element = true;
     let mut saw_hiding = false;
 
     while let Some(c) = chars.next() {
@@ -133,9 +134,9 @@ fn classify_fragment(rest: &str) -> ImportContext {
                 if frames.is_empty() && pending == "hiding" {
                     saw_hiding = true;
                     segments.clear();
-                    expects_hiding_keyword = false;
+                    after_complete_element = false;
                 } else {
-                    expects_hiding_keyword = frames.is_empty();
+                    after_complete_element = frames.is_empty();
                 }
                 pending.clear();
             }
@@ -150,12 +151,12 @@ fn classify_fragment(rest: &str) -> ImportContext {
                 if !pending.is_empty() {
                     segments.push(std::mem::take(&mut pending));
                 }
-                expects_hiding_keyword = false;
+                after_complete_element = false;
             }
             '{' => {
                 frames.push(std::mem::take(&mut segments));
                 pending.clear();
-                expects_hiding_keyword = false;
+                after_complete_element = false;
             }
             '}' => {
                 // The brace's element is complete; back to its parent
@@ -163,12 +164,12 @@ fn classify_fragment(rest: &str) -> ImportContext {
                 frames.pop();
                 segments.clear();
                 pending.clear();
-                expects_hiding_keyword = frames.is_empty();
+                after_complete_element = frames.is_empty();
             }
             ',' => {
                 segments.clear();
                 pending.clear();
-                expects_hiding_keyword = false;
+                after_complete_element = false;
             }
             c if is_ident_char(c) => {
                 pending.push(c);
@@ -177,12 +178,12 @@ fn classify_fragment(rest: &str) -> ImportContext {
                 // `*`, or a character no well-formed import statement
                 // contains: a complete (or hopeless) element.
                 pending.clear();
-                expects_hiding_keyword = frames.is_empty();
+                after_complete_element = frames.is_empty();
             }
         }
     }
 
-    if expects_hiding_keyword {
+    if after_complete_element {
         // `pending` may hold a partially-typed `hiding`; the client
         // filters the offered keyword against it.
         return if saw_hiding {
