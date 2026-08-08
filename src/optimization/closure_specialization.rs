@@ -371,10 +371,10 @@ fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool
     }
 }
 
-// How many copies of one function this pass may make.
+// How many copies of one function this pass may make out of combining its slots.
 //
 // The value is chosen against the corpus, where the most-copied function has four.
-pub const MAX_COPIES_PER_FUNCTION: usize = 16;
+const MAX_COPIES_PER_FUNCTION: usize = 16;
 
 // The copies each function has been committed to, over the whole program.
 //
@@ -385,20 +385,24 @@ pub const MAX_COPIES_PER_FUNCTION: usize = 16;
 // table agrees to every one of them.
 #[derive(Default)]
 struct CopyBudget {
-    // The copies committed to, keyed by the function they copy. Each copy substitutes at least one
-    // slot, and each set holds at most `MAX_COPIES_PER_FUNCTION` of them.
+    // The copies committed to, keyed by the function they copy. Each copy substitutes two slots or
+    // more, and each set holds at most `MAX_COPIES_PER_FUNCTION` of them.
     units: Map<FullName, Set<UnitKey>>,
 }
 
 impl CopyBudget {
     // Commit to making `unit`, and report whether it may be made.
     //
-    // A unit already committed to is always allowed, as is the one that substitutes nothing, which
-    // is the function itself. A fresh copy is allowed while its origin is under the budget. Refusing
-    // one costs optimization and can never cost correctness, whatever the budget is set to: the
-    // values it would have received are wrapped back into closures instead.
+    // A unit already committed to is always allowed. A fresh one is allowed while its origin is
+    // under the budget. Refusing one costs optimization and can never cost correctness, whatever the
+    // budget is set to: the values it would have received are wrapped back into closures instead.
+    //
+    // What is counted is the copies made out of *combining* slots, which is what grows as a product.
+    // A copy that substitutes one slot alone is one per value the program hands to that slot, so a
+    // function called with a different lambda at each of a hundred sites gets a hundred of them and
+    // wants every one — counting those would spend the budget on the population it is not for.
     fn admit(&mut self, unit: &UnitKey) -> bool {
-        if unit.subst.is_empty() {
+        if unit.subst.len() < 2 {
             return true;
         }
         let committed = self.units.entry(unit.origin.clone()).or_default();

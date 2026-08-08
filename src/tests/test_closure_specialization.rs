@@ -12,7 +12,6 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
-    use crate::optimization::closure_specialization::MAX_COPIES_PER_FUNCTION;
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -54,6 +53,11 @@ mod integration_tests {
     /// What `independent_slots` prints: `g(p0, p1, p2, p3, n)` sums the four recursive calls that
     /// each wrap one of the closures, modulo 1000, with `n = 2` and the four lambdas main builds.
     const INDEPENDENT_SLOTS_OUTPUT: &str = "176";
+
+    /// How many copies of `g` `independent_slots` asks for today. What bounds it is the budget on
+    /// the copies a function may have out of combining its slots: four slots decided independently
+    /// reach 95 copies without it, and every further slot multiplies that again.
+    const INDEPENDENT_SLOTS_COPIES: usize = 24;
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -263,7 +267,7 @@ mod integration_tests {
     /// its own, so the copies it can be asked for are keyed on the combinations of those decisions
     /// and grow exponentially in the number of closures. The chain of requests cannot see that: each
     /// combination meets a commitment of its own and none of them disagrees. What bounds it is the
-    /// number of copies one function may have.
+    /// budget on the copies one function may have out of combining its slots.
     #[test]
     pub fn test_a_function_whose_closures_are_decided_independently_stays_within_its_budget() {
         let (_temp_dir, project_dir) = setup_test_env("independent_slots");
@@ -275,9 +279,9 @@ mod integration_tests {
             "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
         );
         assert!(
-            copies.len() <= MAX_COPIES_PER_FUNCTION,
+            copies.len() <= INDEPENDENT_SLOTS_COPIES,
             "`g` should have at most {} copies, but the dump names {}",
-            MAX_COPIES_PER_FUNCTION,
+            INDEPENDENT_SLOTS_COPIES,
             copies.len()
         );
     }
