@@ -7,13 +7,8 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::{
-        fix_build_source_command, test_source, test_source_fail, wait_within,
-    };
-    use std::fs::{self, File};
-    use std::process::{Command, Stdio};
+    use crate::tests::test_util::{build_within_and_run, test_source, test_source_fail};
     use std::time::Duration;
-    use tempfile::TempDir;
 
     /// The argument `x` of `(let x = ..; ..)(x)` denotes the outer `x` after the application is
     /// moved inside the `let`, where the name `x` denotes the bound lambda.
@@ -227,47 +222,14 @@ mod tests {
              main = println(g({args}).to_string);\n"
         );
 
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let program_path = temp_dir.path().join("many_params");
-
-        // The compiler's diagnostics go to a file, which the test reads once the child has exited.
-        // A pipe left unread that long fills its buffer and blocks the very build being timed.
-        let log_path = temp_dir.path().join("build.log");
-        let log = File::create(&log_path).expect("Failed to create the build log");
-        let log_for_stderr = log
-            .try_clone()
-            .expect("Failed to clone the build log handle");
-
-        let mut command = fix_build_source_command(temp_dir.path(), &source, "basic");
-        command
-            .arg("-o")
-            .arg(&program_path)
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(log_for_stderr));
-        let mut child = command.spawn().expect("Failed to execute fix build");
-        let status = wait_within(
-            &mut child,
+        let printed = build_within_and_run(
+            &source,
+            "basic",
             TIMEOUT,
-            &format!("compiling a {}-parameter function", ARITY),
-        );
-        assert!(
-            status.success(),
-            "compiling a {}-parameter function failed: {}\n{}",
-            ARITY,
-            status,
-            fs::read_to_string(&log_path).expect("Failed to read the build log")
-        );
-
-        let output = Command::new(&program_path)
-            .output()
-            .expect("Failed to run the compiled program");
-        assert!(
-            output.status.success(),
-            "the compiled program exited with {}",
-            output.status
+            &format!("a {}-parameter function", ARITY),
         );
         assert_eq!(
-            String::from_utf8_lossy(&output.stdout).trim(),
+            printed,
             expected.to_string(),
             "the {}-parameter function returned a wrong value",
             ARITY

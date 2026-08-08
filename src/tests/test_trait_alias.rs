@@ -5,11 +5,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{fix_build_source_command, wait_within};
-    use std::fs::{self, File};
-    use std::process::{Command, Stdio};
+    use crate::tests::test_util::build_within_and_run;
     use std::time::Duration;
-    use tempfile::TempDir;
 
     /// Each level names the level below it twice, so the level below is arrived at along two paths
     /// and the top level along `2^SHARING_LEVELS`. This many levels compiles in under a second
@@ -42,57 +39,23 @@ mod tests {
             "module Main;\n\
              \n\
              {aliases}\n\
-             describe : [a : Shared{top}] a -> String;\n\
-             describe = |x| x.to_string;\n\
+             show : [a : Shared{top}] a -> String;\n\
+             show = |x| x.to_string;\n\
              \n\
              main : IO ();\n\
-             main = println(describe(42));\n",
+             main = println(show(42));\n",
             aliases = aliases,
             top = SHARING_LEVELS
         );
 
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let program_path = temp_dir.path().join("shared_trait_aliases");
-
-        // The compiler's diagnostics go to a file, which the test reads once the child has exited.
-        // A pipe left unread that long fills its buffer and blocks the very build being timed.
-        let log_path = temp_dir.path().join("build.log");
-        let log = File::create(&log_path).expect("Failed to create the build log");
-        let log_for_stderr = log
-            .try_clone()
-            .expect("Failed to clone the build log handle");
-
-        let mut command = fix_build_source_command(temp_dir.path(), &source, "max");
-        command
-            .arg("-o")
-            .arg(&program_path)
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(log_for_stderr));
-        let mut child = command.spawn().expect("Failed to execute fix build");
-        let status = wait_within(
-            &mut child,
+        let printed = build_within_and_run(
+            &source,
+            "max",
             TIMEOUT,
-            &format!("compiling {} levels of shared trait aliases", SHARING_LEVELS),
-        );
-        assert!(
-            status.success(),
-            "compiling {} levels of shared trait aliases failed: {}\n{}",
-            SHARING_LEVELS,
-            status,
-            fs::read_to_string(&log_path).expect("Failed to read the build log")
-        );
-
-        let output = Command::new(&program_path)
-            .output()
-            .expect("Failed to run the compiled program");
-        assert!(
-            output.status.success(),
-            "the compiled program exited with {}",
-            output.status
+            &format!("{} levels of shared trait aliases", SHARING_LEVELS),
         );
         assert_eq!(
-            String::from_utf8_lossy(&output.stdout).trim(),
-            "42",
+            printed, "42",
             "the constraint on the shared alias reached a wrong implementation"
         );
     }

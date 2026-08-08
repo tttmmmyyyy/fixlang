@@ -12,7 +12,7 @@ use std::{
     fs::{self, remove_file, File},
     io::{self, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Output},
+    process::{Child, Command, ExitStatus, Output, Stdio},
     sync::Once,
     thread::sleep,
     time::{Duration, Instant},
@@ -104,6 +104,66 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
         .arg(opt_level)
         .current_dir(dir);
     command
+}
+
+/// Builds `source` at `opt_level` and runs the program it produces, returning what the program
+/// printed with the surrounding whitespace removed. Fails the test unless the build finishes
+/// within `timeout` and both the build and the program exit successfully.
+///
+/// Use this for a test whose subject is how long a build takes: the deadline turns a compiler that
+/// has become superlinear in the shape being compiled into a failure, where waiting for it out
+/// would occupy the machine for as long as the shape takes.
+///
+/// # Arguments
+/// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
+///   a failure names, e.g. "a chain of 2400 `let`s".
+pub fn build_within_and_run(
+    source: &str,
+    opt_level: &str,
+    timeout: Duration,
+    description: &str,
+) -> String {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let program_path = temp_dir.path().join("program");
+
+    // The compiler's diagnostics go to a file, which is read once the child has exited. A pipe
+    // left unread that long fills its buffer and blocks the very build being timed.
+    let log_path = temp_dir.path().join("build.log");
+    let log = File::create(&log_path).expect("Failed to create the build log");
+    let log_for_stderr = log
+        .try_clone()
+        .expect("Failed to clone the build log handle");
+
+    let mut command = fix_build_source_command(temp_dir.path(), source, opt_level);
+    command
+        .arg("-o")
+        .arg(&program_path)
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(log_for_stderr));
+    let mut child = command.spawn().expect("Failed to execute fix build");
+    let status = wait_within(
+        &mut child,
+        timeout,
+        &format!("compiling {}", description),
+    );
+    assert!(
+        status.success(),
+        "compiling {} failed: {}\n{}",
+        description,
+        status,
+        fs::read_to_string(&log_path).expect("Failed to read the build log")
+    );
+
+    let output = Command::new(&program_path)
+        .output()
+        .expect("Failed to run the compiled program");
+    assert!(
+        output.status.success(),
+        "the program compiled from {} exited with {}",
+        description,
+        output.status
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 /// Which of a build's emitted LLVM IR files to read. The selection reads the file names
