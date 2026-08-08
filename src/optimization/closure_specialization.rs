@@ -1856,3 +1856,93 @@ impl ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr_let_typed(pat, bound, value.clone()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+
+    /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
+    fn lifted(index: u32) -> FullName {
+        FullName::from_strs(
+            &["Main"],
+            &format!(
+                "main{}0123abcd{}{}",
+                INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
+            ),
+        )
+    }
+
+    /// The values two capture fields of one lambda hold read differently from the one value the
+    /// first field holds when it is itself narrowed: `M{0:P, 1:Q}` against `M{0:P{1:Q}}`. Where a
+    /// rendering runs one field into the next these read alike, and one copy then carries both
+    /// names.
+    #[test]
+    fn a_value_nested_one_level_down_differs_from_two_side_by_side() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let side_by_side = Tree::new(
+            m.clone(),
+            vec![(0, Tree::leaf(p.clone())), (1, Tree::leaf(q.clone()))],
+        );
+        let nested = Tree::new(m, vec![(0, Tree::new(p, vec![(1, Tree::leaf(q))]))]);
+        assert_ne!(side_by_side, nested);
+        assert_ne!(side_by_side.unit().name(), nested.unit().name());
+    }
+
+    /// Which field a value arrives through is part of what the copy receiving it is told, since
+    /// that copy reads the capture list by position.
+    #[test]
+    fn the_position_of_a_narrowed_field_is_part_of_the_value() {
+        let (m, p) = (lifted(0), lifted(1));
+        let at_first = Tree::new(m.clone(), vec![(0, Tree::leaf(p.clone()))]);
+        let at_second = Tree::new(m, vec![(1, Tree::leaf(p))]);
+        assert_ne!(at_first, at_second);
+        assert_ne!(at_first.unit().name(), at_second.unit().name());
+    }
+
+    /// A relay chain narrows one link per step, so a value differs from the value one link shorter
+    /// and from the one holding a different lambda at the far end.
+    #[test]
+    fn a_chain_of_narrowed_fields_says_its_own_depth() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let one = Tree::new(m.clone(), vec![(0, Tree::leaf(p.clone()))]);
+        let two = Tree::new(m.clone(), vec![(0, one.clone())]);
+        let three = Tree::new(m.clone(), vec![(0, two.clone())]);
+        let other_end = Tree::new(m, vec![(0, Tree::new(p, vec![(0, Tree::leaf(q))]))]);
+        let names = [&one, &two, &three, &other_end]
+            .iter()
+            .map(|tree| tree.unit().name().to_string())
+            .collect::<Set<_>>();
+        assert_eq!(names.len(), 4);
+    }
+
+    /// The unit a value is received by and the value itself determine each other, which is what
+    /// lets the type of a capture list say what to call it with.
+    #[test]
+    fn a_unit_and_the_capture_list_it_receives_determine_each_other() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let tree = Tree::new(
+            m,
+            vec![
+                (0, Tree::new(p, vec![(2, Tree::leaf(q.clone()))])),
+                (1, Tree::leaf(q)),
+            ],
+        );
+        assert_eq!(tree.unit().capture_list_tree(), Some(tree.clone()));
+    }
+
+    /// An argument and a capture field of the same index are two ways into a function, and the copy
+    /// made for one is not the copy made for the other.
+    #[test]
+    fn an_argument_and_a_capture_field_of_the_same_index_name_two_copies() {
+        let func = FullName::from_strs(&["Main"], "f#0123abcd");
+        let tree = Tree::leaf(lifted(0));
+        let on_argument = UnitKey::new(
+            func.clone(),
+            [(Slot::arg(0), tree.clone())].into_iter().collect(),
+        );
+        let on_capture_field =
+            UnitKey::new(func, [(Slot::capture_field(0), tree)].into_iter().collect());
+        assert_ne!(on_argument.name(), on_capture_field.name());
+    }
+}

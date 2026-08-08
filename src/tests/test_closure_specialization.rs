@@ -31,6 +31,11 @@ mod integration_tests {
     /// in and lambda gets committed to one value.
     const CHANGING_CLOSURE_COPIES: usize = 13;
 
+    /// What `two_narrowed_fields` prints: `relay(f, g, n)` sums `terminal_a(f, i)` and
+    /// `terminal_b(g, i)` over `0..n` and recurses on `n - 1`, with `f = |x| x * 2`,
+    /// `g = |x| x * 3` and `n = 4`.
+    const TWO_NARROWED_FIELDS_OUTPUT: &str = "120";
+
     /// What `derived_closure` prints: `relay` sums `terminal(shifted, i)` over `0..n`, adds
     /// `shifted(n)`, and recurses on `n - 1`, with `shifted = |x| x * 3 + 1` and `n = 4`.
     const DERIVED_CLOSURE_OUTPUT: &str = "89";
@@ -196,6 +201,26 @@ mod integration_tests {
     pub fn test_a_capture_field_follows_the_value_it_holds() {
         let (_temp_dir, project_dir) = setup_test_env("derived_closure");
         build_run_and_read_rc_ir(&project_dir, "max", DERIVED_CLOSURE_OUTPUT);
+    }
+
+    /// One capture list carrying two closures whose identity is known. Each field is decided on its
+    /// own, so both have to follow the value they hold: the function each closure is relayed to gets
+    /// a copy only if the field carrying it was narrowed.
+    #[test]
+    pub fn test_two_capture_fields_of_one_lambda_are_narrowed() {
+        let (_temp_dir, project_dir) = setup_test_env("two_narrowed_fields");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", TWO_NARROWED_FIELDS_OUTPUT);
+
+        let specialized = functions_named_with(&dump, "#closure_spec");
+        for relayed_to in ["Main::terminal_a#", "Main::terminal_b#"] {
+            assert!(
+                specialized.iter().any(|name| name.starts_with(relayed_to)),
+                "`{}` should get a copy, which it does only if the capture field holding the \
+                 closure it is given was narrowed. The dump names: {:?}",
+                relayed_to,
+                specialized
+            );
+        }
     }
 
     /// The chain has to pass through a capture list to reach the end. `relay` never calls the closure
