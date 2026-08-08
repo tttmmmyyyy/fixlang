@@ -157,4 +157,274 @@ main : IO () = (
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(source, config);
     }
+
+    /// Verifies that the append primitives keep the reference-count state dispatch on a global
+    /// array, whose whole graph its initializer marked global.
+    ///
+    /// Each reference count the primitives perform meets a global object here: the release of the
+    /// source `append` consumes, the retain of each element either of them copies, and the
+    /// retain-per-element clone of a shared destination. A global is the only value a locality
+    /// annotation can meet outside the local state, so this is where the declarations of what the
+    /// primitives count reach a runtime check: development mode aborts at a reference count
+    /// inferred local that meets a non-local object.
+    #[test]
+    pub fn test_builder_global_state_dispatch() {
+        let source = r#"
+module Main;
+
+g : Array (Array I64);
+g = [[1], [2]];
+
+// A global with room past its length, so that it can be a destination written into.
+g_spare : Array (Array I64);
+g_spare = [[1], [2]].reserve(8);
+
+main : IO () = (
+    // The standard library's own callers of the two primitives, over a global array.
+    assert_eq(|_|"get_sub of a global", g.get_sub(0, 2), [[1], [2]]);;
+    assert_eq(|_|"append a global", [[0]].append(g), [[0], [1], [2]]);;
+    assert_eq(|_|"append onto a global", g.append([[3]]), [[1], [2], [3]]);;
+
+    // The primitives directly, with a global source and a local destination.
+    let dst = ([[0]] : Array (Array I64)).reserve(8);
+    assert_eq(|_|"copy a global into a shared destination",
+        dst._unsafe_copy_capacity_bounds_unchecked(g, 0, 2), [[0], [1], [2]]);;
+    assert_eq(|_|"append a global into a shared destination",
+        dst._unsafe_append_capacity_unchecked(g), [[0], [1], [2]]);;
+
+    // A global destination, which both primitives clone before writing into it.
+    assert_eq(|_|"copy a local into a global destination",
+        g_spare._unsafe_copy_capacity_bounds_unchecked([[7]], 0, 1), [[1], [2], [7]]);;
+    assert_eq(|_|"append a local into a global destination",
+        g_spare._unsafe_append_capacity_unchecked([[8]]), [[1], [2], [8]]);;
+
+    assert_eq(|_|"the global sources are intact", (g, g_spare), ([[1], [2]], [[1], [2]]));;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that a copy taken out of a global array yields one that still reaches the global's
+    /// elements, so that a later operation cloning it keeps the state dispatch on their retains.
+    ///
+    /// `get_sub` allocates the array it returns, so that array's own object is local; the elements
+    /// it holds come from wherever it copied them, and here that is a global. Sharing the copy
+    /// makes the next `reserve` clone it by retaining each of those elements.
+    #[test]
+    pub fn test_copy_of_a_global_still_reaches_the_global_elements() {
+        let source = r#"
+module Main;
+
+g : Array (Array I64);
+g = [[1], [2]];
+
+main : IO () = (
+    let sub = g.get_sub(0, 2);
+    let grown = sub.reserve(8);
+    let grown_more = sub.reserve(16);
+    assert_eq(|_|"the copy", sub, [[1], [2]]);;
+    assert_eq(|_|"the grown copies", (grown, grown_more), ([[1], [2]], [[1], [2]]));;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies that the append primitives answer correctly over a multi-threaded array, whose
+    /// storage and every element are out of the local reference-counting state.
+    ///
+    /// The uniqueness checks the primitives make on their own — `append`'s check on the source it
+    /// moves the elements out of, and the clone-when-shared check on the destination — carry a
+    /// threaded arm in a threaded build, and that arm returns a uniquely held threaded array to the
+    /// local state before the move.
+    #[test]
+    pub fn test_builder_threaded_state_dispatch() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    // A multi-threaded array: its storage and every element are out of the local state.
+    let t = [[1], [2], [3], [4]].mark_threaded;
+
+    // The borrowing copy retains each element it takes out of a threaded source.
+    assert_eq(|_|"get_sub of a threaded array", t.get_sub(1, 3), [[2], [3]]);;
+
+    // The owning append over a threaded source that is uniquely held (the move path).
+    assert_eq(|_|"append a uniquely held threaded source",
+        [[0]].append(t.get_sub(0, 2).mark_threaded), [[0], [1], [2]]);;
+
+    // The owning append over a threaded source that is shared (the retain-per-element copy path).
+    assert_eq(|_|"append a shared threaded source", [[0]].append(t), [[0], [1], [2], [3], [4]]);;
+
+    // A threaded destination, which the primitive clones before writing.
+    assert_eq(|_|"append onto a threaded destination", t.append([[5]]),
+        [[1], [2], [3], [4], [5]]);;
+    assert_eq(|_|"the threaded array is intact", t, [[1], [2], [3], [4]]);;
+    pure()
+);
+"#;
+        let mut config = Configuration::develop_mode();
+        config.set_threaded();
+        test_source(source, config);
+    }
+
+    /// Verifies that a range copy leaves the array it reads sharable by everyone who already held
+    /// it: a global, a struct field, an unboxed-union payload, and a value the caller keeps. Each
+    /// holder then writes, and the write must reach only the array that holder owns.
+    #[test]
+    pub fn test_copy_leaves_other_holders_intact() {
+        let source = r#"
+module Main;
+
+table : Array (Array I64);
+table = [[1], [2], [3], [4]];
+
+type Holder = unbox struct { xs : Array (Array I64) };
+type Slot = unbox union { full : Array (Array I64), empty : () };
+
+// A copy out of a global, then a write. The global keeps its own reference, so the write clones.
+from_global : () -> (Array (Array I64), Array (Array I64));
+from_global = |_| (
+    let head = table.get_sub(0, 2);
+    (table.set(0, [99]), head)
+);
+
+// A copy out of a struct field, then a write through the field.
+from_field : Holder -> (Array (Array I64), Array (Array I64));
+from_field = |hd| (
+    let head = hd.@xs.get_sub(0, 2);
+    (hd.mod_xs(|xs| xs.set(0, [88])).@xs, head)
+);
+
+// A copy out of an unboxed-union payload carried through a loop, then writes.
+from_union : Array (Array I64) -> Array (Array I64);
+from_union = |arr| (
+    let out = loop((0, Slot::full(arr)), |(i, slot)| (
+        if i == 2 { break $ slot };
+        let arr = slot.as_full;
+        let head = arr.get_sub(0, 2);
+        let arr = arr.set(0, head.@(1)).set(1, head.@(0));
+        continue $ (i + 1, Slot::full(arr))
+    ));
+    out.as_full
+);
+
+main : IO () = (
+    // The global's array is untouched, and the copy keeps the elements it took.
+    let (written, head) = from_global();
+    assert_eq(|_|"global written", written, [[99], [2], [3], [4]]);;
+    assert_eq(|_|"global intact", table, [[1], [2], [3], [4]]);;
+    assert_eq(|_|"global copy intact", head, [[1], [2]]);;
+
+    let (written, head) = from_field(Holder { xs : [[1], [2], [3]] });
+    assert_eq(|_|"field written", written, [[88], [2], [3]]);;
+    assert_eq(|_|"field copy intact", head, [[1], [2]]);;
+
+    // Two round trips through the union leave the array where it started.
+    assert_eq(|_|"union twice", from_union([[1], [2], [3]]), [[1], [2], [3]]);;
+
+    // A copy out of an array of arrays, then a write through the copy and a write through the
+    // source. Each element belongs to both, so each write must clone the element it changes.
+    let arr = [[1, 10], [2, 20], [3, 30]];
+    let head = arr.get_sub(0, 2);
+    let head = head.mod(0, |x| x.set(0, 999));
+    let arr = arr.mod(1, |x| x.set(0, 777));
+    assert_eq(|_|"source after both writes", arr, [[1, 10], [777, 20], [3, 30]]);;
+    assert_eq(|_|"copy after both writes", head, [[999, 10], [2, 20]]);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies `sort_stable_by` on boxed elements, whose merge drains an exhausted run by copying
+    /// out of the array it is sorting and then writes the buffer back into that same array: the
+    /// order is stable, and an array a second holder keeps is left as it was.
+    #[test]
+    pub fn test_sort_stable_by_with_a_second_holder() {
+        let source = r#"
+module Main;
+
+type Rec = unbox struct { key : I64, tag : Array I64 };
+
+keys : Array Rec -> Array I64;
+keys = |arr| arr.map(|x| x.@key);
+
+tags : Array Rec -> Array I64;
+tags = |arr| arr.map(|x| x.@tag.@(0));
+
+main : IO () = (
+    // Sorting an array the caller keeps: the sort must not write into the caller's array.
+    let arr = Array::from_map(12, |i| Rec { key : (i * 7) % 12, tag : [i] });
+    let sorted = arr.sort_stable_by(|(a, b)| a.@key < b.@key);
+    assert_eq(|_|"sorted keys", keys(sorted), Array::from_map(12, |i| i));;
+    assert_eq(|_|"source keys intact", keys(arr), Array::from_map(12, |i| (i * 7) % 12));;
+
+    // Sorting a uniquely owned array, which is where the writes go in place.
+    let sorted = Array::from_map(9, |i| Rec { key : (i * 5) % 9, tag : [i] })
+        .sort_stable_by(|(a, b)| a.@key < b.@key);
+    assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(9, |i| i));;
+
+    // Equal keys keep their input order, which is what the drain copies have to preserve.
+    let dup = Array::from_map(8, |i| Rec { key : i % 2, tag : [i] });
+    let sorted = dup.sort_stable_by(|(a, b)| a.@key < b.@key);
+    assert_eq(|_|"stable tags", tags(sorted), [0, 2, 4, 6, 1, 3, 5, 7]);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies the values `_unsafe_append_capacity_unchecked` and
+    /// `_unsafe_copy_capacity_bounds_unchecked` produce when called directly, over the cases their
+    /// callers in the standard library do not reach: the same array as source and destination, an
+    /// empty range out of a non-empty source, and a destination that already holds elements.
+    #[test]
+    pub fn test_range_primitives_called_directly() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    // The same array as the source and the destination of a copy, and of an append.
+    let a = ([[1], [2], [3], [4]] : Array (Array I64)).reserve(8);
+    assert_eq(|_|"self copy", a._unsafe_copy_capacity_bounds_unchecked(a, 0, 4),
+        [[1], [2], [3], [4], [1], [2], [3], [4]]);;
+    assert_eq(|_|"self append", a.append(a),
+        [[1], [2], [3], [4], [1], [2], [3], [4]]);;
+
+    // A copy out of a source the caller keeps.
+    let src = ([[1], [2], [3]] : Array (Array I64));
+    let dst = (Array::empty(3) : Array (Array I64));
+    assert_eq(|_|"copy from kept src", dst._unsafe_copy_capacity_bounds_unchecked(src, 0, 3),
+        [[1], [2], [3]]);;
+    assert_eq(|_|"copy src intact", src, [[1], [2], [3]]);;
+
+    // An empty range out of a non-empty source.
+    let dst = (Array::empty(3) : Array (Array I64));
+    assert_eq(|_|"copy empty range", dst._unsafe_copy_capacity_bounds_unchecked(src, 2, 2).@size, 0);;
+
+    // A copy onto a destination that already holds elements.
+    let dst = ([[0]] : Array (Array I64)).reserve(4);
+    assert_eq(|_|"copy onto tail", dst._unsafe_copy_capacity_bounds_unchecked(src, 1, 3),
+        [[0], [2], [3]]);;
+
+    // The owning primitive with a source the caller keeps, which takes the retain-per-element path.
+    let dst = ([[0]] : Array (Array I64)).reserve(4);
+    assert_eq(|_|"append kept src", dst._unsafe_append_capacity_unchecked(src), [[0], [1], [2], [3]]);;
+    assert_eq(|_|"append src intact", src, [[1], [2], [3]]);;
+
+    // The owning primitive with a uniquely owned source, which moves the elements.
+    let dst = ([[0]] : Array (Array I64)).reserve(4);
+    assert_eq(|_|"append unique src", dst._unsafe_append_capacity_unchecked([[7], [8]]),
+        [[0], [7], [8]]);;
+
+    // The owning primitive with an empty source.
+    let dst = ([[0]] : Array (Array I64)).reserve(4);
+    assert_eq(|_|"append empty src", dst._unsafe_append_capacity_unchecked([]), [[0]]);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
 }
