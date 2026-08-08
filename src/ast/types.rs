@@ -882,16 +882,23 @@ impl TypeNode {
         self.field_types_via_tycons(&type_env.tycons)
     }
 
+    /// The types of the fields `self` declares, with `self`'s type arguments substituted for the
+    /// declaration's type variables. An array declares its element type as its one field. The
+    /// declarations are read from `tycons`.
     pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
-        let ti = self.toplevel_tycon_info_via_tycons(tycons);
-        assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
-        let mut s = Substitution::default();
-        for (i, tv) in ti.tyvars.iter().enumerate() {
-            let merge_ok = s.merge(&Substitution::single(&tv.name, args[i].clone()));
+        let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
+        assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
+        let mut subst = Substitution::default();
+        for (i, tv) in tycon_info.tyvars.iter().enumerate() {
+            let merge_ok = subst.merge(&Substitution::single(&tv.name, args[i].clone()));
             assert!(merge_ok);
         }
-        ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
+        tycon_info
+            .fields
+            .iter()
+            .map(|f| subst.substitute_type(&f.ty))
+            .collect()
     }
 
     // For structs and unions, return the fields.
@@ -971,8 +978,8 @@ impl TypeNode {
         }
 
         let mut vars: Vec<Arc<TypeNode>> = vec![];
-        let val = collect_app_src_inner(self, &mut vars, vars_limit);
-        (vars, val)
+        let dst_ty = collect_app_src_inner(self, &mut vars, vars_limit);
+        (vars, dst_ty)
     }
 
     // Remove type aliases in a type.
@@ -1753,22 +1760,23 @@ impl TypeNode {
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
-        let mut str = "".to_string();
-        str += &self.to_string_normalize();
+        let mut key = "".to_string();
+        key += &self.to_string_normalize();
         if capture.len() > 0 {
-            str += "_capturing[";
+            key += "_capturing[";
         }
         for ty in capture {
-            str += ", ";
-            str += &ty.to_string_normalize();
+            key += ", ";
+            key += &ty.to_string_normalize();
         }
         if capture.len() > 0 {
-            str += "]";
+            key += "]";
         }
-        format!("{:x}", md5::compute(str))
+        format!("{:x}", md5::compute(key))
     }
 
-    // Get hash value.
+    /// A digest of this type, short enough to embed in a symbol name. Two types with the same
+    /// normalized form hash alike.
     pub fn hash(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
@@ -2429,6 +2437,8 @@ impl Scheme {
         out
     }
 
+    /// The same scheme with every type variable carrying its kind, taken from the scheme's own kind
+    /// signatures and from the kinds the traits its predicates and equalities name demand.
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
         let mut kind_scope = KindScope::new();
@@ -2438,8 +2448,8 @@ impl Scheme {
                 .insert(ks.tyvar.clone(), ks.kind.clone())
                 .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
         }
-        let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
-        if let Err(msg) = res {
+        let extend_result = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
+        if let Err(msg) = extend_result {
             let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
                 span = Span::unite_opt(&span, &ret.predicates[i].src);

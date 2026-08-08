@@ -534,7 +534,7 @@ impl ObjectFieldType {
                 .build_gep(value_ty, buffer, &[begin], "array_append_begin")
                 .unwrap()
         };
-        let val = value.value(gc);
+        let elem_val = value.value(gc);
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _count: IntValue<'c>,
@@ -544,7 +544,7 @@ impl ObjectFieldType {
                     .build_gep(value_ty, buf_ptr, &[idx], "array_append_slot")
                     .unwrap()
             };
-            gc.builder().build_store(slot, val).unwrap();
+            gc.builder().build_store(slot, elem_val).unwrap();
         };
         let after_loop =
             |_gc: &mut Generator<'c, 'm>, _count: IntValue<'c>, _buf: PointerValue<'c>| {};
@@ -1061,22 +1061,22 @@ impl ObjectFieldType {
     ) -> Vec<Object<'c>> {
         // Collect unretained (but cloned) fields.
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
-        let mut ret = vec![];
+        let mut fields = vec![];
         for field_idx in field_indices {
             // Move the field out as an object; it carries its own parts, so it outlives the struct.
             let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
-            ret.push(field);
+            fields.push(field);
         }
 
         if struct_obj.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
-            for field in &ret {
+            for field in &fields {
                 gc.retain(field.clone(), state);
             }
             gc.release(struct_obj.clone(), state);
         } else {
-            // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
-            // just release fields that are not not in `ret`.
+            // The struct is unboxed, so the fields taken out are released by whoever receives them.
+            // Releasing the fields left behind here accounts for the struct itself.
             for field_idx in 0..struct_obj.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
@@ -1086,7 +1086,7 @@ impl ObjectFieldType {
             }
         }
 
-        ret
+        fields
     }
 }
 
@@ -1473,22 +1473,25 @@ pub fn ty_to_object_ty(
 ) -> ObjectType {
     assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
-    let mut ret = ObjectType {
+    let mut object_ty = ObjectType {
         field_types: vec![],
         is_unbox: true,
         ty: ty.clone(),
     };
     if ty.is_closure() {
         assert!(capture.is_empty());
-        ret.is_unbox = true;
-        ret.field_types
+        object_ty.is_unbox = true;
+        object_ty
+            .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
-        ret.field_types
+        object_ty
+            .field_types
             .push(ObjectFieldType::SubObject(make_dynamic_object_ty(), false));
     } else if ty.is_funptr() {
         assert!(capture.is_empty());
-        ret.is_unbox = true;
-        ret.field_types
+        object_ty.is_unbox = true;
+        object_ty
+            .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
         let tc = ty.toplevel_tycon().unwrap();
@@ -1497,71 +1500,83 @@ pub fn ty_to_object_ty(
             TyConVariant::Primitive => {
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
-                ret.is_unbox = ti.is_unbox;
-                ret.field_types
+                object_ty.is_unbox = ti.is_unbox;
+                object_ty
+                    .field_types
                     .extend_from_slice(primitive_field_types(&tc.name));
             }
             TyConVariant::Array => {
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
-                ret.is_unbox = true;
+                object_ty.is_unbox = true;
                 // A pointer to the `#ArrayStorage` holding the elements, then the size and capacity.
                 let elem_ty = ty.field_types(type_env)[0].clone();
-                ret.field_types.push(ObjectFieldType::SubObject(
+                object_ty.field_types.push(ObjectFieldType::SubObject(
                     make_array_storage_ty(elem_ty),
                     false,
                 ));
-                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
-                ret.field_types.push(ObjectFieldType::I64); // size
-                assert_eq!(ret.field_types.len(), ARRAY_CAP_IDX as usize);
-                ret.field_types.push(ObjectFieldType::I64); // capacity
+                assert_eq!(object_ty.field_types.len(), ARRAY_SIZE_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::I64); // size
+                assert_eq!(object_ty.field_types.len(), ARRAY_CAP_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::I64); // capacity
             }
             TyConVariant::Struct => {
                 assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
-                ret.is_unbox = is_unbox;
+                object_ty.is_unbox = is_unbox;
                 if !is_unbox {
-                    ret.field_types.push(ObjectFieldType::ControlBlock);
+                    object_ty.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
+                assert_eq!(
+                    object_ty.field_types.len(),
+                    struct_field_idx(is_unbox) as usize
+                );
                 let field_types = ty.field_types(type_env);
                 for (field_idx, field_ty) in field_types.into_iter().enumerate() {
                     let punched = ti.fields[field_idx].is_punched;
-                    ret.field_types
+                    object_ty
+                        .field_types
                         .push(ObjectFieldType::SubObject(field_ty, punched));
                 }
             }
             TyConVariant::Union => {
                 assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
-                ret.is_unbox = is_unbox;
+                object_ty.is_unbox = is_unbox;
                 if !is_unbox {
-                    ret.field_types.push(ObjectFieldType::ControlBlock);
+                    object_ty.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                ret.field_types.push(ObjectFieldType::UnionTag);
-                ret.field_types
+                object_ty.field_types.push(ObjectFieldType::UnionTag);
+                object_ty
+                    .field_types
                     .push(ObjectFieldType::UnionBuf(ty.field_types(type_env)));
             }
             TyConVariant::DynamicObject => {
                 let is_unbox = ti.is_unbox;
                 assert_eq!(is_unbox, false);
-                ret.is_unbox = false;
-                ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_TRAVARSER_IDX as usize);
-                ret.field_types.push(ObjectFieldType::TraverseFunction);
-                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
+                object_ty.is_unbox = false;
+                object_ty.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(
+                    object_ty.field_types.len(),
+                    DYNAMIC_OBJ_TRAVARSER_IDX as usize
+                );
+                object_ty
+                    .field_types
+                    .push(ObjectFieldType::TraverseFunction);
+                assert_eq!(object_ty.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
                 for cap in capture {
-                    ret.field_types
+                    object_ty
+                        .field_types
                         .push(ObjectFieldType::SubObject(cap.clone(), false));
                 }
             }
             TyConVariant::ArrayStorage => {
                 assert!(capture.is_empty());
                 assert!(!ti.is_unbox);
-                ret.is_unbox = false;
-                ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), STORAGE_BUF_IDX as usize);
-                ret.field_types.push(ObjectFieldType::ArrayStorageBuf(
+                object_ty.is_unbox = false;
+                object_ty.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(object_ty.field_types.len(), STORAGE_BUF_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::ArrayStorageBuf(
                     ty.field_types(type_env)[0].clone(),
                 ));
             }
@@ -1573,7 +1588,7 @@ pub fn ty_to_object_ty(
             }
         }
     }
-    ret
+    object_ty
 }
 
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real

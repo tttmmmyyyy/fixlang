@@ -7793,8 +7793,9 @@ pub fn test_function_returning_a_type_with_no_size() {
     );
 }
 
-/// A type constructor of two arguments grows when either of them does, and the arguments are
-/// matched up one by one — `Q b (a, b)` grows its second argument out of both of `Q a b`'s.
+/// A type constructor reaching itself with an argument built out of its own arguments deepens at
+/// every step, whichever of them the growth is spelled in: `Q b (a, b)` builds its second argument
+/// out of both of `Q a b`'s.
 #[test]
 pub fn test_growing_type_with_two_arguments() {
     let source = r##"
@@ -7814,8 +7815,8 @@ pub fn test_growing_type_with_two_arguments() {
     );
 }
 
-/// Growth is read argument by argument, so a type constructor reached again with one argument
-/// unrelated to the first still has a size, however the other argument compares.
+/// A type constructor met again at unrelated arguments ends the descent: `K E I64` holds `E`, which
+/// holds `K (I64, I64) I64`, whose arguments hold nothing further.
 #[test]
 pub fn test_two_argument_constructor_with_an_unrelated_argument_compiles() {
     let source = r##"
@@ -8023,8 +8024,8 @@ pub fn test_unboxed_cycle_behind_a_boxed_field() {
     );
 }
 
-/// Unboxed fields that lead to an ever larger type of the same type constructor have no layout
-/// either. The type never repeats here, so the report rests on the type growing.
+/// An unboxed field leading to the same type constructor at a larger type argument reaches a new
+/// type at every step, so the depth bound is what reports it.
 #[test]
 pub fn test_growing_unboxed_type_has_no_size() {
     let source = r##"

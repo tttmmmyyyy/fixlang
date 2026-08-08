@@ -158,22 +158,19 @@ impl Symbol {
 
     // Calculate MD5 hash of this symbol.
     pub fn hash(&self) -> String {
-        let mut data = String::new();
-        data.push_str("<name>");
-        data.push_str(&self.name.to_string());
+        let mut hash_input = String::new();
+        hash_input.push_str("<name>");
+        hash_input.push_str(&self.name.to_string());
 
-        // data.push_str("<generic name>");
-        // data.push_str(&self.generic_name.to_string());
+        hash_input.push_str("<type>");
+        hash_input.push_str(&self.ty.to_string());
 
-        data.push_str("<type>");
-        data.push_str(&self.ty.to_string());
-
-        data.push_str("<expr>");
+        hash_input.push_str("<expr>");
         if let Some(expr) = &self.expr {
-            data.push_str(&expr.expr.stringify().to_string());
+            hash_input.push_str(&expr.expr.stringify().to_string());
         }
 
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_input))
     }
 }
 
@@ -1416,8 +1413,8 @@ impl Program {
                     *e = output.te;
                 }
                 SymbolExpr::Method(impls) => {
-                    let i = result.method_impl_idx.unwrap();
-                    impls[i].expr = output.te;
+                    let impl_idx = result.method_impl_idx.unwrap();
+                    impls[impl_idx].expr = output.te;
                 }
             };
         }
@@ -1806,14 +1803,14 @@ impl Program {
         errors.to_result()
     }
 
-    /// Report every value of the instantiated program whose type has no layout, at the expression
-    /// the value appears as.
+    /// Report every value of the instantiated program whose type has no size, at the expression the
+    /// value appears as.
     ///
-    /// A field of an unboxed type is laid out in place, so a type's size follows its unboxed fields:
-    /// a type they reach again — or an ever larger type of the same type constructor — describes a
-    /// value of no size. Code generation would meet such a type as a descent through the fields that
-    /// never ends, so this runs once the program's types are instantiated and before any of them is
-    /// laid out.
+    /// A field of an unboxed type is laid out in place, so a value the unboxed fields reach again
+    /// would have to be larger than itself, and a type reached from itself at a larger type argument
+    /// needs endlessly many layouts. `no_size_reason` decides the first and bounds the second. Code
+    /// generation would meet either as a descent through the fields that never ends, so this runs
+    /// once the program's types are instantiated and before any of them is laid out.
     pub fn validate_layouts(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
 
