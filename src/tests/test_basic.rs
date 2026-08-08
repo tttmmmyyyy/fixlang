@@ -2738,21 +2738,23 @@ is_increasing = |arr| (
 test_sort : SortMethod I64 -> SortMethod BoxedI64 -> IO ();
 test_sort = |sort_method, sort_method_boxed| (
     cases.to_iter.zip(count_up(1)).fold_m((), |(case, case_n), _|
+        let case_name = "case " + case_n.to_string;
+
         // unboxed case
         let xs = case;
         let ys = xs.sort_method;
-        assert(|_| "case {}-unboxed".populate([case_n.to_string]), ys.is_increasing);;
+        assert(|_| case_name + "-unboxed", ys.is_increasing);;
         // The elements are the ones that went in: a partition that drops or repeats one still
         // leaves the result in order.
-        assert_eq(|_| "case {}-unboxed-size".populate([case_n.to_string]), ys.@size, xs.@size);;
-        assert_eq(|_| "case {}-unboxed-sum".populate([case_n.to_string]), ys.to_iter.sum, xs.to_iter.sum);;
+        assert_eq(|_| case_name + "-unboxed-size", ys.@size, xs.@size);;
+        assert_eq(|_| case_name + "-unboxed-sum", ys.to_iter.sum, xs.to_iter.sum);;
 
         // boxed case
         let xs_boxed = xs.map(BoxedI64::make) : Array BoxedI64;
         let ys_boxed = xs_boxed.sort_method_boxed;
-        assert(|_| "case {}-boxed".populate([case_n.to_string]), ys_boxed.is_increasing);;
-        assert_eq(|_| "case {}-boxed-size".populate([case_n.to_string]), ys_boxed.@size, xs.@size);;
-        assert_eq(|_| "case {}-boxed-sum".populate([case_n.to_string]), ys_boxed.to_iter.map(|x| x.@v).sum, xs.to_iter.sum);;
+        assert(|_| case_name + "-boxed", ys_boxed.is_increasing);;
+        assert_eq(|_| case_name + "-boxed-size", ys_boxed.@size, xs.@size);;
+        assert_eq(|_| case_name + "-boxed-sum", ys_boxed.to_iter.map(|x| x.@v).sum, xs.to_iter.sum);;
 
         pure()
     );;

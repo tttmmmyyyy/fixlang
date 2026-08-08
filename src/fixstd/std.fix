@@ -524,8 +524,8 @@ namespace Array {
         // pivot that keeps landing near an end, and a run of those is what heap sort is here for.
         // Spending it on every split instead hands heap sort most of a randomly ordered array,
         // whose splits are uneven by a constant rather than by a growing one.
-        let smaller = min(pivot_i - start, end - pivot_i - 1);
-        let depth = if smaller < (end - start) / 8 { depth - 1_U8 } else { depth };
+        let smaller_side_size = min(pivot_i - start, end - pivot_i - 1);
+        let depth = if smaller_side_size < (end - start) / 8 { depth - 1_U8 } else { depth };
 
         let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth);
         let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth);
