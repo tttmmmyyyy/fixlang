@@ -107,78 +107,114 @@ pub(super) fn is_cursor_in_comment(
 
 // Returns true when byte offset `cursor` in `content` falls inside a
 // `//` line comment or `/* */` block comment.
-//
-// The bytes preceding the cursor are scanned with a small lexer state
-// machine. String (`"..."`) and char (`'...'`) literals are tracked so
-// that comment markers appearing inside them are not mistaken for the
-// start of a comment (e.g. the `//` in `"http://..."`). Backslash escapes
-// inside those literals are skipped. All the markers involved (`/`, `*`,
-// `"`, `'`, `\`, `\n`) are ASCII, so a byte scan never splits a
-// multi-byte UTF-8 character.
 fn is_byte_in_comment(content: &str, cursor: usize) -> bool {
-    #[derive(PartialEq)]
-    enum State {
-        Normal,
-        LineComment,
-        BlockComment,
-        Str,
-        Char,
-    }
+    let state = scan_outside_comments(content, cursor, &mut |_, _| {});
+    matches!(state, ScanState::LineComment | ScanState::BlockComment)
+}
+
+/// Lexer state of `scan_outside_comments` at a byte position.
+#[derive(PartialEq)]
+pub(super) enum ScanState {
+    Normal,
+    LineComment,
+    BlockComment,
+    Str,
+    Char,
+}
+
+/// Scan `content[..cursor]` with a small lexer state machine that tracks
+/// `//` line comments, `/* */` block comments and string (`"..."`) /
+/// char (`'...'`) literals, so that comment markers appearing inside a
+/// literal are not mistaken for the start of a comment (e.g. the `//` in
+/// `"http://..."`), and vice versa. Returns the state the cursor sits in.
+///
+/// `on_code_byte(byte, in_literal)` is called for every byte outside
+/// comments, in source order; `in_literal` is true for the bytes of
+/// string/char literals, quotes and backslash escapes included. Each
+/// comment is reported as a single `b' '` so that for the callback it
+/// still separates the code around it. All the markers involved (`/`,
+/// `*`, `"`, `'`, `\`, `\n`) are ASCII, so the scan never splits a
+/// multi-byte UTF-8 character and the reported bytes always reassemble
+/// into valid UTF-8.
+pub(super) fn scan_outside_comments(
+    content: &str,
+    cursor: usize,
+    on_code_byte: &mut impl FnMut(u8, bool),
+) -> ScanState {
     let bytes = content.as_bytes();
     let cursor = cursor.min(bytes.len());
-    let mut state = State::Normal;
+    let mut state = ScanState::Normal;
     let mut i = 0;
     while i < cursor {
         let b = bytes[i];
         let next = bytes.get(i + 1).copied();
         match state {
-            State::Normal => {
+            ScanState::Normal => {
                 if b == b'/' && next == Some(b'/') {
-                    state = State::LineComment;
+                    state = ScanState::LineComment;
+                    on_code_byte(b' ', false);
                     i += 2;
                     continue;
                 } else if b == b'/' && next == Some(b'*') {
-                    state = State::BlockComment;
+                    state = ScanState::BlockComment;
+                    on_code_byte(b' ', false);
                     i += 2;
                     continue;
                 } else if b == b'"' {
-                    state = State::Str;
+                    state = ScanState::Str;
+                    on_code_byte(b, true);
                 } else if b == b'\'' {
-                    state = State::Char;
+                    state = ScanState::Char;
+                    on_code_byte(b, true);
+                } else {
+                    on_code_byte(b, false);
                 }
             }
-            State::LineComment => {
+            ScanState::LineComment => {
                 if b == b'\n' {
-                    state = State::Normal;
+                    state = ScanState::Normal;
+                    on_code_byte(b, false);
                 }
             }
-            State::BlockComment => {
+            ScanState::BlockComment => {
                 if b == b'*' && next == Some(b'/') {
-                    state = State::Normal;
+                    state = ScanState::Normal;
                     i += 2;
                     continue;
                 }
             }
-            State::Str => {
+            ScanState::Str => {
                 if b == b'\\' {
+                    on_code_byte(b, true);
+                    if let Some(next) = next {
+                        on_code_byte(next, true);
+                    }
                     i += 2;
                     continue;
-                } else if b == b'"' {
-                    state = State::Normal;
                 }
+                if b == b'"' {
+                    state = ScanState::Normal;
+                }
+                on_code_byte(b, true);
             }
-            State::Char => {
+            ScanState::Char => {
                 if b == b'\\' {
+                    on_code_byte(b, true);
+                    if let Some(next) = next {
+                        on_code_byte(next, true);
+                    }
                     i += 2;
                     continue;
-                } else if b == b'\'' {
-                    state = State::Normal;
                 }
+                if b == b'\'' {
+                    state = ScanState::Normal;
+                }
+                on_code_byte(b, true);
             }
         }
         i += 1;
     }
-    state == State::LineComment || state == State::BlockComment
+    state
 }
 
 // Translate an LSP cursor position into a `SourcePos` anchored to the

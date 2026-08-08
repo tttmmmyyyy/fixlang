@@ -1,0 +1,24 @@
+module Lib;
+
+// A value at the module root.
+lib_value : I64 = 42;
+
+// Adds two numbers.
+//
+// # Parameters
+// * `x` - left operand
+// * `y` - right operand
+lib_func : I64 -> I64 -> I64 = |x, y| x + y;
+
+// A struct at the module root.
+type LibType = unbox struct { v : I64 };
+
+// A trait at the module root.
+trait a : LibTrait {
+    lib_method : a -> I64;
+}
+
+namespace Sub {
+    // A value inside the `Sub` namespace.
+    sub_value : I64 = 7;
+}

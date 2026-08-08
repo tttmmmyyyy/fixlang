@@ -1,9 +1,11 @@
 // LSP completion feature handlers.
 
+mod import;
 mod index;
 mod repair;
 mod score;
 
+use self::import::{import_completion_items, import_context_at};
 use self::index::CompletionIndex;
 use self::repair::repair_for_completion;
 use self::score::{
@@ -36,8 +38,24 @@ use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
     CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams, Uri,
 };
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+
+/// Payload stashed in `CompletionItem::data`, carried from
+/// `textDocument/completion` to `completionItem/resolve`.
+#[derive(Serialize, Deserialize)]
+struct ResolveData {
+    node: EndNode,
+    /// The text of the cursor's line up to the cursor.
+    typing_text: String,
+    position: TextDocumentPositionParams,
+    /// True when the item completes a component of an `import`
+    /// statement. Resolve then adds documentation only — the
+    /// argument-snippet expansion and the auto-import edits apply to
+    /// expression contexts.
+    in_import: bool,
+}
 
 /// Handles the `textDocument/completion` LSP request: collects
 /// candidate symbols (globals, type constructors, traits, associated
@@ -60,6 +78,31 @@ pub(super) fn handle_completion(
     }
 
     let typing_text = get_typing_text(text_document_position, uri_to_content);
+
+    // When the cursor is inside an `import` statement, complete module
+    // names or the imported module's entities; the symbol candidates
+    // collected below are for expressions and are meaningless there.
+    if let Some(latest) = uri_to_content.get(&text_document_position.text_document.uri) {
+        let cursor_byte = position_to_bytes(&latest.content, text_document_position.position);
+        if let Some(import_ctx) = import_context_at(&latest.content, cursor_byte) {
+            // Without a diagnostics snapshot there is nothing to
+            // enumerate modules or entities from; reply empty and let
+            // the next diagnostics run restore the candidates.
+            let items = program
+                .map(|program| {
+                    import_completion_items(
+                        &import_ctx,
+                        program,
+                        &latest.path,
+                        &typing_text,
+                        text_document_position,
+                    )
+                })
+                .unwrap_or_default();
+            send_response(id, Ok::<_, ()>(items));
+            return;
+        }
+    }
 
     // In dot-completion contexts, run the receiver-type extraction
     // pipeline so we can rank candidates by how well their receiver
@@ -120,7 +163,7 @@ pub(super) fn handle_completion(
         name: &FullName,
         kind: CompletionItemKind,
         detail: Option<String>,
-        end_node: &EndNode,
+        end_node: EndNode,
         typing_text: &str,
         text_document_position: &TextDocumentPositionParams,
         deprecated: bool,
@@ -161,7 +204,13 @@ pub(super) fn handle_completion(
             command: None,
             commit_characters: None,
             data: Some(
-                serde_json::to_value((end_node, typing_text, text_document_position)).unwrap(),
+                serde_json::to_value(ResolveData {
+                    node: end_node,
+                    typing_text: typing_text.to_string(),
+                    position: text_document_position.clone(),
+                    in_import: false,
+                })
+                .unwrap(),
             ),
             tags: tags_field,
         }
@@ -212,7 +261,7 @@ pub(super) fn handle_completion(
             full_name,
             CompletionItemKind::FUNCTION,
             Some(scheme),
-            &EndNode::Expr(Var::create(full_name.clone()), None),
+            EndNode::Expr(Var::create(full_name.clone()), None),
             &typing_text,
             &text_document_position,
             deprecated,
@@ -247,7 +296,7 @@ pub(super) fn handle_completion(
             &tycon.name,
             CompletionItemKind::CLASS,
             None,
-            &EndNode::Type(tycon.clone()),
+            EndNode::Type(tycon.clone()),
             &typing_text,
             &text_document_position,
             false,
@@ -270,7 +319,7 @@ pub(super) fn handle_completion(
             &trait_.name,
             CompletionItemKind::INTERFACE,
             None,
-            &EndNode::Trait(trait_.clone()),
+            EndNode::Trait(trait_.clone()),
             &typing_text,
             &text_document_position,
             false,
@@ -291,7 +340,7 @@ pub(super) fn handle_completion(
             &assoc_type.name,
             CompletionItemKind::CLASS,
             None,
-            &EndNode::AssocType(assoc_type.clone()),
+            EndNode::AssocType(assoc_type.clone()),
             &typing_text,
             &text_document_position,
             false,
@@ -733,18 +782,16 @@ pub(super) fn handle_completion_resolve_document(
     uri_to_content: &mut Map<Uri, LatestContent>,
     program: &Program,
 ) {
-    if params.data.is_none() {
-        let msg = "In textDocument/completion, params.data is null.".to_string();
-        write_log!("{}", msg);
-        send_response(id, Err::<CompletionItem, String>(msg));
+    let Some(data) = params.data.as_ref() else {
+        // Items without stashed data (e.g. namespace components offered
+        // inside an import statement) have no documentation to attach.
+        send_response(id, Ok::<_, ()>(params.clone()));
         return;
-    }
-    let data = params.data.as_ref().unwrap();
-    let data =
-        serde_json::from_value::<(EndNode, String, TextDocumentPositionParams)>(data.clone());
+    };
+    let data = serde_json::from_value::<ResolveData>(data.clone());
     if let Err(e) = data {
         let msg = format!(
-            "In textDocument/completion, failed to parse params.data as EndNode: {}",
+            "In textDocument/completion, failed to parse params.data as ResolveData: {}",
             e
         );
         write_log!("{}", msg);
@@ -752,7 +799,12 @@ pub(super) fn handle_completion_resolve_document(
         return;
     }
 
-    let (node, typing_text, text_document_position) = data.unwrap();
+    let ResolveData {
+        node,
+        typing_text,
+        position: text_document_position,
+        in_import,
+    } = data.unwrap();
 
     // Is the user completing a function call after a dot?
     let has_dot = is_dot_function(&typing_text);
@@ -764,6 +816,14 @@ pub(super) fn handle_completion_resolve_document(
     let docs = Documentation::MarkupContent(docs);
     let mut item = params.clone();
     item.documentation = Some(docs);
+
+    // In an import statement the completed name is written bare, never
+    // as a call and never needing an import edit; documentation is all
+    // there is to add.
+    if in_import {
+        send_response(id, Ok::<_, ()>(item));
+        return;
+    }
 
     // If the node is a global value with parameters defined in the document, then add the parameters to the insert text.
     match &node {

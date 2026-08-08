@@ -1,0 +1,5 @@
+module HidingDemo;
+
+import Lib hiding lib_value;
+
+hd_value : I64 = 1;

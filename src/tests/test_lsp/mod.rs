@@ -1,11 +1,13 @@
 // LSP integration tests module
 pub mod bench_completion;
+pub mod completion_harness;
 pub mod lsp_client;
 pub mod test_code_action;
 pub mod test_completion;
 pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
+pub mod test_import_completion;
 pub mod test_references;
 pub mod test_rename;
 pub mod test_semantic_tokens;

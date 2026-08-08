@@ -1,0 +1,8 @@
+module MultiLine;
+
+import Lib::{
+    lib_value,
+    Sub::sub_value
+};
+
+ml_use : I64 = lib_value + sub_value;

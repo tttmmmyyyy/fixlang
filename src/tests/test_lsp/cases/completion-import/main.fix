@@ -1,0 +1,9 @@
+module Main;
+
+import Lib::{lib_value, Sub::sub_value};
+
+main : IO () = (
+    let _ = lib_value;
+    let _ = sub_value;
+    pure()
+);
