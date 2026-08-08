@@ -484,7 +484,11 @@ namespace Array {
         range(0, n/2).fold(arr, |i, arr| arr.unsafe_swap_bounds_unchecked(i, n - 1 - i))
     );
 
-    // Quicksort for the specified range in an array.
+    // Sorts a range of an array by quicksort, falling back to insertion sort on a short range and
+    // to heap sort where the recursion has spent its budget.
+    //
+    // The caller must keep `0 <= start <= end <= arr.@size`: the range is read and written without
+    // checking an index against the size.
     //
     // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
@@ -492,7 +496,7 @@ namespace Array {
     // - `start`: The starting index of the range to sort.
     // - `end`: The ending index of the range to sort.
     // - `arr`: An array of elements to be sorted.
-    // - `depth`: The depth of the recursion.
+    // - `depth`: How many more times the range may be split before heap sort takes it.
     _introsort_by_internal : ((a, a) -> Bool) -> I64 -> I64 -> U8 -> Array a -> Array a;
     _introsort_by_internal = |less_than, start, end, depth, arr| (
         if end - start <= 1 { arr };
@@ -505,14 +509,7 @@ namespace Array {
         // Move pivot to the last.
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
 
-        let (arr, pivot_i) = range(start, end).fold((arr, start), |j, (arr, i)|
-            if less_than((arr._unsafe_get_bounds_unchecked(j), pivot)) {
-                // Found j whose element compares less than the pivot, so move it to the left.
-                (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
-            } else {
-                (arr, i)
-            }
-        );
+        let (arr, pivot_i) = arr._move_to_front_by_ranged(|elem| less_than((elem, pivot)), start, end);
 
         // Move pivot to pivot_i.
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
@@ -522,13 +519,7 @@ namespace Array {
         // Gather everything equal to the pivot beside it instead, and drop all of it from the
         // recursion at once.
         if pivot_i == start {
-            let (arr, equal_end) = range(start + 1, end).fold((arr, start + 1), |j, (arr, k)|
-                if less_than((pivot, arr._unsafe_get_bounds_unchecked(j))) {
-                    (arr, k)
-                } else {
-                    (arr.unsafe_swap_bounds_unchecked(k, j), k + 1)
-                }
-            );
+            let (arr, equal_end) = arr._move_to_front_by_ranged(|elem| !less_than((pivot, elem)), start + 1, end);
             arr._introsort_by_internal(less_than, equal_end, end, depth - 1_U8)
         };
 
@@ -536,6 +527,28 @@ namespace Array {
         let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
 
         arr
+    );
+
+    // Moves to the front of `arr[start, end)` the elements the predicate holds of, in the order it
+    // meets them, and returns the array with the index just past the last of them.
+    //
+    // The caller must keep `0 <= start <= end <= arr.@size`: the range is read and written without
+    // checking an index against the size.
+    //
+    // # Parameters
+    // - `pred`: The predicate the elements moved to the front satisfy.
+    // - `start`: The start index of the range.
+    // - `end`: The end index of the range.
+    // - `arr`: An array whose range is to be rearranged.
+    _move_to_front_by_ranged : (a -> Bool) -> I64 -> I64 -> Array a -> (Array a, I64);
+    _move_to_front_by_ranged = |pred, start, end, arr| (
+        range(start, end).fold((arr, start), |j, (arr, i)|
+            if pred(arr._unsafe_get_bounds_unchecked(j)) {
+                (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
+            } else {
+                (arr, i)
+            }
+        )
     );
 
     // Insertion sort for the specified range in an array.

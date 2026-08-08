@@ -2648,7 +2648,8 @@ pub fn test89() {
 }
 
 /// Verifies every sorting routine of the standard library over one corpus of inputs: the empty
-/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays.
+/// array, a single element, an array whose keys repeat, arrays of few distinct values long enough
+/// to be partitioned rather than sorted by insertion, and pseudo-random hundred-element arrays.
 /// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
 /// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
 /// Each runs over an unboxed and a boxed element type, and the stable one is also checked to leave
