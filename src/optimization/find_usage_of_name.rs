@@ -79,6 +79,8 @@ impl ExprVisitor for UsageFinder<'_> {
         EndVisitResult::unchanged(expr)
     }
 
+    // A call records the name once for standing as the callee, and once for each argument position
+    // it is passed at, with the callee named where the callee is a name.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -172,6 +174,8 @@ impl ExprVisitor for UsageFinder<'_> {
         EndVisitResult::unchanged(expr)
     }
 
+    // A struct being built records the name once for each field it is stored into, by the position
+    // that field holds among the fields the type constructor declares.
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,

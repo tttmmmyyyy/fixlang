@@ -283,12 +283,15 @@ impl Tree {
 }
 
 impl PartialEq for Tree {
+    // Compares the digests, each of which stands for a whole tree, so the cost stays the same
+    // however deep the two values are.
     fn eq(&self, other: &Self) -> bool {
         self.0.digest == other.0.digest
     }
 }
 impl Eq for Tree {}
 impl Hash for Tree {
+    // Hashes the digest, so that values equal under `eq` hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.digest.hash(state);
     }
@@ -1394,15 +1397,14 @@ fn apply(func: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
 }
 
 impl ExprVisitor for ClosureSpecializationVisitor {
+    // Wrap a name holding a bare capture list back into the closure its use here calls for: where
+    // the use wants a value of type `T` and the lifted lambda has type `C -> T` for the capture list
+    // type `C`, the name is replaced by that global function applied to it.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If `expr` refers to a decaptured lambda, and
-        // the type of this expression is T, and the lambda function type is C->T (C is the capture list type),
-        // replace it with an expression that applies the lambda function to the capture list.
-
         // Get the name
         let name = &expr.get_var().name;
 
@@ -1444,14 +1446,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Give an inline-LLVM expression the closures it is written against: each free variable holding
+    // a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
+    // capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
+    // gives it.
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If any free variable in the LLVM expression refers to a decaptured lambda,
-        // replace it with an expression that applies the lambda function to the capture list.
-
         // The expression each free variable holding a capture list is replaced with.
         let mut replacements = Map::default();
         for free_name in llvm_expr.free_vars() {
@@ -1640,12 +1643,13 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Retype the domain of a lambda whose parameter holds a bare capture list, so that the body is
+    // walked against the type that parameter now has.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
         let args = expr.get_lam_params();
         assert_eq!(args.len(), 1);
         let arg = &args[0];
