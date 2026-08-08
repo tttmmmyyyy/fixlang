@@ -210,6 +210,7 @@ impl Slot {
 #[derive(Clone, Debug)]
 struct Tree(Rc<TreeData>);
 
+// The contents of a tree, held behind an `Rc` so that every occurrence of one value shares them.
 #[derive(Debug)]
 struct TreeData {
     // The lambda decapturing lifted, which is what a call through this value reaches.

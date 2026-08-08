@@ -26,8 +26,9 @@ mod integration_tests {
     /// on `n - 1`, with `op = |x| x * 2` and `n = 4`.
     const RELAYED_CLOSURE_OUTPUT: &str = "30";
 
-    /// How many copies `changing_closure` asks for today, counted over the names below. The chain of
-    /// requests is what bounds this: each function, way in and lambda gets committed to one value.
+    /// How many copies `changing_closure` asks for today, counted over the `Main::` functions whose
+    /// name carries `#closure_spec`. The chain of requests is what bounds this: each function, way
+    /// in and lambda gets committed to one value.
     const CHANGING_CLOSURE_COPIES: usize = 13;
 
     /// What `derived_closure` prints: `relay` sums `terminal(shifted, i)` over `0..n`, adds
