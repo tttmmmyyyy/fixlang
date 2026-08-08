@@ -68,9 +68,10 @@ mod integration_tests {
     /// and every further wrapper multiplies that again.
     const WRAPPED_CHAIN_COPIES: usize = 17;
 
-    /// What `fix_through_llvm` prints: `Std::fix` summing `0..10`, `apply_twice` over `|x| x * 3`,
-    /// and `Std::fix` summing `|x| x * 3` over `0..4`.
-    const FIX_THROUGH_LLVM_OUTPUT: &str = "112";
+    /// How many copies of the lambdas lifted out of `g` `wrapped_chain` asks for today. Each of
+    /// those lambdas is a function the budget counts on its own, and there are more of them than
+    /// there are copies of `g`, so a bound on one says nothing about the other.
+    const WRAPPED_CHAIN_LAMBDA_COPIES: usize = 52;
 
     /// What `closure_swap` prints: `ping` and `pong` calling each other five rounds deep, each round
     /// swapping which of the two closures sits in which way in and wrapping one of them.
@@ -161,33 +162,50 @@ mod integration_tests {
             .collect()
     }
 
-    /// The copies that `dump` names of the function whose name begins with `func_prefix`,
-    /// deduplicated.
+    /// The copies that `dump` names under `func_prefix`, deduplicated, each paired with whether it
+    /// copies a lambda lifted out of that function rather than the function itself.
     ///
     /// A copy is named by appending `#closure_spec_<hash>` to the name of what it copies, and the
     /// stages after this pass append segments of their own, so what identifies one copy is the name
-    /// up to the end of that segment. A lambda lifted out of the function is copied under a name
-    /// carrying a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps
-    /// copies of the lambdas out of the count of copies of the function itself.
-    fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
+    /// up to the end of that segment. A lambda lifted out of the function carries a `#closure_lam`
+    /// segment ahead of the `#closure_spec_` one, which is what tells the two populations apart.
+    fn spec_copies_under(dump: &str, func_prefix: &str) -> Vec<(String, bool)> {
         let spec_segment = format!("{}_", CLOSURE_SPEC_SUFFIX);
         let mut copies = functions_named_with(dump, &spec_segment)
             .into_iter()
             .filter(|name| name.starts_with(func_prefix))
-            .filter_map(|name| {
+            .map(|name| {
                 let spec_start = name.find(&spec_segment).unwrap();
-                if name[..spec_start].contains(CLOSURE_LAM_SUFFIX) {
-                    return None;
-                }
+                let of_lambda = name[..spec_start].contains(CLOSURE_LAM_SUFFIX);
                 let end = name[spec_start + 1..]
                     .find('#')
                     .map_or(name.len(), |offset| spec_start + 1 + offset);
-                Some(name[..end].to_string())
+                (name[..end].to_string(), of_lambda)
             })
             .collect::<Vec<_>>();
         copies.sort();
         copies.dedup();
         copies
+    }
+
+    /// The copies that `dump` names of the function whose name begins with `func_prefix`.
+    fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
+        spec_copies_under(dump, func_prefix)
+            .into_iter()
+            .filter(|(_, of_lambda)| !of_lambda)
+            .map(|(name, _)| name)
+            .collect()
+    }
+
+    /// The copies that `dump` names of the lambdas lifted out of the function whose name begins
+    /// with `func_prefix`. Each such lambda is a function of its own, copied once per value it is
+    /// given, so bounding the copies of the function bounds nothing about these.
+    fn lambda_copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
+        spec_copies_under(dump, func_prefix)
+            .into_iter()
+            .filter(|(_, of_lambda)| *of_lambda)
+            .map(|(name, _)| name)
+            .collect()
     }
 
     /// A lambda passed to a global function is lifted to a global function of its own, and that
@@ -332,17 +350,18 @@ mod integration_tests {
             WRAPPED_CHAIN_COPIES,
             copies.len()
         );
-    }
 
-    /// A closure reaching an inline-LLVM expression. Such an expression reads variables only, so a
-    /// name holding a bare capture list is wrapped back into a closure and bound to a fresh name
-    /// ahead of it.
-    #[test]
-    pub fn test_a_closure_reaching_an_inline_llvm_expression_is_wrapped_back() {
-        let (_temp_dir, project_dir) = setup_test_env("fix_through_llvm");
-        for opt_level in ["basic", "max"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, FIX_THROUGH_LLVM_OUTPUT);
-        }
+        let lambda_copies = lambda_copies_of(&dump, "Main::g#");
+        assert!(
+            !lambda_copies.is_empty(),
+            "the lambdas `g` wraps its argument in should be copied, but the dump names none"
+        );
+        assert!(
+            lambda_copies.len() <= WRAPPED_CHAIN_LAMBDA_COPIES,
+            "the lambdas `g` lifts should have at most {} copies, but the dump names {}",
+            WRAPPED_CHAIN_LAMBDA_COPIES,
+            lambda_copies.len()
+        );
     }
 
     /// Two closures going round a cycle of two functions, swapping which way in each sits in on

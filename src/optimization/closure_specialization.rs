@@ -700,7 +700,9 @@ fn realize_all(
             name.clone(),
             Symbol {
                 name: name.clone(),
-                generic_name: request.unit.origin.clone(),
+                // A copy is one more instantiation of what its origin instantiates, so it says the
+                // same thing about where it came from before any instantiation.
+                generic_name: originals[&request.unit.origin].generic_name.clone(),
                 ty,
                 expr: Some(trav_res.expr),
             },
