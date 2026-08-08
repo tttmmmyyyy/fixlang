@@ -41,6 +41,7 @@ use lsp_types::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 
 /// Payload stashed in `CompletionItem::data`, carried from
 /// `textDocument/completion` to `completionItem/resolve`.
@@ -409,7 +410,7 @@ fn tiers_in_parallel(
     // threads); the memo is a `Mutex`, so the workers share one cache.
     let chunk_size = n.div_ceil(workers);
     let mut tiers = Vec::with_capacity(n);
-    std::thread::scope(|s| {
+    thread::scope(|s| {
         let handles: Vec<_> = names
             .chunks(chunk_size)
             .map(|chunk| {
@@ -923,7 +924,7 @@ pub(super) fn handle_completion_resolve_document(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::extract_namespace_from_typing_text;
 
     #[test]
     fn test_extract_namespace_from_typing_text_basic() {

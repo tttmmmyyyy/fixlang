@@ -17,6 +17,7 @@ use difference::{diff, Difference};
 use lsp_types::{
     Location, MarkupContent, MarkupKind, Position, Range, TextDocumentPositionParams, Uri,
 };
+use std::env;
 use std::path::{Component, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -592,7 +593,7 @@ fn collect_uses_of_binding(
 
 // Get the current directory, logging an error and returning None if it fails.
 pub(super) fn get_current_dir() -> Option<PathBuf> {
-    match std::env::current_dir() {
+    match env::current_dir() {
         Ok(d) => Some(d),
         Err(e) => {
             write_log!("Failed to get the current directory: {:?}", e);
