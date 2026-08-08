@@ -4,7 +4,6 @@ use super::{
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
-use crate::graph::Graph;
 use crate::{
     ast::{
         expr::{
@@ -21,6 +20,7 @@ use crate::{
         CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
         CLOSURE_SPEC_SUFFIX,
     },
+    graph::Graph,
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
     parse::sourcefile::Span,
@@ -295,12 +295,15 @@ impl Tree {
 }
 
 impl PartialEq for Tree {
+    // Compares the digests, each of which stands for a whole tree, so the cost stays the same
+    // however deep the two values are.
     fn eq(&self, other: &Self) -> bool {
         self.0.digest == other.0.digest
     }
 }
 impl Eq for Tree {}
 impl Hash for Tree {
+    // Hashes the digest, so that values equal under `eq` hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.digest.hash(state);
     }
@@ -1033,13 +1036,15 @@ struct ClosureSpecializationVisitor {
     narrowed_capture_list: Option<NarrowedCaptureList>,
 
     /* Specialization */
-    // Specializable functions
+    // Which ways into which functions a copy is worth making for, solved once over the whole
+    // program.
     specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
     // Copies this walk asks for
     required_specializations: Vec<SpecializationRequest>,
 
     /* Fields related to name generation of lambda function */
-    // Counter used to generate lambda function names
+    // Advances at each lambda this walk lifts, so that the names minted for one symbol stay
+    // distinct.
     lam_func_counter: u32,
     // Name of the symbol currently being optimized
     // Used to generate the names of lambda functions.
@@ -1083,7 +1088,7 @@ impl Known {
 }
 
 impl ClosureSpecializationVisitor {
-    // Create a new visitor
+    // A walk over `current_symbol`, starting with nothing lifted and no copy asked for.
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
@@ -1119,11 +1124,7 @@ impl ClosureSpecializationVisitor {
         let base = self.lifted.borrow().func_ty(tree.lambda());
         let (mut doms, codom) = base.collect_app_src(usize::MAX);
         doms[0] = self.cap_of(tree).ty;
-        let mut ty = codom;
-        for dom in doms.iter().rev() {
-            ty = type_fun(dom.clone(), ty);
-        }
-        expr_var(tree.unit().name(), None).set_type(ty)
+        expr_var(tree.unit().name(), None).set_type(fun_ty(&doms, codom))
     }
 
     // The expression a known value is carried by: the bare capture list, or the closure wrapping it.
@@ -1275,7 +1276,6 @@ impl ClosureSpecializationVisitor {
     // lifted to a global function taking that environment as an argument. The free variables of an
     // expression leave `CAP_NAME` out, so a body that reads it captures more than this can see.
     fn decapturable(expr: &Arc<ExprNode>) -> bool {
-        // If the expression is a not lambda expression, it is not decapturable.
         if !expr.is_lam() {
             return false;
         }
@@ -1364,7 +1364,7 @@ impl ClosureSpecializationVisitor {
     }
 }
 
-// Information of specializable functions
+// What the table of specializable functions holds for one function.
 #[derive(Clone)]
 struct SpecializableFunctionInfo {
     // The ways into this function a copy is worth making for.
@@ -1399,13 +1399,7 @@ impl SpecializationRequest {
             doms[0] = lifted.capture_struct_of(&tree).ty;
         }
 
-        // Convert back to a function type
-        let mut func_ty = codom;
-        for dom in doms.iter().rev() {
-            func_ty = type_fun(dom.clone(), func_ty);
-        }
-
-        func_ty
+        fun_ty(&doms, codom)
     }
 
     // Create an expression to refer to the specialized function.
@@ -1429,6 +1423,16 @@ fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode>
     internalize_let_to_var_at_head(&func)
 }
 
+// The function type taking `doms` in order and returning `codom`, which is what `collect_app_src`
+// takes apart.
+fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
+    let mut ty = codom;
+    for dom in doms.iter().rev() {
+        ty = type_fun(dom.clone(), ty);
+    }
+    ty
+}
+
 // `func` applied to `args`, one argument at a time.
 fn apply(func: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
     let mut expr = func;
@@ -1439,15 +1443,14 @@ fn apply(func: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
 }
 
 impl ExprVisitor for ClosureSpecializationVisitor {
+    // Wrap a name holding a bare capture list back into the closure its use here calls for: where
+    // the use wants a value of type `T` and the lifted lambda has type `C -> T` for the capture list
+    // type `C`, the name is replaced by that global function applied to it.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If `expr` refers to a decaptured lambda, and
-        // the type of this expression is T, and the lambda function type is C->T (C is the capture list type),
-        // replace it with an expression that applies the lambda function to the capture list.
-
         // Get the name
         let name = &expr.get_var().name;
 
@@ -1476,12 +1479,12 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         }
 
         // Check that the required type for this expression matches the codomain of the lambda function.
-        let lam = self.lambda_func_of(&tree);
-        let lambda_codom_ty = lam.type_.as_ref().unwrap().get_lambda_dst();
+        let lam_func = self.lambda_func_of(&tree);
+        let lambda_codom_ty = lam_func.type_.as_ref().unwrap().get_lambda_dst();
         assert_eq!(expr_ty.to_string(), lambda_codom_ty.to_string());
 
         // Replace with an expression that applies the lambda function to the capture list.
-        let expr = expr_app_typed(lam, vec![expr.set_type(cap_list_ty)]);
+        let expr = expr_app_typed(lam_func, vec![expr.set_type(cap_list_ty)]);
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
@@ -1489,15 +1492,17 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Give an inline-LLVM expression the closures it is written against: each free variable holding
+    // a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
+    // capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
+    // gives it.
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // If any free variable in the LLVM expression refers to a decaptured lambda,
-        // replace it with an expression that applies the lambda function to the capture list.
-
-        let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
+        // The expression each free variable holding a capture list is replaced with.
+        let mut replacements = Map::default();
         for free_name in llvm_expr.free_vars() {
             let known = self.local_decap_lambdas.get(&free_name).cloned();
             if known.is_none() {
@@ -1510,15 +1515,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             let tree = known.tree;
 
             // Create an expression that applies the lambda function to the capture list.
-            let lam = self.lambda_func_of(&tree);
+            let lam_func = self.lambda_func_of(&tree);
             let name_expr = expr_var(free_name.clone(), None).set_type(self.cap_of(&tree).ty);
-            let expr = expr_app_typed(lam, vec![name_expr]);
+            let expr = expr_app_typed(lam_func, vec![name_expr]);
 
-            replace.insert(free_name.clone(), expr);
+            replacements.insert(free_name.clone(), expr);
         }
 
         // If none of the free variables in the LLVM expression refer to a decaptured lambda, do nothing.
-        if replace.is_empty() {
+        if replacements.is_empty() {
             return StartVisitResult::VisitChildren;
         }
 
@@ -1530,15 +1535,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // Rename free variables in the LLVM expression
         let mut llvm_expr = llvm_expr.clone();
-        let mut rename: Map<FullName, FullName> = Default::default();
-        for (name, _) in replace.iter() {
-            rename.insert(name.clone(), make_new_name(name));
+        let mut renames: Map<FullName, FullName> = Default::default();
+        for (name, _) in replacements.iter() {
+            renames.insert(name.clone(), make_new_name(name));
         }
-        llvm_expr = rename_free_names(&llvm_expr, rename);
+        llvm_expr = rename_free_names(&llvm_expr, renames);
 
         // Insert `let (new name) = (lambda function call);` before the LLVM expression
         let mut expr = llvm_expr.clone();
-        for (name, call_lam_expr) in replace.iter() {
+        for (name, call_lam_expr) in replacements.iter() {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
                 PatternNode::make_var(var_var(new_name.clone()), None)
@@ -1684,15 +1689,16 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
+    // Retype the domain of a lambda whose parameter holds a bare capture list, so that the body is
+    // walked against the type that parameter now has.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
-        let arg = expr.get_lam_params();
-        assert_eq!(arg.len(), 1);
-        let arg = &arg[0];
+        let args = expr.get_lam_params();
+        assert_eq!(args.len(), 1);
+        let arg = &args[0];
         let arg_name = &arg.name;
         let cap_list_ty = match self.local_decap_lambdas.get(arg_name).cloned() {
             Some(known) if known.is_bare => self.cap_of(&known.tree).ty,
@@ -1718,11 +1724,11 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();
         let lam_body = expr.get_lam_body();
-        let impl_codom_ty = lam_body.type_.as_ref().unwrap();
-        if codom_ty.to_string() == impl_codom_ty.to_string() {
+        let body_ty = lam_body.type_.as_ref().unwrap();
+        if codom_ty.to_string() == body_ty.to_string() {
             return EndVisitResult::unchanged(expr);
         }
-        let new_lambda_ty = type_fun(dom_ty, impl_codom_ty.clone());
+        let new_lambda_ty = type_fun(dom_ty, body_ty.clone());
         let expr = expr.set_type(new_lambda_ty);
         EndVisitResult::changed(expr)
     }

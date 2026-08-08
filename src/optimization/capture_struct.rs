@@ -24,6 +24,7 @@ use std::sync::Arc;
 // "what do I call this with".
 #[derive(Clone)]
 pub struct CaptureStruct {
+    // The type constructor a value of this struct is built and destructured with.
     pub tycon: Arc<TyCon>,
     // The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
