@@ -1,0 +1,4 @@
+module Lib.Extra;
+
+// A value in a module whose name contains `.`.
+extra_value : I64 = 5;

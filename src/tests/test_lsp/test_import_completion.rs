@@ -14,7 +14,13 @@ mod tests {
     /// All files of the `completion-import` fixture; opening them all
     /// lets any of them be queried, and diagnostics are awaited on the
     /// last one.
-    const FIXTURE_FILES: &[&str] = &["lib.fix", "hiding.fix", "multiline.fix", "main.fix"];
+    const FIXTURE_FILES: &[&str] = &[
+        "lib.fix",
+        "extra.fix",
+        "hiding.fix",
+        "multiline.fix",
+        "main.fix",
+    ];
 
     /// Start a language server over a fresh copy of the
     /// `completion-import` fixture, with all of `FIXTURE_FILES` open.
@@ -178,7 +184,33 @@ mod tests {
         assert_eq!(kind_of(find_item(&items, "lib_value")), 3);
         assert_eq!(kind_of(find_item(&items, "LibType")), 7);
         assert_eq!(kind_of(find_item(&items, "LibTrait")), 8);
+        assert_eq!(kind_of(find_item(&items, "LibTraitAlias")), 8);
         assert_eq!(kind_of(find_item(&items, "Sub")), 9);
+
+        // A deprecated entity carries both the legacy `deprecated`
+        // field and the modern `tags` (DEPRECATED = 1); a live one
+        // carries neither.
+        let old_value = find_item(&items, "old_value");
+        assert_eq!(
+            old_value.get("deprecated").and_then(|v| v.as_bool()),
+            Some(true),
+            "deprecated entity should carry `deprecated: true`: {}",
+            old_value
+        );
+        assert!(
+            old_value
+                .get("tags")
+                .and_then(|v| v.as_array())
+                .map_or(false, |tags| tags.iter().any(|t| t.as_i64() == Some(1))),
+            "deprecated entity should carry the DEPRECATED tag: {}",
+            old_value
+        );
+        let live = find_item(&items, "lib_value");
+        assert!(
+            live.get("deprecated").is_none() && live.get("tags").is_none(),
+            "live entity must not carry deprecation fields: {}",
+            live
+        );
 
         // Values carry their type signature as the detail.
         assert_eq!(
@@ -186,6 +218,87 @@ mod tests {
                 .get("detail")
                 .and_then(|v| v.as_str()),
             Some("Std::I64 -> Std::I64 -> Std::I64"),
+        );
+
+        ctx.shutdown();
+    }
+
+    /// A module name containing `.` completes as one item. The typed
+    /// dotted path must be replaced whole by the item's `TextEdit`
+    /// (clients treat `.` as a word boundary, so a plain insertion
+    /// would splice the full name over its last component only), and
+    /// the `filterText` must hold the full dotted name so the client
+    /// matches the typed path against it.
+    #[test]
+    fn test_import_completion_dotted_module_name() {
+        let mut ctx = setup();
+        let (line, col) = position_after(
+            &ctx.project_dir,
+            "main.fix",
+            "import Lib.Extra;",
+            "import Lib.Ex",
+        );
+        let items = ctx.complete("main.fix", line, col);
+
+        let item = find_item(&items, "Lib.Extra");
+        assert_eq!(
+            item.get("filterText").and_then(|v| v.as_str()),
+            Some("Lib.Extra"),
+            "filterText should be the full dotted module name: {}",
+            item
+        );
+        let edit = item
+            .get("textEdit")
+            .unwrap_or_else(|| panic!("dotted module item should carry a textEdit: {}", item));
+        assert_eq!(
+            edit.get("newText").and_then(|v| v.as_str()),
+            Some("Lib.Extra")
+        );
+        let range = edit.get("range").expect("textEdit has range");
+        // The typed path is `Lib.Ex`, 6 characters before the cursor;
+        // the range must span it whole, `.` included.
+        assert_eq!(
+            range
+                .get("start")
+                .and_then(|p| p.get("character"))
+                .and_then(|v| v.as_u64()),
+            Some((col - 6) as u64),
+            "textEdit must start where the typed dotted path starts: {}",
+            edit
+        );
+        assert_eq!(
+            range
+                .get("end")
+                .and_then(|p| p.get("character"))
+                .and_then(|v| v.as_u64()),
+            Some(col as u64)
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Under a trait's namespace (`import Lib::{..., LibTrait::<cursor>`)
+    /// the candidates are the trait's members and associated types.
+    #[test]
+    fn test_import_completion_trait_namespace() {
+        let mut ctx = setup();
+        let (line, col) = position_after(
+            &ctx.project_dir,
+            "multiline.fix",
+            "LibTrait::lib_method",
+            "LibTrait::",
+        );
+        let items = ctx.complete("multiline.fix", line, col);
+        let got = labels(&items);
+
+        // The trait method is a value (FUNCTION = 3); the associated
+        // type is type-level (CLASS = 7).
+        assert_eq!(kind_of(find_item(&items, "lib_method")), 3);
+        assert_eq!(kind_of(find_item(&items, "Elem")), 7);
+        assert!(
+            !got.iter().any(|l| l == "lib_value" || l == "LibTrait"),
+            "candidates outside the trait's namespace offered: {:?}",
+            got
         );
 
         ctx.shutdown();

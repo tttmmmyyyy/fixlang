@@ -15,8 +15,17 @@ type LibType = unbox struct { v : I64 };
 
 // A trait at the module root.
 trait a : LibTrait {
+    // An associated type of the trait.
+    type Elem a;
     lib_method : a -> I64;
 }
+
+// A trait alias at the module root.
+trait LibTraitAlias = Std::ToString + Std::Eq;
+
+// A deprecated value.
+old_value : I64 = 0;
+DEPRECATED[old_value, "Use `lib_value` instead."];
 
 namespace Sub {
     // A value inside the `Sub` namespace.
