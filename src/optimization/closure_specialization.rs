@@ -234,11 +234,11 @@ impl Tree {
         // A field contributes its child's digest, which is of fixed width. That keeps the rendering
         // linear in this tree's own fields, and it closes each child off, so that a value nested one
         // level down reads differently from two values side by side.
-        let mut rendered = lambda.to_string();
+        let mut hash_data = lambda.to_string();
         for (field, tree) in &fields {
-            rendered += &format!("|{}:{}", field, tree.digest_hex());
+            hash_data += &format!("|{}:{}", field, tree.digest_hex());
         }
-        let digest = md5::compute(rendered);
+        let digest = md5::compute(hash_data);
         Tree(Rc::new(TreeData {
             lambda,
             fields,
