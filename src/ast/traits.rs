@@ -764,37 +764,59 @@ impl TraitAliasEnv {
         self.data.contains_key(trait_id)
     }
 
-    // Resolve trait aliases.
+    /// The traits an alias stands for: each trait reachable from it that is not itself an alias,
+    /// once, in the order the definitions name them.
+    ///
+    /// Reports an alias that stands for itself, directly or through other aliases, since expanding
+    /// such a one does not terminate.
     pub fn resolve_alias(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
+        /// Walks the aliases reachable from `trait_id` and pushes onto `res` each trait it reaches
+        /// that is not an alias.
+        ///
+        /// `on_path` holds the aliases the walk has entered and not yet left, so an alias found in
+        /// it is one the walk is already inside: that, and only that, is a circular alias. An alias
+        /// reachable along several paths is entered on the first of them and left again before the
+        /// second is walked, which is why membership has to be given up on the way back up.
+        ///
+        /// `resolved` holds the traits already accounted for in `res`: an alias all of whose traits
+        /// are pushed, and a non-alias trait pushed itself. It keeps a part of the graph that
+        /// several paths share from being walked, or pushed, a second time.
         fn resolve_alias_internal(
             env: &TraitAliasEnv,
             trait_id: &TraitId,
             res: &mut Vec<TraitId>,
-            visited: &mut Set<TraitId>,
+            on_path: &mut Set<TraitId>,
+            resolved: &mut Set<TraitId>,
         ) -> Result<(), Errors> {
-            if visited.contains(trait_id) {
+            if resolved.contains(trait_id) {
+                return Ok(());
+            }
+            let Some(alias) = env.data.get(trait_id) else {
+                res.push(trait_id.clone());
+                resolved.insert(trait_id.clone());
+                return Ok(());
+            };
+            if !on_path.insert(trait_id.clone()) {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "Circular aliasing detected in trait alias `{}`.",
                         trait_id.to_string()
                     ),
-                    &[&env.data.get(trait_id).map(|ta| ta.source.clone()).flatten()],
+                    &[&alias.source],
                 ));
             }
-            visited.insert(trait_id.clone());
-            if !env.is_alias(trait_id) {
-                res.push(trait_id.clone());
-                return Ok(());
+            for (t, _) in &alias.value {
+                resolve_alias_internal(env, t, res, on_path, resolved)?;
             }
-            for (t, _) in &env.data.get(trait_id).unwrap().value {
-                resolve_alias_internal(env, t, res, visited)?;
-            }
+            on_path.remove(trait_id);
+            resolved.insert(trait_id.clone());
             Ok(())
         }
 
         let mut res = vec![];
-        let mut visited = Set::default();
-        resolve_alias_internal(self, trait_id, &mut res, &mut visited)?;
+        let mut on_path = Set::default();
+        let mut resolved = Set::default();
+        resolve_alias_internal(self, trait_id, &mut res, &mut on_path, &mut resolved)?;
         Ok(res)
     }
 }

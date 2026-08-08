@@ -8,9 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, EmittedIr,
+        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
+        run_source_capture, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::Rng;
@@ -4642,6 +4642,66 @@ pub fn test_trait_alias_circular_aliasing() {
         Configuration::develop_mode(),
         "Circular aliasing detected in trait alias `Main::MyTrait",
     );
+}
+
+#[test]
+pub fn test_trait_alias_circular_aliasing_on_itself() {
+    let source = r#"
+        module Main;
+
+        // Error (circular aliasing)
+        trait MyTrait = MyTrait;
+
+        main : IO ();
+        main = (
+            pure()
+        );
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Circular aliasing detected in trait alias `Main::MyTrait`."),
+        "the alias standing for itself is reported, but the message is:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("trait MyTrait = MyTrait;"),
+        "the report points at the definition, but the message is:\n{}",
+        errmsg
+    );
+}
+
+#[test]
+pub fn test_trait_alias_reachable_along_two_paths() {
+    // A trait that two aliases both stand for is reached twice while an alias naming both is
+    // expanded, and expanding it has to end at the traits themselves either way.
+    let source = r#"
+        module Main;
+
+        // `Additive` is reached through `Ordered` and again through `Showable`.
+        trait Ordered = Additive + LessThan;
+        trait Showable = Additive + ToString;
+        trait Ring = Ordered + Showable;
+
+        describe : [a : Ring] a -> a -> String;
+        describe = |x, y| if x < y { (x + y).to_string } else { y.to_string };
+
+        // A trait named beside an alias that already stands for it.
+        trait MyShow = ToString;
+        trait MyShowTwice = MyShow + ToString;
+
+        show_twice : [a : MyShowTwice] a -> String;
+        show_twice = |x| x.to_string + x.to_string;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"case 1", describe(3, 5), "8");;
+            assert_eq(|_|"case 2", describe(5, 3), "3");;
+            assert_eq(|_|"case 3", show_twice(7), "77");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]

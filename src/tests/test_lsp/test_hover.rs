@@ -481,4 +481,38 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// A file whose trait aliases name one trait along two paths is served like any other.
+    ///
+    /// What an alias stands for is worked out before the file's values are looked at, so an alias
+    /// the compiler refuses stops the whole file from being typed and every request about it comes
+    /// back empty. The refusal is anchored where the offending alias is defined, which for an alias
+    /// of the standard library is a file the programmer never opened -- so the editor shows a file
+    /// that answers nothing and says nothing.
+    #[test]
+    fn test_hover_with_trait_alias_reachable_along_two_paths() {
+        let mut ctx = LspTestCtx::setup("trait_alias_two_paths", &["main.fix"]);
+
+        // Source layout (1-based for human reading):
+        //
+        //  13:     let described = describe(3, 5);
+        //
+        // `describe` is constrained by an alias that names `Additive` along two paths.
+        let hover = ctx.hover("main.fix", 12, 10);
+        let text = hover_text(&hover).expect("hover on `described` should return content");
+        assert!(
+            text.contains("String"),
+            "hover on `described` should show its type. Got: {:?}",
+            text
+        );
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            diagnostics.is_empty(),
+            "the file compiles, so nothing is expected, but the diagnostics are {:?}",
+            diagnostics
+        );
+
+        ctx.shutdown();
+    }
 }
