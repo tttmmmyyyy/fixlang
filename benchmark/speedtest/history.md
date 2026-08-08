@@ -26,9 +26,15 @@ after such a copy can have its uniqueness check removed.
 `cp_lib_scc` +0.15%: none of the changed call sites is in its hot path, so the movement is code
 layout. The other 44 cases hold to within a hundredth of a percent.
 
-**`cp_lib_scc` reports 70,766 splits here against 170,766 in the row below**, which is the pair the
-row below records for one unchanged binary read from two shells. Read it as the environment, not as
-the change.
+**The split column of this row is not comparable with the row below: the two were measured from
+different filesystem paths.** A program's initial stack is laid out above its argument and
+environment block, so the path the harness is invoked from moves every address on the stack, and a
+hot stack object a few bytes from a line boundary crosses it or does not. The `cp_lib_lsegtree`
+binary of this row, run unchanged from two directories differing only in the length of their names,
+reports **200,024 splits and 23**. Sixteen cases move by more than a twentieth of a percent here for
+that reason, `cp_lib_lsegtree` 23 -> 400,026 and `sum_by_fold_cap` 23 -> 1,588 among them; the row
+below records the same binaries flipping between the same pairs. **Measure both sides at one path
+before reading anything into this column.**
 
 **Not in the corpus: `Array::sort_stable` costs 17.6% more instructions.** On a 2,000,000-element
 `Array I64` it goes from 4,049,614,425 to 4,763,914,157, and the rate holds at 100,000 and 500,000
