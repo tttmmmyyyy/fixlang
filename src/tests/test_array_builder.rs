@@ -377,7 +377,7 @@ main : IO () = (
         .sort_stable_by(|(a, b)| a.@key < b.@key);
     assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(33, |i| i));;
 
-    // Equal keys keep their input order, which is what the drain copies have to preserve.
+    // Equal keys keep their input order, which is what the merge's tie-breaking has to preserve.
     let dup = Array::from_map(24, |i| Rec { key : i % 2, tag : [i] });
     let sorted = dup.sort_stable_by(|(a, b)| a.@key < b.@key);
     assert_eq(|_|"stable tags", tags(sorted), Array::from_map(24, |i| if i < 12 { i * 2 } else { (i - 12) * 2 + 1 }));;

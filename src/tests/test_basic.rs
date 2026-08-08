@@ -2843,13 +2843,13 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_stable_by` returns the sorted elements in the array the caller reads, over
+/// every size across the threshold at which the recursion stops splitting and on through several
+/// levels of merging, and over inputs that are randomly ordered, already sorted, reversed, and all
+/// of one key. The merge swaps the roles of two arrays at every level, so a size that splits in a
+/// way the merge does not expect leaves the result in the other array.
 #[test]
 pub fn test_sort_stable_over_sizes_and_orders() {
-    // `sort_stable_by` merges between two arrays whose roles swap at every level of the recursion,
-    // so the sorted elements land in the array the caller reads only if every size splits the way
-    // the merge expects. Sweep the sizes across the threshold at which the recursion stops
-    // splitting and on through several levels of merging, over inputs that are randomly ordered,
-    // already sorted, reversed, and all of one key.
     let source = r#"
 module Main;
 
