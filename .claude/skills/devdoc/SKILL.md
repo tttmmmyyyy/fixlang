@@ -7,7 +7,7 @@ description: 'Writing conventions for the prose that explains a change — desig
 
 ## What this covers
 
-A dev doc under `dev-docs/`, a pull request body, and an issue body. All three are addressed to the people working on the change and are read the same way, so all three follow the conventions below. A pull request body and the dev doc of the change it carries are often the same text.
+A dev doc under `dev-docs/`, a pull request body, and an issue body. All three are addressed to the people working on the change and are read the same way, so all three follow the conventions below. A pull request body and the dev doc of the change it carries are often the same text. A pull request body has further requirements on top of these conventions; the pr-message skill states them, so apply both when writing one.
 
 ## The fundamental theorem of readability
 
