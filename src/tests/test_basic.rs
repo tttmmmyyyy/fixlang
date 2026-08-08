@@ -4578,6 +4578,8 @@ pub fn test_one_and_multiplicative() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An alias takes the kind of the traits it stands for, so one naming traits of two kinds — here a
+/// trait of kind `*->*` beside one of kind `*` — is reported.
 #[test]
 pub fn test_trait_alias_kind_mismatch() {
     let source = r#"
@@ -4595,6 +4597,8 @@ pub fn test_trait_alias_kind_mismatch() {
     );
 }
 
+/// An `impl` whose head names an alias is reported, and the report says to implement each of the
+/// traits the alias stands for.
 #[test]
 pub fn test_trait_alias_implement_trait_alias_directly() {
     let source = r#"
@@ -4623,6 +4627,8 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
     );
 }
 
+/// Two aliases that stand for each other are reported as circular, so expanding one of them ends
+/// instead of running on forever.
 #[test]
 pub fn test_trait_alias_circular_aliasing() {
     let source = r#"
@@ -4706,9 +4712,10 @@ pub fn test_trait_alias_reachable_along_two_paths() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Each numeric type carries a value through `to_bytes` and back with `from_bytes`, and
+/// `from_bytes` on a byte array one byte short of the type's width answers an error.
 #[test]
 pub fn test129() {
-    // Test ToBytes/FromBytes
     let source = r#"
         module Main; 
         
@@ -4800,6 +4807,8 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
+/// produced along with the time it took, for a long computation and for file IO.
 #[test]
 pub fn test_consumed_time() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {

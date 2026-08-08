@@ -747,14 +747,18 @@ impl KindSignature {
     }
 }
 
-// Trait alias environment.
+/// The trait aliases a program declares, and the expansion of an alias into the traits it stands
+/// for.
 #[derive(Clone, Default)]
 pub struct TraitAliasEnv {
+    /// Every declared alias, keyed by the name it is declared under. A trait name absent from here
+    /// names a trait of its own.
     pub data: Map<TraitId, TraitAlias>,
 }
 
 impl TraitAliasEnv {
-    // Check if a trait name is an alias.
+    /// Whether `trait_id` names an alias. Trait names divide into the aliases declared here and the
+    /// traits `TraitEnv::traits` holds.
     pub fn is_alias(&self, trait_id: &TraitId) -> bool {
         self.data.contains_key(trait_id)
     }
@@ -829,7 +833,8 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
-    // Find the minimum node which includes the specified source code position.
+    /// The innermost node covering `pos` among the trait definitions, the trait implementations and
+    /// the trait aliases.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (_t, trait_defn) in &self.traits {
             let node = trait_defn.find_node_at(pos);
@@ -916,7 +921,8 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        // Circular aliasing will be detected in `TraitEnv::resolve_aliases`, so we don't need to check it here.
+        // Circular aliasing is reported by `TraitAliasEnv::resolve_alias`, which
+        // `TraitEnv::set_kinds_in_trait_and_alias_defns` calls for every declared alias.
 
         for (_trait_id, trait_defn) in &self.traits {
             // Forbid opaque type variables in trait definitions.
