@@ -73,6 +73,7 @@
 - `fix run` and `fix test` no longer crash on startup in debug builds of `fix` (released builds were unaffected).
 - `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
 - Building a project after upgrading `fix` no longer hangs. The type-checking cache is now regenerated when the compiler itself changes, where before it was reused as long as the source was unchanged and a newer `fix` could misread a cache an older one wrote.
+- LSP: A completion request no longer makes the language server exit when the file annotates an expression with an unknown type variable, such as `let x = (3 : b);`. The editor lost its server until a restart; the request now answers with type-aware candidates, including when the cursor is inside the annotated expression itself.
 
 ## [1.4.0] - 2026-06-22
 

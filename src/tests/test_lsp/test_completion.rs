@@ -651,6 +651,98 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// An annotation naming an unknown type variable (`(3 : b)`) sits in the
+    /// binding right before the completion cursor. The tolerant elaborator
+    /// must swallow the bad annotation and leave every node it substitutes
+    /// typed — an untyped node aborts the server inside `fix_types` before
+    /// it can answer. The sibling `42.` receiver keeps its `I64`, so ranking
+    /// stays type-aware.
+    #[test]
+    fn test_completion_dot_beside_unknown_tyvar_annotation() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-tolerant-broken-annotation", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+        //   3: (blank)
+        //   4: myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+        //   5: (blank)
+        //   6: main : IO () = (
+        //   7:     let x = (3 : b);
+        //   8:     let y = 42.    <-- cursor right after the dot
+        //   9:     pure()
+        //  10: );
+        //
+        // Column 15 = byte just after `.` on `    let y = 42.`.
+        let items = ctx.complete_with_timeout("main.fix", 8, 15, Duration::from_secs(60));
+
+        let sort_myfunc1 = find_sort_text(&items, "Main::myfunc1")
+            .expect("Main::myfunc1 should be a completion candidate");
+        let sort_myfunc2 = find_sort_text(&items, "Main::myfunc2")
+            .expect("Main::myfunc2 should be a completion candidate");
+        assert!(
+            sort_myfunc2.starts_with('0'),
+            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
+            sort_myfunc2
+        );
+        assert!(
+            sort_myfunc2 < sort_myfunc1,
+            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
+             got myfunc2={:?}, myfunc1={:?}",
+            sort_myfunc2,
+            sort_myfunc1
+        );
+
+        ctx.shutdown();
+    }
+
+    /// The completion cursor sits inside the annotated expression itself:
+    /// `(42.<cursor> : b)` with `b` unknown. The tolerant elaborator drops
+    /// the ill-formed annotation and still elaborates the child against the
+    /// contextual type, so the receiver keeps its `I64` and ranking stays
+    /// type-aware.
+    #[test]
+    fn test_completion_dot_inside_unknown_tyvar_annotation() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-tolerant-annotated-receiver", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+        //   3: (blank)
+        //   4: myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+        //   5: (blank)
+        //   6: main : IO () = (
+        //   7:     let x = (42. : b);    <-- cursor right after the dot
+        //   8:     pure()
+        //   9: );
+        //
+        // Column 16 = byte just after `.` in `(42.`.
+        let items = ctx.complete_with_timeout("main.fix", 7, 16, Duration::from_secs(60));
+
+        let sort_myfunc1 = find_sort_text(&items, "Main::myfunc1")
+            .expect("Main::myfunc1 should be a completion candidate");
+        let sort_myfunc2 = find_sort_text(&items, "Main::myfunc2")
+            .expect("Main::myfunc2 should be a completion candidate");
+        assert!(
+            sort_myfunc2.starts_with('0'),
+            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
+            sort_myfunc2
+        );
+        assert!(
+            sort_myfunc2 < sort_myfunc1,
+            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
+             got myfunc2={:?}, myfunc1={:?}",
+            sort_myfunc2,
+            sort_myfunc1
+        );
+
+        ctx.shutdown();
+    }
+
     /// `let arr = [1,2,3]; arr.<cursor>` — methods in `Std::Array::*`
     /// whose receiver position unifies with `Array I64` should land
     /// in Tier 0 sub-tier `a` (InsideTyCon), out-ranking unrelated
