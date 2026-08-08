@@ -7,6 +7,7 @@ use crate::ast::{
 };
 use std::sync::Arc;
 
+// A use of the name being searched for, told apart by what receives the name there.
 pub enum UsageType {
     // The name is passed as an argument to a call. The first component names the function called,
     // and is `None` where the callee is an expression rather than a name; the second is the index of
@@ -20,6 +21,9 @@ pub enum UsageType {
     CapturedInto(FullName, usize),
 }
 
+// Every use of `name` in `expr`, in the order the walk meets them. An occurrence of a local `name`
+// standing under an inner binding of the same name is a use of that binding, and stays out of the
+// result.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     let mut usages = Vec::new();
     let mut finder = UsageFinder {
@@ -30,8 +34,11 @@ pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     usages
 }
 
+// The walk collecting the uses of one name.
 struct UsageFinder<'a> {
+    // The name whose uses are collected.
     name: &'a FullName,
+    // The uses met so far, in the order the walk met them.
     usages: &'a mut Vec<UsageType>,
 }
 

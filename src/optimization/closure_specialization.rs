@@ -940,13 +940,15 @@ struct ClosureSpecializationVisitor {
     narrowed_capture_list: Option<NarrowedCaptureList>,
 
     /* Specialization */
-    // Specializable functions
+    // Which ways into which functions a copy is worth making for, solved once over the whole
+    // program.
     specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
     // Copies this walk asks for
     required_specializations: Vec<SpecializationRequest>,
 
     /* Fields related to name generation of lambda function */
-    // Counter used to generate lambda function names
+    // Advances at each lambda this walk lifts, so that the names minted for one symbol stay
+    // distinct.
     lam_func_counter: u32,
     // Name of the symbol currently being optimized
     // Used to generate the names of lambda functions.
@@ -988,7 +990,7 @@ impl Known {
 }
 
 impl ClosureSpecializationVisitor {
-    // Create a new visitor
+    // A walk over `current_symbol`, starting with nothing lifted and no copy asked for.
     fn new(
         current_symbol: FullName,
         specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
@@ -1169,7 +1171,6 @@ impl ClosureSpecializationVisitor {
     // lifted to a global function taking that environment as an argument. The free variables of an
     // expression leave `CAP_NAME` out, so a body that reads it captures more than this can see.
     fn decapturable(expr: &Arc<ExprNode>) -> bool {
-        // If the expression is a not lambda expression, it is not decapturable.
         if !expr.is_lam() {
             return false;
         }
@@ -1258,7 +1259,7 @@ impl ClosureSpecializationVisitor {
     }
 }
 
-// Information of specializable functions
+// What the table of specializable functions holds for one function.
 #[derive(Clone)]
 struct SpecializableFunctionInfo {
     // The ways into this function a copy is worth making for.
