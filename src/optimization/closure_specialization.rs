@@ -23,6 +23,7 @@ use crate::{
     graph::Graph,
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
+    parse::sourcefile::Span,
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -30,6 +31,7 @@ use std::{
     collections::VecDeque,
     hash::{Hash, Hasher},
     mem,
+    path::PathBuf,
     rc::Rc,
     sync::Arc,
 };
@@ -219,6 +221,9 @@ struct TreeData {
     fields: Vec<(usize, Tree)>,
     // What the two above say. Two trees are the same value exactly when their digests agree.
     digest: md5::Digest,
+    // How many lambdas this value names, itself included. Kept rather than walked, because the
+    // trees a value is built from are shared, so walking one costs its number of paths.
+    lambdas: usize,
 }
 
 impl Tree {
@@ -240,10 +245,12 @@ impl Tree {
             hash_data += &format!("|{}:{}", field, tree.digest_hex());
         }
         let digest = md5::compute(hash_data);
+        let lambdas = 1 + fields.iter().map(|(_, tree)| tree.lambdas()).sum::<usize>();
         Tree(Rc::new(TreeData {
             lambda,
             fields,
             digest,
+            lambdas,
         }))
     }
 
@@ -265,6 +272,11 @@ impl Tree {
     // How the tree reads in a name, and so in the hash that name carries.
     fn digest_hex(&self) -> String {
         format!("{:x}", self.0.digest)
+    }
+
+    // How many lambdas this value names, itself included.
+    fn lambdas(&self) -> usize {
+        self.0.lambdas
     }
 
     // The unit that receives a value of this tree: the lambda, with its known capture fields
@@ -332,6 +344,11 @@ impl UnitKey {
         full_name
     }
 
+    // How many lambdas this copy names across everything it substitutes.
+    fn lambdas(&self) -> usize {
+        self.subst.iter().map(|(_, tree)| tree.lambdas()).sum()
+    }
+
     // The capture list this unit receives, where it copies a lifted lambda whose capture list is
     // narrowed. This is the inverse of `Tree::unit`.
     fn capture_list_tree(&self) -> Option<Tree> {
@@ -371,10 +388,13 @@ fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool
     }
 }
 
-// How many copies of one function this pass may make out of combining its slots.
+// How many combining copies a function is allowed before any site has asked for one, and how many
+// more each site that asks for one brings with it.
 //
-// The value is chosen against the corpus, where the most-copied function has four.
-const MAX_COPIES_PER_FUNCTION: usize = 16;
+// The corpus's most-copied function has four copies, none of them combining, so the base alone
+// leaves it twice the room it uses.
+const BASE_COMBINING_COPIES: usize = 8;
+const COMBINING_COPIES_PER_SITE: usize = 1;
 
 // The copies each function has been committed to, over the whole program.
 //
@@ -385,31 +405,51 @@ const MAX_COPIES_PER_FUNCTION: usize = 16;
 // table agrees to every one of them.
 #[derive(Default)]
 struct CopyBudget {
-    // The copies committed to, keyed by the function they copy. Each copy substitutes two slots or
-    // more, and each set holds at most `MAX_COPIES_PER_FUNCTION` of them.
+    // The copies committed to, keyed by the function they copy. Every one of them names two lambdas
+    // or more.
     units: Map<FullName, Set<UnitKey>>,
+    // Where in the source those copies were asked for, keyed by the function they copy. A copy of
+    // one function asked for at more places is allowed more copies, so that a program which asks
+    // once from each of many places is bounded by what it says rather than by a constant.
+    sites: Map<FullName, Set<(PathBuf, usize, usize)>>,
 }
 
 impl CopyBudget {
-    // Commit to making `unit`, and report whether it may be made.
+    // Commit to making `unit` for a copy asked for at `site`, and report whether it may be made.
     //
     // A unit already committed to is always allowed. A fresh one is allowed while its origin is
-    // under the budget. Refusing one costs optimization and can never cost correctness, whatever the
-    // budget is set to: the values it would have received are wrapped back into closures instead.
+    // under the allowance the sites asking for it have earned. Refusing one costs optimization and
+    // can never cost correctness, whatever the allowance is: the values it would have received are
+    // wrapped back into closures instead.
     //
-    // What is counted is the copies made out of *combining* slots, which is what grows as a product.
-    // A copy that substitutes one slot alone is one per value the program hands to that slot, so a
-    // function called with a different lambda at each of a hundred sites gets a hundred of them and
-    // wants every one — counting those would spend the budget on the population it is not for.
-    fn admit(&mut self, unit: &UnitKey) -> bool {
-        if unit.subst.len() < 2 {
+    // **What is counted** is the copies that name two lambdas or more, which is what grows as a
+    // product — across the slots of one function, and down the capture fields of one value. A copy
+    // naming one lambda is one per value the program hands to that way in, so a function called with
+    // a different lambda at each of a hundred sites gets a hundred of them and wants every one.
+    //
+    // **What the allowance scales on** is the source positions that have asked. A program with many
+    // call sites asks once from each and pays for each; a chain that multiplies asks over and over
+    // from the same positions, because the body a copy is walked from is a copy of the same text, so
+    // its allowance stops growing while its demands do not.
+    fn admit(&mut self, unit: &UnitKey, site: Option<&Span>) -> bool {
+        if unit.lambdas() < 2 {
             return true;
         }
+        if self
+            .units
+            .entry(unit.origin.clone())
+            .or_default()
+            .contains(unit)
+        {
+            return true;
+        }
+        let sites = self.sites.entry(unit.origin.clone()).or_default();
+        if let Some(site) = site {
+            sites.insert((site.input.file_path.clone(), site.start, site.end));
+        }
+        let allowance = BASE_COMBINING_COPIES + COMBINING_COPIES_PER_SITE * sites.len();
         let committed = self.units.entry(unit.origin.clone()).or_default();
-        if committed.contains(unit) {
-            return true;
-        }
-        if committed.len() >= MAX_COPIES_PER_FUNCTION {
+        if committed.len() >= allowance {
             return false;
         }
         committed.insert(unit.clone());
@@ -1165,7 +1205,7 @@ impl ClosureSpecializationVisitor {
     // The commitments the narrowing makes are recorded in `pinned` only once the copy it calls for
     // is one the budget allows, so that a narrowing the budget refuses leaves no trace of a
     // commitment the chain never made.
-    fn narrow(&mut self, known: Known, pinned: &mut Pinned) -> Known {
+    fn narrow(&mut self, known: Known, pinned: &mut Pinned, site: Option<&Span>) -> Known {
         let mut fields = match known.cap_list.destructure_make_struct() {
             Some((_, fields)) => fields.clone(),
             None => return known,
@@ -1197,7 +1237,7 @@ impl ClosureSpecializationVisitor {
         }
 
         let tree = Tree::new(known.tree.lambda().clone(), narrowed_fields);
-        if !self.budget.borrow_mut().admit(&tree.unit()) {
+        if !self.budget.borrow_mut().admit(&tree.unit(), site) {
             return known;
         }
         *pinned = narrowing;
@@ -1551,7 +1591,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 let called = func.get_var().name.clone();
                 if called == *known.tree.lambda() || called == known.tree.unit().name() {
                     let mut pinned = self.pinned.clone();
-                    let known = self.narrow(known, &mut pinned);
+                    let known = self.narrow(known, &mut pinned, expr.source.as_ref());
                     self.pinned = pinned;
                     let head = self.lambda_func_of(&known.tree);
                     let type_of = |expr: &Arc<ExprNode>| expr.type_.as_ref().unwrap().to_string();
@@ -1591,7 +1631,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 Some(known) => known,
                 None => continue,
             };
-            let known = self.narrow(known, &mut pinned);
+            let known = self.narrow(known, &mut pinned, expr.source.as_ref());
             let slot = Slot::arg(i);
             if specialize_info.specializable_slots.contains(&slot)
                 && commit(&mut pinned, &func_name, slot, &known.tree)
@@ -1606,7 +1646,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // of this function. Past that the call hands over every argument as a closure, which is the
         // shape it would have had were none of their identities known.
         let unit = UnitKey::new(func_name, subst);
-        if !self.budget.borrow_mut().admit(&unit) {
+        if !self.budget.borrow_mut().admit(&unit, expr.source.as_ref()) {
             specialized_args.clear();
         }
 
@@ -1739,7 +1779,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             None => return StartVisitResult::VisitChildren,
         };
         let mut pinned = self.pinned.clone();
-        let known = self.narrow(known, &mut pinned);
+        let known = self.narrow(known, &mut pinned, expr.source.as_ref());
         self.pinned = pinned;
 
         // A binding whose value has a known identity passes that identity to the name it binds. A

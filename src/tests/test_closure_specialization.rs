@@ -59,6 +59,15 @@ mod integration_tests {
     /// reach 95 copies without it, and every further slot multiplies that again.
     const INDEPENDENT_SLOTS_COPIES: usize = 24;
 
+    /// What `wrapped_chain` prints: `g(op, n)` sums four recursive calls, each handing on `op`
+    /// wrapped a different way, with `n = 3` and `op = |x| (x * 3) % 97`.
+    const WRAPPED_CHAIN_OUTPUT: &str = "480";
+
+    /// How many copies of `g` `wrapped_chain` asks for today. Counting a copy by the lambdas it
+    /// names is what bounds this: four wrappers reach 129 copies when only the ways in are counted,
+    /// and every further wrapper multiplies that again.
+    const WRAPPED_CHAIN_COPIES: usize = 17;
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -282,6 +291,29 @@ mod integration_tests {
             copies.len() <= INDEPENDENT_SLOTS_COPIES,
             "`g` should have at most {} copies, but the dump names {}",
             INDEPENDENT_SLOTS_COPIES,
+            copies.len()
+        );
+    }
+
+    /// A function that hands the next round the closure it was given, wrapped a different way each
+    /// time, is bounded across the *orderings* of those wrappers. Every copy here substitutes one
+    /// way in and every capture list holds one closure, so a rule that reads how many ways in a copy
+    /// substitutes sees nothing to bound; what grows is the number of wrappers a value has been
+    /// through, which is what counting the lambdas a copy names reads.
+    #[test]
+    pub fn test_a_closure_wrapped_a_different_way_each_round_stays_within_its_budget() {
+        let (_temp_dir, project_dir) = setup_test_env("wrapped_chain");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", WRAPPED_CHAIN_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::g#");
+        assert!(
+            !copies.is_empty(),
+            "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
+        );
+        assert!(
+            copies.len() <= WRAPPED_CHAIN_COPIES,
+            "`g` should have at most {} copies, but the dump names {}",
+            WRAPPED_CHAIN_COPIES,
             copies.len()
         );
     }
