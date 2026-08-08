@@ -998,13 +998,14 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     Ok(prog)
 }
 
-// Create module which defines traits such as ToString or Eq for tuples.
+/// A module holding the trait instances tuples carry — `ToString`, `Eq`, `LessThan`,
+/// `LessThanOrEq` and `Functor` — for tuples of each of the given sizes.
 pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Program, Errors> {
     let src = make_tuple_traits_source(sizes);
     parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)
 }
 
-// Make full name of `Std::with_retained` function.
+/// The module-qualified name of `Std::with_retained`.
 pub fn make_with_retained_name() -> FullName {
     FullName::from_strs(&[STD_NAME], WITH_RETAINED_NAME)
 }

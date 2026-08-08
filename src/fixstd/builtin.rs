@@ -2121,13 +2121,15 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
+/// past the array's length with copies of one value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     arr_name: FullName,
     value_name: FullName,
     count_name: FullName,
-    // When true, clone the array first if it is shared, so the appended slots land in a uniquely
-    // owned array. Set false only where the array is statically known to be unique.
+    /// When true, clone the array first if it is shared, so the appended slots land in a uniquely
+    /// owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -2243,9 +2245,9 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
     }
 }
 
-// Appends `count` copies of `value` to the end of an array, with an internal clone-if-shared and no
-// capacity check. The caller must ensure `count >= 0` and `size + count <= capacity`.
-// Type: a -> I64 -> Array a -> Array a
+/// Appends `count` copies of `value` to the end of an array, with an internal clone-if-shared and no
+/// capacity check. The caller must ensure `count >= 0` and `size + count <= capacity`.
+/// Type: a -> I64 -> Array a -> Array a
 pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "value";
     const COUNT_NAME: &str = "count";
@@ -2606,10 +2608,10 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
     }
 }
 
-// Sets an array's capacity to `new_cap`, `realloc`ing a unique array in place or allocating and
-// copying a shared one, with no check that `new_cap` fits the elements. The caller must ensure
-// `new_cap >= size`; a smaller capacity causes undefined behavior.
-// Type: I64 -> Array a -> Array a
+/// Sets an array's capacity to `new_cap`, `realloc`ing a unique array in place or allocating and
+/// copying a shared one, with no check that `new_cap` fits the elements. The caller must ensure
+/// `new_cap >= size`; a smaller capacity causes undefined behavior.
+/// Type: I64 -> Array a -> Array a
 pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const CAP_NAME: &str = "new_cap";
     const ARR_NAME: &str = "array";
@@ -2652,8 +2654,8 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
     src_name: FullName,
-    // When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
-    // array. Set false only where `dst` is statically known to be unique. `src` is read either way.
+    /// When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
+    /// array. Set false only where `dst` is statically known to be unique. `src` is read either way.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -3019,12 +3021,14 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_grow_size`, which moves the array's length out over
+/// uninitialized slots the caller then fills.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGrowSizeBody {
     arr_name: FullName,
     len_name: FullName,
-    // When true, clone the array first if it is shared, so the length grows on a uniquely owned
-    // array. Set false only where the array is statically known to be unique.
+    /// When true, clone the array first if it is shared, so the length grows on a uniquely owned
+    /// array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.

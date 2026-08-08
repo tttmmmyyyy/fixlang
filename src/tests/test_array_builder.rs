@@ -13,6 +13,9 @@ mod array_builder_tests {
         tests::test_util::test_source,
     };
 
+    /// Verifies the values `append`, `reserve`, `resize`, `push_back`, `get_sub` and
+    /// `unsafe_set_bounds_unchecked` produce, including the empty-range edge cases, and that each
+    /// clones before writing so a shared argument keeps the elements it held.
     #[test]
     pub fn test_builder_correctness() {
         let source = r#"
@@ -74,6 +77,9 @@ main : IO () = (
         test_source(source, Configuration::develop_mode());
     }
 
+    /// Verifies under valgrind that the array builder primitives leak no boxed element and free
+    /// none twice, over both element paths they choose between: the move taken out of a uniquely
+    /// owned source and the retain-per-element copy taken out of a shared one.
     #[test]
     pub fn test_builder_memory_safety() {
         if !platform_valgrind_supported() {
