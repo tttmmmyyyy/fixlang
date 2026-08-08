@@ -158,6 +158,26 @@ Two shapes recur. **The detector never ran on the code**: the probe compiled awa
 
 This applies with most force right after a change **tightens a bound that used to be loose** — an allocation sized exactly where it used to be over-approximate, a length that used to be padded, a timeout that used to be generous. The slack was hiding every violation smaller than itself; when it goes, the violations become reachable, and a detector proven to fire is how you find out whether any existed.
 
+#### Run the gatekeeper's predicate at the gate
+
+A pass that exists to guarantee something for a *later* stage — a validator that rejects what code
+generation cannot handle, a check that every case a dispatch will meet is covered, a cache key that
+must capture everything the generator reads — states a containment: what the later stage requires is
+a subset of what the earlier pass examined. Nothing checks that containment, because the two run far
+apart and the later stage has no reason to look back.
+
+Make it check itself: at the point the later stage consumes the thing, re-run the earlier pass's
+own predicate on what it is actually consuming, and report every disagreement. Two kinds come out,
+and both are findings. The predicate says *no* on something the later stage handled fine — the
+validator over-approximates, and a valid program is being rejected. Or the later stage consumes
+something the earlier pass never saw at all — count those, because they are the hole through which
+the guarantee leaks, and a passing suite says nothing about them.
+
+The count matters as much as the verdict: "the validator never saw 154 of the types code generation
+laid out" is a measurement of the gap, available with no failing input in hand, and it survives as
+evidence even when no input that breaks is found. Prove the probe fires the usual way, on a case
+where the two are known to disagree.
+
 #### Run the same program at every optimization level
 
 `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
