@@ -40,6 +40,13 @@ mod integration_tests {
     /// `shifted(n)`, and recurses on `n - 1`, with `shifted = |x| x * 3 + 1` and `n = 4`.
     const DERIVED_CLOSURE_OUTPUT: &str = "89";
 
+    /// What `opaque_boundary` prints: `through_struct` 30, `through_array` 30, `through_union` -2.
+    const OPAQUE_BOUNDARY_OUTPUT: &str = "58";
+
+    /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
+    /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
+    const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -137,6 +144,28 @@ mod integration_tests {
              none. It lifted: {:?}",
             lifted
         );
+    }
+
+    /// A closure the pass declines to follow — out through a struct field, an array element and a
+    /// union payload, then back to a call — is left as a closure the program can still call, and
+    /// answers the same as it does at the level the pass does not run at.
+    #[test]
+    pub fn test_a_closure_survives_the_boundaries_the_pass_declines_to_follow() {
+        let (_temp_dir, project_dir) = setup_test_env("opaque_boundary");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
+        }
+    }
+
+    /// A narrowed capture field serves three readers at once: a call made there, a function the
+    /// table copies for it, and a function it does not. The third one has no way in to reach, so
+    /// the field's value has to wrap back into a closure at that place alone.
+    #[test]
+    pub fn test_a_narrowed_capture_field_serves_a_reader_that_needs_a_closure() {
+        let (_temp_dir, project_dir) = setup_test_env("mixed_capture_field");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
+        }
     }
 
     /// The pass runs from the `max` optimization level up, so a build below it carries neither of
