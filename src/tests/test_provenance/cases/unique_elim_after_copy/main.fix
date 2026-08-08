@@ -4,8 +4,8 @@ module Main;
 // `Array::_unsafe_copy_capacity_bounds_unchecked`, which borrows the array it reads: the caller
 // keeps the reference it already held instead of duplicating it, so the array is still provably
 // unique afterwards and every `set` that follows drops its check.
-swap_head : Array I64 -> Array I64;
-swap_head = |arr| (
+swap_first_two : Array I64 -> Array I64;
+swap_first_two = |arr| (
     let head = arr.get_sub(0, 2);
     arr.set(0, head.@(1)).set(1, head.@(0))
 );
@@ -13,6 +13,6 @@ swap_head = |arr| (
 main : IO ();
 main = (
     let arr = Array::from_map(4, |i| i);
-    let arr = swap_head(arr);
+    let arr = swap_first_two(arr);
     println $ (arr.@(0) * 10 + arr.@(1)).to_string
 );

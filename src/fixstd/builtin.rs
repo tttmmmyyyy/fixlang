@@ -2665,12 +2665,12 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         let src = gc.get_scoped_obj(&self.src_name);
         let elem_ty = dst.ty.field_types(gc.type_env())[0].clone();
         let (dst, dst_len, dst_write) =
-            array_append_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
+            array_tail_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
 
         let src_storage = get_array_storage(gc, &src);
         let src_ptr = src_storage.value(gc).into_pointer_value();
         let src_buf = get_array_storage_buf(gc, &src);
-        let n = src.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
+        let src_len = src.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
 
         let current_func = gc.current_function();
         let end_bb = gc.context.append_basic_block(current_func, "append_end");
@@ -2687,7 +2687,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         // Unique `src`: memcpy the elements and zero `src`'s length so releasing it frees the block
         // without touching the moved-out elements. No reference counting.
         gc.builder().position_at_end(src_unique_bb);
-        let n_bytes = build_elems_bytes(gc, &elem_ty, n, "append_n_bytes");
+        let n_bytes = build_elems_bytes(gc, &elem_ty, src_len, "append_n_bytes");
         gc.builder()
             .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
             .ok()
@@ -2702,7 +2702,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         gc.builder().position_at_end(src_shared_bb);
         ObjectFieldType::clone_array_buf(
             gc,
-            n,
+            src_len,
             src_buf,
             dst_write,
             elem_ty,
@@ -2716,7 +2716,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         gc.builder().position_at_end(end_bb);
         let new_dst_len = gc
             .builder()
-            .build_int_add(dst_len, n, "append_new_dst_len")
+            .build_int_add(dst_len, src_len, "append_new_dst_len")
             .unwrap();
         dst.insert_field(gc, ARRAY_SIZE_IDX, new_dst_len)
     }
@@ -2856,7 +2856,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         let elem_value_ty = elem_ty.get_embedded_type(gc);
         let n = gc.builder().build_int_sub(end, begin, "copy_n").unwrap();
         let (dst, dst_len, dst_write) =
-            array_append_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
+            array_tail_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
 
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference, so there is nothing to release and no move to choose between.
@@ -7983,10 +7983,11 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
     val
 }
 
-/// Where an append writes: `dst` made uniquely owned so the write is not observed elsewhere, the
-/// length it had, and a pointer to the first slot past that length. The caller guarantees the slots
-/// it fills are within `dst`'s capacity, and grows the length itself once they hold elements.
-fn array_append_destination<'c, 'm>(
+/// Where a write past the length goes: `dst` made uniquely owned so the write is not observed
+/// elsewhere, the length it had, and a pointer to the first slot past that length. The caller
+/// guarantees the slots it fills are within `dst`'s capacity, and grows the length itself once they
+/// hold elements.
+fn array_tail_destination<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     dst: Object<'c>,
     force_unique: bool,
@@ -7994,7 +7995,7 @@ fn array_append_destination<'c, 'm>(
 ) -> (Object<'c>, IntValue<'c>, PointerValue<'c>) {
     assert!(
         dst.ty.is_array(),
-        "an append writes past the length of an array, and `{}` is not one.",
+        "a write past the length goes into an array, and `{}` is not one.",
         dst.ty.to_string()
     );
     let elem_value_ty = dst.ty.field_types(gc.type_env())[0].get_embedded_type(gc);
