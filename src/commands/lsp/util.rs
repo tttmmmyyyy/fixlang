@@ -298,8 +298,8 @@ pub(super) fn find_local_occurrences(
                 continue;
             };
             let mut uses = vec![];
-            let mut stack2: Vec<(FullName, Span)> = vec![];
-            collect_uses_of_binding(root, target, &def_span, &mut stack2, &mut uses);
+            let mut uses_stack: Vec<(FullName, Span)> = vec![];
+            collect_uses_of_binding(root, target, &def_span, &mut uses_stack, &mut uses);
             return Some(LocalOccurrences {
                 definition: def_span,
                 uses,

@@ -728,12 +728,12 @@ fn recurse_for_hole(
 // Check if the user's typing text is in the form of a dot followed by namespaces or a function name
 fn is_dot_function(typing_text: &str) -> bool {
     let mut chars = typing_text.chars().rev();
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     while let Some(c) = chars.next() {
         if c == '.' {
             return true;
         }
-        if !identifer_chars.contains(c) && c != ':' {
+        if !identifier_chars.contains(c) && c != ':' {
             return false;
         }
     }
@@ -745,11 +745,11 @@ fn is_dot_function(typing_text: &str) -> bool {
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     let suffix_byte_start = typing_text
         .char_indices()
         .rev()
-        .find(|(_, c)| !(identifer_chars.contains(*c) || *c == ':'))
+        .find(|(_, c)| !(identifier_chars.contains(*c) || *c == ':'))
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(0);
     let namespace_part = &typing_text[suffix_byte_start..];
