@@ -368,6 +368,48 @@ fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool
     }
 }
 
+// How many copies of one function this pass may make.
+//
+// The value is chosen against the corpus, where the most-copied function has four.
+pub const MAX_COPIES_PER_FUNCTION: usize = 16;
+
+// The copies each function has been committed to, over the whole program.
+//
+// The pinning table bounds the depth of a chain, and this bounds its width. The two are needed
+// separately because the pinning table is a rule about one slot, and a rule about one slot leaves
+// the product: a function whose closure slots are decided independently gets a copy per combination
+// of them, and each combination meets a key of the pinning table it has not met before, so the
+// table agrees to every one of them.
+#[derive(Default)]
+struct CopyBudget {
+    // The copies committed to, keyed by the function they copy. Each copy substitutes at least one
+    // slot, and each set holds at most `MAX_COPIES_PER_FUNCTION` of them.
+    units: Map<FullName, Set<UnitKey>>,
+}
+
+impl CopyBudget {
+    // Commit to making `unit`, and report whether it may be made.
+    //
+    // A unit already committed to is always allowed, as is the one that substitutes nothing, which
+    // is the function itself. A fresh copy is allowed while its origin is under the budget. Refusing
+    // one costs optimization and can never cost correctness, whatever the budget is set to: the
+    // values it would have received are wrapped back into closures instead.
+    fn admit(&mut self, unit: &UnitKey) -> bool {
+        if unit.subst.is_empty() {
+            return true;
+        }
+        let committed = self.units.entry(unit.origin.clone()).or_default();
+        if committed.contains(unit) {
+            return true;
+        }
+        if committed.len() >= MAX_COPIES_PER_FUNCTION {
+            return false;
+        }
+        committed.insert(unit.clone());
+        true
+    }
+}
+
 // What a lambda expression became once decaptured.
 struct LiftedLambda {
     // The capture list threading its captured environment into the global function.
@@ -489,6 +531,8 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
     // Nothing is specializable during this phase, so the walk only lifts: a value whose identity is
     // known is wrapped back into a closure wherever it is used, and no request is raised.
     let nothing_specializable = Rc::new(Map::default());
+    // This phase makes no copy, so no walk below draws on this.
+    let budget = Rc::new(RefCell::new(CopyBudget::default()));
     let mut stable = Set::default();
 
     loop {
@@ -508,6 +552,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 lifted.clone(),
                 global_names.clone(),
                 Pinned::default(),
+                budget.clone(),
             );
             let expr = pull_let::run_on_expr(sym.expr.as_ref().unwrap()); // Increase the number of places decapturing applies to.
             let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing.
@@ -548,6 +593,7 @@ fn realize_all(
     let originals = mem::take(&mut prg.symbols);
     let mut global_names = originals.keys().cloned().collect::<Set<_>>();
     let mut symbols: Map<FullName, Symbol> = Map::default();
+    let budget = Rc::new(RefCell::new(CopyBudget::default()));
 
     // Every function stands for the copy of itself that substitutes nothing.
     let mut queue = originals
@@ -586,6 +632,7 @@ fn realize_all(
             lifted.clone(),
             global_names.clone(),
             request.pinned.clone(),
+            budget.clone(),
         );
         visitor.local_decap_lambdas = local_decap_lambdas;
         visitor.narrowed_capture_list = narrowed;
@@ -960,6 +1007,8 @@ struct ClosureSpecializationVisitor {
     /* Termination */
     // What the chain reaching the symbol being walked has committed to.
     pinned: Pinned,
+    // How many copies of each function the program has been committed to, shared by every walk.
+    budget: Rc<RefCell<CopyBudget>>,
 }
 
 // A value whose identity is known: which lambda it is with its narrowed capture fields, and where
@@ -997,6 +1046,7 @@ impl ClosureSpecializationVisitor {
         lifted: Rc<RefCell<LiftedLambdas>>,
         global_names: Set<FullName>,
         pinned: Pinned,
+        budget: Rc<RefCell<CopyBudget>>,
     ) -> Self {
         ClosureSpecializationVisitor {
             new_symbols: Vec::new(),
@@ -1009,6 +1059,7 @@ impl ClosureSpecializationVisitor {
             current_symbol,
             global_names,
             pinned,
+            budget,
         }
     }
 
@@ -1107,6 +1158,10 @@ impl ClosureSpecializationVisitor {
     //
     // Creating a narrowed value asks for the copy of the lambda that receives it, so that the value
     // can be wrapped back into a closure wherever one is called for.
+    //
+    // The commitments the narrowing makes are recorded in `pinned` only once the copy it calls for
+    // is one the budget allows, so that a narrowing the budget refuses leaves no trace of a
+    // commitment the chain never made.
     fn narrow(&mut self, known: Known, pinned: &mut Pinned) -> Known {
         let mut fields = match known.cap_list.destructure_make_struct() {
             Some((_, fields)) => fields.clone(),
@@ -1117,6 +1172,7 @@ impl ClosureSpecializationVisitor {
         let Some(info) = specializable_funcs.get(known.tree.lambda()) else {
             return known;
         };
+        let mut narrowing = pinned.clone();
         let mut narrowed_fields = Vec::new();
         for (position, (_, _, value)) in fields.iter_mut().enumerate() {
             let slot = Slot::capture_field(position);
@@ -1127,7 +1183,7 @@ impl ClosureSpecializationVisitor {
                 Some(known_field) => known_field,
                 None => continue,
             };
-            if !commit(pinned, known.tree.lambda(), slot, &known_field.tree) {
+            if !commit(&mut narrowing, known.tree.lambda(), slot, &known_field.tree) {
                 continue;
             }
             *value = known_field.cap_list;
@@ -1138,6 +1194,10 @@ impl ClosureSpecializationVisitor {
         }
 
         let tree = Tree::new(known.tree.lambda().clone(), narrowed_fields);
+        if !self.budget.borrow_mut().admit(&tree.unit()) {
+            return known;
+        }
+        *pinned = narrowing;
         self.request_lambda_unit(&tree, pinned);
         let cap = self.cap_of(&tree);
         let cap_list = expr_make_struct(
@@ -1515,9 +1575,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // An argument whose identity is known is handed over as its bare capture list, where the
         // table is willing to copy the function for that way in and the stopping rule allows it.
         let mut pinned = self.pinned.clone();
-        let mut specialized_args = Map::default();
-        let mut new_args = args.clone();
-        let mut changed = false;
+        let mut known_args = Vec::new();
+        let mut subst = Map::default();
+        let mut specialized_args = Set::default();
         for (i, arg) in args.iter().enumerate() {
             let known = match self.known_value(arg) {
                 Some(known) => known,
@@ -1528,14 +1588,31 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             if specialize_info.specializable_slots.contains(&slot)
                 && commit(&mut pinned, &func_name, slot, &known.tree)
             {
+                subst.insert(slot, known.tree.clone());
+                specialized_args.insert(i);
+            }
+            known_args.push((i, known));
+        }
+
+        // The copy those arguments call for is made only where the budget has room for one more copy
+        // of this function. Past that the call hands over every argument as a closure, which is the
+        // shape it would have had were none of their identities known.
+        let unit = UnitKey::new(func_name, subst);
+        if !self.budget.borrow_mut().admit(&unit) {
+            specialized_args.clear();
+        }
+
+        let mut new_args = args.clone();
+        let mut changed = false;
+        for (i, known) in known_args {
+            if specialized_args.contains(&i) {
                 new_args[i] = known.cap_list;
-                specialized_args.insert(slot, known.tree);
                 changed = true;
                 continue;
             }
             // The value stays a closure here, but a narrowed capture list needs the copy that
             // receives it named.
-            if !known.is_bare && !self.is_up_to_date(arg, &known) {
+            if !known.is_bare && !self.is_up_to_date(&args[i], &known) {
                 new_args[i] = self.value_expr(&known);
                 changed = true;
             }
@@ -1549,7 +1626,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // Request the copy and call it.
         let request = SpecializationRequest {
-            unit: UnitKey::new(func_name, specialized_args),
+            unit,
             org_func_ty: func.type_.as_ref().unwrap().clone(),
             pinned,
         };
@@ -1855,5 +1932,95 @@ impl ClosureSpecializationVisitor {
             .set_type(narrowed.cap.ty.clone());
         let bound = bound.set_type(narrowed.cap.ty.clone());
         StartVisitResult::ReplaceAndRevisit(expr_let_typed(pat, bound, value.clone()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+
+    /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
+    fn lifted(index: u32) -> FullName {
+        FullName::from_strs(
+            &["Main"],
+            &format!(
+                "main{}0123abcd{}{}",
+                INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
+            ),
+        )
+    }
+
+    /// The values two capture fields of one lambda hold read differently from the one value the
+    /// first field holds when it is itself narrowed: `M{0:P, 1:Q}` against `M{0:P{1:Q}}`. Where a
+    /// rendering runs one field into the next these read alike, and one copy then carries both
+    /// names.
+    #[test]
+    fn a_value_nested_one_level_down_differs_from_two_side_by_side() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let side_by_side = Tree::new(
+            m.clone(),
+            vec![(0, Tree::leaf(p.clone())), (1, Tree::leaf(q.clone()))],
+        );
+        let nested = Tree::new(m, vec![(0, Tree::new(p, vec![(1, Tree::leaf(q))]))]);
+        assert_ne!(side_by_side, nested);
+        assert_ne!(side_by_side.unit().name(), nested.unit().name());
+    }
+
+    /// Which field a value arrives through is part of what the copy receiving it is told, since
+    /// that copy reads the capture list by position.
+    #[test]
+    fn the_position_of_a_narrowed_field_is_part_of_the_value() {
+        let (m, p) = (lifted(0), lifted(1));
+        let at_first = Tree::new(m.clone(), vec![(0, Tree::leaf(p.clone()))]);
+        let at_second = Tree::new(m, vec![(1, Tree::leaf(p))]);
+        assert_ne!(at_first, at_second);
+        assert_ne!(at_first.unit().name(), at_second.unit().name());
+    }
+
+    /// A relay chain narrows one link per step, so a value differs from the value one link shorter
+    /// and from the one holding a different lambda at the far end.
+    #[test]
+    fn a_chain_of_narrowed_fields_says_its_own_depth() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let one = Tree::new(m.clone(), vec![(0, Tree::leaf(p.clone()))]);
+        let two = Tree::new(m.clone(), vec![(0, one.clone())]);
+        let three = Tree::new(m.clone(), vec![(0, two.clone())]);
+        let other_end = Tree::new(m, vec![(0, Tree::new(p, vec![(0, Tree::leaf(q))]))]);
+        let names = [&one, &two, &three, &other_end]
+            .iter()
+            .map(|tree| tree.unit().name().to_string())
+            .collect::<Set<_>>();
+        assert_eq!(names.len(), 4);
+    }
+
+    /// The unit a value is received by and the value itself determine each other, which is what
+    /// lets the type of a capture list say what to call it with.
+    #[test]
+    fn a_unit_and_the_capture_list_it_receives_determine_each_other() {
+        let (m, p, q) = (lifted(0), lifted(1), lifted(2));
+        let tree = Tree::new(
+            m,
+            vec![
+                (0, Tree::new(p, vec![(2, Tree::leaf(q.clone()))])),
+                (1, Tree::leaf(q)),
+            ],
+        );
+        assert_eq!(tree.unit().capture_list_tree(), Some(tree.clone()));
+    }
+
+    /// An argument and a capture field of the same index are two ways into a function, and the copy
+    /// made for one is not the copy made for the other.
+    #[test]
+    fn an_argument_and_a_capture_field_of_the_same_index_name_two_copies() {
+        let func = FullName::from_strs(&["Main"], "f#0123abcd");
+        let tree = Tree::leaf(lifted(0));
+        let on_argument = UnitKey::new(
+            func.clone(),
+            [(Slot::arg(0), tree.clone())].into_iter().collect(),
+        );
+        let on_capture_field =
+            UnitKey::new(func, [(Slot::capture_field(0), tree)].into_iter().collect());
+        assert_ne!(on_argument.name(), on_capture_field.name());
     }
 }

@@ -1,0 +1,28 @@
+module Main;
+
+// `relay` never calls either closure it is given. Both reach a function that calls them only by
+// being captured into the one lambda `relay` hands to `fold`, so that lambda's capture list holds
+// two closures whose identity is known at the point it is built.
+
+terminal_a : (I64 -> I64) -> I64 -> I64;
+terminal_a = |op, n| (
+    if n == 0 { 0 };
+    op(n) + terminal_a(op, n - 1)
+);
+
+terminal_b : (I64 -> I64) -> I64 -> I64;
+terminal_b = |op, n| (
+    if n == 0 { 0 };
+    op(n) * 2 + terminal_b(op, n - 1)
+);
+
+relay : (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+relay = |f, g, n| (
+    if n == 0 { 0 };
+    Iterator::range(0, n).fold(0, |i, acc| acc + terminal_a(f, i) + terminal_b(g, i))
+        + relay(f, g, n - 1)
+);
+
+main : IO () = (
+    println(relay(|x| x * 2, |x| x * 3, 4).to_string)
+);

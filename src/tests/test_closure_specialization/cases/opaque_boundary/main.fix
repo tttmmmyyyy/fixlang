@@ -1,0 +1,43 @@
+module Main;
+
+// A closure that leaves through a struct field, an array element and a union payload before it is
+// called. These are the paths the pass declines to follow, so what it leaves standing at each of
+// them has to be a closure the program can still call.
+
+type Holder = box struct { op : I64 -> I64, tag : I64 };
+
+terminal : (I64 -> I64) -> I64 -> I64;
+terminal = |op, n| (
+    if n == 0 { 0 };
+    op(n) + terminal(op, n - 1)
+);
+
+// Two construction sites meeting at a branch, so that the field is read off a value whose origin is
+// not one place.
+through_struct : I64 -> I64 -> I64;
+through_struct = |k, n| (
+    let h = if n > 2 { Holder { op : |x| x * k, tag : k } } else { Holder { op : |x| x + k, tag : k } };
+    terminal(h.@op, n)
+);
+
+through_array : I64 -> I64 -> I64;
+through_array = |k, n| (
+    let a : Array (I64 -> I64) = [|x| x * k, |x| x + k];
+    terminal(a.@(n % 2), n)
+);
+
+through_union : I64 -> I64 -> I64;
+through_union = |k, n| (
+    let o : Option (I64 -> I64) = if n > 0 { some(|x| x - k) } else { none() };
+    match o {
+        none() => 0,
+        some(f) => terminal(f, n)
+    }
+);
+
+main : IO () = (
+    let via_struct = through_struct(3, 4);
+    let via_array = through_array(3, 4);
+    let via_union = through_union(3, 4);
+    println((via_struct + via_array + via_union).to_string)
+);

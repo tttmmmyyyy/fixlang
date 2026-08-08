@@ -1,7 +1,9 @@
 //! The two techniques of the closure specialization pass, read off the `--emit-rc-ir` dump: a
 //! lambda is lifted to a global function, and the function it is passed to gets a copy that calls
 //! that function by name. A recursion that hands the next round a closure built from the one it
-//! was given could ask for one copy per round, and runs out instead.
+//! was given could ask for one copy per round, and runs out instead; a function whose closure
+//! parameters are decided independently could ask for one copy per combination of them, and is held
+//! to a budget instead.
 //!
 //! The dump is what these assert against because a program cannot observe either one — both leave
 //! the answer unchanged, so a suite that only runs the program stays green with the whole pass
@@ -9,6 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::optimization::closure_specialization::MAX_COPIES_PER_FUNCTION;
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -31,9 +34,25 @@ mod integration_tests {
     /// in and lambda gets committed to one value.
     const CHANGING_CLOSURE_COPIES: usize = 13;
 
+    /// What `two_narrowed_fields` prints: `relay(f, g, n)` sums `terminal_a(f, i)` and
+    /// `terminal_b(g, i)` over `0..n` and recurses on `n - 1`, with `f = |x| x * 2`,
+    /// `g = |x| x * 3` and `n = 4`.
+    const TWO_NARROWED_FIELDS_OUTPUT: &str = "120";
+
     /// What `derived_closure` prints: `relay` sums `terminal(shifted, i)` over `0..n`, adds
     /// `shifted(n)`, and recurses on `n - 1`, with `shifted = |x| x * 3 + 1` and `n = 4`.
     const DERIVED_CLOSURE_OUTPUT: &str = "89";
+
+    /// What `opaque_boundary` prints: `through_struct` 30, `through_array` 30, `through_union` -2.
+    const OPAQUE_BOUNDARY_OUTPUT: &str = "58";
+
+    /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
+    /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
+    const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
+
+    /// What `independent_slots` prints: `g(p0, p1, p2, p3, n)` sums the four recursive calls that
+    /// each wrap one of the closures, modulo 1000, with `n = 2` and the four lambdas main builds.
+    const INDEPENDENT_SLOTS_OUTPUT: &str = "176";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -112,6 +131,35 @@ mod integration_tests {
             .collect()
     }
 
+    /// The copies that `dump` names of the function whose name begins with `func_prefix`,
+    /// deduplicated.
+    ///
+    /// A copy is named by appending `#closure_spec_<hash>` to the name of what it copies, and the
+    /// stages after this pass append segments of their own, so what identifies one copy is the name
+    /// up to the end of that segment. A lambda lifted out of the function is copied under a name
+    /// carrying a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps
+    /// copies of the lambdas out of the count of copies of the function itself.
+    fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
+        let spec_segment = "#closure_spec_";
+        let mut copies = functions_named_with(dump, spec_segment)
+            .into_iter()
+            .filter(|name| name.starts_with(func_prefix))
+            .filter_map(|name| {
+                let spec_start = name.find(spec_segment).unwrap();
+                if name[..spec_start].contains("#closure_lam") {
+                    return None;
+                }
+                let end = name[spec_start + 1..]
+                    .find('#')
+                    .map_or(name.len(), |offset| spec_start + 1 + offset);
+                Some(name[..end].to_string())
+            })
+            .collect::<Vec<_>>();
+        copies.sort();
+        copies.dedup();
+        copies
+    }
+
     /// A lambda passed to a global function is lifted to a global function of its own, and that
     /// global function is copied into a version specialized on it.
     #[test]
@@ -132,6 +180,28 @@ mod integration_tests {
              none. It lifted: {:?}",
             lifted
         );
+    }
+
+    /// A closure the pass declines to follow — out through a struct field, an array element and a
+    /// union payload, then back to a call — is left as a closure the program can still call, and
+    /// answers the same as it does at the level the pass does not run at.
+    #[test]
+    pub fn test_a_closure_survives_the_boundaries_the_pass_declines_to_follow() {
+        let (_temp_dir, project_dir) = setup_test_env("opaque_boundary");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
+        }
+    }
+
+    /// A narrowed capture field serves three readers at once: a call made there, a function the
+    /// table copies for it, and a function it does not. The third one has no way in to reach, so
+    /// the field's value has to wrap back into a closure at that place alone.
+    #[test]
+    pub fn test_a_narrowed_capture_field_serves_a_reader_that_needs_a_closure() {
+        let (_temp_dir, project_dir) = setup_test_env("mixed_capture_field");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
+        }
     }
 
     /// The pass runs from the `max` optimization level up, so a build below it carries neither of
@@ -188,6 +258,29 @@ mod integration_tests {
         );
     }
 
+    /// A function taking four closures and calling every one of them has each of the four decided on
+    /// its own, so the copies it can be asked for are keyed on the combinations of those decisions
+    /// and grow exponentially in the number of closures. The chain of requests cannot see that: each
+    /// combination meets a commitment of its own and none of them disagrees. What bounds it is the
+    /// number of copies one function may have.
+    #[test]
+    pub fn test_a_function_whose_closures_are_decided_independently_stays_within_its_budget() {
+        let (_temp_dir, project_dir) = setup_test_env("independent_slots");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", INDEPENDENT_SLOTS_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::g#");
+        assert!(
+            !copies.is_empty(),
+            "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
+        );
+        assert!(
+            copies.len() <= MAX_COPIES_PER_FUNCTION,
+            "`g` should have at most {} copies, but the dump names {}",
+            MAX_COPIES_PER_FUNCTION,
+            copies.len()
+        );
+    }
+
     /// A closure a function builds from the one it was given becomes a capture list, and the lambda
     /// that carries it into `fold` holds it in a capture field. Specializing the function narrows
     /// the inner capture list, so what that field holds changes type — and a field that cannot
@@ -196,6 +289,26 @@ mod integration_tests {
     pub fn test_a_capture_field_follows_the_value_it_holds() {
         let (_temp_dir, project_dir) = setup_test_env("derived_closure");
         build_run_and_read_rc_ir(&project_dir, "max", DERIVED_CLOSURE_OUTPUT);
+    }
+
+    /// One capture list carrying two closures whose identity is known. Each field is decided on its
+    /// own, so both have to follow the value they hold: the function each closure is relayed to gets
+    /// a copy only if the field carrying it was narrowed.
+    #[test]
+    pub fn test_two_capture_fields_of_one_lambda_are_narrowed() {
+        let (_temp_dir, project_dir) = setup_test_env("two_narrowed_fields");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", TWO_NARROWED_FIELDS_OUTPUT);
+
+        let specialized = functions_named_with(&dump, "#closure_spec");
+        for relayed_to in ["Main::terminal_a#", "Main::terminal_b#"] {
+            assert!(
+                specialized.iter().any(|name| name.starts_with(relayed_to)),
+                "`{}` should get a copy, which it does only if the capture field holding the \
+                 closure it is given was narrowed. The dump names: {:?}",
+                relayed_to,
+                specialized
+            );
+        }
     }
 
     /// The chain has to pass through a capture list to reach the end. `relay` never calls the closure
