@@ -7810,7 +7810,7 @@ pub fn test_growing_type_with_two_arguments() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "its fields reach ever larger types",
+        "laying it out reaches types nested more than",
     );
 }
 
@@ -7980,9 +7980,9 @@ pub fn test_type_with_no_size_behind_a_pointer() {
     );
 }
 
-/// Growth reaches past a pointer as well: each level's field type is larger than the last, so the
-/// objects the pointers lead to never repeat and never end. Boxing is already what this type does,
-/// so the report asks for the type argument to stop growing instead.
+/// Growth reaches past a pointer as well: every size settles (a pointer is a pointer), but the
+/// objects the pointers lead to never repeat, so the program needs endlessly many types. Boxing is
+/// already what this type does, so the report asks for the type argument to stop growing instead.
 #[test]
 pub fn test_growing_type_behind_a_pointer() {
     let source = r##"
@@ -7998,8 +7998,7 @@ pub fn test_growing_type_behind_a_pointer() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "its fields reach ever larger types (`Main::P Std::I64` -> `Main::P (Std::I64, Std::I64)`). \
-         Give the recursive occurrence the same type arguments.",
+        "`Main::P Std::I64` has no size: laying it out reaches types nested more than",
     );
 }
 
@@ -8041,7 +8040,7 @@ pub fn test_growing_unboxed_type_has_no_size() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "its fields reach ever larger types",
+        "laying it out reaches types nested more than",
     );
 }
 

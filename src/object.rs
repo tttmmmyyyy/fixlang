@@ -1471,7 +1471,7 @@ pub fn ty_to_object_ty(
     capture: &Vec<Arc<TypeNode>>,
     type_env: &TypeEnv,
 ) -> ObjectType {
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     let mut ret = ObjectType {
         field_types: vec![],
@@ -1978,7 +1978,7 @@ pub fn create_obj<'c, 'm>(
 ) -> Object<'c> {
     // Validate arguments. The capacity is for the `#ArrayStorage` object, which carries the element
     // buffer; a flipped `Array` value itself is an unboxed aggregate created without one.
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     assert!(array_capacity.is_some() == ty.is_array_storage());
     assert!(!ty.is_funptr()); // Funptr type is not supported, Currently, there is no need to create an object for funptr.
@@ -2140,7 +2140,7 @@ pub fn create_traverser<'c, 'm>(
     work: Option<TraverserWorkType>,
     state: RcState,
 ) -> Option<FunctionValue<'c>> {
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     if ty.is_dynamic() && capture.is_empty() {
         return None;

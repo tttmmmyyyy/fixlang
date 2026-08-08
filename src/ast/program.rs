@@ -36,7 +36,7 @@ use crate::graph::Graph;
 use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use crate::type_size::no_size_reason;
+use crate::type_size::{no_size_reason, LayoutWalk};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -1829,7 +1829,7 @@ impl Program {
                 .filter_map(|name| self.symbols[*name].expr.as_ref()),
         );
 
-        let mut checked: Set<Arc<TypeNode>> = Set::default();
+        let mut walk = LayoutWalk::default();
         let mut errors = Errors::empty();
         // A node the compiler built carries no source location, so a round that reports only at
         // located nodes runs first; the second round takes the types that appear at no located node.
@@ -1845,7 +1845,7 @@ impl Program {
                             node.expr.stringify().to_string()
                         )
                     });
-                    if let Some(msg) = no_size_reason(ty, &type_env, &mut checked) {
+                    if let Some(msg) = no_size_reason(ty, &type_env, &mut walk) {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }
                 })
@@ -1856,7 +1856,7 @@ impl Program {
         // such a symbol has no source location of its own to report at.
         for name in &symbol_names {
             let symbol = &self.symbols[*name];
-            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut checked) {
+            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut walk) {
                 let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
                 errors.append(Errors::from_msg_srcs(msg, &[&source]));
             }

@@ -1,3 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
+use std::sync::OnceLock;
+
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::FullName;
@@ -431,6 +434,24 @@ impl TyAliasInfo {
 pub struct TypeNode {
     pub ty: Type,
     pub info: TypeInfo,
+    /// The hash of `ty`, kept once computed.
+    ///
+    /// A type is a directed acyclic graph rather than a tree: substituting an argument that a
+    /// declaration mentions twice makes both occurrences the same node. Hashing such a type by
+    /// walking it costs as much as the tree it unfolds to, which doubles at every level of a type
+    /// like `P (a, a)`. Keeping the hash on the node makes the walk cost one visit per node.
+    ///
+    /// `Clone` leaves this empty: the clone-then-replace idiom the setters use would otherwise
+    /// carry the hash of the type the node held before.
+    #[serde(skip)]
+    hash_cache: OnceLock<u64>,
+    /// Whether no type variable occurs in this type, kept once computed. Answered by walking the
+    /// type, so it is kept for the same reason the hash is.
+    #[serde(skip)]
+    ground_cache: OnceLock<bool>,
+    /// How deeply this type nests, kept once computed, for the same reason.
+    #[serde(skip)]
+    depth_cache: OnceLock<usize>,
 }
 
 impl PartialEq for TypeNode {
@@ -443,9 +464,16 @@ impl Eq for TypeNode {}
 
 impl Hash for TypeNode {
     /// Hashes the type expression, which is what `PartialEq` compares; the source information the
-    /// node carries stays out of both.
+    /// node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing a
+    /// type that shares a subterm many times costs one visit per node rather than one per
+    /// occurrence.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ty.hash(state);
+        let hash = *self.hash_cache.get_or_init(|| {
+            let mut hasher = DefaultHasher::new();
+            self.ty.hash(&mut hasher);
+            hasher.finish()
+        });
+        state.write_u64(hash);
     }
 }
 
@@ -1242,6 +1270,9 @@ impl TypeNode {
         Self {
             ty,
             info: TypeInfo::default(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 
@@ -1513,17 +1544,47 @@ impl Clone for TypeNode {
         TypeNode {
             ty: self.ty.clone(),
             info: self.info.clone(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     AssocTy(AssocType, Vec<Arc<TypeNode>>),
+}
+
+/// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
+/// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
+fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
+    Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::TyVar(lhs), Type::TyVar(rhs)) => lhs == rhs,
+            (Type::TyCon(lhs), Type::TyCon(rhs)) => lhs == rhs,
+            (Type::TyApp(lhs_fun, lhs_arg), Type::TyApp(rhs_fun, rhs_arg)) => {
+                type_node_eq(lhs_fun, rhs_fun) && type_node_eq(lhs_arg, rhs_arg)
+            }
+            (Type::AssocTy(lhs_name, lhs_args), Type::AssocTy(rhs_name, rhs_args)) => {
+                lhs_name == rhs_name
+                    && lhs_args.len() == rhs_args.len()
+                    && lhs_args
+                        .iter()
+                        .zip(rhs_args.iter())
+                        .all(|(lhs, rhs)| type_node_eq(lhs, rhs))
+            }
+            _ => false,
+        }
+    }
 }
 
 impl TypeNode {
@@ -1822,6 +1883,34 @@ pub struct TypeInfo {
 }
 
 impl TypeNode {
+    /// Whether no type variable occurs in this type.
+    ///
+    /// `free_vars` answers the same question by collecting the variables, which walks a type that
+    /// shares a subterm once per occurrence rather than once per node. Every type reaching code
+    /// generation is asked this, so it is answered here and kept on the node.
+    pub fn is_ground(&self) -> bool {
+        *self.ground_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) => false,
+            Type::TyCon(_) => true,
+            Type::TyApp(fun, arg) => fun.is_ground() && arg.is_ground(),
+            Type::AssocTy(_, args) => args.iter().all(|arg| arg.is_ground()),
+        })
+    }
+
+    /// How deeply this type nests: a name is one, and an application or an associated type is one
+    /// more than the deepest part it is made of.
+    ///
+    /// This measures the type expression the program wrote or the compiler built, not the fields it
+    /// leads to: a chain of a thousand types that each hold the next is a thousand types of depth
+    /// one. What grows this is a type reached from itself at a larger type argument.
+    pub fn depth(&self) -> usize {
+        *self.depth_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) | Type::TyCon(_) => 1,
+            Type::TyApp(fun, arg) => 1 + fun.depth().max(arg.depth()),
+            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0),
+        })
+    }
+
     // Calculate free type variables.
     pub fn free_vars(self: &Arc<TypeNode>) -> Map<Name, Arc<TyVar>> {
         let mut free_vars: Map<String, Arc<TyVar>> = Map::default();
