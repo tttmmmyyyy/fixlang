@@ -1,7 +1,9 @@
 //! The two techniques of the closure specialization pass, read off the `--emit-rc-ir` dump: a
 //! lambda is lifted to a global function, and the function it is passed to gets a copy that calls
 //! that function by name. A recursion that hands the next round a closure built from the one it
-//! was given could ask for one copy per round, and runs out instead.
+//! was given could ask for one copy per round, and runs out instead; a function whose closure
+//! parameters are decided independently could ask for one copy per combination of them, and is held
+//! to a budget instead.
 //!
 //! The dump is what these assert against because a program cannot observe either one — both leave
 //! the answer unchanged, so a suite that only runs the program stays green with the whole pass
@@ -9,6 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::optimization::closure_specialization::MAX_COPIES_PER_FUNCTION;
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -46,6 +49,10 @@ mod integration_tests {
     /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
     /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
     const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
+
+    /// What `independent_slots` prints: `g(p0, p1, p2, p3, n)` sums the four recursive calls that
+    /// each wrap one of the closures, modulo 1000, with `n = 2` and the four lambdas main builds.
+    const INDEPENDENT_SLOTS_OUTPUT: &str = "176";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -122,6 +129,35 @@ mod integration_tests {
             .filter(|name| !name.contains("::closure#"))
             .filter(|name| name.contains(name_part))
             .collect()
+    }
+
+    /// The copies of `func` that `dump` names, deduplicated.
+    ///
+    /// A copy is named by appending `#closure_spec_<hash>` to the name of what it copies, and the
+    /// stages after this pass append segments of their own, so what identifies one copy is the name
+    /// up to the end of that segment. A lambda lifted out of `func` is copied under a name carrying
+    /// a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps copies of the
+    /// lambdas out of the count of copies of the function itself.
+    fn copies_of(dump: &str, func: &str) -> Vec<String> {
+        let mut copies = dump
+            .lines()
+            .filter_map(|line| line.strip_prefix("fn "))
+            .map(|rest| rest.split('(').next().unwrap().trim())
+            .filter(|name| name.starts_with(func))
+            .filter_map(|name| {
+                let spec = name.find("#closure_spec_")?;
+                if name[..spec].contains("#closure_lam") {
+                    return None;
+                }
+                let end = name[spec + 1..]
+                    .find('#')
+                    .map_or(name.len(), |offset| spec + 1 + offset);
+                Some(name[..end].to_string())
+            })
+            .collect::<Vec<_>>();
+        copies.sort();
+        copies.dedup();
+        copies
     }
 
     /// A lambda passed to a global function is lifted to a global function of its own, and that
@@ -219,6 +255,29 @@ mod integration_tests {
             CHANGING_CLOSURE_COPIES,
             specialized.len(),
             specialized
+        );
+    }
+
+    /// A function taking four closures and calling every one of them has each of the four decided on
+    /// its own, so the copies it can be asked for are keyed on the combinations of those decisions
+    /// and grow exponentially in the number of closures. The chain of requests cannot see that: each
+    /// combination meets a commitment of its own and none of them disagrees. What bounds it is the
+    /// number of copies one function may have.
+    #[test]
+    pub fn test_a_function_whose_closures_are_decided_independently_stays_within_its_budget() {
+        let (_temp_dir, project_dir) = setup_test_env("independent_slots");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", INDEPENDENT_SLOTS_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::g#");
+        assert!(
+            !copies.is_empty(),
+            "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
+        );
+        assert!(
+            copies.len() <= MAX_COPIES_PER_FUNCTION,
+            "`g` should have at most {} copies, but the dump names {}",
+            MAX_COPIES_PER_FUNCTION,
+            copies.len()
         );
     }
 
