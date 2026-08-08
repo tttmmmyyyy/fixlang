@@ -359,26 +359,14 @@ impl TraitDefn {
 
     // Get the document of this trait.
     pub fn get_document(&self) -> Option<String> {
-        // Try to get document from the source code.
-        let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
-
-        // If the documentation is empty, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-
-        // If the document is not available in the source code, use the document field.
-        let docs = match docs {
-            Some(_) => docs,
-            None => self.document.clone(),
-        };
-
-        // Again, if the documentation is empty, treat it as None.
-        match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
+        /// `docs` with an empty document read as absent.
+        fn nonempty(docs: Option<String>) -> Option<String> {
+            docs.filter(|docs| !docs.is_empty())
         }
+
+        // Prefer the document written in the source code, and fall back to the `document` field.
+        let from_source = nonempty(self.source.as_ref().and_then(|src| src.get_document().ok()));
+        nonempty(from_source.or_else(|| self.document.clone()))
     }
 
     // Resolve namespace.
@@ -1061,21 +1049,28 @@ impl TraitEnv {
             }
         }
 
-        for (impl_member, impl_expr) in impl_members {
-            if trait_members
-                .iter()
-                .find(|mi| mi.name == *impl_member)
-                .is_none()
-            {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "`{}` is not a member of trait `{}`.",
-                        impl_member,
-                        trait_id.to_string(),
-                    ),
-                    &[&impl_expr.source],
-                ));
+        /// Reports `member` unless `trait_members` declares it, anchoring the report at `src`.
+        fn validate_member_is_declared(
+            trait_members: &[TraitMember],
+            trait_id: &TraitId,
+            member: &Name,
+            src: &Option<Span>,
+        ) -> Result<(), Errors> {
+            if trait_members.iter().any(|mi| mi.name == *member) {
+                return Ok(());
             }
+            Err(Errors::from_msg_srcs(
+                format!(
+                    "`{}` is not a member of trait `{}`.",
+                    member,
+                    trait_id.to_string(),
+                ),
+                &[src],
+            ))
+        }
+
+        for (impl_member, impl_expr) in impl_members {
+            validate_member_is_declared(trait_members, trait_id, impl_member, &impl_expr.source)?;
         }
 
         // Validate the set of associated types.
@@ -1169,21 +1164,12 @@ impl TraitEnv {
 
         // Validate member type signatures.
         for (member_name, member_sig) in member_sigs {
-            // Check the member is defined in the trait.
-            if !trait_members
-                .iter()
-                .find(|mi| &mi.name == member_name)
-                .is_some()
-            {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "`{}` is not a member of trait `{}`.",
-                        member_name,
-                        trait_id.to_string(),
-                    ),
-                    &[&member_sig.ty.get_source()],
-                ));
-            }
+            validate_member_is_declared(
+                trait_members,
+                trait_id,
+                member_name,
+                &member_sig.ty.get_source(),
+            )?;
         }
 
         // Check Orphan rules.
