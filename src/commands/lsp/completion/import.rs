@@ -9,14 +9,14 @@
 // the item positions.
 
 use super::super::util::{scan_outside_comments, ScanState};
-use super::{is_internal_name, ResolveData};
-use crate::ast::expr::Var;
+use super::symbols::{build_completion_item, type_symbols, value_symbols};
+use super::{ResolveContext, ResolveData};
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, Program};
 use crate::constants::chars_allowed_in_identifiers;
-use crate::misc::{to_absolute_path, Map, Set};
+use crate::misc::{Map, Set};
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionItemTag, CompletionTextEdit, Position, Range,
+    CompletionItem, CompletionItemKind, CompletionTextEdit, Position, Range,
     TextDocumentPositionParams, TextEdit,
 };
 use std::mem;
@@ -200,23 +200,20 @@ fn classify_fragment(rest: &str) -> ImportContext {
 
 /// Build the completion items for a cursor inside an `import`
 /// statement. `file_path` is the file being edited (its own module is
-/// not offered as a module candidate); `typing_text` and `position`
-/// flow into each item's resolve data.
+/// not offered as a module candidate); `position` is the cursor, which
+/// the module items' `TextEdit`s are anchored to.
 pub(super) fn import_completion_items(
     ctx: &ImportContext,
     program: &Program,
     file_path: &Path,
-    typing_text: &str,
     position: &TextDocumentPositionParams,
 ) -> Vec<CompletionItem> {
     match ctx {
         ImportContext::ModuleName { typed } => {
-            module_name_items(typed, program, file_path, typing_text, position)
+            module_name_items(typed, program, file_path, position)
         }
         ImportContext::HidingKeyword => vec![hiding_keyword_item()],
-        ImportContext::Items { module, namespace } => {
-            member_items(module, namespace, program, typing_text, position)
-        }
+        ImportContext::Items { module, namespace } => member_items(module, namespace, program),
         ImportContext::Closed => vec![],
     }
 }
@@ -234,17 +231,9 @@ fn module_name_items(
     typed: &str,
     program: &Program,
     file_path: &Path,
-    typing_text: &str,
     position: &TextDocumentPositionParams,
 ) -> Vec<CompletionItem> {
-    let file_abs = to_absolute_path(file_path).ok();
-    let self_module: Option<Name> = program
-        .modules
-        .iter()
-        .find(|mi| {
-            file_abs.is_some() && to_absolute_path(&mi.source.input.file_path).ok() == file_abs
-        })
-        .map(|mi| mi.name.clone());
+    let self_module: Option<Name> = program.module_of_file(file_path).map(|mi| mi.name.clone());
 
     // The typed module path consists of identifier characters and `.`,
     // all ASCII, so its UTF-16 length equals its byte length.
@@ -252,6 +241,9 @@ fn module_name_items(
     let end = position.position;
     let start = Position {
         line: end.line,
+        // Saturating: the position comes from the client, so an
+        // inconsistent one degrades to a shorter range instead of a
+        // server panic.
         character: end.character.saturating_sub(typed.len() as u32),
     };
     let range = Range { start, end };
@@ -275,12 +267,13 @@ fn module_name_items(
                 range,
                 new_text: name.clone(),
             })),
-            data: Some(ResolveData::to_value(
-                EndNode::Module(name),
-                typing_text,
-                position,
-                true,
-            )),
+            data: Some(
+                ResolveData {
+                    node: EndNode::Module(name),
+                    context: ResolveContext::Import,
+                }
+                .to_value(),
+            ),
             ..CompletionItem::default()
         })
         .collect()
@@ -301,13 +294,7 @@ fn hiding_keyword_item() -> CompletionItem {
 /// below it. A name that is both an entity and a namespace (e.g. a
 /// type `IO` and the namespace `IO` of its methods) is offered once,
 /// as the entity.
-fn member_items(
-    module: &Name,
-    namespace: &[Name],
-    program: &Program,
-    typing_text: &str,
-    position: &TextDocumentPositionParams,
-) -> Vec<CompletionItem> {
+fn member_items(module: &Name, namespace: &[Name], program: &Program) -> Vec<CompletionItem> {
     let mut prefix: Vec<&Name> = Vec::with_capacity(namespace.len() + 1);
     prefix.push(module);
     prefix.extend(namespace.iter());
@@ -315,84 +302,20 @@ fn member_items(
     let mut leaves: Map<Name, CompletionItem> = Map::default();
     let mut child_namespaces: Set<Name> = Set::default();
 
-    let add = |full_name: &FullName,
-               leaves: &mut Map<Name, CompletionItem>,
-               child_namespaces: &mut Set<Name>,
-               make_leaf: &dyn Fn(&Name) -> CompletionItem| {
-        if is_internal_name(&full_name.to_string()) {
-            return;
-        }
-        let Some((next, is_leaf)) = next_component(full_name, &prefix) else {
-            return;
+    for symbol in value_symbols(program)
+        .into_iter()
+        .chain(type_symbols(program))
+    {
+        let (component, is_leaf) = match next_component(&symbol.name, &prefix) {
+            Some((next, is_leaf)) => (next.clone(), is_leaf),
+            None => continue,
         };
         if is_leaf {
-            leaves.insert(next.clone(), make_leaf(next));
+            let item = build_completion_item(symbol, component.clone(), ResolveContext::Import);
+            leaves.insert(component, item);
         } else {
-            child_namespaces.insert(next.clone());
+            child_namespaces.insert(component);
         }
-    };
-
-    for (full_name, gv) in &program.global_values {
-        add(full_name, &mut leaves, &mut child_namespaces, &|name| {
-            let scheme = gv
-                .syn_scm
-                .clone()
-                .unwrap_or(gv.scm.clone())
-                .to_string_normalize();
-            leaf_item(
-                name,
-                CompletionItemKind::FUNCTION,
-                Some(scheme),
-                EndNode::Expr(Var::create(full_name.clone()), None),
-                gv.deprecation.is_some(),
-                typing_text,
-                position,
-            )
-        });
-    }
-    for (tycon, _kind) in program.type_env.kinds() {
-        add(&tycon.name, &mut leaves, &mut child_namespaces, &|name| {
-            leaf_item(
-                name,
-                CompletionItemKind::CLASS,
-                None,
-                EndNode::Type(tycon.clone()),
-                false,
-                typing_text,
-                position,
-            )
-        });
-    }
-    for trait_ in program.traits_with_aliases() {
-        add(&trait_.name, &mut leaves, &mut child_namespaces, &|name| {
-            leaf_item(
-                name,
-                CompletionItemKind::INTERFACE,
-                None,
-                EndNode::Trait(trait_.clone()),
-                false,
-                typing_text,
-                position,
-            )
-        });
-    }
-    for (assoc_type, _kind_info) in program.trait_env.assoc_ty_kind_info() {
-        add(
-            &assoc_type.name,
-            &mut leaves,
-            &mut child_namespaces,
-            &|name| {
-                leaf_item(
-                    name,
-                    CompletionItemKind::CLASS,
-                    None,
-                    EndNode::AssocType(assoc_type.clone()),
-                    false,
-                    typing_text,
-                    position,
-                )
-            },
-        );
     }
 
     let mut items: Vec<CompletionItem> = vec![];
@@ -428,38 +351,6 @@ fn next_component<'a>(full_name: &'a FullName, prefix: &[&Name]) -> Option<(&'a 
         Some((&full_name.name, true))
     } else {
         Some((&ns[prefix.len()], false))
-    }
-}
-
-/// A completion item for an entity offered at an item position. The
-/// label and inserted text are the bare name — the qualifying path is
-/// already in the source around the cursor.
-fn leaf_item(
-    name: &Name,
-    kind: CompletionItemKind,
-    detail: Option<String>,
-    node: EndNode,
-    deprecated: bool,
-    typing_text: &str,
-    position: &TextDocumentPositionParams,
-) -> CompletionItem {
-    // Set both `deprecated` (LSP <3.15) and `tags` (LSP >=3.15) so older
-    // and newer clients both render the strikethrough.
-    let (deprecated_field, tags_field) = if deprecated {
-        (Some(true), Some(vec![CompletionItemTag::DEPRECATED]))
-    } else {
-        (None, None)
-    };
-    CompletionItem {
-        label: name.clone(),
-        kind: Some(kind),
-        detail,
-        deprecated: deprecated_field,
-        tags: tags_field,
-        filter_text: Some(name.clone()),
-        insert_text: Some(name.clone()),
-        data: Some(ResolveData::to_value(node, typing_text, position, true)),
-        ..CompletionItem::default()
     }
 }
 
@@ -594,5 +485,46 @@ mod tests {
         // "import" inside a string literal or spelled after one.
         assert_eq!(context("main = (\n    let s = \"import \""), None);
         assert_eq!(context("let s = \"a;b\"; let t = s"), None);
+    }
+
+    /// The `*` wildcard and the empty item list `{}` are complete
+    /// elements: after one, only `hiding` (or the terminating `;`) can
+    /// follow at brace depth 0, while inside braces the item position
+    /// continues.
+    #[test]
+    fn test_wildcard_and_empty_items() {
+        assert_eq!(context("import Std::{IO::*, "), Some(items("Std", &[])));
+        assert_eq!(
+            context("import Std::{IO::*} "),
+            Some(ImportContext::HidingKeyword)
+        );
+        assert_eq!(
+            context("import Std::* "),
+            Some(ImportContext::HidingKeyword)
+        );
+        assert_eq!(
+            context("import Std::{}"),
+            Some(ImportContext::HidingKeyword)
+        );
+    }
+
+    /// A `;` inside a char literal or after an escaped quote in a
+    /// string literal is not a statement boundary: the statement scan
+    /// tracks literals, so the import statement after the real `;` is
+    /// still recognized.
+    #[test]
+    fn test_literals_before_the_statement() {
+        assert_eq!(
+            context("eval f(';'); import Li"),
+            Some(ImportContext::ModuleName {
+                typed: "Li".to_string()
+            })
+        );
+        assert_eq!(
+            context("let s = \"a\\\";b\"; import Li"),
+            Some(ImportContext::ModuleName {
+                typed: "Li".to_string()
+            })
+        );
     }
 }
