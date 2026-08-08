@@ -4,7 +4,6 @@ use super::{
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
-use crate::graph::Graph;
 use crate::{
     ast::{
         expr::{
@@ -21,6 +20,7 @@ use crate::{
         CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
         CLOSURE_SPEC_SUFFIX,
     },
+    graph::Graph,
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
