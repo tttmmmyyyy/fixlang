@@ -20,7 +20,7 @@ use crate::fixstd::runtime::{
     RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
-use crate::misc::{Map, Set};
+use crate::misc::Map;
 use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
@@ -1574,83 +1574,6 @@ pub fn ty_to_object_ty(
         }
     }
     ret
-}
-
-/// Why a value of `ty` has no size, and `None` where the code generator can lay one out.
-///
-/// The walk follows what `ty_to_object_ty` puts in the object: the fields of a struct, the payloads
-/// of a union, and the elements an array storage holds are laid out in place, so it descends into
-/// them. A field of a boxed type is a pointer, so what it points at is an object of its own: the
-/// walk goes on there with the in-place chain started afresh.
-///
-/// # Arguments
-/// * `checked` - the types walked so far. Whether a type has a size is a property of that type, so
-///   one it holds is passed over; the ways down to it are compared against it first, which is what
-///   catches a type reaching itself.
-pub fn no_size_reason(
-    ty: &Arc<TypeNode>,
-    type_env: &TypeEnv,
-    checked: &mut Set<Arc<TypeNode>>,
-) -> Option<String> {
-    /// Walk the layout of `ty` and of the types it holds. `in_place` is the types `ty` sits inside
-    /// with no pointer in between, `across_pointers` every type the walk reached `ty` through, both
-    /// outermost first.
-    fn walk(
-        ty: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-        in_place: &mut Vec<Arc<TypeNode>>,
-        across_pointers: &mut Vec<Arc<TypeNode>>,
-        checked: &mut Set<Arc<TypeNode>>,
-    ) -> Option<String> {
-        if let Some(msg) = ty.no_size_cause(in_place, across_pointers) {
-            return Some(msg);
-        }
-        if !checked.insert(ty.clone()) {
-            return None;
-        }
-        // The types this object holds.
-        let mut held: Vec<Arc<TypeNode>> = vec![];
-        for field in ty_to_object_ty(ty, &vec![], type_env).field_types {
-            match field {
-                ObjectFieldType::SubObject(field_ty, _is_punched) => held.push(field_ty),
-                ObjectFieldType::UnionBuf(payload_tys) => held.extend(payload_tys),
-                ObjectFieldType::ArrayStorageBuf(elem_ty) => held.push(elem_ty),
-                _ => {}
-            }
-        }
-
-        in_place.push(ty.clone());
-        across_pointers.push(ty.clone());
-        let reason = held.iter().find_map(|held_ty| {
-            if held_ty.is_unbox(type_env) {
-                walk(held_ty, type_env, in_place, across_pointers, checked)
-            } else {
-                walk(held_ty, type_env, &mut vec![], across_pointers, checked)
-            }
-        });
-        across_pointers.pop();
-        in_place.pop();
-        reason
-    }
-    // A function value is a pair of pointers, but the types it takes and returns are laid out where
-    // the function is compiled. A function type reaching here is one the program has a value of, so
-    // that function is compiled and its signature laid out.
-    if ty.is_closure() || ty.is_funptr() {
-        return ty
-            .get_lambda_srcs()
-            .into_iter()
-            .chain([ty.get_lambda_dst()])
-            .find_map(|signature_ty| {
-                walk(
-                    &signature_ty,
-                    type_env,
-                    &mut vec![],
-                    &mut vec![ty.clone()],
-                    checked,
-                )
-            });
-    }
-    walk(ty, type_env, &mut vec![], &mut vec![], checked)
 }
 
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real

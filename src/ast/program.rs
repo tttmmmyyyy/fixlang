@@ -34,9 +34,9 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{collect_results, spawn_compiler_thread, to_absolute_path, Map, Set};
-use crate::object::no_size_reason;
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
+use crate::type_size::no_size_reason;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
