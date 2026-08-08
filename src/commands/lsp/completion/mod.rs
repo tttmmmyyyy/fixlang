@@ -43,6 +43,7 @@ use lsp_types::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 
 /// Payload stashed in `CompletionItem::data`, carried from
 /// `textDocument/completion` to `completionItem/resolve`.
@@ -299,7 +300,7 @@ fn tiers_in_parallel(
     // threads); the memo is a `Mutex`, so the workers share one cache.
     let chunk_size = n.div_ceil(workers);
     let mut tiers = Vec::with_capacity(n);
-    std::thread::scope(|s| {
+    thread::scope(|s| {
         let handles: Vec<_> = names
             .chunks(chunk_size)
             .map(|chunk| {
@@ -605,31 +606,33 @@ fn recurse_for_hole(
     }
 }
 
-// Check if the user's typing text is in the form of a dot followed by namespaces or a function name
+/// Checks whether the user's typing text ends in a dot followed by
+/// namespaces or a function name.
 fn is_dot_function(typing_text: &str) -> bool {
     let mut chars = typing_text.chars().rev();
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     while let Some(c) = chars.next() {
         if c == '.' {
             return true;
         }
-        if !identifer_chars.contains(c) && c != ':' {
+        if !identifier_chars.contains(c) && c != ':' {
             return false;
         }
     }
     false
 }
 
-// Extract namespace from typing text string.
-// This function performs string manipulation to extract namespace components from user input.
+/// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
+/// `NameSpace`. A final component that does not start with an uppercase
+/// letter (a partially typed value name) is dropped.
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     let suffix_byte_start = typing_text
         .char_indices()
         .rev()
-        .find(|(_, c)| !(identifer_chars.contains(*c) || *c == ':'))
+        .find(|(_, c)| !(identifier_chars.contains(*c) || *c == ':'))
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(0);
     let namespace_part = &typing_text[suffix_byte_start..];
@@ -662,7 +665,8 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     namespace.unwrap()
 }
 
-// Get the text of the line being typed by the user up to the cursor position.
+/// Gets the text of the line being typed by the user up to the cursor
+/// position.
 fn get_typing_text(
     text_document_position: &TextDocumentPositionParams,
     uri_to_content: &Map<Uri, LatestContent>,
@@ -674,8 +678,9 @@ fn get_typing_text(
     typing_text
 }
 
-// Handle "completionItem/resolve" method.
-// Add documentation to the completion item.
+/// Handles the `completionItem/resolve` LSP request: attaches documentation
+/// to the completion item, appends an argument-snippet to the insert text of
+/// a global value, and adds text edits that import the completed name.
 pub(super) fn handle_completion_resolve_document(
     id: u32,
     params: &CompletionItem,
@@ -804,7 +809,7 @@ pub(super) fn handle_completion_resolve_document(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::extract_namespace_from_typing_text;
 
     #[test]
     fn test_extract_namespace_from_typing_text_basic() {

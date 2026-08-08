@@ -299,15 +299,16 @@ mod tests {
     /// `42.<cursor>` in a body that mentions both `myfunc1 : U32 -> U32 -> U32`
     /// and `myfunc2 : I64 -> I64 -> I64` — `42` is `I64` so `myfunc2` should
     /// outrank `myfunc1` in the completion list. Verifies the dot-completion
-    /// type-aware ranking pipeline (Steps 1-4).
+    /// ranking pipeline: receiver-type extraction and tier-based `sortText`
+    /// assignment.
     #[test]
     fn test_completion_dot_sort_ranks_matching_receiver_above_others() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
 
         // Cursor right after the dot in `    42.` on line 13 (0-indexed),
         // column 7 (= byte right after `.`).
-        // Use a polling wait — Step 1's full re-elaborate can take longer
-        // than `complete`'s hard-coded 5s sleep on a cold cache.
+        // Use a polling wait — the dot-completion full re-elaborate can take
+        // longer than `complete`'s hard-coded 5s sleep on a cold cache.
         let items = ctx.complete_with_timeout("main.fix", 13, 7, Duration::from_secs(60));
 
         // Each item should carry a sortText derived from its tier.
@@ -352,16 +353,13 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Scenario B: the on-disk file has a parse error (`42` with no
-    /// dot inside `(...)`), so the snapshot Program built at LSP
-    /// startup may be missing the user's module entirely. The user
-    /// then types `.` (live buffer becomes parseable as `42.pure()`)
-    /// and triggers completion.
-    ///
-    /// This reproduces the user's report that priority ranking
-    /// doesn't apply after a "save with parse error → close → reopen
-    /// → type the dot" round trip. We expect the test to fail before
-    /// any fix lands; once it passes the regression is closed.
+    /// The on-disk file has a parse error (`42` with no dot inside
+    /// `(...)`), so the snapshot Program built at LSP startup may be
+    /// missing the user's module entirely. The user then types `.`
+    /// (live buffer becomes parseable as `42.pure()`) and triggers
+    /// completion. Type-aware ranking must still apply: the receiver
+    /// type is recovered from the repaired live buffer even when the
+    /// startup snapshot lacks the module.
     #[test]
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
         let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
@@ -503,13 +501,12 @@ mod tests {
         }
     }
 
-    /// Reproduces the user-report: `let n = range(50, 101).<cursor>`
-    /// with the cursor right after the dot at end of line. We expect
-    /// some `Std::Iterator::*` method (e.g. `fold`) to be ranked
-    /// strictly above an alphabetically-earlier candidate like
-    /// `Std::Add::add` — i.e. the dot-completion ranker must classify
-    /// the receiver as a `RangeIterator`-like type and place Iterator
-    /// methods in a lower-numbered tier.
+    /// `let n = range(50, 101).<cursor>` with the cursor right after
+    /// the dot at end of line. Some `Std::Iterator::*` method (e.g.
+    /// `fold`) must be ranked strictly above an alphabetically-earlier
+    /// candidate like `Std::Add::add` — the dot-completion ranker must
+    /// classify the receiver as a `RangeIterator`-like type and place
+    /// Iterator methods in a lower-numbered tier.
     #[test]
     fn test_completion_dot_sort_iterator_at_end_of_line() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort-iterator", &["main.fix"]);
@@ -1168,8 +1165,7 @@ mod tests {
 
         // The receiver is a `String`, so the dot-context ranker must have
         // run: at least one `Std::String::*` candidate must land in
-        // Tier 0 (a `0`-prefixed sortText). Before the fix these were
-        // untiered (no sortText) because no receiver type was recovered.
+        // Tier 0 (a `0`-prefixed sortText).
         let best_string_sort = items
             .iter()
             .filter(|it| {
