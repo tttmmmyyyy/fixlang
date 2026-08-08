@@ -8115,6 +8115,59 @@ pub fn test_repeated_type_constructor_with_a_smaller_argument() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A cycle of unboxed types is reported whichever of its types the program names first, so the
+/// verdict does not turn on the order the symbols are walked in.
+#[test]
+pub fn test_unboxed_cycle_is_reported_whichever_type_is_named_first() {
+    let cycle = r##"
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+    "##;
+    for (first, second) in [("aaa : A", "zzz : B"), ("aaa : B", "zzz : A")] {
+        let source = format!(
+            r##"
+            module Main;
+            {}
+            {} -> I64;
+            aaa = |x| 1;
+
+            {} -> I64;
+            zzz = |x| 2;
+
+            main : IO ();
+            main = println((aaa(undefined("no value")) + zzz(undefined("no value"))).to_string);
+            "##,
+            cycle, first, second
+        );
+        test_source_fail(&source, Configuration::develop_mode(), "has no size");
+    }
+}
+
+/// A lambda of several parameters is a lambda per parameter, so a parameter type with no size is
+/// reported even where the body never names that parameter.
+#[test]
+pub fn test_multi_parameter_lambda_over_a_type_with_no_size() {
+    let source = r##"
+        module Main;
+        type Bad = unbox struct { b : Bad, n : I64 };
+
+        g : I64 -> Bad -> I64;
+        g = |k, _| k;
+
+        main : IO ();
+        main = (
+            let h = g;
+            eval h;
+            println("ok")
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Bad` has no size",
+    );
+}
+
 // `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
 // that distinct numbers give distinct names.
 #[test]
