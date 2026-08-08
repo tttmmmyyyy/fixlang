@@ -141,11 +141,7 @@ pub fn build_within_and_run(
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_for_stderr));
     let mut child = command.spawn().expect("Failed to execute fix build");
-    let status = wait_within(
-        &mut child,
-        timeout,
-        &format!("compiling {}", description),
-    );
+    let status = wait_within(&mut child, timeout, &format!("compiling {}", description));
     assert!(
         status.success(),
         "compiling {} failed: {}\n{}",
