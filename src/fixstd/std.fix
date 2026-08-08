@@ -625,7 +625,7 @@ namespace Array {
         _merge_sort_by_ranged(less_than, 0, n, copy, arr).@0
     );
 
-    // The length below which `_merge_sort_by_ranged` sorts a range by insertion sort instead of
+    // The greatest length that `_merge_sort_by_ranged` sorts by insertion sort instead of
     // splitting it further. A range it does split has at least two elements, which is what lets the
     // merge read the element before the midpoint, so this is at least 1.
     _merge_sort_insertion_limit : I64;
