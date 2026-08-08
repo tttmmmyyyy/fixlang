@@ -2928,16 +2928,16 @@ impl Pair : Eq {
 
 main : IO ();
 main = (
-    let x = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
-    let y = x.sort;
-    assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
-    assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+    let input = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
+    let sorted = input.sort;
+    assert_eq(|_|"", sorted, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
+    assert_eq(|_|"", input, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
 
     // Long enough that the stable sort merges the range rather than sorting it by insertion.
-    let x = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")];
-    let y = x.sort_stable;
-    assert_eq(|_|"", y, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b"), make(6, "m"), make(6, "o"), make(7, "l"), make(7, "n")]);;
-    assert_eq(|_|"", x, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")]);;
+    let input = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")];
+    let sorted = input.sort_stable;
+    assert_eq(|_|"", sorted, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b"), make(6, "m"), make(6, "o"), make(7, "l"), make(7, "n")]);;
+    assert_eq(|_|"", input, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")]);;
 
     pure()
 );
