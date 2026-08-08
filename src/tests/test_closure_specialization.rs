@@ -68,6 +68,22 @@ mod integration_tests {
     /// and every further wrapper multiplies that again.
     const WRAPPED_CHAIN_COPIES: usize = 17;
 
+    /// What `fix_through_llvm` prints: `Std::fix` summing `0..10`, `apply_twice` over `|x| x * 3`,
+    /// and `Std::fix` summing `|x| x * 3` over `0..4`.
+    const FIX_THROUGH_LLVM_OUTPUT: &str = "112";
+
+    /// What `closure_swap` prints: `ping` and `pong` calling each other five rounds deep, each round
+    /// swapping which of the two closures sits in which way in and wrapping one of them.
+    const CLOSURE_SWAP_OUTPUT: &str = "938";
+
+    /// What `wide_capture` prints: `relay` over four closures with `n = 2`, summing `terminal` on
+    /// each and recursing four ways.
+    const WIDE_CAPTURE_OUTPUT: &str = "18";
+
+    /// What `deep_relay` prints: the cycle `a` -> `b` -> `c` entered with `n = 6`, wrapping the
+    /// closure one level deeper on each turn of the cycle.
+    const DEEP_RELAY_OUTPUT: &str = "569";
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -316,6 +332,49 @@ mod integration_tests {
             WRAPPED_CHAIN_COPIES,
             copies.len()
         );
+    }
+
+    /// A closure reaching an inline-LLVM expression. Such an expression reads variables only, so a
+    /// name holding a bare capture list is wrapped back into a closure and bound to a fresh name
+    /// ahead of it.
+    #[test]
+    pub fn test_a_closure_reaching_an_inline_llvm_expression_is_wrapped_back() {
+        let (_temp_dir, project_dir) = setup_test_env("fix_through_llvm");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, FIX_THROUGH_LLVM_OUTPUT);
+        }
+    }
+
+    /// Two closures going round a cycle of two functions, swapping which way in each sits in on
+    /// every round while one of them is wrapped. A value's identity has to survive both the cycle
+    /// and the swap, and the commitment a chain records is per way in, so the two must not be
+    /// confused for one another.
+    #[test]
+    pub fn test_two_closures_swapping_places_around_a_cycle_keep_their_identity() {
+        let (_temp_dir, project_dir) = setup_test_env("closure_swap");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, CLOSURE_SWAP_OUTPUT);
+        }
+    }
+
+    /// One capture list carrying four closures whose identity is known, where each round narrows a
+    /// different one of them.
+    #[test]
+    pub fn test_a_capture_list_carrying_four_known_closures() {
+        let (_temp_dir, project_dir) = setup_test_env("wide_capture");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, WIDE_CAPTURE_OUTPUT);
+        }
+    }
+
+    /// A cycle of three functions where one turn of the cycle wraps the closure a level deeper, so
+    /// the chain of requests runs out on a cycle longer than the two the suite already covers.
+    #[test]
+    pub fn test_a_cycle_of_three_wrapping_one_level_per_turn_runs_out() {
+        let (_temp_dir, project_dir) = setup_test_env("deep_relay");
+        for opt_level in ["basic", "max"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, DEEP_RELAY_OUTPUT);
+        }
     }
 
     /// A closure a function builds from the one it was given becomes a capture list, and the lambda

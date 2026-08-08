@@ -1,0 +1,27 @@
+module Main;
+
+// Two functions call each other, and each round swaps which closure sits in which way in while
+// wrapping one of them. A value's identity therefore has to survive both the cycle and the swap.
+
+apply_twice : (I64 -> I64) -> I64 -> I64;
+apply_twice = |op, n| (
+    if n <= 0 { 0 };
+    op(op(n)) + apply_twice(op, n - 1)
+);
+
+ping : (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+ping = |p, q, n| (
+    if n <= 0 { p(1) + q(2) };
+    (apply_twice(p, n) + pong(q, |x| (p(x) + 1) % 97, n - 1)) % 99991
+);
+
+pong : (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+pong = |p, q, n| (
+    if n <= 0 { p(3) + q(4) };
+    (apply_twice(q, n) + ping(|x| (q(x) + 2) % 97, p, n - 1)) % 99991
+);
+
+main : IO () = (
+    let k = 11;
+    println(ping(|x| (x * k) % 97, |x| (x + k) % 97, 5).to_string)
+);
