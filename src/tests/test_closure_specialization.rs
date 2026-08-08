@@ -139,13 +139,12 @@ mod integration_tests {
     /// a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps copies of the
     /// lambdas out of the count of copies of the function itself.
     fn copies_of(dump: &str, func: &str) -> Vec<String> {
-        let mut copies = dump
-            .lines()
-            .filter_map(|line| line.strip_prefix("fn "))
-            .map(|rest| rest.split('(').next().unwrap().trim())
+        let spec_segment = "#closure_spec_";
+        let mut copies = functions_named_with(dump, spec_segment)
+            .into_iter()
             .filter(|name| name.starts_with(func))
             .filter_map(|name| {
-                let spec = name.find("#closure_spec_")?;
+                let spec = name.find(spec_segment).unwrap();
                 if name[..spec].contains("#closure_lam") {
                     return None;
                 }
