@@ -19,6 +19,7 @@ use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemTag, CompletionTextEdit, Position, Range,
     TextDocumentPositionParams, TextEdit,
 };
+use std::mem;
 use std::path::Path;
 
 /// The part of an `import` statement the cursor sits in.
@@ -149,12 +150,12 @@ fn classify_fragment(rest: &str) -> ImportContext {
                     chars.next();
                 }
                 if !pending.is_empty() {
-                    segments.push(std::mem::take(&mut pending));
+                    segments.push(mem::take(&mut pending));
                 }
                 after_complete_element = false;
             }
             '{' => {
-                frames.push(std::mem::take(&mut segments));
+                frames.push(mem::take(&mut segments));
                 pending.clear();
                 after_complete_element = false;
             }
@@ -463,7 +464,7 @@ fn leaf_item(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{import_context_at, ImportContext};
 
     fn context(content: &str) -> Option<ImportContext> {
         import_context_at(content, content.len())
