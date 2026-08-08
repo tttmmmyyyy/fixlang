@@ -457,9 +457,9 @@ compatibility; `@size` is the canonical accessor.
 
 Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
-`arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
+`arr.get_sub(start, end)` returns an array `[ arr.@(i) | i ∈ [start, end) ]`.
 
-`s` and `e` are clamped to the range `[0, arr.@size]`.
+`start` and `end` are clamped to the range `[0, arr.@size]`.
 
 ##### Parameters
 
@@ -657,7 +657,7 @@ Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
 
 Stable sort by `LessThan` trait.
 
-Note: Currently this is implemented by merge sort, which is not in-place.
+Implemented by merge sort, which allocates an array as large as the one being sorted.
 
 ##### Parameters
 
@@ -669,7 +669,7 @@ Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
 Stable sort by a "less than" comparator.
 
-Note: Currently this is implemented by merge sort, which is not in-place.
+Implemented by merge sort, which allocates an array as large as the one being sorted.
 
 ##### Parameters
 

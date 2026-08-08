@@ -135,9 +135,9 @@ main : IO () = (
         Iterator::range(0, 40).map(|i| [i]).to_array);;
 
     // `get_sub` on a boxed array copies the range out; the source stays intact.
-    let g = [[1], [2], [3], [4]];
-    assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
-    assert_eq(|_|"get_sub boxed src intact", g, [[1], [2], [3], [4]]);;
+    let source = [[1], [2], [3], [4]];
+    assert_eq(|_|"get_sub boxed", source.get_sub(1, 3), [[2], [3]]);;
+    assert_eq(|_|"get_sub boxed src intact", source, [[1], [2], [3], [4]]);;
 
     // Writing into a boxed array after copying a range out of it. The copy retains each element it
     // takes and borrows the array itself, so the writes reach that array in place while the copy
@@ -149,10 +149,10 @@ main : IO () = (
     assert_eq(|_|"copy intact after write", head, [[1], [2]]);;
 
     // `append` of a shared empty boxed source takes the copy path over an empty range.
-    let e = ([] : Array (Array I64));
-    let d = [[1], [2]];
-    assert_eq(|_|"append shared empty src result", d.append(e), [[1], [2]]);;
-    assert_eq(|_|"append shared empty src intact", e, []);;
+    let empty_src = ([] : Array (Array I64));
+    let empty_src_dst = [[1], [2]];
+    assert_eq(|_|"append shared empty src result", empty_src_dst.append(empty_src), [[1], [2]]);;
+    assert_eq(|_|"append shared empty src intact", empty_src, []);;
 
     // `unsafe_set_bounds_unchecked` on a boxed array releases the overwritten element and, on a
     // shared array, clones so the original keeps its element.
@@ -256,22 +256,22 @@ module Main;
 
 main : IO () = (
     // A multi-threaded array: its storage and every element are out of the local state.
-    let t = [[1], [2], [3], [4]].mark_threaded;
+    let threaded = [[1], [2], [3], [4]].mark_threaded;
 
     // The borrowing copy retains each element it takes out of a threaded source.
-    assert_eq(|_|"get_sub of a threaded array", t.get_sub(1, 3), [[2], [3]]);;
+    assert_eq(|_|"get_sub of a threaded array", threaded.get_sub(1, 3), [[2], [3]]);;
 
     // The owning append over a threaded source that is uniquely held (the move path).
     assert_eq(|_|"append a uniquely held threaded source",
-        [[0]].append(t.get_sub(0, 2).mark_threaded), [[0], [1], [2]]);;
+        [[0]].append(threaded.get_sub(0, 2).mark_threaded), [[0], [1], [2]]);;
 
     // The owning append over a threaded source that is shared (the retain-per-element copy path).
-    assert_eq(|_|"append a shared threaded source", [[0]].append(t), [[0], [1], [2], [3], [4]]);;
+    assert_eq(|_|"append a shared threaded source", [[0]].append(threaded), [[0], [1], [2], [3], [4]]);;
 
     // A threaded destination, which the primitive clones before writing.
-    assert_eq(|_|"append onto a threaded destination", t.append([[5]]),
+    assert_eq(|_|"append onto a threaded destination", threaded.append([[5]]),
         [[1], [2], [3], [4], [5]]);;
-    assert_eq(|_|"the threaded array is intact", t, [[1], [2], [3], [4]]);;
+    assert_eq(|_|"the threaded array is intact", threaded, [[1], [2], [3], [4]]);;
     pure()
 );
 "#;
@@ -303,9 +303,9 @@ from_global = |_| (
 
 // A copy out of a struct field, then a write through the field.
 from_field : Holder -> (Array (Array I64), Array (Array I64));
-from_field = |hd| (
-    let head = hd.@xs.get_sub(0, 2);
-    (hd.mod_xs(|xs| xs.set(0, [88])).@xs, head)
+from_field = |holder| (
+    let head = holder.@xs.get_sub(0, 2);
+    (holder.mod_xs(|xs| xs.set(0, [88])).@xs, head)
 );
 
 // A copy out of an unboxed-union payload carried through a loop, then writes.
