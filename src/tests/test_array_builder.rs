@@ -140,9 +140,9 @@ main : IO () = (
     // `unsafe_set_bounds_unchecked` on a boxed array releases the overwritten element and, on a
     // shared array, clones so the original keeps its element.
     eval [[1], [2], [3]].unsafe_set_bounds_unchecked(1, [9]);
-    let base = [[1], [2], [3]];
-    let overwritten = base.unsafe_set_bounds_unchecked(0, [9]);
-    assert_eq(|_|"unsafe_set shared base intact", base, [[1], [2], [3]]);;
+    let shared_base = [[1], [2], [3]];
+    let overwritten = shared_base.unsafe_set_bounds_unchecked(0, [9]);
+    assert_eq(|_|"unsafe_set shared base intact", shared_base, [[1], [2], [3]]);;
     assert_eq(|_|"unsafe_set shared overwritten", overwritten, [[9], [2], [3]]);;
     pure()
 );

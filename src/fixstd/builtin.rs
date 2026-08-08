@@ -8004,7 +8004,7 @@ fn array_tail_destination<'c, 'm>(
     let dst_buf = get_array_storage_buf(gc, &dst);
     let dst_write = unsafe {
         gc.builder()
-            .build_gep(elem_value_ty, dst_buf, &[dst_len], "append_dst_write")
+            .build_gep(elem_value_ty, dst_buf, &[dst_len], "dst_write")
             .unwrap()
     };
     (dst, dst_len, dst_write)
