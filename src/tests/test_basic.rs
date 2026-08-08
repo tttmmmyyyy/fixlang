@@ -2648,11 +2648,14 @@ pub fn test89() {
 }
 
 /// Verifies every sorting routine of the standard library over one corpus of inputs: the empty
-/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays.
+/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays,
+/// together with arrays long enough to be partitioned rather than sorted by insertion, built of few
+/// distinct values or of an order that leaves one side of every split nearly empty.
 /// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
 /// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
-/// Each runs over an unboxed and a boxed element type, and the stable one is also checked to leave
-/// equal elements in the order they came in.
+/// Each runs over an unboxed and a boxed element type, and its result is checked to be increasing
+/// and to keep the size and the sum of the input; the stable one is also checked to leave equal
+/// elements in the order they came in.
 #[test]
 pub fn test_sort_by() {
     let source = r#"
@@ -2737,15 +2740,23 @@ is_increasing = |arr| (
 test_sort : SortMethod I64 -> SortMethod BoxedI64 -> IO ();
 test_sort = |sort_method, sort_method_boxed| (
     cases.to_iter.zip(count_up(1)).fold_m((), |(case, case_n), _|
+        let case_name = "case " + case_n.to_string;
+
         // unboxed case
         let xs = case;
         let ys = xs.sort_method;
-        assert(|_| "case {}-unboxed", ys.is_increasing);;
+        assert(|_| case_name + "-unboxed", ys.is_increasing);;
+        // The elements are the ones that went in: a partition that drops or repeats one still
+        // leaves the result in order.
+        assert_eq(|_| case_name + "-unboxed-size", ys.@size, xs.@size);;
+        assert_eq(|_| case_name + "-unboxed-sum", ys.to_iter.sum, xs.to_iter.sum);;
 
         // boxed case
         let xs_boxed = xs.map(BoxedI64::make) : Array BoxedI64;
         let ys_boxed = xs_boxed.sort_method_boxed;
-        assert(|_| "case {}-boxed".populate([case_n.to_string]), ys_boxed.is_increasing);;
+        assert(|_| case_name + "-boxed", ys_boxed.is_increasing);;
+        assert_eq(|_| case_name + "-boxed-size", ys_boxed.@size, xs.@size);;
+        assert_eq(|_| case_name + "-boxed-sum", ys_boxed.to_iter.map(|x| x.@v).sum, xs.to_iter.sum);;
 
         pure()
     );;
@@ -2772,6 +2783,11 @@ cases = [
     case_1,
     case_2,
     case_stability_0,
+    case_all_equal,
+    case_two_values,
+    case_few_values,
+    case_organ_pipe,
+    case_lone_minimum,
     case_random_0,
     case_random_1,
     case_random_2,
@@ -2795,6 +2811,29 @@ case_2 = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5];
 
 case_stability_0 : Array I64;
 case_stability_0 = [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0];
+
+// Ranges of few distinct values, long enough to be partitioned rather than sorted by insertion.
+// A partition that separates only the elements comparing less than the pivot takes one round per
+// element on these, so they are what the recursion has to escape.
+
+case_all_equal : Array I64;
+case_all_equal = Array::fill(50, 7);
+
+case_two_values : Array I64;
+case_two_values = Array::from_map(100, |i| i % 2);
+
+case_few_values : Array I64;
+case_few_values = Array::from_map(200, |i| (i * 7) % 4);
+
+// Rises to the middle and falls back, so the middle element is the greatest of every sub-range and
+// every split leaves one element on one side. This is the shape the recursion budget is against.
+case_organ_pipe : Array I64;
+case_organ_pipe = Array::from_map(100, |i| if i < 99 - i { i } else { 99 - i });
+
+// One element smaller than all the rest, sitting where the pivot is taken from: the split leaves
+// nothing on the left and there is no second element equal to the pivot to gather with it.
+case_lone_minimum : Array I64;
+case_lone_minimum = Array::from_map(31, |i| if i == 15 { 0 } else { i + 1 });
 
 case_random_0 : Array I64;
 case_random_0 = [346024429990377868, 245837103567876924, 3986578685004063178, 5805251788053972515, 1417556943926455241, 4845257856352310757, 4555558403327679905, 6902334504764357194, 7801513043249390307, 2949176974545635264, 7059641390372345377, 371268058065748070, 8967105408815998004, 9163707814261219422, 2811786699486158499, 695673114012699563, 7255892546594831251, 5215594425099043756, 7226627387424968494, 3500029154995518523, 73487224687842005, 7622782041994750406, 7620487533683671790, 1948626672868633357, 1716207585624274003, 843382608923212683, 7837714819837928558, 1816086736525301267, 7478592686167993236, 6684621575062124516, 8318977752397448659, 2280779419367863148, 4402166591858481893, 2886005979871858608, 8027251237215604302, 3089788399256501254, 4403629729898519952, 3444861609702597660, 3758594455717637291, 1536276683748698726, 444415575857841953, 1406828580750436238, 309946757719811718, 6469342214276629762, 2907307731075134021, 5390516200439052137, 3467070330460410020, 3131752283003023729, 3701002979343777983, 8757902344019921678, 4468592631788431941, 1988686597499626951, 5098943993242450129, 4563975020031135772, 4558740263275937216, 4136401328193265140, 6221776947277384664, 4218852228729107398, 4693164472015346829, 5926127793208466556, 5980928593819338181, 6358786111999711620, 2510847986880873405, 725552905354199960, 4318305169843662077, 9077270978751322765, 4446216120070684060, 7241182603221941674, 6883294465805350312, 182580429536400213, 6665826731289181158, 4103546543575562161, 2944031420480557330, 7145879548678655791, 684327070863398544, 3141373052076162633, 3376664309606534565, 7748477690866038352, 661097284839573365, 8320186250457439799, 4180671567925332991, 5741176287546058753, 5150928445261445863, 1395554178624938115, 4121093914965231516, 5528476498398069969, 510090779688131913, 1440969282495380048, 1957784169139475426, 7135569354928947870, 3472797929026694304, 2103602003886010196, 7282131254377995390, 8200716464868676255, 940910225290816613, 7646683707254883186, 4235747749241714850, 5832841740041503381, 8357660228540455387, 6794172312654611817];
