@@ -491,7 +491,7 @@ mod tests {
     /// that answers nothing and says nothing.
     #[test]
     fn test_hover_with_trait_alias_reachable_along_two_paths() {
-        let mut ctx = LspTestCtx::setup("trait_alias_two_paths", &["main.fix"]);
+        let mut ctx = LspTestCtx::setup("hover_trait_alias_two_paths", &["main.fix"]);
 
         // Source layout (1-based for human reading):
         //
