@@ -2646,6 +2646,8 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
+/// slots past `dst`'s length.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -2793,10 +2795,10 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
     }
 }
 
-// Appends the whole of `src` to the end of `dst`, moving the elements when `src` is uniquely owned
-// and copying them (with a retain each) otherwise, with no capacity check. The caller must ensure
-// `dst.size + src.size <= dst.capacity`; violating it causes undefined behavior.
-// Type: Array a -> Array a -> Array a
+/// Appends the whole of `src` to the end of `dst`, moving the elements when `src` is uniquely owned
+/// and copying them (with a retain each) otherwise, with no capacity check. The caller must ensure
+/// `dst.size + src.size <= dst.capacity`; violating it causes undefined behavior.
+/// Type: Array a -> Array a -> Array a
 pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const SRC_NAME: &str = "src";
     const DST_NAME: &str = "dst";
@@ -2828,15 +2830,17 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
+/// past `dst`'s length from a borrowed `src`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayCopyCapacityBoundsUnchecked {
     dst_name: FullName,
     src_name: FullName,
     begin_name: FullName,
     end_name: FullName,
-    // When true, clone `dst` first if it is shared, so the copied elements land in a uniquely owned
-    // array. Set false only where `dst` is statically known to be unique. `src` is borrowed either
-    // way.
+    /// When true, clone `dst` first if it is shared, so the copied elements land in a uniquely
+    /// owned array. Set false only where `dst` is statically known to be unique. `src` is borrowed
+    /// either way.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -2859,7 +2863,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
             array_tail_destination(gc, dst, self.force_unique, assumed_state(self.assume_local));
 
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
-        // its reference, so there is nothing to release and no move to choose between.
+        // its reference for its caller.
         let src_buf = get_array_storage_buf(gc, &src);
         let src_read = unsafe {
             gc.builder()
@@ -2965,10 +2969,10 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
     }
 }
 
-// Copies `src[begin, end)` to the end of `dst`, retaining each element, with no capacity check and
-// no bounds check. `src` is borrowed. The caller must ensure `0 <= begin <= end <= src.size` and
-// `dst.size + (end - begin) <= dst.capacity`; violating either causes undefined behavior.
-// Type: Array a -> I64 -> I64 -> Array a -> Array a
+/// Copies `src[begin, end)` to the end of `dst`, retaining each element, with no capacity check and
+/// no bounds check. `src` is borrowed. The caller must ensure `0 <= begin <= end <= src.size` and
+/// `dst.size + (end - begin) <= dst.capacity`; violating either causes undefined behavior.
+/// Type: Array a -> I64 -> I64 -> Array a -> Array a
 pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const SRC_NAME: &str = "src";
     const BEGIN_NAME: &str = "begin";
