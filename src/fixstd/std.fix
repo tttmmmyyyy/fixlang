@@ -493,7 +493,7 @@ namespace Array {
     // - `start`: The starting index of the range to sort.
     // - `end`: The ending index of the range to sort.
     // - `arr`: An array of elements to be sorted.
-    // - `depth`: How many more times the range may be split before heap sort takes it.
+    // - `depth`: How many more uneven splits the range may take before heap sort takes it.
     _introsort_by_internal : ((a, a) -> Bool) -> I64 -> I64 -> U8 -> Array a -> Array a;
     _introsort_by_internal = |less_than, start, end, depth, arr| (
         if end - start <= 1 { arr };
