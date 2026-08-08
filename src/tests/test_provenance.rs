@@ -423,9 +423,12 @@ mod integration_tests {
             // A `reserve`, whose `_unsafe_set_capacity_bounds_unchecked` core folds its check and
             // reallocs the fresh array in place.
             "array_set_capacity[unique]",
-            // An `append`, whose `_unsafe_append_capacity_bounds_unchecked` core folds the check on
-            // the fresh destination it appends into.
-            "array_append_range[unique]",
+            // An `append`, whose `_unsafe_append_capacity_unchecked` core folds the check on the
+            // fresh destination it appends into.
+            "array_append[unique]",
+            // A `get_sub`, whose `_unsafe_copy_capacity_bounds_unchecked` core folds the check on
+            // the fresh array it copies the range into.
+            "array_copy_range[unique]",
             // A `_unsafe_grow_size` on the fresh array folds its check.
             "array_grow_size[unique]",
             // An `unsafe_set_bounds_unchecked` on the fresh array folds its check.
@@ -472,6 +475,37 @@ mod integration_tests {
             .and_then(|rest| rest.split(' ').next())
             .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
             .to_string()
+    }
+
+    /// Verifies that copying a range out of an array leaves the array provably unique. The copy
+    /// borrows the array it reads, so the caller keeps the reference it already held rather than
+    /// duplicating it; a duplicated reference would be a `Retain`, which is the analysis's only
+    /// demotion and lands on the absorbing `unknown`, and every write after the copy would then
+    /// re-check a value nothing had shared.
+    #[test]
+    fn test_unique_check_elim_after_copy() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_after_copy");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The copy writes into the array it just allocated for the result, so its own check goes.
+        assert!(
+            dump.contains("array_copy_range[unique]"),
+            "the copy into the freshly allocated result should drop its check:\n{}",
+            dump
+        );
+        // The array copied out of is the one the writes go into, and nothing shared it. Assert the
+        // writes are there as well as unchecked, so that the case cannot pass by having no write
+        // left in the dump at all.
+        assert!(
+            dump.contains("array_set[unique]"),
+            "the writes after the copy should be in the dump, with their checks dropped:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("array_set("),
+            "every write after the copy should drop its check:\n{}",
+            dump
+        );
     }
 
     /// Verifies that publishing a value to other threads yields a handle of unknown sharing: the

@@ -98,7 +98,7 @@ namespace Array {
         let n = if e > s { e - s } else { 0 };
         let res = Array::empty(n + additional_capacity);
         if n == 0 || len == 0 { res };
-        res._unsafe_append_capacity_bounds_unchecked(arr, s, e)
+        res._unsafe_copy_capacity_bounds_unchecked(arr, s, e)
     );
 
     // Gets an element of an array at the specified index.
@@ -311,7 +311,7 @@ namespace Array {
 
         // Append all of `second`. The primitive clones `first` if it is shared and moves the
         // elements of `second` when `second` is unique.
-        first._unsafe_append_capacity_bounds_unchecked(second, 0, second_len)
+        first._unsafe_append_capacity_unchecked(second)
     );
 
     // Finds the first index at which the element satisfies a condition.
@@ -634,10 +634,10 @@ namespace Array {
         let latter_pos = latter_begin;
         let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
             if former_pos == former_end { // former exhausted: drain the rest of latter in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, latter_pos, latter_end)
+                break $ buffer._unsafe_copy_capacity_bounds_unchecked(vec, latter_pos, latter_end)
             };
             if latter_pos == latter_end { // latter exhausted: drain the rest of former in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, former_pos, former_end)
+                break $ buffer._unsafe_copy_capacity_bounds_unchecked(vec, former_pos, former_end)
             };
             let former_elem = vec.@(former_pos);
             let latter_elem = vec.@(latter_pos);
