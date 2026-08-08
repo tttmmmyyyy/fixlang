@@ -25,7 +25,14 @@ use crate::{
     optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
-use std::{cell::RefCell, collections::VecDeque, mem, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    hash::{Hash, Hasher},
+    mem,
+    rc::Rc,
+    sync::Arc,
+};
 
 /*
 # Closure specialization
@@ -195,43 +202,86 @@ impl Slot {
 //
 // This is what a copy is keyed on, and what the type constructor of a capture list is named after,
 // so that a value of that type says what to call it with.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-struct Tree {
+//
+// The value is shared, and carries a digest of what it says. Two fields holding the same value hold
+// one copy of it, and comparing, hashing or naming a tree reads the digest instead of walking the
+// tree. A relay chain that narrows two capture fields per link would otherwise build, and repeatedly
+// walk, a structure that doubles per link while the program describing it grows by one function.
+#[derive(Clone, Debug)]
+struct Tree(Rc<TreeData>);
+
+#[derive(Debug)]
+struct TreeData {
     // The lambda decapturing lifted, which is what a call through this value reaches.
     lambda: FullName,
     // The capture fields whose own identity is known, by position, in ascending order.
     fields: Vec<(usize, Tree)>,
+    // What the two above say. Two trees are the same value exactly when their digests agree.
+    digest: [u8; 16],
 }
 
 impl Tree {
+    // The value of `lambda` with the given capture fields narrowed to the values they hold.
+    fn new(lambda: FullName, fields: Vec<(usize, Tree)>) -> Self {
+        // A field contributes its child's digest, which is of fixed width. That keeps the rendering
+        // linear in this tree's own fields, and it closes each child off, so that a value nested one
+        // level down reads differently from two values side by side.
+        let mut rendered = lambda.to_string();
+        for (field, tree) in &fields {
+            rendered += &format!("|{}:{}", field, tree.digest_hex());
+        }
+        let digest = md5::compute(rendered).0;
+        Tree(Rc::new(TreeData {
+            lambda,
+            fields,
+            digest,
+        }))
+    }
+
     // The value of a lambda whose capture fields are all still closures.
     fn leaf(lambda: FullName) -> Self {
-        Tree {
-            lambda,
-            fields: Vec::new(),
-        }
+        Tree::new(lambda, Vec::new())
+    }
+
+    // The lambda a call through this value reaches.
+    fn lambda(&self) -> &FullName {
+        &self.0.lambda
+    }
+
+    // The capture fields whose own identity is known, by position, in ascending order.
+    fn fields(&self) -> &[(usize, Tree)] {
+        &self.0.fields
     }
 
     // How the tree reads in a name, and so in the hash that name carries.
-    fn to_string(&self) -> String {
-        let mut text = self.lambda.to_string();
-        for (field, tree) in &self.fields {
-            text += &format!("|{}:{}", field, tree.to_string());
-        }
-        text
+    fn digest_hex(&self) -> String {
+        self.0.digest.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
     // The unit that receives a value of this tree: the lambda, with its known capture fields
     // substituted.
     fn unit(&self) -> UnitKey {
         UnitKey {
-            origin: self.lambda.clone(),
+            origin: self.0.lambda.clone(),
             subst: self
+                .0
                 .fields
                 .iter()
                 .map(|(field, tree)| (Slot::capture_field(*field), tree.clone()))
                 .collect(),
         }
+    }
+}
+
+impl PartialEq for Tree {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.digest == other.0.digest
+    }
+}
+impl Eq for Tree {}
+impl Hash for Tree {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.digest.hash(state);
     }
 }
 
@@ -264,7 +314,7 @@ impl UnitKey {
         *name += CLOSURE_SPEC_SUFFIX;
         let mut hash_data = String::new();
         for (slot, tree) in &self.subst {
-            hash_data += &format!(",{},{}", slot.to_string(), tree.to_string());
+            hash_data += &format!(",{},{}", slot.to_string(), tree.digest_hex());
         }
         *name += &format!("_{:x}", md5::compute(hash_data));
         full_name
@@ -281,10 +331,7 @@ impl UnitKey {
         if fields.is_empty() {
             return None;
         }
-        Some(Tree {
-            lambda: self.origin.clone(),
-            fields,
-        })
+        Some(Tree::new(self.origin.clone(), fields))
     }
 }
 
@@ -302,7 +349,7 @@ type Pinned = Map<(FullName, Slot, FullName), Tree>;
 // recursion handing the next round a closure built from the one it was given, and following it would
 // ask for one copy per round.
 fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool {
-    let key = (func.clone(), slot, tree.lambda.clone());
+    let key = (func.clone(), slot, tree.lambda().clone());
     match pinned.get(&key) {
         Some(committed) => committed == tree,
         None => {
@@ -332,6 +379,9 @@ struct LiftedLambdas {
     // The value a capture list of each type constructor this pass minted carries. This is what makes
     // the type of a capture list say what to call it with.
     trees: Map<FullName, Tree>,
+    // The capture struct each value is, which is asked for once per wrap and once per call through a
+    // narrowed capture list. Deriving it walks the whole tree, so it is derived once per value.
+    caps: Map<Tree, CaptureStruct>,
     // The type constructors minted so far, which the caller registers into the program's type
     // environment.
     new_tycons: Map<TyCon, TyConInfo>,
@@ -373,16 +423,20 @@ impl LiftedLambdas {
     // to the capture struct of what it holds. The type constructor is named after the unit that
     // receives it, so the type and the tree determine each other.
     fn capture_struct_of(&mut self, tree: &Tree) -> CaptureStruct {
-        let base = &self.lambdas[&tree.lambda].cap;
-        if tree.fields.is_empty() {
+        if let Some(cap) = self.caps.get(tree) {
+            return cap.clone();
+        }
+        let base = &self.lambdas[tree.lambda()].cap;
+        if tree.fields().is_empty() {
             return base.clone();
         }
         let mut fields = base.fields().to_vec();
-        for (field, inner) in &tree.fields {
-            fields[*field].1 = self.capture_struct_of(inner).ty;
+        for (field, inner) in tree.fields().to_vec() {
+            fields[field].1 = self.capture_struct_of(&inner).ty;
         }
         let cap = CaptureStruct::new(CAP_LIST_PREFIX, &tree.unit().name(), &fields);
         self.record_capture_list(&cap, tree);
+        self.caps.insert(tree.clone(), cap.clone());
         cap
     }
 
@@ -729,7 +783,7 @@ fn reaches_a_direct_call(
                 lifted.tree_of_capture_list(&tycon).is_some_and(|tree| {
                     is_specializable(
                         specializable_funcs,
-                        &tree.lambda,
+                        tree.lambda(),
                         Slot::capture_field(position),
                     )
                 })
@@ -956,7 +1010,7 @@ impl ClosureSpecializationVisitor {
     // For a tree whose fields are all still closures this is the lifted lambda itself; otherwise it
     // is the copy that receives the narrowed capture list.
     fn lambda_func_of(&self, tree: &Tree) -> Arc<ExprNode> {
-        let base = self.lifted.borrow().func_ty(&tree.lambda);
+        let base = self.lifted.borrow().func_ty(tree.lambda());
         let (mut doms, codom) = base.collect_app_src(usize::MAX);
         doms[0] = self.cap_of(tree).ty;
         let mut ty = codom;
@@ -1016,7 +1070,7 @@ impl ClosureSpecializationVisitor {
         }
         let name = func.get_var().name.clone();
         if let Some(known) = self.known_value(&args[0]) {
-            if name != known.tree.lambda && name != known.tree.unit().name() {
+            if name != *known.tree.lambda() && name != known.tree.unit().name() {
                 return None;
             }
             return Some(Known {
@@ -1049,7 +1103,7 @@ impl ClosureSpecializationVisitor {
         };
         // The table is held through the loop below, which takes `self` mutably.
         let specializable_funcs = self.specializable_funcs.clone();
-        let Some(info) = specializable_funcs.get(&known.tree.lambda) else {
+        let Some(info) = specializable_funcs.get(known.tree.lambda()) else {
             return known;
         };
         let mut narrowed_fields = Vec::new();
@@ -1062,20 +1116,17 @@ impl ClosureSpecializationVisitor {
                 Some(known_field) => known_field,
                 None => continue,
             };
-            if !commit(pinned, &known.tree.lambda, slot, &known_field.tree) {
+            if !commit(pinned, known.tree.lambda(), slot, &known_field.tree) {
                 continue;
             }
             *value = known_field.cap_list;
             narrowed_fields.push((position, known_field.tree));
         }
-        if narrowed_fields == known.tree.fields {
+        if narrowed_fields == known.tree.fields() {
             return known;
         }
 
-        let tree = Tree {
-            lambda: known.tree.lambda,
-            fields: narrowed_fields,
-        };
+        let tree = Tree::new(known.tree.lambda().clone(), narrowed_fields);
         self.request_lambda_unit(&tree, pinned);
         let cap = self.cap_of(&tree);
         let cap_list = expr_make_struct(
@@ -1097,7 +1148,7 @@ impl ClosureSpecializationVisitor {
         if unit.subst.is_empty() {
             return;
         }
-        let org_func_ty = self.lifted.borrow().func_ty(&tree.lambda);
+        let org_func_ty = self.lifted.borrow().func_ty(tree.lambda());
         self.required_specializations.push(SpecializationRequest {
             unit,
             org_func_ty,
@@ -1127,29 +1178,47 @@ impl ClosureSpecializationVisitor {
     // Returns the value the lambda is, and the expression that generates its capture list.
     fn decapture_lambda(
         &mut self,
-        mut lam: Arc<ExprNode>,
+        lam: Arc<ExprNode>,
         state: &mut VisitState,
     ) -> (Tree, Arc<ExprNode>) {
         // Get the capture list.
         let cap_names = lam.lambda_cap_names();
 
-        // If the lambda captures a decaptured lambda, visit `lam` in advance to ensure that the decaptured lambda in `lam` is processed.
-        for cap_name in &cap_names {
-            if self.local_decap_lambdas.contains_key(cap_name) {
-                let lam_visit_res = self.visit_expr(&lam, state);
-                lam = self.revisit_if_changed(lam_visit_res, state).expr;
-                break;
-            }
-        }
-
-        // For each captured name, get its type.
+        // For each captured name, get the type the field holding it is declared at. A name holding a
+        // bare capture list is captured at the closure type it wraps back into, so that every
+        // capture field is declared at a type narrowing leaves alone — which is what makes wrapping
+        // available at a field whose value will not be narrowed. The construction below reads such a
+        // name at the closure type, and the wrapping rule repairs it when the rewritten expression is
+        // visited again.
         let cap_names_types = cap_names
             .iter()
             .map(|name| {
-                let ty = state.scope.get_local(&name.name).unwrap().unwrap();
-                (name.clone(), ty.clone())
+                let ty = match self.local_decap_lambdas.get(name).cloned() {
+                    Some(known) if known.is_bare => self
+                        .lambda_func_of(&known.tree)
+                        .type_
+                        .as_ref()
+                        .unwrap()
+                        .get_lambda_dst(),
+                    _ => state.scope.get_local(&name.name).unwrap().unwrap().clone(),
+                };
+                (name.clone(), ty)
             })
             .collect::<Vec<_>>();
+
+        // A capture field declared at a capture list type has no wrap to fall back on, so a value
+        // stored in one has to follow wherever that value's type goes. Keeping every field at a type
+        // narrowing leaves alone is what lets each field be decided on its own.
+        for (name, ty) in &cap_names_types {
+            assert!(
+                self.lifted.borrow().tree_of_capture_list_type(ty).is_none(),
+                "the capture field `{}` of a lambda lifted in {} is declared at the capture list \
+                 type {}",
+                name.to_string(),
+                self.current_symbol.to_string(),
+                ty.to_string()
+            );
+        }
 
         // Name the lifted function first: the capture list is named after it, so that a value of
         // that capture list says which function consumes it.
@@ -1402,7 +1471,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         if func.is_var() && !args.is_empty() {
             if let Some(known) = self.known_value(&args[0]) {
                 let called = func.get_var().name.clone();
-                if called == known.tree.lambda || called == known.tree.unit().name() {
+                if called == *known.tree.lambda() || called == known.tree.unit().name() {
                     let mut pinned = self.pinned.clone();
                     let known = self.narrow(known, &mut pinned);
                     self.pinned = pinned;

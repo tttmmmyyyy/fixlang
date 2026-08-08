@@ -27,9 +27,12 @@ mod integration_tests {
     const RELAYED_CLOSURE_OUTPUT: &str = "30";
 
     /// How many copies `changing_closure` asks for today, counted over the names below. The chain of
-    /// requests is what bounds this: each function, way in and lambda gets committed to one value,
-    /// so `grow` and `tock` reach three copies each and so do the lambdas they carry.
-    const CHANGING_CLOSURE_COPIES: usize = 12;
+    /// requests is what bounds this: each function, way in and lambda gets committed to one value.
+    const CHANGING_CLOSURE_COPIES: usize = 13;
+
+    /// What `derived_closure` prints: `relay` sums `terminal(shifted, i)` over `0..n`, adds
+    /// `shifted(n)`, and recurses on `n - 1`, with `shifted = |x| x * 3 + 1` and `n = 4`.
+    const DERIVED_CLOSURE_OUTPUT: &str = "89";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -182,6 +185,16 @@ mod integration_tests {
             specialized.len(),
             specialized
         );
+    }
+
+    /// A closure a function builds from the one it was given becomes a capture list, and the lambda
+    /// that carries it into `fold` holds it in a capture field. Specializing the function narrows
+    /// the inner capture list, so what that field holds changes type — and a field that cannot
+    /// follow has no closure to fall back on, since it is not one.
+    #[test]
+    pub fn test_a_capture_field_follows_the_value_it_holds() {
+        let (_temp_dir, project_dir) = setup_test_env("derived_closure");
+        build_run_and_read_rc_ir(&project_dir, "max", DERIVED_CLOSURE_OUTPUT);
     }
 
     /// The chain has to pass through a capture list to reach the end. `relay` never calls the closure
