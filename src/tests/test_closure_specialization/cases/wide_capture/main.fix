@@ -1,0 +1,24 @@
+module Main;
+
+// One capture list carrying four closures whose identity is known, with each round wrapping a
+// different one of them.
+
+terminal : (I64 -> I64) -> I64 -> I64;
+terminal = |op, n| ( if n <= 0 { 0 }; op(n) + terminal(op, n - 1) );
+
+relay : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+relay = |p0, p1, p2, p3, n| (
+    if n <= 0 { 0 };
+    Iterator::range(0, n).fold(0, |i, acc| (
+        acc + terminal(p0, i) + terminal(p1, i) + terminal(p2, i) + terminal(p3, i)
+    )) % 1000
+    + ( relay(|x| (p0(x) + 1) % 97, p1, p2, p3, n - 1)
+      + relay(p0, |x| (p1(x) + 2) % 97, p2, p3, n - 1)
+      + relay(p0, p1, |x| (p2(x) + 3) % 97, p3, n - 1)
+      + relay(p0, p1, p2, |x| (p3(x) + 4) % 97, n - 1) ) % 1000
+);
+
+main : IO () = (
+    let k = 3;
+    println(relay(|x| (x*k+0)%97, |x| (x*k+1)%97, |x| (x*k+2)%97, |x| (x*k+3)%97, 2).to_string)
+);
