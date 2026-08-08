@@ -36,8 +36,8 @@ through_union = |k, n| (
 );
 
 main : IO () = (
-    let a = through_struct(3, 4);
-    let b = through_array(3, 4);
-    let c = through_union(3, 4);
-    println((a + b + c).to_string)
+    let via_struct = through_struct(3, 4);
+    let via_array = through_array(3, 4);
+    let via_union = through_union(3, 4);
+    println((via_struct + via_array + via_union).to_string)
 );

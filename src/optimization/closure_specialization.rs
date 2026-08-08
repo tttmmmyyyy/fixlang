@@ -1574,7 +1574,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         let mut pinned = self.pinned.clone();
         let mut known_args = Vec::new();
         let mut subst = Map::default();
-        let mut specialized = Set::default();
+        let mut specialized_args = Set::default();
         for (i, arg) in args.iter().enumerate() {
             let known = match self.known_value(arg) {
                 Some(known) => known,
@@ -1586,7 +1586,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 && commit(&mut pinned, &func_name, slot, &known.tree)
             {
                 subst.insert(slot, known.tree.clone());
-                specialized.insert(i);
+                specialized_args.insert(i);
             }
             known_args.push((i, known));
         }
@@ -1596,13 +1596,13 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // shape it would have had were none of their identities known.
         let unit = UnitKey::new(func_name, subst);
         if !self.budget.borrow_mut().admit(&unit) {
-            specialized.clear();
+            specialized_args.clear();
         }
 
         let mut new_args = args.clone();
         let mut changed = false;
         for (i, known) in known_args {
-            if specialized.contains(&i) {
+            if specialized_args.contains(&i) {
                 new_args[i] = known.cap_list;
                 changed = true;
                 continue;
@@ -1614,7 +1614,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
                 changed = true;
             }
         }
-        if specialized.is_empty() {
+        if specialized_args.is_empty() {
             if !changed {
                 return StartVisitResult::VisitChildren;
             }

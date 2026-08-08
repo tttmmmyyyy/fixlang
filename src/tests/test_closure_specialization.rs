@@ -131,26 +131,27 @@ mod integration_tests {
             .collect()
     }
 
-    /// The copies of `func` that `dump` names, deduplicated.
+    /// The copies that `dump` names of the function whose name begins with `func_prefix`,
+    /// deduplicated.
     ///
     /// A copy is named by appending `#closure_spec_<hash>` to the name of what it copies, and the
     /// stages after this pass append segments of their own, so what identifies one copy is the name
-    /// up to the end of that segment. A lambda lifted out of `func` is copied under a name carrying
-    /// a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps copies of the
-    /// lambdas out of the count of copies of the function itself.
-    fn copies_of(dump: &str, func: &str) -> Vec<String> {
+    /// up to the end of that segment. A lambda lifted out of the function is copied under a name
+    /// carrying a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps
+    /// copies of the lambdas out of the count of copies of the function itself.
+    fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         let spec_segment = "#closure_spec_";
         let mut copies = functions_named_with(dump, spec_segment)
             .into_iter()
-            .filter(|name| name.starts_with(func))
+            .filter(|name| name.starts_with(func_prefix))
             .filter_map(|name| {
-                let spec = name.find(spec_segment).unwrap();
-                if name[..spec].contains("#closure_lam") {
+                let spec_start = name.find(spec_segment).unwrap();
+                if name[..spec_start].contains("#closure_lam") {
                     return None;
                 }
-                let end = name[spec + 1..]
+                let end = name[spec_start + 1..]
                     .find('#')
-                    .map_or(name.len(), |offset| spec + 1 + offset);
+                    .map_or(name.len(), |offset| spec_start + 1 + offset);
                 Some(name[..end].to_string())
             })
             .collect::<Vec<_>>();

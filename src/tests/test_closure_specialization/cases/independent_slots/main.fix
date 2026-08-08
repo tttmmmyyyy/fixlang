@@ -4,7 +4,7 @@ module Main;
 // Each recursive call wraps a different one and passes the rest through, so the four decide
 // independently and their combinations are what the copies are keyed on.
 //
-// `c` keeps the four lambdas main hands over from folding into constants.
+// `k` keeps the four lambdas main hands over from folding into constants.
 
 g : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
 g = |p0, p1, p2, p3, n| (
@@ -16,6 +16,6 @@ g = |p0, p1, p2, p3, n| (
 );
 
 main : IO () = (
-    let c = 3;
-    println(g(|x| (x * c + 0) % 97, |x| (x * c + 1) % 97, |x| (x * c + 2) % 97, |x| (x * c + 3) % 97, 2).to_string)
+    let k = 3;
+    println(g(|x| (x * k + 0) % 97, |x| (x * k + 1) % 97, |x| (x * k + 2) % 97, |x| (x * k + 3) % 97, 2).to_string)
 );
