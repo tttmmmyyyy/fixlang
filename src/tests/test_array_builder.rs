@@ -117,11 +117,12 @@ main : IO () = (
     // Growing a boxed array by repeated `push_back` reallocates several times.
     eval Iterator::range(0, 50).fold(Array::empty(1), |i, arr| arr.push_back([i]));
 
-    // `sort_stable_by` merges runs into a working buffer, draining an exhausted run in one bulk
-    // copy; on boxed elements the copies and the copy-back must not leak or double-free.
+    // `sort_stable_by` merges between the array and a working copy of it, writing each element of
+    // one over an element of the other; on boxed elements every element the writes drop must be
+    // released exactly once.
     assert_eq(|_|"sort_stable boxed",
-        [[3], [1], [2], [1], [4], [0]].sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
-        [[0], [1], [1], [2], [3], [4]]);;
+        Iterator::range(0, 40).map(|i| [(i * 7) % 40]).to_array.sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
 
     // `get_sub` on a boxed array copies the range out; the source stays intact.
     let g = [[1], [2], [3], [4]];
@@ -338,9 +339,9 @@ main : IO () = (
         test_source(source, Configuration::develop_mode());
     }
 
-    /// Verifies `sort_stable_by` on boxed elements, whose merge drains an exhausted run by copying
-    /// out of the array it is sorting and then writes the buffer back into that same array: the
-    /// order is stable, and an array a second holder keeps is left as it was.
+    /// Verifies `sort_stable_by` on boxed elements, over inputs long enough that the sort merges
+    /// them instead of sorting them by insertion: the order is stable, and an array a second holder
+    /// keeps is left as it was.
     #[test]
     pub fn test_sort_stable_by_with_a_second_holder() {
         let source = r#"
@@ -356,20 +357,20 @@ tags = |arr| arr.map(|x| x.@tag.@(0));
 
 main : IO () = (
     // Sorting an array the caller keeps: the sort must not write into the caller's array.
-    let arr = Array::from_map(12, |i| Rec { key : (i * 7) % 12, tag : [i] });
+    let arr = Array::from_map(40, |i| Rec { key : (i * 7) % 40, tag : [i] });
     let sorted = arr.sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"sorted keys", keys(sorted), Array::from_map(12, |i| i));;
-    assert_eq(|_|"source keys intact", keys(arr), Array::from_map(12, |i| (i * 7) % 12));;
+    assert_eq(|_|"sorted keys", keys(sorted), Array::from_map(40, |i| i));;
+    assert_eq(|_|"source keys intact", keys(arr), Array::from_map(40, |i| (i * 7) % 40));;
 
     // Sorting a uniquely owned array, which is where the writes go in place.
-    let sorted = Array::from_map(9, |i| Rec { key : (i * 5) % 9, tag : [i] })
+    let sorted = Array::from_map(33, |i| Rec { key : (i * 5) % 33, tag : [i] })
         .sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(9, |i| i));;
+    assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(33, |i| i));;
 
     // Equal keys keep their input order, which is what the drain copies have to preserve.
-    let dup = Array::from_map(8, |i| Rec { key : i % 2, tag : [i] });
+    let dup = Array::from_map(24, |i| Rec { key : i % 2, tag : [i] });
     let sorted = dup.sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"stable tags", tags(sorted), [0, 2, 4, 6, 1, 3, 5, 7]);;
+    assert_eq(|_|"stable tags", tags(sorted), Array::from_map(24, |i| if i < 12 { i * 2 } else { (i - 12) * 2 + 1 }));;
     pure()
 );
 "#;

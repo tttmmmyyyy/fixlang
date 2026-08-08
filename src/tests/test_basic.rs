@@ -2844,6 +2844,70 @@ main = (
 }
 
 #[test]
+pub fn test_sort_stable_over_sizes_and_orders() {
+    // `sort_stable_by` merges between two arrays whose roles swap at every level of the recursion,
+    // so the sorted elements land in the array the caller reads only if every size splits the way
+    // the merge expects. Sweep the sizes across the threshold at which the recursion stops
+    // splitting and on through several levels of merging, over inputs that are randomly ordered,
+    // already sorted, reversed, and all of one key.
+    let source = r#"
+module Main;
+
+// Park-Miller minimal-standard LCG.
+_next : I64 -> I64 = |x| (16807 * x) % 2147483647;
+
+// `n` keys drawn from a small range, each paired with its position, so that equal keys are
+// distinguishable and stability is observable.
+gen : I64 -> Array (I64, I64);
+gen = |n| (
+    Iterator::range(0, n).fold((Array::empty(n), 1), |i, (arr, x)|
+        let x = _next(x);
+        (arr.push_back((x % 7, i)), x)
+    ).@0
+);
+
+// Whether the keys are non-descending and equal keys kept the order they came in.
+is_sorted_stably : Array (I64, I64) -> Bool;
+is_sorted_stably = |arr| (
+    Iterator::range(1, arr.@size).fold(true, |i, acc|
+        let (former_key, former_pos) = arr.@(i - 1);
+        let (latter_key, latter_pos) = arr.@(i);
+        acc && (former_key < latter_key || (former_key == latter_key && former_pos < latter_pos))
+    )
+);
+
+by_key : ((I64, I64), (I64, I64)) -> Bool;
+by_key = |((lhs, _), (rhs, _))| lhs < rhs;
+
+check : String -> I64 -> Array (I64, I64) -> IO ();
+check = |order, n, arr| (
+    let name = order + " input of size " + n.to_string;
+    let sorted = arr.sort_stable_by(by_key);
+    assert(|_| name + ": sorted and stable", sorted.is_sorted_stably);;
+    // Every position appears exactly once, so no element was dropped or duplicated.
+    assert_eq(|_| name + ": every element kept", sorted.to_iter.map(|(_, pos)| pos).sum, n * (n - 1) / 2);;
+    assert_eq(|_| name + ": size kept", sorted.@size, n);;
+    pure()
+);
+
+main : IO ();
+main = (
+    let sizes = Iterator::range(0, 40).to_array.push_back(100).push_back(257).push_back(1000);
+    sizes.to_iter.fold_m((), |n, _|
+        let arr = gen(n);
+        check("random", n, arr);;
+        check("sorted", n, arr.sort_stable_by(by_key));;
+        check("reversed", n, arr.sort_stable_by(|((lhs, _), (rhs, _))| rhs < lhs));;
+        check("one-key", n, arr.map(|(_, pos)| (0, pos)));;
+        pure()
+    );;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_sort() {
     let source = r#"
 module Main;

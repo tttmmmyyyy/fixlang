@@ -606,57 +606,94 @@ namespace Array {
     // * `array` - The array to be sorted.
     sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_stable_by = |less_than, arr| (
-        let buffer = Array::empty(arr.@size);
-        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, 0, arr.@size, less_than);
-        arr
+        let n = arr.@size;
+        if n <= _merge_sort_insertion_limit { arr._insertion_sort_by_ranged(less_than, 0, n) };
+        // The merge sort reads from one array and writes into the other, so it needs a second array
+        // holding the same elements.
+        let buffer = arr.get_sub(0, n);
+        _merge_sort_by_ranged(less_than, 0, n, buffer, arr).@0
     );
 
-    // Sorts elements in a range of an array by "less than" comparator.
-    // 
-    // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _mergesort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _mergesort_range_using_buffer = |buffer, begin, end, less_than, arr| (
-        // Merge sorting.
-        let len = end - begin;
-        if len <= 1 { (arr, buffer) };
-        // Divide into intervals.
-        let former_len = len / 2;
-        let former_begin = begin;
-        let former_end = begin + former_len;
-        let latter_len = len - former_len;
-        let latter_begin = former_end;
-        let latter_end = end;
-        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, former_begin, former_end, less_than);
-        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
-        // Merge former and latter to buffer.
-        let buffer = buffer.truncate(0);
-        let former_pos = former_begin;
-        let latter_pos = latter_begin;
-        let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
-            if former_pos == former_end { // former exhausted: drain the rest of latter in one copy.
-                break $ buffer._unsafe_copy_capacity_bounds_unchecked(arr, latter_pos, latter_end)
-            };
-            if latter_pos == latter_end { // latter exhausted: drain the rest of former in one copy.
-                break $ buffer._unsafe_copy_capacity_bounds_unchecked(arr, former_pos, former_end)
-            };
-            let former_elem = arr.@(former_pos);
-            let latter_elem = arr.@(latter_pos);
-            if !less_than((latter_elem, former_elem)) { // Essential for stability.
-                // Copy elements in former to buffer.
-                let buffer = buffer.push_back(former_elem);
-                continue $ (former_pos + 1, latter_pos, buffer)
-            } else {
-                // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(latter_elem);
-                continue $ (former_pos, latter_pos + 1, buffer)
-            }
-        ));
-        // Copy buffer to arr.
-        loop((0, arr), |(idx, arr)|(
-            if idx == len { break $ (arr, buffer) };
-            let arr = arr.set(begin + idx, buffer.@(idx));
-            continue $ (idx + 1, arr)
-        ))
+    // The length below which `_merge_sort_by_ranged` sorts a range by insertion sort instead of
+    // splitting it further.
+    _merge_sort_insertion_limit : I64;
+    _merge_sort_insertion_limit = 12;
+
+    // Sorts `from[begin, end)` into `into[begin, end)` by "less than" comparator.
+    //
+    // The two arrays hold equal elements over `[begin, end)` on entry. On exit `into` holds them in
+    // non-descending order and `from` holds them in an unspecified order. The pair is returned as
+    // `(into, from)`, so that the sorted array is the first component.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `begin`: The start index of the range to sort.
+    // - `end`: The end index of the range to sort.
+    // - `from`: The array to read the elements from.
+    // - `into`: The array to write the sorted elements into.
+    _merge_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a -> (Array a, Array a);
+    _merge_sort_by_ranged = |less_than, begin, end, from, into| (
+        if end - begin <= _merge_sort_insertion_limit {
+            (into._insertion_sort_by_ranged(less_than, begin, end), from)
+        };
+        let mid = begin + (end - begin) / 2;
+        // Sorting each half the other way round puts both sorted runs in `from`, ready to be merged.
+        let (from, into) = _merge_sort_by_ranged(less_than, begin, mid, into, from);
+        let (from, into) = _merge_sort_by_ranged(less_than, mid, end, into, from);
+        if !less_than((from.@(mid), from.@(mid - 1))) {
+            // The two runs are already in order where they stand, so the merge would only copy them.
+            (into._unsafe_copy_range_bounds_unchecked(from, begin, end, begin), from)
+        };
+        (into._merge_runs(less_than, begin, mid, mid, end, begin, from), from)
+    );
+
+    // Merges the sorted runs `from[former_pos, mid)` and `from[latter_pos, end)` into `into`,
+    // writing from `dst_pos` on.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `former_pos`: The index of the next element of the run that starts the range.
+    // - `mid`: The end index of that run.
+    // - `latter_pos`: The index of the next element of the run that ends the range.
+    // - `end`: The end index of that run.
+    // - `dst_pos`: The index in `into` at which the next element lands.
+    // - `from`: The array holding the two runs.
+    // - `into`: The array to write the merged elements into.
+    _merge_runs : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a -> Array a;
+    _merge_runs = |less_than, former_pos, mid, latter_pos, end, dst_pos, from, into| (
+        if former_pos == mid { into._unsafe_copy_range_bounds_unchecked(from, latter_pos, end, dst_pos) };
+        if latter_pos == end { into._unsafe_copy_range_bounds_unchecked(from, former_pos, mid, dst_pos) };
+        let former_elem = from.@(former_pos);
+        let latter_elem = from.@(latter_pos);
+        if !less_than((latter_elem, former_elem)) { // Essential for stability.
+            into.set(dst_pos, former_elem)
+                ._merge_runs(less_than, former_pos + 1, mid, latter_pos, end, dst_pos + 1, from)
+        } else {
+            into.set(dst_pos, latter_elem)
+                ._merge_runs(less_than, former_pos, mid, latter_pos + 1, end, dst_pos + 1, from)
+        }
+    );
+
+    // Overwrites `dst[dst_begin, dst_begin + end - begin)` with `src[begin, end)`, omitting the
+    // bounds checks.
+    //
+    // The caller must ensure `[begin, end)` is in range of `src` and
+    // `[dst_begin, dst_begin + end - begin)` is in range of `dst`; an out-of-range index causes
+    // undefined behavior.
+    //
+    // # Parameters
+    // - `src`: The array to read the elements from.
+    // - `begin`: The start index of the range in `src`.
+    // - `end`: The end index of the range in `src`.
+    // - `dst_begin`: The index in `dst` at which the first element lands.
+    // - `dst`: The array to write the elements into.
+    _unsafe_copy_range_bounds_unchecked : Array a -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _unsafe_copy_range_bounds_unchecked = |src, begin, end, dst_begin, dst| (
+        if begin == end { dst };
+        dst.unsafe_set_bounds_unchecked(dst_begin, src._unsafe_get_bounds_unchecked(begin))
+           ._unsafe_copy_range_bounds_unchecked(src, begin + 1, end, dst_begin + 1)
     );
 
     // Converts an array to an iterator.
