@@ -1686,7 +1686,8 @@ impl Program {
         //
         // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
         let ret_ty = ret.type_.as_ref().unwrap();
-        if let Some((fv_name, _)) = ret_ty.free_vars().into_iter().next() {
+        if !ret_ty.is_ground() {
+            let (fv_name, _) = ret_ty.free_vars().into_iter().next().unwrap();
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(

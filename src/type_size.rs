@@ -75,36 +75,43 @@ pub fn no_size_reason(
             .get_lambda_srcs()
             .into_iter()
             .chain([ty.get_lambda_dst()])
-            .find_map(|signature_ty| reach(&signature_ty, &signature_ty, type_env, walk));
+            .find_map(|signature_ty| {
+                no_size_reachable(&signature_ty, &signature_ty, type_env, walk, &mut vec![])
+            });
     }
-    reach(ty, ty, type_env, walk)
+    no_size_reachable(ty, ty, type_env, walk, &mut vec![])
 }
 
 /// Walk the types the program needs an object for, deciding at each one whether its size settles.
 ///
 /// `root` is the type the walk started from, which the report names where the type at fault is one
 /// the walk built on the way: printing that one would print a term as deep as the bound.
-fn reach(
+fn no_size_reachable(
     root: &Arc<TypeNode>,
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
     walk: &mut LayoutWalk,
+    asked_for: &mut Vec<Arc<TypeNode>>,
 ) -> Option<String> {
     if !walk.reached.insert(ty.clone()) {
         return None;
     }
     if ty.depth() > MAX_TYPE_DEPTH {
-        return Some(depth_message(root));
+        return Some(depth_message(root, asked_for));
     }
-    if let Some(msg) = size_of(root, ty, type_env, &mut vec![], &mut Set::default(), walk) {
+    if let Some(msg) = no_size_in_place(root, ty, type_env, &mut vec![], &mut Set::default(), walk)
+    {
         return Some(msg);
     }
     // The descent is as deep as the types the program holds, which is deeper than a thread's stack.
-    grow_stack(|| {
+    asked_for.push(ty.clone());
+    let reason = grow_stack(|| {
         held_types(ty, type_env)
             .iter()
-            .find_map(|held_ty| reach(root, held_ty, type_env, walk))
-    })
+            .find_map(|held_ty| no_size_reachable(root, held_ty, type_env, walk, asked_for))
+    });
+    asked_for.pop();
+    reason
 }
 
 /// Whether the size of `ty` settles, descending into the fields laid out in place.
@@ -112,7 +119,7 @@ fn reach(
 /// `path` is the types the descent is inside, outermost first, and `on_path` is the same types as a
 /// set. A type met twice on one path is a value that contains itself. `root` names the report where
 /// the descent reaches a type too deep to be one the program wrote.
-fn size_of(
+fn no_size_in_place(
     root: &Arc<TypeNode>,
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -133,7 +140,7 @@ fn size_of(
         return None;
     }
     if ty.depth() > MAX_TYPE_DEPTH {
-        return Some(depth_message(root));
+        return Some(depth_message(root, path));
     }
     let in_place_tys: Vec<Arc<TypeNode>> = held_types(ty, type_env)
         .into_iter()
@@ -145,7 +152,7 @@ fn size_of(
     let reason = grow_stack(|| {
         in_place_tys
             .iter()
-            .find_map(|held_ty| size_of(root, held_ty, type_env, path, on_path, walk))
+            .find_map(|held_ty| no_size_in_place(root, held_ty, type_env, path, on_path, walk))
     });
     on_path.remove(ty);
     path.pop();
@@ -156,16 +163,33 @@ fn size_of(
     reason
 }
 
-/// The report for a type whose layout reaches types deeper than the bound, which names the type the
-/// walk started from: the type at fault is one the walk built on the way, and printing it would
-/// print a term as deep as the bound.
-fn depth_message(root: &Arc<TypeNode>) -> String {
+/// The report for a type whose layout reaches types deeper than the bound.
+///
+/// It names the type the walk started from and the first few types that one asked for, which is
+/// where a type reached from itself at a larger argument shows itself. The type actually at fault
+/// is one the walk built on the way, and printing that one would print a term as deep as the bound.
+fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
+    /// How many steps of the way down to show. Enough for one turn of a growing family to be
+    /// visible, and short enough that the types printed are ones the reader can read.
+    const SHOWN_STEPS: usize = 3;
+
+    let shown = asked_for
+        .iter()
+        .take(SHOWN_STEPS)
+        .map(|ty| format!("`{}`", ty.to_string()))
+        .collect::<Vec<_>>();
+    let way_down = if shown.is_empty() {
+        String::new()
+    } else {
+        format!(" ({} -> ...)", shown.join(" -> "))
+    };
     format!(
-        "`{}` has no size: laying it out reaches types nested more than {} deep, so it needs \
+        "`{}` has no size: laying it out asks for types nested more than {} deep{}, so it needs \
          endlessly many. A type reached from itself at a larger type argument does this; give the \
          recursive occurrence the same type arguments.",
         root.to_string(),
-        MAX_TYPE_DEPTH
+        MAX_TYPE_DEPTH,
+        way_down
     )
 }
 

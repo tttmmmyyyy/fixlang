@@ -119,8 +119,8 @@ error: `Main::A` has no size: its unboxed fields reach `Main::A` itself (`Main::
 しても終わらないので、引数を育てるのをやめることを言う。
 
 ```
-error: `Main::P Std::I64` has no size: laying it out reaches types nested more than 500 deep, so it
-needs endlessly many. A type reached from itself at a larger type argument does this; give the
+error: `Main::P Std::I64` has no size: laying it out asks for types nested more than 500 deep (`Main::P Std::I64` ->
+`Main::P (Std::I64, Std::I64)` -> ...), so it needs endlessly many. A type reached from itself at a larger type argument does this; give the
 recursive occurrence the same type arguments.
 ```
 

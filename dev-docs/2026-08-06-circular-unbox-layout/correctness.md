@@ -85,7 +85,7 @@ settled : Set<Type>     その場の降下が報告なしで終わった型。�
 reach(root, τ):
     if τ ∈ reached:                       return None
     reached ← reached ∪ {τ}
-    if depth(τ) > D:                      return 深さの報告(root)
+    if depth(τ) > D:                      return 深さの報告(root, 経路)
     if size_of(root, τ, [], ∅) = Some(m): return Some(m)
     for υ ∈ held(τ): if reach(root, υ) = Some(m): return Some(m)
     return None
@@ -93,7 +93,7 @@ reach(root, τ):
 size_of(root, τ, path, on_path):
     if τ ∈ on_path:  return 循環の報告(τ, path)
     if τ ∈ settled:  return None
-    if depth(τ) > D: return 深さの報告(root)
+    if depth(τ) > D: return 深さの報告(root, 経路)
     push τ を path と on_path に
     r ← 最初に報告を返す size_of(root, υ, …)    for υ ∈ held(τ) のうち υ が unbox
     pop

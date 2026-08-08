@@ -7811,7 +7811,7 @@ pub fn test_growing_type_with_two_arguments() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "laying it out reaches types nested more than",
+        "laying it out asks for types nested more than",
     );
 }
 
@@ -7999,7 +7999,7 @@ pub fn test_growing_type_behind_a_pointer() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "`Main::P Std::I64` has no size: laying it out reaches types nested more than",
+        "`Main::P Std::I64` has no size: laying it out asks for types nested more than",
     );
 }
 
@@ -8041,7 +8041,7 @@ pub fn test_growing_unboxed_type_has_no_size() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "laying it out reaches types nested more than",
+        "laying it out asks for types nested more than",
     );
 }
 
@@ -8165,6 +8165,138 @@ pub fn test_multi_parameter_lambda_over_a_type_with_no_size() {
         &source,
         Configuration::develop_mode(),
         "`Main::Bad` has no size",
+    );
+}
+
+/// A container recursing through its own type argument — the shape an adjacency list takes — has a
+/// layout: `Array Node` leads to `Array (I64, Node)`, and that leads back to a `Node` already laid
+/// out. Reading the second as growth rejects a program that compiles.
+#[test]
+pub fn test_container_recursing_through_its_type_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Node = box struct { edges : Array (I64, Node) };
+
+        first_weight : Array Node -> I64;
+        first_weight = |nodes| nodes.@(0).@edges.@(0).@0;
+
+        main : IO ();
+        main = (
+            let leaf = Node { edges : [] };
+            let nodes = [Node { edges : [(7, leaf)] }];
+            assert_eq(|_|"", first_weight(nodes), 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type argument that no field holds asks for no layout, so a type that passes a larger version of
+/// itself through such an argument stays finite.
+#[test]
+pub fn test_growth_through_an_unheld_type_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Phantom a = unbox struct { x : I64 };
+        type C a = unbox struct { p : Phantom (C (a, a)), n : I64 };
+
+        depth : C I64 -> I64;
+        depth = |c| c.@n;
+
+        main : IO ();
+        main = (
+            let c = C { p : Phantom { x : 1 }, n : 42 };
+            assert_eq(|_|"", depth(c), 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type constructor reaching itself at a larger argument through a higher-kinded parameter grows
+/// like any other: the application `f b` names no constructor until `f` is given one.
+#[test]
+pub fn test_growth_through_a_higher_kinded_parameter_has_no_size() {
+    let source = r##"
+        module Main;
+        type [f : *->*] B f b = unbox struct { x : f b, n : I64 };
+        type A a = unbox struct { x : B A (a, a), n : I64 };
+
+        depth : A I64 -> I64;
+        depth = |a| a.@n;
+
+        main : IO ();
+        main = println(depth(undefined("no value")).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "laying it out asks for types nested more than",
+    );
+}
+
+/// Types are counted one at a time, not as a whole: a program keeps compiling however many types it
+/// gains, as long as each of them is shallow.
+#[test]
+pub fn test_a_long_chain_of_shallow_types_compiles() {
+    const CHAIN: usize = 300;
+    let mut source = "module Main;\n".to_string();
+    for i in 0..CHAIN {
+        let held = if i + 1 == CHAIN {
+            "I64".to_string()
+        } else {
+            format!("T{}", i + 1)
+        };
+        source += &format!("type T{} = unbox struct {{ x : {}, n : I64 }};\n", i, held);
+    }
+    source += r##"
+        depth : T0 -> I64;
+        depth = |t| t.@n;
+
+        main : IO ();
+        main = (
+            let argc = *IO::get_arg_count;
+            let n = if argc < 0 { depth(undefined("no value")) } else { 7 };
+            assert_eq(|_|"", n, 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The bound is on how deeply one type nests, so a type just under it is laid out and one just over
+/// it is reported.
+#[test]
+pub fn test_a_type_at_the_depth_bound_compiles_and_one_past_it_does_not() {
+    fn source_nesting(levels: usize) -> String {
+        let mut ty = "I64".to_string();
+        for _ in 0..levels {
+            ty = format!("W ({})", ty);
+        }
+        format!(
+            r##"
+            module Main;
+            type W a = unbox struct {{ x : a, n : I64 }};
+
+            depth : {} -> I64;
+            depth = |w| w.@n;
+
+            main : IO ();
+            main = (
+                let argc = *IO::get_arg_count;
+                let n = if argc < 0 {{ depth(undefined("no value")) }} else {{ 7 }};
+                assert_eq(|_|"", n, 7);;
+                pure()
+            );
+            "##,
+            ty
+        )
+    }
+    test_source(&source_nesting(498), Configuration::develop_mode());
+    test_source_fail(
+        &source_nesting(505),
+        Configuration::develop_mode(),
+        "laying it out asks for types nested more than",
     );
 }
 
