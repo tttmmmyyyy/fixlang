@@ -124,6 +124,16 @@ main : IO () = (
         Iterator::range(0, 40).map(|i| [(i * 7) % 40]).to_array.sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
         Iterator::range(0, 40).map(|i| [i]).to_array);;
 
+    // An input already in order takes, at every merge, the copy of a whole range instead of the
+    // element-by-element comparison. Keeping a second holder makes the first of those copies clone
+    // the array it writes into.
+    let ordered = Iterator::range(0, 40).map(|i| [i]).to_array;
+    assert_eq(|_|"sort_stable boxed already ordered",
+        ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
+    assert_eq(|_|"the ordered source is intact", ordered,
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
+
     // `get_sub` on a boxed array copies the range out; the source stays intact.
     let g = [[1], [2], [3], [4]];
     assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
@@ -375,6 +385,68 @@ main : IO () = (
 );
 "#;
         test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies `sort_stable_by` over a global array of boxed elements, whose storage and elements
+    /// are the one thing outside the local state that a locality annotation can meet: the merge
+    /// moves elements it must not treat as local, and the global itself is left as it was.
+    #[test]
+    pub fn test_sort_stable_of_a_global() {
+        let source = r#"
+module Main;
+
+// Long enough that sorting merges the range rather than sorting it by insertion.
+scrambled : Array (Array I64);
+scrambled = Array::from_map(20, |i| [(i * 7) % 20]);
+
+// Already in order, so that every merge copies its two runs instead of comparing them.
+ordered : Array (Array I64);
+ordered = Array::from_map(20, |i| [i]);
+
+heads : Array (Array I64) -> Array I64;
+heads = |arr| arr.map(|x| x.@(0));
+
+main : IO () = (
+    assert_eq(|_|"a global sorted", heads(scrambled.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"an ordered global sorted", heads(ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"the globals are intact", (heads(scrambled), heads(ordered)),
+        (Array::from_map(20, |i| (i * 7) % 20), Array::from_map(20, |i| i)));;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies `sort_stable_by` in a build where every object is out of the local state, so that
+    /// the merge's reads and writes go through the multi-threaded reference counting.
+    #[test]
+    pub fn test_sort_stable_when_threaded() {
+        let source = r#"
+module Main;
+
+heads : Array (Array I64) -> Array I64;
+heads = |arr| arr.map(|x| x.@(0));
+
+main : IO () = (
+    // Long enough that sorting merges the range rather than sorting it by insertion.
+    let scrambled = Array::from_map(20, |i| [(i * 7) % 20]).mark_threaded;
+    assert_eq(|_|"a threaded array sorted", heads(scrambled.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"the threaded array is intact", heads(scrambled),
+        Array::from_map(20, |i| (i * 7) % 20));;
+
+    // Already in order, so that every merge copies its two runs instead of comparing them.
+    let ordered = Array::from_map(20, |i| [i]).mark_threaded;
+    assert_eq(|_|"an ordered threaded array sorted", heads(ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    pure()
+);
+"#;
+        let mut config = Configuration::develop_mode();
+        config.set_threaded();
+        test_source(source, config);
     }
 
     /// Verifies the values `_unsafe_append_capacity_unchecked` and
