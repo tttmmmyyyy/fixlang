@@ -5,9 +5,9 @@ import Std::{
     Iterator::{fold, range, sum}, Monad::pure
 };
 
-// Sort benchmark on an input that is already in order, where every split falls where the recursion
-// wants it. Guards the side the recursion budget is spent on: a budget large enough to keep the
-// randomly ordered case out of heap sort is only safe while an ordered input stays cheap.
+// Sort benchmark on an input that is already in order, where the middle element is the median of
+// every sub-range and every split falls in the middle. Guards the cost of the partition itself,
+// with the recursion as shallow as it goes.
 
 gen_input : I64 -> Array I64 = |n| (
     Iterator::range(0, n).fold(Array::empty(n), |i, arr| arr.push_back(i))

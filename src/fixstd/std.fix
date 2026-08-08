@@ -466,11 +466,8 @@ namespace Array {
     // - `arr`: An array of elements to be sorted.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, arr| (
-        // Twice the number of times the size halves down to nothing. Quicksort on a randomly
-        // ordered array recurses deeper than the logarithm of the size, so a budget of the
-        // logarithm alone hands most of the work to heap sort.
         let depth = loop((arr.@size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
-        arr._introsort_by_internal(less_than, 0, arr.@size, 2_U8 * depth)
+        arr._introsort_by_internal(less_than, 0, arr.@size, depth)
     );
 
     // Reverse an array.
@@ -523,8 +520,15 @@ namespace Array {
             arr._introsort_by_internal(less_than, equal_end, end, depth - 1_U8)
         };
 
-        let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth - 1_U8);
-        let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
+        // A split near the middle costs nothing from the budget: what the budget is against is the
+        // pivot that keeps landing near an end, and a run of those is what heap sort is here for.
+        // Spending it on every split instead hands heap sort most of a randomly ordered array,
+        // whose splits are uneven by a constant rather than by a growing one.
+        let smaller = min(pivot_i - start, end - pivot_i - 1);
+        let depth = if smaller < (end - start) / 8 { depth - 1_U8 } else { depth };
+
+        let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth);
+        let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth);
 
         arr
     );
