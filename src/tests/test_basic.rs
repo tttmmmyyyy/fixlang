@@ -4644,6 +4644,8 @@ pub fn test_trait_alias_circular_aliasing() {
     );
 }
 
+/// An alias that stands for itself is reported as circular, and the report points at the
+/// definition that names it.
 #[test]
 pub fn test_trait_alias_circular_aliasing_on_itself() {
     let source = r#"
@@ -4670,10 +4672,10 @@ pub fn test_trait_alias_circular_aliasing_on_itself() {
     );
 }
 
+/// A trait that two aliases both stand for is reached twice while an alias naming both is
+/// expanded, and expanding it has to end at the traits themselves either way.
 #[test]
 pub fn test_trait_alias_reachable_along_two_paths() {
-    // A trait that two aliases both stand for is reached twice while an alias naming both is
-    // expanded, and expanding it has to end at the traits themselves either way.
     let source = r#"
         module Main;
 
