@@ -117,16 +117,27 @@ main : IO () = (
     // Growing a boxed array by repeated `push_back` reallocates several times.
     eval Iterator::range(0, 50).fold(Array::empty(1), |i, arr| arr.push_back([i]));
 
-    // `sort_stable_by` merges runs into a working buffer, draining an exhausted run in one bulk
-    // copy; on boxed elements the copies and the copy-back must not leak or double-free.
+    // `sort_stable_by` merges between the array and a working copy of it, writing each element of
+    // one over an element of the other; on boxed elements every element the writes drop must be
+    // released exactly once.
     assert_eq(|_|"sort_stable boxed",
-        [[3], [1], [2], [1], [4], [0]].sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
-        [[0], [1], [1], [2], [3], [4]]);;
+        Iterator::range(0, 40).map(|i| [(i * 7) % 40]).to_array.sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
+
+    // An input already in order takes, at every merge, the copy of a whole range instead of the
+    // element-by-element comparison. Keeping a second holder makes the first of those copies clone
+    // the array it writes into.
+    let ordered = Iterator::range(0, 40).map(|i| [i]).to_array;
+    assert_eq(|_|"sort_stable boxed already ordered",
+        ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0)),
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
+    assert_eq(|_|"the ordered source is intact", ordered,
+        Iterator::range(0, 40).map(|i| [i]).to_array);;
 
     // `get_sub` on a boxed array copies the range out; the source stays intact.
-    let g = [[1], [2], [3], [4]];
-    assert_eq(|_|"get_sub boxed", g.get_sub(1, 3), [[2], [3]]);;
-    assert_eq(|_|"get_sub boxed src intact", g, [[1], [2], [3], [4]]);;
+    let source = [[1], [2], [3], [4]];
+    assert_eq(|_|"get_sub boxed", source.get_sub(1, 3), [[2], [3]]);;
+    assert_eq(|_|"get_sub boxed src intact", source, [[1], [2], [3], [4]]);;
 
     // Writing into a boxed array after copying a range out of it. The copy retains each element it
     // takes and borrows the array itself, so the writes reach that array in place while the copy
@@ -138,10 +149,10 @@ main : IO () = (
     assert_eq(|_|"copy intact after write", head, [[1], [2]]);;
 
     // `append` of a shared empty boxed source takes the copy path over an empty range.
-    let e = ([] : Array (Array I64));
-    let d = [[1], [2]];
-    assert_eq(|_|"append shared empty src result", d.append(e), [[1], [2]]);;
-    assert_eq(|_|"append shared empty src intact", e, []);;
+    let empty_src = ([] : Array (Array I64));
+    let empty_src_dst = [[1], [2]];
+    assert_eq(|_|"append shared empty src result", empty_src_dst.append(empty_src), [[1], [2]]);;
+    assert_eq(|_|"append shared empty src intact", empty_src, []);;
 
     // `unsafe_set_bounds_unchecked` on a boxed array releases the overwritten element and, on a
     // shared array, clones so the original keeps its element.
@@ -245,22 +256,22 @@ module Main;
 
 main : IO () = (
     // A multi-threaded array: its storage and every element are out of the local state.
-    let t = [[1], [2], [3], [4]].mark_threaded;
+    let threaded = [[1], [2], [3], [4]].mark_threaded;
 
     // The borrowing copy retains each element it takes out of a threaded source.
-    assert_eq(|_|"get_sub of a threaded array", t.get_sub(1, 3), [[2], [3]]);;
+    assert_eq(|_|"get_sub of a threaded array", threaded.get_sub(1, 3), [[2], [3]]);;
 
     // The owning append over a threaded source that is uniquely held (the move path).
     assert_eq(|_|"append a uniquely held threaded source",
-        [[0]].append(t.get_sub(0, 2).mark_threaded), [[0], [1], [2]]);;
+        [[0]].append(threaded.get_sub(0, 2).mark_threaded), [[0], [1], [2]]);;
 
     // The owning append over a threaded source that is shared (the retain-per-element copy path).
-    assert_eq(|_|"append a shared threaded source", [[0]].append(t), [[0], [1], [2], [3], [4]]);;
+    assert_eq(|_|"append a shared threaded source", [[0]].append(threaded), [[0], [1], [2], [3], [4]]);;
 
     // A threaded destination, which the primitive clones before writing.
-    assert_eq(|_|"append onto a threaded destination", t.append([[5]]),
+    assert_eq(|_|"append onto a threaded destination", threaded.append([[5]]),
         [[1], [2], [3], [4], [5]]);;
-    assert_eq(|_|"the threaded array is intact", t, [[1], [2], [3], [4]]);;
+    assert_eq(|_|"the threaded array is intact", threaded, [[1], [2], [3], [4]]);;
     pure()
 );
 "#;
@@ -292,9 +303,9 @@ from_global = |_| (
 
 // A copy out of a struct field, then a write through the field.
 from_field : Holder -> (Array (Array I64), Array (Array I64));
-from_field = |hd| (
-    let head = hd.@xs.get_sub(0, 2);
-    (hd.mod_xs(|xs| xs.set(0, [88])).@xs, head)
+from_field = |holder| (
+    let head = holder.@xs.get_sub(0, 2);
+    (holder.mod_xs(|xs| xs.set(0, [88])).@xs, head)
 );
 
 // A copy out of an unboxed-union payload carried through a loop, then writes.
@@ -338,9 +349,9 @@ main : IO () = (
         test_source(source, Configuration::develop_mode());
     }
 
-    /// Verifies `sort_stable_by` on boxed elements, whose merge drains an exhausted run by copying
-    /// out of the array it is sorting and then writes the buffer back into that same array: the
-    /// order is stable, and an array a second holder keeps is left as it was.
+    /// Verifies `sort_stable_by` on boxed elements, over inputs long enough that the sort merges
+    /// them instead of sorting them by insertion: the order is stable, and an array a second holder
+    /// keeps is left as it was.
     #[test]
     pub fn test_sort_stable_by_with_a_second_holder() {
         let source = r#"
@@ -356,24 +367,86 @@ tags = |arr| arr.map(|x| x.@tag.@(0));
 
 main : IO () = (
     // Sorting an array the caller keeps: the sort must not write into the caller's array.
-    let arr = Array::from_map(12, |i| Rec { key : (i * 7) % 12, tag : [i] });
+    let arr = Array::from_map(40, |i| Rec { key : (i * 7) % 40, tag : [i] });
     let sorted = arr.sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"sorted keys", keys(sorted), Array::from_map(12, |i| i));;
-    assert_eq(|_|"source keys intact", keys(arr), Array::from_map(12, |i| (i * 7) % 12));;
+    assert_eq(|_|"sorted keys", keys(sorted), Array::from_map(40, |i| i));;
+    assert_eq(|_|"source keys intact", keys(arr), Array::from_map(40, |i| (i * 7) % 40));;
 
     // Sorting a uniquely owned array, which is where the writes go in place.
-    let sorted = Array::from_map(9, |i| Rec { key : (i * 5) % 9, tag : [i] })
+    let sorted = Array::from_map(33, |i| Rec { key : (i * 5) % 33, tag : [i] })
         .sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(9, |i| i));;
+    assert_eq(|_|"unique sorted keys", keys(sorted), Array::from_map(33, |i| i));;
 
-    // Equal keys keep their input order, which is what the drain copies have to preserve.
-    let dup = Array::from_map(8, |i| Rec { key : i % 2, tag : [i] });
+    // Equal keys keep their input order, which is what the merge's tie-breaking has to preserve.
+    let dup = Array::from_map(24, |i| Rec { key : i % 2, tag : [i] });
     let sorted = dup.sort_stable_by(|(a, b)| a.@key < b.@key);
-    assert_eq(|_|"stable tags", tags(sorted), [0, 2, 4, 6, 1, 3, 5, 7]);;
+    assert_eq(|_|"stable tags", tags(sorted), Array::from_map(24, |i| if i < 12 { i * 2 } else { (i - 12) * 2 + 1 }));;
     pure()
 );
 "#;
         test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies `sort_stable_by` over a global array of boxed elements, whose storage and elements
+    /// are the one thing outside the local state that a locality annotation can meet: the merge
+    /// moves elements it must not treat as local, and the global itself is left as it was.
+    #[test]
+    pub fn test_sort_stable_of_a_global() {
+        let source = r#"
+module Main;
+
+// Long enough that sorting merges the range rather than sorting it by insertion.
+scrambled : Array (Array I64);
+scrambled = Array::from_map(20, |i| [(i * 7) % 20]);
+
+// Already in order, so that every merge copies its two runs instead of comparing them.
+ordered : Array (Array I64);
+ordered = Array::from_map(20, |i| [i]);
+
+heads : Array (Array I64) -> Array I64;
+heads = |arr| arr.map(|x| x.@(0));
+
+main : IO () = (
+    assert_eq(|_|"a global sorted", heads(scrambled.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"an ordered global sorted", heads(ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"the globals are intact", (heads(scrambled), heads(ordered)),
+        (Array::from_map(20, |i| (i * 7) % 20), Array::from_map(20, |i| i)));;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies `sort_stable_by` in a build where every object is out of the local state, so that
+    /// the merge's reads and writes go through the multi-threaded reference counting.
+    #[test]
+    pub fn test_sort_stable_when_threaded() {
+        let source = r#"
+module Main;
+
+heads : Array (Array I64) -> Array I64;
+heads = |arr| arr.map(|x| x.@(0));
+
+main : IO () = (
+    // Long enough that sorting merges the range rather than sorting it by insertion.
+    let scrambled = Array::from_map(20, |i| [(i * 7) % 20]).mark_threaded;
+    assert_eq(|_|"a threaded array sorted", heads(scrambled.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    assert_eq(|_|"the threaded array is intact", heads(scrambled),
+        Array::from_map(20, |i| (i * 7) % 20));;
+
+    // Already in order, so that every merge copies its two runs instead of comparing them.
+    let ordered = Array::from_map(20, |i| [i]).mark_threaded;
+    assert_eq(|_|"an ordered threaded array sorted", heads(ordered.sort_stable_by(|(a, b)| a.@(0) < b.@(0))),
+        Array::from_map(20, |i| i));;
+    pure()
+);
+"#;
+        let mut config = Configuration::develop_mode();
+        config.set_threaded();
+        test_source(source, config);
     }
 
     /// Verifies the values `_unsafe_append_capacity_unchecked` and

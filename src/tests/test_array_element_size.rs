@@ -102,7 +102,9 @@ main = (
     assert_eq(|_|"reserve", ids(Array::from_map(3, mk).reserve(64).push_back(mk(3))), [0, 1, 2, 3]);;
     assert_eq(|_|"resize", ids(Array::from_map(2, mk).resize(4, mk(8))), [0, 1, 8, 8]);;
     assert_eq(|_|"sort", ids(Array::from_map(5, |i| mk((i * 2) % 5)).sort_by(|(x, y)| x.@a < y.@a)), [0, 1, 2, 3, 4]);;
-    assert_eq(|_|"sort_stable", ids(Array::from_map(5, |i| mk((i * 3) % 5)).sort_stable_by(|(x, y)| x.@a < y.@a)), [0, 1, 2, 3, 4]);;
+    // Long enough that the stable sort merges the range rather than sorting it by insertion, so
+    // that the merge's element-by-element writes land on this element size too.
+    assert_eq(|_|"sort_stable", ids(Array::from_map(20, |i| mk((i * 3) % 20)).sort_stable_by(|(x, y)| x.@a < y.@a)), Array::from_map(20, |i| i));;
     assert_eq(|_|"reverse", ids(Array::from_map(4, mk).reverse), [3, 2, 1, 0]);;
     assert_eq(|_|"to_iter", ids(Array::from_map(4, mk).to_iter.to_array), [0, 1, 2, 3]);;
 

@@ -14,6 +14,33 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 6e3c9d0534027c05d806c3a2e42eb8e4c397d7fa
+
+`Array::sort_stable` merges between the array and a copy of it, the two exchanging roles at every
+level of the recursion, instead of filling one working buffer and copying it back over the array
+(#222). A range of 12 elements or fewer is sorted by insertion; a merge whose two runs are already
+in order copies them instead of comparing them; and the merge and the range copies are
+tail-recursive functions rather than `Std::loop` bodies.
+
+**Every case of the corpus holds: the largest move is 0.0002%, and `sort` reports the same
+64,037,014 instructions as the row below.** No case sorts stably, which is why two join here:
+`sort_stable` sorts a pseudo-random 100,000-element `Array I64` at 35,516,421 instructions, and
+`sort_stable_ordered` sorts one already in order at 10,090,283, that being the only case reaching
+the copy the ordered-run check takes. The `startup` case says 113,633 of each was spent before
+`main`.
+
+Off the corpus, on 1,000,000 elements with `perf stat -e instructions:u` and the generator
+subtracted: pseudo-random 2,263,395,952 -> **373,925,715** (-83.5%), already ordered 1,571,133,487
+-> 90,713,298 (-94.2%), reversed 1,579,854,830 -> 252,954,574 (-84.0%), 16 distinct values
+2,229,446,252 -> 367,524,544 (-83.5%), and boxed elements at 200,000 elements 680,478,640 ->
+242,621,975 (-64.3%). Sorting stably now costs **0.56 times** what `Array::sort` costs on the same
+input.
+
+Halving the moves accounts for a factor of 2.2 of it; the rest is the price of one move. Written as
+a `Std::loop` body the merge loop is a closure LLVM leaves out of line, and every element pays a
+call that spills six callee-saved registers: the same changes measure 1,450,225,596 with the loop
+and 426,179,761 without it. That is the cliff of #221, which this row steps off rather than removes.
+
 ## b2c580cd758ba315d530f61c278540fb9e401d36
 
 The primitive that copies a range of one array onto the end of another was split into an owning one

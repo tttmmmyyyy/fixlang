@@ -2647,9 +2647,14 @@ pub fn test89() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies every sorting routine of the standard library over one corpus of inputs: the empty
+/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays.
+/// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
+/// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
+/// Each runs over an unboxed and a boxed element type, and the stable one is also checked to leave
+/// equal elements in the order they came in.
 #[test]
 pub fn test_sort_by() {
-    // Test "sort_by" and related functions.
     let source = r#"
 module Main;
 
@@ -2825,6 +2830,8 @@ case_random_9 = [4811598823819225076, 945484849661270666, 3974642354777520028, 4
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_by` returns the order in a new array and leaves the array it was given as it
+/// was, over an array the caller goes on holding.
 #[test]
 pub fn test_sort_by_immutability() {
     let source = r#"
@@ -2843,6 +2850,73 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_stable_by` returns the sorted elements in the array the caller reads, over
+/// every size across the threshold at which the recursion stops splitting and on through several
+/// levels of merging, and over inputs that are randomly ordered, already sorted, reversed, and all
+/// of one key. The merge swaps the roles of two arrays at every level, so a size that splits in a
+/// way the merge does not expect leaves the result in the other array.
+#[test]
+pub fn test_sort_stable_over_sizes_and_orders() {
+    let source = r#"
+module Main;
+
+// Park-Miller minimal-standard LCG.
+_next : I64 -> I64 = |x| (16807 * x) % 2147483647;
+
+// `n` keys drawn from a small range, each paired with its position, so that equal keys are
+// distinguishable and stability is observable.
+gen : I64 -> Array (I64, I64);
+gen = |n| (
+    Iterator::range(0, n).fold((Array::empty(n), 1), |i, (arr, x)|
+        let x = _next(x);
+        (arr.push_back((x % 7, i)), x)
+    ).@0
+);
+
+// Whether the keys are non-descending and equal keys kept the order they came in.
+is_sorted_stably : Array (I64, I64) -> Bool;
+is_sorted_stably = |arr| (
+    Iterator::range(1, arr.@size).fold(true, |i, acc|
+        let (former_key, former_pos) = arr.@(i - 1);
+        let (latter_key, latter_pos) = arr.@(i);
+        acc && (former_key < latter_key || (former_key == latter_key && former_pos < latter_pos))
+    )
+);
+
+by_key : ((I64, I64), (I64, I64)) -> Bool;
+by_key = |((lhs, _), (rhs, _))| lhs < rhs;
+
+check : String -> I64 -> Array (I64, I64) -> IO ();
+check = |input_kind, n, arr| (
+    let name = input_kind + " input of size " + n.to_string;
+    let sorted = arr.sort_stable_by(by_key);
+    assert(|_| name + ": sorted and stable", sorted.is_sorted_stably);;
+    // Every position appears exactly once, so no element was dropped or duplicated.
+    assert_eq(|_| name + ": every element kept", sorted.to_iter.map(|(_, pos)| pos).sum, n * (n - 1) / 2);;
+    assert_eq(|_| name + ": size kept", sorted.@size, n);;
+    pure()
+);
+
+main : IO ();
+main = (
+    let sizes = Iterator::range(0, 40).to_array.push_back(100).push_back(257).push_back(1000);
+    sizes.to_iter.fold_m((), |n, _|
+        let arr = gen(n);
+        check("random", n, arr);;
+        check("sorted", n, arr.sort_stable_by(by_key));;
+        check("reversed", n, arr.sort_stable_by(|((lhs, _), (rhs, _))| rhs < lhs));;
+        check("one-key", n, arr.map(|(_, pos)| (0, pos)));;
+        pure()
+    );;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies `sort` and `sort_stable`, which take their order from the `LessThan` trait rather than
+/// from a comparator the caller passes: the result is non-descending, elements the trait calls equal
+/// keep the order they came in, and the array the caller goes on holding is left as it was.
 #[test]
 pub fn test_sort() {
     let source = r#"
@@ -2864,15 +2938,16 @@ impl Pair : Eq {
 
 main : IO ();
 main = (
-    let x = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
-    let y = x.sort;
-    assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
-    assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+    let input = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
+    let sorted = input.sort;
+    assert_eq(|_|"", sorted, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
+    assert_eq(|_|"", input, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
 
-    let x = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")];
-    let y = x.sort_stable;
-    assert_eq(|_|"", y, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b")]);;
-    assert_eq(|_|"", x, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")]);;
+    // Long enough that the stable sort merges the range rather than sorting it by insertion.
+    let input = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")];
+    let sorted = input.sort_stable;
+    assert_eq(|_|"", sorted, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b"), make(6, "m"), make(6, "o"), make(7, "l"), make(7, "n")]);;
+    assert_eq(|_|"", input, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")]);;
 
     pure()
 );
