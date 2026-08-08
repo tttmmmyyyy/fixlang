@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::mem::replace;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::vec;
 
@@ -580,6 +580,15 @@ impl Program {
             }
         }
         None
+    }
+
+    /// The module defined by the source file at `path`, compared by
+    /// absolute path.
+    pub fn module_of_file(&self, path: &Path) -> Option<&ModuleInfo> {
+        let path = to_absolute_path(path).ok()?;
+        self.modules
+            .iter()
+            .find(|mi| to_absolute_path(&mi.source.input.file_path).ok().as_ref() == Some(&path))
     }
 
     // Get the names of entry pointes / exported functions.

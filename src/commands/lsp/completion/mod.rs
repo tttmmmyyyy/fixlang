@@ -1,22 +1,26 @@
 // LSP completion feature handlers.
 
+mod import;
 mod index;
 mod repair;
 mod score;
+mod symbols;
 
+use self::import::{import_completion_items, import_context_at};
 use self::index::CompletionIndex;
 use self::repair::repair_for_completion;
 use self::score::{
     assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text, namespace_match,
     sort_text_for, PredMemo, Tier,
 };
+use self::symbols::{build_completion_item, type_symbols, value_symbols, CompletionSymbol};
 use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
 use super::util::{
     document_from_endnode, get_line_string_from_position, is_cursor_in_comment,
     parameters_of_global_value, position_to_bytes,
 };
-use crate::ast::expr::{hole_full_name, Expr, ExprNode, Var};
+use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::types::TypeNode;
@@ -33,11 +37,49 @@ use crate::parse::parser::parse_source_file;
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
-    CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams, Uri,
+    CompletionItem, CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams,
+    Uri,
 };
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
+
+/// Payload stashed in `CompletionItem::data`, carried from
+/// `textDocument/completion` to `completionItem/resolve`.
+#[derive(Serialize, Deserialize)]
+struct ResolveData {
+    /// The entity the item completes; resolve reads its documentation
+    /// (and, for a global value, its parameter list) from it.
+    node: EndNode,
+    /// Where the completed name is being written; decides what resolve
+    /// adds beyond the documentation.
+    context: ResolveContext,
+}
+
+/// The syntactic position a completion item is offered in.
+#[derive(Serialize, Deserialize)]
+enum ResolveContext {
+    /// An expression: resolve may append the argument snippet to the
+    /// insert text and attach the auto-import edits, both of which
+    /// need the typed line and the cursor position.
+    Expression {
+        /// The text of the cursor's line up to the cursor.
+        typing_text: String,
+        /// The document and cursor position of the completion request.
+        position: TextDocumentPositionParams,
+    },
+    /// A component of an `import` statement: the completed name is
+    /// written bare, so the documentation is all resolve adds.
+    Import,
+}
+
+impl ResolveData {
+    /// The serialized payload to stash in `CompletionItem::data`.
+    fn to_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
 
 /// Handles the `textDocument/completion` LSP request: collects
 /// candidate symbols (globals, type constructors, traits, associated
@@ -60,6 +102,30 @@ pub(super) fn handle_completion(
     }
 
     let typing_text = get_typing_text(text_document_position, uri_to_content);
+
+    // When the cursor is inside an `import` statement, complete module
+    // names or the imported module's entities; the symbol candidates
+    // collected below are for expressions and are meaningless there.
+    if let Some(latest) = uri_to_content.get(&text_document_position.text_document.uri) {
+        let cursor_byte = position_to_bytes(&latest.content, text_document_position.position);
+        if let Some(import_ctx) = import_context_at(&latest.content, cursor_byte) {
+            // Without a diagnostics snapshot there is nothing to
+            // enumerate modules or entities from; reply empty and let
+            // the next diagnostics run restore the candidates.
+            let items = program
+                .map(|program| {
+                    import_completion_items(
+                        &import_ctx,
+                        program,
+                        &latest.path,
+                        text_document_position,
+                    )
+                })
+                .unwrap_or_default();
+            send_response(id, Ok::<_, ()>(items));
+            return;
+        }
+    }
 
     // In dot-completion contexts, run the receiver-type extraction
     // pipeline so we can rank candidates by how well their receiver
@@ -109,73 +175,19 @@ pub(super) fn handle_completion(
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
+    let expression_context = || ResolveContext::Expression {
+        typing_text: typing_text.clone(),
+        position: text_document_position.clone(),
+    };
 
     let mut items = vec![];
-
-    /// Builds a `CompletionItem` for one symbol, stashing the data
-    /// needed by `completionItem/resolve` (the `EndNode`, the typing
-    /// text, and the original cursor position) into the item's `data`
-    /// field.
-    fn create_item(
-        name: &FullName,
-        kind: CompletionItemKind,
-        detail: Option<String>,
-        end_node: &EndNode,
-        typing_text: &str,
-        text_document_position: &TextDocumentPositionParams,
-        deprecated: bool,
-    ) -> CompletionItem {
-        // Set both `deprecated` (LSP <3.15) and `tags` (LSP >=3.15) so older
-        // and newer clients both render the strikethrough.
-        let (deprecated_field, tags_field) = if deprecated {
-            (Some(true), Some(vec![CompletionItemTag::DEPRECATED]))
-        } else {
-            (None, None)
-        };
-        CompletionItem {
-            label: name.to_string(),
-            label_details: Some(CompletionItemLabelDetails {
-                detail: None,
-                description: None,
-            }),
-            kind: Some(kind),
-            detail,
-            documentation: None,
-            deprecated: deprecated_field,
-            preselect: None,
-            sort_text: None,
-            // Filter by the bare name, not the rendered label
-            // (which includes the namespace). The label keeps the full
-            // qualified path for display; the bare-name filter makes
-            // typing `mpq` match `GMP.Q::mpq` with a top-tier fuzzy
-            // score. Namespace-prefix typing is unaffected because the
-            // `:` trigger character re-fires completion, after which
-            // `is_in_namespace` server-side has already restricted the
-            // candidate set to the typed namespace's members.
-            filter_text: Some(name.name.clone()),
-            insert_text: Some(name.name.clone()),
-            insert_text_format: None,
-            insert_text_mode: None,
-            text_edit: None,
-            additional_text_edits: None,
-            command: None,
-            commit_characters: None,
-            data: Some(
-                serde_json::to_value((end_node, typing_text, text_document_position)).unwrap(),
-            ),
-            tags: tags_field,
-        }
-    }
 
     // Collect the visible global-value candidates once. This is also the
     // order they're sent in; the client re-sorts by `sortText`, so the
     // order only needs to be stable, not meaningful.
-    let global_candidates: Vec<(&FullName, _)> = active_program
-        .global_values
-        .iter()
-        .filter(|(full_name, _)| {
-            !is_internal_name(&full_name.to_string()) && is_in_namespace(full_name)
-        })
+    let global_candidates: Vec<CompletionSymbol> = value_symbols(active_program)
+        .into_iter()
+        .filter(|symbol| is_in_namespace(&symbol.name))
         .collect();
 
     // In a dot context the per-candidate tier needs a unify probe
@@ -185,7 +197,7 @@ pub(super) fn handle_completion(
     // tiers across worker threads. `None` outside dot contexts, where no
     // tier is assigned at all.
     let global_tiers: Option<Vec<Tier>> = dot_ranking.as_ref().map(|ranking| {
-        let names: Vec<&FullName> = global_candidates.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&FullName> = global_candidates.iter().map(|s| &s.name).collect();
         match &ranking.tc_template {
             Some(tc) => {
                 // One memo per request, shared across all candidates (and
@@ -201,30 +213,22 @@ pub(super) fn handle_completion(
         }
     });
 
-    for (idx, (full_name, gv)) in global_candidates.iter().copied().enumerate() {
-        let scheme = gv
-            .syn_scm
-            .clone()
-            .unwrap_or(gv.scm.clone())
-            .to_string_normalize();
-        let deprecated = gv.deprecation.is_some();
-        let mut item = create_item(
-            full_name,
-            CompletionItemKind::FUNCTION,
-            Some(scheme),
-            &EndNode::Expr(Var::create(full_name.clone()), None),
-            &typing_text,
-            &text_document_position,
-            deprecated,
-        );
-        if let Some(ranking) = &dot_ranking {
+    for (idx, symbol) in global_candidates.into_iter().enumerate() {
+        let sort_text = if let Some(ranking) = &dot_ranking {
             // `global_tiers` is `Some` whenever `dot_ranking` is, and is
             // indexed in lockstep with `global_candidates`.
             let tier = global_tiers.as_ref().unwrap()[idx];
-            let ns_match =
-                namespace_match(ranking.receiver_type.toplevel_tycon().as_deref(), full_name);
-            item.sort_text = Some(sort_text_for(tier, ns_match, deprecated, full_name));
-        } else if deprecated {
+            let ns_match = namespace_match(
+                ranking.receiver_type.toplevel_tycon().as_deref(),
+                &symbol.name,
+            );
+            Some(sort_text_for(
+                tier,
+                ns_match,
+                symbol.deprecated,
+                &symbol.name,
+            ))
+        } else if symbol.deprecated {
             // Non-dot context. Live items keep `sort_text = None` so the
             // client's default (label-based, possibly fuzzy) ordering
             // applies. Deprecated items get a `~` prefix on their sort
@@ -232,73 +236,27 @@ pub(super) fn handle_completion(
             // appear in a Fix identifier or namespace separator, so
             // deprecated items always sort below every live item whose
             // sort key is its label.
-            item.sort_text = Some(format!("~{}", full_name.to_string()));
-        }
+            Some(format!("~{}", symbol.name.to_string()))
+        } else {
+            None
+        };
+        let label = symbol.name.to_string();
+        let mut item = build_completion_item(symbol, label, expression_context());
+        item.sort_text = sort_text;
         items.push(item);
     }
-    for (tycon, _kind) in active_program.type_env.kinds() {
-        if is_internal_name(&tycon.name.to_string()) {
+    for symbol in type_symbols(active_program) {
+        if !is_in_namespace(&symbol.name) {
             continue;
         }
-        if !is_in_namespace(&tycon.name) {
-            continue;
-        }
-        let mut item = create_item(
-            &tycon.name,
-            CompletionItemKind::CLASS,
-            None,
-            &EndNode::Type(tycon.clone()),
-            &typing_text,
-            &text_document_position,
-            false,
-        );
-        if dot_ranking.is_some() {
-            // Types can't appear after a dot in Fix, so they shouldn't
-            // outrank function candidates.
-            item.sort_text = Some(dot_context_low_priority_sort_text(&tycon.name));
-        }
-        items.push(item);
-    }
-    for trait_ in active_program.traits_with_aliases() {
-        if is_internal_name(&trait_.to_string()) {
-            continue;
-        }
-        if !is_in_namespace(&trait_.name) {
-            continue;
-        }
-        let mut item = create_item(
-            &trait_.name,
-            CompletionItemKind::INTERFACE,
-            None,
-            &EndNode::Trait(trait_.clone()),
-            &typing_text,
-            &text_document_position,
-            false,
-        );
-        if dot_ranking.is_some() {
-            item.sort_text = Some(dot_context_low_priority_sort_text(&trait_.name));
-        }
-        items.push(item);
-    }
-    for (assoc_type, _kind_info) in active_program.trait_env.assoc_ty_kind_info() {
-        if is_internal_name(&assoc_type.name.to_string()) {
-            continue;
-        }
-        if !is_in_namespace(&assoc_type.name) {
-            continue;
-        }
-        let mut item = create_item(
-            &assoc_type.name,
-            CompletionItemKind::CLASS,
-            None,
-            &EndNode::AssocType(assoc_type.clone()),
-            &typing_text,
-            &text_document_position,
-            false,
-        );
-        if dot_ranking.is_some() {
-            item.sort_text = Some(dot_context_low_priority_sort_text(&assoc_type.name));
-        }
+        // Types can't appear after a dot in Fix, so they shouldn't
+        // outrank function candidates.
+        let sort_text = dot_ranking
+            .as_ref()
+            .map(|_| dot_context_low_priority_sort_text(&symbol.name));
+        let label = symbol.name.to_string();
+        let mut item = build_completion_item(symbol, label, expression_context());
+        item.sort_text = sort_text;
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
@@ -342,7 +300,7 @@ fn tiers_in_parallel(
     // threads); the memo is a `Mutex`, so the workers share one cache.
     let chunk_size = n.div_ceil(workers);
     let mut tiers = Vec::with_capacity(n);
-    std::thread::scope(|s| {
+    thread::scope(|s| {
         let handles: Vec<_> = names
             .chunks(chunk_size)
             .map(|chunk| {
@@ -377,16 +335,6 @@ struct DotRanking {
     receiver_type: Arc<TypeNode>,
     index: CompletionIndex,
     tc_template: Option<TypeCheckContext>,
-}
-
-/// True for names that refer to compiler-internal entities and
-/// shouldn't appear in user-facing completion. `#` marks
-/// compiler-defined values/types (`Std::#hole`, …); `?` marks
-/// opaque type variables turned into TyCons by opaque desugar
-/// (`Std::Iterator::range::?it`, …). Neither character is legal in
-/// a user-written identifier, so plain substring checks suffice.
-fn is_internal_name(rendered: &str) -> bool {
-    rendered.contains('#') || rendered.contains('?')
 }
 
 /// Bundle returned by the dot-completion extraction pipeline: the
@@ -585,11 +533,13 @@ fn walk_for_hole(
             let take = match best {
                 None => true,
                 Some(prev) => {
-                    let prev_len = prev
+                    // `best` is only ever assigned an expr whose `source`
+                    // passed the let-else above, so it has a span.
+                    let prev_span = prev
                         .source
                         .as_ref()
-                        .map(|s| s.end - s.start)
-                        .unwrap_or(usize::MAX);
+                        .expect("hole candidate recorded without a span");
+                    let prev_len = prev_span.end - prev_span.start;
                     let cur_len = span.end - span.start;
                     cur_len <= prev_len
                 }
@@ -656,31 +606,33 @@ fn recurse_for_hole(
     }
 }
 
-// Check if the user's typing text is in the form of a dot followed by namespaces or a function name
+/// Checks whether the user's typing text ends in a dot followed by
+/// namespaces or a function name.
 fn is_dot_function(typing_text: &str) -> bool {
     let mut chars = typing_text.chars().rev();
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     while let Some(c) = chars.next() {
         if c == '.' {
             return true;
         }
-        if !identifer_chars.contains(c) && c != ':' {
+        if !identifier_chars.contains(c) && c != ':' {
             return false;
         }
     }
     false
 }
 
-// Extract namespace from typing text string.
-// This function performs string manipulation to extract namespace components from user input.
+/// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
+/// `NameSpace`. A final component that does not start with an uppercase
+/// letter (a partially typed value name) is dropped.
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
-    let identifer_chars = chars_allowed_in_identifiers();
+    let identifier_chars = chars_allowed_in_identifiers();
     let suffix_byte_start = typing_text
         .char_indices()
         .rev()
-        .find(|(_, c)| !(identifer_chars.contains(*c) || *c == ':'))
+        .find(|(_, c)| !(identifier_chars.contains(*c) || *c == ':'))
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(0);
     let namespace_part = &typing_text[suffix_byte_start..];
@@ -713,7 +665,8 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     namespace.unwrap()
 }
 
-// Get the text of the line being typed by the user up to the cursor position.
+/// Gets the text of the line being typed by the user up to the cursor
+/// position.
 fn get_typing_text(
     text_document_position: &TextDocumentPositionParams,
     uri_to_content: &Map<Uri, LatestContent>,
@@ -725,26 +678,25 @@ fn get_typing_text(
     typing_text
 }
 
-// Handle "completionItem/resolve" method.
-// Add documentation to the completion item.
+/// Handles the `completionItem/resolve` LSP request: attaches documentation
+/// to the completion item, appends an argument-snippet to the insert text of
+/// a global value, and adds text edits that import the completed name.
 pub(super) fn handle_completion_resolve_document(
     id: u32,
     params: &CompletionItem,
     uri_to_content: &mut Map<Uri, LatestContent>,
     program: &Program,
 ) {
-    if params.data.is_none() {
-        let msg = "In textDocument/completion, params.data is null.".to_string();
-        write_log!("{}", msg);
-        send_response(id, Err::<CompletionItem, String>(msg));
+    let Some(data) = params.data.as_ref() else {
+        // Items without stashed data (e.g. namespace components offered
+        // inside an import statement) have no documentation to attach.
+        send_response(id, Ok::<_, ()>(params.clone()));
         return;
-    }
-    let data = params.data.as_ref().unwrap();
-    let data =
-        serde_json::from_value::<(EndNode, String, TextDocumentPositionParams)>(data.clone());
+    };
+    let data = serde_json::from_value::<ResolveData>(data.clone());
     if let Err(e) = data {
         let msg = format!(
-            "In textDocument/completion, failed to parse params.data as EndNode: {}",
+            "In textDocument/completion, failed to parse params.data as ResolveData: {}",
             e
         );
         write_log!("{}", msg);
@@ -752,10 +704,7 @@ pub(super) fn handle_completion_resolve_document(
         return;
     }
 
-    let (node, typing_text, text_document_position) = data.unwrap();
-
-    // Is the user completing a function call after a dot?
-    let has_dot = is_dot_function(&typing_text);
+    let ResolveData { node, context } = data.unwrap();
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -764,6 +713,23 @@ pub(super) fn handle_completion_resolve_document(
     let docs = Documentation::MarkupContent(docs);
     let mut item = params.clone();
     item.documentation = Some(docs);
+
+    let (typing_text, text_document_position) = match context {
+        // In an import statement the completed name is written bare,
+        // never as a call and never needing an import edit; the
+        // documentation is all there is to add.
+        ResolveContext::Import => {
+            send_response(id, Ok::<_, ()>(item));
+            return;
+        }
+        ResolveContext::Expression {
+            typing_text,
+            position,
+        } => (typing_text, position),
+    };
+
+    // Is the user completing a function call after a dot?
+    let has_dot = is_dot_function(&typing_text);
 
     // If the node is a global value with parameters defined in the document, then add the parameters to the insert text.
     match &node {
@@ -816,7 +782,7 @@ pub(super) fn handle_completion_resolve_document(
         EndNode::Module(_) => None,
         EndNode::TypeOrTrait(name) => Some(name),
         EndNode::AssocType(assoc_type) => Some(assoc_type.name.clone()),
-        EndNode::ValueDecl(name) => Some(name), // Should not be used for completion, but just in case.
+        EndNode::ValueDecl(name) => Some(name),
         EndNode::Field(_, _) | EndNode::Variant(_, _) => None,
         EndNode::InferredType(_) => None,
     };
@@ -843,7 +809,7 @@ pub(super) fn handle_completion_resolve_document(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::extract_namespace_from_typing_text;
 
     #[test]
     fn test_extract_namespace_from_typing_text_basic() {

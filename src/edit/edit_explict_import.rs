@@ -76,19 +76,12 @@ fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors
 // Rewrite import statements for a single file.
 fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<(), Errors> {
     // Find the module info for this file.
-    let module_info = program
-        .modules
-        .iter()
-        .find(|mi| {
-            let mi_path = to_absolute_path(&mi.source.input.file_path).ok();
-            mi_path.as_ref() == Some(file_path)
-        })
-        .ok_or_else(|| {
-            Errors::from_msg(format!(
-                "Could not find module info for {}",
-                file_path.display()
-            ))
-        })?;
+    let module_info = program.module_of_file(file_path).ok_or_else(|| {
+        Errors::from_msg(format!(
+            "Could not find module info for {}",
+            file_path.display()
+        ))
+    })?;
 
     let mod_name = &module_info.name;
 
