@@ -115,10 +115,15 @@ fn is_byte_in_comment(content: &str, cursor: usize) -> bool {
 /// Lexer state of `scan_outside_comments` at a byte position.
 #[derive(PartialEq)]
 pub(super) enum ScanState {
+    /// Plain code, outside any comment or literal.
     Normal,
+    /// Inside a `//` line comment.
     LineComment,
+    /// Inside a `/* */` block comment.
     BlockComment,
+    /// Inside a `"..."` string literal.
     Str,
+    /// Inside a `'...'` character literal.
     Char,
 }
 

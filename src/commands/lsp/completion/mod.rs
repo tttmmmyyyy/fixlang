@@ -46,9 +46,12 @@ use std::sync::Arc;
 /// `textDocument/completion` to `completionItem/resolve`.
 #[derive(Serialize, Deserialize)]
 struct ResolveData {
+    /// The entity the item completes; resolve reads its documentation
+    /// (and, for a global value, its parameter list) from it.
     node: EndNode,
     /// The text of the cursor's line up to the cursor.
     typing_text: String,
+    /// The document and cursor position of the completion request.
     position: TextDocumentPositionParams,
     /// True when the item completes a component of an `import`
     /// statement. Resolve then adds documentation only — the

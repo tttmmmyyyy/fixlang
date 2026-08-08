@@ -171,6 +171,7 @@ impl LspCompletionCtx {
             .expect("Resolve response should have result")
     }
 
+    /// Shut the server down and assert its reader thread saw no errors.
     pub fn shutdown(mut self) {
         self.client
             .shutdown(Duration::from_millis(500))

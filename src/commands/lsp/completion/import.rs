@@ -286,6 +286,7 @@ fn module_name_items(
         .collect()
 }
 
+/// The completion item offering the `hiding` keyword.
 fn hiding_keyword_item() -> CompletionItem {
     CompletionItem {
         label: "hiding".to_string(),
@@ -466,10 +467,12 @@ fn leaf_item(
 mod tests {
     use super::{import_context_at, ImportContext};
 
+    /// Classify with the cursor at the end of `content`.
     fn context(content: &str) -> Option<ImportContext> {
         import_context_at(content, content.len())
     }
 
+    /// An `ImportContext::Items` built from string literals.
     fn items(module: &str, namespace: &[&str]) -> ImportContext {
         ImportContext::Items {
             module: module.to_string(),
@@ -477,6 +480,9 @@ mod tests {
         }
     }
 
+    /// The module position is recognized right after `import`, with the
+    /// partially typed module path (possibly empty or dotted) captured
+    /// as `typed`.
     #[test]
     fn test_module_name_context() {
         assert_eq!(
@@ -499,6 +505,9 @@ mod tests {
         );
     }
 
+    /// Item positions — after `::` (or a half-typed `:`), inside
+    /// `::{...}` groups, and after a comma — resolve to the namespace
+    /// path enclosing the cursor.
     #[test]
     fn test_items_context() {
         assert_eq!(context("import Std:"), Some(items("Std", &[])));
@@ -520,6 +529,9 @@ mod tests {
         );
     }
 
+    /// After a complete module path or item part only the `hiding`
+    /// keyword can start; a `hiding` part completes items like the
+    /// import part does, and at most once.
     #[test]
     fn test_hiding_contexts() {
         assert_eq!(context("import Std "), Some(ImportContext::HidingKeyword));
@@ -544,6 +556,9 @@ mod tests {
         );
     }
 
+    /// The whole statement, not the cursor's line, determines the
+    /// context: newlines and comments inside the statement are
+    /// transparent.
     #[test]
     fn test_multiline_and_comments() {
         assert_eq!(
@@ -561,6 +576,9 @@ mod tests {
         );
     }
 
+    /// Cursors outside an import statement — in expressions, after a
+    /// `;`, on a half-typed `import` keyword, or where "import" appears
+    /// in an identifier or string literal — yield no context.
     #[test]
     fn test_non_import_contexts() {
         assert_eq!(context(""), None);

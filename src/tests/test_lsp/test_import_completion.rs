@@ -16,6 +16,8 @@ mod tests {
     /// last one.
     const FIXTURE_FILES: &[&str] = &["lib.fix", "hiding.fix", "multiline.fix", "main.fix"];
 
+    /// Start a language server over a fresh copy of the
+    /// `completion-import` fixture, with all of `FIXTURE_FILES` open.
     fn setup() -> LspCompletionCtx {
         LspCompletionCtx::setup("completion-import", FIXTURE_FILES)
     }
@@ -39,6 +41,7 @@ mod tests {
         (line_idx as u32, col as u32)
     }
 
+    /// The `label` strings of `items`, in order.
     fn labels(items: &[Value]) -> Vec<String> {
         items
             .iter()
@@ -46,6 +49,8 @@ mod tests {
             .collect()
     }
 
+    /// The item whose `label` is `label`; panics, listing the labels
+    /// present, when there is none.
     fn find_item<'a>(items: &'a [Value], label: &str) -> &'a Value {
         items
             .iter()
@@ -53,6 +58,7 @@ mod tests {
             .unwrap_or_else(|| panic!("expected item {:?}; got labels {:?}", label, labels(items)))
     }
 
+    /// The numeric `CompletionItemKind` of `item` (0 when absent).
     fn kind_of(item: &Value) -> i64 {
         item.get("kind").and_then(|k| k.as_i64()).unwrap_or(0)
     }
