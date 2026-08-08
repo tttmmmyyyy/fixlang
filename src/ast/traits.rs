@@ -348,8 +348,8 @@ impl TraitDefn {
                 }
             }
         }
-        for mi in &self.members {
-            let node = mi.find_node_at(pos);
+        for member in &self.members {
+            let node = member.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
@@ -372,8 +372,8 @@ impl TraitDefn {
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for mi in &mut self.members {
-            errors.eat_err(mi.resolve_namespace(ctx));
+        for member in &mut self.members {
+            errors.eat_err(member.resolve_namespace(ctx));
         }
         errors.to_result()
     }
@@ -381,8 +381,8 @@ impl TraitDefn {
     // Resolve type aliases
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for mi in &mut self.members {
-            errors.eat_err(mi.resolve_type_aliases(type_env));
+        for member in &mut self.members {
+            errors.eat_err(member.resolve_type_aliases(type_env));
         }
         errors.to_result()
     }
@@ -391,7 +391,11 @@ impl TraitDefn {
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
     // this function returns "[a: ToString] a -> String" as type of "to_string" member.
     pub fn member_scheme(&self, name: &Name, syntactic: bool) -> Arc<Scheme> {
-        let member = self.members.iter().find(|mi| mi.name == *name).unwrap();
+        let member = self
+            .members
+            .iter()
+            .find(|member| member.name == *name)
+            .unwrap();
         let mut qual_ty = if syntactic {
             member.syn_qual_ty.as_ref().unwrap().clone()
         } else {
@@ -413,7 +417,7 @@ impl TraitDefn {
     pub fn member_ty(&self, name: &Name) -> QualType {
         self.members
             .iter()
-            .find(|mi| mi.name == *name)
+            .find(|member| member.name == *name)
             .unwrap()
             .qual_ty
             .clone()
@@ -503,9 +507,12 @@ impl TraitImpl {
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
         let kind_signs = &self.qual_pred.kind_constraints;
-        let res = kind_scope.extend(preds, eqs, kind_signs, kind_env);
-        if res.is_err() {
-            return Err(Errors::from_msg_srcs(res.unwrap_err(), &[&self.source]));
+        let extend_result = kind_scope.extend(preds, eqs, kind_signs, kind_env);
+        if extend_result.is_err() {
+            return Err(Errors::from_msg_srcs(
+                extend_result.unwrap_err(),
+                &[&self.source],
+            ));
         }
         self.qual_pred.predicate.set_kinds(&kind_scope);
         for pred in &mut self.qual_pred.pred_constraints {
@@ -516,15 +523,15 @@ impl TraitImpl {
         }
         for (_member_name, member_sig) in &mut self.member_sigs {
             let mut member_kind_scope = kind_scope.clone();
-            let res = member_kind_scope.extend(
+            let extend_result = member_kind_scope.extend(
                 &member_sig.preds,
                 &member_sig.eqs,
                 &member_sig.kind_signs,
                 kind_env,
             );
-            if res.is_err() {
+            if extend_result.is_err() {
                 return Err(Errors::from_msg_srcs(
-                    res.unwrap_err(),
+                    extend_result.unwrap_err(),
                     &[&member_sig.ty.get_source()],
                 ));
             }
@@ -639,19 +646,19 @@ impl TraitImpl {
             .cloned()
             .collect();
         let new_names = generate_fresh_varnames(vars_to_rename.len(), &used_names);
-        let mut s = Substitution::default();
+        let mut rename_subst = Substitution::default();
         for (fv, new_name) in vars_to_rename.iter().zip(new_names.iter()) {
             let new_fv = type_tyvar(new_name, &fv.kind);
-            let merge_succ = s.merge(&Substitution::single(&fv.name, new_fv));
+            let merge_succ = rename_subst.merge(&Substitution::single(&fv.name, new_fv));
             assert!(merge_succ);
         }
         // Rename type variables in `method_qualty`.
-        s.substitute_qualtype(&mut method_qualty);
+        rename_subst.substitute_qualtype(&mut method_qualty);
 
         // Then substitute `tyvar_name` with `impl_type`.
         // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
-        let s = Substitution::single(&tyvar_name, impl_type);
-        s.substitute_qualtype(&mut method_qualty);
+        let impl_subst = Substitution::single(&tyvar_name, impl_type);
+        impl_subst.substitute_qualtype(&mut method_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
         let ty = method_qualty.ty.clone();
@@ -824,8 +831,8 @@ pub struct TraitEnv {
 impl TraitEnv {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        for (_t, ti) in &self.traits {
-            let node = ti.find_node_at(pos);
+        for (_t, trait_defn) in &self.traits {
+            let node = trait_defn.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
@@ -1098,7 +1105,7 @@ impl TraitEnv {
             return Err(Errors::from_err(err));
         }
 
-        for (impl_assoc_type, impl_info) in impl_assoc_types {
+        for (impl_assoc_type, assoc_ty_impl) in impl_assoc_types {
             if !trait_assoc_types.contains_key(impl_assoc_type) {
                 return Err(Errors::from_msg_srcs(
                     format!(
@@ -1106,33 +1113,33 @@ impl TraitEnv {
                         impl_assoc_type,
                         trait_id.to_string(),
                     ),
-                    &[&impl_info.source],
+                    &[&assoc_ty_impl.source],
                 ));
             }
             // Validate that the impl_type written in the associated type line matches the trait impl's impl_type.
-            if impl_info.impl_type_as_written != impl_.impl_type() {
+            if assoc_ty_impl.impl_type_as_written != impl_.impl_type() {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The implementation of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}} = {{value_type}};`, where {{impl_type}} is `{}` here.",
                         impl_.impl_type().to_string()
                     ),
-                    &[&impl_info.source],
+                    &[&assoc_ty_impl.source],
                 ));
             }
             // Validate free variable of associated type implementation.
             let mut allowed_tyvars = vec![];
             impl_.impl_type().free_vars_to_vec(&mut allowed_tyvars);
-            for arg in &impl_info.params {
+            for arg in &assoc_ty_impl.params {
                 allowed_tyvars.push(arg.clone());
             }
-            for used_tv in impl_info.value.free_vars_vec() {
+            for used_tv in assoc_ty_impl.value.free_vars_vec() {
                 if allowed_tyvars
                     .iter()
                     .all(|allowed_tv| allowed_tv.name != used_tv.name)
                 {
                     return Err(Errors::from_msg_srcs(
                         format!("Unknown type variable `{}`.", used_tv.name),
-                        &[&impl_info.source],
+                        &[&assoc_ty_impl.source],
                     ));
                 }
             }
@@ -1447,8 +1454,8 @@ impl TraitEnv {
         let mut errors = Errors::empty();
 
         // Set kinds in trait definitions.
-        for (_id, ti) in &mut self.traits {
-            errors.eat_err(ti.set_trait_kind());
+        for (_id, trait_defn) in &mut self.traits {
+            errors.eat_err(trait_defn.set_trait_kind());
         }
 
         // Throw errors if any.
@@ -1500,8 +1507,8 @@ impl TraitEnv {
 
     pub fn trait_kind_map_with_aliases(&self) -> Map<TraitId, Arc<Kind>> {
         let mut res: Map<TraitId, Arc<Kind>> = Map::default();
-        for (id, ti) in &self.traits {
-            res.insert(id.clone(), ti.type_var.kind.clone());
+        for (id, trait_defn) in &self.traits {
+            res.insert(id.clone(), trait_defn.type_var.kind.clone());
         }
         for (id, ta) in &self.aliases.data {
             res.insert(id.clone(), ta.kind.clone());
@@ -1511,8 +1518,8 @@ impl TraitEnv {
 
     pub fn import(&mut self, other: TraitEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for (_, ti) in other.traits {
-            if let Err(es) = self.add_trait(ti) {
+        for (_, trait_defn) in other.traits {
+            if let Err(es) = self.add_trait(trait_defn) {
                 errors.append(es);
             }
         }
