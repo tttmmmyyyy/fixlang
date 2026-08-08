@@ -382,6 +382,8 @@ pub const MAX_COPIES_PER_FUNCTION: usize = 16;
 // table agrees to every one of them.
 #[derive(Default)]
 struct CopyBudget {
+    // The copies committed to, keyed by the function they copy. Each copy substitutes at least one
+    // slot, and each set holds at most `MAX_COPIES_PER_FUNCTION` of them.
     units: Map<FullName, Set<UnitKey>>,
 }
 
