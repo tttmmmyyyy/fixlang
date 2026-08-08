@@ -121,6 +121,14 @@ error: `Main::A` has no size: its unboxed fields reach `Main::A` itself (`Main::
   |      ^
 ```
 
+直し方は判定した条件で変わる。条件 1 は経路のどこかをボックスにすれば終わるが、条件 2 は
+ボックスにしても終わらないので、引数を育てるのをやめることを言う。
+
+```
+error: `Main::P Std::I64` has no size: its fields reach ever larger types (`Main::P Std::I64` ->
+`Main::P (Std::I64, Std::I64)`). Give the recursive occurrence the same type arguments.
+```
+
 ノードの型を型ごとに 1 回だけ調べるので、大きなプログラムでも 1 ミリ秒に収まる（付録 B）。
 
 見る順は 3 段。**ソース位置を持つノードの型**、次に**位置を持たないノードの型**、最後に

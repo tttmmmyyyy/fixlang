@@ -457,6 +457,15 @@ impl Debug for TypeNode {
     }
 }
 
+/// The change that gives a type with no size a size, chosen by what makes its layout endless.
+enum NoSizeRemedy {
+    /// The fields lead back to the type: a pointer anywhere on the way round ends the descent.
+    Box,
+    /// The fields lead to the same type constructor at a larger argument: the descent ends once the
+    /// recursion stops enlarging the argument, whatever is boxed.
+    SameTypeArguments,
+}
+
 impl TypeNode {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
@@ -1236,7 +1245,7 @@ impl TypeNode {
     ) -> Option<String> {
         if let Some(i) = in_place.iter().position(|ancestor| ancestor == self) {
             let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
-            return Some(self.format_no_size_error(&in_place[i..], cause));
+            return Some(self.format_no_size_error(&in_place[i..], cause, NoSizeRemedy::Box));
         }
         // A function value is a pair of pointers whatever it takes and returns, so its size is
         // settled. Every function type shares the `->` constructor, so the growth of one function's
@@ -1263,7 +1272,11 @@ impl TypeNode {
         };
         if let Some(i) = across_pointers.iter().position(grows_from) {
             let cause = "its fields reach ever larger types".to_string();
-            return Some(self.format_no_size_error(&across_pointers[i..], cause));
+            return Some(self.format_no_size_error(
+                &across_pointers[i..],
+                cause,
+                NoSizeRemedy::SameTypeArguments,
+            ));
         }
         None
     }
@@ -1301,11 +1314,12 @@ impl TypeNode {
     }
 
     /// The report for a type with no size: what its fields do, the way down to it from the type that
-    /// shows it, and which types the fix is among.
+    /// shows it, and the change that gives it a size.
     fn format_no_size_error(
         self: &Arc<TypeNode>,
         ancestors: &[Arc<TypeNode>],
         cause: String,
+        remedy: NoSizeRemedy,
     ) -> String {
         let descent = ancestors
             .iter()
@@ -1315,20 +1329,24 @@ impl TypeNode {
         // A type holding itself directly is the whole story already, so the way down is spelled
         // out only where it passes through another type.
         let holds_itself = ancestors.iter().all(|ty| ty == self);
-        let (way_down, remedy) = if holds_itself {
-            (String::new(), format!("Make `{}` boxed.", descent[0]))
+        let way_down = if holds_itself {
+            String::new()
         } else {
-            (
-                format!(
-                    " ({})",
-                    descent
-                        .iter()
-                        .map(|ty| format!("`{}`", ty))
-                        .collect::<Vec<_>>()
-                        .join(" -> ")
-                ),
-                "Make one of these types boxed.".to_string(),
+            format!(
+                " ({})",
+                descent
+                    .iter()
+                    .map(|ty| format!("`{}`", ty))
+                    .collect::<Vec<_>>()
+                    .join(" -> ")
             )
+        };
+        let remedy = match remedy {
+            NoSizeRemedy::Box if holds_itself => format!("Make `{}` boxed.", descent[0]),
+            NoSizeRemedy::Box => "Make one of these types boxed.".to_string(),
+            NoSizeRemedy::SameTypeArguments => {
+                "Give the recursive occurrence the same type arguments.".to_string()
+            }
         };
         format!(
             "`{}` has no size: {}{}. {}",
