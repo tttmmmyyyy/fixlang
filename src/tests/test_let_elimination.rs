@@ -537,14 +537,14 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
-    // A chain this long builds in a few seconds while the inspection of a binding is proportional
-    // to where its name is read, and in several minutes while it walks the whole body of every
-    // binding.
+    /// A chain this long builds in a few seconds while the inspection of a binding is proportional
+    /// to where its name is read, and in several minutes while it walks the whole body of every
+    /// binding.
     const CHAIN_LENGTH: usize = 2400;
 
-    // Generous next to the few seconds the build takes, with room for a machine several times
-    // slower running the rest of the suite beside it, and well short of the minutes the build takes
-    // once the inspection walks whole bodies again.
+    /// Generous next to the few seconds the build takes, with room for a machine several times
+    /// slower running the rest of the suite beside it, and well short of the minutes the build
+    /// takes once the inspection walks whole bodies.
     const TIMEOUT: Duration = Duration::from_secs(120);
 
     /// Builds and runs a global whose body is a chain of `CHAIN_LENGTH` `let`s, failing if the

@@ -185,12 +185,12 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
-    // Compiling this arity takes a few seconds while the cost is linear in it, and is out of reach
-    // while the cost doubles per parameter.
+    /// Compiling this arity takes a few seconds while the cost is linear in it, and is out of reach
+    /// while the cost doubles per parameter.
     const ARITY: usize = 25;
 
-    // Generous next to the few seconds the build takes, and short enough to report a regression as
-    // a failure instead of occupying the machine.
+    /// Generous next to the few seconds the build takes, and short enough to report a regression as
+    /// a failure instead of occupying the machine.
     const TIMEOUT: Duration = Duration::from_secs(180);
 
     /// The text `item` gives each of the `ARITY` parameter positions, joined by `separator`.

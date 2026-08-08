@@ -4578,6 +4578,8 @@ pub fn test_one_and_multiplicative() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An alias takes the kind of the traits it stands for, so one naming traits of two kinds — here a
+/// trait of kind `*->*` beside one of kind `*` — is reported.
 #[test]
 pub fn test_trait_alias_kind_mismatch() {
     let source = r#"
@@ -4595,6 +4597,8 @@ pub fn test_trait_alias_kind_mismatch() {
     );
 }
 
+/// An `impl` whose head names an alias is reported, and the report says to implement each of the
+/// traits the alias stands for.
 #[test]
 pub fn test_trait_alias_implement_trait_alias_directly() {
     let source = r#"
@@ -4623,6 +4627,8 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
     );
 }
 
+/// Two aliases that stand for each other are reported as circular, so expanding one of them ends
+/// instead of running on forever.
 #[test]
 pub fn test_trait_alias_circular_aliasing() {
     let source = r#"
@@ -4706,9 +4712,103 @@ pub fn test_trait_alias_reachable_along_two_paths() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Each numeric type carries a value through `to_bytes` and back with `from_bytes`, and
+/// `from_bytes` on a byte array one byte short of the type's width answers an error.
+/// A trait of kind `*->*` that two aliases both stand for is reached twice while an alias naming
+/// both is expanded, and the alias takes that kind. A trait named twice in one definition is
+/// likewise arrived at twice.
+#[test]
+pub fn test_trait_alias_higher_kinded_reachable_along_two_paths() {
+    let source = r#"
+        module Main;
+
+        // `Functor` is reached through `Mappable` and again through `Liftable`.
+        trait Mappable = Functor;
+        trait Liftable = Functor + Monad;
+        trait Both = Mappable + Liftable;
+
+        twice : [f : Both] (a -> a) -> f a -> f a;
+        twice = |g, x| x.map(g).map(g);
+
+        // One trait named twice in one definition.
+        trait ShownTwice = ToString + ToString;
+
+        show : [a : ShownTwice] a -> String;
+        show = |x| x.to_string;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"case 1", twice(|x| x + 1, [1, 2]), [3, 4]);;
+            assert_eq(|_|"case 2", twice(|x| x + 1, Option::some(1)).as_some, 3);;
+            assert_eq(|_|"case 3", show(7), "7");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An alias that stands for itself is reported as circular even where the aliases it names are
+/// also named by a sibling, so what several paths share does not hide the cycle.
+#[test]
+pub fn test_trait_alias_circular_beside_shared_aliases() {
+    let source = r#"
+        module Main;
+
+        trait Base = ToString;
+        trait Left = Base;
+        trait Right = Base;
+        // Error (circular aliasing)
+        trait Top = Left + Right + Top;
+
+        show : [a : Top] a -> String;
+        show = |x| x.to_string;
+
+        main : IO ();
+        main = println(show(42));
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Circular aliasing detected in trait alias `Main::Top`."),
+        "the alias standing for itself is reported, but the message is:\n{}",
+        errmsg
+    );
+}
+
+/// An implementation that defines a member the trait does not declare is reported, and the report
+/// points at the definition of that member rather than at the implementation as a whole.
+#[test]
+pub fn test_trait_impl_defines_undeclared_member() {
+    let source = r#"
+        module Main;
+
+        trait a : MyTrait {
+            foo : a -> I64;
+        }
+
+        impl I64 : MyTrait {
+            foo = |x| x;
+            bar = |x| x + 1;
+        }
+
+        main : IO ();
+        main = println(MyTrait::foo(1).to_string);
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("`bar` is not a member of trait `Main::MyTrait`."),
+        "the undeclared member is reported, but the message is:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("bar = |x| x + 1;"),
+        "the report points at the definition of the member, but the message is:\n{}",
+        errmsg
+    );
+}
+
 #[test]
 pub fn test129() {
-    // Test ToBytes/FromBytes
     let source = r#"
         module Main; 
         
@@ -4800,6 +4900,8 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
+/// produced along with the time it took, for a long computation and for file IO.
 #[test]
 pub fn test_consumed_time() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
@@ -10866,6 +10968,8 @@ pub fn test_higher_kinded_instance_selected_by_annotation() {
         let o = (build(4) : Option I64);
         assert_eq(|_|"", a.@(0), 3);;
         assert_eq(|_|"", o.as_some, 4);;
+        assert_eq(|_|"", a.cmap(|x| x + 1).@(0), 4);;
+        assert_eq(|_|"", o.cmap(|x| x + 1).as_some, 5);;
         pure()
     );
     "##;
