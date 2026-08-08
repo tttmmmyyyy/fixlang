@@ -14,6 +14,34 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## b2c580cd758ba315d530f61c278540fb9e401d36
+
+The primitive that copies a range of one array onto the end of another was split into an owning one
+that takes the whole source and a borrowing one that takes a range (#204). `Array::append` calls the
+owning one; `Array::get_sub` and `Array::sort_stable` call the borrowing one, which leaves the array
+it reads to its caller. Without the reference duplication the old primitive forced on them, a write
+after such a copy can have its uniqueness check removed.
+
+`get_sub` **-3.48%** instructions and -3.66% memory accesses, the case the change is for.
+`cp_lib_scc` +0.15%: none of the changed call sites is in its hot path, so the movement is code
+layout. The other 44 cases hold to within a hundredth of a percent.
+
+**The split column of this row is not comparable with the row below: the two were measured from
+different filesystem paths.** A program's initial stack is laid out above its argument and
+environment block, so the path the harness is invoked from moves every address on the stack, and a
+hot stack object a few bytes from a line boundary crosses it or does not. The `cp_lib_lsegtree`
+binary of this row, run unchanged from two directories differing only in the length of their names,
+reports **200,024 splits and 23**. Sixteen cases move by more than a twentieth of a percent here for
+that reason, `cp_lib_lsegtree` 23 -> 400,026 and `sum_by_fold_cap` 23 -> 1,588 among them; the row
+below records the same binaries flipping between the same pairs. **Measure both sides at one path
+before reading anything into this column.**
+
+**Not in the corpus: `Array::sort_stable` costs 17.6% more instructions.** On a 2,000,000-element
+`Array I64` it goes from 4,049,614,425 to 4,763,914,157, and the rate holds at 100,000 and 500,000
+elements. Its RC IR improves — two fewer branches in the operation, one fewer release, and 478 lines
+of LLVM-IR down to 409 — but LLVM stops inlining the merge loop's body into `Std::loop`, and 48.7% of
+the run is then spent in the function that stays behind. The corpus has no `sort_stable` case.
+
 ## b2de6116d89ff9d43449c2a12fe5c29dd1304bb4
 
 The compiler emits the same code as at the row below. Each of the 46 cases was built with both

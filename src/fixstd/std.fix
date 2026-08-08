@@ -98,7 +98,7 @@ namespace Array {
         let n = if e > s { e - s } else { 0 };
         let res = Array::empty(n + additional_capacity);
         if n == 0 || len == 0 { res };
-        res._unsafe_append_capacity_bounds_unchecked(arr, s, e)
+        res._unsafe_copy_capacity_bounds_unchecked(arr, s, e)
     );
 
     // Gets an element of an array at the specified index.
@@ -311,7 +311,7 @@ namespace Array {
 
         // Append all of `second`. The primitive clones `first` if it is shared and moves the
         // elements of `second` when `second` is unique.
-        first._unsafe_append_capacity_bounds_unchecked(second, 0, second_len)
+        first._unsafe_append_capacity_unchecked(second)
     );
 
     // Finds the first index at which the element satisfies a condition.
@@ -605,20 +605,20 @@ namespace Array {
     // * `less_than` - The comparator function.
     // * `array` - The array to be sorted.
     sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
-    sort_stable_by = |less_than, vec| (
-        let buffer = Array::empty(vec.@size);
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, 0, vec.@size, less_than);
-        vec
+    sort_stable_by = |less_than, arr| (
+        let buffer = Array::empty(arr.@size);
+        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, 0, arr.@size, less_than);
+        arr
     );
 
-    // Sorts elements in a range of a vector by "less than" comparator.
+    // Sorts elements in a range of an array by "less than" comparator.
     // 
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
     _mergesort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _mergesort_range_using_buffer = |buffer, begin, end, less_than, vec| (
+    _mergesort_range_using_buffer = |buffer, begin, end, less_than, arr| (
         // Merge sorting.
         let len = end - begin;
-        if len <= 1 { (vec, buffer) };
+        if len <= 1 { (arr, buffer) };
         // Divide into intervals.
         let former_len = len / 2;
         let former_begin = begin;
@@ -626,21 +626,21 @@ namespace Array {
         let latter_len = len - former_len;
         let latter_begin = former_end;
         let latter_end = end;
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, former_begin, former_end, less_than);
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
+        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, former_begin, former_end, less_than);
+        let (arr, buffer) = arr._mergesort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
         // Merge former and latter to buffer.
         let buffer = buffer.truncate(0);
         let former_pos = former_begin;
         let latter_pos = latter_begin;
         let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
             if former_pos == former_end { // former exhausted: drain the rest of latter in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, latter_pos, latter_end)
+                break $ buffer._unsafe_copy_capacity_bounds_unchecked(arr, latter_pos, latter_end)
             };
             if latter_pos == latter_end { // latter exhausted: drain the rest of former in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, former_pos, former_end)
+                break $ buffer._unsafe_copy_capacity_bounds_unchecked(arr, former_pos, former_end)
             };
-            let former_elem = vec.@(former_pos);
-            let latter_elem = vec.@(latter_pos);
+            let former_elem = arr.@(former_pos);
+            let latter_elem = arr.@(latter_pos);
             if !less_than((latter_elem, former_elem)) { // Essential for stability.
                 // Copy elements in former to buffer.
                 let buffer = buffer.push_back(former_elem);
@@ -651,11 +651,11 @@ namespace Array {
                 continue $ (former_pos, latter_pos + 1, buffer)
             }
         ));
-        // Copy buffer to vec.
-        loop((0, vec), |(idx, vec)|(
-            if idx == len { break $ (vec, buffer) };
-            let vec = vec.set(begin + idx, buffer.@(idx));
-            continue $ (idx + 1, vec)
+        // Copy buffer to arr.
+        loop((0, arr), |(idx, arr)|(
+            if idx == len { break $ (arr, buffer) };
+            let arr = arr.set(begin + idx, buffer.@(idx));
+            continue $ (idx + 1, arr)
         ))
     );
 
@@ -676,10 +676,10 @@ namespace Array {
     // * `new_length` - The number of elements to be kept.
     // * `array` - The array to be truncated.
     truncate : I64 -> Array a -> Array a;
-    truncate = |length, vec| (
+    truncate = |length, arr| (
         if length < 0 { undefined("[Std::Array::truncate] Negative size is not allowed.") };
-        if length >= vec.@size { vec };
-        vec._unsafe_truncate_bounds_unchecked(length)
+        if length >= arr.@size { arr };
+        arr._unsafe_truncate_bounds_unchecked(length)
     );
 
     // Resizes an array to the given size, filling with the given value if the new size is larger than the current size, 
