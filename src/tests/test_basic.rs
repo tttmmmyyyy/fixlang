@@ -10866,6 +10866,8 @@ pub fn test_higher_kinded_instance_selected_by_annotation() {
         let o = (build(4) : Option I64);
         assert_eq(|_|"", a.@(0), 3);;
         assert_eq(|_|"", o.as_some, 4);;
+        assert_eq(|_|"", a.cmap(|x| x + 1).@(0), 4);;
+        assert_eq(|_|"", o.cmap(|x| x + 1).as_some, 5);;
         pure()
     );
     "##;
