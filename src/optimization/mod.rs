@@ -1,6 +1,6 @@
 mod application_inlining;
 mod capture_struct;
-pub mod closure_specialization;
+mod closure_specialization;
 mod dead_symbol_elimination;
 mod defunctionalize_fix;
 #[allow(dead_code)]
