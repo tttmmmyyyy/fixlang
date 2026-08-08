@@ -180,7 +180,28 @@ fn held_types(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
             ObjectFieldType::SubObject(field_ty, _is_punched) => held.push(field_ty),
             ObjectFieldType::UnionBuf(payload_tys) => held.extend(payload_tys),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => held.push(elem_ty),
-            _ => {}
+            // A lambda field is a pointer to compiled code, and the types that function takes and
+            // returns are laid out where it is compiled.
+            ObjectFieldType::LambdaFunction(_) => {}
+            ObjectFieldType::Array(_) => {
+                unreachable!("an object holds its elements as an `ArrayStorageBuf` field")
+            }
+            // The rest carry no Fix type. Listing them keeps this match exhaustive, so a field kind
+            // added later is answered here as well.
+            ObjectFieldType::ControlBlock
+            | ObjectFieldType::TraverseFunction
+            | ObjectFieldType::Ptr
+            | ObjectFieldType::I8
+            | ObjectFieldType::U8
+            | ObjectFieldType::I16
+            | ObjectFieldType::U16
+            | ObjectFieldType::I32
+            | ObjectFieldType::U32
+            | ObjectFieldType::I64
+            | ObjectFieldType::U64
+            | ObjectFieldType::F32
+            | ObjectFieldType::F64
+            | ObjectFieldType::UnionTag => {}
         }
     }
     held
@@ -189,7 +210,11 @@ fn held_types(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
 /// The way down from the type that shows the defect to the type that has none, spelled out only
 /// where it passes through another type — a type holding itself directly is the whole story.
 fn way_down(path: &[Arc<TypeNode>], ty: &Arc<TypeNode>) -> String {
-    let start = path.iter().position(|ancestor| ancestor == ty).unwrap_or(0);
+    // The caller reports a way down only for a type the descent is inside, so `ty` is on `path`.
+    let start = path
+        .iter()
+        .position(|ancestor| ancestor == ty)
+        .unwrap_or_else(|| panic!("`{}` is not on the descent it was found on", ty.to_string()));
     if path.len() - start <= 1 {
         return String::new();
     }
