@@ -1075,11 +1075,7 @@ impl ClosureSpecializationVisitor {
         let base = self.lifted.borrow().func_ty(tree.lambda());
         let (mut doms, codom) = base.collect_app_src(usize::MAX);
         doms[0] = self.cap_of(tree).ty;
-        let mut ty = codom;
-        for dom in doms.iter().rev() {
-            ty = type_fun(dom.clone(), ty);
-        }
-        expr_var(tree.unit().name(), None).set_type(ty)
+        expr_var(tree.unit().name(), None).set_type(fun_ty(&doms, codom))
     }
 
     // The expression a known value is carried by: the bare capture list, or the closure wrapping it.
@@ -1354,13 +1350,7 @@ impl SpecializationRequest {
             doms[0] = lifted.capture_struct_of(&tree).ty;
         }
 
-        // Convert back to a function type
-        let mut func_ty = codom;
-        for dom in doms.iter().rev() {
-            func_ty = type_fun(dom.clone(), func_ty);
-        }
-
-        func_ty
+        fun_ty(&doms, codom)
     }
 
     // Create an expression to refer to the specialized function.
@@ -1382,6 +1372,16 @@ fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode>
     );
     let func = expr_abs_typed(var_local(CLOSURE_CAP_NAME), cap.ty.clone(), body);
     internalize_let_to_var_at_head(&func)
+}
+
+// The function type taking `doms` in order and returning `codom`, which is what `collect_app_src`
+// takes apart.
+fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
+    let mut ty = codom;
+    for dom in doms.iter().rev() {
+        ty = type_fun(dom.clone(), ty);
+    }
+    ty
 }
 
 // `func` applied to `args`, one argument at a time.

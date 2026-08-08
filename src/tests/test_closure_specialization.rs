@@ -11,6 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
     use crate::optimization::closure_specialization::MAX_COPIES_PER_FUNCTION;
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
@@ -140,13 +141,13 @@ mod integration_tests {
     /// carrying a `#closure_lam` segment ahead of the `#closure_spec_` one, which is what keeps
     /// copies of the lambdas out of the count of copies of the function itself.
     fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
-        let spec_segment = "#closure_spec_";
-        let mut copies = functions_named_with(dump, spec_segment)
+        let spec_segment = format!("{}_", CLOSURE_SPEC_SUFFIX);
+        let mut copies = functions_named_with(dump, &spec_segment)
             .into_iter()
             .filter(|name| name.starts_with(func_prefix))
             .filter_map(|name| {
-                let spec_start = name.find(spec_segment).unwrap();
-                if name[..spec_start].contains("#closure_lam") {
+                let spec_start = name.find(&spec_segment).unwrap();
+                if name[..spec_start].contains(CLOSURE_LAM_SUFFIX) {
                     return None;
                 }
                 let end = name[spec_start + 1..]
@@ -167,13 +168,13 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("specialized_fold");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", SPECIALIZED_FOLD_OUTPUT);
 
-        let lifted = functions_named_with(&dump, "#closure_lam");
+        let lifted = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
         assert!(
             !lifted.is_empty(),
             "the pass should lift the lambda to a global function, but the dump names none: {}",
             dump.lines().take(20).collect::<Vec<_>>().join("\n")
         );
-        let specialized = functions_named_with(&dump, "#closure_spec");
+        let specialized = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX);
         assert!(
             !specialized.is_empty(),
             "the pass should specialize the function the lambda is passed to, but the dump names \
@@ -229,7 +230,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("changing_closure");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", CHANGING_CLOSURE_OUTPUT);
 
-        let lifted = functions_named_with(&dump, "#closure_lam");
+        let lifted = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
         // The two the inliner leaves standing as recursions of their own.
         for recursive_fn in ["Main::grow#", "Main::tock#"] {
             assert!(
@@ -241,7 +242,7 @@ mod integration_tests {
             );
         }
 
-        let specialized = functions_named_with(&dump, "#closure_spec")
+        let specialized = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX)
             .into_iter()
             .filter(|name| name.starts_with("Main::"))
             .collect::<Vec<_>>();
@@ -299,7 +300,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("two_narrowed_fields");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", TWO_NARROWED_FIELDS_OUTPUT);
 
-        let specialized = functions_named_with(&dump, "#closure_spec");
+        let specialized = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX);
         for relayed_to in ["Main::terminal_a#", "Main::terminal_b#"] {
             assert!(
                 specialized.iter().any(|name| name.starts_with(relayed_to)),
@@ -321,9 +322,9 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("relayed_closure");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", RELAYED_CLOSURE_OUTPUT);
 
-        let narrowed = functions_named_with(&dump, "#closure_spec")
+        let narrowed = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX)
             .into_iter()
-            .filter(|name| name.contains("#closure_lam"))
+            .filter(|name| name.contains(CLOSURE_LAM_SUFFIX))
             .collect::<Vec<_>>();
         assert!(
             !narrowed.is_empty(),
@@ -334,7 +335,7 @@ mod integration_tests {
 
         let terminal = functions_named_with(&dump, "Main::terminal");
         assert!(
-            terminal.iter().any(|name| name.contains("#closure_spec")),
+            terminal.iter().any(|name| name.contains(CLOSURE_SPEC_SUFFIX)),
             "the chain should reach `terminal` through that capture list and copy it, but the dump \
              names only: {:?}",
             terminal
