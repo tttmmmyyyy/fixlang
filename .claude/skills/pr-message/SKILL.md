@@ -7,6 +7,21 @@ description: 'Conventions for writing a pull request body, added on top of the d
 
 A pull request body is one of the documents the devdoc skill covers. Read `.claude/skills/devdoc/SKILL.md` and follow all of it — the fundamental theorem of readability, the body and the appendix, self-containedness, readable front to back. The sections below add what a pull request body needs beyond those conventions.
 
+## Name the issues the merge closes
+
+The body opens by naming the issues this change finishes:
+
+```
+Closes #193
+```
+
+GitHub closes an issue named this way when the pull request merges **into the default branch**, and that is what the keyword is for. Two rules follow.
+
+- Write `Closes` only for an issue this change **finishes**. One the change touches without finishing gets `Refs #N`, so the remaining work is not thrown away the moment the branch lands.
+- A pull request based on another branch — the cleanup beside a change, a layer of a stack — closes nothing when it merges, so it names its issues with `Refs` as well. The issue closes with the pull request that reaches the default branch.
+
+An issue that stays open after its work has shipped is the failure this prevents, and it is a quiet one: nothing about the merged branch says an issue was ever meant to close with it.
+
 ## Every function the diff touches
 
 The body is read before the diff, and it has to make the diff make sense. So the body covers the functions the diff touches:
