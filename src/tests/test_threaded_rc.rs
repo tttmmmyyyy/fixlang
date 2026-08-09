@@ -5,7 +5,10 @@
 //! fence is reported as racing even where it is correct. The orderings are read off the emitted
 //! LLVM IR, since that is where the choice is made and where a change to it is visible.
 
-use crate::tests::test_util::{emitted_llvm_ir, fix_build_source_command, EmittedIr};
+use crate::configuration::Configuration;
+use crate::tests::test_util::{
+    emitted_llvm_ir, fix_build_source_command, run_source_capture, EmittedIr,
+};
 use std::process::Command;
 use tempfile::TempDir;
 
@@ -153,4 +156,23 @@ fn test_threaded_orderings_are_checkable_unoptimized() {
 #[test]
 fn test_threaded_orderings_are_checkable_optimized() {
     assert_orderings_are_checkable("max");
+}
+
+/// Verifies that a build with multi-threading and compiler development mode both on computes the
+/// same answers.
+///
+/// The checks development mode makes on the uniqueness proofs read the object's state, and that
+/// dispatch grows a threaded arm only where the two settings meet, so this is what puts the arm
+/// through code generation and the verifier. Execution takes the local arm: the writes whose proofs
+/// are checked here reach values still in the local state.
+#[test]
+fn test_threaded_build_checks_its_uniqueness_proofs() {
+    let mut config = Configuration::develop_mode();
+    config.set_threaded();
+    let output = run_source_capture(SOURCE, config);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        EXPECTED_OUTPUT,
+        "a threaded development-mode build should compute what every other build does"
+    );
 }

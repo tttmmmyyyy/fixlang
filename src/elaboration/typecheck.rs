@@ -610,18 +610,19 @@ impl TypeCheckContext {
         }))
     }
 
-    /// Resolve `tc` to its struct definition for `Expr::MakeStruct`
-    /// elaboration. In strict mode, an unknown or non-struct tycon
-    /// is an error; in tolerant mode it degrades to `None`, letting
-    /// the caller type each field expression against a fresh tyvar.
-    fn resolve_struct_tycon(
+    /// Resolve `tc`, the head of a struct literal or of a struct
+    /// pattern, to its struct definition. In strict mode, an unknown
+    /// or non-struct tycon is an error; in tolerant mode it degrades
+    /// to `None`, letting the caller fall back to fresh type
+    /// variables for the fields.
+    pub fn resolve_struct_tycon(
         &self,
         tc: &Arc<TyCon>,
         source: &Option<Span>,
         strict: bool,
-    ) -> Result<Option<TyConInfo>, Errors> {
+    ) -> Result<Option<&TyConInfo>, Errors> {
         match self.type_env.tycons.get(tc) {
-            Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti.clone())),
+            Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti)),
             Some(_) if strict => Err(Errors::from_msg_srcs(
                 format!("Type `{}` is not a struct.", tc.to_string()),
                 &[source],
@@ -1059,6 +1060,10 @@ impl TypeCheckContext {
         })
     }
 
+    /// Elaborate `ei` against the expected type `ty`, one arm per `Expr`
+    /// variant, returning the expression annotated with its inferred type.
+    /// Each arm tolerates what it can in `error_tolerant` mode; what it
+    /// cannot is raised as an error.
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1382,37 +1387,51 @@ impl TypeCheckContext {
                 // mode errors out on unknown / non-struct names;
                 // tolerant degrades to `None` so we can still type
                 // each field expression against a fresh tyvar.
-                let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?;
+                // The definition is taken by value because the steps below
+                // borrow the type checker mutably.
+                let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?.cloned();
 
                 // 2. Strict-only: reject missing or unknown fields
                 // with a rich diagnostic. Tolerant accepts the
                 // literal as-is so the user can keep typing inside a
                 // partially written struct literal.
                 if strict {
-                    if let Some(ti) = tycon_info.as_ref() {
-                        self.validate_make_struct_field_set(ti, tc, fields, &ei.source)?;
-                    }
+                    let ti = tycon_info
+                        .as_ref()
+                        .expect("strict mode resolves the head to a struct or reports an error");
+                    self.validate_make_struct_field_set(ti, tc, fields, &ei.source)?;
                 }
 
                 // 3. Compute the `name -> expected field type` map
                 // (after unifying the outer expected type with the
                 // constructed struct type). An empty map when the
-                // tycon didn't resolve, signalling step 4 to use
-                // fresh tyvars throughout.
+                // tycon didn't resolve, leaving every field
+                // expression to be typed against a fresh tyvar.
                 let known_field_tys =
                     self.compute_make_struct_field_tys(tc, tycon_info.as_ref(), &ty, &ei.source)?;
 
                 // 4. Type each provided field expression in source
                 // order — matching the `Expr::App` convention that
                 // sub-expression side effects happen in the order
-                // the user wrote them. Unknown field names fall back
-                // to a fresh tyvar.
+                // the user wrote them.
                 let mut typed_fields = fields.clone();
                 for (name, _, field_expr) in typed_fields.iter_mut() {
-                    let field_ty = known_field_tys
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_else(|| self.fresh_ty_with_src(&field_expr.source));
+                    let field_ty = match known_field_tys.get(name) {
+                        Some(field_ty) => field_ty.clone(),
+                        None => {
+                            // No expected type to check the field expression against: the head
+                            // names no struct, or the struct has no such field.
+                            // `validate_make_struct_field_set` rejects both in strict mode and
+                            // tolerates them in `error_tolerant` mode.
+                            assert!(
+                                self.error_tolerant,
+                                "struct `{}` has no field `{}`",
+                                tc.to_string(),
+                                name
+                            );
+                            self.fresh_ty_with_src(&field_expr.source)
+                        }
+                    };
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
                 }
 
@@ -1422,9 +1441,10 @@ impl TypeCheckContext {
                 // tree may be structurally ill-formed for codegen,
                 // but tolerant elaborates aren't fed to codegen.
                 if strict {
-                    if let Some(ti) = tycon_info.as_ref() {
-                        typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
-                    }
+                    let ti = tycon_info
+                        .as_ref()
+                        .expect("strict mode resolves the head to a struct or reports an error");
+                    typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
                 }
 
                 Ok(ei.set_make_struct_fields(typed_fields))
@@ -1497,7 +1517,10 @@ impl TypeCheckContext {
         }
     }
 
-    // Validate pattern and raise error if invalid,
+    /// Reject a pattern the elaboration cannot make sense of: a struct head
+    /// that names no struct, an unknown or duplicated field name, an
+    /// ill-formed type annotation, or a variable name bound twice. Recurses
+    /// into the sub-patterns.
     fn validate_pattern(&mut self, pat: &PatternNode) -> Result<(), Errors> {
         // In `error_tolerant` mode every gate below is downgraded to a
         // no-op so a single bad sub-check doesn't bail out of the whole
@@ -1516,28 +1539,33 @@ impl TypeCheckContext {
                 }
             }
             Pattern::Struct(tc, pats) => {
-                let ti = self.type_env.tycons.get(&tc).unwrap();
-                let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                let fields_pat = pats
+                // The head has to name a struct: the sub-patterns are matched against that
+                // struct's fields, and the value is destructured in its field order.
+                let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
+                let pattern_field_names = pats
                     .iter()
                     .map(|(name, _, _)| name.clone())
                     .collect::<Set<_>>();
-                if fields_pat.len() < pats.len() && !tolerate {
+                if pattern_field_names.len() < pats.len() && !tolerate {
                     return Err(Errors::from_msg_srcs(
                         "Duplicate field in struct pattern.".to_string(),
                         &[&pat.info.source],
                     ));
                 }
-                for f in fields_pat {
-                    if !fields_str.contains(&f) && !tolerate {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Unknown field `{}` for struct `{}`.",
-                                f,
-                                tc.name.to_string()
-                            ),
-                            &[&pat.info.source],
-                        ));
+                if let Some(ti) = tycon_info {
+                    let struct_field_names =
+                        ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                    for field_name in pattern_field_names {
+                        if !struct_field_names.contains(&field_name) && !tolerate {
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "Unknown field `{}` for struct `{}`.",
+                                    field_name,
+                                    tc.name.to_string()
+                                ),
+                                &[&pat.info.source],
+                            ));
+                        }
                     }
                 }
                 for (_, _, p) in pats {
@@ -1565,6 +1593,14 @@ impl TypeCheckContext {
         Ok(())
     }
 
+    /// Say where each of `tvs` came from: for every type variable whose source
+    /// expression is known, a sentence naming it paired with that expression's
+    /// span, to hang off an error as extra source pointers.
+    ///
+    /// # Arguments
+    /// * `ref_no` — when the error text refers to several types by number, the
+    ///   number of the one these variables belong to; it is printed alongside
+    ///   each variable's name.
     pub fn create_tyvar_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
@@ -1601,6 +1637,10 @@ impl TypeCheckContext {
         msg_srcs
     }
 
+    /// Build the "Type mismatch" error pointed at `source`: `expected_ty` and
+    /// `found_ty` with the current substitution applied, the constraint of
+    /// `unif_err` that could not be deduced, and a source pointer for every
+    /// type variable still free in them.
     fn create_type_mismatch_error(
         &self,
         expected_ty: &Arc<TypeNode>,

@@ -10,6 +10,119 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+**The split columns are comparable from `b2de6116d89ff9d43449c2a12fe5c29dd1304bb4` down, and not
+across it.** The counters were read with whatever environment the harness inherited until that row,
+and a split count moves with the environment for the reason given there.
+
+## 4052838995f52c3d8a2ba2ac82fc0e6cb3c02b8a
+
+`Array::sort` spends its recursion budget only on a split that leaves under an eighth of the range
+on one side, instead of on every split, and a split that found nothing less than the pivot gathers
+everything equal to it beside it and drops all of that from the recursion (#227). The partition's
+read of the element it compares no longer checks its bounds, the way the swap beside it already did
+not.
+
+**`sort` costs 49,703,021 instructions against 64,037,014, -22.4%, and 70,499,931 memory accesses
+against 87,856,297.** `sort_stable` reports the same 35,516,421 as the row below, and every other
+case holds to within a thousandth of a percent. Three cases join the corpus, one per shape the
+change turns on: `sort_few_values` sorts an input of 16 distinct values at 15,087,278,
+`sort_ordered` one already in order at 31,217,869, and `sort_organ_pipe` one that rises to the
+middle and falls back at 127,510,119.
+
+Off the corpus, on 1,000,000 elements with `perf stat -e instructions:u` and the generator
+subtracted: pseudo-random 663,737,123 -> **511,899,164** (-22.9%), 16 distinct values 483,798,807
+-> 110,773,672 (-77.1%), already ordered 398,916,794 -> 372,735,723 (-6.6%), reversed 431,928,778
+-> 405,531,368 (-6.1%), boxed elements at 200,000 elements 379,362,768 -> 369,528,805 (-2.6%).
+
+**The organ pipe is what the budget rule is for, and it is where a budget spent wrongly shows up.**
+Doubling the budget outright reads pseudo-random at -17.9% and the organ pipe at **+30.0%**
+(1,452,057,887 -> 1,887,233,235), because the middle element is the greatest of every sub-range
+there and twice the budget is twice as long before heap sort takes over. Spending the budget only
+on the one-sided splits keeps the logarithm it always was, and the organ pipe lands at
+1,486,423,058, **+2.4%**.
+
+## 6e3c9d0534027c05d806c3a2e42eb8e4c397d7fa
+
+`Array::sort_stable` merges between the array and a copy of it, the two exchanging roles at every
+level of the recursion, instead of filling one working buffer and copying it back over the array
+(#222). A range of 12 elements or fewer is sorted by insertion; a merge whose two runs are already
+in order copies them instead of comparing them; and the merge and the range copies are
+tail-recursive functions rather than `Std::loop` bodies.
+
+**Every case of the corpus holds: the largest move is 0.0002%, and `sort` reports the same
+64,037,014 instructions as the row below.** No case sorts stably, which is why two join here:
+`sort_stable` sorts a pseudo-random 100,000-element `Array I64` at 35,516,421 instructions, and
+`sort_stable_ordered` sorts one already in order at 10,090,283, that being the only case reaching
+the copy the ordered-run check takes. The `startup` case says 113,633 of each was spent before
+`main`.
+
+Off the corpus, on 1,000,000 elements with `perf stat -e instructions:u` and the generator
+subtracted: pseudo-random 2,263,395,952 -> **373,925,715** (-83.5%), already ordered 1,571,133,487
+-> 90,713,298 (-94.2%), reversed 1,579,854,830 -> 252,954,574 (-84.0%), 16 distinct values
+2,229,446,252 -> 367,524,544 (-83.5%), and boxed elements at 200,000 elements 680,478,640 ->
+242,621,975 (-64.3%). Sorting stably now costs **0.56 times** what `Array::sort` costs on the same
+input.
+
+Halving the moves accounts for a factor of 2.2 of it; the rest is the price of one move. Written as
+a `Std::loop` body the merge loop is a closure LLVM leaves out of line, and every element pays a
+call that spills six callee-saved registers: the same changes measure 1,450,225,596 with the loop
+and 426,179,761 without it. That is the cliff of #221, which this row steps off rather than removes.
+
+## b2c580cd758ba315d530f61c278540fb9e401d36
+
+The primitive that copies a range of one array onto the end of another was split into an owning one
+that takes the whole source and a borrowing one that takes a range (#204). `Array::append` calls the
+owning one; `Array::get_sub` and `Array::sort_stable` call the borrowing one, which leaves the array
+it reads to its caller. Without the reference duplication the old primitive forced on them, a write
+after such a copy can have its uniqueness check removed.
+
+`get_sub` **-3.48%** instructions and -3.66% memory accesses, the case the change is for.
+`cp_lib_scc` +0.15%: none of the changed call sites is in its hot path, so the movement is code
+layout. The other 44 cases hold to within a hundredth of a percent.
+
+**The split column of this row is not comparable with the row below: the two were measured from
+different filesystem paths.** A program's initial stack is laid out above its argument and
+environment block, so the path the harness is invoked from moves every address on the stack, and a
+hot stack object a few bytes from a line boundary crosses it or does not. The `cp_lib_lsegtree`
+binary of this row, run unchanged from two directories differing only in the length of their names,
+reports **200,024 splits and 23**. Sixteen cases move by more than a twentieth of a percent here for
+that reason, `cp_lib_lsegtree` 23 -> 400,026 and `sum_by_fold_cap` 23 -> 1,588 among them; the row
+below records the same binaries flipping between the same pairs. **Measure both sides at one path
+before reading anything into this column.**
+
+**Not in the corpus: `Array::sort_stable` costs 17.6% more instructions.** On a 2,000,000-element
+`Array I64` it goes from 4,049,614,425 to 4,763,914,157, and the rate holds at 100,000 and 500,000
+elements. Its RC IR improves — two fewer branches in the operation, one fewer release, and 478 lines
+of LLVM-IR down to 409 — but LLVM stops inlining the merge loop's body into `Std::loop`, and 48.7% of
+the run is then spent in the function that stays behind. The corpus has no `sort_stable` case.
+
+## b2de6116d89ff9d43449c2a12fe5c29dd1304bb4
+
+The compiler emits the same code as at the row below. Each of the 46 cases was built with both
+compilers and the two binaries hold the same machine code: 43 of them byte for byte in `.text`, and
+`sort`, `cp_lib_scc` and `cp_lib_bipartite` under a renaming of the numbers a specialization carries
+in its symbol. Every instruction count agrees to within a fiftieth of a percent, which is what the
+loader and libc cost before `main`.
+
+**Read the split column against this row, not against the ones above it.** `perf_counters.py` gave
+the measured command whatever environment the harness inherited, and a program's initial stack is
+laid out above the environment block, so every address on the stack moved with how much the caller
+happened to export. One unchanged binary reported 70,765 splits from one shell and 170,766 from
+another, and `array_mod` reported 23 and 3,153. The counters are now read with the fixed environment
+`cachegrind.py` reads its simulation with, which is why `cp_lib_unionfind` (7,374 above, 207,242
+here) and `cp_lib_lsegtree` (400,155 above, 23 here) move by a factor with the code unchanged.
+
+**A split count belongs to the way the harness invokes the program.** A case whose hot stack object
+sits a few bytes from a line boundary flips by a large factor whenever a frame moves — measured
+under one environment but from a longer path, `cp_lib_lsegtree` reports 400,026 and `cp_lib_scc`
+70,765 — so a jump of that shape is worth attributing before it is read as a change in what the
+program touches.
+
+**What the cycle column reads when nothing changed at all.** The two compilers' binaries, alternated
+within one run under one environment, differ by up to 5% on the cases below a few million cycles and
+by about 1% on the large ones, with the code identical on both sides. Seven cases carry a cycle count
+here; the machine took 11.52 cores for other work while the rest were read.
+
 ## 0fa42cadaaac5aa40e2b9bbf1e2cff3ab34502ff
 
 The capacity check that #178 put in front of every array write which clones a shared array is now

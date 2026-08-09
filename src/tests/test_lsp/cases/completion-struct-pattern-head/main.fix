@@ -1,0 +1,8 @@
+module Main;
+
+main : IO () = (
+    let Item { data : d } = 42;
+    let arr = [1, 2, 3];
+    let _ = arr.
+    pure()
+);

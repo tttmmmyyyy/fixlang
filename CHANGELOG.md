@@ -12,6 +12,7 @@
 #### Tool
 
 - LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
+- LSP: Completion inside an `import` statement now offers what can be written there instead of expression symbols: module names at the module position, the imported module's namespaces and entities at the item positions (including inside `::{...}` and after `hiding`), and the `hiding` keyword after a complete module path.
 - Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which compile `eval {expr0}; {expr1}` as `{expr1}`. Use it to take a debugging `eval debug_println(...)` out of a build without editing the source.
 
 #### Std
@@ -29,7 +30,7 @@
 
 #### Std
 
-- `Array` no longer implements `Boxed`. An array used to keep its size and capacity on the heap alongside its elements, so an `Array a` value was a pointer to that heap object and the type was `Boxed`. An array now keeps its size and capacity in the value itself and puts only the elements on the heap, so the type is unboxed: its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. Consequently an array's element data pointer for FFI now comes from `Array::borrow_elements` / `mutate_elements` instead of the generic `Boxed` pointer helpers (`FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`); code that called those on an array uses the array helpers instead. To pass a whole array to C as an opaque retained pointer, wrap it in a boxed struct such as `Box`.
+- `Array` no longer implements `Boxed`. An array now keeps its size and capacity in the value itself and only its elements on the heap, so the type is unboxed and its embedded representation is `{ptr, i64, i64}` — the pointer to the element storage, the size, and the capacity. For FFI, take an array's element pointer from `Array::borrow_elements` / `mutate_elements` in place of `FFI::borrow_boxed` / `mutate_boxed` / `_get_boxed_ptr`, and wrap an array in a boxed struct such as `Box` to pass it to C as an opaque retained pointer.
 - `Std::unsafe_is_unique` and `Debug::assert_unique` now require their argument to be `Boxed`.
 - The counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` hold different fields. They yield the same elements as before, so only code that reads their fields directly is affected; see their definitions in the standard library.
 
@@ -41,6 +42,12 @@
 - The project file's `no_runtime_check` can now be set in the `build.test` section. `fix test` reads it from there, so a project that disables the checks for its program still runs its tests with them.
 
 ### Fixed
+
+#### Language
+
+- A struct pattern now requires the type at its head to be a struct, and reports an error otherwise. `let MyUnion { a : x } = u;` took the union's tag for the payload of `a`, and the build aborted; `let Item { data : x } = 42;`, whose head names an associated type, aborted the compiler.
+- A trait alias that stands for one trait along two paths is now accepted. `trait Ring = Ordered + Showable;`, where `Ordered` and `Showable` both stand for `Additive`, was rejected as circular aliasing, and the message named a trait of the standard library that the program never mentions.
+- Two implementations of one trait are now reported as overlapping when one of their heads takes a type parameter of a higher kind, as `impl [f : *->*] Bar f : MyTrait` does beside `impl Bar Array : MyTrait`. Both used to be accepted, and the order they were written in decided which one a call reached.
 
 #### Std
 

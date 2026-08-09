@@ -28,10 +28,10 @@ Every scope reviews the working tree as it stands, so uncommitted changes are al
 A completed review records how far it got, so the next one can pick up from there. The record lives in the session memory directory (the path is in the memory instructions the orchestrator already carries), as a single memory file named `code-review-checkpoints`, type `project`, holding one line per branch:
 
 ```
-- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>
+- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>; cleanup PR #<n>
 ```
 
-The recorded hash is `HEAD` **after** the review's own commits land, so the next review starts past the cleanup commits this one made. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. The cleanup pull request is named because its commits sit on another branch and the hash alone would not lead anyone to them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
 
 The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
 
@@ -67,7 +67,22 @@ Ring-2 work is opportunistic, so it is capped: **at most five edits per file per
 
 ### Modes
 
-Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied). Each mode is committed on its own, so the cleanup near the change is a separate commit the author can weigh — or revert — as one unit.
+Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied).
+
+**The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own with a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
+
+The cleanup branch is cut from **the branch under review**, at its tip once the `in-diff` commits have landed, and its pull request targets that branch. Each pull request then reads as one thing: the change against `main`, and the cleanup against the change.
+
+The one requirement is that **the cleanup stay out of the change's diff until the change has been read**. Once it has, the two land whichever way suits:
+
+- Merge the cleanup into the branch under review, then that branch into `main`. One merge into `main`, carrying both.
+- Merge the branch into `main`, and delete it. Deleting a merged head branch makes GitHub retarget every open pull request based on it to that branch's own base, so the cleanup's pull request becomes a pull request into `main` by itself. The deletion is what triggers this, at any point after the merge — it does not have to happen at merge time.
+
+That is the author's call, and it is worth saying in the summary so the choice is in front of them.
+
+Cutting the cleanup branch from the change rather than from `main` also means the two never conflict: the cleanup is a descendant of what it cleans up around.
+
+When the branch under review **is** `main`, there is no split: both modes commit where they are.
 
 ## Aspect Sequence
 
@@ -87,7 +102,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 1. **Avoid conflicting edits.** The editing aspects modify files. Parallel runs would fight each other.
 2. **Each aspect should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
-3. **Per-aspect commits need it.** Each editing aspect is committed on its own, and each of its two modes separately again (see the Procedure), which means running and committing them one at a time.
+3. **Per-aspect commits need it.** Each editing aspect is committed on its own, on the branch its mode belongs to (see the Procedure), which means running and committing them one at a time.
 
 ## Procedure
 
@@ -113,15 +128,21 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. They only report findings; they make no edits.
    - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
 3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. On a clean tree, skip this step.
-4. **Run the editing aspects, committing each mode separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. For each aspect, in turn:
-   - Run it in **`in-diff` mode**. If it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`).
-   - If it reported ring-2 candidates, run it again in **`neighborhood` mode**, handing it that list as its starting point, and commit what it changed as `code-review: <what this aspect did> — cleanup near the change`. An aspect that reported no candidates skips this second run.
+4. **Run the editing aspects in `in-diff` mode**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. Run each one, and if it changed any files, commit exactly those changes on the branch under review — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). Collect the ring-2 candidates each aspect reports, keyed by aspect.
 
-   A mode that changed nothing produces no commit. **Per-aspect, per-mode, fine-grained commits are the goal — never bundle several into one commit.**
-5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Record the checkpoint.** Take `git rev-parse --short HEAD` and write it to the `code-review-checkpoints` memory under the current branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-7. **Summarize.** For each editing aspect, give a one-line description of what it changed in each mode (or note it changed nothing), keeping the cleanup near the change visible as its own line so the author can judge it separately; surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
-8. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+   An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
+5. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
+6. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, and go to step 7.
+
+   Otherwise:
+   - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
+   - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode**, handing it that list as its starting point.
+   - Commit each aspect's edits on their own — `code-review: <what this aspect did> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the build (and the test suite where the edits could reach behavior).
+   - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what the cleanups are, which convention each comes from, and why they are behavior-preserving.
+   - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
+7. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+8. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
+9. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -182,7 +203,8 @@ edits; findings and candidates are added on top of it.
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base and the mode.
 - Don't let a `neighborhood` pass edit past the radius rules: an interface change or a behavior change outside the hunks is a finding, whatever the mode.
-- Don't let neighborhood edits ride along in an `in-diff` commit — the split is what lets the author revert the cleanup on its own.
+- Don't commit neighborhood edits on the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
+- Don't merge the cleanup pull request yourself. Merging it before the change has been read puts the cleanup back into the diff the split exists to keep clear, and either way the merge is the author's.
 - Don't continue the chain if a step fails.
 - Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
@@ -855,9 +877,11 @@ Comments are read by people coming to the code fresh. They want to know *what th
 
 **Keep** a "why" reference to history *only* when the implementation departs from what a reader would naturally expect, and the past explains the departure — e.g., "we don't use approach X here because of bug #1234" or "the obvious recursion is unrolled to avoid stack overflow on deeply nested input." The test: would a fresh reader, seeing the code, be surprised by the choice and benefit from knowing why?
 
-#### Comments and prose must be in English — [Rust + Markdown]
+#### The project's own text is in English — [Rust + Markdown]
 
-This project's source comments are written in English (`Document.md`, `std.fix`, prior code, and PRs all assume English). A comment in any other language — Japanese, Chinese, etc. — is a style violation.
+The Rust source comments, `std.fix`'s doc comments, and the documents the project publishes to its users are written in English, so a comment or a paragraph in another language is a style violation. The exception is a document that exists as a translation, such as `Document-ja.md`, which is written in the language it translates into.
+
+This convention covers the text the project ships. Writing addressed to the people working on the change — a dev doc under `dev-docs/`, a pull request body, an issue — is in the language of the people who read it, and this convention does not reach it. The `devdoc` skill governs a dev doc's writing.
 
 **Rewrite**: translate the comment into clear English while preserving its meaning.
 
@@ -940,7 +964,7 @@ The test: could a user of the latest release hit this bug? A bug whose cause is 
 
 1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
-   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
    - **`CHANGELOG.md`**: the **[Rust + Markdown]** and **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
