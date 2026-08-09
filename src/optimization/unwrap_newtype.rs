@@ -42,11 +42,9 @@ pub fn run(prg: &mut Program) {
 /// The type constructors this pass replaces with the type of their one field, together with the
 /// type environment they were chosen against.
 ///
-/// The choice is made once and every rewrite asks this same value: the type of an expression, the
-/// field of a declaration that stays, and the type environment itself. A type constructor is
-/// therefore replaced wherever it heads a saturated type and dropped from the type environment only
-/// if it is replaced, so no saturated occurrence is left naming a type the environment no longer
-/// declares.
+/// The choice is made once and every rewrite asks this same value, so a type constructor is
+/// replaced wherever it heads a saturated type and dropped from the type environment only if it is
+/// replaced: no saturated occurrence is left naming a type the environment no longer declares.
 struct NewtypeUnwrapping {
     /// The type environment as this pass received it. Field types are read from here, so a
     /// declaration reads as it did when the choices were made.
@@ -56,6 +54,8 @@ struct NewtypeUnwrapping {
 }
 
 impl NewtypeUnwrapping {
+    /// Chooses the type constructors to replace: the newtypes of `tycons` whose field types do not
+    /// lead back to them.
     fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
         let mut unwrappable_tycons = Set::default();
         for tc in tycons.keys() {
@@ -78,6 +78,8 @@ impl NewtypeUnwrapping {
         }
     }
 
+    /// Whether `tc` is replaced by the type of its one field. The form of a struct with one field
+    /// punched out answers as the struct it punches does.
     fn is_unwrappable(&self, tc: &TyCon) -> bool {
         self.unwrappable_tycons.contains(tc)
     }
@@ -170,6 +172,7 @@ impl NewtypeUnwrapping {
         }
     }
 
+    /// Unwraps the type recorded in `pat_info`, in place.
     fn unwrap_pattern_info(&self, pat_info: &mut PatternInfo) {
         if let Some(ty) = &mut pat_info.type_ {
             *ty = self.unwrap_type(ty);
@@ -198,6 +201,8 @@ impl NewtypeUnwrapping {
     }
 }
 
+/// Unwraps the types recorded in each export statement. An exported `IO` function is recorded as
+/// state-passing, since unwrapping `IO` leaves the function that takes the state.
 fn run_on_exported_statements(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
     for export in &mut prg.export_statements {
         if let Some(expr) = &export.value_expr {
@@ -216,6 +221,7 @@ fn run_on_exported_statements(prg: &mut Program, unwrapping: &NewtypeUnwrapping)
     }
 }
 
+/// Unwraps the type inferred for the `IO` value the program runs at entry.
 fn run_on_entry_io_value(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
     if let Some(entry_io_value) = &mut prg.entry_io_value {
         let expr = unwrapping.unwrap_inferred_type(entry_io_value);
@@ -223,6 +229,7 @@ fn run_on_entry_io_value(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
     }
 }
 
+/// Unwraps the type of one symbol and rewrites the expression that defines it.
 fn run_on_symbol(sym: &mut Symbol, unwrapping: &NewtypeUnwrapping) {
     let mut unwrapper = ExprUnwrapper { unwrapping };
     sym.ty = unwrapping.unwrap_type(&sym.ty);
@@ -232,6 +239,7 @@ fn run_on_symbol(sym: &mut Symbol, unwrapping: &NewtypeUnwrapping) {
 /// Rewrites the types recorded in one symbol's expression, and replaces the field operations of an
 /// unwrapped newtype by the operations on the field itself.
 struct ExprUnwrapper<'a> {
+    /// The choices made for the whole program, applied here to one symbol.
     unwrapping: &'a NewtypeUnwrapping,
 }
 
@@ -511,9 +519,7 @@ fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
 /// Is this type constructor a newtype whose field types do not lead back to it?
 ///
 /// Replacing a newtype with the type of its field terminates exactly when this walk reaches the
-/// end, so this is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite. Whether a type
-/// constructor is replaced is `NewtypeUnwrapping::is_unwrappable`, which takes this answer for a
-/// struct and the struct's answer for the form of it with a field punched out.
+/// end, so this answer is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite.
 fn is_acyclic_newtype(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     // If this TyCon is not a newtype, return false.
     if !is_newtype(tc, env) {
