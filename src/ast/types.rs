@@ -40,25 +40,33 @@ use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
+/// A type variable, identified by its name.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
+    /// The name the variable is written with, e.g. `a`.
     pub name: Name,
+    /// The kind of the types this variable stands for. A variable built by the parser carries `*`
+    /// until `Program::set_kinds` reads the kind signatures of the declaration it appears in.
     pub kind: Arc<Kind>,
 }
 
 impl PartialEq for TyVar {
+    /// Compares the name alone, which is what decides which variable this is; see the note on
+    /// `Hash`.
+    ///
+    /// Every place the compiler compares two type variables by hand reads the name alone, and the
+    /// kind a variable carries is set later than the variable itself, so reading it here answers a
+    /// question about kinds with whichever value happened to be stored.
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.kind == other.kind
+        self.name == other.name
     }
 }
 
 impl Eq for TyVar {}
 
 impl Hash for TyVar {
-    /// Hashes the name alone. The kind is an attribute of a variable rather than part of which
-    /// variable it is, so two variables of one name are one variable whatever kinds they carry --
-    /// a shape a well-formed program does not produce, and one a hash should not distinguish.
-    /// Leaving the kind out also keeps this consistent with an equality that stopped reading it.
+    /// Hashes the name alone, agreeing with the equality of `PartialEq`: the name is what decides
+    /// which variable this is, and the kind is an attribute the variable carries.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
@@ -72,6 +80,7 @@ impl TyVar {
         Arc::new(ret)
     }
 
+    /// A copy of this type variable named `name`, leaving this one as it is.
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
@@ -1623,10 +1632,11 @@ impl TypeNode {
             }
             appeared.insert(fv.name.clone());
             let new_name = number_to_varname(next_tyvar_no);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
+            assert!(merge_ok, "`{}` is renamed twice.", fv.name);
             next_tyvar_no += 1;
         }
 
@@ -1994,7 +2004,7 @@ impl TypeNode {
     }
 
     // Collect type variables that are "fixed" in this type, in the sense of
-    // `Fixv` from section 5.1 of "Associated Type Synonyms"
+    // `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms"
     // (Chakravarty, Keller, Peyton Jones, ICFP '05).
     //
     // A type variable is fixed if unifying the type with a ground type would
@@ -2284,33 +2294,35 @@ impl Scheme {
         }
 
         // Each generalized type variable that appears in the scheme body must
-        // be "fixed" in the sense of `Fixv` from section 5.1 of "Associated
-        // Type Synonyms". A variable is fixed iff it appears outside of any
-        // associated type application, either in the main type or on the
-        // right-hand side of an equality constraint. A variable that only
-        // appears under an associated type application (or only in a class
-        // predicate) would not be determined by unification at a use site,
-        // which would make the scheme ambiguous.
-        let fixed = self.fixed_vars();
+        // be "fixed" in the sense of `Fixv` from the section "Well-formed
+        // programs" of "Associated Type Synonyms". A variable is fixed iff it
+        // appears outside of any associated type application, either in the
+        // main type or on the right-hand side of an equality constraint. A
+        // variable that only appears under an associated type application (or
+        // only in a class predicate) would not be determined by unification at
+        // a use site, which would make the scheme ambiguous.
+        let fixed_vars = self.fixed_vars();
         // First occurrence wins, which gives a useful span pointing at the
         // offending position.
         let occurrences = self.all_tyvar_occurrences_with_span();
-        for gv in &self.gen_vars {
-            if fixed.contains(&gv.name) {
+        for gen_var in &self.gen_vars {
+            if fixed_vars.contains(&gen_var.name) {
                 continue;
             }
-            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gv.name) else {
-                // Variable does not appear anywhere in the body; it cannot be
-                // used and would be ambiguous, but this situation should not
-                // arise because `Scheme::generalize` only collects free vars
-                // into `gen_vars`. Skip defensively.
+            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gen_var.name) else {
+                // A generalized variable can be absent from the body:
+                // `gen_vars` is determined when the scheme is generalized, and
+                // expanding a type alias that drops a parameter (`type Ignore
+                // a = I64;` used as `f : Ignore a -> I64;`) afterwards removes
+                // the variable from the body. Such a variable constrains
+                // nothing at a use site, so there is no ambiguity to report.
                 continue;
             };
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
                      NOTE: `{}` must appear outside of any associated type application.",
-                    gv.name, gv.name,
+                    gen_var.name, gen_var.name,
                 ),
                 &[span],
             ));
@@ -2369,10 +2381,11 @@ impl Scheme {
         for tyvar in &self.gen_vars {
             tyvar_num += 1;
             let new_name = number_to_varname(tyvar_num as usize);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &tyvar.name,
                 type_tyvar(&new_name, &tyvar.kind.clone()),
             ));
+            assert!(merge_ok, "`{}` is generalized twice.", tyvar.name);
         }
         self.to_string_substituted(&s)
     }
@@ -2402,7 +2415,7 @@ impl Scheme {
     }
 
     // Collect type variables that are "fixed" by this scheme's body, in the
-    // sense of `Fixv` from section 5.1 of "Associated Type Synonyms".
+    // sense of `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms".
     //
     // Contributions:
     // - the main type `self.ty`
@@ -2639,4 +2652,31 @@ pub struct OpaqueTyConResolution {
     // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{kind_arrow, kind_star, make_tyvar};
+    use crate::misc::Set;
+
+    /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
+    /// with that.
+    ///
+    /// The kind a variable carries is set later than the variable itself, so a container keyed by a
+    /// type would otherwise hold one variable under two keys, one of them stale.
+    #[test]
+    fn a_type_variable_is_identified_by_its_name_alone() {
+        let star = make_tyvar("a", &kind_star());
+        let higher = make_tyvar("a", &kind_arrow(kind_star(), kind_star()));
+        let other_name = make_tyvar("b", &kind_star());
+
+        assert!(star == higher, "`a : *` and `a : *->*` are one variable.");
+        assert!(star != other_name, "`a` and `b` are two variables.");
+
+        let mut set = Set::default();
+        set.insert(star.clone());
+        set.insert(higher.clone());
+        set.insert(other_name.clone());
+        assert_eq!(set.len(), 2);
+    }
 }

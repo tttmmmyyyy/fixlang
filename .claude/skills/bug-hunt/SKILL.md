@@ -1,7 +1,7 @@
 ---
 name: bug-hunt
-description: "Hunt for latent bugs in a chosen target with three finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. It never fixes the code under test; a hypothesis test that passes is kept as a regression test, on the branch under test when it covers an axis the suite lacks and on a dedicated branch otherwise. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
-argument-hint: "Target (a subsystem path, a branch's diff, the standard library, or the whole compiler) and optionally the angles to search from. If omitted, the skill asks."
+description: "Hunt for latent bugs in a chosen target with two finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. It never fixes the code under test; a hypothesis test that passes is kept as a regression test, on the branch under test when it covers an axis the suite lacks and on a dedicated branch otherwise. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
+argument-hint: "Target (a subsystem path, a branch's diff, the standard library, or the whole compiler) and optionally the lens to search from. If omitted, the skill asks."
 ---
 
 # Bug Hunt
@@ -25,13 +25,13 @@ The invoker names the target, and optionally the lens. When either is missing, a
 - The Fix standard library (`std.fix`) and the behavior `Document.md` promises for it — a documented behavior the compiler does not deliver is a bug in one of the two.
 - The whole compiler, which the scout pass then splits into areas.
 
-**Lenses** — a lens is a search angle handed to one finder, so that the three look for different things instead of converging on the same shallow three bugs. A lens is powerful for the same reason it is dangerous: a finder told to look for boundary bugs will find boundary bugs, and will walk past everything else. So a hunt **derives its two lenses from the target** rather than picking them off a list, and gives the third finder no lens at all:
+**Lenses** — a lens is a search angle handed to one finder: a question about the target that the wave commits to asking. A lens is powerful for the same reason it is dangerous: a finder told to look for boundary bugs will find boundary bugs, and will walk past everything else. So **one finder gets a lens the hunt derives from the target, and the other gets none**:
 
-- In the scout pass, read the target and write down what it is responsible for: the invariants it maintains, the inputs it accepts, the guarantees its callers rely on, the ways it can fail silently. Each of those is a candidate lens, phrased as a question about *this* target.
-- Take two that are blind to each other. Two lenses that would read the same code the same way are one lens.
-- **The third finder runs unlensed**, told to ignore the angles the hunt chose and report whatever is actually wrong. It is the check on the lens set itself, and comparing its yield against the other two says whether the lenses are helping or narrowing.
+- In the scout pass, read the target and write down what it is responsible for: the invariants it maintains, the inputs it accepts, the guarantees its callers rely on, the ways it can fail silently. Each of those is a candidate lens, phrased as a question about *this* target. Take the one the log leaves most open.
+- **The other finder runs unlensed**, told to report whatever is actually wrong in the areas it owns. It is the check on the lens itself: the lens commits the wave to one question, and the unlensed sweep is what finds the wave asking the wrong one.
+- Comparing the two yields says whether the lens is helping or narrowing. An unlensed finder that out-yields the lens, wave after wave, is the signal to stop deriving lenses at all.
 
-Recurring angles look roughly like the following. Treat them as calibration for how wide a lens should be, and let the target dictate the actual set — a hunt that only ever asks the questions on this list will only ever find the classes of bug already known to this project:
+Recurring lenses look roughly like the following. Treat them as calibration for how wide a lens should be, and let the target dictate the actual one — a hunt that only ever asks the questions on this list will only ever find the classes of bug already known to this project:
 
 - Miscompilation — a valid program compiled into code that computes the wrong thing.
 - Memory and reference counting — leaks, double frees, use-after-free, an ownership declaration that disagrees with what the code does.
@@ -40,7 +40,7 @@ Recurring angles look roughly like the following. Treat them as calibration for 
 - Error and failure paths — the arm nobody runs on input nobody sends.
 - Tool behavior — the build cache, dependency resolution, the LSP answers, the generated documentation.
 
-The hunt log holds the angles previous hunts used and what each returned. Start somewhere else: a lens that has been run twice with nothing to show is spent, and the classes named by the last hunt's completeness critic are the strongest candidates for this one.
+The hunt log holds the lenses previous hunts used and what each returned. Take this wave's lens from somewhere else: a lens that has been run twice with nothing to show is spent, and the classes named by the last hunt's completeness critic are the strongest candidates for this one.
 
 ## Severity
 
@@ -65,17 +65,17 @@ A finding with neither is dropped.
 
 ## Procedure
 
-A hunt is **three finder subagents and the orchestrator**. Each finder gets its own worktree, so three is also three builds — that cost is what keeps the fan-out at three, and the schedule is where the depth comes from instead: one hunt is one wave, and the hunt log carries what has been searched from wave to wave.
+A hunt is **two finder subagents and the orchestrator**. Each finder gets its own worktree, so two is also two builds — that cost is what keeps the fan-out small, and the schedule is where the depth comes from instead: one hunt is one wave, and the hunt log carries what has been searched from wave to wave.
 
-1. **Resolve the target and the angles.** Ask with `AskUserQuestion` when the invocation left either open. Confirm the working tree is clean (`git status --porcelain`) and note the current commit — the hunt reports against that state.
-2. **Read the hunt log** from memory: what previous hunts covered, which angles they used and what each returned, which candidates were dismissed and why, and which confirmed bugs are still unfixed. A dismissed candidate is re-raised only with evidence the refutation did not have.
-3. **Scout, inline.** Read enough of the target to split it into areas and to derive the angles (see *Target and Lens*). Then fix the three assignments: **two derived angles, and one unlensed finder**. Each gets the areas it owns, so that together they cover the target. Report the assignment before launching, so a mis-scoped hunt is caught in seconds rather than after three subagents finish.
-4. **Launch the three finders in parallel** with the `Agent` tool, in a single block, each with `isolation: "worktree"`, and wait for all three. The isolation is what makes the parallelism sound: the *Evidence Bar* asks a finder to run things, so each one edits sources and builds, and three of them sharing one tree would revert each other's probes and read each other's edits as their own. It is also the hunt's largest cost — each worktree compiles its own `target/` — and the reason the fan-out stays at three.
+1. **Resolve the target and the lens.** Ask with `AskUserQuestion` when the invocation left either open. Confirm the working tree is clean (`git status --porcelain`) and note the current commit — the hunt reports against that state.
+2. **Read the hunt log** from memory: what previous hunts covered, which lenses they used and what each returned, which candidates were dismissed and why, and which confirmed bugs are still unfixed. A dismissed candidate is re-raised only with evidence the refutation did not have.
+3. **Scout, inline.** Read enough of the target to split it into areas and to derive the lens (see *Target and Lens*). Then fix the two assignments: **one derived lens, and one unlensed finder**. Each gets the areas it owns, so that together they cover the target. Report the assignment before launching, so a mis-scoped hunt is caught in seconds rather than after both subagents finish.
+4. **Launch both finders in parallel** with the `Agent` tool, in a single block, each with `isolation: "worktree"`, and wait for both. The isolation is what makes the parallelism sound: the *Evidence Bar* asks a finder to run things, so each one edits sources and builds, and two of them sharing one tree would revert each other's probes and read each other's edits as their own. It is also the hunt's largest cost — each worktree compiles its own `target/` — and the reason the fan-out stays at two.
 
-   Brief each with: the target and its areas, its angle (or, for the third, the instruction to ignore the hunt's angles and report whatever is actually wrong), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that it reverts every probe before returning, so its worktree is removed for it. A hypothesis test that passes is handed back in the report — its full body, and where in the suite it belongs — before that revert, since the report is the only thing that outlives the worktree. Each returns candidates (file, symbol, claim, failing scenario, and whether the evidence is executed or traced) and, separately, the passing hypothesis tests it wrote.
+   Brief each with: the target and its areas, its lens (or, for the unlensed one, the instruction to report whatever is actually wrong in the areas it owns), the *Evidence Bar*, the *Techniques That Found Bugs* section, the dismissed candidates from the log, and the rule that it reverts every probe before returning, so its worktree is removed for it. A hypothesis test that passes is handed back in the report — its full body, and where in the suite it belongs — before that revert, since the report is the only thing that outlives the worktree. Each returns candidates (file, symbol, claim, failing scenario, and whether the evidence is executed or traced) and, separately, the passing hypothesis tests it wrote.
 5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it — on the commit under test *and* on the true pre-change baseline (the fork point for a branch not yet merged; for a change already merged to main, the merge commit's **first** parent — not `git merge-base`, which for a merged PR returns the feature-branch tip that already contains the change, so a real regression looks pre-existing against it), since a pre-existing failure, environment noise, or a third-party defect looks identical to a fresh bug until that one run? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
 6. **Deepen each survivor, inline**: the four deliverables under *Report*.
-7. **Critique the coverage.** With all three reports in hand, name the classes of bug that these angles could not have surfaced, whatever their yield. That answer goes in the report and becomes the strongest candidate angle for the next hunt.
+7. **Critique the coverage.** With both reports in hand, name the classes of bug this wave could not have surfaced, whatever its yield — what the lens looked past, and what the unlensed sweep had no way to reach. That answer goes in the report and becomes the strongest candidate lens for the next hunt.
 8. **Keep the tests worth keeping, where they belong.** Collect the passing hypothesis tests the finders handed back and drop any duplicated among the finders. Then sort the rest by the question above: would anything in the suite fail if the behavior this test pins broke? Answer it against the suite — the symbol it exercises, the file that would cover it — and when the answer is not clearly no, treat it as covered. The ones nothing covers go to the **branch under test**: run them there, then commit them as one commit whose message says what each pins. The rest go to a **dedicated branch** in its own worktree. Both are deliverables beside the report; name them there.
 9. **Report**, then **append** any technique that earns it, then **update the hunt log**.
 10. **Leave the working tree as you found it.** Verify `git status --porcelain` is empty on the branch under test, and that no finder worktree survives (`git worktree list`) — one that does is a finder that left a probe behind. The report is written against the commit noted in step 1; the test commit sits on top of it, and the report says so.
@@ -89,7 +89,7 @@ Per bug, most severe first:
 - **Fix proposal** — the root cause, then what to change. When the root cause is a design gap rather than a line, say so and name the options.
 - **Barrier** — see *Recurrence Barriers*.
 
-Close with what the hunt covered: the areas, the three angles and what each returned, how many candidates were examined and how many the refutation killed, and the classes of bug these angles could not have surfaced. A hunt that found nothing reports that plainly along with its coverage — a clean sweep of a well-worn subsystem is information, and so is an unlensed finder that out-yields both lenses.
+Close with what the hunt covered: the areas, the lens and the unlensed sweep and what each returned, how many candidates were examined and how many the refutation killed, and the classes of bug this wave could not have surfaced. A hunt that found nothing reports that plainly along with its coverage — a clean sweep of a well-worn subsystem is information, and so is an unlensed finder that out-yields the lens.
 
 Say in one line what each kept test pins, and where it went: the commit on the branch under test for the ones covering an axis the suite lacks, the dedicated branch for the rest. A green test for an invariant the hunt suspected and confirmed is as much a product of the wave as a red one that found a bug — a hunt that fixed nothing can still leave the suite stronger than it found it.
 
@@ -158,6 +158,26 @@ Two shapes recur. **The detector never ran on the code**: the probe compiled awa
 
 This applies with most force right after a change **tightens a bound that used to be loose** — an allocation sized exactly where it used to be over-approximate, a length that used to be padded, a timeout that used to be generous. The slack was hiding every violation smaller than itself; when it goes, the violations become reachable, and a detector proven to fire is how you find out whether any existed.
 
+#### Run the gatekeeper's predicate at the gate
+
+A pass that exists to guarantee something for a *later* stage — a validator that rejects what code
+generation cannot handle, a check that every case a dispatch will meet is covered, a cache key that
+must capture everything the generator reads — states a containment: what the later stage requires is
+a subset of what the earlier pass examined. Nothing checks that containment, because the two run far
+apart and the later stage has no reason to look back.
+
+Make it check itself: at the point the later stage consumes the thing, re-run the earlier pass's
+own predicate on what it is actually consuming, and report every disagreement. Two kinds come out,
+and both are findings. The predicate says *no* on something the later stage handled fine — the
+validator over-approximates, and a valid program is being rejected. Or the later stage consumes
+something the earlier pass never saw at all — count those, because they are the hole through which
+the guarantee leaks, and a passing suite says nothing about them.
+
+The count matters as much as the verdict: "the validator never saw 154 of the types code generation
+laid out" is a measurement of the gap, available with no failing input in hand, and it survives as
+evidence even when no input that breaks is found. Prove the probe fires the usual way, on a case
+where the two are known to disagree.
+
 #### Run the same program at every optimization level
 
 `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
@@ -206,10 +226,10 @@ Output comparison and memcheck both run single-threaded and miss data races — 
 
 One hunt is one wave, so the log is what turns a schedule of small hunts into a search that keeps going. Kept in the session memory directory (the path is in the memory instructions the orchestrator already carries) as a memory file named `bug-hunt-log`, type `project`:
 
-- One line per hunt: date, target, commit, the three angles, and what each returned. A lens that has now returned nothing twice is spent — retire it, and say so on the line.
+- One line per hunt: date, target, commit, the lens, the unlensed area, and what each returned. A lens that has now returned nothing twice is spent — retire it, and say so on the line.
 - One line per dismissed candidate: what was claimed, and why the refutation killed it. This is what keeps a periodic hunt from re-reporting the same non-bug every time. A dismissed candidate returns only with evidence the refutation did not have.
 - One line per confirmed bug the author left unfixed, so the next hunt reports it as known rather than new.
-- The classes the coverage critique named. They are the first place the next hunt looks for its angles.
+- The classes the coverage critique named. They are the first place the next hunt looks for its lens.
 
 ## What NOT to do
 
@@ -219,7 +239,8 @@ One hunt is one wave, so the log is what turns a schedule of small hunts into a 
 - Don't discard a passing hypothesis test that no existing test covers — it is a regression test the wave earned, and it belongs on the branch under test.
 - Don't put a test on the branch under test on a hunch that it is new. The question is whether the suite would fail without it, and an unanswered question sends the test to the dedicated branch.
 - Don't re-raise a dismissed candidate without new evidence.
-- Don't grow the hunt past three finders. The depth of this hunt comes from running it again, not from spending more on one wave.
-- Don't let the recurring-angle list stand in for the scout pass. Angles derived from the target find what a fixed menu cannot.
+- Don't grow the hunt past two finders. The depth of this hunt comes from running it again, not from spending more on one wave.
+- Don't let the recurring-lens list stand in for the scout pass. A lens derived from the target finds what a fixed menu cannot.
+- Don't give the unlensed finder an angle, whether by naming one or by describing its areas so that only one reading is open. Its job is the reading the lens is not doing.
 - Don't add a `code-review` convention for a bug that a regression test pins better — the review skill is read in full by every aspect subagent, so its conventions are a shared budget.
 - Don't write a convention or a technique whose subject is one incident. Both sections are instructions to future agents that will meet different code; anything that only makes sense next to the bug at hand degrades them.
