@@ -94,11 +94,11 @@ struct Slot {
 キャプチャフィールドである。
 
 ```rust
-struct Tree {
+struct ClosureTree {
     // この値を通る呼び出しが届くラムダ。
     lambda: FullName,
     // 正体の分かっているキャプチャフィールドを、位置の昇順で。
-    fields: Vec<(usize, Tree)>,
+    fields: Vec<(usize, ClosureTree)>,
 }
 ```
 
@@ -107,9 +107,9 @@ struct Tree {
 ```rust
 // 1 つの複製: どの関数を複製したか、その各入口が何を受け取ると分かっているか。
 // 置き換えが空なら、その関数自身を指す。
-struct UnitKey {
+struct FuncCopy {
     origin: FullName,
-    subst: Vec<(Slot, Tree)>,
+    subst: Vec<(Slot, ClosureTree)>,
 }
 ```
 
@@ -156,7 +156,7 @@ run(プログラム):
 
 ```rust
 // (関数, スロット, 木の根のラムダ) -> その道すじで入れてよい木。
-type Pinned = Map<(FullName, Slot, FullName), Tree>;
+type Pinned = Map<(FullName, Slot, FullName), ClosureTree>;
 ```
 
 読み方は「この道すじでは、この関数のこのスロットに、根がこのラムダの木を入れるなら、入れて
@@ -165,7 +165,7 @@ type Pinned = Map<(FullName, Slot, FullName), Tree>;
 
 ```rust
 // 木 t をスロット s へ入れてよいかを答え、通すならその約束を表に書く。
-fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool;
+fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &ClosureTree) -> bool;
 ```
 
 これが止めるのは、**受け取ったクロージャを包んで次の周へ渡す再帰**である。周ごとに木が 1 段
@@ -288,7 +288,7 @@ k = 2 で、単位が生まれる順を追う。`K_i{}` は「`K_i` そのもの
 // 固定表は連鎖の深さを止める。こちらは幅を止める。固定表はスロット 1 つについての規則で、
 // スロット 1 つについての規則は組み合わせの積を残すからである。
 struct CopyBudget {
-    units: Map<FullName, Set<UnitKey>>,
+    copies: Map<FullName, Set<FuncCopy>>,
     askers: Map<FullName, Set<FullName>>,
 }
 
@@ -298,26 +298,26 @@ const BASE_COMBINING_COPIES: usize = 8;
 const COMBINING_COPIES_PER_ASKING_FUNCTION: usize = 1;
 
 impl CopyBudget {
-    // 関数 asked_by が要求した単位 unit を作ると約束し、作ってよいかを答える。
+    // 関数 asked_by が要求した単位 copy を作ると約束し、作ってよいかを答える。
     //
     // 既に約束した単位はいつでも通る。新しい単位は、要求した関数が稼いだ許容量に出どころが
     // まだ届いていなければ通る。通さなかった地点は値を包むので、許容量をどう決めても
     // 正しさを損なうことはない。
-    fn admit(&mut self, unit: &UnitKey, asked_by: &FullName) -> bool {
-        if unit.lambdas() < 2 {
+    fn admit(&mut self, copy: &FuncCopy, asked_by: &FullName) -> bool {
+        if copy.lambdas() < 2 {
             return true;
         }
-        if self.units.entry(unit.origin.clone()).or_default().contains(unit) {
+        if self.copies.entry(copy.origin.clone()).or_default().contains(copy) {
             return true;
         }
-        let askers = self.askers.entry(unit.origin.clone()).or_default();
+        let askers = self.askers.entry(copy.origin.clone()).or_default();
         askers.insert(asked_by.clone());
         let allowance = BASE_COMBINING_COPIES + COMBINING_COPIES_PER_ASKING_FUNCTION * askers.len();
-        let committed = self.units.entry(unit.origin.clone()).or_default();
+        let committed = self.copies.entry(copy.origin.clone()).or_default();
         if committed.len() >= allowance {
             return false;
         }
-        committed.insert(unit.clone());
+        committed.insert(copy.clone());
         true
     }
 }
@@ -384,7 +384,7 @@ sum over 出どころ O of (BASE + C * |O を要求した関数|) <= (BASE + C) 
 
 - **R1** (`narrow`) — 狭めるフィールドが決まり、木ができたところ。その木を受け取るラムダの
   単位を `admit` に掛け、通らなければ**狭めを 1 つも行わずに** `known` をそのまま返す。
-- **R2** (`start_visit_app`) — 狭めて渡す引数が決まったところ。`UnitKey::new(func_name,
+- **R2** (`start_visit_app`) — 狭めて渡す引数が決まったところ。`FuncCopy::new(func_name,
   specialized_args)` を `admit` に掛け、通らなければ**この呼び出しでは 1 つも狭めず**、
   すべて包んだ引数で元の関数を呼ぶ。
 

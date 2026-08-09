@@ -379,9 +379,9 @@ issue #166 はこれを「持ち上げ先が空の表で始まる」と書いて
 // どのラムダのキャプチャリストで、どのフィールドがどう狭まっているか。
 // 載るのは狭めたフィールドだけで、残りは元のまま。キャプチャリストの
 // フィールドは大半が普通の値 (I64 や Array) で、狭めようがない。
-struct Tree {
+struct ClosureTree {
     lambda: FullName,
-    fields: Map<usize, Tree>,
+    fields: Map<usize, ClosureTree>,
 }
 ```
 
@@ -457,9 +457,9 @@ run(プログラム):
 
 ```rust
 // origin の本体を、スロットごとの木で置き換えて 1 度だけ実体化する単位。
-struct UnitKey {
+struct FuncCopy {
     origin: FullName,
-    subst: Map<Slot, Tree>,   // 空なら origin そのもの
+    subst: Map<Slot, ClosureTree>,   // 空なら origin そのもの
 }
 ```
 
@@ -691,11 +691,11 @@ struct PinKey {
 }
 
 // 見出し -> その道すじで入れてよい木。
-type Pinned = Map<PinKey, Tree>;
+type Pinned = Map<PinKey, ClosureTree>;
 
 // 要求は単位の鍵と、それを立てた道すじの固定表を運ぶ。
 struct UnitRequest {
-    key: UnitKey,
+    key: FuncCopy,
     pinned: Pinned,
 }
 ```
@@ -789,7 +789,7 @@ fold = |s, op, iter| ( ... iter.fold(op(a, s), op) ... )    // op をそのま�
 #### 同じキーを違う固定表で要求したとき
 
 単位の本体は、実体化したときの固定表によって変わりうる (深い道すじでは内側の判定が通らず、包み
-直しが残る)。一方 `UnitKey` は出どころと置き換えだけで決まり、固定表を含まない。したがって
+直しが残る)。一方 `FuncCopy` は出どころと置き換えだけで決まり、固定表を含まない。したがって
 **同じ鍵の要求が違う固定表で立つと、先に実体化したほうの本体が共有される。**
 
 これは受け入れる。正しさも停止性も損なわれず、失うのは「浅い道すじから来た要求が、深い道すじの
