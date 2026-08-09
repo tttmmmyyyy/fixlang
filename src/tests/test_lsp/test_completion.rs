@@ -8,7 +8,7 @@ mod tests {
         collect_completion_items, find_sort_text, setup_test_env, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::{fs, path::Path, time::Duration};
 
     /// Test that associated types appear in completion candidates.
@@ -311,44 +311,7 @@ mod tests {
         // longer than `complete`'s hard-coded 5s sleep on a cold cache.
         let items = ctx.complete_with_timeout("main.fix", 13, 7, Duration::from_secs(60));
 
-        // Each item should carry a sortText derived from its tier.
-        let find_sort = |label: &str| -> String {
-            let it = items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .unwrap_or_else(|| {
-                    panic!("expected {} in completion items; got {:?}", label, items)
-                });
-            it.get("sortText")
-                .and_then(|v| v.as_str())
-                .map(String::from)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "expected sortText on dot-completion item {}; got {}",
-                        label, it
-                    )
-                })
-        };
-
-        let sort_myfunc1 = find_sort("Main::myfunc1");
-        let sort_myfunc2 = find_sort("Main::myfunc2");
-        assert!(
-            sort_myfunc2 < sort_myfunc1,
-            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
-             got myfunc2={:?}, myfunc1={:?}",
-            sort_myfunc2,
-            sort_myfunc1
-        );
-        // Stronger: I64 unify should land myfunc2 in Tier 0. The
-        // namespace-match sub-tier is encoded as a single letter
-        // following the digit (`0a` / `0b` / `0c`); for `Main::myfunc2`
-        // with an `I64` receiver the namespace `Main` is unrelated to
-        // `Std::I64`, so the sub-tier is `c`.
-        assert!(
-            sort_myfunc2.starts_with('0'),
-            "myfunc2 should be Tier 0 (sortText `0…`); got {:?}",
-            sort_myfunc2
-        );
+        assert_myfunc2_outranks_myfunc1(&items);
 
         ctx.shutdown();
     }
@@ -478,15 +441,10 @@ mod tests {
 
         // Assertion: myfunc2 should out-rank myfunc1 even when the
         // snapshot Program was built from a parse-erroring source.
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-        match (find_sort("Main::myfunc1"), find_sort("Main::myfunc2")) {
+        match (
+            find_sort_text(&items, "Main::myfunc1"),
+            find_sort_text(&items, "Main::myfunc2"),
+        ) {
             (Some(s1), Some(s2)) => {
                 assert!(
                     s2 < s1,
@@ -566,17 +524,8 @@ mod tests {
             dump_top.join("\n")
         );
 
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-
-        let sort_fold = find_sort("Std::Iterator::fold");
-        let sort_add = find_sort("Std::Add::add");
+        let sort_fold = find_sort_text(&items, "Std::Iterator::fold");
+        let sort_add = find_sort_text(&items, "Std::Add::add");
         eprintln!(
             "Std::Iterator::fold sort = {:?}, Std::Add::add sort = {:?}",
             sort_fold, sort_add
@@ -647,6 +596,90 @@ mod tests {
              receiver; got {:?}",
             sort_myfunc2,
         );
+
+        ctx.shutdown();
+    }
+
+    /// Assert type-aware ranking on the `myfunc1`/`myfunc2` fixture pair:
+    /// `Main::myfunc2` (`I64` receiver) must land in Tier 0 and outrank
+    /// `Main::myfunc1` (`U32` receiver).
+    fn assert_myfunc2_outranks_myfunc1(items: &[Value]) {
+        let sort_myfunc1 = find_sort_text(items, "Main::myfunc1")
+            .expect("Main::myfunc1 should be a completion candidate");
+        let sort_myfunc2 = find_sort_text(items, "Main::myfunc2")
+            .expect("Main::myfunc2 should be a completion candidate");
+        assert!(
+            sort_myfunc2.starts_with('0'),
+            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
+            sort_myfunc2
+        );
+        assert!(
+            sort_myfunc2 < sort_myfunc1,
+            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
+             got myfunc2={:?}, myfunc1={:?}",
+            sort_myfunc2,
+            sort_myfunc1
+        );
+    }
+
+    /// An annotation naming an unknown type variable (`(3 : b)`) sits in the
+    /// binding right before the completion cursor. The tolerant elaborator
+    /// must swallow the bad annotation and leave every node it substitutes
+    /// typed — an untyped node aborts the server inside `fix_types` before
+    /// it can answer. The sibling `42.` receiver keeps its `I64`, so ranking
+    /// stays type-aware.
+    #[test]
+    fn test_completion_dot_beside_unknown_tyvar_annotation() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-tolerant-broken-annotation", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+        //   3: (blank)
+        //   4: myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+        //   5: (blank)
+        //   6: main : IO () = (
+        //   7:     let x = (3 : b);
+        //   8:     let y = 42.    <-- cursor right after the dot
+        //   9:     pure()
+        //  10: );
+        //
+        // Column 15 = byte just after `.` on `    let y = 42.`.
+        let items = ctx.complete_with_timeout("main.fix", 8, 15, Duration::from_secs(60));
+
+        assert_myfunc2_outranks_myfunc1(&items);
+
+        ctx.shutdown();
+    }
+
+    /// The completion cursor sits inside the annotated expression itself:
+    /// `(42.<cursor> : b)` with `b` unknown. The tolerant elaborator drops
+    /// the ill-formed annotation and still elaborates the child against the
+    /// contextual type, so the receiver keeps its `I64` and ranking stays
+    /// type-aware.
+    #[test]
+    fn test_completion_dot_inside_unknown_tyvar_annotation() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-tolerant-annotated-receiver", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+        //   3: (blank)
+        //   4: myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+        //   5: (blank)
+        //   6: main : IO () = (
+        //   7:     let x = (42. : b);    <-- cursor right after the dot
+        //   8:     pure()
+        //   9: );
+        //
+        // Column 16 = byte just after `.` in `(42.`.
+        let items = ctx.complete_with_timeout("main.fix", 7, 16, Duration::from_secs(60));
+
+        assert_myfunc2_outranks_myfunc1(&items);
 
         ctx.shutdown();
     }

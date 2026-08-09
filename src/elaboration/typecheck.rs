@@ -1,4 +1,4 @@
-use super::check_holes;
+use super::check_holes::collect_hole_errors;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
 use crate::misc::{collect_results, grow_stack, insert_to_map_vec, Map, Set};
@@ -467,14 +467,16 @@ pub struct TypeCheckContext {
     // After type-checking, these are resolved via substitution to find the concrete types.
     pub opaque_instantiations: Map<Name, Arc<TyVar>>,
     /// When true, errors raised from elaborating a sub-expression are
-    /// swallowed: that sub-expression is replaced by a placeholder
-    /// annotated with the expected type, and elaboration continues on
-    /// its siblings, so types can still be inferred around an
-    /// unrelated type error elsewhere in the body.
+    /// swallowed: that sub-expression keeps the expected type at its
+    /// root and gets fresh type variables below (`set_fallback_types`),
+    /// and elaboration continues on its siblings, so types can still be
+    /// inferred around an unrelated type error elsewhere in the body.
     pub error_tolerant: bool,
 }
 
 impl TypeCheckContext {
+    /// Print the entry count of each of the context's collections; a
+    /// debugging aid for inspecting the context's growth.
     #[allow(dead_code)]
     pub fn show_sizes(&self) {
         println!("scope size = {}", self.scope.local.len());
@@ -597,17 +599,39 @@ impl TypeCheckContext {
 
     /// Combine `tolerate` with the canonical fresh-tyvar fallback for a
     /// failed pattern elaboration: on `Err` in `error_tolerant` mode,
-    /// substitute a typed-but-empty-binding pattern so the surrounding
-    /// walk can continue.
+    /// substitute a typed-throughout, empty-binding pattern so the
+    /// surrounding walk can continue.
     pub fn tolerate_pattern_typed(
         &mut self,
         res: Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors>,
         pat: &Arc<PatternNode>,
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
-        Ok(self.tolerate(res)?.unwrap_or_else(|| {
-            let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-            (pat.set_type(pat_ty), Map::default())
-        }))
+        Ok(self
+            .tolerate(res)?
+            .unwrap_or_else(|| (self.set_fallback_types_for_pattern(pat), Map::default())))
+    }
+
+    /// Assign a type to every node of `ei`: `ty` at the root and a fresh type
+    /// variable at every descendant expression and pattern. The tolerant
+    /// fallbacks substitute an unelaborated subtree for one whose elaboration
+    /// failed, and every later tree walk relies on each node carrying a type
+    /// (see `fix_types`), so the substitute is typed throughout.
+    fn set_fallback_types(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+        let expr = self
+            .map_types(
+                ei,
+                &mut |tc, e| Ok(tc.fresh_ty_with_src(&e.source)),
+                &mut |tc, p| Ok(tc.fresh_ty_with_src(&p.info.source)),
+            )
+            .unwrap_or_else(|_| unreachable!("fresh-type callbacks cannot fail"));
+        expr.set_type(ty)
+    }
+
+    /// Pattern counterpart of `set_fallback_types`: a fresh type variable at
+    /// the pattern and at each of its sub-patterns.
+    fn set_fallback_types_for_pattern(&mut self, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
+        self.map_types_for_pattern(pat, &mut |tc, p| Ok(tc.fresh_ty_with_src(&p.info.source)))
+            .unwrap_or_else(|_| unreachable!("fresh-type callbacks cannot fail"))
     }
 
     /// Resolve `tc`, the head of a struct literal or of a struct
@@ -1036,9 +1060,9 @@ impl TypeCheckContext {
         Ok(sub.substitute_type(ty))
     }
 
-    // Perform typechecking.
-    // Update type substitution so that `ei` has type `ty`.
-    // Returns given AST augmented with inferred information.
+    /// Perform typechecking: update the type substitution so that `ei` has
+    /// type `ty`, and return the given AST augmented with inferred
+    /// information.
     pub fn unify_type_of_expr(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1048,12 +1072,12 @@ impl TypeCheckContext {
             let ty_for_fallback = ty.clone();
             match self.unify_type_of_expr_inner(ei, ty) {
                 Ok(e) => Ok(e),
-                Err(errs) if self.error_tolerant => {
-                    // Swallow the failure and substitute a placeholder
-                    // annotated with the expected type, so enclosing
-                    // elaboration can keep going on sibling nodes.
-                    let _ = errs;
-                    Ok(ei.set_type(ty_for_fallback))
+                Err(_) if self.error_tolerant => {
+                    // Swallow the failure and substitute the original
+                    // subtree — the expected type at its root, fresh
+                    // type variables below — so enclosing elaboration
+                    // can keep going on sibling nodes.
+                    Ok(self.set_fallback_types(ei, ty_for_fallback))
                 }
                 Err(errs) => Err(errs),
             }
@@ -1278,19 +1302,20 @@ impl TypeCheckContext {
                 self.scope.pop(&arg.name.name);
                 Ok(ei.set_lam_body(body))
             }
-            Expr::Let(pat, val, body) => {
-                // `validate_pattern` / `get_typed` may fail on a
-                // malformed pattern (unknown struct field, duplicate
-                // variable, sub-pattern type mismatch). In
+            Expr::Let(pat, bound, val) => {
+                // Pattern elaboration may fail on a malformed pattern
+                // (unknown struct field, duplicate variable,
+                // sub-pattern type mismatch). In
                 // `error_tolerant` mode we still want to elaborate
-                // `val` and `body` so any nested cursor inside them
+                // `bound` and `val` so any nested cursor inside them
                 // gets a useful type — fall back to a fresh-tyvar
                 // pattern with no variable bindings.
                 let elab = self.elaborate_pattern_binding(pat);
                 let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
-                let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
-                let body = self.unify_type_of_expr_with_scope(body, ty, &var_ty)?;
-                Ok(ei.set_let_pat(pat).set_let_bound(val).set_let_value(body))
+                let bound =
+                    self.unify_type_of_expr(bound, pat.info.type_.as_ref().unwrap().clone())?;
+                let val = self.unify_type_of_expr_with_scope(val, ty, &var_ty)?;
+                Ok(ei.set_let_pat(pat).set_let_bound(bound).set_let_value(val))
             }
             Expr::Match(cond, pat_vals) => {
                 // First, perform type inference for the condition.
@@ -1325,9 +1350,11 @@ impl TypeCheckContext {
                     }
 
                     let pat = if pat.is_union() {
-                        // Failure is tolerated; we fall through to
-                        // `get_typed` below which can still type
-                        // sub-patterns from the variant's signature.
+                        // In `error_tolerant` mode a failed variant
+                        // check is swallowed and the arm keeps the
+                        // unvalidated pattern; the pattern elaboration
+                        // below can still type its sub-patterns from
+                        // the variant's signature.
                         let validated =
                             self.validate_union_arm(&cond, &cond_ty, pat, &mut cond_tc_info);
                         self.tolerate(validated)?.unwrap_or_else(|| pat.clone())
@@ -1337,11 +1364,12 @@ impl TypeCheckContext {
                         pat.clone()
                     };
 
-                    // Type the pattern, then unify with cond.
-                    // `get_typed` is itself tolerant of sub-pattern
-                    // mismatches in `error_tolerant` mode; the only
-                    // remaining failure path here is `validate_pattern`
-                    // (struct field validity etc.).
+                    // Type the pattern, then unify with cond. In
+                    // `error_tolerant` mode sub-pattern type mismatches
+                    // are already tolerated inside the elaboration
+                    // itself; a pattern that still fails to elaborate
+                    // (e.g. its shape cannot be validated) falls back
+                    // to a fresh-tyvar pattern with no bindings.
                     let elab = self.elaborate_pattern_binding(&pat);
                     let (pat, var_ty) = self.tolerate_pattern_typed(elab, &pat)?;
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
@@ -1370,7 +1398,12 @@ impl TypeCheckContext {
                     .set_if_else(else_expr))
             }
             Expr::TyAnno(e, anno_ty) => {
-                let anno_ty = self.validate_type_annotation(&anno_ty)?;
+                // In `error_tolerant` mode an ill-formed annotation
+                // (e.g. one naming an unknown type variable) is
+                // dropped, and the child is elaborated against the
+                // contextual type.
+                let validated = self.validate_type_annotation(&anno_ty);
+                let anno_ty = self.tolerate(validated)?.unwrap_or_else(|| ty.clone());
                 // After a successful unify, `ty` and `anno_ty` are
                 // substitution-equivalent, so either could be the
                 // child's expected type. After a tolerated mismatch
@@ -1744,6 +1777,9 @@ impl TypeCheckContext {
     ) -> Result<(Arc<ExprNode>, Errors), Errors> {
         self.assert_freshness();
 
+        /// Build the error reported when a constraint required by the
+        /// inference cannot be deduced from the assumptions, attaching
+        /// source-location notes for the type variables it mentions.
         fn make_error(
             tc: &TypeCheckContext,
             mut unif_err: UnificationErr,
@@ -1775,6 +1811,15 @@ impl TypeCheckContext {
         // Hard step 1: unify. Failure here is a real type mismatch and
         // there is no useful typed expression to keep.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
+
+        // The tolerant path's only invariant is "every node has an
+        // inferred type". `check_all_typed` verifies it here, before
+        // `fix_types` reads the types and aborts the process on a
+        // missing one, so a fallback that leaves part of the tree
+        // untyped surfaces as a failed request.
+        if self.error_tolerant {
+            self.check_all_typed(&expr)?;
+        }
 
         // Hard step 2: substitute every node's type. This walks the
         // tree but does not check that types are fully determined.
@@ -1815,12 +1860,7 @@ impl TypeCheckContext {
         //   constraints from partially failed sub-expressions, and
         //   surfacing them as diagnostics confuses the LSP without
         //   helping the user.
-        //
-        // The tolerant path's only invariant is "every node has an
-        // inferred type"; `check_all_typed` walks the tree to catch
-        // regressions.
         if self.error_tolerant {
-            self.check_all_typed(&expr)?;
             return Ok((expr, Errors::empty()));
         }
 
@@ -1830,7 +1870,7 @@ impl TypeCheckContext {
         let src = expr.source.clone();
 
         // Layer 1: holes.
-        let hole_errors = check_holes::collect_hole_errors(&expr, self);
+        let hole_errors = collect_hole_errors(&expr, self);
         if hole_errors.has_diagnostics() {
             return Ok((expr, hole_errors));
         }
@@ -2217,33 +2257,32 @@ impl TypeCheckContext {
         return Ok(());
     }
 
-    pub fn fix_types_for_pattern(
+    /// Pattern half of `map_types`: rebuild `pat` with the type of the
+    /// pattern and of each sub-pattern recomputed by `pat_ty`.
+    fn map_types_for_pattern<G>(
         &mut self,
-        pat: Arc<PatternNode>,
-    ) -> Result<Arc<PatternNode>, Errors> {
-        let raw_ty = pat
-            .info
-            .type_
-            .as_ref()
-            .expect("fix_types_for_pattern: every pattern should be typed");
-        // Same rationale as in `fix_types`.
-        let reduced = self.substitute_and_reduce_type(raw_ty);
-        let ty = self.tolerate(reduced)?.unwrap_or_else(|| raw_ty.clone());
+        pat: &Arc<PatternNode>,
+        pat_ty: &mut G,
+    ) -> Result<Arc<PatternNode>, Errors>
+    where
+        G: FnMut(&mut Self, &Arc<PatternNode>) -> Result<Arc<TypeNode>, Errors>,
+    {
+        let ty = pat_ty(self, pat)?;
         let pat = pat.set_type(ty);
         Ok(match &pat.pattern {
             Pattern::Var(_var, _anno_ty) => {
-                // Currently, type annotation is not used in the following processes, so there is no need to finish type annotation.
+                // The annotation type inside the pattern is left as parsed;
+                // nothing downstream reads it.
                 pat
             }
             Pattern::Union(_, _, subpat) => {
-                let subpat = self.fix_types_for_pattern(subpat.clone())?;
+                let subpat = self.map_types_for_pattern(subpat, pat_ty)?;
                 pat.set_union_pat(subpat)
             }
             Pattern::Struct(_, field_to_pat) => {
                 let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
-                    let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
-                    *subpat = new_subpat;
+                    *subpat = self.map_types_for_pattern(subpat, pat_ty)?;
                 }
                 pat.set_struct_field_to_pat(field_to_pat)
             }
@@ -2279,6 +2318,21 @@ impl TypeCheckContext {
         errs
     }
 
+    /// Substitute the accumulated type substitution into `ty` and reduce
+    /// associated types. Associated-type reduction can fail when the
+    /// substitution / equality state is inconsistent — a normal consequence
+    /// of the tolerant elaborator stitching together partially failed
+    /// sub-expressions. On a tolerated failure, keep the un-reduced type so
+    /// downstream consumers (LSP dot completion, hover) can still read
+    /// whatever type info survived.
+    fn substitute_and_reduce_type_or_keep(
+        &mut self,
+        ty: &Arc<TypeNode>,
+    ) -> Result<Arc<TypeNode>, Errors> {
+        let reduced = self.substitute_and_reduce_type(ty);
+        Ok(self.tolerate(reduced)?.unwrap_or_else(|| ty.clone()))
+    }
+
     /// Apply the type substitution to every node's `type_` field and to
     /// every pattern type. Does not check whether the resulting types
     /// are fixed (free of unsolved type variables); see
@@ -2286,74 +2340,105 @@ impl TypeCheckContext {
     /// fixed-type check are kept separate so other passes (e.g. hole
     /// detection) can run on the substituted AST in between.
     pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
-        let raw_ty = expr
-            .type_
-            .as_ref()
-            .expect("fix_types: every node should be typed by unify_type_of_expr");
-        // Associated-type reduction can fail when the accumulated
-        // substitution / equality state is inconsistent — a normal
-        // consequence of the tolerant elaborator stitching together
-        // partially failed sub-expressions. Fall back to the
-        // un-reduced type so downstream consumers (LSP dot completion,
-        // hover) can still read whatever type info survived.
-        let reduced = self.substitute_and_reduce_type(raw_ty);
-        let ty = self.tolerate(reduced)?.unwrap_or_else(|| raw_ty.clone());
+        self.map_types(
+            &expr,
+            &mut |tc, e| {
+                let raw_ty = e
+                    .type_
+                    .as_ref()
+                    .expect("fix_types: every node should be typed by unify_type_of_expr");
+                tc.substitute_and_reduce_type_or_keep(raw_ty)
+            },
+            &mut |tc, p| {
+                let raw_ty = p
+                    .info
+                    .type_
+                    .as_ref()
+                    .expect("fix_types: every pattern should be typed");
+                tc.substitute_and_reduce_type_or_keep(raw_ty)
+            },
+        )
+    }
+
+    /// Rebuild `expr` with the type of every expression node recomputed by
+    /// `expr_ty` and the type of every pattern node by `pat_ty`, recursing
+    /// through all children. The walk is top-down: a node's type is computed
+    /// before its children are rebuilt.
+    fn map_types<F, G>(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        expr_ty: &mut F,
+        pat_ty: &mut G,
+    ) -> Result<Arc<ExprNode>, Errors>
+    where
+        F: FnMut(&mut Self, &Arc<ExprNode>) -> Result<Arc<TypeNode>, Errors>,
+        G: FnMut(&mut Self, &Arc<PatternNode>) -> Result<Arc<TypeNode>, Errors>,
+    {
+        let ty = expr_ty(self, expr)?;
         let expr = expr.set_type(ty);
         Ok(match &*expr.expr {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
-                let args = collect_results(args.iter().map(|arg| self.fix_types(arg.clone())))?;
-                let fun = self.fix_types(fun.clone())?;
+                let args =
+                    collect_results(args.iter().map(|arg| self.map_types(arg, expr_ty, pat_ty)))?;
+                let fun = self.map_types(fun, expr_ty, pat_ty)?;
                 expr.set_app_func(fun).set_app_args(args)
             }
             Expr::Lam(_args, body) => {
-                let body = self.fix_types(body.clone())?;
+                let body = self.map_types(body, expr_ty, pat_ty)?;
                 expr.set_lam_body(body)
             }
-            Expr::Let(pat, val, body) => {
-                let pat = self.fix_types_for_pattern(pat.clone())?;
-                let val = self.fix_types(val.clone())?;
-                let body = self.fix_types(body.clone())?;
-                expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
+            Expr::Let(pat, bound, val) => {
+                let pat = self.map_types_for_pattern(pat, pat_ty)?;
+                let bound = self.map_types(bound, expr_ty, pat_ty)?;
+                let val = self.map_types(val, expr_ty, pat_ty)?;
+                expr.set_let_pat(pat)
+                    .set_let_bound(bound)
+                    .set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.fix_types(cond.clone())?;
-                let then_expr = self.fix_types(then_expr.clone())?;
-                let else_expr = self.fix_types(else_expr.clone())?;
+                let cond = self.map_types(cond, expr_ty, pat_ty)?;
+                let then_expr = self.map_types(then_expr, expr_ty, pat_ty)?;
+                let else_expr = self.map_types(else_expr, expr_ty, pat_ty)?;
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::Match(cond, pat_vals) => {
-                let cond = self.fix_types(cond.clone())?;
+                let cond = self.map_types(cond, expr_ty, pat_ty)?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
-                    let pat = self.fix_types_for_pattern(pat.clone())?;
-                    let val = self.fix_types(val.clone())?;
+                    let pat = self.map_types_for_pattern(pat, pat_ty)?;
+                    let val = self.map_types(val, expr_ty, pat_ty)?;
                     new_pat_vals.push((pat, val));
                 }
                 expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
             }
-            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.fix_types(e.clone())?),
+            Expr::TyAnno(e, _) => {
+                let e = self.map_types(e, expr_ty, pat_ty)?;
+                expr.set_tyanno_expr(e)
+            }
             Expr::MakeStruct(_tc, fields) => {
-                let mut new_fields = fields.clone();
-                for (_, _, e) in new_fields.iter_mut() {
-                    *e = self.fix_types(e.clone())?;
+                let mut fields = fields.clone();
+                for (_, _, field_expr) in fields.iter_mut() {
+                    *field_expr = self.map_types(field_expr, expr_ty, pat_ty)?;
                 }
-                expr.set_make_struct_fields(new_fields)
+                expr.set_make_struct_fields(fields)
             }
             Expr::ArrayLit(elems) => {
-                let elems = collect_results(elems.iter().map(|e| self.fix_types(e.clone())))?;
+                let elems =
+                    collect_results(elems.iter().map(|e| self.map_types(e, expr_ty, pat_ty)))?;
                 expr.set_array_lit_elems(elems)
             }
             Expr::FFICall(_, _, _, _, args, _) => {
-                let args = collect_results(args.iter().map(|arg| self.fix_types(arg.clone())))?;
+                let args =
+                    collect_results(args.iter().map(|arg| self.map_types(arg, expr_ty, pat_ty)))?;
                 expr.set_ffi_call_args(args)
             }
             Expr::Eval(side, main) => {
-                let side = self.fix_types(side.clone())?;
-                let main = self.fix_types(main.clone())?;
+                let side = self.map_types(side, expr_ty, pat_ty)?;
+                let main = self.map_types(main, expr_ty, pat_ty)?;
                 expr.set_eval_side(side).set_eval_main(main)
             }
         })
@@ -2373,10 +2458,10 @@ impl TypeCheckContext {
                 self.check_types_are_fixed(fun)?;
             }
             Expr::Lam(_, body) => self.check_types_are_fixed(body)?,
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 self.check_pattern_types_are_fixed(pat)?;
+                self.check_types_are_fixed(bound)?;
                 self.check_types_are_fixed(val)?;
-                self.check_types_are_fixed(body)?;
             }
             Expr::If(cond, then_e, else_e) => {
                 self.check_types_are_fixed(cond)?;
@@ -2464,10 +2549,10 @@ impl TypeCheckContext {
                 self.check_all_typed(fun)?;
             }
             Expr::Lam(_, body) => self.check_all_typed(body)?,
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 self.check_all_pattern_typed(pat)?;
+                self.check_all_typed(bound)?;
                 self.check_all_typed(val)?;
-                self.check_all_typed(body)?;
             }
             Expr::If(cond, then_e, else_e) => {
                 self.check_all_typed(cond)?;
@@ -2624,5 +2709,104 @@ impl From<Errors> for UnifOrOtherErr {
 impl From<UnificationErr> for UnifOrOtherErr {
     fn from(e: UnificationErr) -> Self {
         UnifOrOtherErr::UnifErr(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::{
+        expr_abs, expr_app, expr_array_lit, expr_eval, expr_ffi_call, expr_if, expr_let,
+        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var,
+    };
+    use crate::elaboration::typecheckcache::MemoryCache;
+
+    /// Context over empty environments: the fallback typing reads only the
+    /// fresh-type-variable counter, so no program state is needed.
+    fn empty_context() -> TypeCheckContext {
+        TypeCheckContext::new(
+            TraitEnv::default(),
+            TypeEnv::default(),
+            KindEnv::default(),
+            Map::default(),
+            Arc::new(MemoryCache::new()),
+            1,
+            true,
+        )
+    }
+
+    /// Unelaborated variable expression, as the parser would produce it.
+    fn local_var(name: &str) -> Arc<ExprNode> {
+        expr_var(FullName::local(name), None)
+    }
+
+    /// Unelaborated variable pattern.
+    fn var_pat(name: &str) -> Arc<PatternNode> {
+        PatternNode::make_var(var_var(FullName::local(name)), None)
+    }
+
+    /// The tolerant fallbacks substitute an unelaborated subtree for one whose
+    /// elaboration failed, and every later walk assumes each expression node
+    /// and pattern carries a type (`fix_types` aborts the process on one that
+    /// does not — the language server dies with it). Verifies that
+    /// `set_fallback_types` establishes that invariant over a tree containing
+    /// every child-bearing `Expr` variant and every `Pattern` variant, and
+    /// puts the given type at the root.
+    #[test]
+    fn test_set_fallback_types_types_every_node() {
+        let mut tc = empty_context();
+
+        let tycon = Arc::new(TyCon::new(FullName::from_strs(&["Main"], "S")));
+        let struct_pat = PatternNode::make_struct(
+            tycon.clone(),
+            vec![
+                ("a".to_string(), var_pat("a")),
+                (
+                    "b".to_string(),
+                    PatternNode::make_union_with_span(
+                        FullName::from_strs(&["Main"], "some"),
+                        None,
+                        var_pat("c"),
+                    ),
+                ),
+            ],
+        );
+
+        let match_expr = expr_match(local_var("m"), vec![(struct_pat, local_var("arm"))], None);
+        let if_expr = expr_if(local_var("cond"), local_var("t"), local_var("e"), None);
+        let app_expr = expr_app(local_var("f"), vec![local_var("x"), local_var("y")], None);
+        let lam_expr = expr_abs(vec![var_var(FullName::local("p"))], app_expr, None);
+        let struct_expr = expr_make_struct(
+            tycon.clone(),
+            vec![
+                ("a".to_string(), local_var("fa")),
+                ("b".to_string(), if_expr),
+            ],
+        );
+        let anno_expr = expr_tyanno(struct_expr, make_bool_ty(), None);
+        let ffi_expr = expr_ffi_call(
+            "c_fun".to_string(),
+            tycon,
+            vec![],
+            false,
+            vec![local_var("z")],
+            false,
+            None,
+        );
+        let array_expr = expr_array_lit(vec![anno_expr, match_expr, ffi_expr], None);
+        let eval_expr = expr_eval(lam_expr, array_expr, None);
+        let root = expr_let(var_pat("v"), local_var("bound"), eval_expr, None);
+
+        let root_ty = make_bool_ty();
+        let typed = tc.set_fallback_types(&root, root_ty.clone());
+
+        assert!(
+            Arc::ptr_eq(typed.type_.as_ref().unwrap(), &root_ty),
+            "the root should carry the given type"
+        );
+        assert!(
+            tc.check_all_typed(&typed).is_ok(),
+            "every node and pattern of the substitute should carry a type"
+        );
     }
 }
