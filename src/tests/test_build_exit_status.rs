@@ -4,8 +4,8 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::fix_build_source_command;
-    use std::fs::remove_file;
+    use crate::tests::test_util::{fix_build_source_command, fix_command};
+    use std::fs;
     use tempfile::TempDir;
 
     const SOURCE: &str = r#"module Main;
@@ -33,7 +33,7 @@ main = println("hi");
             String::from_utf8_lossy(&control.stdout),
             String::from_utf8_lossy(&control.stderr)
         );
-        remove_file(&out_path).expect("Failed to remove the control build's output");
+        fs::remove_file(&out_path).expect("Failed to remove the control build's output");
 
         let output = fix_build_source_command(temp_dir.path(), SOURCE, "none")
             .arg("-o")
@@ -95,6 +95,87 @@ main = println(depth(undefined("no value")).to_string);
         assert!(
             !output.status.success(),
             "the build reported success for a program it could not lay out"
+        );
+    }
+
+    /// A type with no size is reported in the source that declares it, even where a library
+    /// function instantiated at that type is what reaches it first.
+    #[test]
+    fn test_a_type_with_no_size_is_reported_outside_the_library() {
+        // The module sorts after `Std`, so walking the symbols by name alone would reach this type
+        // inside `Std::Array::empty` before reaching it here.
+        const MAIN: &str = r#"module Main;
+import Zzz;
+
+main : IO ();
+main = println(Zzz::size_of_bad(()).to_string);
+"#;
+        const ZZZ: &str = r#"module Zzz;
+
+type Bad = unbox struct { x : Bad, n : I64 };
+
+size_of_bad : () -> I64;
+size_of_bad = |_| ( let a : Array Bad = Array::empty(0); a.get_size );
+"#;
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let main_path = temp_dir.path().join("main.fix");
+        let zzz_path = temp_dir.path().join("zzz.fix");
+        fs::write(&main_path, MAIN).expect("Failed to write main.fix");
+        fs::write(&zzz_path, ZZZ).expect("Failed to write zzz.fix");
+
+        let output = fix_command()
+            .arg("build")
+            .arg("--file")
+            .arg(&main_path)
+            .arg("--file")
+            .arg(&zzz_path)
+            .arg("-O")
+            .arg("none")
+            .arg("-o")
+            .arg(temp_dir.path().join("out"))
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to execute fix build");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("zzz.fix"),
+            "the report did not name the source that declares the type:\nstderr: {}",
+            stderr
+        );
+        assert!(
+            !stderr.contains("std."),
+            "the report named the standard library's source:\nstderr: {}",
+            stderr
+        );
+    }
+
+    /// A function value is two pointers however many arguments it takes, so a function of more
+    /// arguments than the layout walk's depth bound is laid out like any other. The build runs in a
+    /// separate process because the compiler gives its own threads a stack this depth needs.
+    #[test]
+    fn test_a_function_of_more_arguments_than_the_depth_bound_builds() {
+        const ARGUMENTS: usize = 600;
+        let signature = vec!["I64"; ARGUMENTS + 1].join(" -> ");
+        let parameters = (0..ARGUMENTS)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let arguments = vec!["0"; ARGUMENTS].join(", ");
+        let source = format!(
+            "module Main;\n\nf : {};\nf = |{}| x0;\n\nmain : IO ();\nmain = println(f({}).to_string);\n",
+            signature, parameters, arguments
+        );
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let output = fix_build_source_command(temp_dir.path(), &source, "none")
+            .arg("-o")
+            .arg(temp_dir.path().join("out"))
+            .output()
+            .expect("Failed to execute fix build");
+        assert!(
+            output.status.success(),
+            "a function of {} arguments was not built:\nstderr: {}",
+            ARGUMENTS,
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }

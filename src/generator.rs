@@ -151,7 +151,7 @@ impl<'c> Object<'c> {
         ty: Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> Self {
-        assert!(ty.free_vars().is_empty());
+        assert!(ty.is_ground());
         if gc.config.develop_mode && ty.is_unbox(gc.type_env()) && !ty.is_funptr() {
             let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
@@ -168,7 +168,7 @@ impl<'c> Object<'c> {
         ty: Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> Self {
-        assert!(ty.free_vars().is_empty());
+        assert!(ty.is_ground());
         if gc.config.develop_mode {
             let embed_ty = ty.get_embedded_type(gc);
             let part_tys = gc.type_parts(embed_ty);

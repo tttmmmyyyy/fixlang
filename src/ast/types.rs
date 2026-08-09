@@ -30,29 +30,38 @@ use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+/// A type variable, identified by its name.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
+    /// The name the variable is written with, e.g. `a`.
     pub name: Name,
+    /// The kind of the types this variable stands for. A variable built by the parser carries `*`
+    /// until `Program::set_kinds` reads the kind signatures of the declaration it appears in.
     pub kind: Arc<Kind>,
 }
 
 impl PartialEq for TyVar {
+    /// Compares the name alone, which is what decides which variable this is; see the note on
+    /// `Hash`.
+    ///
+    /// Every place the compiler compares two type variables by hand reads the name alone, and the
+    /// kind a variable carries is set later than the variable itself, so reading it here answers a
+    /// question about kinds with whichever value happened to be stored.
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.kind == other.kind
+        self.name == other.name
     }
 }
 
 impl Eq for TyVar {}
 
 impl Hash for TyVar {
-    /// Hashes the name alone. The kind is an attribute of a variable rather than part of which
-    /// variable it is, so two variables of one name are one variable whatever kinds they carry --
-    /// a shape a well-formed program does not produce, and one a hash should not distinguish.
-    /// Leaving the kind out also keeps this consistent with an equality that stopped reading it.
+    /// Hashes the name alone, agreeing with the equality of `PartialEq`: the name is what decides
+    /// which variable this is, and the kind is an attribute the variable carries.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
@@ -66,6 +75,7 @@ impl TyVar {
         Arc::new(ret)
     }
 
+    /// A copy of this type variable named `name`, leaving this one as it is.
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
@@ -426,6 +436,24 @@ impl TyAliasInfo {
 pub struct TypeNode {
     pub ty: Type,
     pub info: TypeInfo,
+    /// The hash of `ty`, kept once computed.
+    ///
+    /// A type is a directed acyclic graph: substituting an argument that a declaration mentions
+    /// twice makes both occurrences the same node. Hashing such a type by walking it costs as much
+    /// as the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. Keeping
+    /// the hash on the node makes the walk cost one visit per node.
+    ///
+    /// `Clone` leaves this empty: the clone-then-replace idiom the setters use would otherwise
+    /// carry the hash of the type the node held before.
+    #[serde(skip)]
+    hash_cache: OnceLock<u64>,
+    /// Whether no type variable occurs in this type, kept once computed. Answered by walking the
+    /// type, so it is kept for the same reason the hash is.
+    #[serde(skip)]
+    ground_cache: OnceLock<bool>,
+    /// How deeply this type nests, kept once computed, for the same reason.
+    #[serde(skip)]
+    depth_cache: OnceLock<usize>,
 }
 
 impl PartialEq for TypeNode {
@@ -438,9 +466,16 @@ impl Eq for TypeNode {}
 
 impl Hash for TypeNode {
     /// Hashes the type expression, which is what `PartialEq` compares; the source information the
-    /// node carries stays out of both.
+    /// node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing a
+    /// type that shares a subterm many times costs one visit per node rather than one per
+    /// occurrence.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ty.hash(state);
+        let hash = *self.hash_cache.get_or_init(|| {
+            let mut hasher = DefaultHasher::new();
+            self.ty.hash(&mut hasher);
+            hasher.finish()
+        });
+        state.write_u64(hash);
     }
 }
 
@@ -853,18 +888,23 @@ impl TypeNode {
         self.field_types_via_tycons(&type_env.tycons)
     }
 
-    /// The field types of this type, with the declaration of its outermost type constructor taken
-    /// from a table of type constructors held apart from a `TypeEnv`.
+    /// The types of the fields `self` declares, with `self`'s type arguments substituted for the
+    /// declaration's type variables. An array declares its element type as its one field. The
+    /// declarations are read from `tycons`.
     pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
-        let ti = self.toplevel_tycon_info_via_tycons(tycons);
-        assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
-        let mut s = Substitution::default();
-        for (i, tv) in ti.tyvars.iter().enumerate() {
-            let merge_ok = s.merge(&Substitution::single(&tv.name, args[i].clone()));
+        let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
+        assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
+        let mut subst = Substitution::default();
+        for (i, tv) in tycon_info.tyvars.iter().enumerate() {
+            let merge_ok = subst.merge(&Substitution::single(&tv.name, args[i].clone()));
             assert!(merge_ok);
         }
-        ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
+        tycon_info
+            .fields
+            .iter()
+            .map(|f| subst.substitute_type(&f.ty))
+            .collect()
     }
 
     /// The fields declared for this type's outermost type constructor: one per field for a struct,
@@ -945,8 +985,8 @@ impl TypeNode {
         }
 
         let mut vars: Vec<Arc<TypeNode>> = vec![];
-        let val = collect_app_src_inner(self, &mut vars, vars_limit);
-        (vars, val)
+        let dst_ty = collect_app_src_inner(self, &mut vars, vars_limit);
+        (vars, dst_ty)
     }
 
     // Remove type aliases in a type.
@@ -1242,122 +1282,6 @@ impl TypeNode {
             .all(|field_ty| field_ty.is_fully_unboxed(type_env))
     }
 
-    /// Why a value of `self` has no size, given the types its layout came through, and `None` where
-    /// it has one.
-    ///
-    /// # Arguments
-    /// * `in_place` - the types `self` sits inside with no pointer in between, outermost first.
-    ///   Reaching one of them again is a value that contains itself.
-    /// * `across_pointers` - every type the layout came through, the ones behind a pointer included.
-    ///   Reaching a larger type of the same type constructor there has no end either: the same
-    ///   fields lead from that one to a larger one again.
-    pub(crate) fn no_size_cause(
-        self: &Arc<TypeNode>,
-        in_place: &[Arc<TypeNode>],
-        across_pointers: &[Arc<TypeNode>],
-    ) -> Option<String> {
-        if let Some(i) = in_place.iter().position(|ancestor| ancestor == self) {
-            let cause = format!("its unboxed fields reach `{}` itself", self.to_string());
-            return Some(self.format_no_size_error(&in_place[i..], cause));
-        }
-        // A function value is a pair of pointers whatever it takes and returns, so its size is
-        // settled. Every function type shares the `->` constructor, so the growth of one function's
-        // argument would otherwise be read off another's.
-        if self.is_closure() || self.is_funptr() {
-            return None;
-        }
-        // The same type constructor with arguments that have grown: the fields that led from that
-        // one here lead on to a larger one again. A type merely appearing inside another (`Tree`
-        // inside `(Tree, Tree)`) is how an ordinary recursive type is written, and the walk ends
-        // there by meeting `Tree` a second time.
-        let my_app_seq = self.flatten_type_application();
-        let grows_from = |ancestor: &Arc<TypeNode>| {
-            if ancestor == self {
-                return false;
-            }
-            let their_app_seq = ancestor.flatten_type_application();
-            their_app_seq.len() == my_app_seq.len()
-                && their_app_seq[0] == my_app_seq[0]
-                && their_app_seq[1..]
-                    .iter()
-                    .zip(my_app_seq[1..].iter())
-                    .all(|(their_arg, my_arg)| their_arg.embeds_in(my_arg))
-        };
-        if let Some(i) = across_pointers.iter().position(grows_from) {
-            let cause = "its fields reach ever larger types".to_string();
-            return Some(self.format_no_size_error(&across_pointers[i..], cause));
-        }
-        None
-    }
-
-    /// Whether this type is embedded in `other`: it appears there with its own shape intact, with
-    /// more type around it or inside its arguments. An argument grown this way is what tells a type
-    /// reached again at a larger argument from one reached at a smaller or unrelated one.
-    fn embeds_in(self: &Arc<TypeNode>, other: &Arc<TypeNode>) -> bool {
-        // Inside one of `other`'s parts.
-        let inside = match &other.ty {
-            Type::TyApp(fun, arg) => self.embeds_in(fun) || self.embeds_in(arg),
-            Type::AssocTy(_, args) => args.iter().any(|arg| self.embeds_in(arg)),
-            Type::TyVar(_) | Type::TyCon(_) => false,
-        };
-        if inside {
-            return true;
-        }
-        // The same shape at the top, each part embedded in the part facing it.
-        match (&self.ty, &other.ty) {
-            (Type::TyVar(my_var), Type::TyVar(their_var)) => my_var.name == their_var.name,
-            (Type::TyCon(my_tycon), Type::TyCon(their_tycon)) => my_tycon == their_tycon,
-            (Type::TyApp(my_fun, my_arg), Type::TyApp(their_fun, their_arg)) => {
-                my_fun.embeds_in(their_fun) && my_arg.embeds_in(their_arg)
-            }
-            (Type::AssocTy(my_assoc, my_args), Type::AssocTy(their_assoc, their_args)) => {
-                my_assoc == their_assoc
-                    && my_args.len() == their_args.len()
-                    && my_args
-                        .iter()
-                        .zip(their_args.iter())
-                        .all(|(my_arg, their_arg)| my_arg.embeds_in(their_arg))
-            }
-            _ => false,
-        }
-    }
-
-    /// The report for a type with no size: what its fields do, the way down to it from the type that
-    /// shows it, and which types the fix is among.
-    fn format_no_size_error(
-        self: &Arc<TypeNode>,
-        ancestors: &[Arc<TypeNode>],
-        cause: String,
-    ) -> String {
-        let descent = ancestors
-            .iter()
-            .chain([self])
-            .map(|ty| ty.to_string())
-            .collect::<Vec<_>>();
-        // A type holding itself directly is the whole story already, so the way down is spelled
-        // out only where it passes through another type.
-        let holds_itself = ancestors.iter().all(|ty| ty == self);
-        let (way_down, remedy) = if holds_itself {
-            (String::new(), format!("Make `{}` boxed.", descent[0]))
-        } else {
-            (
-                format!(
-                    " ({})",
-                    descent
-                        .iter()
-                        .map(|ty| format!("`{}`", ty))
-                        .collect::<Vec<_>>()
-                        .join(" -> ")
-                ),
-                "Make one of these types boxed.".to_string(),
-            )
-        };
-        format!(
-            "`{}` has no size: {}{}. {}",
-            descent[0], cause, way_down, remedy,
-        )
-    }
-
     /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by
     /// a custom traverser rather than by descending into its fields. This holds for a boxed value, an
     /// unboxed union (only its active variant is live, so a refcount operation must dispatch on the tag
@@ -1380,6 +1304,9 @@ impl TypeNode {
         Self {
             ty,
             info: TypeInfo::default(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 
@@ -1651,17 +1578,50 @@ impl Clone for TypeNode {
         TypeNode {
             ty: self.ty.clone(),
             info: self.info.clone(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     AssocTy(AssocType, Vec<Arc<TypeNode>>),
+}
+
+/// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
+/// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
+fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
+    Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
+}
+
+impl PartialEq for Type {
+    /// Compares the parts of the type expression, taking two occurrences of one node as equal on
+    /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node
+    /// holds.
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::TyVar(lhs), Type::TyVar(rhs)) => lhs == rhs,
+            (Type::TyCon(lhs), Type::TyCon(rhs)) => lhs == rhs,
+            (Type::TyApp(lhs_fun, lhs_arg), Type::TyApp(rhs_fun, rhs_arg)) => {
+                type_node_eq(lhs_fun, rhs_fun) && type_node_eq(lhs_arg, rhs_arg)
+            }
+            (Type::AssocTy(lhs_assoc_ty, lhs_args), Type::AssocTy(rhs_assoc_ty, rhs_args)) => {
+                lhs_assoc_ty == rhs_assoc_ty
+                    && lhs_args.len() == rhs_args.len()
+                    && lhs_args
+                        .iter()
+                        .zip(rhs_args.iter())
+                        .all(|(lhs, rhs)| type_node_eq(lhs, rhs))
+            }
+            _ => false,
+        }
+    }
 }
 
 impl TypeNode {
@@ -1692,10 +1652,11 @@ impl TypeNode {
             }
             appeared.insert(fv.name.clone());
             let new_name = number_to_varname(next_tyvar_no);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
+            assert!(merge_ok, "`{}` is renamed twice.", fv.name);
             next_tyvar_no += 1;
         }
 
@@ -1829,22 +1790,23 @@ impl TypeNode {
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
-        let mut str = "".to_string();
-        str += &self.to_string_normalize();
+        let mut key = "".to_string();
+        key += &self.to_string_normalize();
         if capture.len() > 0 {
-            str += "_capturing[";
+            key += "_capturing[";
         }
         for ty in capture {
-            str += ", ";
-            str += &ty.to_string_normalize();
+            key += ", ";
+            key += &ty.to_string_normalize();
         }
         if capture.len() > 0 {
-            str += "]";
+            key += "]";
         }
-        format!("{:x}", md5::compute(str))
+        format!("{:x}", md5::compute(key))
     }
 
-    // Get hash value.
+    /// A digest of this type, short enough to embed in a symbol name. Two types with the same
+    /// normalized form hash alike.
     pub fn hash(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
@@ -1960,6 +1922,34 @@ pub struct TypeInfo {
 }
 
 impl TypeNode {
+    /// Whether no type variable occurs in this type.
+    ///
+    /// `free_vars` answers the same question by collecting the variables, which walks a type that
+    /// shares a subterm once per occurrence rather than once per node. Every type reaching code
+    /// generation is asked this, so it is answered here and kept on the node.
+    pub fn is_ground(&self) -> bool {
+        *self.ground_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) => false,
+            Type::TyCon(_) => true,
+            Type::TyApp(fun, arg) => fun.is_ground() && arg.is_ground(),
+            Type::AssocTy(_, args) => args.iter().all(|arg| arg.is_ground()),
+        })
+    }
+
+    /// How deeply this type nests: a name is one, and an application or an associated type is one
+    /// more than the deepest part it is made of.
+    ///
+    /// This measures the type expression the program wrote or the compiler built: a chain of a
+    /// thousand types that each hold the next is a thousand types of depth one. What grows this is
+    /// a type reached from itself at a larger type argument.
+    pub fn depth(&self) -> usize {
+        *self.depth_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) | Type::TyCon(_) => 1,
+            Type::TyApp(fun, arg) => 1 + fun.depth().max(arg.depth()),
+            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0),
+        })
+    }
+
     // Calculate free type variables.
     pub fn free_vars(self: &Arc<TypeNode>) -> Map<Name, Arc<TyVar>> {
         let mut free_vars: Map<String, Arc<TyVar>> = Map::default();
@@ -2034,7 +2024,7 @@ impl TypeNode {
     }
 
     // Collect type variables that are "fixed" in this type, in the sense of
-    // `Fixv` from section 5.1 of "Associated Type Synonyms"
+    // `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms"
     // (Chakravarty, Keller, Peyton Jones, ICFP '05).
     //
     // A type variable is fixed if unifying the type with a ground type would
@@ -2324,33 +2314,35 @@ impl Scheme {
         }
 
         // Each generalized type variable that appears in the scheme body must
-        // be "fixed" in the sense of `Fixv` from section 5.1 of "Associated
-        // Type Synonyms". A variable is fixed iff it appears outside of any
-        // associated type application, either in the main type or on the
-        // right-hand side of an equality constraint. A variable that only
-        // appears under an associated type application (or only in a class
-        // predicate) would not be determined by unification at a use site,
-        // which would make the scheme ambiguous.
-        let fixed = self.fixed_vars();
+        // be "fixed" in the sense of `Fixv` from the section "Well-formed
+        // programs" of "Associated Type Synonyms". A variable is fixed iff it
+        // appears outside of any associated type application, either in the
+        // main type or on the right-hand side of an equality constraint. A
+        // variable that only appears under an associated type application (or
+        // only in a class predicate) would not be determined by unification at
+        // a use site, which would make the scheme ambiguous.
+        let fixed_vars = self.fixed_vars();
         // First occurrence wins, which gives a useful span pointing at the
         // offending position.
         let occurrences = self.all_tyvar_occurrences_with_span();
-        for gv in &self.gen_vars {
-            if fixed.contains(&gv.name) {
+        for gen_var in &self.gen_vars {
+            if fixed_vars.contains(&gen_var.name) {
                 continue;
             }
-            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gv.name) else {
-                // Variable does not appear anywhere in the body; it cannot be
-                // used and would be ambiguous, but this situation should not
-                // arise because `Scheme::generalize` only collects free vars
-                // into `gen_vars`. Skip defensively.
+            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gen_var.name) else {
+                // A generalized variable can be absent from the body:
+                // `gen_vars` is determined when the scheme is generalized, and
+                // expanding a type alias that drops a parameter (`type Ignore
+                // a = I64;` used as `f : Ignore a -> I64;`) afterwards removes
+                // the variable from the body. Such a variable constrains
+                // nothing at a use site, so there is no ambiguity to report.
                 continue;
             };
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
                      NOTE: `{}` must appear outside of any associated type application.",
-                    gv.name, gv.name,
+                    gen_var.name, gen_var.name,
                 ),
                 &[span],
             ));
@@ -2409,10 +2401,11 @@ impl Scheme {
         for tyvar in &self.gen_vars {
             tyvar_num += 1;
             let new_name = number_to_varname(tyvar_num as usize);
-            s.merge(&Substitution::single(
+            let merge_ok = s.merge(&Substitution::single(
                 &tyvar.name,
                 type_tyvar(&new_name, &tyvar.kind.clone()),
             ));
+            assert!(merge_ok, "`{}` is generalized twice.", tyvar.name);
         }
         self.to_string_substituted(&s)
     }
@@ -2442,7 +2435,7 @@ impl Scheme {
     }
 
     // Collect type variables that are "fixed" by this scheme's body, in the
-    // sense of `Fixv` from section 5.1 of "Associated Type Synonyms".
+    // sense of `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms".
     //
     // Contributions:
     // - the main type `self.ty`
@@ -2477,6 +2470,8 @@ impl Scheme {
         out
     }
 
+    /// The same scheme with every type variable carrying its kind, taken from the scheme's own kind
+    /// signatures and from the kinds the traits its predicates and equalities name demand.
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
         let mut kind_scope = KindScope::new();
@@ -2486,8 +2481,8 @@ impl Scheme {
                 .insert(ks.tyvar.clone(), ks.kind.clone())
                 .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
         }
-        let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
-        if let Err(msg) = res {
+        let extend_result = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
+        if let Err(msg) = extend_result {
             let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
                 span = Span::unite_opt(&span, &ret.predicates[i].src);
@@ -2677,4 +2672,31 @@ pub struct OpaqueTyConResolution {
     // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{kind_arrow, kind_star, make_tyvar};
+    use crate::misc::Set;
+
+    /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
+    /// with that.
+    ///
+    /// The kind a variable carries is set later than the variable itself, so a container keyed by a
+    /// type would otherwise hold one variable under two keys, one of them stale.
+    #[test]
+    fn a_type_variable_is_identified_by_its_name_alone() {
+        let star = make_tyvar("a", &kind_star());
+        let higher = make_tyvar("a", &kind_arrow(kind_star(), kind_star()));
+        let other_name = make_tyvar("b", &kind_star());
+
+        assert!(star == higher, "`a : *` and `a : *->*` are one variable.");
+        assert!(star != other_name, "`a` and `b` are two variables.");
+
+        let mut set = Set::default();
+        set.insert(star.clone());
+        set.insert(higher.clone());
+        set.insert(other_name.clone());
+        assert_eq!(set.len(), 2);
+    }
 }

@@ -1,0 +1,11 @@
+module Main;
+
+import Lib::{lib_value, Sub::sub_value};
+import Lib.Extra;
+
+main : IO () = (
+    let _ = lib_value;
+    let _ = sub_value;
+    let _ = extra_value;
+    pure()
+);

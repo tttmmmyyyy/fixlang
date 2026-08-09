@@ -1,0 +1,18 @@
+module Main;
+
+type [f : *->*] Bar f = struct { data : f Bool };
+
+trait a : MyTrait {
+    m : a -> I64;
+}
+
+impl [f : *->*] Bar f : MyTrait {
+    m = |_| 0;
+}
+
+impl Bar Array : MyTrait {
+    m = |_| 1;
+}
+
+main : IO ();
+main = println(Bar { data : [true] }.m.to_string);

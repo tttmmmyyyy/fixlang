@@ -24,3 +24,4 @@ pub mod printer;
 pub mod rc_ir;
 pub mod return_abi;
 pub mod tool;
+pub mod type_size;

@@ -59,8 +59,8 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Add `Std::Boxed` trait implementations.
     program.add_boxed_impls()?;
 
-    // Validate trait env.
-    program.validate_trait_env()?;
+    // Validate the traits, the trait aliases and the trait implementations, structurally.
+    program.validate_trait_env_structure()?;
 
     // Create symbols.
     program.create_trait_member_symbols();
@@ -75,6 +75,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Set and check kinds that appear in type signatures.
     // NOTE: kinds of type variables appearing in type annotations in expressions are set not at this stage but at the type inference stage.
     program.set_kinds()?;
+
+    // Check that no two implementations of one trait can apply to the same type.
+    // Runs after `set_kinds`, since which types an instance head denotes depends on the kinds of
+    // the type variables in it.
+    program.validate_overlapping_instances()?;
 
     // If typechecking is not needed, return here.
     if !config.subcommand.typecheck() {
@@ -137,7 +142,8 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     Ok(program)
 }
 
-/// The contents of the file at `path`, or a message saying what went wrong reading it.
+/// Read the whole file at `path` as a string.
+/// The error carries a message naming the path and the reason it could not be read.
 pub fn read_file(path: &Path) -> Result<String, String> {
     let mut file = match File::open(&path) {
         Err(why) => {
@@ -163,7 +169,8 @@ pub fn read_file(path: &Path) -> Result<String, String> {
     Ok(s)
 }
 
-/// The path of the directory at `rel_path`, created along with its parents if it is not there yet.
+/// Create the directory at `rel_path`, together with its missing ancestors, and return its path.
+/// An existing directory is left as it is. Panics when the directory cannot be created.
 pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
     P: AsRef<Path>,

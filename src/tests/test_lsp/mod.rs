@@ -1,10 +1,13 @@
 // LSP integration tests module
 pub mod bench_completion;
+pub mod completion_harness;
 pub mod lsp_client;
 pub mod test_code_action;
 pub mod test_completion;
+pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
+pub mod test_import_completion;
 pub mod test_references;
 pub mod test_rename;
 pub mod test_semantic_tokens;
@@ -26,14 +29,14 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    // Get the path to the test cases directory
+    /// Path to the directory holding the LSP test-case projects.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
-    // Create a temporary test environment with copied project files
+    /// Create a temporary test environment with copied project files.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -45,10 +48,11 @@ mod tests {
         (temp_dir, test_case_dst)
     }
 
+    /// The LSP server automatically generates a lock file containing the
+    /// project's dependencies, and diagnostics clear once a missing
+    /// dependency is added.
     #[test]
     fn test_lsp_auto_lockfile_generation() {
-        // Test: Verify that LSP automatically generates lock file with dependencies
-
         let (_temp_dir, project_dir) = setup_test_env("project_with_deps");
 
         // Clean up before test
@@ -148,12 +152,11 @@ mod tests {
             .expect("Reader thread should not have errors");
     }
 
+    /// The LSP server automatically generates a lock file covering
+    /// test-dependencies when test.fix imports an external library added
+    /// with `fix deps add --test`.
     #[test]
     fn test_lsp_auto_lockfile_generation_for_test_deps() {
-        // Test: Verify that LSP automatically generates lock file with test-dependencies
-        // when test.fix imports an external library that is listed in test_dependencies
-        // but not yet in fixproj.toml.
-
         let (_temp_dir, project_dir) = setup_test_env("project_with_test_deps");
 
         // Clean up before test
@@ -254,10 +257,10 @@ mod tests {
             .expect("Reader thread should not have errors");
     }
 
+    /// The LSP server shows diagnostic errors, anchored to fixproj.toml,
+    /// when dependency resolution fails.
     #[test]
     fn test_lsp_dependency_resolution_failure() {
-        // Test: Verify that LSP shows diagnostic errors when dependency resolution fails
-
         let (_temp_dir, project_dir) = setup_test_env("project_with_invalid_dep");
 
         // Clean up before test

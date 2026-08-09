@@ -237,6 +237,16 @@ pub fn build_object_files<'c>(
     // Run optimizations.
     optimization::run(&mut program, &config);
 
+    // The layout validation before code generation runs on the program as elaboration left it, and
+    // the optimizations that follow mint types of their own — a capture list, a punched type, the
+    // pair a newtype opens into. Those reach code generation without having been validated, so in
+    // development mode the program is validated again here, where the types are the ones code
+    // generation will actually lay out. A report at this point names a type the compiler built
+    // rather than one the user wrote, which is why a user's build does not run it.
+    if config.develop_mode {
+        program.validate_layouts()?;
+    }
+
     dump_rc_ir_stages(&program, config);
 
     // Determine compilation units.

@@ -46,6 +46,7 @@ mod return_abi;
 #[cfg(test)]
 mod tests;
 mod tool;
+mod type_size;
 
 use crate::error::Errors;
 use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};

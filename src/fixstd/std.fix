@@ -89,16 +89,27 @@ loop = |s, body| (
 
 namespace Array {
 
-    // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
-    // and has a parameter to specify additional capacity of the returned `Array`.
+    // Copies `arr[begin, end)` into a new array, treating `arr` as having size `len` and giving the
+    // new array `additional_capacity` elements' worth of capacity beyond the elements copied.
+    //
+    // A negative `begin` reads as `0` and an `end` past `len` reads as `len`; a range that ends at
+    // or before it begins gives an array of no elements.
+    //
+    // # Parameters
+    //
+    // * `len` - The size to treat `arr` as having.
+    // * `additional_capacity` - The capacity of the returned array beyond the elements it holds.
+    // * `begin` - The start index of the range to copy.
+    // * `end` - The end index of the range to copy.
+    // * `arr` - The array to copy the range out of.
     _get_sub_size_with_length_and_additional_capacity : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
-    _get_sub_size_with_length_and_additional_capacity = |len, additional_capacity, s, e, arr| (
-        let s = max(0, s);
-        let e = min(len, e);
-        let n = if e > s { e - s } else { 0 };
+    _get_sub_size_with_length_and_additional_capacity = |len, additional_capacity, begin, end, arr| (
+        let begin = max(0, begin);
+        let end = min(len, end);
+        let n = if end > begin { end - begin } else { 0 };
         let res = Array::empty(n + additional_capacity);
         if n == 0 || len == 0 { res };
-        res._unsafe_append_capacity_bounds_unchecked(arr, s, e)
+        res._unsafe_copy_capacity_bounds_unchecked(arr, begin, end)
     );
 
     // Gets an element of an array at the specified index.
@@ -311,7 +322,7 @@ namespace Array {
 
         // Append all of `second`. The primitive clones `first` if it is shared and moves the
         // elements of `second` when `second` is unique.
-        first._unsafe_append_capacity_bounds_unchecked(second, 0, second_len)
+        first._unsafe_append_capacity_unchecked(second)
     );
 
     // Finds the first index at which the element satisfies a condition.
@@ -374,9 +385,9 @@ namespace Array {
         Option::some $ arr.@(len - 1)
     );
 
-    // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
+    // `arr.get_sub(start, end)` returns an array `[ arr.@(i) | i ∈ [start, end) ]`.
     // 
-    // `s` and `e` are clamped to the range `[0, arr.@size]`.
+    // `start` and `end` are clamped to the range `[0, arr.@size]`.
     // 
     // # Parameters
     // 
@@ -384,7 +395,7 @@ namespace Array {
     // * `end` - The end index of the subarray.
     // * `array` - The array to be sliced.
     get_sub : I64 -> I64 -> Array a -> Array a;
-    get_sub = |s, e, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.@size, 0, s, e);
+    get_sub = |start, end, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.@size, 0, start, end);
 
     // Gets whether the array is empty.
     // 
@@ -470,7 +481,11 @@ namespace Array {
         range(0, n/2).fold(arr, |i, arr| arr.unsafe_swap_bounds_unchecked(i, n - 1 - i))
     );
 
-    // Quicksort for the specified range in an array.
+    // Sorts a range of an array by quicksort, falling back to insertion sort on a short range and
+    // to heap sort where the recursion has spent its budget.
+    //
+    // The caller must keep `0 <= start <= end <= arr.@size`: the range is read and written without
+    // checking an index against the size.
     //
     // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
@@ -478,7 +493,7 @@ namespace Array {
     // - `start`: The starting index of the range to sort.
     // - `end`: The ending index of the range to sort.
     // - `arr`: An array of elements to be sorted.
-    // - `depth`: The depth of the recursion.
+    // - `depth`: How many more uneven splits the range may take before heap sort takes it.
     _introsort_by_internal : ((a, a) -> Bool) -> I64 -> I64 -> U8 -> Array a -> Array a;
     _introsort_by_internal = |less_than, start, end, depth, arr| (
         if end - start <= 1 { arr };
@@ -491,22 +506,53 @@ namespace Array {
         // Move pivot to the last.
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
 
-        let (arr, pivot_i) = range(start, end).fold((arr, start), |j, (arr, i)|
-            if less_than((arr.@(j), pivot)) {
-                // Found j such that `arr.@(j)` < pivot, then move it to the left.
-                (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
-            } else {
-                (arr, i)
-            }
-        );
+        let (arr, pivot_i) = arr._move_to_front_by_ranged(|elem| less_than((elem, pivot)), start, end);
 
         // Move pivot to pivot_i.
         let arr = arr.unsafe_swap_bounds_unchecked(pivot_i, end - 1);
 
-        let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth - 1_U8);
-        let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
+        // Nothing compared less than the pivot, so the partition moved one element into place, and
+        // a range whose elements all compare equal would go on doing that one element at a time.
+        // Gather everything equal to the pivot beside it instead, and drop all of it from the
+        // recursion at once.
+        if pivot_i == start {
+            let (arr, equal_end) = arr._move_to_front_by_ranged(|elem| !less_than((pivot, elem)), start + 1, end);
+            arr._introsort_by_internal(less_than, equal_end, end, depth - 1_U8)
+        };
+
+        // A split near the middle costs nothing from the budget: what the budget is against is the
+        // pivot that keeps landing near an end, and a run of those is what heap sort is here for.
+        // Spending it on every split instead hands heap sort most of a randomly ordered array,
+        // whose splits are uneven by a constant rather than by a growing one.
+        let smaller_side_size = min(pivot_i - start, end - pivot_i - 1);
+        let depth = if smaller_side_size < (end - start) / 8 { depth - 1_U8 } else { depth };
+
+        let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth);
+        let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth);
 
         arr
+    );
+
+    // Moves to the front of `arr[start, end)` the elements the predicate holds of, in the order it
+    // meets them, and returns the array with the index just past the last of them.
+    //
+    // The caller must keep `0 <= start <= end <= arr.@size`: the range is read and written without
+    // checking an index against the size.
+    //
+    // # Parameters
+    // - `pred`: The predicate the elements moved to the front satisfy.
+    // - `start`: The start index of the range.
+    // - `end`: The end index of the range.
+    // - `arr`: An array whose range is to be rearranged.
+    _move_to_front_by_ranged : (a -> Bool) -> I64 -> I64 -> Array a -> (Array a, I64);
+    _move_to_front_by_ranged = |pred, start, end, arr| (
+        range(start, end).fold((arr, start), |j, (arr, i)|
+            if pred(arr._unsafe_get_bounds_unchecked(j)) {
+                (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
+            } else {
+                (arr, i)
+            }
+        )
     );
 
     // Insertion sort for the specified range in an array.
@@ -538,12 +584,12 @@ namespace Array {
     );
 
     // Heap sort for the specified range in an array.
-    // 
-    // # parameters
+    //
+    // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
-    // - `start`
-    // - `end`
+    // - `start`: The start index of the range to sort.
+    // - `end`: The end index of the range to sort.
     // - `arr`: An array of elements to be sorted.
     _heap_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a;
     _heap_sort_by_ranged = |less_than, start, end, arr| (
@@ -564,99 +610,137 @@ namespace Array {
 
     // Down-heap (sift down) operation to maintain the heap property.
     //
-    // # parameters
+    // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
     // - `i`: The index of the element to sift down.
-    // - `n`: The end index of the heap.
-    // - `start`: the range of an array.
-    // - `end`: the range of an array.
+    // - `heap_end`: The end index of the heap.
+    // - `start`: The start index of the range being sorted, where the root of the heap sits.
+    // - `end`: The end index of the range being sorted.
     // - `heap`: An array representing the heap.
     _heap_down_ranged : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
-    _heap_down_ranged = |less_than, i, n, start, end, heap| (
+    _heap_down_ranged = |less_than, i, heap_end, start, end, heap| (
         let left = 2 * (i - start) + 1 + start;
         let right = 2 * (i - start) + 2 + start;
 
         let largest = i;
-        let largest = if left < n && less_than((heap.@(i), heap.@(left))) { left } else largest;
-        let largest = if right < n && less_than((heap.@(largest), heap.@(right))) { right } else largest;
+        let largest = if left < heap_end && less_than((heap.@(i), heap.@(left))) { left } else largest;
+        let largest = if right < heap_end && less_than((heap.@(largest), heap.@(right))) { right } else largest;
 
         if largest == i { heap };
 
         let heap = heap.unsafe_swap_bounds_unchecked(i, largest);
-        heap._heap_down_ranged(less_than, largest, n, start, end)
+        heap._heap_down_ranged(less_than, largest, heap_end, start, end)
     );
 
     // Stable sort by `LessThan` trait.
-    // 
-    // Note: Currently this is implemented by merge sort, which is not in-place.
-    // 
+    //
+    // Implemented by merge sort, which allocates an array as large as the one being sorted.
+    //
     // # Parameters
     // - `arr`: An array of elements to be sorted.
     sort_stable : [a : LessThan] Array a -> Array a;
     sort_stable = |arr| arr.sort_stable_by(|(lhs, rhs)| lhs < rhs);    
 
     // Stable sort by a "less than" comparator.
-    // 
-    // Note: Currently this is implemented by merge sort, which is not in-place.
-    // 
+    //
+    // Implemented by merge sort, which allocates an array as large as the one being sorted.
+    //
     // # Parameters
     // 
     // * `less_than` - The comparator function.
     // * `array` - The array to be sorted.
     sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
-    sort_stable_by = |less_than, vec| (
-        let buffer = Array::empty(vec.@size);
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, 0, vec.@size, less_than);
-        vec
+    sort_stable_by = |less_than, arr| (
+        let n = arr.@size;
+        if n <= _merge_sort_insertion_limit { arr._insertion_sort_by_ranged(less_than, 0, n) };
+        // The merge sort reads from one array and writes into the other, so it needs a second array
+        // holding the same elements.
+        let copy = arr.get_sub(0, n);
+        _merge_sort_by_ranged(less_than, 0, n, copy, arr).@0
     );
 
-    // Sorts elements in a range of a vector by "less than" comparator.
-    // 
-    // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _mergesort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _mergesort_range_using_buffer = |buffer, begin, end, less_than, vec| (
-        // Merge sorting.
-        let len = end - begin;
-        if len <= 1 { (vec, buffer) };
-        // Divide into intervals.
-        let former_len = len / 2;
-        let former_begin = begin;
-        let former_end = begin + former_len;
-        let latter_len = len - former_len;
-        let latter_begin = former_end;
-        let latter_end = end;
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, former_begin, former_end, less_than);
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
-        // Merge former and latter to buffer.
-        let buffer = buffer.truncate(0);
-        let former_pos = former_begin;
-        let latter_pos = latter_begin;
-        let buffer = loop((former_pos, latter_pos, buffer), |(former_pos, latter_pos, buffer)|(
-            if former_pos == former_end { // former exhausted: drain the rest of latter in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, latter_pos, latter_end)
-            };
-            if latter_pos == latter_end { // latter exhausted: drain the rest of former in one copy.
-                break $ buffer._unsafe_append_capacity_bounds_unchecked(vec, former_pos, former_end)
-            };
-            let former_elem = vec.@(former_pos);
-            let latter_elem = vec.@(latter_pos);
-            if !less_than((latter_elem, former_elem)) { // Essential for stability.
-                // Copy elements in former to buffer.
-                let buffer = buffer.push_back(former_elem);
-                continue $ (former_pos + 1, latter_pos, buffer)
-            } else {
-                // Copy elements in latter to buffer.
-                let buffer = buffer.push_back(latter_elem);
-                continue $ (former_pos, latter_pos + 1, buffer)
-            }
-        ));
-        // Copy buffer to vec.
-        loop((0, vec), |(idx, vec)|(
-            if idx == len { break $ (vec, buffer) };
-            let vec = vec.set(begin + idx, buffer.@(idx));
-            continue $ (idx + 1, vec)
-        ))
+    // The greatest length that `_merge_sort_by_ranged` sorts by insertion sort instead of
+    // splitting it further. A range it does split has at least two elements, which is what lets the
+    // merge read the element before the midpoint, so this is at least 1.
+    _merge_sort_insertion_limit : I64;
+    _merge_sort_insertion_limit = 12;
+
+    // Sorts `from[start, end)` into `into[start, end)` by "less than" comparator.
+    //
+    // The two arrays hold equal elements over `[start, end)` on entry. On exit `into` holds them in
+    // non-descending order and `from` holds them in an unspecified order. The pair is returned as
+    // `(into, from)`, so that the sorted array is the first component.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `start`: The start index of the range to sort.
+    // - `end`: The end index of the range to sort.
+    // - `from`: The array to read the elements from.
+    // - `into`: The array to write the sorted elements into.
+    _merge_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a -> (Array a, Array a);
+    _merge_sort_by_ranged = |less_than, start, end, from, into| (
+        if end - start <= _merge_sort_insertion_limit {
+            (into._insertion_sort_by_ranged(less_than, start, end), from)
+        };
+        let mid = start + (end - start) / 2;
+        // Sorting each half the other way round puts both sorted runs in `from`, ready to be merged.
+        let (from, into) = _merge_sort_by_ranged(less_than, start, mid, into, from);
+        let (from, into) = _merge_sort_by_ranged(less_than, mid, end, into, from);
+        if !less_than((from.@(mid), from.@(mid - 1))) {
+            // The two runs are already in order where they stand, so the merge would only copy them.
+            (into._unsafe_copy_range_bounds_unchecked(from, start, end, start), from)
+        };
+        (into._merge_runs(less_than, start, mid, mid, end, start, from), from)
+    );
+
+    // Merges the sorted runs `from[former_pos, former_end)` and `from[latter_pos, latter_end)` into
+    // `into`, writing from `into_pos` on.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `former_pos`: The index of the next element of the run that starts the range.
+    // - `former_end`: The end index of that run.
+    // - `latter_pos`: The index of the next element of the run that ends the range.
+    // - `latter_end`: The end index of that run.
+    // - `into_pos`: The index in `into` at which the next element lands.
+    // - `from`: The array holding the two runs.
+    // - `into`: The array to write the merged elements into.
+    _merge_runs : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a -> Array a;
+    _merge_runs = |less_than, former_pos, former_end, latter_pos, latter_end, into_pos, from, into| (
+        if former_pos == former_end { into._unsafe_copy_range_bounds_unchecked(from, latter_pos, latter_end, into_pos) };
+        if latter_pos == latter_end { into._unsafe_copy_range_bounds_unchecked(from, former_pos, former_end, into_pos) };
+        let former_elem = from.@(former_pos);
+        let latter_elem = from.@(latter_pos);
+        if !less_than((latter_elem, former_elem)) { // Essential for stability.
+            into.set(into_pos, former_elem)
+                ._merge_runs(less_than, former_pos + 1, former_end, latter_pos, latter_end, into_pos + 1, from)
+        } else {
+            into.set(into_pos, latter_elem)
+                ._merge_runs(less_than, former_pos, former_end, latter_pos + 1, latter_end, into_pos + 1, from)
+        }
+    );
+
+    // Overwrites `dst[dst_begin, dst_begin + end - begin)` with `src[begin, end)`, omitting the
+    // bounds checks.
+    //
+    // The caller must ensure `[begin, end)` is in range of `src` and
+    // `[dst_begin, dst_begin + end - begin)` is in range of `dst`; an out-of-range index causes
+    // undefined behavior.
+    //
+    // # Parameters
+    // - `src`: The array to read the elements from.
+    // - `begin`: The start index of the range in `src`.
+    // - `end`: The end index of the range in `src`.
+    // - `dst_begin`: The index in `dst` at which the first element lands.
+    // - `dst`: The array to write the elements into.
+    _unsafe_copy_range_bounds_unchecked : Array a -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _unsafe_copy_range_bounds_unchecked = |src, begin, end, dst_begin, dst| (
+        if begin == end { dst };
+        dst.unsafe_set_bounds_unchecked(dst_begin, src._unsafe_get_bounds_unchecked(begin))
+           ._unsafe_copy_range_bounds_unchecked(src, begin + 1, end, dst_begin + 1)
     );
 
     // Converts an array to an iterator.
@@ -676,10 +760,10 @@ namespace Array {
     // * `new_length` - The number of elements to be kept.
     // * `array` - The array to be truncated.
     truncate : I64 -> Array a -> Array a;
-    truncate = |length, vec| (
+    truncate = |length, arr| (
         if length < 0 { undefined("[Std::Array::truncate] Negative size is not allowed.") };
-        if length >= vec.@size { vec };
-        vec._unsafe_truncate_bounds_unchecked(length)
+        if length >= arr.@size { arr };
+        arr._unsafe_truncate_bounds_unchecked(length)
     );
 
     // Resizes an array to the given size, filling with the given value if the new size is larger than the current size, 
