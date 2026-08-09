@@ -11084,9 +11084,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Two types that name each other through the type argument of a phantom type. Neither is a type
-// the compiler may replace with its field, and unwrapping the phantom type leaves both of them
-// one-field unboxed structs.
+// Two types that name each other through the type argument of a phantom type, so each is reached
+// from itself in two steps. Neither is a type the compiler may replace with its field, and
+// unwrapping the phantom type leaves both of them one-field unboxed structs whose field operations
+// have to keep working.
 #[test]
 pub fn test_two_newtypes_naming_each_other_through_a_phantom_type_argument() {
     let source = r##"
@@ -11101,6 +11102,11 @@ main = (
     let d = D { z : Phantom { x : 3 } };
     let e = E { w : Phantom { x : 5 } };
     assert_eq(|_|"", d.@z.@x + e.@w.@x, 8);;
+    let d = d.mod_z(|p| Phantom { x : p.@x * 2 });
+    let e = e.mod_w(|p| Phantom { x : p.@x * 2 });
+    let D { z : dz } = d;
+    let E { w : ew } = e;
+    assert_eq(|_|"", dz.@x + ew.@x, 16);;
     pure()
 );
     "##;

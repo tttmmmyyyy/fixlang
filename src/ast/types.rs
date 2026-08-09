@@ -2687,7 +2687,7 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar};
+    use super::{kind_arrow, kind_star, make_tyvar, FullName, TyCon};
     use crate::misc::Set;
 
     /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
@@ -2709,5 +2709,28 @@ mod tests {
         set.insert(higher.clone());
         set.insert(other_name.clone());
         assert_eq!(set.len(), 2);
+    }
+
+    /// A name that `into_punched_type_name` produced names the struct it punches, and a name that
+    /// merely carries such a name inside a larger one names nothing.
+    ///
+    /// Reading the struct back out of the name is what pairs a punched declaration with the one it
+    /// punches, so a name a later pass rebuilt around the punched name has to answer that it carries
+    /// no such pairing rather than hand back a struct that does not exist.
+    #[test]
+    fn a_punched_type_name_names_the_struct_it_punches() {
+        let struct_tc = TyCon::new(FullName::from_strs(&["Main"], "C"));
+
+        let named = |tc: &TyCon| tc.unpunched_tycon().map(|tc| tc.to_string());
+
+        let mut punched_tc = struct_tc.clone();
+        punched_tc.into_punched_type_name(0);
+        assert_eq!(named(&punched_tc), Some(struct_tc.to_string()));
+
+        assert_eq!(named(&struct_tc), None);
+
+        let mut rebuilt_tc = struct_tc.clone();
+        *rebuilt_tc.name.name_as_mut() = format!("#RHKTV<{} Std::Array>", punched_tc.name.name);
+        assert_eq!(named(&rebuilt_tc), None);
     }
 }
