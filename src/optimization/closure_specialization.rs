@@ -296,15 +296,12 @@ impl Tree {
 }
 
 impl PartialEq for Tree {
-    // Two values that say the same thing are one value, decided on the digest rather than by walking
-    // the tree.
     fn eq(&self, other: &Self) -> bool {
         self.0.digest == other.0.digest
     }
 }
 impl Eq for Tree {}
 impl Hash for Tree {
-    // Hashes the digest, so that a value hashes the same wherever it was built.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.digest.hash(state);
     }
@@ -739,20 +736,20 @@ fn known_arguments(
     lifted: &RefCell<LiftedLambdas>,
 ) -> Map<FullName, Known> {
     let mut known_args = Map::default();
-    let (param_lists, _) = body.destructure_lam_sequence();
+    let (args, _) = body.destructure_lam_sequence();
     for (slot, tree) in &unit.subst {
         if slot.field.is_some() {
             continue;
         }
         assert!(
-            slot.arg < param_lists.len(),
+            slot.arg < args.len(),
             "{} is substituted at argument {}, but takes {} of them",
             unit.origin.to_string(),
             slot.arg,
-            param_lists.len()
+            args.len()
         );
-        assert_eq!(param_lists[slot.arg].len(), 1);
-        let arg_name = param_lists[slot.arg][0].name.clone();
+        assert_eq!(args[slot.arg].len(), 1);
+        let arg_name = args[slot.arg][0].name.clone();
         let cap_list_ty = lifted.borrow_mut().capture_struct_of(tree).ty;
         known_args.insert(
             arg_name.clone(),
@@ -904,12 +901,12 @@ fn specializable_slots_of(
     let expr = sym.expr.as_ref().unwrap();
 
     // Check if each parameter of `sym` is specializable.
-    let (param_lists, body) = expr.destructure_lam_sequence();
-    let params = param_lists
+    let (params, body) = expr.destructure_lam_sequence();
+    let params = params
         .iter()
-        .map(|param_list| {
-            assert_eq!(param_list.len(), 1);
-            param_list[0].name.clone()
+        .map(|may_multi_param| {
+            assert_eq!(may_multi_param.len(), 1);
+            may_multi_param[0].name.clone()
         })
         .collect::<Vec<_>>();
     let param_tys = sym.ty.collect_app_src(usize::MAX).0;
@@ -1504,16 +1501,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
-    // Rewrite an inline-LLVM expression that reads a variable holding a bare capture list: the call
-    // wrapping that capture list back into a closure is bound to a local of its own, and the
-    // expression reads that local instead.
     fn start_visit_llvm(
         &mut self,
         llvm_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        // The call replacing each such free variable.
-        let mut replacements = Map::default();
+        // If any free variable in the LLVM expression refers to a decaptured lambda,
+        // replace it with an expression that applies the lambda function to the capture list.
+
+        let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
         for free_name in llvm_expr.free_vars() {
             let known = self.local_decap_lambdas.get(&free_name).cloned();
             if known.is_none() {
@@ -1530,11 +1526,11 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             let name_expr = expr_var(free_name.clone(), None).set_type(self.cap_of(&tree).ty);
             let expr = expr_app_typed(lam, vec![name_expr]);
 
-            replacements.insert(free_name.clone(), expr);
+            replace.insert(free_name.clone(), expr);
         }
 
         // If none of the free variables in the LLVM expression refer to a decaptured lambda, do nothing.
-        if replacements.is_empty() {
+        if replace.is_empty() {
             return StartVisitResult::VisitChildren;
         }
 
@@ -1546,15 +1542,15 @@ impl ExprVisitor for ClosureSpecializationVisitor {
 
         // Rename free variables in the LLVM expression
         let mut llvm_expr = llvm_expr.clone();
-        let mut renames: Map<FullName, FullName> = Default::default();
-        for (name, _) in replacements.iter() {
-            renames.insert(name.clone(), make_new_name(name));
+        let mut rename: Map<FullName, FullName> = Default::default();
+        for (name, _) in replace.iter() {
+            rename.insert(name.clone(), make_new_name(name));
         }
-        llvm_expr = rename_free_names(&llvm_expr, renames);
+        llvm_expr = rename_free_names(&llvm_expr, rename);
 
         // Insert `let (new name) = (lambda function call);` before the LLVM expression
         let mut expr = llvm_expr.clone();
-        for (name, call_lam_expr) in replacements.iter() {
+        for (name, call_lam_expr) in replace.iter() {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
                 PatternNode::make_var(var_var(new_name.clone()), None)
@@ -1700,17 +1696,17 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         EndVisitResult::unchanged(expr)
     }
 
-    // Retype a lambda whose parameter holds a bare capture list: its domain still says the closure
-    // type the parameter was written at.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        let params = expr.get_lam_params();
-        assert_eq!(params.len(), 1);
-        let param_name = &params[0].name;
-        let cap_list_ty = match self.local_decap_lambdas.get(param_name).cloned() {
+        // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
+        let arg = expr.get_lam_params();
+        assert_eq!(arg.len(), 1);
+        let arg = &arg[0];
+        let arg_name = &arg.name;
+        let cap_list_ty = match self.local_decap_lambdas.get(arg_name).cloned() {
             Some(known) if known.is_bare => self.cap_of(&known.tree).ty,
             // If the argument does not hold a capture list, do nothing.
             _ => return StartVisitResult::VisitChildren,
@@ -1727,10 +1723,9 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
-    // Retype a lambda whose body took a different type while it was visited. In `|x| |y| (...)`,
-    // retyping the inner lambda for a parameter holding a capture list changes the codomain of the
-    // outer one.
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
+        // Example: In `expr` is a lambda `|x| |y| (...)`, if `y` is a decaptured lambda, visiting `|y| (...)` may change its type, so the codomain of `|x| |y| (...)` may need to be fixed.
         let lam_ty = expr.type_.as_ref().unwrap();
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();
