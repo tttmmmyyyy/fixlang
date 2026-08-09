@@ -1234,6 +1234,20 @@ impl ClosureSpecializationVisitor {
             *value = known_field.cap_list;
             narrowed_fields.push((position, known_field.tree));
         }
+        // A value arrives already narrowed where a copy passes it on, and this rebuilds the
+        // narrowing from the fields rather than from what it arrived as. A field the value already
+        // narrowed has to survive that: the type it is declared at says it is narrowed, and dropping
+        // it from the tree would leave the two disagreeing.
+        assert!(
+            known.tree.fields().iter().all(|(position, tree)| narrowed_fields
+                .iter()
+                .any(|(narrowed, value)| narrowed == position && value == tree)),
+            "field {:?} of {} arrived narrowed and is dropped by the narrowing in {}, which keeps {:?}",
+            known.tree.fields().iter().map(|(position, _)| *position).collect::<Vec<_>>(),
+            known.tree.lambda().to_string(),
+            self.current_symbol.to_string(),
+            narrowed_fields.iter().map(|(position, _)| *position).collect::<Vec<_>>()
+        );
         if narrowed_fields == known.tree.fields() {
             return known;
         }
