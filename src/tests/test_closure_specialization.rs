@@ -80,13 +80,30 @@ mod integration_tests {
     /// swapping which of the two closures sits in which way in and wrapping one of them.
     const CLOSURE_SWAP_OUTPUT: &str = "938";
 
+    /// How many copies `closure_swap` asks for today. What bounds it is the commitment a chain
+    /// records: raising the allowance the budget grants leaves this count where it is.
+    const CLOSURE_SWAP_COPIES: usize = 9;
+
     /// What `wide_capture` prints: `relay` over four closures with `n = 2`, summing `terminal` on
     /// each and recursing four ways.
     const WIDE_CAPTURE_OUTPUT: &str = "18";
 
+    /// How many closures `wide_capture` builds a capture list out of, and so how many of them one
+    /// copy of the lambda receiving it can call by name.
+    const WIDE_CAPTURE_KNOWN_CLOSURES: usize = 4;
+
+    /// How many copies of `relay` `wide_capture` may have. Four capture fields decided independently
+    /// reach 95 copies without the budget on the copies that combine slots; the bound sits between
+    /// the two, so that adjusting the allowance moves the count without moving the claim.
+    const WIDE_CAPTURE_COPIES: usize = 50;
+
     /// What `deep_relay` prints: the cycle `a` -> `b` -> `c` entered with `n = 6`, wrapping the
     /// closure one level deeper on each turn of the cycle.
     const DEEP_RELAY_OUTPUT: &str = "569";
+
+    /// How many copies `deep_relay` asks for today. What bounds it is the commitment a chain
+    /// records: raising the allowance the budget grants leaves this count where it is.
+    const DEEP_RELAY_COPIES: usize = 7;
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -173,22 +190,25 @@ mod integration_tests {
     /// up to the end of that segment. A lambda lifted out of the function carries a `#closure_lam`
     /// segment ahead of the `#closure_spec_` one, which is what tells the two populations apart.
     fn spec_copies_under(dump: &str, func_prefix: &str) -> Vec<(String, bool)> {
-        let spec_segment = format!("{}_", CLOSURE_SPEC_SUFFIX);
-        let mut copies = functions_named_with(dump, &spec_segment)
+        let mut copies = functions_named_with(dump, &format!("{}_", CLOSURE_SPEC_SUFFIX))
             .into_iter()
             .filter(|name| name.starts_with(func_prefix))
-            .map(|name| {
-                let spec_start = name.find(&spec_segment).unwrap();
-                let is_lambda_copy = name[..spec_start].contains(CLOSURE_LAM_SUFFIX);
-                let end = name[spec_start + 1..]
-                    .find('#')
-                    .map_or(name.len(), |offset| spec_start + 1 + offset);
-                (name[..end].to_string(), is_lambda_copy)
-            })
+            .filter_map(copy_name)
+            .map(|copy| (copy.to_string(), copy.contains(CLOSURE_LAM_SUFFIX)))
             .collect::<Vec<_>>();
         copies.sort();
         copies.dedup();
         copies
+    }
+
+    /// The part of `name` that names one copy, which is the name up to the end of the
+    /// `#closure_spec_` segment, or `None` where `name` carries no such segment.
+    fn copy_name(name: &str) -> Option<&str> {
+        let spec_start = name.find(&format!("{}_", CLOSURE_SPEC_SUFFIX))?;
+        let end = name[spec_start + 1..]
+            .find('#')
+            .map_or(name.len(), |offset| spec_start + 1 + offset);
+        Some(&name[..end])
     }
 
     /// The copies that `dump` names of the function whose name begins with `func_prefix`.
@@ -209,6 +229,29 @@ mod integration_tests {
             .filter(|(_, is_lambda_copy)| *is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
+    }
+
+    /// The largest number of distinct copies of the function named by `callee_prefix` that any one
+    /// body in `dump` calls by name.
+    ///
+    /// A closure whose identity a capture field holds is called by name from the body receiving that
+    /// capture list, so this says how many of the closures one capture list carries are known at
+    /// once. The line naming a function is left out of its own body, so a copy does not count itself.
+    fn most_copies_called_from_one_body(dump: &str, callee_prefix: &str) -> usize {
+        dump.split("\nfn ")
+            .map(|function| {
+                let body = function.split_once('\n').map_or("", |(_, body)| body);
+                let mut called = body
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#'))
+                    .filter(|token| token.starts_with(callee_prefix))
+                    .filter_map(copy_name)
+                    .collect::<Vec<_>>();
+                called.sort();
+                called.dedup();
+                called.len()
+            })
+            .max()
+            .unwrap_or(0)
     }
 
     /// A lambda passed to a global function is lifted to a global function of its own, and that
@@ -374,9 +417,33 @@ mod integration_tests {
     #[test]
     pub fn test_two_closures_swapping_places_around_a_cycle_keep_their_identity() {
         let (_temp_dir, project_dir) = setup_test_env("closure_swap");
-        for opt_level in ["basic", "max", "experimental"] {
+        for opt_level in ["basic", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, CLOSURE_SWAP_OUTPUT);
         }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", CLOSURE_SWAP_OUTPUT);
+
+        assert!(
+            !copies_of(&dump, "Main::pong#").is_empty(),
+            "`pong` receives the two closures in the ways in `ping` did not, so it gets a copy only \
+             if their identity survived both the cycle and the swap. The dump names: {:?}",
+            copies_of(&dump, "Main::")
+        );
+        let apply_twice = copies_of(&dump, "Main::apply_twice#");
+        assert!(
+            apply_twice.len() >= 2,
+            "`apply_twice` is called with each of the two closures in turn, so it should have a \
+             copy per closure. The dump names {}: {:?}",
+            apply_twice.len(),
+            apply_twice
+        );
+        let copies = copies_of(&dump, "Main::");
+        assert!(
+            copies.len() <= CLOSURE_SWAP_COPIES,
+            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
+            CLOSURE_SWAP_COPIES,
+            copies.len(),
+            copies
+        );
     }
 
     /// One capture list carrying four closures whose identity is known, where each round narrows a
@@ -384,9 +451,27 @@ mod integration_tests {
     #[test]
     pub fn test_a_capture_list_carrying_four_known_closures() {
         let (_temp_dir, project_dir) = setup_test_env("wide_capture");
-        for opt_level in ["basic", "max", "experimental"] {
+        for opt_level in ["basic", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, WIDE_CAPTURE_OUTPUT);
         }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", WIDE_CAPTURE_OUTPUT);
+
+        let known_at_once = most_copies_called_from_one_body(&dump, "Main::terminal#");
+        assert!(
+            known_at_once >= WIDE_CAPTURE_KNOWN_CLOSURES,
+            "the lambda `relay` hands to `fold` captures all four closures and calls `terminal` on \
+             each, so one of its copies should call {} copies of `terminal` by name. The most any \
+             body calls is {}",
+            WIDE_CAPTURE_KNOWN_CLOSURES,
+            known_at_once
+        );
+        let copies = copies_of(&dump, "Main::relay#");
+        assert!(
+            copies.len() <= WIDE_CAPTURE_COPIES,
+            "`relay` should have at most {} copies, but the dump names {}",
+            WIDE_CAPTURE_COPIES,
+            copies.len()
+        );
     }
 
     /// A cycle of three functions where one turn of the cycle wraps the closure a level deeper, so
@@ -394,9 +479,25 @@ mod integration_tests {
     #[test]
     pub fn test_a_cycle_of_three_wrapping_one_level_per_turn_runs_out() {
         let (_temp_dir, project_dir) = setup_test_env("deep_relay");
-        for opt_level in ["basic", "max", "experimental"] {
+        for opt_level in ["basic", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, DEEP_RELAY_OUTPUT);
         }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", DEEP_RELAY_OUTPUT);
+
+        assert!(
+            !copies_of(&dump, "Main::a#").is_empty(),
+            "`a` wraps the closure it was given and hands it round the cycle, so it should be \
+             specialized on what comes back. The dump names: {:?}",
+            copies_of(&dump, "Main::")
+        );
+        let copies = copies_of(&dump, "Main::");
+        assert!(
+            copies.len() <= DEEP_RELAY_COPIES,
+            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
+            DEEP_RELAY_COPIES,
+            copies.len(),
+            copies
+        );
     }
 
     /// A closure a function builds from the one it was given becomes a capture list, and the lambda
