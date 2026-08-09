@@ -4,191 +4,12 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
-    use serde_json::{json, Value};
-    use std::{
-        path::{Path, PathBuf},
-        time::{Duration, Instant},
+    use super::super::completion_harness::{
+        collect_completion_items, find_sort_text, setup_test_env, LspCompletionCtx,
     };
-    use tempfile::TempDir;
-
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
-    /// Look up the `sortText` of the completion item whose `label` is `label`.
-    fn find_sort_text(items: &[Value], label: &str) -> Option<String> {
-        items
-            .iter()
-            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-            .and_then(|it| it.get("sortText"))
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    }
-
-    /// Poll an in-flight `textDocument/completion` request until the
-    /// server replies or `timeout` elapses. Returns the completion items
-    /// (the response's `result` may be either an array or a
-    /// `CompletionList` — both shapes are unwrapped); returns `None`
-    /// when the timeout expires so the caller can format its own
-    /// diagnostic.
-    fn collect_completion_items(
-        client: &mut LspClient,
-        request_id: u32,
-        timeout: Duration,
-    ) -> Option<Vec<Value>> {
-        let start = Instant::now();
-        loop {
-            client.wait_for_server(Duration::from_millis(500));
-            if let Some(response) = client.get_response(request_id) {
-                let result = response.get("result").expect("response has result");
-                let items = if result.is_array() {
-                    result.as_array().unwrap().clone()
-                } else {
-                    result
-                        .get("items")
-                        .and_then(|v| v.as_array())
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                return Some(items);
-            }
-            if start.elapsed() > timeout {
-                return None;
-            }
-        }
-    }
-
-    struct LspCompletionCtx {
-        client: LspClient,
-        project_dir: PathBuf,
-        _temp_dir: TempDir,
-    }
-
-    impl LspCompletionCtx {
-        fn setup(project_name: &str, files: &[&str]) -> Self {
-            let (temp_dir, project_dir) = setup_test_env(project_name);
-            let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
-            client
-                .initialize(&project_dir, Duration::from_secs(5))
-                .expect("Failed to initialize LSP");
-            for f in files {
-                client
-                    .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
-            }
-            let trigger_file = files.last().unwrap();
-            client.trigger_and_wait_for_diagnostics(Path::new(trigger_file));
-            Self {
-                client,
-                project_dir,
-                _temp_dir: temp_dir,
-            }
-        }
-
-        fn file_uri(&self, file: &str) -> String {
-            format!("file://{}", self.project_dir.join(file).display())
-        }
-
-        /// Send textDocument/completion and return the result items.
-        fn complete(&mut self, file: &str, line: u32, col: u32) -> Vec<Value> {
-            let uri = self.file_uri(file);
-            let id = self
-                .client
-                .send_request(
-                    "textDocument/completion",
-                    json!({
-                        "textDocument": { "uri": uri },
-                        "position": { "line": line, "character": col }
-                    }),
-                )
-                .expect("Failed to send completion request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive a completion response");
-            let result = response
-                .get("result")
-                .expect("Response should have a result field");
-            // The result can be either an array or a CompletionList object.
-            if result.is_array() {
-                result.as_array().unwrap().clone()
-            } else {
-                result
-                    .get("items")
-                    .and_then(|items| items.as_array())
-                    .cloned()
-                    .unwrap_or_default()
-            }
-        }
-
-        /// Send textDocument/completion and poll for the response with
-        /// the given timeout. Use this in dot-completion tests where
-        /// the server's first-time re-elaborate can take longer than
-        /// `complete`'s hard-coded 5s wait on a cold cache.
-        fn complete_with_timeout(
-            &mut self,
-            file: &str,
-            line: u32,
-            col: u32,
-            timeout: Duration,
-        ) -> Vec<Value> {
-            let uri = self.file_uri(file);
-            let id = self
-                .client
-                .send_request(
-                    "textDocument/completion",
-                    json!({
-                        "textDocument": { "uri": uri },
-                        "position": { "line": line, "character": col }
-                    }),
-                )
-                .expect("Failed to send completion request");
-            collect_completion_items(&mut self.client, id, timeout)
-                .unwrap_or_else(|| panic!("completion did not respond within {:?}", timeout))
-        }
-
-        /// Send completionItem/resolve and return the resolved item.
-        fn resolve(&mut self, item: Value) -> Value {
-            let id = self
-                .client
-                .send_request("completionItem/resolve", item)
-                .expect("Failed to send resolve request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive a resolve response");
-            response
-                .get("result")
-                .cloned()
-                .expect("Resolve response should have result")
-        }
-
-        fn shutdown(mut self) {
-            self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
-            self.client
-                .finish()
-                .expect("Reader thread should not have errors");
-        }
-    }
+    use super::super::lsp_client::LspClient;
+    use serde_json::json;
+    use std::{fs, path::Path, time::Duration};
 
     /// Test that associated types appear in completion candidates.
     /// The completion project defines various entities:
@@ -478,15 +299,16 @@ mod tests {
     /// `42.<cursor>` in a body that mentions both `myfunc1 : U32 -> U32 -> U32`
     /// and `myfunc2 : I64 -> I64 -> I64` — `42` is `I64` so `myfunc2` should
     /// outrank `myfunc1` in the completion list. Verifies the dot-completion
-    /// type-aware ranking pipeline (Steps 1-4).
+    /// ranking pipeline: receiver-type extraction and tier-based `sortText`
+    /// assignment.
     #[test]
     fn test_completion_dot_sort_ranks_matching_receiver_above_others() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
 
         // Cursor right after the dot in `    42.` on line 13 (0-indexed),
         // column 7 (= byte right after `.`).
-        // Use a polling wait — Step 1's full re-elaborate can take longer
-        // than `complete`'s hard-coded 5s sleep on a cold cache.
+        // Use a polling wait — the dot-completion full re-elaborate can take
+        // longer than `complete`'s hard-coded 5s sleep on a cold cache.
         let items = ctx.complete_with_timeout("main.fix", 13, 7, Duration::from_secs(60));
 
         // Each item should carry a sortText derived from its tier.
@@ -531,20 +353,15 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Scenario B: the on-disk file has a parse error (`42` with no
-    /// dot inside `(...)`), so the snapshot Program built at LSP
-    /// startup may be missing the user's module entirely. The user
-    /// then types `.` (live buffer becomes parseable as `42.pure()`)
-    /// and triggers completion.
-    ///
-    /// This reproduces the user's report that priority ranking
-    /// doesn't apply after a "save with parse error → close → reopen
-    /// → type the dot" round trip. We expect the test to fail before
-    /// any fix lands; once it passes the regression is closed.
+    /// The on-disk file has a parse error (`42` with no dot inside
+    /// `(...)`), so the snapshot Program built at LSP startup may be
+    /// missing the user's module entirely. The user then types `.`
+    /// (live buffer becomes parseable as `42.pure()`) and triggers
+    /// completion. Type-aware ranking must still apply: the receiver
+    /// type is recovered from the repaired live buffer even when the
+    /// startup snapshot lacks the module.
     #[test]
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
-        use std::fs;
-
         let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client
@@ -684,13 +501,12 @@ mod tests {
         }
     }
 
-    /// Reproduces the user-report: `let n = range(50, 101).<cursor>`
-    /// with the cursor right after the dot at end of line. We expect
-    /// some `Std::Iterator::*` method (e.g. `fold`) to be ranked
-    /// strictly above an alphabetically-earlier candidate like
-    /// `Std::Add::add` — i.e. the dot-completion ranker must classify
-    /// the receiver as a `RangeIterator`-like type and place Iterator
-    /// methods in a lower-numbered tier.
+    /// `let n = range(50, 101).<cursor>` with the cursor right after
+    /// the dot at end of line. Some `Std::Iterator::*` method (e.g.
+    /// `fold`) must be ranked strictly above an alphabetically-earlier
+    /// candidate like `Std::Add::add` — the dot-completion ranker must
+    /// classify the receiver as a `RangeIterator`-like type and place
+    /// Iterator methods in a lower-numbered tier.
     #[test]
     fn test_completion_dot_sort_iterator_at_end_of_line() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort-iterator", &["main.fix"]);
@@ -712,7 +528,7 @@ mod tests {
         // dot-context extractor actually observed as the receiver
         // type (it logs `dot-context receiver type: <ty>`).
         let log_path = ctx.project_dir.join(".fixlang/fix.log");
-        if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+        if let Ok(log_content) = fs::read_to_string(&log_path) {
             let completion_log: String = log_content
                 .lines()
                 .filter(|l| l.contains("[completion]"))
@@ -927,6 +743,43 @@ mod tests {
              receiver it must stay at Tier 1 (bucket match, unify fails); \
              got {:?}",
             sort_specific,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// A struct pattern whose head names no struct — here `Item`, an
+    /// associated type of `Std::Iterator` — is an error the strict
+    /// typechecker reports. The completion pipeline runs
+    /// `error_tolerant`, so it walks past that pattern and has to
+    /// keep serving the rest of the body: the `arr.` receiver further
+    /// down the same body still earns its `Array I64` type, which puts
+    /// `Std::Array::push_back` in Tier 0.
+    #[test]
+    fn test_completion_dot_sort_past_bad_struct_pattern() {
+        let mut ctx = LspCompletionCtx::setup("completion-struct-pattern-head", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: main : IO () = (
+        //   3:     let Item { data : d } = 42;
+        //   4:     let arr = [1, 2, 3];
+        //   5:     let _ = arr.   <-- cursor right after the dot
+        //   6:     pure()
+        //   7: );
+        //
+        // Column 16 = byte just after `.` on `    let _ = arr.`.
+        let items = ctx.complete("main.fix", 5, 16);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with('0'),
+            "Std::Array::push_back should land in Tier 0 for an Array I64 \
+             receiver even though an earlier pattern in the same body has a \
+             bad head; got {:?}",
+            sort_push_back,
         );
 
         ctx.shutdown();
@@ -1312,8 +1165,7 @@ mod tests {
 
         // The receiver is a `String`, so the dot-context ranker must have
         // run: at least one `Std::String::*` candidate must land in
-        // Tier 0 (a `0`-prefixed sortText). Before the fix these were
-        // untiered (no sortText) because no receiver type was recovered.
+        // Tier 0 (a `0`-prefixed sortText).
         let best_string_sort = items
             .iter()
             .filter(|it| {

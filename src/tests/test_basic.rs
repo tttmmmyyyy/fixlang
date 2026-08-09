@@ -8,9 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, EmittedIr,
+        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
+        run_source_capture, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::Rng;
@@ -2647,9 +2647,17 @@ pub fn test89() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies every sorting routine of the standard library over one corpus of inputs: the empty
+/// array, a single element, an array whose keys repeat, and pseudo-random hundred-element arrays,
+/// together with arrays long enough to be partitioned rather than sorted by insertion, built of few
+/// distinct values or of an order that leaves one side of every split nearly empty.
+/// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
+/// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
+/// Each runs over an unboxed and a boxed element type, and its result is checked to be increasing
+/// and to keep the size and the sum of the input; the stable one is also checked to leave equal
+/// elements in the order they came in.
 #[test]
 pub fn test_sort_by() {
-    // Test "sort_by" and related functions.
     let source = r#"
 module Main;
 
@@ -2732,15 +2740,23 @@ is_increasing = |arr| (
 test_sort : SortMethod I64 -> SortMethod BoxedI64 -> IO ();
 test_sort = |sort_method, sort_method_boxed| (
     cases.to_iter.zip(count_up(1)).fold_m((), |(case, case_n), _|
+        let case_name = "case " + case_n.to_string;
+
         // unboxed case
         let xs = case;
         let ys = xs.sort_method;
-        assert(|_| "case {}-unboxed", ys.is_increasing);;
+        assert(|_| case_name + "-unboxed", ys.is_increasing);;
+        // The elements are the ones that went in: a partition that drops or repeats one still
+        // leaves the result in order.
+        assert_eq(|_| case_name + "-unboxed-size", ys.@size, xs.@size);;
+        assert_eq(|_| case_name + "-unboxed-sum", ys.to_iter.sum, xs.to_iter.sum);;
 
         // boxed case
         let xs_boxed = xs.map(BoxedI64::make) : Array BoxedI64;
         let ys_boxed = xs_boxed.sort_method_boxed;
-        assert(|_| "case {}-boxed".populate([case_n.to_string]), ys_boxed.is_increasing);;
+        assert(|_| case_name + "-boxed", ys_boxed.is_increasing);;
+        assert_eq(|_| case_name + "-boxed-size", ys_boxed.@size, xs.@size);;
+        assert_eq(|_| case_name + "-boxed-sum", ys_boxed.to_iter.map(|x| x.@v).sum, xs.to_iter.sum);;
 
         pure()
     );;
@@ -2767,6 +2783,11 @@ cases = [
     case_1,
     case_2,
     case_stability_0,
+    case_all_equal,
+    case_two_values,
+    case_few_values,
+    case_organ_pipe,
+    case_lone_minimum,
     case_random_0,
     case_random_1,
     case_random_2,
@@ -2790,6 +2811,29 @@ case_2 = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5];
 
 case_stability_0 : Array I64;
 case_stability_0 = [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0];
+
+// Ranges of few distinct values, long enough to be partitioned rather than sorted by insertion.
+// A partition that separates only the elements comparing less than the pivot takes one round per
+// element on these, so they are what the recursion has to escape.
+
+case_all_equal : Array I64;
+case_all_equal = Array::fill(50, 7);
+
+case_two_values : Array I64;
+case_two_values = Array::from_map(100, |i| i % 2);
+
+case_few_values : Array I64;
+case_few_values = Array::from_map(200, |i| (i * 7) % 4);
+
+// Rises to the middle and falls back, so the middle element is the greatest of every sub-range and
+// every split leaves one element on one side. This is the shape the recursion budget is against.
+case_organ_pipe : Array I64;
+case_organ_pipe = Array::from_map(100, |i| if i < 99 - i { i } else { 99 - i });
+
+// One element smaller than all the rest, sitting where the pivot is taken from: the split leaves
+// nothing on the left and there is no second element equal to the pivot to gather with it.
+case_lone_minimum : Array I64;
+case_lone_minimum = Array::from_map(31, |i| if i == 15 { 0 } else { i + 1 });
 
 case_random_0 : Array I64;
 case_random_0 = [346024429990377868, 245837103567876924, 3986578685004063178, 5805251788053972515, 1417556943926455241, 4845257856352310757, 4555558403327679905, 6902334504764357194, 7801513043249390307, 2949176974545635264, 7059641390372345377, 371268058065748070, 8967105408815998004, 9163707814261219422, 2811786699486158499, 695673114012699563, 7255892546594831251, 5215594425099043756, 7226627387424968494, 3500029154995518523, 73487224687842005, 7622782041994750406, 7620487533683671790, 1948626672868633357, 1716207585624274003, 843382608923212683, 7837714819837928558, 1816086736525301267, 7478592686167993236, 6684621575062124516, 8318977752397448659, 2280779419367863148, 4402166591858481893, 2886005979871858608, 8027251237215604302, 3089788399256501254, 4403629729898519952, 3444861609702597660, 3758594455717637291, 1536276683748698726, 444415575857841953, 1406828580750436238, 309946757719811718, 6469342214276629762, 2907307731075134021, 5390516200439052137, 3467070330460410020, 3131752283003023729, 3701002979343777983, 8757902344019921678, 4468592631788431941, 1988686597499626951, 5098943993242450129, 4563975020031135772, 4558740263275937216, 4136401328193265140, 6221776947277384664, 4218852228729107398, 4693164472015346829, 5926127793208466556, 5980928593819338181, 6358786111999711620, 2510847986880873405, 725552905354199960, 4318305169843662077, 9077270978751322765, 4446216120070684060, 7241182603221941674, 6883294465805350312, 182580429536400213, 6665826731289181158, 4103546543575562161, 2944031420480557330, 7145879548678655791, 684327070863398544, 3141373052076162633, 3376664309606534565, 7748477690866038352, 661097284839573365, 8320186250457439799, 4180671567925332991, 5741176287546058753, 5150928445261445863, 1395554178624938115, 4121093914965231516, 5528476498398069969, 510090779688131913, 1440969282495380048, 1957784169139475426, 7135569354928947870, 3472797929026694304, 2103602003886010196, 7282131254377995390, 8200716464868676255, 940910225290816613, 7646683707254883186, 4235747749241714850, 5832841740041503381, 8357660228540455387, 6794172312654611817];
@@ -2825,6 +2869,8 @@ case_random_9 = [4811598823819225076, 945484849661270666, 3974642354777520028, 4
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_by` returns the order in a new array and leaves the array it was given as it
+/// was, over an array the caller goes on holding.
 #[test]
 pub fn test_sort_by_immutability() {
     let source = r#"
@@ -2843,6 +2889,73 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `sort_stable_by` returns the sorted elements in the array the caller reads, over
+/// every size across the threshold at which the recursion stops splitting and on through several
+/// levels of merging, and over inputs that are randomly ordered, already sorted, reversed, and all
+/// of one key. The merge swaps the roles of two arrays at every level, so a size that splits in a
+/// way the merge does not expect leaves the result in the other array.
+#[test]
+pub fn test_sort_stable_over_sizes_and_orders() {
+    let source = r#"
+module Main;
+
+// Park-Miller minimal-standard LCG.
+_next : I64 -> I64 = |x| (16807 * x) % 2147483647;
+
+// `n` keys drawn from a small range, each paired with its position, so that equal keys are
+// distinguishable and stability is observable.
+gen : I64 -> Array (I64, I64);
+gen = |n| (
+    Iterator::range(0, n).fold((Array::empty(n), 1), |i, (arr, x)|
+        let x = _next(x);
+        (arr.push_back((x % 7, i)), x)
+    ).@0
+);
+
+// Whether the keys are non-descending and equal keys kept the order they came in.
+is_sorted_stably : Array (I64, I64) -> Bool;
+is_sorted_stably = |arr| (
+    Iterator::range(1, arr.@size).fold(true, |i, acc|
+        let (former_key, former_pos) = arr.@(i - 1);
+        let (latter_key, latter_pos) = arr.@(i);
+        acc && (former_key < latter_key || (former_key == latter_key && former_pos < latter_pos))
+    )
+);
+
+by_key : ((I64, I64), (I64, I64)) -> Bool;
+by_key = |((lhs, _), (rhs, _))| lhs < rhs;
+
+check : String -> I64 -> Array (I64, I64) -> IO ();
+check = |input_kind, n, arr| (
+    let name = input_kind + " input of size " + n.to_string;
+    let sorted = arr.sort_stable_by(by_key);
+    assert(|_| name + ": sorted and stable", sorted.is_sorted_stably);;
+    // Every position appears exactly once, so no element was dropped or duplicated.
+    assert_eq(|_| name + ": every element kept", sorted.to_iter.map(|(_, pos)| pos).sum, n * (n - 1) / 2);;
+    assert_eq(|_| name + ": size kept", sorted.@size, n);;
+    pure()
+);
+
+main : IO ();
+main = (
+    let sizes = Iterator::range(0, 40).to_array.push_back(100).push_back(257).push_back(1000);
+    sizes.to_iter.fold_m((), |n, _|
+        let arr = gen(n);
+        check("random", n, arr);;
+        check("sorted", n, arr.sort_stable_by(by_key));;
+        check("reversed", n, arr.sort_stable_by(|((lhs, _), (rhs, _))| rhs < lhs));;
+        check("one-key", n, arr.map(|(_, pos)| (0, pos)));;
+        pure()
+    );;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies `sort` and `sort_stable`, which take their order from the `LessThan` trait rather than
+/// from a comparator the caller passes: the result is non-descending, elements the trait calls equal
+/// keep the order they came in, and the array the caller goes on holding is left as it was.
 #[test]
 pub fn test_sort() {
     let source = r#"
@@ -2864,15 +2977,16 @@ impl Pair : Eq {
 
 main : IO ();
 main = (
-    let x = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
-    let y = x.sort;
-    assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
-    assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+    let input = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
+    let sorted = input.sort;
+    assert_eq(|_|"", sorted, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
+    assert_eq(|_|"", input, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
 
-    let x = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")];
-    let y = x.sort_stable;
-    assert_eq(|_|"", y, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b")]);;
-    assert_eq(|_|"", x, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")]);;
+    // Long enough that the stable sort merges the range rather than sorting it by insertion.
+    let input = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")];
+    let sorted = input.sort_stable;
+    assert_eq(|_|"", sorted, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b"), make(6, "m"), make(6, "o"), make(7, "l"), make(7, "n")]);;
+    assert_eq(|_|"", input, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k"), make(7, "l"), make(6, "m"), make(7, "n"), make(6, "o")]);;
 
     pure()
 );
@@ -4578,6 +4692,8 @@ pub fn test_one_and_multiplicative() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An alias takes the kind of the traits it stands for, so one naming traits of two kinds — here a
+/// trait of kind `*->*` beside one of kind `*` — is reported.
 #[test]
 pub fn test_trait_alias_kind_mismatch() {
     let source = r#"
@@ -4595,6 +4711,8 @@ pub fn test_trait_alias_kind_mismatch() {
     );
 }
 
+/// An `impl` whose head names an alias is reported, and the report says to implement each of the
+/// traits the alias stands for.
 #[test]
 pub fn test_trait_alias_implement_trait_alias_directly() {
     let source = r#"
@@ -4623,6 +4741,8 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
     );
 }
 
+/// Two aliases that stand for each other are reported as circular, so expanding one of them ends
+/// instead of running on forever.
 #[test]
 pub fn test_trait_alias_circular_aliasing() {
     let source = r#"
@@ -4644,9 +4764,165 @@ pub fn test_trait_alias_circular_aliasing() {
     );
 }
 
+/// An alias that stands for itself is reported as circular, and the report points at the
+/// definition that names it.
+#[test]
+pub fn test_trait_alias_circular_aliasing_on_itself() {
+    let source = r#"
+        module Main;
+
+        // Error (circular aliasing)
+        trait MyTrait = MyTrait;
+
+        main : IO ();
+        main = (
+            pure()
+        );
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Circular aliasing detected in trait alias `Main::MyTrait`."),
+        "the alias standing for itself is reported, but the message is:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("trait MyTrait = MyTrait;"),
+        "the report points at the definition, but the message is:\n{}",
+        errmsg
+    );
+}
+
+/// A trait that two aliases both stand for is reached twice while an alias naming both is
+/// expanded, and expanding it has to end at the traits themselves either way.
+#[test]
+pub fn test_trait_alias_reachable_along_two_paths() {
+    let source = r#"
+        module Main;
+
+        // `Additive` is reached through `Ordered` and again through `Showable`.
+        trait Ordered = Additive + LessThan;
+        trait Showable = Additive + ToString;
+        trait Ring = Ordered + Showable;
+
+        describe : [a : Ring] a -> a -> String;
+        describe = |x, y| if x < y { (x + y).to_string } else { y.to_string };
+
+        // A trait named beside an alias that already stands for it.
+        trait MyShow = ToString;
+        trait MyShowTwice = MyShow + ToString;
+
+        show_twice : [a : MyShowTwice] a -> String;
+        show_twice = |x| x.to_string + x.to_string;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"case 1", describe(3, 5), "8");;
+            assert_eq(|_|"case 2", describe(5, 3), "3");;
+            assert_eq(|_|"case 3", show_twice(7), "77");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Each numeric type carries a value through `to_bytes` and back with `from_bytes`, and
+/// `from_bytes` on a byte array one byte short of the type's width answers an error.
+/// A trait of kind `*->*` that two aliases both stand for is reached twice while an alias naming
+/// both is expanded, and the alias takes that kind. A trait named twice in one definition is
+/// likewise arrived at twice.
+#[test]
+pub fn test_trait_alias_higher_kinded_reachable_along_two_paths() {
+    let source = r#"
+        module Main;
+
+        // `Functor` is reached through `Mappable` and again through `Liftable`.
+        trait Mappable = Functor;
+        trait Liftable = Functor + Monad;
+        trait Both = Mappable + Liftable;
+
+        twice : [f : Both] (a -> a) -> f a -> f a;
+        twice = |g, x| x.map(g).map(g);
+
+        // One trait named twice in one definition.
+        trait ShownTwice = ToString + ToString;
+
+        show : [a : ShownTwice] a -> String;
+        show = |x| x.to_string;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"case 1", twice(|x| x + 1, [1, 2]), [3, 4]);;
+            assert_eq(|_|"case 2", twice(|x| x + 1, Option::some(1)).as_some, 3);;
+            assert_eq(|_|"case 3", show(7), "7");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An alias that stands for itself is reported as circular even where the aliases it names are
+/// also named by a sibling, so what several paths share does not hide the cycle.
+#[test]
+pub fn test_trait_alias_circular_beside_shared_aliases() {
+    let source = r#"
+        module Main;
+
+        trait Base = ToString;
+        trait Left = Base;
+        trait Right = Base;
+        // Error (circular aliasing)
+        trait Top = Left + Right + Top;
+
+        show : [a : Top] a -> String;
+        show = |x| x.to_string;
+
+        main : IO ();
+        main = println(show(42));
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Circular aliasing detected in trait alias `Main::Top`."),
+        "the alias standing for itself is reported, but the message is:\n{}",
+        errmsg
+    );
+}
+
+/// An implementation that defines a member the trait does not declare is reported, and the report
+/// points at the definition of that member rather than at the implementation as a whole.
+#[test]
+pub fn test_trait_impl_defines_undeclared_member() {
+    let source = r#"
+        module Main;
+
+        trait a : MyTrait {
+            foo : a -> I64;
+        }
+
+        impl I64 : MyTrait {
+            foo = |x| x;
+            bar = |x| x + 1;
+        }
+
+        main : IO ();
+        main = println(MyTrait::foo(1).to_string);
+    "#;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("`bar` is not a member of trait `Main::MyTrait`."),
+        "the undeclared member is reported, but the message is:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("bar = |x| x + 1;"),
+        "the report points at the definition of the member, but the message is:\n{}",
+        errmsg
+    );
+}
+
 #[test]
 pub fn test129() {
-    // Test ToBytes/FromBytes
     let source = r#"
         module Main; 
         
@@ -4738,6 +5014,8 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
+/// produced along with the time it took, for a long computation and for file IO.
 #[test]
 pub fn test_consumed_time() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
@@ -5693,6 +5971,8 @@ pub fn test_implement_trait_on_arrow_2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two instance heads of the same shape overlap even when one of them carries a context: the
+/// overlap check compares the heads and disregards the contexts.
 #[test]
 pub fn test_overlapping_instances_1() {
     let source = r##"
@@ -5703,11 +5983,11 @@ pub fn test_overlapping_instances_1() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl [a : ToString] Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5723,6 +6003,8 @@ pub fn test_overlapping_instances_1() {
     );
 }
 
+/// An instance head whose argument is a type variable overlaps a head that fixes that argument to
+/// a concrete type, since the types the second head denotes are among those the first denotes.
 #[test]
 pub fn test_overlapping_instances_2() {
     let source = r##"
@@ -5733,11 +6015,11 @@ pub fn test_overlapping_instances_2() {
     }
 
     impl Array a : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
 
     impl Array I64 : MyToString {
-        to_string = |f| "array";
+        to_string = |_| "array";
     }
     
     main : IO ();
@@ -5753,6 +6035,8 @@ pub fn test_overlapping_instances_2() {
     );
 }
 
+/// The overlap check reaches function types: a head implementing the trait for every arrow type
+/// overlaps a head that fixes the domain of the arrow.
 #[test]
 pub fn test_overlapping_instances_3() {
     let source = r##"
@@ -5783,6 +6067,8 @@ pub fn test_overlapping_instances_3() {
     );
 }
 
+/// Two heads that are identical up to the naming of their type parameters overlap even when their
+/// contexts constrain different parameters.
 #[test]
 pub fn test_overlapping_instances_4() {
     let source = r##"
@@ -5793,11 +6079,11 @@ pub fn test_overlapping_instances_4() {
     }
 
     impl [e : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl [a : MyToString] Result e a : MyToString {
-        to_string = |f| "result";
+        to_string = |_| "result";
     }
 
     impl I64 : MyToString {
@@ -5817,6 +6103,185 @@ pub fn test_overlapping_instances_4() {
     );
 }
 
+/// An instance head whose argument is a type variable of a higher kind overlaps a head whose
+/// argument is a type constructor of that kind, and the pair is reported.
+///
+/// Which types a head denotes depends on the kinds of the type variables in it: a variable still
+/// carrying the default kind `*` fails to unify with the type constructor it stands for, and the
+/// pair reads as disjoint.
+#[test]
+pub fn test_overlapping_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// A variable whose higher kind comes from a trait constraint rather than a kind signature reaches
+/// the overlap check with that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_higher_kind_from_constraint() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait [f : *->*] f : MyFunctor {
+        fmap : (a -> b) -> f a -> f b;
+    }
+
+    impl Array : MyFunctor {
+        fmap = |g, xs| xs.to_iter.map(g).to_array;
+    }
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : MyFunctor] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// A head whose argument is a partially applied type constructor overlaps one taking a variable of
+/// that kind, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_partially_applied_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl Bar (Result String) : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : Result::ok(true) }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two heads that both take a variable of the same higher kind overlap, so the pair is reported.
+#[test]
+pub fn test_overlapping_instances_two_higher_kinded_heads() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl [f : *->*] Bar f : MyTrait {
+        m = |_| 0;
+    }
+
+    impl [g : *->*] Bar g : MyTrait {
+        m = |_| 1;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 0);;
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::MyTrait` are overlapping.",
+    );
+}
+
+/// Two instance heads whose arguments are different type constructors of the same higher kind
+/// denote disjoint sets of types, and both implementations stand.
+#[test]
+pub fn test_disjoint_instances_higher_kinded_head() {
+    let source = r##"
+    module Main;
+
+    type [f : *->*] Bar f = struct { data : f Bool };
+
+    trait a : MyTrait {
+        m : a -> I64;
+    }
+
+    impl Bar Array : MyTrait {
+        m = |_| 1;
+    }
+
+    impl Bar Option : MyTrait {
+        m = |_| 2;
+    }
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"fail", Bar { data : [true] }.m, 1);;
+        assert_eq(|_|"fail", Bar { data : Option::some(true) }.m, 2);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `eval` accepts an expression of any type, evaluating it and discarding its value.
 #[test]
 pub fn test_eval_non_unit() {
     let source = r##"
@@ -7421,6 +7886,10 @@ pub fn test_tuple_functor() {
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Verifies that a struct declared with no fields can be constructed as
+/// `Empty {}` and given a trait implementation, in each of the plain, `box`
+/// and `unbox` forms.
 #[test]
 pub fn test_empty_struct() {
     let source = r##"
@@ -7455,6 +7924,8 @@ pub fn test_empty_struct() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct literal whose head names a union is reported as an
+/// error.
 #[test]
 pub fn test_make_struct_to_union() {
     let source = r##"
@@ -7482,6 +7953,132 @@ pub fn test_make_struct_to_union() {
     );
 }
 
+// The head of a struct pattern has to name a struct: the sub-patterns are matched against that
+// struct's fields. Read as a field list, a union's variant list would make the pattern bind the
+// tag of the value in place of the payload it names.
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `let` binding.
+#[test]
+pub fn test_struct_pattern_head_is_union() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let Foo { foo: x } = Foo::foo(1);
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a `match` arm, where the type of the matched value already agrees
+/// with the head.
+#[test]
+pub fn test_struct_pattern_head_is_union_in_match_arm() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let x = match Foo::foo(1) {
+                Foo { foo: x } => x
+            };
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a union type is reported as an
+/// error in a lambda parameter, where the pattern drives the inference of the
+/// parameter's type.
+#[test]
+pub fn test_struct_pattern_head_is_union_in_lambda_parameter() {
+    let source = r##"
+        module Main;
+
+        type Foo = union {
+            foo: I64,
+            bar: Bool
+        };
+
+        main: IO ();
+        main = (
+            let get_foo = |Foo { foo: x }| x;
+            println(get_foo(Foo::foo(1)).to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Main::Foo` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by a primitive type, which carries no
+/// fields at all, is reported as an error.
+#[test]
+pub fn test_struct_pattern_head_is_primitive_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let I64 { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type `Std::I64` is not a struct.",
+    );
+}
+
+/// Verifies that a struct pattern headed by an associated type name is reported
+/// as an error: such a name resolves like a type name, so it reaches the
+/// pattern as a type constructor that no type declares.
+#[test]
+pub fn test_struct_pattern_head_is_associated_type() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let Item { foo: x } = 42;
+            println(x.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unknown type name `Std::Iterator::Item`.",
+    );
+}
+
+/// Verifies that `!` parses as negation whether or not a space separates it
+/// from its operand, so `if ! (1 == 2) { .. }` compiles like `if !(1 == 2)`.
 #[test]
 pub fn test_regression_issue_46() {
     let source = r##"
@@ -7502,6 +8099,8 @@ pub fn test_regression_issue_46() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that reading from a handle already given to `close_file` raises a
+/// catchable error naming the closed handle, rather than reading anything.
 #[test]
 pub fn test_read_file_after_close() {
     let source = r##"
@@ -7521,6 +8120,8 @@ pub fn test_read_file_after_close() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct and a union may each name their own type inside a
+/// field, as long as the occurrence sits behind a function arrow.
 #[test]
 pub fn test_circular_type_definition() {
     let source = r##"
@@ -10481,6 +11082,8 @@ pub fn test_higher_kinded_instance_selected_by_annotation() {
         let o = (build(4) : Option I64);
         assert_eq(|_|"", a.@(0), 3);;
         assert_eq(|_|"", o.as_some, 4);;
+        assert_eq(|_|"", a.cmap(|x| x + 1).@(0), 4);;
+        assert_eq(|_|"", o.cmap(|x| x + 1).as_some, 5);;
         pure()
     );
     "##;

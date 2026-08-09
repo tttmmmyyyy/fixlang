@@ -17,10 +17,17 @@ module Main;
 //   `array_truncate [unique]`.
 // - `Array::reserve` on a fresh array -> its `_unsafe_set_capacity_bounds_unchecked` core folds to
 //   `array_set_capacity [unique]` and reallocs in place.
-// - `Array::append` into a fresh array -> its `_unsafe_append_capacity_bounds_unchecked` core folds
-//   to `array_append_range [unique]`.
+// - `Array::append` into a fresh array -> its `_unsafe_append_capacity_unchecked` core folds
+//   to `array_append [unique]`.
+// - `Array::get_sub` of an array -> its `_unsafe_copy_capacity_bounds_unchecked` core folds the
+//   check on the fresh array it copies into, to `array_copy_range [unique]`.
 // - `_unsafe_grow_size` on a fresh array -> `array_grow_size [unique]`.
 // - `unsafe_set_bounds_unchecked` on a fresh array -> `array_set_unchecked [unique]`.
+// - a boxed-struct field `act` on a fresh struct -> the `struct_punch_0 [unique]` and
+//   `struct_plug_in_0 [unique]` it carries the update out with.
+// - `unsafe_is_unique` on a fresh boxed value -> `is_unique [unique]`, the flag folded to `true`.
+// - `mutate_boxed` and `mutate_boxed_io` on a fresh boxed value -> `mutate_boxed [unique]` and
+//   `mutate_boxed_ios [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 namespace Array {
@@ -42,6 +49,11 @@ main = (
     let rec = Rec { x : 1, y : 2 };
     let rec = rec.set_x(10);
 
+    let acted_rec = Rec { x : 3, y : 4 }.act_x(|v| Option::some(v + 1)).as_some;
+    let (rec_unique, checked_rec) = Rec { x : 5, y : 6 }.unsafe_is_unique;
+    let (mutated, _) = Rec { x : 7, y : 8 }.mutate_boxed(|_| pure());
+    let (mutated_io, _) = *Rec { x : 9, y : 10 }.mutate_boxed_io(|_| pure());
+
     let guarded = Array::fill(4, 0).assert_unique(|_|"the array is shared");
     let guarded = guarded.set(0, 7);
 
@@ -56,6 +68,8 @@ main = (
     let appended = Array::fill(2, 0).reserve(5).append([9, 9, 9]);
     let appended = appended.set(0, 4);
 
+    let sub = Array::fill(4, 6).get_sub(1, 3);
+
     // `_unsafe_grow_size` on the fresh empty array; only its length is read, not the uninitialized
     // slots it exposes.
     let grown = (Array::empty(4)._unsafe_grow_size(4) : Array I64);
@@ -66,5 +80,6 @@ main = (
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + grown.@size + unsafe_set.@(1)).to_string
+    let rec_fields = acted_rec.@x + checked_rec.@x + mutated.@x + mutated_io.@x + (if rec_unique { 1 } else { 0 });
+    println $ (acted.@(2) + rec.@x + inner.@(0) + guarded.@(0) + built.@(0) + trunc.@(0) + reserved.@(0) + appended.@(0) + sub.@(0) + grown.@size + unsafe_set.@(1) + rec_fields).to_string
 );

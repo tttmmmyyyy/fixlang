@@ -11,14 +11,16 @@ mod integration_tests {
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
+    /// The directory in the source tree holding the case projects these tests build.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_provenance/cases");
         path
     }
 
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    // and return the directory of the named case project.
+    /// Copy the test cases into a temporary directory of this test's own, so that parallel test
+    /// runs stay out of each other's way, and return that directory together with the directory of
+    /// the case project named by `case`.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dst = temp_dir.path().to_path_buf();
@@ -108,13 +110,24 @@ mod integration_tests {
         assert_binding_prov(&dump, "r", "[fresh]");
     }
 
-    /// The first signature line of a function whose name starts with `fn <name_prefix>` and whose
-    /// name segment (up to the first space) satisfies `name_pred`.
+    /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`
+    /// keyword) and whose name segment, up to the first space or parenthesis, satisfies `name_pred`.
+    fn is_sig(line: &str, name_prefix: &str, name_pred: &impl Fn(&str) -> bool) -> bool {
+        if !line.starts_with(name_prefix) {
+            return false;
+        }
+        let name = line
+            .split(['(', ' '])
+            .nth(1)
+            .unwrap_or_else(|| panic!("a signature line carries no name segment:\n{}", line));
+        name_pred(name)
+    }
+
+    /// The first function signature in `dump` starting with `name_prefix` and whose name segment
+    /// satisfies `name_pred`.
     fn sig_line<'a>(dump: &'a str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> &'a str {
         dump.lines()
-            .find(|l| {
-                l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
-            })
+            .find(|l| is_sig(l, name_prefix, &name_pred))
             .unwrap_or_else(|| {
                 panic!(
                     "no matching `{}` function in the RC IR dump:\n{}",
@@ -123,12 +136,10 @@ mod integration_tests {
             })
     }
 
-    /// Whether the dump has a function whose name starts with `fn <name_prefix>` and satisfies
-    /// `name_pred` on its name segment.
+    /// Whether `dump` has a function signature starting with `name_prefix` and whose name segment
+    /// satisfies `name_pred`.
     fn has_sig(dump: &str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> bool {
-        dump.lines().any(|l| {
-            l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
-        })
+        dump.lines().any(|l| is_sig(l, name_prefix, &name_pred))
     }
 
     /// The body block of the first function whose signature satisfies the predicates: the lines from
@@ -295,11 +306,11 @@ mod integration_tests {
 
     /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
     fn borrow_call_first_arg(line: &str) -> &str {
-        line.split("#borrow(")
+        let after = line
+            .split("#borrow(")
             .nth(1)
-            .and_then(|after| after.split([',', ')']).next())
-            .unwrap_or("")
-            .trim()
+            .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
+        after.split([',', ')']).next().unwrap().trim()
     }
 
     /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
@@ -339,6 +350,9 @@ mod integration_tests {
         assert_binding_prov(&dump, "arr", "[fresh]");
     }
 
+    /// Verifies that the borrow version of a function that wraps its borrowed argument in a union
+    /// reference-counts nothing: the union lays the borrowed payload in place without owning it, so
+    /// releasing the union would free an array its caller still holds.
     #[test]
     fn test_borrow_union_no_double_release() {
         let (_temp_dir, project_dir) = setup_test_env("union");
@@ -372,6 +386,9 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a locally fresh value carries its provenance through a guard and through a
+    /// fill loop, so that every in-place operation reached with it drops its uniqueness check,
+    /// while an operation on a value read out of a boxed container keeps one.
     #[test]
     fn test_unique_check_elim_local_fresh() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim");
@@ -413,13 +430,24 @@ mod integration_tests {
             // A `reserve`, whose `_unsafe_set_capacity_bounds_unchecked` core folds its check and
             // reallocs the fresh array in place.
             "array_set_capacity[unique]",
-            // An `append`, whose `_unsafe_append_capacity_bounds_unchecked` core folds the check on
-            // the fresh destination it appends into.
-            "array_append_range[unique]",
+            // An `append`, whose `_unsafe_append_capacity_unchecked` core folds the check on the
+            // fresh destination it appends into.
+            "array_append[unique]",
+            // A `get_sub`, whose `_unsafe_copy_capacity_bounds_unchecked` core folds the check on
+            // the fresh array it copies the range into.
+            "array_copy_range[unique]",
             // A `_unsafe_grow_size` on the fresh array folds its check.
             "array_grow_size[unique]",
             // An `unsafe_set_bounds_unchecked` on the fresh array folds its check.
             "array_set_unchecked[unique]",
+            // The punch and the plug that a boxed-struct field `act` carries the update out with.
+            "struct_punch_0[unique]",
+            "struct_plug_in_0[unique]",
+            // An `unsafe_is_unique`, whose flag folds to the constant `true`.
+            "is_unique[unique]",
+            // The two `_mutate_boxed_internal` cores, on a freshly allocated value.
+            "mutate_boxed[unique]",
+            "mutate_boxed_ios[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -454,6 +482,37 @@ mod integration_tests {
             .and_then(|rest| rest.split(' ').next())
             .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
             .to_string()
+    }
+
+    /// Verifies that copying a range out of an array leaves the array provably unique. The copy
+    /// borrows the array it reads, so the caller keeps the reference it already held rather than
+    /// duplicating it; a duplicated reference would be a `Retain`, which is the analysis's only
+    /// demotion and lands on the absorbing `unknown`, and every write after the copy would then
+    /// re-check a value nothing had shared.
+    #[test]
+    fn test_unique_check_elim_after_copy() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_after_copy");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The copy writes into the array it just allocated for the result, so its own check goes.
+        assert!(
+            dump.contains("array_copy_range[unique]"),
+            "the copy into the freshly allocated result should drop its check:\n{}",
+            dump
+        );
+        // The array copied out of is the one the writes go into, and nothing shared it. Assert the
+        // writes are there as well as unchecked, so that the case cannot pass by having no write
+        // left in the dump at all.
+        assert!(
+            dump.contains("array_set[unique]"),
+            "the writes after the copy should be in the dump, with their checks dropped:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("array_set("),
+            "every write after the copy should drop its check:\n{}",
+            dump
+        );
     }
 
     /// Verifies that publishing a value to other threads yields a handle of unknown sharing: the
@@ -516,6 +575,28 @@ mod integration_tests {
         }
     }
 
+    /// Verifies that a write into an array read out of a global keeps its uniqueness check.
+    ///
+    /// A global object is shared whatever its reference count says, and the count is not raised to
+    /// record that, so proving one unique would licence a write everything else in the program can
+    /// see. The elimination is sound for globals only as long as this holds.
+    #[test]
+    fn test_global_value_keeps_its_check() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_global");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert!(
+            dump.contains("array_set("),
+            "the set on an array read out of a global should keep its check:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("array_set[unique]"),
+            "the set on an array read out of a global should not be proven unique:\n{}",
+            dump
+        );
+    }
+
     /// Verifies that a value updated through a field of an unboxed struct keeps the provenance that
     /// lets its check be dropped, so a loop over such a struct re-checks nothing.
     #[test]
@@ -536,6 +617,12 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a loop entered with a shared array pays its uniqueness check on the first
+    /// iteration alone.
+    ///
+    /// Specialization clones the loop body per input uniqueness, so the source-level `set` appears
+    /// in two functions: a checked one, whose check clones the shared array, and one reached with
+    /// that fresh clone, which writes in place.
     #[test]
     fn test_unique_check_elim_shared_loop_entry() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
@@ -550,14 +637,14 @@ mod integration_tests {
         // iteration would re-check a value already proven unique.
         let mut checked = vec![];
         let mut elided = vec![];
-        let mut current = "";
+        let mut current_fn = "";
         for line in dump.lines() {
             if line.starts_with("fn ") {
-                current = line;
+                current_fn = line;
             } else if line.contains("array_set[unique]") {
-                elided.push(current);
+                elided.push(current_fn);
             } else if line.contains("array_set(") {
-                checked.push(current);
+                checked.push(current_fn);
             }
         }
         assert!(

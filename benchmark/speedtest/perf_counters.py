@@ -8,10 +8,11 @@ line-crossing access, yet those cost real time -- an array whose elements start 
 nothing about how fast the machine gets through those instructions, which is where a change to
 code layout or branch density shows up.
 
-The split count is deterministic; the cycle count is not, so it is the minimum over `--repeat`
-runs, and it is reported only when the machine had CPU to spare for the program throughout. A
-run the rest of the machine competed with leaves the cycle field empty rather than logging a
-figure that says more about that competition than about the program.
+The split count is decided by the program and the environment it is given; the cycle count is
+not, so it is the minimum over `--repeat` runs, and it is reported only when the machine had
+CPU to spare for the program throughout. A run the rest of the machine competed with leaves the
+cycle field empty rather than logging a figure that says more about that competition than about
+the program.
 
 Exits non-zero when the counters are unavailable (no hardware PMU, or
 `kernel.perf_event_paranoid` above 2) or when the PMU had to time-slice them, so a caller
@@ -42,6 +43,13 @@ CYCLE_EVENT = "cycles:u"
 # a threshold on it rejects measurements that were never disturbed.
 QUIET_CONTENTION = 0.5
 
+# The environment the measured command gets, fixed the way `cachegrind.py` fixes it. The
+# initial stack is laid out above the environment block, so every address on the stack moves
+# with how much the caller happened to export, and a stack object that lands 8 bytes below a
+# cache-line boundary splits every wide access to it. Left to the caller's environment, one
+# unchanged binary reported 70,765 splits from one shell and 170,766 from another.
+MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+
 CLOCK_TICK = os.sysconf("SC_CLK_TCK")
 
 ARCH = subprocess.check_output(["uname", "-m"], text=True).strip()
@@ -69,6 +77,7 @@ def read_counters(argv):
         ["setarch", ARCH, "-R", "perf", "stat", "-x,",
          "-e", ",".join(SPLIT_EVENTS + [CYCLE_EVENT]), "--"] + argv,
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+        env=MEASUREMENT_ENV,
     )
     # perf exits with the program's status, and it reports whatever the program managed to
     # execute before it died. Counting a partial run as a measurement would put a plausible
@@ -101,8 +110,9 @@ def measure(argv, repeat):
     took over the whole of it, in cores.
 
     The run with the fewest cycles is the one the rest of the machine disturbed least. The
-    split count comes from the same runs and has to agree across them, since it counts
-    retired instructions of a kind and nothing about the machine's state can change it.
+    split count comes from the same runs and has to agree across them: the runs are given one
+    environment, and from there nothing about the machine's state reaches the addresses the
+    program touches.
     """
     machine_before = machine_cpu_seconds()
     own_before = own_cpu_seconds()

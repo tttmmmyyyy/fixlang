@@ -11,6 +11,7 @@ mod tests {
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
@@ -355,8 +356,8 @@ mod tests {
         // line 4: `    let iter = Iterator::range(0, n).map(|idx| x);` (binder)
         // line 5: `    iter` (use). Both resolve to the same opaque type.
         for (line, col) in [(4u32, 8u32), (5, 4)] {
-            let hov = ctx.hover("main.fix", line, col);
-            let text = hover_text(&hov).unwrap_or_else(|| {
+            let hover = ctx.hover("main.fix", line, col);
+            let text = hover_text(&hover).unwrap_or_else(|| {
                 panic!(
                     "hover on `iter` at ({}, {}) should return content",
                     line, col
@@ -391,7 +392,7 @@ mod tests {
     #[test]
     fn test_hover_type_wildcard_shows_inferred_type() {
         let mut ctx = LspTestCtx::setup("hover_type_wildcard", &["main.fix"]);
-        let src = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
+        let src = fs::read_to_string(ctx.project_dir.join("main.fix"))
             .expect("should read the copied main.fix");
         let lines: Vec<&str> = src.lines().collect();
 
@@ -426,8 +427,8 @@ mod tests {
                 cols.len()
             );
             for (col, want) in cols.iter().zip(*expected) {
-                let hov = ctx.hover("main.fix", line as u32, *col);
-                let text = hover_text(&hov).unwrap_or_else(|| {
+                let hover = ctx.hover("main.fix", line as u32, *col);
+                let text = hover_text(&hover).unwrap_or_else(|| {
                     panic!(
                         "hover on wildcard at {:?} col {} should return content",
                         needle, col
@@ -468,8 +469,8 @@ mod tests {
         // Hover at the closing `)` of the fold call (line 8, char 43-44)
         // and a few characters around — none should mention `#hole`.
         for col in 39..=44 {
-            let hov = ctx.hover("main.fix", 8, col);
-            if let Some(text) = hover_text(&hov) {
+            let hover = ctx.hover("main.fix", 8, col);
+            if let Some(text) = hover_text(&hover) {
                 assert!(
                     !text.contains("#hole"),
                     "hover at col {} leaked the internal `#hole` name. Got: {:?}",
@@ -478,6 +479,40 @@ mod tests {
                 );
             }
         }
+
+        ctx.shutdown();
+    }
+
+    /// A file whose trait aliases name one trait along two paths is served like any other.
+    ///
+    /// What an alias stands for is worked out before the file's values are looked at, so an alias
+    /// the compiler refuses stops the whole file from being typed and every request about it comes
+    /// back empty. The refusal is anchored where the offending alias is defined, which for an alias
+    /// of the standard library is a file the programmer never opened -- so the editor shows a file
+    /// that answers nothing and says nothing.
+    #[test]
+    fn test_hover_with_trait_alias_reachable_along_two_paths() {
+        let mut ctx = LspTestCtx::setup("hover_trait_alias_two_paths", &["main.fix"]);
+
+        // Source layout (1-based for human reading):
+        //
+        //  13:     let described = describe(3, 5);
+        //
+        // `describe` is constrained by an alias that names `Additive` along two paths.
+        let hover = ctx.hover("main.fix", 12, 10);
+        let text = hover_text(&hover).expect("hover on `described` should return content");
+        assert!(
+            text.contains("String"),
+            "hover on `described` should show its type. Got: {:?}",
+            text
+        );
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            diagnostics.is_empty(),
+            "the file compiles, so nothing is expected, but the diagnostics are {:?}",
+            diagnostics
+        );
 
         ctx.shutdown();
     }

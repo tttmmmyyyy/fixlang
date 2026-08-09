@@ -1,0 +1,15 @@
+module Main;
+
+// `Additive` is reached through `Ordered` and again through `Showable`.
+trait Ordered = Additive + LessThan;
+trait Showable = Additive + ToString;
+trait Ring = Ordered + Showable;
+
+describe : [a : Ring] a -> a -> String;
+describe = |x, y| if x < y { (x + y).to_string } else { y.to_string };
+
+main : IO ();
+main = (
+    let described = describe(3, 5);
+    println(described)
+);

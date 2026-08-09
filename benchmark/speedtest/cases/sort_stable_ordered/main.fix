@@ -1,0 +1,26 @@
+module Main;
+
+import Std::{
+    Array, Bool, I64, IO, Array::{empty, push_back, sort_stable, to_iter, @, @size}, Debug::assert_eq,
+    Iterator::{fold, range, sum}, Monad::pure
+};
+
+// Stable sort benchmark on an input that is already in order, where every merge finds its two runs
+// in order and copies them instead of comparing. Guards the cost of that copy, which the randomly
+// ordered case never reaches.
+
+gen_input : I64 -> Array I64 = |n| (
+    Iterator::range(0, n).fold(Array::empty(n), |i, arr| arr.push_back(i))
+);
+
+is_nondecreasing : Array I64 -> Bool = |arr| (
+    Iterator::range(1, arr.@size).fold(true, |i, acc| acc && arr.@(i-1) <= arr.@(i))
+);
+
+main : IO () = (
+    let n = 100000;
+    let sorted = gen_input(n).sort_stable;
+    assert_eq(|_|"sort_stable_ordered: nondecreasing", sorted.is_nondecreasing, true);;
+    assert_eq(|_|"sort_stable_ordered: sum preserved", sorted.to_iter.sum, 4999950000);;
+    pure()
+);

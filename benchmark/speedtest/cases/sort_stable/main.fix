@@ -1,0 +1,33 @@
+module Main;
+
+import Std::{
+    Array, Bool, I64, IO, Array::{empty, push_back, sort_stable, to_iter, @, @size}, Debug::assert_eq,
+    Iterator::{fold, range, sum}, Monad::pure, Tuple2::@0
+};
+
+// Stable sort benchmark: `Array::sort_stable` on a fixed pseudo-random array, so the comparisons
+// and the element moves of the merges dominate. Guards the cost of one merge step, which every
+// level of the recursion pays for every element.
+
+// Park-Miller minimal-standard LCG. 16807 * (2^31 - 1) < 2^63, so the multiply
+// stays within I64; the stream is deterministic, giving a stable benchmark input.
+_next : I64 -> I64 = |x| (16807 * x) % 2147483647;
+
+gen_input : I64 -> Array I64 = |n| (
+    Iterator::range(0, n).fold((Array::empty(n), 1), |_, (arr, x)|
+        let x = _next(x);
+        (arr.push_back(x), x)
+    ).@0
+);
+
+is_nondecreasing : Array I64 -> Bool = |arr| (
+    Iterator::range(1, arr.@size).fold(true, |i, acc| acc && arr.@(i-1) <= arr.@(i))
+);
+
+main : IO () = (
+    let n = 100000;
+    let sorted = gen_input(n).sort_stable;
+    assert_eq(|_|"sort_stable: nondecreasing", sorted.is_nondecreasing, true);;
+    assert_eq(|_|"sort_stable: sum preserved", sorted.to_iter.sum, 107435233385977);;
+    pure()
+);
