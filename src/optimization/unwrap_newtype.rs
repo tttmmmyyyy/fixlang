@@ -28,7 +28,10 @@ use crate::{
 use std::sync::Arc;
 
 pub fn run(prg: &mut Program) {
-    let unwrapping = NewtypeUnwrapping::new(prg.type_env.tycons.as_ref().clone());
+    let unwrapping = NewtypeUnwrapping::new(
+        prg.type_env.tycons.as_ref().clone(),
+        prg.type_env.punched_from.as_ref(),
+    );
 
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym, &unwrapping);
@@ -56,19 +59,28 @@ struct NewtypeUnwrapping {
 impl NewtypeUnwrapping {
     /// Chooses the type constructors to replace: the newtypes of `tycons` whose field types do not
     /// lead back to them.
-    fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
+    ///
+    /// # Arguments
+    /// * `punched_from` - the struct each punched type constructor of `tycons` punches, which is
+    ///   what decides the punched one.
+    fn new(tycons: Map<TyCon, TyConInfo>, punched_from: &Map<TyCon, TyCon>) -> Self {
         let mut unwrappable_tycons = Set::default();
-        for tc in tycons.keys() {
+        for (tc, ti) in &tycons {
             // The form of a struct with one field punched out is unwrapped exactly when the struct
-            // it punches is, so it is the struct that `is_acyclic_newtype` is asked about.
-            // Asking about the punched form itself answers a different question: its name appears
-            // in no field type, so the walk finds nothing and says yes even where the struct names
-            // itself and stays.
-            let deciding_tc = match tc.unpunched_tycon() {
-                Some(struct_tc) if tycons.contains_key(&struct_tc) => struct_tc,
-                _ => tc.clone(),
+            // it punches is, so it is the struct that `is_acyclic_newtype` is asked about. Asking
+            // about the punched form itself answers a different question: it names no field type,
+            // so the walk finds nothing and says yes even where the struct names itself and stays.
+            let deciding_tc = if ti.fields.iter().any(|field| field.is_punched) {
+                punched_from.get(tc).unwrap_or_else(|| {
+                    panic!(
+                        "The declaration of `{}` punches a field, and no struct claims it.",
+                        tc.to_string()
+                    )
+                })
+            } else {
+                tc
             };
-            if is_acyclic_newtype(&deciding_tc, &tycons) {
+            if is_acyclic_newtype(deciding_tc, &tycons) {
                 unwrappable_tycons.insert(tc.clone());
             }
         }
