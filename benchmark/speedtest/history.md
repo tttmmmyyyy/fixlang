@@ -14,6 +14,26 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 598a391a50af0a37273e9c7bdbd3426d5dfdf277
+
+Closure specialization carried along a chain of copies, measured against `4052838928`. A lambda
+handed to a function is lifted into a global function and a capture list, and the function receiving
+it is copied so that the call goes by name. The chain used to stop at the first step that stored the
+value into a capture list instead of passing it on, which is where a sort's comparison goes: the
+lambda handed to `fold` captures it. Narrowing that capture field's type to the capture list of what
+it holds carries the identity across the step, and the comparison reaches the leaf as a direct call.
+
+Thirteen cases move, twelve of them down: sort_ordered -63.6%, sort -62.0%, sort_few_values -52.1%,
+sort_organ_pipe -49.1%, sort_stable_ordered -30.8%, sort_stable -14.2%, cp_lib_conv_zp -5.0%,
+cp_lib_bipartite -0.3%, cp_lib_scc -0.1%, and four more by under a thousandth of a percent, of which
+cp_lib_unionfind is the one that rises, by 179 instructions. The memory column follows the
+instruction column on every one of them.
+
+**`sort` saves what it saved before the sort was rewritten, against a smaller total.** Against the
+implementation that #227 and #229 replaced it read 64,037,014 -> 35,921,169, a saving of 28,115,845;
+here it reads 49,703,021 -> 18,895,019, a saving of 30,808,002. The five other sort cases entered the
+corpus with those two changes, so this is the first row that reads them with the chain followed.
+
 ## 4052838995f52c3d8a2ba2ac82fc0e6cb3c02b8a
 
 `Array::sort` spends its recursion budget only on a split that leaves under an eighth of the range
