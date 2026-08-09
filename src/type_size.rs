@@ -67,9 +67,9 @@ pub fn no_size_reason(
     type_env: &TypeEnv,
     walk: &mut LayoutWalk,
 ) -> Option<String> {
-    // A function value is a pair of pointers, but the types it takes and returns are laid out where
-    // the function is compiled. A function type reaching here is one the program has a value of, so
-    // that function is compiled and its signature laid out.
+    // A function type at a root is one the program has a value of, so that function is compiled and
+    // the types it takes and returns are laid out with it. A function type reached as a field is
+    // not: a value of it may never be built, and its own layout is two pointers either way.
     if ty.is_closure() || ty.is_funptr() {
         return ty
             .get_lambda_srcs()
@@ -96,7 +96,10 @@ fn no_size_reachable(
     if !walk.reached.insert(ty.clone()) {
         return None;
     }
-    if ty.depth() > MAX_TYPE_DEPTH {
+    // A function value is a pair of pointers whatever it takes and returns, so how deeply the
+    // function type itself nests says nothing about a layout: a function of five hundred arguments
+    // nests five hundred deep and is still two pointers.
+    if !ty.is_closure() && !ty.is_funptr() && ty.depth() > MAX_TYPE_DEPTH {
         return Some(depth_message(root, asked_for));
     }
     if let Some(msg) = no_size_in_place(root, ty, type_env, &mut vec![], &mut Set::default(), walk)
@@ -139,6 +142,10 @@ fn no_size_in_place(
     if walk.settled.contains(ty) {
         return None;
     }
+    // Two pointers, settled, whatever the function takes and returns.
+    if ty.is_closure() || ty.is_funptr() {
+        return None;
+    }
     if ty.depth() > MAX_TYPE_DEPTH {
         return Some(depth_message(root, path));
     }
@@ -169,6 +176,18 @@ fn no_size_in_place(
 /// where a type reached from itself at a larger argument shows itself. The type actually at fault
 /// is one the walk built on the way, and printing that one would print a term as deep as the bound.
 fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
+    /// How much of a type to print before cutting it short. A type that trips the bound can be a
+    /// term of any size, and the whole of one says no more than its beginning does.
+    const MAX_SHOWN_CHARS: usize = 200;
+
+    fn shorten(ty: &Arc<TypeNode>) -> String {
+        let text = ty.to_string();
+        match text.char_indices().nth(MAX_SHOWN_CHARS) {
+            Some((cut, _)) => format!("{}...", &text[..cut]),
+            None => text,
+        }
+    }
+
     /// How many steps of the way down to show. Enough for one turn of a growing family to be
     /// visible, and short enough that the types printed are ones the reader can read.
     const SHOWN_STEPS: usize = 3;
@@ -176,7 +195,7 @@ fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
     let shown = asked_for
         .iter()
         .take(SHOWN_STEPS)
-        .map(|ty| format!("`{}`", ty.to_string()))
+        .map(|ty| format!("`{}`", shorten(ty)))
         .collect::<Vec<_>>();
     let way_down = if shown.is_empty() {
         String::new()
@@ -187,7 +206,7 @@ fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
         "`{}` has no size: laying it out asks for types nested more than {} deep{}, so it needs \
          endlessly many. A type reached from itself at a larger type argument does this; give the \
          recursive occurrence the same type arguments.",
-        root.to_string(),
+        shorten(root),
         MAX_TYPE_DEPTH,
         way_down
     )

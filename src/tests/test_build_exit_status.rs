@@ -148,4 +148,34 @@ size_of_bad = |_| ( let a : Array Bad = Array::empty(0); a.get_size );
             stderr
         );
     }
+
+    /// A function value is two pointers however many arguments it takes, so a function of more
+    /// arguments than the layout walk's depth bound is laid out like any other. The build runs in a
+    /// separate process because the compiler gives its own threads a stack this depth needs.
+    #[test]
+    fn test_a_function_of_more_arguments_than_the_depth_bound_builds() {
+        const ARGUMENTS: usize = 600;
+        let signature = vec!["I64"; ARGUMENTS + 1].join(" -> ");
+        let parameters = (0..ARGUMENTS)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let arguments = vec!["0"; ARGUMENTS].join(", ");
+        let source = format!(
+            "module Main;\n\nf : {};\nf = |{}| x0;\n\nmain : IO ();\nmain = println(f({}).to_string);\n",
+            signature, parameters, arguments
+        );
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let output = fix_build_source_command(temp_dir.path(), &source, "none")
+            .arg("-o")
+            .arg(temp_dir.path().join("out"))
+            .output()
+            .expect("Failed to execute fix build");
+        assert!(
+            output.status.success(),
+            "a function of {} arguments was not built:\nstderr: {}",
+            ARGUMENTS,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

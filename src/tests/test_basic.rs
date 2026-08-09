@@ -8,9 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, EmittedIr,
+        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
+        run_source_capture, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::Rng;
@@ -8298,6 +8298,66 @@ pub fn test_a_type_at_the_depth_bound_compiles_and_one_past_it_does_not() {
         Configuration::develop_mode(),
         "laying it out asks for types nested more than",
     );
+}
+
+/// A type with no size is reported once, however many values carry it: the walk answers a type the
+/// first time it reaches it.
+#[test]
+pub fn test_a_type_with_no_size_is_reported_once() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+
+        one : A -> I64;
+        one = |x| x.@n;
+
+        two : A -> I64;
+        two = |x| x.@n + 1;
+
+        three : A -> I64;
+        three = |x| x.@n + 2;
+
+        main : IO ();
+        main = println((one(undefined("v")) + two(undefined("v")) + three(undefined("v"))).to_string);
+    "##;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert_eq!(
+        errmsg.matches("has no size").count(),
+        1,
+        "one type with no size, carried by three functions, was reported more than once:\n{}",
+        errmsg
+    );
+}
+
+/// Every type with no size gets a report of its own: the walk goes on past the first one instead of
+/// answering the whole program with it.
+#[test]
+pub fn test_every_type_with_no_size_is_reported() {
+    let source = r##"
+        module Main;
+        type A = unbox struct { b : B, n : I64 };
+        type B = unbox struct { a : A, m : I64 };
+        type C = unbox struct { c : C, k : I64 };
+
+        one : A -> I64;
+        one = |x| x.@n;
+
+        two : C -> I64;
+        two = |x| x.@k;
+
+        main : IO ();
+        main = println((one(undefined("v")) + two(undefined("v"))).to_string);
+    "##;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    for reported in ["`Main::A` has no size", "`Main::C` has no size"] {
+        assert!(
+            errmsg.contains(reported),
+            "`{}` is missing from the report:\n{}",
+            reported,
+            errmsg
+        );
+    }
 }
 
 // `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
