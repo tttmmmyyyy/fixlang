@@ -10,7 +10,6 @@ use crate::constants::{
     STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
     TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
-use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
     make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
@@ -37,14 +36,20 @@ use inkwell::{
 use inkwell::{AddressSpace, IntPredicate};
 use std::sync::{Arc, OnceLock};
 
-// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
-// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
-// subobject, a union's payload buffer, an array).
+/// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
+/// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
+/// subobject, a union's payload buffer, an array).
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
+    /// The reference count and the flags the runtime keeps for every boxed object, which a boxed
+    /// object's layout begins with.
     ControlBlock,
+    /// A pointer to the function that walks the fields following it, for an object whose fields the
+    /// type alone leaves open (`#DynamicObject`).
     TraverseFunction,
-    LambdaFunction(Arc<TypeNode>), // Specify type of lambda
+    /// The function pointer of a closure of the given type, called with the closure's capture.
+    LambdaFunction(Arc<TypeNode>),
+    /// A `Std::Ptr`: an address the program carries and whose target it leaves alone.
     Ptr,
     I8,
     U8,
@@ -56,28 +61,34 @@ pub enum ObjectFieldType {
     U64,
     F32,
     F64,
+    /// A value of the given type laid out in place. The flag marks a punched field, whose value has
+    /// been moved out: the space stays, and traversal passes over it.
     SubObject(Arc<TypeNode>, bool /* is_punched */),
-    UnionBuf(Vec<Arc<TypeNode>>), // Embedded union.
+    /// The payload buffer of a union, sized and aligned to hold whichever of the given variant
+    /// types the tag names.
+    UnionBuf(Vec<Arc<TypeNode>>),
+    /// The integer saying which variant a union carries.
     UnionTag,
-    Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
-    // The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
-    // type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
-    // value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
-    // contributes its element sizing to the object layout.
+    /// The tail of an `Array` object: a capacity slot followed by a flexible buffer of elements of
+    /// the given type.
+    Array(Arc<TypeNode>),
+    /// The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
+    /// type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
+    /// value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
+    /// contributes its element sizing to the object layout.
     ArrayStorageBuf(Arc<TypeNode>),
 }
 
-// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
-// largest variant.
+/// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
+/// largest variant.
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     field_tys: &[Arc<TypeNode>],
-    unboxed_path: &[Arc<TypeNode>],
 ) -> BasicTypeEnum<'c> {
     let mut max_size = 0;
     let mut max_align = 1;
     for field_ty in field_tys {
-        let struct_ty = gc.embedded_type_of(field_ty, unboxed_path);
+        let struct_ty = gc.embedded_type_of(field_ty);
         max_size = max_size.max(gc.sizeof(&struct_ty));
         // The buffer needs the payloads' ABI alignment, not the preferred alignment: the
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
@@ -97,21 +108,14 @@ fn union_buf_type<'c, 'm>(
 
 impl ObjectFieldType {
     /// The LLVM type this field occupies in the struct its object is laid out as.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
-    pub fn to_basic_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> BasicTypeEnum<'c> {
+    pub fn to_basic_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
             ObjectFieldType::TraverseFunction => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::LambdaFunction(_ty) => {
                 gc.context.ptr_type(AddressSpace::from(0)).into()
             }
-            ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty, unboxed_path),
+            ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty),
             ObjectFieldType::Ptr => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::U8 => gc.context.i8_type().into(),
@@ -124,9 +128,9 @@ impl ObjectFieldType {
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
-            ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty, unboxed_path),
+            ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
-            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, unboxed_path),
+            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys),
         }
     }
 
@@ -191,7 +195,7 @@ impl ObjectFieldType {
                 .as_type(),
             ObjectFieldType::SubObject(ty, _is_punched) => ty_to_debug_embedded_ty(ty.clone(), gc),
             ObjectFieldType::UnionBuf(tys) => {
-                let basic_ty = self.to_basic_type(gc, &[]);
+                let basic_ty = self.to_basic_type(gc);
                 let size_in_bits = gc.target_data.get_bit_size(&basic_ty);
                 let align_in_bits = gc.target_data.get_abi_alignment(&basic_ty) * 8;
 
@@ -201,7 +205,8 @@ impl ObjectFieldType {
                     let variant_debug_ty = ty_to_debug_embedded_ty(ty.clone(), gc);
                     let size_in_bits = gc.target_data.get_bit_size(&variant_ty);
                     let align_in_bits = gc.target_data.get_abi_alignment(&variant_ty) * 8;
-                    let offset_in_bits = 0; // Union buffer has alignment 8.
+                    // Every variant starts at the beginning of the union buffer.
+                    let offset_in_bits = 0;
                     let mem_ty = gc
                         .get_di_builder()
                         .create_member_type(
@@ -543,7 +548,7 @@ impl ObjectFieldType {
                 .build_gep(value_ty, buffer, &[begin], "array_append_begin")
                 .unwrap()
         };
-        let val = value.value(gc);
+        let elem_val = value.value(gc);
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _count: IntValue<'c>,
@@ -553,7 +558,7 @@ impl ObjectFieldType {
                     .build_gep(value_ty, buf_ptr, &[idx], "array_append_slot")
                     .unwrap()
             };
-            gc.builder().build_store(slot, val).unwrap();
+            gc.builder().build_store(slot, elem_val).unwrap();
         };
         let after_loop =
             |_gc: &mut Generator<'c, 'm>, _count: IntValue<'c>, _buf: PointerValue<'c>| {};
@@ -911,15 +916,15 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_mark_union(gc, union, None, amount, state);
     }
 
-    // The tag of a union value: the index, among the union's variants, of the variant it holds.
+    /// The tag of a union value: the index, among the union's variants, of the variant it holds.
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
         let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
         union.extract_field(gc, union_tag_idx).into_int_value()
     }
 
-    // The union with its tag set to `tag`, the index of the variant it is to hold. The payload
-    // buffer is left as it is, so the caller writes the variant's value into it.
+    /// The union with its tag set to `tag`, the index of the variant it is to hold. The payload
+    /// buffer keeps what it held, so the caller writes the variant's value into it.
     pub fn set_union_tag<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -948,8 +953,8 @@ impl ObjectFieldType {
         union.extract_field(gc, union_buf_idx)
     }
 
-    // Get the value of union.
-    // The return value is retained and the union is released.
+    /// The value a union carries, read as `elem_ty`, owned by the caller: the value is retained and
+    /// the union released, which cancel each other out for an unboxed union.
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -967,8 +972,8 @@ impl ObjectFieldType {
         value
     }
 
-    // Get the value of union.
-    // None of the return value and the union is retained/released.
+    /// The value a union carries, read as `elem_ty` and borrowed: the reference count of neither the
+    /// value nor the union moves, so the value lives only as long as the union does.
     pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -979,6 +984,8 @@ impl ObjectFieldType {
         Object::new(value, elem_ty.clone(), gc)
     }
 
+    /// The contents of a union's payload buffer read as `elem_ty`, by a bit cast: the buffer is at
+    /// least as wide as the variant, and the variant starts at its beginning.
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
@@ -988,6 +995,8 @@ impl ObjectFieldType {
         gc.bit_cast(buf, elem_ty)
     }
 
+    /// The union with `value` bit cast into its payload buffer. The tag is left to `set_union_tag`,
+    /// which names the variant the payload is now to be read as.
     pub fn set_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1035,8 +1044,9 @@ impl ObjectFieldType {
         gc.builder().position_at_end(match_bb);
     }
 
-    // Get field `Object` of a struct `Object`.
-    // This "moves out" the field; in other words, the returned object is not retained.
+    /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
+    /// retained, so the caller either reads it while the struct is alive or takes the reference over
+    /// by dropping the struct without releasing that field.
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1047,8 +1057,8 @@ impl ObjectFieldType {
         struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
 
-    // Set an `Object` into the field of a struct `Object`.
-    // This "moves into" the field; in other words, the old value isn't released.
+    /// The struct with `field` stored at `field_idx`, taking over the caller's reference to `field`.
+    /// The value the field held before stays live and is the caller's to account for.
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: Object<'c>,
@@ -1070,22 +1080,22 @@ impl ObjectFieldType {
     ) -> Vec<Object<'c>> {
         // Collect unretained (but cloned) fields.
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
-        let mut ret = vec![];
+        let mut fields = vec![];
         for field_idx in field_indices {
             // Move the field out as an object; it carries its own parts, so it outlives the struct.
             let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, *field_idx);
-            ret.push(field);
+            fields.push(field);
         }
 
         if struct_obj.is_box(gc.type_env()) {
             // If struct is boxed, simply retain fields and release the struct.
-            for field in &ret {
+            for field in &fields {
                 gc.retain(field.clone(), state);
             }
             gc.release(struct_obj.clone(), state);
         } else {
-            // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
-            // just release fields that are not not in `ret`.
+            // The struct is unboxed, so the fields taken out are released by whoever receives them.
+            // Releasing the fields left behind here accounts for the struct itself.
             for field_idx in 0..struct_obj.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
@@ -1095,7 +1105,7 @@ impl ObjectFieldType {
             }
         }
 
-        ret
+        fields
     }
 }
 
@@ -1117,38 +1127,20 @@ pub struct ObjectType {
     /// Whether a value of this type is held in place. A boxed value is a pointer to a heap block
     /// whose contents this layout describes.
     pub is_unbox: bool,
-    /// The Fix type this is the layout of, which `to_struct_type` compares against `unboxed_path`
-    /// to find a cycle of unboxed types.
+    /// The Fix type this is the layout of.
     pub ty: Arc<TypeNode>,
 }
 
 impl ObjectType {
     /// The LLVM struct type this object is laid out as.
     ///
-    /// # Arguments
-    /// * `unboxed_path` - the unboxed types whose layout is being determined, outermost first, which
-    ///   is what turns a circular definition by unboxed types into a diagnostic instead of an
-    ///   infinite recursion. A call from outside passes an empty slice; the recursion extends it,
-    ///   and a boxed type on the way clears it, since a pointer bounds the layout there.
-    pub fn to_struct_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> StructType<'c> {
-        let unboxed_path = if self.is_unbox {
-            if unboxed_path.contains(&self.ty) {
-                panic_with_msg(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", self.ty.to_string()));
-            }
-            let mut extended = unboxed_path.to_vec();
-            extended.push(self.ty.clone());
-            extended
-        } else {
-            vec![]
-        };
-
+    /// The layout of an unboxed field is held in place, so this descends into it. A type reaching
+    /// itself that way has no layout and no end to this descent; `Program::validate_layouts` rejects
+    /// such a type before code generation begins.
+    pub fn to_struct_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for (i, field_type) in self.field_types.iter().enumerate() {
-            fields.push(field_type.to_basic_type(gc, &unboxed_path));
+            fields.push(field_type.to_basic_type(gc));
             match field_type {
                 ObjectFieldType::Array(ty) => {
                     assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
@@ -1159,7 +1151,7 @@ impl ObjectType {
                     // - to get the pointer to the first element by gep of this struct type.
                     // - used in implementation of size_of method.
                     // - in to_debug_type function.
-                    fields.push(gc.embedded_type_of(ty, &unboxed_path));
+                    fields.push(gc.embedded_type_of(ty));
                 }
                 _ => {}
             }
@@ -1180,7 +1172,7 @@ impl ObjectType {
                 self.ty.to_string()
             ),
         };
-        let struct_ty = self.to_struct_type(gc, &[]);
+        let struct_ty = self.to_struct_type(gc);
         let buf_field_idx = struct_ty.count_fields() - 1;
         ElementBufferLayout {
             header_size: gc
@@ -1232,22 +1224,15 @@ impl ObjectType {
                 )
                 .unwrap();
         } else {
-            self.to_struct_type(gc, &[]).size_of().unwrap()
+            self.to_struct_type(gc).size_of().unwrap()
         }
     }
 
     /// The type this object takes where it is embedded in another value: a struct for an unboxed
     /// type, a pointer for a boxed one.
-    ///
-    /// # Arguments
-    /// * `unboxed_path` - see `ObjectType::to_struct_type`.
-    pub fn to_embedded_type<'c, 'm>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        unboxed_path: &[Arc<TypeNode>],
-    ) -> BasicTypeEnum<'c> {
+    pub fn to_embedded_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
         if self.is_unbox {
-            let struct_ty = self.to_struct_type(gc, unboxed_path);
+            let struct_ty = self.to_struct_type(gc);
             struct_ty.into()
         } else {
             gc.context.ptr_type(AddressSpace::from(0)).into()
@@ -1458,6 +1443,8 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
+/// The index at which a struct's own fields begin in its layout. A boxed struct leads with its
+/// control block, which pushes them along by one.
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -1505,24 +1492,27 @@ pub fn ty_to_object_ty(
     capture: &Vec<Arc<TypeNode>>,
     type_env: &TypeEnv,
 ) -> ObjectType {
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
-    let mut ret = ObjectType {
+    let mut object_ty = ObjectType {
         field_types: vec![],
         is_unbox: true,
         ty: ty.clone(),
     };
     if ty.is_closure() {
         assert!(capture.is_empty());
-        ret.is_unbox = true;
-        ret.field_types
+        object_ty.is_unbox = true;
+        object_ty
+            .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
-        ret.field_types
+        object_ty
+            .field_types
             .push(ObjectFieldType::SubObject(make_dynamic_object_ty(), false));
     } else if ty.is_funptr() {
         assert!(capture.is_empty());
-        ret.is_unbox = true;
-        ret.field_types
+        object_ty.is_unbox = true;
+        object_ty
+            .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
         let tc = ty.toplevel_tycon().unwrap();
@@ -1531,71 +1521,83 @@ pub fn ty_to_object_ty(
             TyConVariant::Primitive => {
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
-                ret.is_unbox = ti.is_unbox;
-                ret.field_types
+                object_ty.is_unbox = ti.is_unbox;
+                object_ty
+                    .field_types
                     .extend_from_slice(primitive_field_types(&tc.name));
             }
             TyConVariant::Array => {
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
-                ret.is_unbox = true;
+                object_ty.is_unbox = true;
                 // A pointer to the `#ArrayStorage` holding the elements, then the size and capacity.
                 let elem_ty = ty.field_types(type_env)[0].clone();
-                ret.field_types.push(ObjectFieldType::SubObject(
+                object_ty.field_types.push(ObjectFieldType::SubObject(
                     make_array_storage_ty(elem_ty),
                     false,
                 ));
-                assert_eq!(ret.field_types.len(), ARRAY_SIZE_IDX as usize);
-                ret.field_types.push(ObjectFieldType::I64); // size
-                assert_eq!(ret.field_types.len(), ARRAY_CAP_IDX as usize);
-                ret.field_types.push(ObjectFieldType::I64); // capacity
+                assert_eq!(object_ty.field_types.len(), ARRAY_SIZE_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::I64); // size
+                assert_eq!(object_ty.field_types.len(), ARRAY_CAP_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::I64); // capacity
             }
             TyConVariant::Struct => {
                 assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
-                ret.is_unbox = is_unbox;
+                object_ty.is_unbox = is_unbox;
                 if !is_unbox {
-                    ret.field_types.push(ObjectFieldType::ControlBlock);
+                    object_ty.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                assert_eq!(ret.field_types.len(), struct_field_idx(is_unbox) as usize);
+                assert_eq!(
+                    object_ty.field_types.len(),
+                    struct_field_idx(is_unbox) as usize
+                );
                 let field_types = ty.field_types(type_env);
                 for (field_idx, field_ty) in field_types.into_iter().enumerate() {
                     let punched = ti.fields[field_idx].is_punched;
-                    ret.field_types
+                    object_ty
+                        .field_types
                         .push(ObjectFieldType::SubObject(field_ty, punched));
                 }
             }
             TyConVariant::Union => {
                 assert!(capture.is_empty());
                 let is_unbox = ti.is_unbox;
-                ret.is_unbox = is_unbox;
+                object_ty.is_unbox = is_unbox;
                 if !is_unbox {
-                    ret.field_types.push(ObjectFieldType::ControlBlock);
+                    object_ty.field_types.push(ObjectFieldType::ControlBlock);
                 }
-                ret.field_types.push(ObjectFieldType::UnionTag);
-                ret.field_types
+                object_ty.field_types.push(ObjectFieldType::UnionTag);
+                object_ty
+                    .field_types
                     .push(ObjectFieldType::UnionBuf(ty.field_types(type_env)));
             }
             TyConVariant::DynamicObject => {
                 let is_unbox = ti.is_unbox;
                 assert_eq!(is_unbox, false);
-                ret.is_unbox = false;
-                ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_TRAVARSER_IDX as usize);
-                ret.field_types.push(ObjectFieldType::TraverseFunction);
-                assert_eq!(ret.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
+                object_ty.is_unbox = false;
+                object_ty.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(
+                    object_ty.field_types.len(),
+                    DYNAMIC_OBJ_TRAVARSER_IDX as usize
+                );
+                object_ty
+                    .field_types
+                    .push(ObjectFieldType::TraverseFunction);
+                assert_eq!(object_ty.field_types.len(), DYNAMIC_OBJ_CAP_IDX as usize);
                 for cap in capture {
-                    ret.field_types
+                    object_ty
+                        .field_types
                         .push(ObjectFieldType::SubObject(cap.clone(), false));
                 }
             }
             TyConVariant::ArrayStorage => {
                 assert!(capture.is_empty());
                 assert!(!ti.is_unbox);
-                ret.is_unbox = false;
-                ret.field_types.push(ObjectFieldType::ControlBlock);
-                assert_eq!(ret.field_types.len(), STORAGE_BUF_IDX as usize);
-                ret.field_types.push(ObjectFieldType::ArrayStorageBuf(
+                object_ty.is_unbox = false;
+                object_ty.field_types.push(ObjectFieldType::ControlBlock);
+                assert_eq!(object_ty.field_types.len(), STORAGE_BUF_IDX as usize);
+                object_ty.field_types.push(ObjectFieldType::ArrayStorageBuf(
                     ty.field_types(type_env)[0].clone(),
                 ));
             }
@@ -1607,7 +1609,7 @@ pub fn ty_to_object_ty(
             }
         }
     }
-    ret
+    object_ty
 }
 
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
@@ -2012,14 +2014,14 @@ pub fn create_obj<'c, 'm>(
 ) -> Object<'c> {
     // Validate arguments. The capacity is for the `#ArrayStorage` object, which carries the element
     // buffer; a flipped `Array` value itself is an unboxed aggregate created without one.
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     assert!(array_capacity.is_some() == ty.is_array_storage());
     assert!(!ty.is_funptr()); // Funptr type is not supported, Currently, there is no need to create an object for funptr.
 
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, &[]);
+    let struct_type = object_type.to_struct_type(gc);
 
     // Allocate object. An array storage can be placed above the base of its allocation, so it
     // carries the distance it was placed by; every other object starts at the base.
@@ -2174,7 +2176,7 @@ pub fn create_traverser<'c, 'm>(
     work: Option<TraverserWorkType>,
     state: RcState,
 ) -> Option<FunctionValue<'c>> {
-    assert!(ty.free_vars().is_empty());
+    assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     if ty.is_dynamic() && capture.is_empty() {
         return None;
@@ -2326,7 +2328,7 @@ fn build_traverse<'c, 'm>(
 
     // In this function, we need to access captured fields, which is not possible by `obj` only.
     let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
-    let struct_type = object_type.to_struct_type(gc, &[]);
+    let struct_type = object_type.to_struct_type(gc);
 
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
@@ -2511,7 +2513,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             }
 
             let element_di_ty = field.to_debug_type(gc);
-            let element_ty = field.to_basic_type(gc, &[]);
+            let element_ty = field.to_basic_type(gc);
             let size_in_bits = element_di_ty.get_size_in_bits();
             let align_in_bits = gc.target_data.get_abi_alignment(&element_ty) * 8;
             let offset_in_bits = gc

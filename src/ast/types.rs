@@ -1,8 +1,6 @@
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::name::FullName;
-use crate::ast::name::Name;
-use crate::ast::name::NameSpace;
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
@@ -23,10 +21,7 @@ use crate::fixstd::builtin::{
     make_tuple_name_abs,
 };
 use crate::generator::Generator;
-use crate::misc::collect_results;
-use crate::misc::number_to_varname;
-use crate::misc::Map;
-use crate::misc::Set;
+use crate::misc::{collect_results, number_to_varname, Map, Set};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::rc_ir::ast::RcState;
@@ -35,9 +30,10 @@ use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// A type variable, identified by its name.
 #[derive(Clone, Serialize, Deserialize)]
@@ -293,8 +289,6 @@ impl TyCon {
         })
     }
 
-    // Whether this is an integer type that carries a sign. Panics for a type that is not an
-    // integer type of `Std`.
     // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
     // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
     // which side of the call extends it; a wider type fills the register and needs no extension.
@@ -309,6 +303,8 @@ impl TyCon {
             )
     }
 
+    // Whether this is an integer type that carries a sign. Panics for a type that is not an
+    // integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
@@ -440,6 +436,24 @@ impl TyAliasInfo {
 pub struct TypeNode {
     pub ty: Type,
     pub info: TypeInfo,
+    /// The hash of `ty`, kept once computed.
+    ///
+    /// A type is a directed acyclic graph: substituting an argument that a declaration mentions
+    /// twice makes both occurrences the same node. Hashing such a type by walking it costs as much
+    /// as the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. Keeping
+    /// the hash on the node makes the walk cost one visit per node.
+    ///
+    /// `Clone` leaves this empty: the clone-then-replace idiom the setters use would otherwise
+    /// carry the hash of the type the node held before.
+    #[serde(skip)]
+    hash_cache: OnceLock<u64>,
+    /// Whether no type variable occurs in this type, kept once computed. Answered by walking the
+    /// type, so it is kept for the same reason the hash is.
+    #[serde(skip)]
+    ground_cache: OnceLock<bool>,
+    /// How deeply this type nests, kept once computed, for the same reason.
+    #[serde(skip)]
+    depth_cache: OnceLock<usize>,
 }
 
 impl PartialEq for TypeNode {
@@ -452,9 +466,16 @@ impl Eq for TypeNode {}
 
 impl Hash for TypeNode {
     /// Hashes the type expression, which is what `PartialEq` compares; the source information the
-    /// node carries stays out of both.
+    /// node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing a
+    /// type that shares a subterm many times costs one visit per node rather than one per
+    /// occurrence.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ty.hash(state);
+        let hash = *self.hash_cache.get_or_init(|| {
+            let mut hasher = DefaultHasher::new();
+            self.ty.hash(&mut hasher);
+            hasher.finish()
+        });
+        state.write_u64(hash);
     }
 }
 
@@ -859,26 +880,36 @@ impl TypeNode {
         self.set_toplevel_tycon(Arc::new(tycon))
     }
 
-    // For structs and unions, return types of fields.
-    // For Array, return the element type.
+    /// The types the fields of a value of this type hold: one per field for a struct, one per
+    /// variant for a union, and the element type alone for `Array`, whose elements all share it.
+    /// This type's arguments are substituted in, so the results are the field types at this
+    /// instance.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.field_types_via_tycons(&type_env.tycons)
     }
 
+    /// The types of the fields `self` declares, with `self`'s type arguments substituted for the
+    /// declaration's type variables. An array declares its element type as its one field. The
+    /// declarations are read from `tycons`.
     pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
-        let ti = self.toplevel_tycon_info_via_tycons(tycons);
-        assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
-        let mut s = Substitution::default();
-        for (i, tv) in ti.tyvars.iter().enumerate() {
-            let merge_ok = s.merge(&Substitution::single(&tv.name, args[i].clone()));
+        let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
+        assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
+        let mut subst = Substitution::default();
+        for (i, tv) in tycon_info.tyvars.iter().enumerate() {
+            let merge_ok = subst.merge(&Substitution::single(&tv.name, args[i].clone()));
             assert!(merge_ok);
         }
-        ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
+        tycon_info
+            .fields
+            .iter()
+            .map(|f| subst.substitute_type(&f.ty))
+            .collect()
     }
 
-    // For structs and unions, return the fields.
-    // For Array, return the element type.
+    /// The fields declared for this type's outermost type constructor: one per field for a struct,
+    /// one per variant for a union, and the element field alone for `Array`. The field types carry
+    /// the type parameters of the declaration; `field_types` substitutes this type's arguments in.
     pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
@@ -894,8 +925,8 @@ impl TypeNode {
             .position(|f| f.name == field_name)
     }
 
-    // Flatten type application.
-    // ex. If given `f a b`, returns `vec![f, a, b]`.
+    /// This type split into the head being applied and the arguments applied to it: `f a b` gives
+    /// `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
         fn flatten_type_application_inner(ty: &TypeNode, tys: &mut Vec<Arc<TypeNode>>) {
             match &ty.ty {
@@ -954,8 +985,8 @@ impl TypeNode {
         }
 
         let mut vars: Vec<Arc<TypeNode>> = vec![];
-        let val = collect_app_src_inner(self, &mut vars, vars_limit);
-        (vars, val)
+        let dst_ty = collect_app_src_inner(self, &mut vars, vars_limit);
+        (vars, dst_ty)
     }
 
     // Remove type aliases in a type.
@@ -1075,6 +1106,8 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
+    /// the values it captured.
     pub fn is_closure(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1084,6 +1117,8 @@ impl TypeNode {
         tc.name == make_arrow_name_abs()
     }
 
+    /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
+    /// arguments that carries no captured value.
     pub fn is_funptr(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1114,6 +1149,7 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1148,8 +1184,8 @@ impl TypeNode {
         }
     }
 
-    // Whether the top-level type constructor of this type is a struct.
-    // Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
+    /// Whether the top-level type constructor of this type is a struct.
+    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1158,6 +1194,9 @@ impl TypeNode {
         }
     }
 
+    /// Whether the top-level type constructor of this type is a union, so that a value of it
+    /// carries one of the declared fields and a tag saying which.
+    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1166,6 +1205,9 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is `#DynamicObject`, the boxed object a closure keeps its captured values
+    /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
+    /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1175,6 +1217,8 @@ impl TypeNode {
         is_dynamic_object_tycon(tc.as_ref())
     }
 
+    /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
+    /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {
@@ -1184,26 +1228,38 @@ impl TypeNode {
         is_destructor_object_tycon(tc.as_ref())
     }
 
+    /// The declaration of this type's outermost type constructor: its variant, boxedness, type
+    /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
+    /// absent from `type_env`.
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
         self.toplevel_tycon_info_via_tycons(&type_env.tycons)
     }
 
+    /// The declaration of this type's outermost type constructor, taken from a table of type
+    /// constructors held apart from a `TypeEnv`.
     pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
         tycons.get(&tycon).unwrap().clone()
     }
 
+    /// Whether a value of this type is held in place, with its fields laid out where the value
+    /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
+    /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
+    /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }
 
-    // Check if `self` is fully unboxed.
-    // Here, a type is fully unboxed if and only if it does not contain any boxed type.
+    /// Whether this type contains no boxed type.
+    ///
+    /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
+    /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
+    /// runs.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;
@@ -1248,6 +1304,9 @@ impl TypeNode {
         Self {
             ty,
             info: TypeInfo::default(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 
@@ -1373,7 +1432,7 @@ impl TypeNode {
         self: &Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> BasicTypeEnum<'c> {
-        gc.embedded_type_of(self, &[])
+        gc.embedded_type_of(self)
     }
 
     // Check if the type takes the form of the definition of associated type.
@@ -1519,17 +1578,50 @@ impl Clone for TypeNode {
         TypeNode {
             ty: self.ty.clone(),
             info: self.info.clone(),
+            hash_cache: OnceLock::new(),
+            ground_cache: OnceLock::new(),
+            depth_cache: OnceLock::new(),
         }
     }
 }
 
 // Variant of type
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
     AssocTy(AssocType, Vec<Arc<TypeNode>>),
+}
+
+/// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
+/// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
+fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
+    Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
+}
+
+impl PartialEq for Type {
+    /// Compares the parts of the type expression, taking two occurrences of one node as equal on
+    /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node
+    /// holds.
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::TyVar(lhs), Type::TyVar(rhs)) => lhs == rhs,
+            (Type::TyCon(lhs), Type::TyCon(rhs)) => lhs == rhs,
+            (Type::TyApp(lhs_fun, lhs_arg), Type::TyApp(rhs_fun, rhs_arg)) => {
+                type_node_eq(lhs_fun, rhs_fun) && type_node_eq(lhs_arg, rhs_arg)
+            }
+            (Type::AssocTy(lhs_assoc_ty, lhs_args), Type::AssocTy(rhs_assoc_ty, rhs_args)) => {
+                lhs_assoc_ty == rhs_assoc_ty
+                    && lhs_args.len() == rhs_args.len()
+                    && lhs_args
+                        .iter()
+                        .zip(rhs_args.iter())
+                        .all(|(lhs, rhs)| type_node_eq(lhs, rhs))
+            }
+            _ => false,
+        }
+    }
 }
 
 impl TypeNode {
@@ -1698,22 +1790,23 @@ impl TypeNode {
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
-        let mut str = "".to_string();
-        str += &self.to_string_normalize();
+        let mut key = "".to_string();
+        key += &self.to_string_normalize();
         if capture.len() > 0 {
-            str += "_capturing[";
+            key += "_capturing[";
         }
         for ty in capture {
-            str += ", ";
-            str += &ty.to_string_normalize();
+            key += ", ";
+            key += &ty.to_string_normalize();
         }
         if capture.len() > 0 {
-            str += "]";
+            key += "]";
         }
-        format!("{:x}", md5::compute(str))
+        format!("{:x}", md5::compute(key))
     }
 
-    // Get hash value.
+    /// A digest of this type, short enough to embed in a symbol name. Two types with the same
+    /// normalized form hash alike.
     pub fn hash(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
         format!("{:x}", md5::compute(type_string))
@@ -1829,6 +1922,34 @@ pub struct TypeInfo {
 }
 
 impl TypeNode {
+    /// Whether no type variable occurs in this type.
+    ///
+    /// `free_vars` answers the same question by collecting the variables, which walks a type that
+    /// shares a subterm once per occurrence rather than once per node. Every type reaching code
+    /// generation is asked this, so it is answered here and kept on the node.
+    pub fn is_ground(&self) -> bool {
+        *self.ground_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) => false,
+            Type::TyCon(_) => true,
+            Type::TyApp(fun, arg) => fun.is_ground() && arg.is_ground(),
+            Type::AssocTy(_, args) => args.iter().all(|arg| arg.is_ground()),
+        })
+    }
+
+    /// How deeply this type nests: a name is one, and an application or an associated type is one
+    /// more than the deepest part it is made of.
+    ///
+    /// This measures the type expression the program wrote or the compiler built: a chain of a
+    /// thousand types that each hold the next is a thousand types of depth one. What grows this is
+    /// a type reached from itself at a larger type argument.
+    pub fn depth(&self) -> usize {
+        *self.depth_cache.get_or_init(|| match &self.ty {
+            Type::TyVar(_) | Type::TyCon(_) => 1,
+            Type::TyApp(fun, arg) => 1 + fun.depth().max(arg.depth()),
+            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0),
+        })
+    }
+
     // Calculate free type variables.
     pub fn free_vars(self: &Arc<TypeNode>) -> Map<Name, Arc<TyVar>> {
         let mut free_vars: Map<String, Arc<TyVar>> = Map::default();
@@ -2349,6 +2470,8 @@ impl Scheme {
         out
     }
 
+    /// The same scheme with every type variable carrying its kind, taken from the scheme's own kind
+    /// signatures and from the kinds the traits its predicates and equalities name demand.
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
         let mut kind_scope = KindScope::new();
@@ -2358,8 +2481,8 @@ impl Scheme {
                 .insert(ks.tyvar.clone(), ks.kind.clone())
                 .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
         }
-        let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
-        if let Err(msg) = res {
+        let extend_result = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
+        if let Err(msg) = extend_result {
             let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
                 span = Span::unite_opt(&span, &ret.predicates[i].src);

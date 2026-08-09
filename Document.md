@@ -862,6 +862,21 @@ Fix types are divided into **boxed** and **unboxed** types, which are similar to
 * **Boxed** type values are allocated on the heap. A local variable or a field in a struct/union with a boxed type is compiled as a pointer to the value.
 * **Unboxed** type values are directly embedded in stack memory, structs, or unions.
 
+A type's size therefore follows its unboxed fields, and following them has to end somewhere. A type whose unboxed fields reach the type itself again has no size, and a program using one is rejected. Make one of the types along the way boxed: the field holding it becomes a pointer, and the size is settled.
+
+```
+type Tree = unbox union { leaf : (), node : (Tree, Tree) };  // rejected: no size
+type Tree = box union { leaf : (), node : (Tree, Tree) };    // fine
+```
+
+A type that leads to itself at a larger type argument is rejected as well, whether or not a pointer lies on the way: the compiler lays out one object per type, and this asks it for endlessly many. Give the recursive occurrence the same type arguments the declaration takes.
+
+```
+type P a = unbox struct { x : P (a, a) };  // rejected: `P I64` leads to `P (I64, I64)`
+type P a =   box struct { x : P (a, a) };  // rejected for the same reason
+type P a =   box struct { x : P a };       // fine
+```
+
 In general, it's recommended that types containing a large amount of data be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
 
 ### Functions
@@ -890,7 +905,7 @@ type Product = box struct { price: I64, sold: Bool };
 
 ### Unions
 
-Unions are unboxed by default. To define boxed union type, write `box` specifier before `struct`.
+Unions are unboxed by default. To define boxed union type, write `box` specifier before `union`.
 
 ```
 type Weight = box union { pound: I64, kilograms: I64 };

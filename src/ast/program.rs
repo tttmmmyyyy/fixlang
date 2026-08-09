@@ -38,6 +38,7 @@ use crate::misc::{
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
+use crate::type_size::{no_size_reason, LayoutWalk};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -582,6 +583,18 @@ impl Program {
         None
     }
 
+    /// The expressions the entry point and the exported functions were instantiated as.
+    pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
+        self.entry_io_value
+            .iter()
+            .chain(
+                self.export_statements
+                    .iter()
+                    .filter_map(|stmt| stmt.value_expr.as_ref()),
+            )
+            .collect()
+    }
+
     /// The module defined by the source file at `path`, compared by
     /// absolute path.
     pub fn module_of_file(&self, path: &Path) -> Option<&ModuleInfo> {
@@ -591,18 +604,12 @@ impl Program {
             .find(|mi| to_absolute_path(&mi.source.input.file_path).ok().as_ref() == Some(&path))
     }
 
-    // Get the names of entry pointes / exported functions.
+    /// The names of the entry point and the exported functions.
     pub fn root_value_names(&self) -> Vec<FullName> {
-        let mut res = vec![];
-        if let Some(entry) = self.entry_io_value.as_ref() {
-            res.push(entry.get_var().name.clone());
-        }
-        for stmt in &self.export_statements {
-            if let Some(exported) = stmt.value_expr.as_ref() {
-                res.push(exported.get_var().name.clone());
-            }
-        }
-        res
+        self.root_value_exprs()
+            .iter()
+            .map(|expr| expr.get_var().name.clone())
+            .collect()
     }
 
     // Get the list of module names from a list of files.
@@ -1422,8 +1429,8 @@ impl Program {
                     *e = output.te;
                 }
                 SymbolExpr::Method(impls) => {
-                    let i = result.method_impl_idx.unwrap();
-                    impls[i].expr = output.te;
+                    let impl_idx = result.method_impl_idx.unwrap();
+                    impls[impl_idx].expr = output.te;
                 }
             };
         }
@@ -1695,7 +1702,8 @@ impl Program {
         //
         // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
         let ret_ty = ret.type_.as_ref().unwrap();
-        if let Some((fv_name, _)) = ret_ty.free_vars().into_iter().next() {
+        if !ret_ty.is_ground() {
+            let (fv_name, _) = ret_ty.free_vars().into_iter().next().unwrap();
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(
@@ -1792,6 +1800,8 @@ impl Program {
         }
     }
 
+    /// Report every constraint written in a global value's type signature, and in the signature of
+    /// each implementation of a trait method, that `Scheme::validate_constraints` rejects.
     pub fn validate_global_value_type_constraints(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for (_name, gv) in &self.global_values {
@@ -1812,7 +1822,72 @@ impl Program {
         errors.to_result()
     }
 
-    // Validate and update export statements.
+    /// Report every value of the instantiated program whose type has no size, at the expression the
+    /// value appears as.
+    ///
+    /// A field of an unboxed type is laid out in place, so a value the unboxed fields reach again
+    /// would have to be larger than itself, and a type reached from itself at a larger type argument
+    /// needs endlessly many layouts. `no_size_reason` decides the first and bounds the second. Code
+    /// generation would meet either as a descent through the fields that never ends, so this runs
+    /// once the program's types are instantiated and before any of them is laid out.
+    pub fn validate_layouts(&self) -> Result<(), Errors> {
+        let type_env = self.type_env();
+
+        // The entry point and the exported values come first, so that a type they carry is reported
+        // in the program's own code rather than in a library function instantiated at it. The
+        // symbols follow, the standard library last: a library function instantiated at a type the
+        // program declared would otherwise take the report into the library's own source, which
+        // says nothing about the program. Within each group the order is by name, so that a program
+        // rejected twice is rejected the same way.
+        let mut roots = self.root_value_exprs();
+        let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
+        symbol_names.sort_by_key(|name| {
+            let in_std = name.namespace.names.first().map(String::as_str) == Some(STD_NAME);
+            (in_std, *name)
+        });
+        roots.extend(
+            symbol_names
+                .iter()
+                .filter_map(|name| self.symbols[*name].expr.as_ref()),
+        );
+
+        let mut walk = LayoutWalk::default();
+        let mut errors = Errors::empty();
+        // A node the compiler built carries no source location, so a round that reports only at
+        // located nodes runs first; the second round takes the types that appear at no located node.
+        for located_only in [true, false] {
+            for expr in &roots {
+                expr.walk_nodes(&mut |node| {
+                    if located_only && node.source.is_none() {
+                        return;
+                    }
+                    let ty = node.type_.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "Instantiation left an expression with no type: `{}`.",
+                            node.expr.stringify().to_string()
+                        )
+                    });
+                    if let Some(msg) = no_size_reason(ty, &type_env, &mut walk) {
+                        errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
+                    }
+                })
+            }
+        }
+        // Every instantiated symbol is compiled, so its own type is laid out whether or not an
+        // expression carries it — a compiler-generated accessor has none. These come last because
+        // such a symbol has no source location of its own to report at.
+        for name in &symbol_names {
+            let symbol = &self.symbols[*name];
+            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut walk) {
+                let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
+                errors.append(Errors::from_msg_srcs(msg, &[&source]));
+            }
+        }
+        errors.to_result()
+    }
+
+    /// Report every `FFI_EXPORT` statement that names its value by an absolute path, that gives a
+    /// C function name C cannot spell, or that takes a C function name another statement took.
     pub fn validate_export_statements(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1854,13 +1929,9 @@ impl Program {
         Ok(())
     }
 
-    /// Drain any warning-severity items out of `deferred_errors` and write
-    /// them to stderr, leaving error-severity items in place.
-    ///
-    /// Use this on code paths that print to a terminal so warnings are
-    /// surfaced even when compilation succeeds. Code paths that consume
-    /// `deferred_errors` directly (e.g. to convert into structured
-    /// diagnostics) should leave the warnings in place instead.
+    /// Write the warning-severity items of `deferred_errors` to stderr and take them out of it,
+    /// leaving the error-severity items in place. Warnings reach the terminal this way even where
+    /// compilation succeeds.
     pub fn flush_warnings_to_stderr(&mut self) {
         let warnings = self.deferred_errors.take_warnings();
         if warnings.has_diagnostics() {
@@ -1868,17 +1939,6 @@ impl Program {
         }
     }
 
-    /// Walk every expression in the program looking for uses of items marked
-    /// with `DEPRECATED[...]` and emit warnings (or errors, if
-    /// `Configuration.deprecation_mode == Deny`). Returns the collected
-    /// diagnostics; the caller decides whether to surface or merge them.
-    ///
-    /// Diagnostics are scoped to the user's own code via
-    /// `Configuration.root_source_files`: only uses whose source span
-    /// lives in one of those files are reported. Uses inside dependencies
-    /// or the embedded stdlib are silently skipped, matching
-    /// rustc/swiftc/javac/etc. — a deprecated use the user can't edit
-    /// shouldn't surface as a warning.
     /// Reports the calls of `Std::mark_threaded` this program makes when multi-threading is off.
     ///
     /// Multi-threading is what gives an object a mode to be put into, so `Std::mark_threaded` has
@@ -1928,6 +1988,12 @@ impl Program {
         ))
     }
 
+    /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
+    /// errors where `Configuration.deprecation_mode` is `Deny`.
+    ///
+    /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
+    /// use is reported where its source span lies in one of those files, so that what is reported
+    /// is what the user can edit.
     pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.

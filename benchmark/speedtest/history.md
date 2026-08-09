@@ -14,6 +14,60 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 4052838995f52c3d8a2ba2ac82fc0e6cb3c02b8a
+
+`Array::sort` spends its recursion budget only on a split that leaves under an eighth of the range
+on one side, instead of on every split, and a split that found nothing less than the pivot gathers
+everything equal to it beside it and drops all of that from the recursion (#227). The partition's
+read of the element it compares no longer checks its bounds, the way the swap beside it already did
+not.
+
+**`sort` costs 49,703,021 instructions against 64,037,014, -22.4%, and 70,499,931 memory accesses
+against 87,856,297.** `sort_stable` reports the same 35,516,421 as the row below, and every other
+case holds to within a thousandth of a percent. Three cases join the corpus, one per shape the
+change turns on: `sort_few_values` sorts an input of 16 distinct values at 15,087,278,
+`sort_ordered` one already in order at 31,217,869, and `sort_organ_pipe` one that rises to the
+middle and falls back at 127,510,119.
+
+Off the corpus, on 1,000,000 elements with `perf stat -e instructions:u` and the generator
+subtracted: pseudo-random 663,737,123 -> **511,899,164** (-22.9%), 16 distinct values 483,798,807
+-> 110,773,672 (-77.1%), already ordered 398,916,794 -> 372,735,723 (-6.6%), reversed 431,928,778
+-> 405,531,368 (-6.1%), boxed elements at 200,000 elements 379,362,768 -> 369,528,805 (-2.6%).
+
+**The organ pipe is what the budget rule is for, and it is where a budget spent wrongly shows up.**
+Doubling the budget outright reads pseudo-random at -17.9% and the organ pipe at **+30.0%**
+(1,452,057,887 -> 1,887,233,235), because the middle element is the greatest of every sub-range
+there and twice the budget is twice as long before heap sort takes over. Spending the budget only
+on the one-sided splits keeps the logarithm it always was, and the organ pipe lands at
+1,486,423,058, **+2.4%**.
+
+## 6e3c9d0534027c05d806c3a2e42eb8e4c397d7fa
+
+`Array::sort_stable` merges between the array and a copy of it, the two exchanging roles at every
+level of the recursion, instead of filling one working buffer and copying it back over the array
+(#222). A range of 12 elements or fewer is sorted by insertion; a merge whose two runs are already
+in order copies them instead of comparing them; and the merge and the range copies are
+tail-recursive functions rather than `Std::loop` bodies.
+
+**Every case of the corpus holds: the largest move is 0.0002%, and `sort` reports the same
+64,037,014 instructions as the row below.** No case sorts stably, which is why two join here:
+`sort_stable` sorts a pseudo-random 100,000-element `Array I64` at 35,516,421 instructions, and
+`sort_stable_ordered` sorts one already in order at 10,090,283, that being the only case reaching
+the copy the ordered-run check takes. The `startup` case says 113,633 of each was spent before
+`main`.
+
+Off the corpus, on 1,000,000 elements with `perf stat -e instructions:u` and the generator
+subtracted: pseudo-random 2,263,395,952 -> **373,925,715** (-83.5%), already ordered 1,571,133,487
+-> 90,713,298 (-94.2%), reversed 1,579,854,830 -> 252,954,574 (-84.0%), 16 distinct values
+2,229,446,252 -> 367,524,544 (-83.5%), and boxed elements at 200,000 elements 680,478,640 ->
+242,621,975 (-64.3%). Sorting stably now costs **0.56 times** what `Array::sort` costs on the same
+input.
+
+Halving the moves accounts for a factor of 2.2 of it; the rest is the price of one move. Written as
+a `Std::loop` body the merge loop is a closure LLVM leaves out of line, and every element pays a
+call that spills six callee-saved registers: the same changes measure 1,450,225,596 with the loop
+and 426,179,761 without it. That is the cliff of #221, which this row steps off rather than removes.
+
 ## b2c580cd758ba315d530f61c278540fb9e401d36
 
 The primitive that copies a range of one array onto the end of another was split into an owning one

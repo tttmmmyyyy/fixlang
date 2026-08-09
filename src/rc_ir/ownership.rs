@@ -82,6 +82,7 @@ impl VarTable {
         vars
     }
 
+    /// A table with no variable in it, to be filled by the constructor that knows what to put there.
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -647,9 +648,9 @@ pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPa
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
-                let leaf = (p.name.clone(), unit);
-                if !func.borrowed_units.contains(&leaf) {
-                    owned.insert(leaf);
+                let unit_path = (p.name.clone(), unit);
+                if !func.borrowed_units.contains(&unit_path) {
+                    owned.insert(unit_path);
                 }
             }
         }
@@ -700,37 +701,46 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{as_arg_projection, origin, Binding, Origin, VarTable};
+    use crate::ast::name::FullName;
+    use crate::ast::program::TypeEnv;
     use crate::fixstd::builtin::make_i64_ty;
-    use crate::rc_ir::provenance::Provenance;
+    use crate::misc::Set;
+    use crate::rc_ir::ast::{RcVar, VarPath};
+    use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
         srcs.into_iter().collect()
     }
 
+    /// A result leaf whose only source is one argument leaf aliases that leaf, and is reported with
+    /// the argument's index and path.
     #[test]
     fn a_lone_arg_is_a_projection() {
         let ls = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
         assert_eq!(as_arg_projection(&ls), Some((1, vec![0])));
     }
 
+    /// A result leaf that is the argument on one path and a new value on another aliases neither:
+    /// the op consumes the argument, and `origin` stops at the op. Reading such a leaf as a
+    /// projection would drop the consume without the alias, releasing one object twice.
     #[test]
     fn an_arg_joined_with_another_source_is_not_a_projection() {
-        // The result is the argument or a new value, so it aliases neither: the op consumes the
-        // argument, and `origin` stops at the op. Reading such a leaf as a projection would drop the
-        // consume without the alias, releasing one object twice.
         let ls = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
         assert_eq!(as_arg_projection(&ls), None);
     }
 
+    /// A result leaf that may come from either of two arguments aliases neither: a projection names
+    /// one argument, and here the choice would fall to whichever of the two the set yields first.
     #[test]
     fn one_of_two_args_is_not_a_projection() {
-        // Neither argument can be named as the alias, whichever of the two the set yields first.
         let ls = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
         assert_eq!(as_arg_projection(&ls), None);
     }
 
+    /// A leaf the op itself produced — a fresh object, or one of unknown origin — aliases no
+    /// argument.
     #[test]
     fn a_produced_leaf_is_not_a_projection() {
         assert_eq!(
@@ -743,9 +753,10 @@ mod tests {
         );
     }
 
+    /// A leaf with no source at all — the result of `_undefined_internal`, which aborts — aliases no
+    /// argument.
     #[test]
     fn a_bottom_leaf_is_not_a_projection() {
-        // `_undefined_internal` aborts, so its result has no source at all.
         assert_eq!(as_arg_projection(&sources(vec![])), None);
     }
 
@@ -781,12 +792,14 @@ mod tests {
         origin(vars, &TypeEnv::default(), &FullName::local(name), &[])
     }
 
+    /// A variable bound by the op that produced the value is the origin of that value.
     #[test]
     fn a_producer_is_exactly_itself() {
         let vars = table(vec![("p", Binding::Producer)]);
         assert_eq!(origin_of(&vars, "p"), Origin::Exactly(at("p")));
     }
 
+    /// A move-bind reaches through to the variable it moved, so both names key to one object.
     #[test]
     fn a_move_bind_is_the_moved_variable() {
         let vars = table(vec![
@@ -796,10 +809,10 @@ mod tests {
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
 
+    /// A match binding whose arms produce different objects is one of them: its candidates are the
+    /// arms' results, and the join itself is the name every alias chain through it agrees on.
     #[test]
     fn a_match_binding_may_be_any_arm_result() {
-        // The two arms produce different objects, so the binding is one of them and the join itself
-        // is the name every alias chain through it agrees on.
         let vars = table(vec![
             ("p", Binding::Producer),
             ("q", Binding::Producer),
@@ -816,9 +829,10 @@ mod tests {
         );
     }
 
+    /// A match binding whose arms all reach one variable, here with one arm reaching it through a
+    /// move-bind, is exactly that variable.
     #[test]
     fn a_match_binding_whose_arms_agree_is_exact() {
-        // Both arms reach `p`, one of them through a move-bind, so the binding is `p` on every path.
         let vars = table(vec![
             ("p", Binding::Producer),
             ("m1", Binding::Move(var("p"))),
@@ -827,10 +841,11 @@ mod tests {
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
 
+    /// A move of a match binding keeps the join's identity: the identity has to survive an alias
+    /// chain, or a retain of the binding and a release of the moved-to variable would key
+    /// differently and never pair.
     #[test]
     fn a_move_of_a_match_binding_keeps_the_joins_name() {
-        // The identity has to survive an alias chain, or a retain of the binding and a release of the
-        // moved-to variable would key differently and never pair.
         let vars = table(vec![
             ("p", Binding::Producer),
             ("q", Binding::Producer),
@@ -840,6 +855,8 @@ mod tests {
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
     }
 
+    /// A join over another join flattens: every result the inner join could yield is among the outer
+    /// join's candidates.
     #[test]
     fn a_join_of_joins_may_be_any_of_their_results() {
         let vars = table(vec![

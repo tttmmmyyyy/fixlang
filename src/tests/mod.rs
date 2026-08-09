@@ -58,6 +58,7 @@ mod test_threaded_rc;
 mod test_threaded_setting;
 mod test_trait_alias;
 mod test_trait_implementable_type;
+mod test_type_node_identity;
 mod test_type_sign_in_trait_impl;
 mod test_unbox_destructure;
 mod test_undefined;
