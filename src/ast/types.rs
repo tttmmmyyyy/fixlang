@@ -873,17 +873,20 @@ impl TypeNode {
         }
     }
 
-    // Take a struct type, and convert it to a punched version.
+    /// This struct type punched at field `punched_at`: a type of the same memory layout, whose
+    /// declaration marks that field as a hole the value has moved out of.
     pub fn to_punched_struct(self: &Arc<TypeNode>, punched_at: usize) -> Arc<TypeNode> {
         let mut tycon = self.toplevel_tycon().unwrap().as_ref().clone();
         tycon.into_punched_type_name(punched_at);
         self.set_toplevel_tycon(Arc::new(tycon))
     }
 
-    /// The types the fields of a value of this type hold: one per field for a struct, one per
-    /// variant for a union, and the element type alone for `Array`, whose elements all share it.
-    /// This type's arguments are substituted in, so the results are the field types at this
-    /// instance.
+    /// The type of every field slot this type declares: one per field for a struct, one per variant
+    /// for a union, and the element type alone for `Array`, whose elements all share it. This type's
+    /// arguments are substituted in, so the results are the field types at this instance.
+    ///
+    /// This is the layout's answer, so a punched field's slot is among them, at the type it was
+    /// declared with; `value_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.field_types_via_tycons(&type_env.tycons)
     }
@@ -947,7 +950,8 @@ impl TypeNode {
             .collect()
     }
 
-    // The index of the struct/union field named `field_name`.
+    /// The index of the struct field or the union variant named `field_name`, which is the index it
+    /// sits at in the layout.
     pub fn field_index(&self, type_env: &TypeEnv, field_name: &str) -> Option<usize> {
         self.toplevel_tycon_info(type_env)
             .fields
@@ -976,7 +980,8 @@ impl TypeNode {
         tys
     }
 
-    // For type `f a b c` where `f` is a type constructor returns `vec![a, b, c]`.
+    /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
+    /// `vec![a, b, c]`.
     pub fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
@@ -1945,9 +1950,11 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
 
-// Additional information of types.
+/// What a type node carries beside the type itself.
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
+    /// The span of the source text the type was written at. A type the compiler builds itself has
+    /// none.
     source: Option<Span>,
 }
 

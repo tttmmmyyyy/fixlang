@@ -4659,8 +4659,13 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
+    /// The operand: the struct the field is moved out of.
     pub var_name: FullName,
+    /// The index of the field moved out, in the struct's layout — the slot the result's punched
+    /// struct carries as a hole.
     field_idx: usize,
+    /// Whether a struct that is shared is cloned before the field is moved out. Where false, the
+    /// operand is taken to be uniquely owned already.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -4814,20 +4819,15 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 /// The index of the punched struct in the result of a struct punch, `(field, punched struct)`.
 const PUNCHED_STRUCT_FIELD: usize = 1;
 
-// Field punching function for a given struct.
-//
-// If the struct is `S` and the field is `x` of type `F`, then the function has the type `S -> (F, Sx)` where `Sx` is the punched `S` at the field `x`.
-// i.e., `Sx` has the same memory layout as `S`, but does not contain the field `x`.
-//
-// We are not sure whether we should clone the struct when a shared struct is given to `punch_x`.
-// If we do not clone the struct, it will lead to different types of values sharing the same memory area, which feels dangerous,
-// but we have not found an example that causes a memory management issue yet.
-//
-// There are two use cases for the current `punch_x` function.
-// One is the implementation of `act_x`, where the struct given to `punch_x` is guaranteed to be unique.
-// The other is the implementation of `mod_x`, where it is acceptable to clone the struct if it is shared.
-// So we have two versions of `punch_x`: one that does not clone the struct and one that does.
-// The above problem is unresolved, but the current use cases do not require solving this problem.
+/// The `punch_x` function of a struct: for a struct `S` with a field `x` of type `F`, a function of
+/// type `S -> (F, Sx)` that moves the field out. `Sx` is `S` punched at `x` — the memory layout of
+/// `S`, with the slot at `x` a hole whose value has moved out.
+///
+/// The field is handed over without being reference counted, so the struct it is taken out of has to
+/// be uniquely owned. `force_unique` picks how that is met, as `force_unique_or_assert` describes:
+/// forcing it clones a struct that is shared, and leaving it off takes the caller's guarantee that
+/// the struct is unique. That guarantee is what keeps `S` and `Sx` apart — a shared struct punched
+/// without a clone leaves the two types naming one region of memory.
 pub fn struct_punch(
     definition: &TypeDefn,
     field_name: &str,
@@ -4860,6 +4860,9 @@ pub fn struct_punch(
     (expr, scm)
 }
 
+/// The body of a struct's `plug_in_x`: the value bound to `field_name` is moved into the hole of the
+/// punched struct bound to `punched_struct_name`, giving back the struct type the hole was punched
+/// out of.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
     punched_struct_name: FullName,

@@ -7650,6 +7650,8 @@ pub fn test_get_errno() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `*` inside a struct literal or a tuple binds the components in the order they are written: the
+/// value of the one written first is held while the later one runs through its values.
 #[test]
 pub fn test_monadic_bind_and_make_struct_ordering() {
     let source = r##"
@@ -7684,6 +7686,9 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `*` in a function application binds in the order the two are written: in `f(x)` and `f $ x` the
+/// function's value is held while the argument's runs through its values, and in `x.f` the
+/// argument's is held while the function's runs.
 #[test]
 pub fn test_monadic_bind_and_function_application_ordering() {
     let source = r##"
@@ -7709,6 +7714,9 @@ pub fn test_monadic_bind_and_function_application_ordering() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `act` on a uniquely owned struct, over the four combinations of a boxed or unboxed struct with a
+/// boxed or unboxed field, at an actor that yields a value and at one that yields nothing. The actor
+/// asserts that the array field it is handed is unique.
 #[test]
 pub fn test_struct_act() {
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
@@ -7789,6 +7797,9 @@ pub fn test_struct_act() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `act` on a struct the caller goes on holding, on one whose field is shared with another binding,
+/// and on both at once: the update leaves what the other holder sees as it was. Also covers a
+/// generic struct, and a functor whose `map` rebuilds the struct more than once.
 #[test]
 pub fn test_struct_act2() {
     let source = r##"
@@ -7974,6 +7985,8 @@ pub fn test_struct_act_on_a_shared_only_reference_counted_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The `Functor` instance of a tuple maps its last component and leaves the earlier ones as they
+/// are, for a 1-tuple and a 2-tuple.
 #[test]
 pub fn test_tuple_functor() {
     let source = r##"
