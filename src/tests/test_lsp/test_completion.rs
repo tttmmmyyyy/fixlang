@@ -651,6 +651,28 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Assert type-aware ranking on the `myfunc1`/`myfunc2` fixture pair:
+    /// `Main::myfunc2` (`I64` receiver) must land in Tier 0 and outrank
+    /// `Main::myfunc1` (`U32` receiver).
+    fn assert_myfunc2_outranks_myfunc1(items: &[serde_json::Value]) {
+        let sort_myfunc1 = find_sort_text(items, "Main::myfunc1")
+            .expect("Main::myfunc1 should be a completion candidate");
+        let sort_myfunc2 = find_sort_text(items, "Main::myfunc2")
+            .expect("Main::myfunc2 should be a completion candidate");
+        assert!(
+            sort_myfunc2.starts_with('0'),
+            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
+            sort_myfunc2
+        );
+        assert!(
+            sort_myfunc2 < sort_myfunc1,
+            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
+             got myfunc2={:?}, myfunc1={:?}",
+            sort_myfunc2,
+            sort_myfunc1
+        );
+    }
+
     /// An annotation naming an unknown type variable (`(3 : b)`) sits in the
     /// binding right before the completion cursor. The tolerant elaborator
     /// must swallow the bad annotation and leave every node it substitutes
@@ -678,22 +700,7 @@ mod tests {
         // Column 15 = byte just after `.` on `    let y = 42.`.
         let items = ctx.complete_with_timeout("main.fix", 8, 15, Duration::from_secs(60));
 
-        let sort_myfunc1 = find_sort_text(&items, "Main::myfunc1")
-            .expect("Main::myfunc1 should be a completion candidate");
-        let sort_myfunc2 = find_sort_text(&items, "Main::myfunc2")
-            .expect("Main::myfunc2 should be a completion candidate");
-        assert!(
-            sort_myfunc2.starts_with('0'),
-            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
-            sort_myfunc2
-        );
-        assert!(
-            sort_myfunc2 < sort_myfunc1,
-            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
-             got myfunc2={:?}, myfunc1={:?}",
-            sort_myfunc2,
-            sort_myfunc1
-        );
+        assert_myfunc2_outranks_myfunc1(&items);
 
         ctx.shutdown();
     }
@@ -723,22 +730,7 @@ mod tests {
         // Column 16 = byte just after `.` in `(42.`.
         let items = ctx.complete_with_timeout("main.fix", 7, 16, Duration::from_secs(60));
 
-        let sort_myfunc1 = find_sort_text(&items, "Main::myfunc1")
-            .expect("Main::myfunc1 should be a completion candidate");
-        let sort_myfunc2 = find_sort_text(&items, "Main::myfunc2")
-            .expect("Main::myfunc2 should be a completion candidate");
-        assert!(
-            sort_myfunc2.starts_with('0'),
-            "myfunc2 (I64 receiver) should be Tier 0; got {:?}",
-            sort_myfunc2
-        );
-        assert!(
-            sort_myfunc2 < sort_myfunc1,
-            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
-             got myfunc2={:?}, myfunc1={:?}",
-            sort_myfunc2,
-            sort_myfunc1
-        );
+        assert_myfunc2_outranks_myfunc1(&items);
 
         ctx.shutdown();
     }
