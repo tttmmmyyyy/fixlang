@@ -8,8 +8,9 @@ terminal = |op, n| ( if n <= 0 { 0 }; op(n) + terminal(op, n - 1) );
 a : (I64 -> I64) -> I64 -> I64;
 a = |op, n| (
     if n <= 0 { op(1) };
-    let w = |x| (op(x) + 1) % 97;
-    Iterator::range(0, n).fold(0, |i, acc| acc + terminal(w, i)) % 1000 + b(w, n - 1)
+    let wrapped = |x| (op(x) + 1) % 97;
+    Iterator::range(0, n).fold(0, |i, acc| acc + terminal(wrapped, i)) % 1000
+        + b(wrapped, n - 1)
 );
 b : (I64 -> I64) -> I64 -> I64;
 b = |op, n| c(op, n) + terminal(op, n);

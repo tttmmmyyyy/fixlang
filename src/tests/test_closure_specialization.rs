@@ -175,11 +175,11 @@ mod integration_tests {
             .filter(|name| name.starts_with(func_prefix))
             .map(|name| {
                 let spec_start = name.find(spec_segment).unwrap();
-                let of_lambda = name[..spec_start].contains("#closure_lam");
+                let is_lambda_copy = name[..spec_start].contains("#closure_lam");
                 let end = name[spec_start + 1..]
                     .find('#')
                     .map_or(name.len(), |offset| spec_start + 1 + offset);
-                (name[..end].to_string(), of_lambda)
+                (name[..end].to_string(), is_lambda_copy)
             })
             .collect::<Vec<_>>();
         copies.sort();
@@ -191,7 +191,7 @@ mod integration_tests {
     fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         spec_copies_under(dump, func_prefix)
             .into_iter()
-            .filter(|(_, of_lambda)| !of_lambda)
+            .filter(|(_, is_lambda_copy)| !is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
     }
@@ -202,7 +202,7 @@ mod integration_tests {
     fn lambda_copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         spec_copies_under(dump, func_prefix)
             .into_iter()
-            .filter(|(_, of_lambda)| *of_lambda)
+            .filter(|(_, is_lambda_copy)| *is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
     }

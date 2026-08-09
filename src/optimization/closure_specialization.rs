@@ -1235,7 +1235,8 @@ impl ClosureSpecializationVisitor {
         assert!(
             known.tree.fields().iter().all(|(position, tree)| narrowed_fields
                 .iter()
-                .any(|(narrowed, value)| narrowed == position && value == tree)),
+                .any(|(narrowed_position, narrowed_tree)| narrowed_position == position
+                    && narrowed_tree == tree)),
             "field {:?} of {} arrived narrowed and is dropped by the narrowing in {}, which keeps {:?}",
             known.tree.fields().iter().map(|(position, _)| *position).collect::<Vec<_>>(),
             known.tree.lambda().to_string(),
