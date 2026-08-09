@@ -7912,6 +7912,68 @@ pub fn test_struct_act_on_the_only_reference_counted_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
+// `act` on the only reference-counted field of an unboxed struct, where the actor's functor yields
+// nothing: the struct with that field punched out is dropped rather than plugged back.
+#[test]
+pub fn test_struct_act_yielding_nothing_on_the_only_reference_counted_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, n : I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1, 2], n : 3 };
+            let r = s.act_p(|p| if p.@size == 0 { Option::some(p) } else { Option::none() });
+            assert(|_|"", r.is_none);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `act` on the only reference-counted field of an unboxed struct at a functor whose `map` rebuilds
+// the struct more than once, so each rebuild reads the same punched struct.
+#[test]
+pub fn test_struct_act_plugging_in_more_than_once_on_the_only_reference_counted_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, n : I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1], n : 3 };
+            let ss = s.act_p(|p| [p, p.push_back(2)]);
+            assert_eq(|_|"", ss.map(|t| t.@p.@size + t.@n), [4, 5]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `act` on the only reference-counted field of an unboxed struct, where that field is shared with a
+// binding that outlives the update: the update leaves that binding's value as it was.
+#[test]
+pub fn test_struct_act_on_a_shared_only_reference_counted_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, n : I64 };
+
+        main : IO ();
+        main = (
+            let a = [1, 2];
+            let s = S { p : a, n : 3 };
+            let t = s.act_p(|p| Option::some(p.push_back(9))).as_some;
+            assert_eq(|_|"", t.@p, [1, 2, 9]);;
+            assert_eq(|_|"", a, [1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_tuple_functor() {
     let source = r##"
