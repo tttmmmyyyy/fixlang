@@ -4686,9 +4686,9 @@ impl InlineLLVMStructPunchBody {
             );
             return rest.to_vec();
         }
-        let mut p = vec![self.field_idx];
-        p.extend_from_slice(rest);
-        p
+        let mut arg_path = vec![self.field_idx];
+        arg_path.extend_from_slice(rest);
+        arg_path
     }
 }
 
