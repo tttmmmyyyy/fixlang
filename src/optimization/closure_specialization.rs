@@ -389,8 +389,9 @@ fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &Tree) -> bool
 // How many combining copies a function is allowed before any site has asked for one, and how many
 // more each site that asks for one brings with it.
 //
-// The corpus's most-copied function has four copies, none of them combining, so the base alone
-// leaves it twice the room it uses.
+// The base is twice the largest number of copies any function has in the corpus, which is four.
+// None of those four is a combining copy, so the budget counts nothing there; the base is the room
+// left for a program whose copies do combine before any site has asked for one.
 const BASE_COMBINING_COPIES: usize = 8;
 const COMBINING_COPIES_PER_SITE: usize = 1;
 
