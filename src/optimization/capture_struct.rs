@@ -1,7 +1,6 @@
 // Shared machinery for lifting a lambda that captures local variables into a global function: the
 // unboxed struct that threads the captured environment through the call, and generation of a
-// collision-free global name for the lifted function. `closure_specialization` and
-// `defunctionalize_fix` both lift lambdas this way and build on these.
+// collision-free global name for the lifted function.
 
 use crate::{
     ast::{
@@ -24,6 +23,7 @@ use std::sync::Arc;
 // "what do I call this with".
 #[derive(Clone)]
 pub struct CaptureStruct {
+    // The type constructor a value of this struct is built and destructured with.
     pub tycon: Arc<TyCon>,
     // The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
