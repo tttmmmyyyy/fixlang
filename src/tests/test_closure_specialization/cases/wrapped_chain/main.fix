@@ -1,0 +1,22 @@
+module Main;
+
+// `g` takes one closure and hands the next round that same closure wrapped in a different lambda,
+// four ways. A value's tree then records which wrappers it went through and in what order, so the
+// orderings are what multiply — every way in is a single one, and every capture list holds a single
+// closure, so nothing here is wide.
+//
+// `k` keeps the lambda main hands over from folding into a constant.
+
+g : (I64 -> I64) -> I64 -> I64;
+g = |op, n| (
+    if n <= 0 { op(0) % 97 };
+    ( g(|x| (op(x) + 1) % 97, n - 1)
+    + g(|x| (op(x) + 2) % 97, n - 1)
+    + g(|x| (op(x) + 3) % 97, n - 1)
+    + g(|x| (op(x) + 4) % 97, n - 1) ) % 1000
+);
+
+main : IO () = (
+    let k = 3;
+    println(g(|x| (x * k) % 97, 3).to_string)
+);

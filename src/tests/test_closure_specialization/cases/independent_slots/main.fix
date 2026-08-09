@@ -1,0 +1,21 @@
+module Main;
+
+// `g` takes four closures and calls every one of them, so all four ways in are worth copying for.
+// Each recursive call wraps a different one and passes the rest through, so the four decide
+// independently and their combinations are what the copies are keyed on.
+//
+// `k` keeps the four lambdas main hands over from folding into constants.
+
+g : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+g = |p0, p1, p2, p3, n| (
+    if n <= 0 { (p0(0) + p1(0) + p2(0) + p3(0)) % 1000 };
+    ( g(|x| (p0(x) + 1) % 97, p1, p2, p3, n - 1)
+    + g(p0, |x| (p1(x) + 2) % 97, p2, p3, n - 1)
+    + g(p0, p1, |x| (p2(x) + 3) % 97, p3, n - 1)
+    + g(p0, p1, p2, |x| (p3(x) + 4) % 97, n - 1) ) % 1000
+);
+
+main : IO () = (
+    let k = 3;
+    println(g(|x| (x * k + 0) % 97, |x| (x * k + 1) % 97, |x| (x * k + 2) % 97, |x| (x * k + 3) % 97, 2).to_string)
+);

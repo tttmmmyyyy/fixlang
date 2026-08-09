@@ -1,7 +1,6 @@
 // Shared machinery for lifting a lambda that captures local variables into a global function: the
 // unboxed struct that threads the captured environment through the call, and generation of a
-// collision-free global name for the lifted function. `closure_specialization` and
-// `defunctionalize_fix` both lift lambdas this way and build on these.
+// collision-free global name for the lifted function.
 
 use crate::{
     ast::{
@@ -11,16 +10,20 @@ use crate::{
         typedecl::Field,
         types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
-    constants::STD_NAME,
     misc::Set,
 };
 use std::sync::Arc;
 
 // The unboxed struct that carries a lambda's captured environment across the call to its lifted
-// global function. The type constructor is named `{prefix}<{signature}>`, where `signature` encodes
-// the captured fields; two captures with identical fields therefore share one type constructor,
-// while callers using different prefixes keep their capture structs distinct.
+// global function.
+//
+// The type constructor lives in the namespace of the function the capture struct is built for, and
+// is named after it, so that a value of it says which function consumes it. Two lambdas capturing
+// the same names at the same types are distinct here, which is what lets a reader of the type answer
+// "what do I call this with".
+#[derive(Clone)]
 pub struct CaptureStruct {
+    // The type constructor a value of this struct is built and destructured with.
     pub tycon: Arc<TyCon>,
     // The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
@@ -35,17 +38,14 @@ impl CaptureStruct {
     // `tycon_info` into the program's type environment.
     //
     // # Arguments
-    // * `prefix` - the head of the type constructor's name, which keeps the capture structs of one
-    //   caller distinct from those of another that captures the same fields.
+    // * `prefix` - the head of the type constructor's name, which says which pass built the capture
+    //   struct.
+    // * `owner` - the function this capture struct is built for. It is a global name of its own, so
+    //   it alone tells one capture struct from another.
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
-    pub fn new(prefix: &str, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
-        let signature = fields
-            .iter()
-            .map(|(n, t)| format!("{}:{}", n.to_string(), t.to_string()))
-            .collect::<Vec<_>>()
-            .join(",");
+    pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let tycon = Arc::new(TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("{}<{}>", prefix, signature)),
+            name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),
         });
         let tycon_info = TyConInfo {
             kind: kind_star(),
@@ -78,6 +78,11 @@ impl CaptureStruct {
                 .collect(),
         )
         .set_type(self.ty.clone())
+    }
+
+    // The captured names paired with their types, in the order the struct holds them.
+    pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
+        &self.fields
     }
 
     // Pattern destructuring the capture struct back into its original captured names.

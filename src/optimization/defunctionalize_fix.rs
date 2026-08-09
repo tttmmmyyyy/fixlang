@@ -245,14 +245,15 @@ impl FixDefunctionalizer {
                 (n.clone(), ty)
             })
             .collect();
-        let cap = CaptureStruct::new("#FixCap", &cap_fields);
-
+        // Name the lifted function first: the capture struct is named after it, so that a value of
+        // that capture struct says which function consumes it.
         let func_name = fresh_global_name(
             &self.current_symbol,
             "#fix_defunct",
             &mut self.counter,
             &mut self.global_names,
         );
+        let cap = CaptureStruct::new("#FixCap", &func_name, &cap_fields);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`

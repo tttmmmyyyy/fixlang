@@ -32,13 +32,6 @@ impl<T> Graph<T> {
         self.elems.len()
     }
 
-    pub fn find_index(&self, elem: &T) -> Option<usize>
-    where
-        T: Eq,
-    {
-        self.elems.iter().position(|e| e == elem)
-    }
-
     // Create a graph from a set of elements.
     // Returns a map from element to a node.
     pub fn from_set(elems: Set<T>) -> (Self, Map<T, usize>)
@@ -62,24 +55,6 @@ impl<T> Graph<T> {
     // Connect two nodes by indices.
     pub fn connect_idx(&mut self, from: usize, to: usize) {
         self.edges.get_mut(from).unwrap().push(to);
-    }
-
-    // Connect two nodes.
-    pub fn connect(&mut self, from: &T, to: &T)
-    where
-        T: Eq,
-    {
-        let from = self.elem_to_idx(from).unwrap();
-        let to = self.elem_to_idx(to).unwrap();
-        self.connect_idx(from, to);
-    }
-
-    // Get the index of an element.
-    pub fn elem_to_idx(&self, elem: &T) -> Option<usize>
-    where
-        T: Eq,
-    {
-        self.elems.iter().position(|e| e == elem)
     }
 
     // Collect nodes reachable from a node.

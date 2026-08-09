@@ -1,0 +1,20 @@
+module Main;
+
+// A cycle of three functions, where going round it once wraps the closure one level deeper.
+
+terminal : (I64 -> I64) -> I64 -> I64;
+terminal = |op, n| ( if n <= 0 { 0 }; op(n) + terminal(op, n - 1) );
+
+a : (I64 -> I64) -> I64 -> I64;
+a = |op, n| (
+    if n <= 0 { op(1) };
+    let wrapped = |x| (op(x) + 1) % 97;
+    Iterator::range(0, n).fold(0, |i, acc| acc + terminal(wrapped, i)) % 1000
+        + b(wrapped, n - 1)
+);
+b : (I64 -> I64) -> I64 -> I64;
+b = |op, n| c(op, n) + terminal(op, n);
+c : (I64 -> I64) -> I64 -> I64;
+c = |op, n| a(op, n) + terminal(op, n);
+
+main : IO () = ( let k = 3; println(a(|x| (x * k) % 97, 6).to_string) );
