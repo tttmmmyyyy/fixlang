@@ -475,6 +475,8 @@ pub struct TypeCheckContext {
 }
 
 impl TypeCheckContext {
+    /// Print the entry count of each of the context's collections; a
+    /// debugging aid for inspecting the context's growth.
     #[allow(dead_code)]
     pub fn show_sizes(&self) {
         println!("scope size = {}", self.scope.local.len());
@@ -1144,9 +1146,9 @@ impl TypeCheckContext {
         Ok(sub.substitute_type(ty))
     }
 
-    // Perform typechecking.
-    // Update type substitution so that `ei` has type `ty`.
-    // Returns given AST augmented with inferred information.
+    /// Perform typechecking: update the type substitution so that `ei` has
+    /// type `ty`, and return the given AST augmented with inferred
+    /// information.
     pub fn unify_type_of_expr(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1434,9 +1436,11 @@ impl TypeCheckContext {
                     }
 
                     let pat = if pat.is_union() {
-                        // Failure is tolerated; we fall through to
-                        // `get_typed` below which can still type
-                        // sub-patterns from the variant's signature.
+                        // In `error_tolerant` mode a failed variant
+                        // check is swallowed and the arm keeps the
+                        // unvalidated pattern; the pattern elaboration
+                        // below can still type its sub-patterns from
+                        // the variant's signature.
                         let validated =
                             self.validate_union_arm(&cond, &cond_ty, pat, &mut cond_tc_info);
                         self.tolerate(validated)?.unwrap_or_else(|| pat.clone())
@@ -1446,11 +1450,12 @@ impl TypeCheckContext {
                         pat.clone()
                     };
 
-                    // Type the pattern, then unify with cond.
-                    // `get_typed` is itself tolerant of sub-pattern
-                    // mismatches in `error_tolerant` mode; the only
-                    // remaining failure path here is `validate_pattern`
-                    // (struct field validity etc.).
+                    // Type the pattern, then unify with cond. In
+                    // `error_tolerant` mode sub-pattern type mismatches
+                    // are already tolerated inside the elaboration
+                    // itself; a pattern that still fails to elaborate
+                    // (e.g. its shape cannot be validated) falls back
+                    // to a fresh-tyvar pattern with no bindings.
                     let elab = self.elaborate_pattern_binding(&pat);
                     let (pat, var_ty) = self.tolerate_pattern_typed(elab, &pat)?;
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
@@ -1858,6 +1863,9 @@ impl TypeCheckContext {
     ) -> Result<(Arc<ExprNode>, Errors), Errors> {
         self.assert_freshness();
 
+        /// Build the error reported when a constraint required by the
+        /// inference cannot be deduced from the assumptions, attaching
+        /// source-location notes for the type variables it mentions.
         fn make_error(
             tc: &TypeCheckContext,
             mut unif_err: UnificationErr,
