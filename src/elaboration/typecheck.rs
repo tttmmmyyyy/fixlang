@@ -1387,9 +1387,9 @@ impl TypeCheckContext {
                 Ok(ei.set_lam_body(body))
             }
             Expr::Let(pat, bound, val) => {
-                // `validate_pattern` / `get_typed` may fail on a
-                // malformed pattern (unknown struct field, duplicate
-                // variable, sub-pattern type mismatch). In
+                // Pattern elaboration may fail on a malformed pattern
+                // (unknown struct field, duplicate variable,
+                // sub-pattern type mismatch). In
                 // `error_tolerant` mode we still want to elaborate
                 // `bound` and `val` so any nested cursor inside them
                 // gets a useful type — fall back to a fresh-tyvar
