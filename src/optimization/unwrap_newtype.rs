@@ -36,7 +36,7 @@ pub fn run(prg: &mut Program) {
     run_on_exported_statements(prg, &unwrapping);
     run_on_entry_io_value(prg, &unwrapping);
 
-    prg.type_env.tycons = Arc::new(unwrapping.unwrapped_type_env());
+    prg.type_env.tycons = Arc::new(unwrapping.unwrapped_tycons());
 }
 
 /// The type constructors this pass replaces with the type of their one field, together with the
@@ -52,34 +52,34 @@ struct NewtypeUnwrapping {
     /// declaration reads as it did when the choices were made.
     tycons: Map<TyCon, TyConInfo>,
     /// The type constructors to replace.
-    unwrappable: Set<TyCon>,
+    unwrappable_tycons: Set<TyCon>,
 }
 
 impl NewtypeUnwrapping {
     fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
-        let mut unwrappable = Set::default();
+        let mut unwrappable_tycons = Set::default();
         for tc in tycons.keys() {
             // The form of a struct with one field punched out is unwrapped exactly when the struct
-            // it punches is, so it is the struct that `is_unwrappable_newtype` is asked about.
+            // it punches is, so it is the struct that `is_acyclic_newtype` is asked about.
             // Asking about the punched form itself answers a different question: its name appears
             // in no field type, so the walk finds nothing and says yes even where the struct names
             // itself and stays.
-            let asked_about = match tc.unpunched_tycon() {
+            let deciding_tc = match tc.unpunched_tycon() {
                 Some(struct_tc) if tycons.contains_key(&struct_tc) => struct_tc,
                 _ => tc.clone(),
             };
-            if is_unwrappable_newtype(&asked_about, &tycons) {
-                unwrappable.insert(tc.clone());
+            if is_acyclic_newtype(&deciding_tc, &tycons) {
+                unwrappable_tycons.insert(tc.clone());
             }
         }
         NewtypeUnwrapping {
             tycons,
-            unwrappable,
+            unwrappable_tycons,
         }
     }
 
     fn is_unwrappable(&self, tc: &TyCon) -> bool {
-        self.unwrappable.contains(tc)
+        self.unwrappable_tycons.contains(tc)
     }
 
     /// `ty` with each unwrappable type constructor in it replaced by the type of its one field.
@@ -182,7 +182,7 @@ impl NewtypeUnwrapping {
     /// A replaced type constructor loses its declaration, so a type this pass failed to rewrite
     /// fails at the first lookup of that declaration rather than laying its values out as the
     /// struct they were to stop being.
-    fn unwrapped_type_env(&self) -> Map<TyCon, TyConInfo> {
+    fn unwrapped_tycons(&self) -> Map<TyCon, TyConInfo> {
         let mut env = Map::default();
         for (tc, ti) in &self.tycons {
             if self.is_unwrappable(tc) {
@@ -510,33 +510,35 @@ fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
 
 /// Is this type constructor a newtype whose field types do not lead back to it?
 ///
-/// Replacing a newtype with the type of its field terminates exactly when the walk below reaches
-/// the end, so this is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite.
-fn is_unwrappable_newtype(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
+/// Replacing a newtype with the type of its field terminates exactly when this walk reaches the
+/// end, so this is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite. Whether a type
+/// constructor is replaced is `NewtypeUnwrapping::is_unwrappable`, which takes this answer for a
+/// struct and the struct's answer for the form of it with a field punched out.
+fn is_acyclic_newtype(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     // If this TyCon is not a newtype, return false.
     if !is_newtype(tc, env) {
         return false;
     }
 
     let mut visited = Set::default();
-    let mut seed_tcs = vec![tc.clone()];
-    while let Some(now_tc) = seed_tcs.pop() {
-        visited.insert(now_tc.clone());
-        if !is_newtype(&now_tc, env) {
+    let mut pending_tcs = vec![tc.clone()];
+    while let Some(visiting_tc) = pending_tcs.pop() {
+        visited.insert(visiting_tc.clone());
+        if !is_newtype(&visiting_tc, env) {
             continue;
         }
-        let ti = env.get(&now_tc).unwrap();
+        let ti = env.get(&visiting_tc).unwrap();
         let field_ty = &ti.fields[0].ty;
-        let mut tycons = Set::default();
-        field_ty.collect_tycons(&mut tycons);
-        for tycon in tycons {
-            if tycon == *tc {
+        let mut field_tcs = Set::default();
+        field_ty.collect_tycons(&mut field_tcs);
+        for field_tc in field_tcs {
+            if field_tc == *tc {
                 return false;
             }
-            if visited.contains(&tycon) {
+            if visited.contains(&field_tc) {
                 continue;
             }
-            seed_tcs.push(tycon);
+            pending_tcs.push(field_tc);
         }
     }
 

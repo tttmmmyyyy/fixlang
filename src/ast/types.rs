@@ -2721,16 +2721,16 @@ mod tests {
     fn a_punched_type_name_names_the_struct_it_punches() {
         let struct_tc = TyCon::new(FullName::from_strs(&["Main"], "C"));
 
-        let named = |tc: &TyCon| tc.unpunched_tycon().map(|tc| tc.to_string());
+        let unpunched_name = |tc: &TyCon| tc.unpunched_tycon().map(|tc| tc.to_string());
 
         let mut punched_tc = struct_tc.clone();
         punched_tc.into_punched_type_name(0);
-        assert_eq!(named(&punched_tc), Some(struct_tc.to_string()));
+        assert_eq!(unpunched_name(&punched_tc), Some(struct_tc.to_string()));
 
-        assert_eq!(named(&struct_tc), None);
+        assert_eq!(unpunched_name(&struct_tc), None);
 
         let mut rebuilt_tc = struct_tc.clone();
         *rebuilt_tc.name.name_as_mut() = format!("#RHKTV<{} Std::Array>", punched_tc.name.name);
-        assert_eq!(named(&rebuilt_tc), None);
+        assert_eq!(unpunched_name(&rebuilt_tc), None);
     }
 }
