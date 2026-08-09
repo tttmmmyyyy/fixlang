@@ -608,7 +608,7 @@ impl TypeCheckContext {
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
         Ok(self
             .tolerate(res)?
-            .unwrap_or_else(|| (self.set_fallback_types_on_pattern(pat), Map::default())))
+            .unwrap_or_else(|| (self.set_fallback_types_for_pattern(pat), Map::default())))
     }
 
     /// Assign a type to every node of `ei`: `ty` at the root and a fresh type
@@ -629,7 +629,7 @@ impl TypeCheckContext {
 
     /// Pattern counterpart of `set_fallback_types`: a fresh type variable at
     /// the pattern and at each of its sub-patterns.
-    fn set_fallback_types_on_pattern(&mut self, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
+    fn set_fallback_types_for_pattern(&mut self, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
         self.map_types_for_pattern(pat, &mut |tc, p| Ok(tc.fresh_ty_with_src(&p.info.source)))
             .unwrap_or_else(|_| unreachable!("fresh-type callbacks cannot fail"))
     }
