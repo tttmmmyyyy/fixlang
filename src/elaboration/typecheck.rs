@@ -467,10 +467,10 @@ pub struct TypeCheckContext {
     // After type-checking, these are resolved via substitution to find the concrete types.
     pub opaque_instantiations: Map<Name, Arc<TyVar>>,
     /// When true, errors raised from elaborating a sub-expression are
-    /// swallowed: that sub-expression is replaced by a placeholder
-    /// annotated with the expected type, and elaboration continues on
-    /// its siblings, so types can still be inferred around an
-    /// unrelated type error elsewhere in the body.
+    /// swallowed: that sub-expression keeps the expected type at its
+    /// root and gets fresh type variables below (`set_fallback_types`),
+    /// and elaboration continues on its siblings, so types can still be
+    /// inferred around an unrelated type error elsewhere in the body.
     pub error_tolerant: bool,
 }
 
@@ -1156,12 +1156,11 @@ impl TypeCheckContext {
             let ty_for_fallback = ty.clone();
             match self.unify_type_of_expr_inner(ei, ty) {
                 Ok(e) => Ok(e),
-                Err(errs) if self.error_tolerant => {
+                Err(_) if self.error_tolerant => {
                     // Swallow the failure and substitute the original
                     // subtree — the expected type at its root, fresh
                     // type variables below — so enclosing elaboration
                     // can keep going on sibling nodes.
-                    let _ = errs;
                     Ok(self.set_fallback_types(ei, ty_for_fallback))
                 }
                 Err(errs) => Err(errs),
