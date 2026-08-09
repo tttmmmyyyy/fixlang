@@ -38,6 +38,13 @@ This project implements the Fix programming language compiler and related tools 
 
 - **Dead-code warnings**: Do NOT add `#[allow(dead_code)]` to silence the "never used" warning on items that will eventually be used in production code (e.g. a constant or function added in one step of a multi-step rollout that will be consumed in a later step). The warning is the reminder that the follow-up work is still pending; suppressing it loses that signal. Leave the warning in place and let the next step resolve it.
 
+## Finishing a Change
+
+- **When the implementation is complete**, run these skills in order before the work is handed over:
+  1. `code-review` over the change, and act on the findings it reports.
+  2. `bug-hunt` against the subsystem the change touched.
+  3. `pr-message` to write the pull request body, then open the pull request.
+
 ## Changelog
 
 - **When a round of modifications is complete**, add an entry describing the change to `CHANGELOG.md`.
