@@ -348,17 +348,6 @@ impl TyCon {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
-    /// The struct this type constructor punches a field out of, for a name that
-    /// `into_punched_type_name` produced. `None` for every other name, including one that carries a
-    /// punched name inside a larger synthetic name.
-    pub fn unpunched_tycon(&self) -> Option<TyCon> {
-        let (struct_name, punched_at) = self.name.name.rsplit_once(PUNCHED_TYPE_SYMBOL)?;
-        punched_at.parse::<usize>().ok()?;
-        let mut tycon = self.clone();
-        *tycon.name.name_as_mut() = struct_name.to_string();
-        Some(tycon)
-    }
-
     /// Whether this is the type constructor `->` that heads a function type.
     #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
@@ -2695,7 +2684,7 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar, FullName, TyCon};
+    use super::{kind_arrow, kind_star, make_tyvar};
     use crate::misc::Set;
 
     /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
@@ -2717,28 +2706,5 @@ mod tests {
         set.insert(higher.clone());
         set.insert(other_name.clone());
         assert_eq!(set.len(), 2);
-    }
-
-    /// A name that `into_punched_type_name` produced names the struct it punches, and a name that
-    /// merely carries such a name inside a larger one names nothing.
-    ///
-    /// Reading the struct back out of the name is what pairs a punched declaration with the one it
-    /// punches, so a name a later pass rebuilt around the punched name has to answer that it carries
-    /// no such pairing rather than hand back a struct that does not exist.
-    #[test]
-    fn a_punched_type_name_names_the_struct_it_punches() {
-        let struct_tc = TyCon::new(FullName::from_strs(&["Main"], "C"));
-
-        let unpunched_name = |tc: &TyCon| tc.unpunched_tycon().map(|tc| tc.to_string());
-
-        let mut punched_tc = struct_tc.clone();
-        punched_tc.into_punched_type_name(0);
-        assert_eq!(unpunched_name(&punched_tc), Some(struct_tc.to_string()));
-
-        assert_eq!(unpunched_name(&struct_tc), None);
-
-        let mut rebuilt_tc = struct_tc.clone();
-        *rebuilt_tc.name.name_as_mut() = format!("#RHKTV<{} Std::Array>", punched_tc.name.name);
-        assert_eq!(unpunched_name(&rebuilt_tc), None);
     }
 }

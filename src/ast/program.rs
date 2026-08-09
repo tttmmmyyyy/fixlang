@@ -53,6 +53,11 @@ pub struct TypeEnv {
     pub tycons: Arc<Map<TyCon, TyConInfo>>,
     // List of type aliases.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
+    /// The struct each type constructor of `tycons` whose declaration has a field punched out
+    /// punches. Such a type constructor stands for the values of that struct with one field moved
+    /// out, so a pass that rewrites the struct has to rewrite it the same way, and this is where it
+    /// reads which struct that is.
+    pub punched_from: Arc<Map<TyCon, TyCon>>,
 }
 
 impl Default for TypeEnv {
@@ -60,15 +65,21 @@ impl Default for TypeEnv {
         Self {
             tycons: Arc::new(Default::default()),
             aliases: Arc::new(Default::default()),
+            punched_from: Arc::new(Default::default()),
         }
     }
 }
 
 impl TypeEnv {
-    pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
+    pub fn new(
+        tycons: Map<TyCon, TyConInfo>,
+        aliases: Map<TyCon, TyAliasInfo>,
+        punched_from: Map<TyCon, TyCon>,
+    ) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
             aliases: Arc::new(aliases),
+            punched_from: Arc::new(punched_from),
         }
     }
 
@@ -803,6 +814,7 @@ impl Program {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
         let mut aliases: Map<TyCon, TyAliasInfo> = Map::default();
+        let mut punched_from: Map<TyCon, TyCon> = Map::default();
         for type_decl in &mut self.type_defns {
             // Set kinds of type variables in the right hand side of type definition.
             type_decl.set_kinds_in_value()?;
@@ -831,17 +843,20 @@ impl Program {
             } else {
                 tycons.insert(tycon.clone(), type_decl.tycon_info(&[]));
             }
-            // If the type is a boxed struct, add punched struct types to tycons.
+            // A struct also gets, per field, the type constructor of the struct with that field
+            // punched out, which is what `act_` and `mod_` hold the rest of the struct in while the
+            // field is out.
             if let TypeDeclValue::Struct(s) = &type_decl.value {
                 for i in 0..s.fields.len() {
                     let mut punched_tycon = tycon.clone();
                     punched_tycon.into_punched_type_name(i);
+                    punched_from.insert(punched_tycon.clone(), tycon.clone());
                     tycons.insert(punched_tycon, type_decl.tycon_info(&[i]));
                 }
             }
         }
         // Create type environment.
-        self.type_env = TypeEnv::new(tycons, aliases);
+        self.type_env = TypeEnv::new(tycons, aliases, punched_from);
 
         errors.to_result()
     }

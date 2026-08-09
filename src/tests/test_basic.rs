@@ -11094,6 +11094,31 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// A type of a higher-kinded parameter that names itself through the type argument of a type of its
+// parameter. The pass that removes higher-kinded type variables rebuilds the type constructor for
+// each argument list, so the copy of the struct and the copy of the form with its field punched out
+// have to stay paired.
+#[test]
+pub fn test_higher_kinded_newtype_naming_itself_through_its_parameter() {
+    let source = r##"
+module Main;
+
+type [f : *->*] It f = unbox struct { next : f (It f) };
+
+main : IO ();
+main = (
+    let it : It Array = It { next : [] };
+    assert_eq(|_|"", it.@next.get_size, 0);;
+    let it = it.mod_next(|n| n.push_back(It { next : [] }));
+    assert_eq(|_|"", it.@next.get_size, 1);;
+    let It { next : n } = it;
+    assert_eq(|_|"", n.get_size, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // Two types that name each other through the type argument of a phantom type, so each is reached
 // from itself in two steps. Neither is a type the compiler may replace with its field, and
 // unwrapping the phantom type leaves both of them one-field unboxed structs whose field operations
