@@ -221,8 +221,9 @@ struct TreeData {
     fields: Vec<(usize, Tree)>,
     // What the two above say. Two trees are the same value exactly when their digests agree.
     digest: md5::Digest,
-    // How many lambdas this value names, itself included. Kept rather than walked, because the
-    // trees a value is built from are shared, so walking one costs its number of paths.
+    // How many lambdas this value names, itself included. The count is stored because the trees a
+    // value is built from are shared, so computing it on demand costs one step per path through the
+    // value.
     lambdas: usize,
 }
 
@@ -405,9 +406,9 @@ struct CopyBudget {
     // The copies committed to, keyed by the function they copy. Every one of them names two lambdas
     // or more.
     units: Map<FullName, Set<UnitKey>>,
-    // Where in the source those copies were asked for, keyed by the function they copy. A copy of
-    // one function asked for at more places is allowed more copies, so that a program which asks
-    // once from each of many places is bounded by what it says rather than by a constant.
+    // Where in the source those copies were asked for, keyed by the function they copy. A function
+    // asked for copies at more places is allowed more of them, so that a program which asks once
+    // from each of many places is bounded by how much it asks for.
     sites: Map<FullName, Set<(PathBuf, usize, usize)>>,
 }
 
@@ -1228,10 +1229,10 @@ impl ClosureSpecializationVisitor {
             *value = known_field.cap_list;
             narrowed_fields.push((position, known_field.tree));
         }
-        // A value arrives already narrowed where a copy passes it on, and this rebuilds the
-        // narrowing from the fields rather than from what it arrived as. A field the value already
-        // narrowed has to survive that: the type it is declared at says it is narrowed, and dropping
-        // it from the tree would leave the two disagreeing.
+        // A value arrives already narrowed where a copy passes it on, and the narrowing here is
+        // rebuilt from the fields. A field the value already narrowed has to survive that rebuild:
+        // the type it is declared at says it is narrowed, and dropping it from the tree would leave
+        // the two disagreeing.
         assert!(
             known.tree.fields().iter().all(|(position, tree)| narrowed_fields
                 .iter()
