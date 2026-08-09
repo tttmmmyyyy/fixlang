@@ -342,6 +342,17 @@ impl TyCon {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
+    /// The struct this type constructor punches a field out of, for a name that
+    /// `into_punched_type_name` produced. `None` for every other name, including one that carries a
+    /// punched name inside a larger synthetic name.
+    pub fn unpunched_tycon(&self) -> Option<TyCon> {
+        let (struct_name, punched_at) = self.name.name.rsplit_once(PUNCHED_TYPE_SYMBOL)?;
+        punched_at.parse::<usize>().ok()?;
+        let mut tycon = self.clone();
+        *tycon.name.name_as_mut() = struct_name.to_string();
+        Some(tycon)
+    }
+
     #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
         self == &make_arrow_tycon()

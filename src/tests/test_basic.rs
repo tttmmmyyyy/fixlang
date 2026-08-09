@@ -11038,6 +11038,75 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// `Phantom a` holds nothing of type `a`, so `C` is a type of one `I64` even though the type it
+// names its field with names `C` back. Unwrapping `Phantom` leaves `C` a one-field unboxed struct,
+// and every field operation on `C` has to keep working on it.
+#[test]
+pub fn test_newtype_naming_itself_through_a_phantom_type_argument() {
+    let source = r##"
+module Main;
+
+type Phantom a = unbox struct { x : I64 };
+type C = unbox struct { y : Phantom C };
+
+main : IO ();
+main = (
+    let c = C { y : Phantom { x : 42 } };
+    assert_eq(|_|"", c.@y.@x, 42);;
+    let c = c.set_y(Phantom { x : 7 });
+    assert_eq(|_|"", c.@y.@x, 7);;
+    let c = c.mod_y(|p| Phantom { x : p.@x + 1 });
+    assert_eq(|_|"", c.@y.@x, 8);;
+    let C { y : p } = c;
+    assert_eq(|_|"", p.@x, 8);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `DynIterator` is an unboxed struct of one field whose type names `DynIterator` itself, so it is a
+// type the compiler carries as it is. `mod_` on its field takes it apart into the field and the
+// rest of the struct, which is where a type left as it is has to stay whole.
+#[test]
+pub fn test_field_update_of_a_std_type_naming_itself() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let it = [1, 2, 3].to_iter.to_dyn;
+    let it = it.mod_next(|next| next);
+    assert_eq(|_|"", it.to_array, [1, 2, 3]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// Two types that name each other through the type argument of a phantom type. Neither is a type
+// the compiler may replace with its field, and unwrapping the phantom type leaves both of them
+// one-field unboxed structs.
+#[test]
+pub fn test_two_newtypes_naming_each_other_through_a_phantom_type_argument() {
+    let source = r##"
+module Main;
+
+type Phantom a = unbox struct { x : I64 };
+type D = unbox struct { z : Phantom E };
+type E = unbox struct { w : Phantom D };
+
+main : IO ();
+main = (
+    let d = D { z : Phantom { x : 3 } };
+    let e = E { w : Phantom { x : 5 } };
+    assert_eq(|_|"", d.@z.@x + e.@w.@x, 8);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
 // fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
 // hold: the wide result travels through an out-pointer, and the calling convention lets the tail
