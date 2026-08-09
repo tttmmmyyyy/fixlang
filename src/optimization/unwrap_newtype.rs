@@ -27,6 +27,8 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// Replaces every unwrappable newtype of `prg` with the type of its one field, in the types
+/// recorded throughout the program and in the type environment.
 pub fn run(prg: &mut Program) {
     let unwrapping = NewtypeUnwrapping::new(prg.type_env.tycons.as_ref().clone());
 
@@ -282,6 +284,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for an inline LLVM expression, and replaces the read, the write,
+    /// the punch and the plug-in of an unwrapped newtype's field by the field value itself, which
+    /// is what a value of that type has become.
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
         let old_ty = expr.type_.as_ref().unwrap().clone();
         let mut expr = self.unwrapping.unwrap_inferred_type(expr);
@@ -293,7 +298,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             unreachable!()
         };
 
-        // We don't need to change the LLVM type: TODO: rename llvm.ty to llvm.generic_ty.
+        // `llvm.generic_ty` stays as it is: type checking is the last pass that reads it.
 
         // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
         let gen = llvm.generator.as_ref();
@@ -446,6 +451,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a struct literal, and replaces a literal of an unwrapped
+    /// newtype by the expression its one field is built from.
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -510,7 +517,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
     }
 }
 
-// Is this type constructor a "newtype", i.e., is it an unbox struct type with only one field?
+/// Is this type constructor a "newtype", i.e., is it an unbox struct type with only one field?
 fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     let ti = env.get(tycon).unwrap();
     ti.is_unbox && ti.variant == TyConVariant::Struct && ti.fields.len() == 1
