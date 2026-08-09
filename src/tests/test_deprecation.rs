@@ -1,6 +1,6 @@
 use crate::{
-    configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    configuration::{Configuration, DeprecationMode},
+    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
 };
 
 /// Verifies that a `DEPRECATED` pragma on a top-level global value
@@ -263,4 +263,120 @@ pub fn test_stdlib_to_cast_is_deprecated() {
         );
     "##;
     test_source(source, Configuration::develop_mode());
+}
+
+/// A deprecated value is reported wherever it is named, whichever kind of expression holds the use.
+/// The report walks every node of the expression tree, so this pins that the walk reaches them all.
+#[test]
+pub fn test_deprecated_use_is_reported_in_every_expression_form() {
+    let source = r##"
+        module Main;
+
+        old : I64 -> I64;
+        old = |x| x;
+        DEPRECATED[old, "gone"];
+
+        apply : (I64 -> I64) -> I64 -> I64;
+        apply = |f, x| f(x);
+
+        type S = unbox struct { v : I64 };
+
+        in_app_func : I64;
+        in_app_func = old(1);
+
+        in_app_arg : I64;
+        in_app_arg = apply(old, 1);
+
+        in_lam_body : I64 -> I64;
+        in_lam_body = |x| old(x);
+
+        in_let_bound : I64;
+        in_let_bound = ( let y = old(1); y );
+
+        in_let_value : I64;
+        in_let_value = ( let y = 1; old(y) );
+
+        in_if_cond : I64;
+        in_if_cond = if old(0) == 0 { 1 } else { 2 };
+
+        in_if_then : I64;
+        in_if_then = if true { old(3) } else { 2 };
+
+        in_if_else : I64;
+        in_if_else = if true { 1 } else { old(4) };
+
+        in_match_cond : I64;
+        in_match_cond = match Option::some(old(5)) { some(v) => v, none(_) => 0 };
+
+        in_match_arm : I64;
+        in_match_arm = match Option::some(6) { some(v) => old(v), none(_) => 0 };
+
+        in_tyanno : I64;
+        in_tyanno = (old(7) : I64);
+
+        in_make_struct : S;
+        in_make_struct = S { v : old(8) };
+
+        in_array_lit : Array I64;
+        in_array_lit = [old(9)];
+
+        in_ffi_call : I32;
+        in_ffi_call = FFI_CALL[I32 abs(I32), old(10).to_I32];
+
+        in_eval_side : I64;
+        in_eval_side = ( eval old(11); 0 );
+
+        in_eval_main : I64;
+        in_eval_main = ( eval 12; old(13) );
+
+        main : IO ();
+        main = (
+            eval in_app_func;
+            eval in_app_arg;
+            eval in_lam_body;
+            eval in_let_bound;
+            eval in_let_value;
+            eval in_if_cond;
+            eval in_if_then;
+            eval in_if_else;
+            eval in_match_cond;
+            eval in_match_arm;
+            eval in_tyanno;
+            eval in_make_struct;
+            eval in_array_lit;
+            eval in_ffi_call;
+            eval in_eval_side;
+            eval in_eval_main;
+            pure()
+        );
+    "##;
+    let mut config = Configuration::develop_mode();
+    config.deprecation_mode = DeprecationMode::Deny;
+    let errmsg = run_source_assert_failed(source, config);
+    // One line per kind of expression, each holding this program's only use of `old` in that kind.
+    for use_site in [
+        "in_app_func = old(1);",
+        "in_app_arg = apply(old, 1);",
+        "in_lam_body = |x| old(x);",
+        "let y = old(1); y",
+        "let y = 1; old(y)",
+        "in_if_cond = if old(0) == 0",
+        "in_if_then = if true { old(3) }",
+        "else { old(4) }",
+        "match Option::some(old(5))",
+        "some(v) => old(v)",
+        "in_tyanno = (old(7) : I64);",
+        "in_make_struct = S { v : old(8) };",
+        "in_array_lit = [old(9)];",
+        "old(10).to_I32",
+        "eval old(11); 0",
+        "eval 12; old(13)",
+    ] {
+        assert!(
+            errmsg.contains(use_site),
+            "the deprecated use in `{}` was not reported.\nReport:\n{}",
+            use_site,
+            errmsg
+        );
+    }
 }

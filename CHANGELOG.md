@@ -26,6 +26,7 @@
 
 #### Language
 
+- A program that uses a type with no size is now rejected with an error, instead of exhausting the compiler's stack. A type whose unboxed fields reach the type itself (`type A = unbox struct { b : B, n : I64 }; type B = unbox struct { a : A, m : I64 };`) has no size; make one of the types along the way boxed. A type that leads to itself at a larger type argument (`type P a = unbox struct { x : P (a, a), n : I64 };`) needs endlessly many types, whether or not a pointer lies on the way; give the recursive occurrence the same type arguments.
 - `FFI_EXPORT` now rejects a value whose type the C ABI cannot carry, instead of exporting a function whose arguments or result silently disagree with the C declaration. An exported function may exchange integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), `Ptr`, boxed types (which the foreign language receives as an opaque pointer), the `Std::FFI` C type aliases such as `CInt`, and `()` as the result type. A struct, a tuple or a union is rejected, because how C passes one depends on the target; `Bool` is rejected because C leaves the width of `_Bool` to the implementation. To exchange an aggregate, take a `Ptr` to memory the foreign language owns and copy through it; see the FFI section of `Document.md`.
 
 #### Std
