@@ -235,7 +235,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_closure_survives_the_boundaries_the_pass_declines_to_follow() {
         let (_temp_dir, project_dir) = setup_test_env("opaque_boundary");
-        for opt_level in ["basic", "max"] {
+        for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
         }
     }
@@ -246,7 +246,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_narrowed_capture_field_serves_a_reader_that_needs_a_closure() {
         let (_temp_dir, project_dir) = setup_test_env("mixed_capture_field");
-        for opt_level in ["basic", "max"] {
+        for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
         }
     }
@@ -370,7 +370,7 @@ mod integration_tests {
     #[test]
     pub fn test_two_closures_swapping_places_around_a_cycle_keep_their_identity() {
         let (_temp_dir, project_dir) = setup_test_env("closure_swap");
-        for opt_level in ["basic", "max"] {
+        for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, CLOSURE_SWAP_OUTPUT);
         }
     }
@@ -380,7 +380,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_capture_list_carrying_four_known_closures() {
         let (_temp_dir, project_dir) = setup_test_env("wide_capture");
-        for opt_level in ["basic", "max"] {
+        for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, WIDE_CAPTURE_OUTPUT);
         }
     }
@@ -390,7 +390,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_cycle_of_three_wrapping_one_level_per_turn_runs_out() {
         let (_temp_dir, project_dir) = setup_test_env("deep_relay");
-        for opt_level in ["basic", "max"] {
+        for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, DEEP_RELAY_OUTPUT);
         }
     }

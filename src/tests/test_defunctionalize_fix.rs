@@ -590,3 +590,41 @@ fn test_fix_self_escape_and_boxed_captures_are_memory_safe() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// A closure the closure specializer copies a function for also reaches the capture list this pass
+// mints. The specializer declines to follow a field of that capture list, because another pass built
+// it, so a copy receiving the closure as a bare capture list has to wrap it back for that field
+// while the chain narrows it everywhere else. `middle` holds both ends: it hands `op` to `terminal`,
+// which calls it, and stores `op` into the capture list of its own `fix` body.
+#[test]
+fn test_closure_specialized_argument_reaches_a_fix_capture_list() {
+    let source = r#"
+    module Main;
+
+    terminal : (I64 -> I64) -> I64 -> I64;
+    terminal = |op, n| (
+        if n == 0 { 0 };
+        op(n) + terminal(op, n - 1)
+    );
+
+    middle : (I64 -> I64) -> I64 -> I64;
+    middle = |op, n| (
+        if n == 0 { 0 };
+        let go = fix(|self, k| if k == 0 { 0 } else { op(k) + self(k - 1) });
+        terminal(op, n) + go(n) + middle(op, n - 1)
+    );
+
+    outer : (I64 -> I64) -> I64 -> I64;
+    outer = |op, n| (
+        if n == 0 { 0 };
+        middle(op, n) + outer(op, n - 1)
+    );
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"unexpected result", outer(|x| x * 2 + 1, 4), 180);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
