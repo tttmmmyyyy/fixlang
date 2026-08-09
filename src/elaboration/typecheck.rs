@@ -631,11 +631,11 @@ impl TypeCheckContext {
                 let body = self.set_fallback_types_fresh(body);
                 expr.set_lam_body(body)
             }
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 let pat = self.set_fallback_types_on_pattern(pat);
+                let bound = self.set_fallback_types_fresh(bound);
                 let val = self.set_fallback_types_fresh(val);
-                let body = self.set_fallback_types_fresh(body);
-                expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
+                expr.set_let_pat(pat).set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.set_fallback_types_fresh(cond);
@@ -1386,19 +1386,20 @@ impl TypeCheckContext {
                 self.scope.pop(&arg.name.name);
                 Ok(ei.set_lam_body(body))
             }
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 // `validate_pattern` / `get_typed` may fail on a
                 // malformed pattern (unknown struct field, duplicate
                 // variable, sub-pattern type mismatch). In
                 // `error_tolerant` mode we still want to elaborate
-                // `val` and `body` so any nested cursor inside them
+                // `bound` and `val` so any nested cursor inside them
                 // gets a useful type — fall back to a fresh-tyvar
                 // pattern with no variable bindings.
                 let elab = self.elaborate_pattern_binding(pat);
                 let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
-                let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
-                let body = self.unify_type_of_expr_with_scope(body, ty, &var_ty)?;
-                Ok(ei.set_let_pat(pat).set_let_bound(val).set_let_value(body))
+                let bound =
+                    self.unify_type_of_expr(bound, pat.info.type_.as_ref().unwrap().clone())?;
+                let val = self.unify_type_of_expr_with_scope(val, ty, &var_ty)?;
+                Ok(ei.set_let_pat(pat).set_let_bound(bound).set_let_value(val))
             }
             Expr::Match(cond, pat_vals) => {
                 // First, perform type inference for the condition.
@@ -2428,11 +2429,11 @@ impl TypeCheckContext {
                 let body = self.fix_types(body.clone())?;
                 expr.set_lam_body(body)
             }
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 let pat = self.fix_types_for_pattern(pat.clone())?;
+                let bound = self.fix_types(bound.clone())?;
                 let val = self.fix_types(val.clone())?;
-                let body = self.fix_types(body.clone())?;
-                expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
+                expr.set_let_pat(pat).set_let_bound(bound).set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.fix_types(cond.clone())?;
@@ -2490,10 +2491,10 @@ impl TypeCheckContext {
                 self.check_types_are_fixed(fun)?;
             }
             Expr::Lam(_, body) => self.check_types_are_fixed(body)?,
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 self.check_pattern_types_are_fixed(pat)?;
+                self.check_types_are_fixed(bound)?;
                 self.check_types_are_fixed(val)?;
-                self.check_types_are_fixed(body)?;
             }
             Expr::If(cond, then_e, else_e) => {
                 self.check_types_are_fixed(cond)?;
@@ -2581,10 +2582,10 @@ impl TypeCheckContext {
                 self.check_all_typed(fun)?;
             }
             Expr::Lam(_, body) => self.check_all_typed(body)?,
-            Expr::Let(pat, val, body) => {
+            Expr::Let(pat, bound, val) => {
                 self.check_all_pattern_typed(pat)?;
+                self.check_all_typed(bound)?;
                 self.check_all_typed(val)?;
-                self.check_all_typed(body)?;
             }
             Expr::If(cond, then_e, else_e) => {
                 self.check_all_typed(cond)?;
