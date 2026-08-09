@@ -44,8 +44,9 @@ pub fn run(prg: &mut Program) {
 ///
 /// The choice is made once and every rewrite asks this same value: the type of an expression, the
 /// field of a declaration that stays, and the type environment itself. A type constructor is
-/// therefore unwrapped in all three or in none of them, so no expression is left naming a type the
-/// type environment no longer declares.
+/// therefore replaced wherever it heads a saturated type and dropped from the type environment only
+/// if it is replaced, so no saturated occurrence is left naming a type the environment no longer
+/// declares.
 struct NewtypeUnwrapping {
     /// The type environment as this pass received it. Field types are read from here, so a
     /// declaration reads as it did when the choices were made.
@@ -88,7 +89,7 @@ impl NewtypeUnwrapping {
         // First, replace the top-level type constructor if it is a newtype. The field type is taken
         // at this instance, so `Foo Bool` of `type Foo a = unbox struct { data : () -> a }` becomes
         // `() -> Bool`.
-        if let Some(top_tc) = ty.toplevel_tycon().clone() {
+        if let Some(top_tc) = ty.toplevel_tycon() {
             let top_ti = self.tycons.get(&top_tc).unwrap();
             let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
             if is_fully_applied && self.is_unwrappable(&top_tc) {
@@ -177,6 +178,10 @@ impl NewtypeUnwrapping {
 
     /// The type environment this pass leaves behind: the declarations of the type constructors that
     /// stay, with their field types unwrapped.
+    ///
+    /// A replaced type constructor loses its declaration, so a type this pass failed to rewrite
+    /// fails at the first lookup of that declaration rather than laying its values out as the
+    /// struct they were to stop being.
     fn unwrapped_type_env(&self) -> Map<TyCon, TyConInfo> {
         let mut env = Map::default();
         for (tc, ti) in &self.tycons {
@@ -219,12 +224,9 @@ fn run_on_entry_io_value(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
 }
 
 fn run_on_symbol(sym: &mut Symbol, unwrapping: &NewtypeUnwrapping) {
-    let mut remover = ExprUnwrapper { unwrapping };
-    let res = remover.traverse(&sym.expr.as_ref().unwrap());
-    if res.changed {
-        sym.ty = unwrapping.unwrap_type(&sym.ty);
-        sym.expr = Some(res.expr);
-    }
+    let mut unwrapper = ExprUnwrapper { unwrapping };
+    sym.ty = unwrapping.unwrap_type(&sym.ty);
+    sym.expr = Some(unwrapper.traverse(&sym.expr.as_ref().unwrap()).expr);
 }
 
 /// Rewrites the types recorded in one symbol's expression, and replaces the field operations of an
