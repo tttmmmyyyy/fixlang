@@ -900,7 +900,10 @@ impl TypeNode {
 
     /// The fields `self` declares, each with its type at this instance — the declaration read from
     /// `tycons`, with `self`'s type arguments substituted for the declaration's type variables.
-    fn fields_with_instance_types(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<(Field, Arc<TypeNode>)> {
+    fn fields_with_instance_types(
+        &self,
+        tycons: &Map<TyCon, TyConInfo>,
+    ) -> Vec<(Field, Arc<TypeNode>)> {
         let args = self.collect_type_argments();
         let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
