@@ -637,7 +637,9 @@ impl TypeCheckContext {
                 let pat = self.set_fallback_types_on_pattern(pat);
                 let bound = self.set_fallback_types_fresh(bound);
                 let val = self.set_fallback_types_fresh(val);
-                expr.set_let_pat(pat).set_let_bound(bound).set_let_value(val)
+                expr.set_let_pat(pat)
+                    .set_let_bound(bound)
+                    .set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.set_fallback_types_fresh(cond);
@@ -2441,7 +2443,9 @@ impl TypeCheckContext {
                 let pat = self.fix_types_for_pattern(pat.clone())?;
                 let bound = self.fix_types(bound.clone())?;
                 let val = self.fix_types(val.clone())?;
-                expr.set_let_pat(pat).set_let_bound(bound).set_let_value(val)
+                expr.set_let_pat(pat)
+                    .set_let_bound(bound)
+                    .set_let_value(val)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.fix_types(cond.clone())?;
