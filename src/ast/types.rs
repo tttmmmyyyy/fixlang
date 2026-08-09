@@ -941,10 +941,10 @@ impl TypeNode {
     /// one per variant for a union, and the element field alone for `Array`. The field types carry
     /// the type parameters of the declaration; `field_types` substitutes this type's arguments in.
     pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
-        let args = self.collect_type_argments();
-        let ti = self.toplevel_tycon_info(type_env);
-        assert_eq!(args.len(), ti.tyvars.len());
-        ti.fields
+        self.fields_with_instance_types(&type_env.tycons)
+            .into_iter()
+            .map(|(field, _)| field)
+            .collect()
     }
 
     // The index of the struct/union field named `field_name`.
