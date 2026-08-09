@@ -905,7 +905,7 @@ type Product = box struct { price: I64, sold: Bool };
 
 ### Unions
 
-Unions are unboxed by default. To define boxed union type, write `box` specifier before `struct`.
+Unions are unboxed by default. To define boxed union type, write `box` specifier before `union`.
 
 ```
 type Weight = box union { pound: I64, kilograms: I64 };

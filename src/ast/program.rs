@@ -604,7 +604,7 @@ impl Program {
             .find(|mi| to_absolute_path(&mi.source.input.file_path).ok().as_ref() == Some(&path))
     }
 
-    // Get the names of entry pointes / exported functions.
+    /// The names of the entry point and the exported functions.
     pub fn root_value_names(&self) -> Vec<FullName> {
         self.root_value_exprs()
             .iter()
@@ -1800,6 +1800,8 @@ impl Program {
         }
     }
 
+    /// Report every constraint written in a global value's type signature, and in the signature of
+    /// each implementation of a trait method, that `Scheme::validate_constraints` rejects.
     pub fn validate_global_value_type_constraints(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for (_name, gv) in &self.global_values {
@@ -1884,7 +1886,8 @@ impl Program {
         errors.to_result()
     }
 
-    // Validate and update export statements.
+    /// Report every `FFI_EXPORT` statement that names its value by an absolute path, that gives a
+    /// C function name C cannot spell, or that takes a C function name another statement took.
     pub fn validate_export_statements(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1926,13 +1929,9 @@ impl Program {
         Ok(())
     }
 
-    /// Drain any warning-severity items out of `deferred_errors` and write
-    /// them to stderr, leaving error-severity items in place.
-    ///
-    /// Use this on code paths that print to a terminal so warnings are
-    /// surfaced even when compilation succeeds. Code paths that consume
-    /// `deferred_errors` directly (e.g. to convert into structured
-    /// diagnostics) should leave the warnings in place instead.
+    /// Write the warning-severity items of `deferred_errors` to stderr and take them out of it,
+    /// leaving the error-severity items in place. Warnings reach the terminal this way even where
+    /// compilation succeeds.
     pub fn flush_warnings_to_stderr(&mut self) {
         let warnings = self.deferred_errors.take_warnings();
         if warnings.has_diagnostics() {
@@ -1940,17 +1939,6 @@ impl Program {
         }
     }
 
-    /// Walk every expression in the program looking for uses of items marked
-    /// with `DEPRECATED[...]` and emit warnings (or errors, if
-    /// `Configuration.deprecation_mode == Deny`). Returns the collected
-    /// diagnostics; the caller decides whether to surface or merge them.
-    ///
-    /// Diagnostics are scoped to the user's own code via
-    /// `Configuration.root_source_files`: only uses whose source span
-    /// lives in one of those files are reported. Uses inside dependencies
-    /// or the embedded stdlib are silently skipped, matching
-    /// rustc/swiftc/javac/etc. — a deprecated use the user can't edit
-    /// shouldn't surface as a warning.
     /// Reports the calls of `Std::mark_threaded` this program makes when multi-threading is off.
     ///
     /// Multi-threading is what gives an object a mode to be put into, so `Std::mark_threaded` has
@@ -2000,6 +1988,12 @@ impl Program {
         ))
     }
 
+    /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
+    /// errors where `Configuration.deprecation_mode` is `Deny`.
+    ///
+    /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
+    /// use is reported where its source span lies in one of those files, so that what is reported
+    /// is what the user can edit.
     pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.

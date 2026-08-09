@@ -62,8 +62,8 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LeafMap<T>(Map<FieldPath, T>);
 
-/// The empty map — a value with no boxed leaf. Stated rather than derived, so that a fact type need
-/// not itself have a default.
+/// The empty map — a value with no boxed leaf. Available for every fact type `T`, whatever defaults
+/// `T` itself has.
 impl<T> Default for LeafMap<T> {
     fn default() -> LeafMap<T> {
         LeafMap(Map::default())

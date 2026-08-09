@@ -13,7 +13,7 @@ use crate::{
         test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::{
     fs::{self, remove_file, File},
     io::Write,
@@ -3322,7 +3322,7 @@ pub fn test98() {
 #[test]
 pub fn test99() {
     // Test cast between integral types.
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let mut cases: Vec<String> = vec![];
     let tys = &[
         I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,
@@ -8099,8 +8099,8 @@ pub fn test_regression_issue_46() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that reading from a handle already given to `close_file` raises a
-/// catchable error naming the closed handle, rather than reading anything.
+/// Reading from a handle already given to `close_file` raises a catchable error naming the closed
+/// handle.
 #[test]
 pub fn test_read_file_after_close() {
     let source = r##"
@@ -8120,8 +8120,8 @@ pub fn test_read_file_after_close() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that a struct and a union may each name their own type inside a
-/// field, as long as the occurrence sits behind a function arrow.
+/// A struct and a union may each name their own type inside a field, as long as the occurrence
+/// sits behind a function arrow.
 #[test]
 pub fn test_circular_type_definition() {
     let source = r##"
@@ -8838,8 +8838,8 @@ pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(52), "a2");
 }
 
-// Two `*` operators on one expression bind through two monad layers, so `**x` on a nested
-// `Option` reaches the innermost value.
+/// Two `*` operators on one expression bind through two monad layers, so `**x` on a nested
+/// `Option` reaches the innermost value.
 #[test]
 pub fn test_double_bind() {
     let source = r##"
@@ -8856,6 +8856,9 @@ pub fn test_double_bind() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A `;;` in the right-hand side of a `let` binds the value before it and discards it, in the monad
+/// of the value after: over the array monad, an array of two units ahead of `[1, 2, 3]` yields that
+/// array twice over.
 #[test]
 pub fn test_double_semicolon_in_let() {
     let source = r##"
@@ -8871,6 +8874,8 @@ pub fn test_double_semicolon_in_let() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A struct holding a boxed value, produced by an `IO` action that `unsafe_perform` runs, is intact
+/// once the action is over: the result outlives the action it came out of.
 #[test]
 pub fn test_regression_unsafe_perform_bug() {
     let source = r##"
@@ -8892,6 +8897,8 @@ pub fn test_regression_unsafe_perform_bug() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `debug_println` and `debug_eprintln` print from outside `IO`, so `eval` is enough to run them,
+/// writing to stdout and stderr respectively.
 #[test]
 pub fn test_debug_println() {
     let source = r##"
@@ -8907,6 +8914,8 @@ pub fn test_debug_println() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `Std::Boxed` is the compiler's own mark of a boxed type, so a hand-written implementation of it
+/// is rejected.
 #[test]
 pub fn test_impl_boxed_by_hand() {
     let source = r##"
@@ -8930,6 +8939,8 @@ pub fn test_impl_boxed_by_hand() {
     );
 }
 
+/// `_get_boxed_ptr` on a union points at the payload, so C reading an `I64` through it sees the
+/// value the union was built with.
 #[test]
 pub fn test_get_boxed_data_ptr_for_union() {
     let source = r##"
