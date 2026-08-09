@@ -54,24 +54,27 @@ mod integration_tests {
     /// each wrap one of the closures, modulo 1000, with `n = 2` and the four lambdas main builds.
     const INDEPENDENT_SLOTS_OUTPUT: &str = "176";
 
-    /// How many copies of `g` `independent_slots` asks for today. What bounds it is the budget on
-    /// the copies a function may have out of combining its slots: four slots decided independently
-    /// reach 95 copies without it, and every further slot multiplies that again.
-    const INDEPENDENT_SLOTS_COPIES: usize = 24;
+    /// How many copies of `g` `independent_slots` may have. What bounds it is the budget on the
+    /// copies a function may have out of combining its slots: four slots decided independently reach
+    /// 95 copies without it, and every further slot multiplies that again. The bound sits between
+    /// the two, so that adjusting the allowance moves the count without moving the claim.
+    const INDEPENDENT_SLOTS_COPIES: usize = 40;
 
     /// What `wrapped_chain` prints: `g(op, n)` sums four recursive calls, each handing on `op`
     /// wrapped a different way, with `n = 3` and `op = |x| (x * 3) % 97`.
     const WRAPPED_CHAIN_OUTPUT: &str = "480";
 
-    /// How many copies of `g` `wrapped_chain` asks for today. Counting a copy by the lambdas it
-    /// names is what bounds this: four wrappers reach 129 copies when only the ways in are counted,
-    /// and every further wrapper multiplies that again.
-    const WRAPPED_CHAIN_COPIES: usize = 17;
+    /// How many copies of `g` `wrapped_chain` may have. Counting a copy by the lambdas it names is
+    /// what bounds this: four wrappers reach 129 copies when only the ways in are counted, and every
+    /// further wrapper multiplies that again. The bound sits between the two, so that adjusting the
+    /// allowance moves the count without moving the claim.
+    const WRAPPED_CHAIN_COPIES: usize = 50;
 
-    /// How many copies of the lambdas lifted out of `g` `wrapped_chain` asks for today. Each of
-    /// those lambdas is a function the budget counts on its own, and there are more of them than
-    /// there are copies of `g`, so a bound on one says nothing about the other.
-    const WRAPPED_CHAIN_LAMBDA_COPIES: usize = 52;
+    /// How many copies the lambdas lifted out of `g` in `wrapped_chain` may have. Each of those
+    /// lambdas is a function the budget counts on its own, and there are more of them than there are
+    /// copies of `g`, so a bound on one says nothing about the other. Counting a copy by the ways in
+    /// it substitutes reaches 516; the bound sits between the two.
+    const WRAPPED_CHAIN_LAMBDA_COPIES: usize = 200;
 
     /// What `closure_swap` prints: `ping` and `pong` calling each other five rounds deep, each round
     /// swapping which of the two closures sits in which way in and wrapping one of them.
@@ -176,11 +179,11 @@ mod integration_tests {
             .filter(|name| name.starts_with(func_prefix))
             .map(|name| {
                 let spec_start = name.find(&spec_segment).unwrap();
-                let of_lambda = name[..spec_start].contains(CLOSURE_LAM_SUFFIX);
+                let is_lambda_copy = name[..spec_start].contains(CLOSURE_LAM_SUFFIX);
                 let end = name[spec_start + 1..]
                     .find('#')
                     .map_or(name.len(), |offset| spec_start + 1 + offset);
-                (name[..end].to_string(), of_lambda)
+                (name[..end].to_string(), is_lambda_copy)
             })
             .collect::<Vec<_>>();
         copies.sort();
@@ -192,7 +195,7 @@ mod integration_tests {
     fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         spec_copies_under(dump, func_prefix)
             .into_iter()
-            .filter(|(_, of_lambda)| !of_lambda)
+            .filter(|(_, is_lambda_copy)| !is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
     }
@@ -203,7 +206,7 @@ mod integration_tests {
     fn lambda_copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         spec_copies_under(dump, func_prefix)
             .into_iter()
-            .filter(|(_, of_lambda)| *of_lambda)
+            .filter(|(_, is_lambda_copy)| *is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
     }
