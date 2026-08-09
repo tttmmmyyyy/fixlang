@@ -2712,3 +2712,101 @@ impl From<UnificationErr> for UnifOrOtherErr {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::{
+        expr_abs, expr_app, expr_array_lit, expr_eval, expr_ffi_call, expr_if, expr_let,
+        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var,
+    };
+    use crate::elaboration::typecheckcache::MemoryCache;
+
+    /// Context over empty environments: the fallback typing reads only the
+    /// fresh-type-variable counter, so no program state is needed.
+    fn empty_context() -> TypeCheckContext {
+        TypeCheckContext::new(
+            TraitEnv::default(),
+            TypeEnv::default(),
+            KindEnv::default(),
+            Map::default(),
+            Arc::new(MemoryCache::new()),
+            1,
+            true,
+        )
+    }
+
+    /// Unelaborated variable expression, as the parser would produce it.
+    fn local_var(name: &str) -> Arc<ExprNode> {
+        expr_var(FullName::local(name), None)
+    }
+
+    /// Unelaborated variable pattern.
+    fn var_pat(name: &str) -> Arc<PatternNode> {
+        PatternNode::make_var(var_var(FullName::local(name)), None)
+    }
+
+    /// The tolerant fallbacks substitute an unelaborated subtree for one whose
+    /// elaboration failed, and every later walk assumes each expression node
+    /// and pattern carries a type (`fix_types` aborts the process on one that
+    /// does not — the language server dies with it). Verifies that
+    /// `set_fallback_types` establishes that invariant over a tree containing
+    /// every child-bearing `Expr` variant and every `Pattern` variant, and
+    /// puts the given type at the root.
+    #[test]
+    fn test_set_fallback_types_types_every_node() {
+        let mut tc = empty_context();
+
+        let tycon = Arc::new(TyCon::new(FullName::from_strs(&["Main"], "S")));
+        let struct_pat = PatternNode::make_struct(
+            tycon.clone(),
+            vec![
+                ("a".to_string(), var_pat("a")),
+                (
+                    "b".to_string(),
+                    PatternNode::make_union_with_span(
+                        FullName::from_strs(&["Main"], "some"),
+                        None,
+                        var_pat("c"),
+                    ),
+                ),
+            ],
+        );
+
+        let match_expr = expr_match(local_var("m"), vec![(struct_pat, local_var("arm"))], None);
+        let if_expr = expr_if(local_var("cond"), local_var("t"), local_var("e"), None);
+        let app_expr = expr_app(local_var("f"), vec![local_var("x"), local_var("y")], None);
+        let lam_expr = expr_abs(vec![var_var(FullName::local("p"))], app_expr, None);
+        let struct_expr = expr_make_struct(
+            tycon.clone(),
+            vec![
+                ("a".to_string(), local_var("fa")),
+                ("b".to_string(), if_expr),
+            ],
+        );
+        let anno_expr = expr_tyanno(struct_expr, make_bool_ty(), None);
+        let ffi_expr = expr_ffi_call(
+            "c_fun".to_string(),
+            tycon,
+            vec![],
+            false,
+            vec![local_var("z")],
+            false,
+            None,
+        );
+        let array_expr = expr_array_lit(vec![anno_expr, match_expr, ffi_expr], None);
+        let eval_expr = expr_eval(lam_expr, array_expr, None);
+        let root = expr_let(var_pat("v"), local_var("bound"), eval_expr, None);
+
+        let root_ty = make_bool_ty();
+        let typed = tc.set_fallback_types(&root, root_ty.clone());
+
+        assert!(
+            Arc::ptr_eq(typed.type_.as_ref().unwrap(), &root_ty),
+            "the root should carry the given type"
+        );
+        assert!(
+            tc.check_all_typed(&typed).is_ok(),
+            "every node and pattern of the substitute should carry a type"
+        );
+    }
+}
