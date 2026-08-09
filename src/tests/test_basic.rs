@@ -7871,6 +7871,47 @@ pub fn test_struct_act2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+// `act` on the only field of an unboxed struct that holds a reference, where that reference is a
+// closure's capture — the shape `Std::DynIterator` has.
+#[test]
+pub fn test_struct_act_on_the_only_field_holding_a_closure() {
+    let source = r##"
+        module Main;
+
+        type Maker = unbox struct { make : I64 -> Array I64, n : I64 };
+
+        main : IO ();
+        main = (
+            let x = 7;
+            let m = Maker { make : |n| Array::fill(n, x), n : 2 };
+            let m = m.act_make(|f| Option::some(|n| f(n).push_back(9))).as_some;
+            assert_eq(|_|"", (m.@make)(m.@n).@size, 3);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `act` on the only reference-counted field of an unboxed struct: while the actor runs, the struct
+// has that field punched out, so no part of it is reference-counted.
+#[test]
+pub fn test_struct_act_on_the_only_reference_counted_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, n : I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1, 2], n : 3 };
+            let s = s.act_p(|p| Option::some(p.push_back(9))).as_some;
+            assert_eq(|_|"", s.@p.@size + s.@n, 6);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_tuple_functor() {
     let source = r##"

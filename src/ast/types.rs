@@ -892,6 +892,15 @@ impl TypeNode {
     /// declaration's type variables. An array declares its element type as its one field. The
     /// declarations are read from `tycons`.
     pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
+        self.instantiated_fields(tycons)
+            .into_iter()
+            .map(|(_, ty)| ty)
+            .collect()
+    }
+
+    /// The fields `self` declares, each with its type at this instance — the declaration read from
+    /// `tycons`, with `self`'s type arguments substituted for the declaration's type variables.
+    fn instantiated_fields(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<(Field, Arc<TypeNode>)> {
         let args = self.collect_type_argments();
         let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -902,8 +911,26 @@ impl TypeNode {
         }
         tycon_info
             .fields
-            .iter()
-            .map(|f| subst.substitute_type(&f.ty))
+            .into_iter()
+            .map(|f| {
+                let ty = subst.substitute_type(&f.ty);
+                (f, ty)
+            })
+            .collect()
+    }
+
+    /// The types of the fields that hold a value, each with the index it sits at. A punched field is
+    /// a hole — the value it held has moved out — so it holds none and is left out here, while the
+    /// slot stays in the layout and keeps the index the other fields are addressed by.
+    ///
+    /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
+    /// slot through no path, and reading one would read a value that has moved on.
+    pub fn value_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
+        self.instantiated_fields(&type_env.tycons)
+            .into_iter()
+            .enumerate()
+            .filter(|(_, (field, _))| !field.is_punched)
+            .map(|(i, (_, ty))| (i, ty))
             .collect()
     }
 
@@ -1255,7 +1282,8 @@ impl TypeNode {
         !self.is_unbox(type_env)
     }
 
-    /// Whether this type contains no boxed type.
+    /// Whether a value of this type holds no boxed value, so that reference counting has nothing to
+    /// do to it.
     ///
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
@@ -1276,10 +1304,9 @@ impl TypeNode {
         if self.is_funptr() {
             return true;
         }
-        let field_types = self.field_types(type_env);
-        field_types
+        self.value_field_types(type_env)
             .iter()
-            .all(|field_ty| field_ty.is_fully_unboxed(type_env))
+            .all(|(_, field_ty)| field_ty.is_fully_unboxed(type_env))
     }
 
     /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by

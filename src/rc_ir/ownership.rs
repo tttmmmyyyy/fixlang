@@ -543,15 +543,9 @@ fn rc_units_go(
         out.push(path.clone());
         return;
     }
-    let fields = ty.fields(type_env);
-    for (i, fty) in ty.field_types(type_env).iter().enumerate() {
-        // A punched struct field is a hole (its value has moved out): the whole-value traversal skips
-        // it, so it names no unit.
-        if fields[i].is_punched {
-            continue;
-        }
+    for (i, fty) in ty.value_field_types(type_env) {
         path.push(i);
-        rc_units_go(fty, type_env, path, out);
+        rc_units_go(&fty, type_env, path, out);
         path.pop();
     }
 }

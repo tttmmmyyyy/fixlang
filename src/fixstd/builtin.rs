@@ -4748,8 +4748,8 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
         // fields carry the argument's, and nothing is retained or released. Declaring those
         // passthroughs is what carries a boxed field — an array in a loop state, say — through
-        // `mod`/`act` with what is known about it intact. The punched-out field is left holding a
-        // value the struct no longer owns; it names nothing, so `Unknown` says the least about it.
+        // `mod`/`act` with what is known about it intact. The punched struct holds nothing at the
+        // punched field, so every leaf it has is one it keeps, at the path it had in the argument.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
@@ -4759,21 +4759,12 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             let (head, rest) = path
                 .split_first()
                 .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head != PUNCHED_STRUCT_FIELD {
-                let mut p = vec![self.field_idx];
-                p.extend_from_slice(rest);
-                return Provenance::leaf(LeafOrigin::Arg(0, p));
+            if *head == PUNCHED_STRUCT_FIELD {
+                return Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()));
             }
-            // The punched struct is unboxed here, so a boxed leaf of it also starts with a field
-            // index.
-            let (field, _) = rest
-                .split_first()
-                .expect("a boxed leaf of an unboxed punched struct has a non-empty path");
-            if *field == self.field_idx {
-                Provenance::leaf(LeafOrigin::Unknown)
-            } else {
-                Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()))
-            }
+            let mut p = vec![self.field_idx];
+            p.extend_from_slice(rest);
+            Provenance::leaf(LeafOrigin::Arg(0, p))
         })
     }
 
@@ -4997,8 +4988,8 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// and every other field the struct operand's, with nothing retained or released. Declaring those
 /// passthroughs is what carries a boxed field — an array in a loop state, say — through `mod`/`act`
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
-/// result path and so stays consumed: `set` releases the value it replaces, and `plug_in` fills a
-/// hole holding a value the struct no longer owns.
+/// result path and so stays consumed, which is what `set` does with it: it releases the value it
+/// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
