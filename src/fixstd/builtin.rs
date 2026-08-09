@@ -4667,6 +4667,31 @@ pub struct InlineLLVMStructPunchBody {
     pub(crate) assume_local: bool,
 }
 
+impl InlineLLVMStructPunchBody {
+    /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
+    /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
+    /// argument; a leaf of the moved-out field sits under the punched field.
+    fn arg_leaf_path(&self, path: &FieldPath) -> FieldPath {
+        // A boxed leaf of the result descends through the field or through the punched struct.
+        let (head, rest) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed pair has a non-empty path");
+        if *head == PUNCHED_STRUCT_FIELD {
+            assert_ne!(
+                rest.first(),
+                Some(&self.field_idx),
+                "the punched struct holds nothing at field {}, so leaf {:?} names no value",
+                self.field_idx,
+                path
+            );
+            return rest.to_vec();
+        }
+        let mut p = vec![self.field_idx];
+        p.extend_from_slice(rest);
+        p
+    }
+}
+
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructPunchBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4755,16 +4780,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
         }
         Provenance::build_shape(result_ty, type_env, &|path| {
-            // A boxed leaf of the result descends through the field or through the punched struct.
-            let (head, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head == PUNCHED_STRUCT_FIELD {
-                return Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()));
-            }
-            let mut p = vec![self.field_idx];
-            p.extend_from_slice(rest);
-            Provenance::leaf(LeafOrigin::Arg(0, p))
+            Provenance::leaf(LeafOrigin::Arg(0, self.arg_leaf_path(path)))
         })
     }
 
@@ -4786,16 +4802,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return punched_out_locality(result_ty, type_env, 0, PUNCHED_STRUCT_FIELD);
         }
         ExtShape::build_shape(result_ty, type_env, &|path| {
-            let (head, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head == PUNCHED_STRUCT_FIELD {
-                LeafCond::input_leaf(0, rest.to_vec())
-            } else {
-                let mut p = vec![self.field_idx];
-                p.extend_from_slice(rest);
-                LeafCond::input_leaf(0, p)
-            }
+            LeafCond::input_leaf(0, self.arg_leaf_path(path))
         })
     }
 

@@ -1973,7 +1973,13 @@ impl TypeNode {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,
             Type::TyApp(fun, arg) => 1 + fun.depth().max(arg.depth()),
-            Type::AssocTy(_, args) => 1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0),
+            Type::AssocTy(_, args) => {
+                1 + args
+                    .iter()
+                    .map(|arg| arg.depth())
+                    .max()
+                    .expect("an associated type is applied to at least its implementing type")
+            }
         })
     }
 
