@@ -8,7 +8,7 @@ mod tests {
         collect_completion_items, find_sort_text, setup_test_env, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::{fs, path::Path, time::Duration};
 
     /// Test that associated types appear in completion candidates.
@@ -603,7 +603,7 @@ mod tests {
     /// Assert type-aware ranking on the `myfunc1`/`myfunc2` fixture pair:
     /// `Main::myfunc2` (`I64` receiver) must land in Tier 0 and outrank
     /// `Main::myfunc1` (`U32` receiver).
-    fn assert_myfunc2_outranks_myfunc1(items: &[serde_json::Value]) {
+    fn assert_myfunc2_outranks_myfunc1(items: &[Value]) {
         let sort_myfunc1 = find_sort_text(items, "Main::myfunc1")
             .expect("Main::myfunc1 should be a completion candidate");
         let sort_myfunc2 = find_sort_text(items, "Main::myfunc2")

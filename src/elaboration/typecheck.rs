@@ -1,4 +1,4 @@
-use super::check_holes;
+use super::check_holes::collect_hole_errors;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
 use crate::misc::{collect_results, grow_stack, insert_to_map_vec, Map, Set};
@@ -1948,7 +1948,7 @@ impl TypeCheckContext {
         let src = expr.source.clone();
 
         // Layer 1: holes.
-        let hole_errors = check_holes::collect_hole_errors(&expr, self);
+        let hole_errors = collect_hole_errors(&expr, self);
         if hole_errors.has_diagnostics() {
             return Ok((expr, hole_errors));
         }
