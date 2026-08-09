@@ -432,12 +432,8 @@ impl CopyBudget {
         if unit.lambdas() < 2 {
             return true;
         }
-        if self
-            .units
-            .entry(unit.origin.clone())
-            .or_default()
-            .contains(unit)
-        {
+        let committed = self.units.entry(unit.origin.clone()).or_default();
+        if committed.contains(unit) {
             return true;
         }
         let sites = self.sites.entry(unit.origin.clone()).or_default();
@@ -445,7 +441,6 @@ impl CopyBudget {
             sites.insert((site.input.file_path.clone(), site.start, site.end));
         }
         let allowance = BASE_COMBINING_COPIES + COMBINING_COPIES_PER_SITE * sites.len();
-        let committed = self.units.entry(unit.origin.clone()).or_default();
         if committed.len() >= allowance {
             return false;
         }
@@ -699,7 +694,7 @@ fn realize_all(
                 name: name.clone(),
                 // A copy is one more instantiation of what its origin instantiates, so it says the
                 // same thing about where it came from before any instantiation.
-                generic_name: originals[&request.unit.origin].generic_name.clone(),
+                generic_name: original.generic_name.clone(),
                 ty,
                 expr: Some(trav_res.expr),
             },
