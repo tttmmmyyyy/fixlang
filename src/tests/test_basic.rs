@@ -7871,8 +7871,8 @@ pub fn test_struct_act2() {
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act` on the only field of an unboxed struct that holds a reference, where that reference is a
-// closure's capture — the shape `Std::DynIterator` has.
+/// `act` on the only field of an unboxed struct that holds a reference, where that reference is a
+/// closure's capture — the shape `Std::DynIterator` has.
 #[test]
 pub fn test_struct_act_on_the_only_field_holding_a_closure() {
     let source = r##"
@@ -7892,8 +7892,8 @@ pub fn test_struct_act_on_the_only_field_holding_a_closure() {
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act` on the only reference-counted field of an unboxed struct: while the actor runs, the struct
-// has that field punched out, so no part of it is reference-counted.
+/// `act` on the only reference-counted field of an unboxed struct: while the actor runs, the struct
+/// has that field punched out, so no part of it is reference-counted.
 #[test]
 pub fn test_struct_act_on_the_only_reference_counted_field() {
     let source = r##"
@@ -7912,8 +7912,8 @@ pub fn test_struct_act_on_the_only_reference_counted_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act` on the only reference-counted field of an unboxed struct, where the actor's functor yields
-// nothing: the struct with that field punched out is dropped rather than plugged back.
+/// `act` on the only reference-counted field of an unboxed struct, where the actor's functor yields
+/// nothing: the struct with that field punched out is dropped rather than plugged back.
 #[test]
 pub fn test_struct_act_yielding_nothing_on_the_only_reference_counted_field() {
     let source = r##"
@@ -7932,8 +7932,8 @@ pub fn test_struct_act_yielding_nothing_on_the_only_reference_counted_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act` on the only reference-counted field of an unboxed struct at a functor whose `map` rebuilds
-// the struct more than once, so each rebuild reads the same punched struct.
+/// `act` on the only reference-counted field of an unboxed struct at a functor whose `map` rebuilds
+/// the struct more than once, so each rebuild reads the same punched struct.
 #[test]
 pub fn test_struct_act_plugging_in_more_than_once_on_the_only_reference_counted_field() {
     let source = r##"
@@ -7952,8 +7952,8 @@ pub fn test_struct_act_plugging_in_more_than_once_on_the_only_reference_counted_
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act` on the only reference-counted field of an unboxed struct, where that field is shared with a
-// binding that outlives the update: the update leaves that binding's value as it was.
+/// `act` on the only reference-counted field of an unboxed struct, where that field is shared with a
+/// binding that outlives the update: the update leaves that binding's value as it was.
 #[test]
 pub fn test_struct_act_on_a_shared_only_reference_counted_field() {
     let source = r##"
