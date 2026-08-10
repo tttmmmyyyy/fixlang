@@ -380,6 +380,7 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -410,6 +411,35 @@ mod tests {
             SLOW_THREADS,
             "every thread has finished by the time the panic is carried on"
         );
+    }
+
+    /// The panic carried on holds the worker's own payload, so the renderer the compiler reports
+    /// through still finds the message in it. Raising a fresh panic around the joined
+    /// `Box<dyn Any>` would report the error a second time, and as `(unknown error)`.
+    #[test]
+    fn test_join_compiler_threads_carries_the_workers_own_payload() {
+        const MESSAGE: &str = "this thread panics on purpose";
+        let threads: Vec<JoinHandle<()>> = vec![spawn_compiler_thread(|| panic!("{}", MESSAGE))];
+
+        let payload = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)))
+            .expect_err("the worker's panic is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// The values come back in the order the threads were given, whatever order they finish in.
+    #[test]
+    fn test_join_compiler_threads_returns_values_in_the_order_given() {
+        let threads = vec![
+            // The first thread finishes last, so the assertion below tells the order of the
+            // threads apart from the order they finished in.
+            spawn_compiler_thread(|| {
+                thread::sleep(Duration::from_millis(200));
+                "first"
+            }),
+            spawn_compiler_thread(|| "second"),
+        ];
+
+        assert_eq!(join_compiler_threads(threads), vec!["first", "second"]);
     }
 
     #[test]
