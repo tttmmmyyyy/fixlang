@@ -11380,8 +11380,8 @@ main = (
 }
 
 // `DynIterator` is an unboxed struct of one field whose type names `DynIterator` itself, so it is a
-// type the compiler carries as it is. `mod_` on its field takes it apart into the field and the
-// rest of the struct, which is where a type left as it is has to stay whole.
+// type the compiler carries as it is. `mod_` and `act_` on its field take it apart into the field
+// and the rest of the struct, which is where a type left as it is has to stay whole.
 #[test]
 pub fn test_field_update_of_a_std_type_naming_itself() {
     let source = r##"
@@ -11392,6 +11392,8 @@ main = (
     let it = [1, 2, 3].to_iter.to_dyn;
     let it = it.mod_next(|next| next);
     assert_eq(|_|"", it.to_array, [1, 2, 3]);;
+    let it = [4, 5].to_iter.to_dyn.act_next(|next| Option::some(next)).as_some;
+    assert_eq(|_|"", it.to_array, [4, 5]);;
     pure()
 );
     "##;
@@ -11704,6 +11706,9 @@ type C = unbox struct { y : Ph C };
 main : IO ();
 main = (
     let c = C { y : Ph { x : [1,2,3] } };
+    let o = c.act_y(|p| Option::some(Ph { x : p.@x.push_back(4) })).as_some;
+    assert_eq(|_|"", o.@y.@x, [1,2,3,4]);;
+    assert_eq(|_|"", c.act_y(|_| Option::none() : Option (Ph C)).is_none.to_string, "true");;
     let t : (I64, C) = c.act_y(|p| (p.@x.@size, Ph { x : p.@x.push_back(4) }));
     assert_eq(|_|"", t.@0, 3);;
     assert_eq(|_|"", t.@1.@y.@x, [1,2,3,4]);;
