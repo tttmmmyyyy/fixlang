@@ -75,7 +75,7 @@
 - `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
 - Building a project after upgrading `fix` no longer hangs. The type-checking cache is now regenerated when the compiler itself changes, where before it was reused as long as the source was unchanged and a newer `fix` could misread a cache an older one wrote.
 - LSP: A completion request no longer makes the language server exit when the file annotates an expression with an unknown type variable, such as `let x = (3 : b);`. The request now answers with type-aware candidates, including when the cursor is inside the annotated expression itself.
-- An internal compiler error raised while type checking is now reported on its own. The compiler used to unwind while its other type-checking threads were still running, freeing the memory they were working on, so the report could be followed by a second error or by a crash that buried it.
+- An internal compiler error is now reported on its own. The message used to be followed by a second error, or by a crash that buried it.
 
 ## [1.4.0] - 2026-06-22
 
