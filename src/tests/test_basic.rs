@@ -11498,28 +11498,28 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A cycle of three types, one of them a union, reaching a type of a higher-kinded parameter from its
-// last member. A type is rebuilt when it names a rebuilt type in the type of a field, and a union
-// carries that the way a struct does, so the whole cycle is rebuilt from a reach that only one of
-// its members has.
+// A union that takes a type parameter, sitting in a cycle that reaches a type of a higher-kinded
+// parameter through the struct it names. A declaration that takes type parameters is left as it is
+// written, so the union has to be rebuilt per type-argument list together with the struct it names,
+// which the compiler decides for a union the way it decides it for a struct.
 #[test]
-pub fn test_union_in_a_type_cycle_reaching_a_higher_kinded_type_variable() {
+pub fn test_parameterized_union_in_a_type_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
 module Main;
 
 type [f : *->*] H f = unbox struct { d : f I64 };
-type U = unbox union { l : Array V, r : I64 };
-type V = unbox struct { m : Array W };
-type W = unbox struct { u : Array U, h : H Array };
+type Y a = unbox union { p : Array X, q : a };
+type X = unbox struct { r : Y I64, s : H Array };
 
 main : IO ();
 main = (
-    let w = W { u : [U::r(3)], h : H { d : [1, 2] } };
-    let u : U = U::l([V { m : [w] }]);
-    assert_eq(|_|"", u.as_l.@(0).@m.@(0).@u.@(0).as_r, 3);;
-    assert_eq(|_|"", u.as_l.@(0).@m.@(0).@h.@d.@size, 2);;
-    let u = u.mod_l(|vs| vs.push_back(V { m : [] }));
-    assert_eq(|_|"", u.as_l.@size, 2);;
+    let x = X { r : Y::q(7), s : H { d : [1, 2] } };
+    assert_eq(|_|"", x.@r.as_q, 7);;
+    assert_eq(|_|"", x.@s.@d.@size, 2);;
+    let y : Y String = Y::q("hi");
+    assert_eq(|_|"", y.as_q, "hi");;
+    let y : Y I64 = Y::p([x]);
+    assert_eq(|_|"", y.as_p.@(0).@s.@d.@size, 2);;
     pure()
 );
     "##;
@@ -11552,6 +11552,37 @@ main = (
     let X { r : y, s : h } = x;
     assert_eq(|_|"", y.@q, 8);;
     assert_eq(|_|"", h.@d.@size, 3);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
+// reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
+// type with that field punched out, which carries the type argument the value was made at, so the
+// punched form is rebuilt per type-argument list alongside the type it is punched from.
+#[test]
+pub fn test_field_update_on_a_parameterized_type_in_a_cycle_reaching_a_higher_kinded_type_variable()
+{
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+type Y a = unbox struct { p : Array X, q : a };
+type X = unbox struct { r : Y I64, s : H Array };
+
+main : IO ();
+main = (
+    let y : Y I64 = Y { p : [], q : 7 };
+    let y = y.mod_q(|v| v + 1);
+    assert_eq(|_|"", y.@q, 8);;
+    let t : (I64, Y I64) = y.act_p(|ps| (ps.@size, ps.push_back(X { r : y, s : H { d : [1] } })));
+    assert_eq(|_|"", t.@0, 0);;
+    assert_eq(|_|"", t.@1.@p.@(0).@s.@d.@size, 1);;
+    let z : Y String = Y { p : [], q : "hi" };
+    let z = z.mod_q(|s| s + "!");
+    assert_eq(|_|"", z.@q, "hi!");;
     pure()
 );
     "##;

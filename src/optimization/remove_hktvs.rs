@@ -55,16 +55,33 @@ impl Env {
     }
 }
 
+// The type constructors a declaration names: those appearing in the type of one of its fields, and,
+// for a declaration holding a struct with one field punched out, that struct.
+//
+// A declaration written in terms of a type constructor stands or falls with it, which is the edge
+// both `calculate_removed_tycons` and `assert_every_named_tycon_is_declared` are about, so they read
+// it from here and agree on what naming is.
+fn named_tycons(ti: &TyConInfo) -> Set<TyCon> {
+    let mut named_tycons = Set::default();
+    for field in &ti.fields {
+        field.ty.collect_tycons(&mut named_tycons);
+    }
+    if let Some(struct_tc) = &ti.punched_from {
+        named_tycons.insert(struct_tc.clone());
+    }
+    named_tycons
+}
+
 // The type constructors this transformation replaces by a copy per list of type arguments: a struct
 // or a union declared with a higher-kinded type variable, and a struct or a union that names such a
-// declaration in the type of a field, transitively.
+// declaration, transitively.
 //
-// The type of a field can name the declaration the field belongs to, directly or through other
-// declarations, so "transitively" is taken over a graph that has cycles and the answer is its least
-// fixed point. It is reached by propagating backwards along the edge "names in the type of a field",
-// starting from the declarations that carry a higher-kinded type variable.
+// A declaration can name itself, directly or through other declarations, so "transitively" is taken
+// over a graph that has cycles and the answer is its least fixed point. It is reached by propagating
+// backwards along the naming edge, starting from the declarations that carry a higher-kinded type
+// variable.
 fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
-    // For each type constructor, the struct and union declarations naming it in the type of a field.
+    // For each type constructor, the struct and union declarations naming it.
     let mut named_by: Map<TyCon, Vec<TyCon>> = Map::default();
     // The declarations to propagate from, which start as those carrying a higher-kinded type
     // variable.
@@ -79,12 +96,8 @@ fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
         if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
             pending.push(tc.clone());
         }
-        for field in &ti.fields {
-            let mut field_tycons = Set::default();
-            field.ty.collect_tycons(&mut field_tycons);
-            for field_tycon in field_tycons {
-                named_by.entry(field_tycon).or_default().push(tc.clone());
-            }
+        for named_tycon in named_tycons(ti) {
+            named_by.entry(named_tycon).or_default().push(tc.clone());
         }
     }
 
@@ -108,16 +121,9 @@ fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
 // later pass looking a declaration up and finding nothing.
 fn assert_every_named_tycon_is_declared(tycons: &Map<TyCon, TyConInfo>) {
     for (tc, ti) in tycons {
-        let mut named_tycons = Set::default();
-        for field in &ti.fields {
-            field.ty.collect_tycons(&mut named_tycons);
-        }
-        if let Some(struct_tc) = &ti.punched_from {
-            named_tycons.insert(struct_tc.clone());
-        }
-        for named_tycon in &named_tycons {
+        for named_tycon in named_tycons(ti) {
             assert!(
-                tycons.contains_key(named_tycon),
+                tycons.contains_key(&named_tycon),
                 "The declaration of `{}` names `{}`, which is not declared.",
                 tc.to_string(),
                 named_tycon.to_string()
