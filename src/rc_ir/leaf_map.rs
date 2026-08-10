@@ -22,8 +22,9 @@ use std::sync::Arc;
 /// The paths of the boxed leaves of a value of type `ty` — the field indices from the root of `ty`
 /// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
 /// the capture; a boxed value is a single leaf at the current path; an unboxed aggregate (struct,
-/// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
-/// has none. It is the single source of truth for which of a type's paths are boxed leaves.
+/// tuple, or union) recurses into the fields that hold a value (a union's variants' payloads); a
+/// fully unboxed value has none. It is the single source of truth for which of a type's paths are
+/// boxed leaves.
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     /// Descend a type, pushing onto `out` the path of each boxed leaf reached. `path` is the field
     /// path from the value's root down to `ty`, which each pushed leaf is named relative to.
@@ -47,9 +48,9 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             out.push(path.clone());
             return;
         }
-        for (i, fty) in ty.field_types(type_env).iter().enumerate() {
+        for (i, fty) in ty.value_field_types(type_env) {
             path.push(i);
-            go(fty, type_env, path, out);
+            go(&fty, type_env, path, out);
             path.pop();
         }
     }
