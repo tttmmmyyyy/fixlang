@@ -34,7 +34,8 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, spawn_compiler_thread, to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
+    to_absolute_path, Map, Set,
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
@@ -1400,11 +1401,10 @@ impl Program {
                 });
                 threads.push(thread);
             }
-            let mut results = vec![];
-            for thread in threads {
-                results.append(&mut thread.join().unwrap());
-            }
-            results
+            join_compiler_threads(threads)
+                .into_iter()
+                .flatten()
+                .collect()
         };
 
         // Store results to into members of `self`.

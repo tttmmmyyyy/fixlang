@@ -9,6 +9,7 @@ use std::io::IsTerminal;
 use std::{
     env, fs,
     hash::Hash,
+    panic::resume_unwind,
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
 };
@@ -53,6 +54,31 @@ where
         .stack_size(COMPILER_THREAD_STACK_SIZE)
         .spawn(f)
         .expect("failed to spawn a compiler thread")
+}
+
+/// The values the given threads returned, in the order the threads are given.
+///
+/// A thread that panicked carries its panic on from here, once **every** thread has been joined:
+/// unwinding tears down the state the compiler works on, and a thread still running under it reads
+/// and writes memory that is being freed, which crashes the process on top of the panic that was
+/// meant to be reported.
+pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
+    let mut values = vec![];
+    let mut panic_payload = None;
+    for thread in threads {
+        match thread.join() {
+            Ok(value) => values.push(value),
+            // The payload of the first thread that panicked is the one carried on, by
+            // `resume_unwind`: that thread has already reported through the panic hook, and a
+            // joined payload is a `Box<dyn Any>` rather than a message, so raising it as a fresh
+            // panic would report a second time and call it an unknown error.
+            Err(payload) => panic_payload = panic_payload.or(Some(payload)),
+        }
+    }
+    if let Some(payload) = panic_payload {
+        resume_unwind(payload);
+    }
+    values
 }
 
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
@@ -354,6 +380,35 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[test]
+    fn test_join_compiler_threads_joins_every_thread() {
+        const SLOW_THREADS: usize = 3;
+        let finished = Arc::new(AtomicUsize::new(0));
+
+        // The thread that panics is joined first, so a collector that carries the panic on at the
+        // first `Err` it sees leaves the slow threads running.
+        let mut threads = vec![spawn_compiler_thread(|| panic!("a worker thread panicked"))];
+        for _ in 0..SLOW_THREADS {
+            let finished = finished.clone();
+            threads.push(spawn_compiler_thread(move || {
+                thread::sleep(Duration::from_millis(500));
+                finished.fetch_add(1, Ordering::SeqCst);
+            }));
+        }
+
+        let joined = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)));
+        assert!(joined.is_err(), "the worker's panic is carried on");
+        assert_eq!(
+            finished.load(Ordering::SeqCst),
+            SLOW_THREADS,
+            "every thread has finished by the time the panic is carried on"
+        );
+    }
 
     #[test]
     fn test_split_string() {

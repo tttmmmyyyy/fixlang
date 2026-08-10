@@ -15,7 +15,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
-    misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
+    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -45,7 +45,6 @@ use std::{
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
-    panic::resume_unwind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -390,20 +389,7 @@ pub fn build_object_files<'c>(
             write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
         }));
     }
-    // Every thread is joined before a panic is carried on: a thread still running holds the state
-    // that unwinding tears down, and the process crashes under it. `resume_unwind` carries the
-    // payload of the thread that panicked, which has already reported through the panic hook; a
-    // joined payload is a `Box<dyn Any>`, so a fresh panic here would report a second time, and as
-    // an unknown error.
-    let mut panic_payload = None;
-    for t in threads {
-        if let Err(payload) = t.join() {
-            panic_payload = panic_payload.or(Some(payload));
-        }
-    }
-    if let Some(payload) = panic_payload {
-        resume_unwind(payload);
-    }
+    join_compiler_threads(threads);
 
     // Save object files cache.
     let result = BuildObjFilesResult { obj_paths };
