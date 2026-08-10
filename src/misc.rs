@@ -17,6 +17,8 @@ use std::{
 
 pub type Map<K, V> = FxHashMap<K, V>;
 
+/// A map holding the given key-value pairs. When a key is given more than once, the value that
+/// comes last is the one kept.
 pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K, V> {
     let mut map = Map::default();
     for (k, v) in kvs {
@@ -27,6 +29,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
 
 pub type Set<T> = FxHashSet<T>;
 
+/// A set holding the given elements, with an element that appears several times held once.
 pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     let mut set = Set::default();
     for elem in iter {
@@ -82,6 +85,9 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values
 }
 
+/// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
+/// of the source's content — inserted before the `.fix` extension, so that two sources of the same
+/// name and different content are saved side by side.
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }
@@ -296,6 +302,8 @@ impl Drop for Finally {
     }
 }
 
+/// Turns off the color of every message the compiler prints, when its error output goes somewhere
+/// other than a terminal.
 pub fn disable_colored_no_tty() {
     if !io::stderr().is_terminal() {
         control::set_override(false);
@@ -310,9 +318,8 @@ pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
 }
 
-// Styling used for interactive prompts that require the user's attention
-// (e.g. the preliminary-commands approval flow). Centralized so the look stays
-// consistent across prompt lines.
+/// Styles `s` as a line of an interactive prompt that requires the user's attention, so that every
+/// such prompt looks alike.
 pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
@@ -442,6 +449,9 @@ mod tests {
         assert_eq!(join_compiler_threads(threads), vec!["first", "second"]);
     }
 
+    /// Splitting a command line into words: a run of spaces separates words, a quoted run — single
+    /// or double — stays one word, a backslash escapes the character after it, and an input of
+    /// spaces alone yields no word at all.
     #[test]
     fn test_split_string() {
         assert_eq!(

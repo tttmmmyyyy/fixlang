@@ -56,8 +56,8 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
-/// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
-/// code generation and the RC IR dump build on; the optimizations are separate
+/// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
+/// lowered program needs to run at all; the optimizations over it are separate
 /// (`optimize_rc_program`).
 ///
 /// # Arguments
@@ -671,8 +671,9 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
-// Implement the C `main` function of the program: store `argc` and `argv` into the global variables
-// the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return 0.
+/// Implement the C `main` function of the program: store `argc` and `argv` into the global
+/// variables the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return
+/// 0.
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
