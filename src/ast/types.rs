@@ -885,8 +885,9 @@ impl TypeNode {
     /// for a union, and the element type alone for `Array`, whose elements all share it. This type's
     /// arguments are substituted in, so the results are the field types at this instance.
     ///
-    /// This is the layout's answer, so a punched field's slot is among them, at the type it was
-    /// declared with; `value_field_types` answers which of the slots hold a value.
+    /// A punched field's slot is among them, at the type it was declared with, so a reader that can
+    /// meet a punched type wants this one only to lay the fields out or to address one by its index;
+    /// `value_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.field_types_via_tycons(&type_env.tycons)
     }
