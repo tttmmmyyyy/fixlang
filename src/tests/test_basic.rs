@@ -11531,7 +11531,7 @@ main = (
 // the struct with that field punched out, which names what the struct names and so is rebuilt
 // alongside it.
 #[test]
-pub fn test_field_operations_on_a_type_cycle_reaching_a_higher_kinded_type_variable() {
+pub fn test_field_operations_on_a_type_in_a_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
 module Main;
 
