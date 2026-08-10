@@ -310,11 +310,12 @@ fn param_ownership_shape(
         if ty.is_rc_unit_root(type_env) {
             return OwnershipShape::Unit(ownership_at(path));
         }
-        let fields = ty.field_types(type_env);
-        let mut children = Vec::with_capacity(fields.len());
-        for (i, fty) in fields.iter().enumerate() {
+        // A field the value holds nothing at keeps its place in the shape, so that a shape index is a
+        // field index.
+        let mut children = vec![OwnershipShape::NoUnit; ty.field_types(type_env).len()];
+        for (i, fty) in ty.value_field_types(type_env) {
             path.push(i);
-            children.push(go(var, fty, owned_units, type_env, path));
+            children[i] = go(var, &fty, owned_units, type_env, path);
             path.pop();
         }
         OwnershipShape::Fields(children)
