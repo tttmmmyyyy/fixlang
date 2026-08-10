@@ -56,7 +56,6 @@ struct NewtypeUnwrapping {
 impl NewtypeUnwrapping {
     /// Chooses the type constructors to replace: the newtypes of `tycons` whose field types do not
     /// lead back to them.
-    ///
     fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
         let mut unwrappable_tycons = Set::default();
         for (tc, ti) in &tycons {

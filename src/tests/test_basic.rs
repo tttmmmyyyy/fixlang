@@ -11085,9 +11085,9 @@ main = (
 }
 
 // A type of a higher-kinded parameter that names itself through the type argument of its parameter,
-// so the copy the compiler makes of it is a type it carries as it is. The pass that removes
-// higher-kinded type variables rebuilds the type constructor for each argument list, so the copy of
-// the struct and the copy of the form with its field punched out have to stay paired.
+// so the copy the compiler makes of it is a type the compiler carries as it is. The pass that
+// removes higher-kinded type variables rebuilds the type constructor for each argument list, so the
+// copy of the struct and the copy of the form with its field punched out have to stay paired.
 #[test]
 pub fn test_higher_kinded_newtype_naming_itself_through_its_parameter() {
     let source = r##"

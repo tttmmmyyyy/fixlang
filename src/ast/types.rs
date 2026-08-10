@@ -370,9 +370,9 @@ pub struct TyConInfo {
     /// The struct this declaration punches a field out of, for a declaration that has one.
     ///
     /// Such a declaration stands for the values of that struct with one field moved out, so a pass
-    /// that rewrites the struct has to rewrite it the same way, and this is where it reads which
-    /// struct that is. The struct's own declaration is in the same table as this one, so a pass that
-    /// creates a punched declaration creates the struct's as well.
+    /// that rewrites the struct rewrites this declaration the same way. The struct's own
+    /// declaration is in the same table as this one, so a pass that creates a punched declaration
+    /// creates the struct's as well.
     pub punched_from: Option<TyCon>,
 }
 

@@ -259,18 +259,8 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
     *new_tc.name.name_as_mut() = name;
 
     if !env.tycons.contains_key(&new_tc) {
-        // The copy about to be made punches the same field of the copy made for the struct at these
-        // same type arguments, so it is paired with that one the way their originals are paired.
-        let punched_from = top_ti.punched_from.as_ref().map(|struct_tc| {
-            let struct_ty = ty.set_toplevel_tycon(Arc::new(struct_tc.clone()));
-            run_on_type(&struct_ty, env)
-                .toplevel_tycon()
-                .unwrap()
-                .as_ref()
-                .clone()
-        });
         let mut new_ti = TyConInfo {
-            punched_from,
+            punched_from: None,
             kind: kind_star(),
             variant: top_ti.variant.clone(),
             is_unbox: top_ti.is_unbox,
@@ -281,6 +271,18 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
         };
         // Register the new type constructor before processing field types to handle recursive types.
         env.tycons.insert(new_tc.clone(), new_ti.clone());
+
+        // The copy being made punches the same field of the copy made for the struct at these same
+        // type arguments, so it is paired with that one the way their originals are paired. The copy
+        // is registered above first, so the walk for the struct stops here if it comes back.
+        new_ti.punched_from = top_ti.punched_from.as_ref().map(|struct_tc| {
+            let struct_ty = ty.set_toplevel_tycon(Arc::new(struct_tc.clone()));
+            run_on_type(&struct_ty, env)
+                .toplevel_tycon()
+                .unwrap()
+                .as_ref()
+                .clone()
+        });
 
         let mut field_types = ty.field_types_via_tycons(&env.tycons);
         for field_type in &mut field_types {
