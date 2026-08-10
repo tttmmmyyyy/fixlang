@@ -4659,12 +4659,42 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
+    /// The operand: the struct the field is moved out of.
     pub var_name: FullName,
+    /// The index of the field moved out, in the struct's layout — the slot the result's punched
+    /// struct carries as a hole.
     field_idx: usize,
+    /// Whether a struct that is shared is cloned before the field is moved out. Where false, the
+    /// operand is taken to be uniquely owned already.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
     pub(crate) assume_local: bool,
+}
+
+impl InlineLLVMStructPunchBody {
+    /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
+    /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
+    /// argument; a leaf of the moved-out field sits under the punched field.
+    fn arg_leaf_path(&self, path: &FieldPath) -> FieldPath {
+        // A boxed leaf of the result descends through the field or through the punched struct.
+        let (head, rest) = path
+            .split_first()
+            .expect("a boxed leaf of an unboxed pair has a non-empty path");
+        if *head == PUNCHED_STRUCT_FIELD {
+            assert_ne!(
+                rest.first(),
+                Some(&self.field_idx),
+                "the punched struct holds nothing at field {}, so leaf {:?} names no value",
+                self.field_idx,
+                path
+            );
+            return rest.to_vec();
+        }
+        let mut arg_path = vec![self.field_idx];
+        arg_path.extend_from_slice(rest);
+        arg_path
+    }
 }
 
 #[typetag::serde]
@@ -4748,32 +4778,14 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
         // fields carry the argument's, and nothing is retained or released. Declaring those
         // passthroughs is what carries a boxed field — an array in a loop state, say — through
-        // `mod`/`act` with what is known about it intact. The punched-out field is left holding a
-        // value the struct no longer owns; it names nothing, so `Unknown` says the least about it.
+        // `mod`/`act` with what is known about it intact. The punched struct holds nothing at the
+        // punched field, so every leaf it has is one it keeps, at the path it had in the argument.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
         }
         Provenance::build_shape(result_ty, type_env, &|path| {
-            // A boxed leaf of the result descends through the field or through the punched struct.
-            let (head, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head != PUNCHED_STRUCT_FIELD {
-                let mut p = vec![self.field_idx];
-                p.extend_from_slice(rest);
-                return Provenance::leaf(LeafOrigin::Arg(0, p));
-            }
-            // The punched struct is unboxed here, so a boxed leaf of it also starts with a field
-            // index.
-            let (field, _) = rest
-                .split_first()
-                .expect("a boxed leaf of an unboxed punched struct has a non-empty path");
-            if *field == self.field_idx {
-                Provenance::leaf(LeafOrigin::Unknown)
-            } else {
-                Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()))
-            }
+            Provenance::leaf(LeafOrigin::Arg(0, self.arg_leaf_path(path)))
         })
     }
 
@@ -4795,16 +4807,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return punched_out_locality(result_ty, type_env, 0, PUNCHED_STRUCT_FIELD);
         }
         ExtShape::build_shape(result_ty, type_env, &|path| {
-            let (head, rest) = path
-                .split_first()
-                .expect("a boxed leaf of an unboxed pair has a non-empty path");
-            if *head == PUNCHED_STRUCT_FIELD {
-                LeafCond::input_leaf(0, rest.to_vec())
-            } else {
-                let mut p = vec![self.field_idx];
-                p.extend_from_slice(rest);
-                LeafCond::input_leaf(0, p)
-            }
+            LeafCond::input_leaf(0, self.arg_leaf_path(path))
         })
     }
 
@@ -4816,20 +4819,15 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 /// The index of the punched struct in the result of a struct punch, `(field, punched struct)`.
 const PUNCHED_STRUCT_FIELD: usize = 1;
 
-// Field punching function for a given struct.
-//
-// If the struct is `S` and the field is `x` of type `F`, then the function has the type `S -> (F, Sx)` where `Sx` is the punched `S` at the field `x`.
-// i.e., `Sx` has the same memory layout as `S`, but does not contain the field `x`.
-//
-// We are not sure whether we should clone the struct when a shared struct is given to `punch_x`.
-// If we do not clone the struct, it will lead to different types of values sharing the same memory area, which feels dangerous,
-// but we have not found an example that causes a memory management issue yet.
-//
-// There are two use cases for the current `punch_x` function.
-// One is the implementation of `act_x`, where the struct given to `punch_x` is guaranteed to be unique.
-// The other is the implementation of `mod_x`, where it is acceptable to clone the struct if it is shared.
-// So we have two versions of `punch_x`: one that does not clone the struct and one that does.
-// The above problem is unresolved, but the current use cases do not require solving this problem.
+/// The `punch_x` function of a struct: for a struct `S` with a field `x` of type `F`, a function of
+/// type `S -> (F, Sx)` that moves the field out. `Sx` is `S` punched at `x` — the memory layout of
+/// `S`, with the slot at `x` a hole whose value has moved out.
+///
+/// The field is handed over without being reference counted, so the struct it is taken out of has to
+/// be uniquely owned. `force_unique` picks how that is met, as `force_unique_or_assert` describes:
+/// forcing it clones a struct that is shared, and leaving it off takes the caller's guarantee that
+/// the struct is unique. That guarantee is what keeps `S` and `Sx` apart — a shared struct punched
+/// without a clone leaves the two types naming one region of memory.
 pub fn struct_punch(
     definition: &TypeDefn,
     field_name: &str,
@@ -4862,6 +4860,9 @@ pub fn struct_punch(
     (expr, scm)
 }
 
+/// The body of a struct's `plug_in_x`: the value bound to `field_name` is moved into the hole of the
+/// punched struct bound to `punched_struct_name`, giving back the struct type the hole was punched
+/// out of.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
     punched_struct_name: FullName,
@@ -4997,8 +4998,8 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// and every other field the struct operand's, with nothing retained or released. Declaring those
 /// passthroughs is what carries a boxed field — an array in a loop state, say — through `mod`/`act`
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
-/// result path and so stays consumed: `set` releases the value it replaces, and `plug_in` fills a
-/// hole holding a value the struct no longer owns.
+/// result path and so stays consumed, which is what `set` does with it: it releases the value it
+/// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -7894,9 +7895,9 @@ fn mutated_in_place_locality(
     value_path: &[usize],
 ) -> ExtShape {
     let payload_holds_boxed = arg_tys[value_arg]
-        .field_types(type_env)
+        .value_field_types(type_env)
         .iter()
-        .any(|fty| !boxed_leaf_paths(fty, type_env).is_empty());
+        .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
     let value_leaf = if payload_holds_boxed {
         LeafCond::new(ExtCond::bottom(), ExtCond::Always)
     } else {

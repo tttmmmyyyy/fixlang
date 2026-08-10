@@ -543,15 +543,9 @@ fn rc_units_go(
         out.push(path.clone());
         return;
     }
-    let fields = ty.fields(type_env);
-    for (i, fty) in ty.field_types(type_env).iter().enumerate() {
-        // A punched struct field is a hole (its value has moved out): the whole-value traversal skips
-        // it, so it names no unit.
-        if fields[i].is_punched {
-            continue;
-        }
+    for (i, fty) in ty.value_field_types(type_env) {
         path.push(i);
-        rc_units_go(fty, type_env, path, out);
+        rc_units_go(&fty, type_env, path, out);
         path.pop();
     }
 }
@@ -577,16 +571,8 @@ pub(crate) fn truncate_to_unit(
             // boxed leaf under a union variant, or the punched array's inner array) keys to its root.
             break;
         }
-        // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
-        let fields = cur.field_types(type_env);
-        assert!(
-            idx < fields.len(),
-            "truncate_to_unit: path index {} out of range ({} fields)",
-            idx,
-            fields.len()
-        );
         out.push(idx);
-        cur = fields[idx].clone();
+        cur = field_type_at(&cur, idx, type_env, "truncate_to_unit");
     }
     out
 }
@@ -686,17 +672,24 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
         if cur.is_closure() || cur.is_rc_unit_root(type_env) || cur.is_fully_unboxed(type_env) {
             return None;
         }
-        // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
-        let fields = cur.field_types(type_env);
-        assert!(
-            idx < fields.len(),
-            "subtree_type: path index {} out of range ({} fields)",
-            idx,
-            fields.len()
-        );
-        cur = fields[idx].clone();
+        cur = field_type_at(&cur, idx, type_env, "subtree_type");
     }
     Some(cur)
+}
+
+/// The type of field `idx` of `ty`, where the walk that reached `ty` has established it to be an
+/// unboxed struct/tuple, so that a well-formed unit/root path index is in range. `what` names the
+/// walk in the message an out-of-range index aborts with.
+fn field_type_at(ty: &Arc<TypeNode>, idx: usize, type_env: &TypeEnv, what: &str) -> Arc<TypeNode> {
+    let fields = ty.field_types(type_env);
+    assert!(
+        idx < fields.len(),
+        "{}: path index {} out of range ({} fields)",
+        what,
+        idx,
+        fields.len()
+    );
+    fields[idx].clone()
 }
 
 #[cfg(test)]
