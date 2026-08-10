@@ -11558,6 +11558,63 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
+// one, all three reached from one cycle of types. The compiler rebuilds each of them per
+// type-argument list, keeping a union's variants and a boxed struct's boxedness, and the same
+// declaration rebuilt at two different type arguments stays two types.
+#[test]
+pub fn test_higher_kinded_union_and_boxed_struct_reached_from_a_type_cycle() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64, n : I64 };
+type [f : *->*] U f = unbox union { left : f I64, right : I64 };
+type [f : *->*] B f = box struct { b : f I64, tag : Bool };
+
+type Y a = unbox struct { p : Array X, q : a };
+type X = unbox struct { r : Y I64, s : H Array, t : U Option, u : B Array };
+
+sum_x : X -> I64;
+sum_x = |x| (
+    let a = x.@r.@q;
+    let b = x.@s.@d.to_iter.fold(0, Add::add) + x.@s.@n;
+    let c = if x.@t.is_left {
+        if x.@t.as_left.is_some { x.@t.as_left.as_some } else { 0 }
+    } else { x.@t.as_right };
+    let d = x.@u.@b.to_iter.fold(0, Add::add) + (if x.@u.@tag { 100 } else { 200 });
+    a + b + c + d + x.@r.@p.@size
+);
+
+main : IO ();
+main = (
+    let x0 = X {
+        r : Y { p : [], q : 3 },
+        s : H { d : [1, 2, 3], n : 10 },
+        t : U::left(Option::some(5)),
+        u : B { b : [7, 8], tag : true }
+    };
+    assert_eq(|_|"", sum_x(x0), 139);;
+    let x1 = x0.mod_s(|h| h.mod_d(|d| d.push_back(4)).set_n(20));
+    assert_eq(|_|"", sum_x(x1), 153);;
+    let x2 = x1.mod_t(|_| U::right(9));
+    assert_eq(|_|"", sum_x(x2), 157);;
+    let x3 = x2.mod_u(|b| b.set_tag(false));
+    assert_eq(|_|"", sum_x(x3), 257);;
+    let x4 = x3.mod_r(|y| y.mod_p(|ps| ps.push_back(x0)).set_q(30));
+    assert_eq(|_|"", sum_x(x4), 285);;
+    let (taken, rest) = x4.act_s(|h| (h.@n, h.set_n(0)));
+    assert_eq(|_|"", taken, 20);;
+    assert_eq(|_|"", sum_x(rest), 265);;
+    let h_arr : H Array = H { d : [9], n : 1 };
+    assert_eq(|_|"", h_arr.@d.@(0), 9);;
+    let h_opt : H Option = H { d : Option::some(11), n : 2 };
+    assert_eq(|_|"", h_opt.@d.as_some, 11);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
 // reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
 // type with that field punched out, which carries the type argument the value was made at, so the
