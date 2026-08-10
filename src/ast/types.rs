@@ -887,7 +887,7 @@ impl TypeNode {
     ///
     /// A punched field's slot is among them, at the type it was declared with, so a reader that can
     /// meet a punched type wants this one only to lay the fields out or to address one by its index;
-    /// `value_field_types` answers which of the slots hold a value.
+    /// `unpunched_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.field_types_via_tycons(&type_env.tycons)
     }
@@ -926,13 +926,13 @@ impl TypeNode {
             .collect()
     }
 
-    /// The types of the fields that hold a value, each with the index it sits at. A punched field is
-    /// a hole — the value it held has moved out — so it holds none and is left out here, while the
-    /// slot stays in the layout and keeps the index the other fields are addressed by.
+    /// The types of the fields that are not punched, each with the index it sits at. A punched field
+    /// is a hole: the value it held has moved out, so it holds nothing, while its slot stays in the
+    /// layout and the other fields keep the indices they are addressed by.
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    pub fn value_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
+    pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         self.fields_with_instance_types(&type_env.tycons)
             .into_iter()
             .enumerate()
@@ -1313,7 +1313,7 @@ impl TypeNode {
         if self.is_funptr() {
             return true;
         }
-        self.value_field_types(type_env)
+        self.unpunched_field_types(type_env)
             .iter()
             .all(|(_, field_ty)| field_ty.is_fully_unboxed(type_env))
     }

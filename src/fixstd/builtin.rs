@@ -7895,7 +7895,7 @@ fn mutated_in_place_locality(
     value_path: &[usize],
 ) -> ExtShape {
     let payload_holds_boxed = arg_tys[value_arg]
-        .value_field_types(type_env)
+        .unpunched_field_types(type_env)
         .iter()
         .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
     let value_leaf = if payload_holds_boxed {
