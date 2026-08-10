@@ -2653,9 +2653,10 @@ pub fn test89() {
 /// distinct values or of an order that leaves one side of every split nearly empty.
 /// The routines are the stable merge sort, the heap sort and the insertion sort that introsort falls
 /// back on, introsort at a recursion depth low enough to force that fallback, and `sort_by` itself.
-/// Each runs over an unboxed and a boxed element type, and its result is checked to be increasing
-/// and to keep the size and the sum of the input; the stable one is also checked to leave equal
-/// elements in the order they came in.
+/// Each runs over an unboxed and a boxed element type, and its result is checked to be increasing,
+/// to keep the size and the sum of the input, and to hold the same sequence of values whichever of
+/// the two element types it ran over; the stable one is also checked to leave equal elements in the
+/// order they came in.
 #[test]
 pub fn test_sort_by() {
     let source = r#"
@@ -2757,6 +2758,9 @@ test_sort = |sort_method, sort_method_boxed| (
         assert(|_| case_name + "-boxed", ys_boxed.is_increasing);;
         assert_eq(|_| case_name + "-boxed-size", ys_boxed.@size, xs.@size);;
         assert_eq(|_| case_name + "-boxed-sum", ys_boxed.to_iter.map(|x| x.@v).sum, xs.to_iter.sum);;
+        // The same multiset put in the same order gives the same sequence of values, so the boxed
+        // run and the unboxed one have to agree element by element.
+        assert_eq(|_| case_name + "-boxed-elements", ys_boxed, ys.map(BoxedI64::make));;
 
         pure()
     );;
@@ -11126,6 +11130,9 @@ main : IO () = (
     let res = (foobar.as_some.@data.@data).run_reader(41);
     assert_eq(|_|"3", res, 42);;
 
+    let ra : Reader I64 I64 = do { pure $ (*get_env) + 1 };
+    assert_eq(|_|"4", ra.run_reader(41), 42);;
+
     pure()
 );
     "##;
@@ -11184,6 +11191,9 @@ main : IO () = (
     let foobar = foobar.(Foo::act_data << Bar::act_data $ |r| some(r));
     let res = (foobar.as_some.@data.@data).run_reader(41);
     assert_eq(|_|"3", res, 42);;
+
+    let ra : Reader I64 I64 = do { pure $ (*get_env) + 1 };
+    assert_eq(|_|"4", ra.run_reader(41), 42);;
 
     pure()
 );

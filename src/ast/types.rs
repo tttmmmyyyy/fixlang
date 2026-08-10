@@ -327,26 +327,34 @@ impl TyCon {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
 
-    // Whether this is the type constructor `IO`.
+    /// Whether this is the type constructor `IO`.
     pub fn is_io(&self) -> bool {
         self == make_io_tycon().as_ref()
     }
 
-    // Whether this is the type `IOState`, the token that an `IO` action threads.
+    /// Whether this is the type `IOState`, the token that an `IO` action threads.
     #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
         return self.name == make_iostate_name();
     }
 
+    /// Renames this struct's type constructor to the one that stands for the struct with one field
+    /// made a hole.
+    ///
+    /// # Arguments
+    /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
+    ///   fields are declared.
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
+    /// Whether this is the type constructor `->` that heads a function type.
     #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
         self == &make_arrow_tycon()
     }
 
+    /// Whether this is the type constructor `Std::Array`.
     #[allow(dead_code)]
     pub fn is_array(&self) -> bool {
         self == &make_array_tycon()
