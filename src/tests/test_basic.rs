@@ -11166,6 +11166,334 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// A type the compiler keeps rather than replacing with its field, whose one field is reference
+// counted, through every operation a program can perform on such a value: reading and replacing the
+// field, holding it in an array, a struct, a union and a boxed struct, passing it to a higher-order
+// function, and sharing it between two bindings.
+#[test]
+pub fn test_kept_newtype_with_a_reference_counted_field_through_every_operation() {
+    let source = r##"
+module Main;
+
+type Ph a = unbox struct { x : Array I64 };
+type C = unbox struct { y : Ph C };
+
+impl C : ToString {
+    to_string = |c| "C(" + c.@y.@x.to_string + ")";
+}
+
+impl C : Eq {
+    eq = |a, b| a.@y.@x == b.@y.@x;
+}
+
+type Holder = unbox struct { c : C, tag : I64 };
+type BoxHolder = box struct { c : C };
+type U = union { l : C, r : I64 };
+
+apply : (C -> C) -> C -> C;
+apply = |f, c| f(c);
+
+main : IO ();
+main = (
+    let c = C { y : Ph { x : [1,2,3] } };
+    assert_eq(|_|"", c.to_string, "C([1, 2, 3])");;
+    let c2 = c.set_y(Ph { x : [4,5] });
+    assert_eq(|_|"", c2.to_string, "C([4, 5])");;
+    let c3 = c2.mod_y(|p| Ph { x : p.@x.push_back(6) });
+    assert_eq(|_|"", c3.to_string, "C([4, 5, 6])");;
+    let C { y : p } = c3;
+    assert_eq(|_|"", p.@x, [4,5,6]);;
+    let d = c3;
+    assert_eq(|_|"", (c3 == d).to_string, "true");;
+    let arr = [c, c2, c3];
+    assert_eq(|_|"", arr.to_iter.map(to_string).join(","), "C([1, 2, 3]),C([4, 5]),C([4, 5, 6])");;
+    let arr = arr.set(1, C { y : Ph { x : [9] } });
+    assert_eq(|_|"", arr.@(1).to_string, "C([9])");;
+    let h = Holder { c : c3, tag : 7 };
+    assert_eq(|_|"", h.mod_c(|c| c.set_y(Ph { x : [0] })).@c.to_string, "C([0])");;
+    let bh = BoxHolder { c : c3 };
+    assert_eq(|_|"", bh.mod_c(|c| c.mod_y(|p| Ph { x : p.@x.push_back(100) })).@c.to_string, "C([4, 5, 6, 100])");;
+    let u : U = U::l(c3);
+    assert_eq(|_|"", u.as_l.to_string, "C([4, 5, 6])");;
+    assert_eq(|_|"", apply(|c| c.set_y(Ph { x : [42] }), c3).to_string, "C([42])");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A type the compiler keeps whose one field is a closure, which is the shape `Std::DynIterator` has,
+// written out by a program of its own.
+#[test]
+pub fn test_kept_newtype_with_a_closure_field() {
+    let source = r##"
+module Main;
+
+type PhF a = unbox struct { f : I64 -> I64 };
+type K = unbox struct { g : PhF K };
+
+main : IO ();
+main = (
+    let k = K { g : PhF { f : |x| x + 1 } };
+    assert_eq(|_|"", (k.@g.@f)(10), 11);;
+    let k2 = k.mod_g(|p| PhF { f : |x| (p.@f)(x) * 2 });
+    assert_eq(|_|"", (k2.@g.@f)(10), 22);;
+    let k4 = k2.set_g(PhF { f : |x| x - 1 });
+    assert_eq(|_|"", (k4.@g.@f)(10), 9);;
+    let K { g : q } = k4;
+    assert_eq(|_|"", (q.@f)(10), 9);;
+    let arr = [k, k2, k4];
+    assert_eq(|_|"", arr.to_iter.map(|k| (k.@g.@f)(1)).to_array, [2, 4, 0]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// The field of a `Std::DynIterator` through building, reading, replacing, updating, matching,
+// holding in an array, and sharing between two bindings.
+#[test]
+pub fn test_dyn_iterator_through_every_field_operation() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let it = [1,2,3].to_iter.to_dyn;
+    let n = it.@next;
+    let it2 = DynIterator { next : n };
+    let DynIterator { next : n2 } = it2;
+    let it3 = it2.set_next(n2);
+    let it4 = it3.mod_next(|f| f);
+    assert_eq(|_|"", it4.to_array, [1,2,3]);;
+    let arr = [[1,2].to_iter.to_dyn, [3,4].to_iter.to_dyn];
+    assert_eq(|_|"", arr.@(0).to_array + arr.@(1).to_array, [1,2,3,4]);;
+    let a = [5,6,7].to_iter.to_dyn;
+    let b = a;
+    assert_eq(|_|"", a.to_array + b.to_array, [5,6,7,5,6,7]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A type the compiler keeps whose one field is a union, one whose field is a boxed value, and one
+// held inside another such type.
+#[test]
+pub fn test_kept_newtype_with_a_union_field_and_nested_kept_newtypes() {
+    let source = r##"
+module Main;
+
+type Bx = box struct { value : I64 };
+
+type PhU a = unbox struct { u : Option (Array I64) };
+type V = unbox struct { m : PhU V };
+
+type PhB a = unbox struct { b : Bx };
+type W = unbox struct { n : PhB W };
+
+type Inner = unbox struct { i : PhU Inner };
+type Outer = unbox struct { o : Array Inner };
+
+main : IO ();
+main = (
+    let v = V { m : PhU { u : Option::some([1,2]) } };
+    assert_eq(|_|"", v.@m.@u.as_some, [1,2]);;
+    let v = v.mod_m(|p| PhU { u : Option::none() });
+    assert_eq(|_|"", v.@m.@u.is_none.to_string, "true");;
+    let w = W { n : PhB { b : Bx { value : 5 } } };
+    assert_eq(|_|"", w.@n.@b.@value, 5);;
+    let w = w.mod_n(|p| PhB { b : Bx { value : p.@b.@value + 1 } });
+    assert_eq(|_|"", w.@n.@b.@value, 6);;
+    let inner = Inner { i : PhU { u : Option::some([3]) } };
+    let outer = Outer { o : [inner] };
+    assert_eq(|_|"", outer.@o.@(0).@i.@u.as_some, [3]);;
+    let outer = outer.mod_o(|a| a.push_back(Inner { i : PhU { u : Option::none() } }));
+    assert_eq(|_|"", outer.@o.@(1).@i.@u.is_none.to_string, "true");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A type the compiler keeps that takes two parameters of a higher kind and names itself through
+// both of them.
+#[test]
+pub fn test_two_parameter_higher_kinded_kept_newtype() {
+    let source = r##"
+module Main;
+
+type [f : *->*, g : *->*] It2 f g = unbox struct { n : f (g (It2 f g)) };
+
+main : IO ();
+main = (
+    let x : It2 Array Array = It2 { n : [] };
+    assert_eq(|_|"", x.@n.@size, 0);;
+    let x = x.mod_n(|a| a.push_back([It2 { n : [] }]));
+    assert_eq(|_|"", x.@n.@size, 1);;
+    assert_eq(|_|"", x.@n.@(0).@size, 1);;
+    let x = x.set_n([]);
+    assert_eq(|_|"", x.@n.@size, 0);;
+    let It2 { n : m } = x;
+    assert_eq(|_|"", m.@size, 0);;
+    let y : It2 Array Option = It2 { n : [Option::none()] };
+    assert_eq(|_|"", y.@n.@(0).is_none.to_string, "true");;
+    let y = y.mod_n(|a| a.push_back(Option::some(It2 { n : [] })));
+    assert_eq(|_|"", y.@n.@size, 2);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// Updating the field of a shared value of a type the compiler keeps leaves the other binding's value
+// alone, which is what a wrong uniqueness decision on such a type would break silently.
+#[test]
+pub fn test_a_shared_kept_newtype_is_copied_by_a_field_update() {
+    let source = r##"
+module Main;
+
+type Ph a = unbox struct { x : Array I64 };
+type C = unbox struct { y : Ph C };
+
+main : IO ();
+main = (
+    let c = C { y : Ph { x : [1,2,3] } };
+    let d = c;
+    let e = c.mod_y(|p| Ph { x : p.@x.set(0, 99) });
+    assert_eq(|_|"", (d.@y.@x.@(0), e.@y.@x.@(0)), (1, 99));;
+    let arr = [c];
+    let f = arr.@(0).mod_y(|p| Ph { x : p.@x.set(1, 55) });
+    assert_eq(|_|"", (arr.@(0).@y.@x.@(1), f.@y.@x.@(1)), (2, 55));;
+    let total = loop((0, C { y : Ph { x : [0] } }), |(i, c)|
+        if i == 100 { break $ c.@y.@x.@(0) };
+        continue $ (i + 1, c.mod_y(|p| Ph { x : p.@x.mod(0, |v| v + i) }))
+    );
+    assert_eq(|_|"", total, 4950);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `act_` on a type the compiler keeps, at the functors the field-update machinery has a special
+// implementation for: one that discards the rest of the struct, one that carries it beside another
+// value, and the one `mod_` itself is written on.
+#[test]
+pub fn test_kept_newtype_act_at_the_specialized_functors() {
+    let source = r##"
+module Main;
+
+type Ph a = unbox struct { x : Array I64 };
+type C = unbox struct { y : Ph C };
+
+main : IO ();
+main = (
+    let c = C { y : Ph { x : [1,2,3] } };
+    let t : (I64, C) = c.act_y(|p| (p.@x.@size, Ph { x : p.@x.push_back(4) }));
+    assert_eq(|_|"", t.@0, 3);;
+    assert_eq(|_|"", t.@1.@y.@x, [1,2,3,4]);;
+    let i : Identity C = c.act_y(|p| Identity { data : Ph { x : p.@x.push_back(9) } });
+    assert_eq(|_|"", i.@data.@y.@x, [1,2,3,9]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// `act_` on the field of a `Std::DynIterator`, whose one field is a closure, at the same functors.
+#[test]
+pub fn test_dyn_iterator_act_at_the_specialized_functors() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let it = [1,2,3].to_iter.to_dyn;
+    let t : (I64, DynIterator I64) = it.act_next(|n| (7, n));
+    assert_eq(|_|"", t.@0, 7);;
+    assert_eq(|_|"", t.@1.to_array, [1,2,3]);;
+    let i : Identity (DynIterator I64) = it.act_next(|n| Identity { data : n });
+    assert_eq(|_|"", i.@data.to_array, [1,2,3]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A struct of two fields, one of whose field types names the struct itself, so the struct is one the
+// compiler carries as it is while having a field beside the one that names it.
+#[test]
+pub fn test_field_operations_on_a_two_field_struct_naming_itself() {
+    let source = r##"
+module Main;
+
+type Phantom a = unbox struct { x : I64 };
+type T = unbox struct { a : Phantom T, b : Array I64 };
+
+main : IO ();
+main = (
+    let t = T { a : Phantom { x : 1 }, b : [10, 20] };
+    let t = t.mod_a(|p| Phantom { x : p.@x + 1 });
+    let t = t.mod_b(|v| v.push_back(30));
+    let t = t.set_b(t.@b.push_back(40));
+    let T { a : pa, b : pb } = t;
+    assert_eq(|_|"", pa.@x, 2);;
+    assert_eq(|_|"", pb, [10, 20, 30, 40]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A one-field unboxed struct whose field type reaches the struct through an array, so the struct is
+// one the compiler carries as it is even though its field holds a pointer.
+#[test]
+pub fn test_newtype_naming_itself_through_an_array() {
+    let source = r##"
+module Main;
+
+type G = unbox struct { g : Array G };
+
+main : IO ();
+main = (
+    let x = G { g : [] };
+    let y = G { g : [x, x] };
+    let y = y.mod_g(|a| a.push_back(x));
+    let y = y.set_g(y.@g.push_back(x));
+    let G { g : a } = y;
+    assert_eq(|_|"", a.@size, 4);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A type of a higher-kinded parameter whose form with the field punched out the program reaches
+// before its whole form, so the copy made for the punched form is the one that pairs itself with the
+// copy made for the struct.
+#[test]
+pub fn test_higher_kinded_newtype_punched_before_its_whole_form() {
+    let source = r##"
+module Main;
+
+type [f : *->*] Cell f = unbox struct { v : f (Cell f) };
+
+update : Cell Array -> Cell Array;
+update = |c| c.mod_v(|a| a.push_back(Cell { v : [] }));
+
+main : IO ();
+main = (
+    let c = Cell { v : [] } : Cell Array;
+    let c = update(c);
+    let c = update(c);
+    assert_eq(|_|"", c.@v.@size, 2);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
 // fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
 // hold: the wide result travels through an out-pointer, and the calling convention lets the tail
