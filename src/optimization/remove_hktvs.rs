@@ -58,9 +58,8 @@ impl Env {
 // The type constructors a declaration names: those appearing in the type of one of its fields, and,
 // for a declaration holding a struct with one field punched out, that struct.
 //
-// A declaration written in terms of a type constructor stands or falls with it, which is the edge
-// both `calculate_removed_tycons` and `assert_every_named_tycon_is_declared` are about, so they read
-// it from here and agree on what naming is.
+// A declaration written in terms of a type constructor stands or falls with it, so this is the
+// edge along which removal propagates.
 fn named_tycons(ti: &TyConInfo) -> Set<TyCon> {
     let mut named_tycons = Set::default();
     for field in &ti.fields {
