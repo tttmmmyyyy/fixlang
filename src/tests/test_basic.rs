@@ -11494,6 +11494,56 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// The operations `Std` builds on a `DynIterator` — which is a type the compiler carries as it is —
+// mixed with an update of its field, so each operation meets a value the update has taken apart and
+// put back together.
+#[test]
+pub fn test_dyn_iterator_through_the_std_operations_on_it() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let it = Iterator::range(0, 5).to_dyn;
+    assert_eq(|_|"", it.to_array, [0,1,2,3,4]);;
+    let it = it.mod_next(|n| n);
+    assert_eq(|_|"", it.advance.as_some.@1, 0);;
+    let it2 = it.map(|x| x * 2) : DynIterator I64;
+    assert_eq(|_|"", it2.to_array, [0,2,4,6,8]);;
+    let it3 = it.bind(|x| [x, x].to_iter.to_dyn) : DynIterator I64;
+    assert_eq(|_|"", it3.to_array, [0,0,1,1,2,2,3,3,4,4]);;
+    assert_eq(|_|"", (it + it).to_array.@size, 10);;
+    assert_eq(|_|"", (DynIterator::empty : DynIterator I64).to_array, []);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A type of a higher-kinded parameter that the compiler carries as it is, at a parameter that is
+// itself such a type: the copy made for `It DynIterator` pairs a user type with one of `Std`'s.
+#[test]
+pub fn test_higher_kinded_kept_newtype_at_a_std_kept_newtype_argument() {
+    let source = r##"
+module Main;
+
+type [f : *->*] It f = unbox struct { next : f (It f) };
+
+main : IO ();
+main = (
+    let ia : It Array = It { next : [] };
+    let ia = ia.mod_next(|n| n.push_back(It { next : [] }));
+    assert_eq(|_|"", ia.@next.@size, 1);;
+    let iw : It DynIterator = It { next : DynIterator::empty };
+    assert_eq(|_|"", iw.@next.to_array.@size, 0);;
+    let iw = iw.mod_next(|n| [It { next : DynIterator::empty }].to_iter.to_dyn);
+    assert_eq(|_|"", iw.@next.to_array.@size, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
 // fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
 // hold: the wide result travels through an out-pointer, and the calling convention lets the tail
