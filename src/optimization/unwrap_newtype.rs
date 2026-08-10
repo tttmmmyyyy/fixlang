@@ -6,9 +6,20 @@
 //! field would not terminate. `NewtypeUnwrapping` decides that by walking the type constructors
 //! reachable through field types.
 //!
-//! This optimization should be run after the remove-hk-tyvar transform.
-//! The unwrap-newtype optimization cannot be applied to programs with generic type definitions such as `type [f : * -> *] Foo f = box struct { data : f () };`.
-//! This is because if there is an expression with a type like `Foo IO`, `IO` is a partially applied type and cannot be unwrapped.
+//! A newtype that takes type parameters is replaced at each instance, with the field type read at
+//! that instance, so `Foo Bool` of `type Foo a = unbox struct { data : () -> a };` becomes
+//! `() -> Bool`. What a replacement does require is that the type constructor appears saturated
+//! everywhere it occurs, since a type constructor is dropped from the type environment once it is
+//! replaced, and an occurrence left standing would name a type constructor that is no longer
+//! declared. The transform that removes higher-kinded type variables establishes that, and runs
+//! first.
+//!
+//! A higher-kinded type variable is the only way a type constructor reaches a program's types
+//! without its arguments, and one it carries can be a newtype. Take
+//! `type [f : *->*] Foo f = box struct { data : f () };` and a program holding a `Foo IO`. `Foo` is
+//! boxed, so this pass keeps it, and the bare `IO` stays inside it. `IO` is itself a newtype
+//! (`type IO a = unbox struct { runner : IOState -> (IOState, a) };`), so `IO ()` and `IO I64` are
+//! replaced and `IO` is dropped — while the bare `IO` inside `Foo IO` still names it.
 
 use crate::{
     ast::{
