@@ -7783,6 +7783,14 @@ pub fn test_struct_act() {
             let s = UU { x : false, y : [1, 2], z : 3 };
             assert_eq(|_|"", s.act_x(actor_bool), Option::none());;
 
+            // GB case 1
+            let s = GB { x : [true], y : [1, 2], z : 3 };
+            assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true], y : [1, 2], z : 3 }));;
+
+            // GB case 2
+            let s = GB { x : [], y : [1, 2], z : 3 };
+            assert_eq(|_|"", s.act_x(actor_array), Option::none());;
+
             pure()
         );
     "##;
@@ -7828,6 +7836,25 @@ pub fn test_struct_act2() {
         main = (
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
+            // Case where BU is shared: the field is unboxed, so the update reads it and the struct
+            // is left as it was.
+            let s = BU { x : true, y : [1, 2], z : 3 };
+            assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true, y : [1, 2], z : 3 }));;
+            assert_eq(|_|"", s, BU { x : true, y : [1, 2], z : 3 });;
+
+            // Case where UU is shared.
+            let s = UU { x : true, y : [1, 2], z : 3 };
+            assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true, y : [1, 2], z : 3 }));;
+            assert_eq(|_|"", s, UU { x : true, y : [1, 2], z : 3 });;
+
+            // Case where UB's field is shared with a binding that outlives the update.
+            let actor_set = |x| if x.Array::@size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
+            let x = [true];
+            let s = UB { x : x, y : [1, 2], z : 3 };
+            assert_eq(|_|"", s.act_x(actor_set), Option::some(UB { x : [false], y : [1, 2], z : 3 }));;
+            assert_eq(|_|"", x, [true]);;
+            assert_eq(|_|"", s.@x, [true]);;
+
             // GB case 1
             let actor_array = |x| if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
             let s = GB { x : [true], y : [1, 2], z : 3 };
@@ -7872,7 +7899,7 @@ pub fn test_struct_act2() {
 }
 
 /// `act` on the only field of an unboxed struct that holds a reference, where that reference is a
-/// closure's capture — the shape `Std::DynIterator` has.
+/// closure's capture rather than an array.
 #[test]
 pub fn test_struct_act_on_the_only_field_holding_a_closure() {
     let source = r##"
