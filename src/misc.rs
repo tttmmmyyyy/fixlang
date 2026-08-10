@@ -388,27 +388,27 @@ mod tests {
 
     #[test]
     fn test_join_compiler_threads_joins_every_thread() {
-        const SLOW_THREADS: usize = 3;
-        let finished = Arc::new(AtomicUsize::new(0));
+        const SLOW_THREAD_COUNT: usize = 3;
+        let finished_count = Arc::new(AtomicUsize::new(0));
 
         // The thread that panics is joined first, so a collector that carries the panic on at the
         // first `Err` it sees leaves the slow threads running.
         let mut threads = vec![spawn_compiler_thread(|| {
             panic!("this thread panics on purpose")
         })];
-        for _ in 0..SLOW_THREADS {
-            let finished = finished.clone();
+        for _ in 0..SLOW_THREAD_COUNT {
+            let finished_count = finished_count.clone();
             threads.push(spawn_compiler_thread(move || {
                 thread::sleep(Duration::from_millis(500));
-                finished.fetch_add(1, Ordering::SeqCst);
+                finished_count.fetch_add(1, Ordering::SeqCst);
             }));
         }
 
         let joined = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)));
         assert!(joined.is_err(), "the worker's panic is carried on");
         assert_eq!(
-            finished.load(Ordering::SeqCst),
-            SLOW_THREADS,
+            finished_count.load(Ordering::SeqCst),
+            SLOW_THREAD_COUNT,
             "every thread has finished by the time the panic is carried on"
         );
     }
