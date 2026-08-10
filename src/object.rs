@@ -792,7 +792,7 @@ impl ObjectFieldType {
         mut dst: Object<'c>,
         state: RcState,
     ) -> Object<'c> {
-        for (i, _) in src.ty.value_field_types(gc.type_env()) {
+        for (i, _) in src.ty.unpunched_field_types(gc.type_env()) {
             // Retain the field.
             let field = ObjectFieldType::move_out_struct_field(gc, src, i as u32);
             gc.retain(field.clone(), state);
@@ -1091,7 +1091,7 @@ impl ObjectFieldType {
         } else {
             // The struct is unboxed, so the fields taken out are released by whoever receives them.
             // Releasing the fields left behind here accounts for the struct itself.
-            for (field_idx, _) in struct_obj.ty.value_field_types(gc.type_env()) {
+            for (field_idx, _) in struct_obj.ty.unpunched_field_types(gc.type_env()) {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
                     let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, field_idx);

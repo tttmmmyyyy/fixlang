@@ -2,7 +2,9 @@
 //!
 //! The newtype pattern is an unboxed struct of exactly one field.
 //!
-//! If there is a circular definition of newtype, the optimization is skipped (such a type is rejected before this runs, by `Program::validate_layouts`).
+//! A newtype whose field types lead back to itself stays as it is, since replacing it with its
+//! field would not terminate. `NewtypeUnwrapping` decides that by walking the type constructors
+//! reachable through field types.
 //!
 //! This optimization should be run after the remove-hk-tyvar transform.
 //! The unwrap-newtype optimization cannot be applied to programs with generic type definitions such as `type [f : * -> *] Foo f = box struct { data : f () };`.
@@ -25,30 +27,197 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// Replaces every unwrappable newtype of `prg` with the type of its one field, in the types
+/// recorded throughout the program and in the type environment.
 pub fn run(prg: &mut Program) {
-    let mut env = prg.type_env.tycons.as_ref().clone();
+    let unwrapping = NewtypeUnwrapping::new(prg.type_env.tycons.as_ref().clone());
 
     for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym, &env);
+        run_on_symbol(sym, &unwrapping);
     }
-    run_on_exported_statements(prg, &env);
-    run_on_entry_io_value(prg, &env);
-    unwrap_newtype_on_type_env(&mut env);
+    run_on_exported_statements(prg, &unwrapping);
+    run_on_entry_io_value(prg, &unwrapping);
 
-    prg.type_env.tycons = Arc::new(env);
+    prg.type_env.tycons = Arc::new(unwrapping.unwrapped_tycons());
 }
 
-fn run_on_exported_statements(prg: &mut Program, env: &Map<TyCon, TyConInfo>) {
+/// The type constructors this pass replaces with the type of their one field, together with the
+/// type environment they were chosen against.
+///
+/// The choice is made once and every rewrite asks this same value, so a type constructor is
+/// replaced wherever it heads a saturated type and dropped from the type environment only if it is
+/// replaced: no saturated occurrence is left naming a type the environment no longer declares.
+struct NewtypeUnwrapping {
+    /// The type environment as this pass received it. Field types are read from here, so a
+    /// declaration reads as it did when the choices were made.
+    tycons: Map<TyCon, TyConInfo>,
+    /// The type constructors to replace.
+    unwrappable_tycons: Set<TyCon>,
+}
+
+impl NewtypeUnwrapping {
+    /// Chooses the type constructors to replace: the newtypes of `tycons` whose field types do not
+    /// lead back to them.
+    fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
+        let mut unwrappable_tycons = Set::default();
+        for (tc, ti) in &tycons {
+            // The form of a struct with one field punched out is unwrapped exactly when the struct
+            // it punches is, so it is the struct that `is_acyclic_newtype` is asked about. Asking
+            // about the punched form itself answers a different question: it names no field type,
+            // so the walk finds nothing and says yes even where the struct names itself and stays.
+            assert_eq!(
+                ti.punched_from.is_some(),
+                ti.fields.iter().any(|field| field.is_punched),
+                "The declaration of `{}` names a struct it punches iff it has a hole.",
+                tc.to_string()
+            );
+            let deciding_tc = ti.punched_from.as_ref().unwrap_or(tc);
+            if is_acyclic_newtype(deciding_tc, &tycons) {
+                unwrappable_tycons.insert(tc.clone());
+            }
+        }
+        NewtypeUnwrapping {
+            tycons,
+            unwrappable_tycons,
+        }
+    }
+
+    /// Whether `tc` is replaced by the type of its one field. The form of a struct with one field
+    /// punched out answers as the struct it punches does.
+    fn is_unwrappable(&self, tc: &TyCon) -> bool {
+        self.unwrappable_tycons.contains(tc)
+    }
+
+    /// `ty` with each unwrappable type constructor in it replaced by the type of its one field.
+    ///
+    /// This is supposed to be called after type aliases are resolved.
+    fn unwrap_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        // First, replace the top-level type constructor if it is a newtype. The field type is taken
+        // at this instance, so `Foo Bool` of `type Foo a = unbox struct { data : () -> a }` becomes
+        // `() -> Bool`.
+        if let Some(top_tc) = ty.toplevel_tycon() {
+            let top_ti = self.tycons.get(&top_tc).unwrap();
+            let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
+            if is_fully_applied && self.is_unwrappable(&top_tc) {
+                // A value of the form with the one field punched out holds nothing once that field
+                // is the hole, so it becomes the unit type.
+                if top_ti.fields[0].is_punched {
+                    return make_unit_ty();
+                }
+                let field_ty = ty.field_types_via_tycons(&self.tycons)[0].clone();
+                return self.unwrap_type(&field_ty);
+            }
+        }
+
+        // If the top-level tycon is not a newtype, recursively process type arguments
+        match &ty.ty {
+            Type::TyVar(_) => ty.clone(),
+            Type::TyCon(_) => ty.clone(),
+            Type::TyApp(fun_ty, arg_ty) => ty
+                .set_tyapp_fun(self.unwrap_type(fun_ty))
+                .set_tyapp_arg(self.unwrap_type(arg_ty)),
+            Type::AssocTy(_, _args) => {
+                unimplemented!("AssocTy is not supported in unwrap_type")
+            }
+        }
+    }
+
+    /// `expr` with the type inferred for it unwrapped.
+    fn unwrap_inferred_type(&self, expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+        let type_ = expr.type_.as_ref().unwrap();
+        expr.set_type(self.unwrap_type(type_))
+    }
+
+    /// `pat` with each unwrappable struct pattern replaced by the pattern of its one field, and the
+    /// type recorded in every pattern that stays unwrapped.
+    ///
+    /// This is supposed to be called after type aliases are resolved.
+    fn unwrap_pattern(&self, pat: &Arc<PatternNode>) -> Arc<PatternNode> {
+        match &pat.pattern {
+            Pattern::Var(v, ty) => {
+                // Ignore user-provided type annotation for variable patterns
+                let mut info = pat.info.clone();
+                self.unwrap_pattern_info(&mut info);
+                Arc::new(PatternNode {
+                    pattern: Pattern::Var(v.clone(), ty.clone()),
+                    info,
+                })
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                if self.is_unwrappable(tc) {
+                    assert_eq!(field_to_pat.len(), 1);
+                    let (_, _, pat) = &field_to_pat[0];
+                    self.unwrap_pattern(pat)
+                } else {
+                    let mut field_to_pat = field_to_pat.clone();
+                    for (_, _, pat) in &mut field_to_pat {
+                        *pat = self.unwrap_pattern(pat);
+                    }
+                    let mut info = pat.info.clone();
+                    self.unwrap_pattern_info(&mut info);
+                    Arc::new(PatternNode {
+                        pattern: Pattern::Struct(tc.clone(), field_to_pat),
+                        info,
+                    })
+                }
+            }
+            Pattern::Union(variant, variant_src, subpat) => {
+                let mut info = pat.info.clone();
+                self.unwrap_pattern_info(&mut info);
+                Arc::new(PatternNode {
+                    pattern: Pattern::Union(
+                        variant.clone(),
+                        variant_src.clone(),
+                        self.unwrap_pattern(subpat),
+                    ),
+                    info,
+                })
+            }
+        }
+    }
+
+    /// Unwraps the type recorded in `pat_info`, in place.
+    fn unwrap_pattern_info(&self, pat_info: &mut PatternInfo) {
+        if let Some(ty) = &mut pat_info.type_ {
+            *ty = self.unwrap_type(ty);
+        }
+    }
+
+    /// The type environment this pass leaves behind: the declarations of the type constructors that
+    /// stay, with their field types unwrapped.
+    ///
+    /// A replaced type constructor loses its declaration, so a type this pass failed to rewrite
+    /// fails at the first lookup of that declaration rather than laying its values out as the
+    /// struct they were to stop being.
+    fn unwrapped_tycons(&self) -> Map<TyCon, TyConInfo> {
+        let mut env = Map::default();
+        for (tc, ti) in &self.tycons {
+            if self.is_unwrappable(tc) {
+                continue;
+            }
+            let mut ti = ti.clone();
+            for field in &mut ti.fields {
+                field.ty = self.unwrap_type(&field.ty);
+            }
+            env.insert(tc.clone(), ti);
+        }
+        env
+    }
+}
+
+/// Unwraps the types recorded in each export statement. An exported `IO` function is recorded as
+/// state-passing, since unwrapping `IO` leaves the function that takes the state.
+fn run_on_exported_statements(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
     for export in &mut prg.export_statements {
         if let Some(expr) = &export.value_expr {
-            let expr = run_on_inferred_type(expr, env);
+            let expr = unwrapping.unwrap_inferred_type(expr);
             export.value_expr = Some(expr);
         }
         if let Some(ft) = &mut export.function_type {
             for dom in &mut ft.doms {
-                *dom = unwrap_newtype_on_type(dom, env);
+                *dom = unwrapping.unwrap_type(dom);
             }
-            ft.codom = unwrap_newtype_on_type(&ft.codom, env);
+            ft.codom = unwrapping.unwrap_type(&ft.codom);
             if matches!(ft.io_type, IOType::IO) {
                 ft.io_type = IOType::IOState;
             }
@@ -56,33 +225,29 @@ fn run_on_exported_statements(prg: &mut Program, env: &Map<TyCon, TyConInfo>) {
     }
 }
 
-fn run_on_entry_io_value(prg: &mut Program, env: &Map<TyCon, TyConInfo>) {
+/// Unwraps the type inferred for the `IO` value the program runs at entry.
+fn run_on_entry_io_value(prg: &mut Program, unwrapping: &NewtypeUnwrapping) {
     if let Some(entry_io_value) = &mut prg.entry_io_value {
-        let expr = run_on_inferred_type(entry_io_value, env);
+        let expr = unwrapping.unwrap_inferred_type(entry_io_value);
         prg.entry_io_value = Some(expr);
     }
 }
 
-fn run_on_symbol(sym: &mut Symbol, env: &Map<TyCon, TyConInfo>) {
-    let mut remover = NewtypeUnwrapper { type_env: env };
-    let res = remover.traverse(&sym.expr.as_ref().unwrap());
-    if res.changed {
-        sym.ty = unwrap_newtype_on_type(&sym.ty, env);
-        sym.expr = Some(res.expr);
-    }
+/// Unwraps the type of one symbol and rewrites the expression that defines it.
+fn run_on_symbol(sym: &mut Symbol, unwrapping: &NewtypeUnwrapping) {
+    let mut unwrapper = ExprUnwrapper { unwrapping };
+    sym.ty = unwrapping.unwrap_type(&sym.ty);
+    sym.expr = Some(unwrapper.traverse(&sym.expr.as_ref().unwrap()).expr);
 }
 
-fn run_on_inferred_type(expr: &Arc<ExprNode>, type_env: &Map<TyCon, TyConInfo>) -> Arc<ExprNode> {
-    let type_ = expr.type_.as_ref().unwrap();
-    let type_ = unwrap_newtype_on_type(type_, type_env);
-    expr.set_type(type_)
+/// Rewrites the types recorded in one symbol's expression, and replaces the field operations of an
+/// unwrapped newtype by the operations on the field itself.
+struct ExprUnwrapper<'a> {
+    /// The choices made for the whole program, applied here to one symbol.
+    unwrapping: &'a NewtypeUnwrapping,
 }
 
-struct NewtypeUnwrapper<'a> {
-    type_env: &'a Map<TyCon, TyConInfo>,
-}
-
-impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
+impl<'a> ExprVisitor for ExprUnwrapper<'a> {
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
@@ -96,7 +261,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -109,7 +274,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -121,9 +286,12 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for an inline LLVM expression, and replaces the read, the write,
+    /// the punch and the plug-in of an unwrapped newtype's field by the field value itself, which
+    /// is what a value of that type has become.
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
         let old_ty = expr.type_.as_ref().unwrap().clone();
-        let mut expr = run_on_inferred_type(&expr, self.type_env);
+        let mut expr = self.unwrapping.unwrap_inferred_type(expr);
         let new_ty = expr.type_.as_ref().unwrap().clone();
 
         let llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
@@ -132,17 +300,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
             unreachable!()
         };
 
-        // We don't need to change the LLVM type: TODO: rename llvm.ty to llvm.generic_ty.
-
-        // write_log(&format!(
-        //     "UnwrapNewtype: LLVM expr with type {}, old_type = {}, new_type = {}, llvm_name = {}",
-        //     llvm.ty.to_string(),
-        //     old_ty.to_string(),
-        //     new_ty.to_string(),
-        //     llvm.generator.name()
-        // ));
-        // llvm.ty = unwrap_newtype_on_type(&llvm.ty, self.type_env);
-        // expr = expr.set_llvm(llvm.clone());
+        // `llvm.generic_ty` stays as it is: type checking is the last pass that reads it.
 
         // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
         let gen = llvm.generator.as_ref();
@@ -155,7 +313,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
             assert!(struct_name.is_local());
             let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if is_unwrappable_newtype(struct_tc.as_ref(), &self.type_env) {
+            if self.unwrapping.is_unwrappable(struct_tc.as_ref()) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
         } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructSetBody>() {
@@ -165,7 +323,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
             let field_ty = new_ty;
             let struct_ty = old_ty;
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if is_unwrappable_newtype(struct_tc.as_ref(), &self.type_env) {
+            if self.unwrapping.is_unwrappable(struct_tc.as_ref()) {
                 let field_name = body.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
@@ -177,9 +335,8 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
             let struct_name = body.var_name.clone();
             assert!(struct_name.is_local());
             let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
-            // let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if is_unwrappable_newtype(struct_tc.as_ref(), &self.type_env) {
+            if self.unwrapping.is_unwrappable(struct_tc.as_ref()) {
                 let field_ty = field_unit_ty.collect_type_argments()[0].clone();
                 let unit_ty = make_unit_ty();
                 let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
@@ -197,7 +354,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
             // plug_in : () -> F -> F = |_, f| f
             let struct_ty = old_ty;
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if is_unwrappable_newtype(struct_tc.as_ref(), &self.type_env) {
+            if self.unwrapping.is_unwrappable(struct_tc.as_ref()) {
                 let field_ty = new_ty;
                 let field_name = body.field_name.clone();
                 assert!(field_name.is_local());
@@ -217,7 +374,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -230,7 +387,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -243,12 +400,9 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let mut expr = run_on_inferred_type(&expr, self.type_env);
+        let mut expr = self.unwrapping.unwrap_inferred_type(expr);
         if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
-            let pat = unwrap_newtype_on_pattern(pat, self.type_env);
-            // let pat = pat
-            //     .get_typed_matching(body.type_.as_ref().unwrap(), &self.type_env)
-            //     .unwrap();
+            let pat = self.unwrapping.unwrap_pattern(pat);
             expr = expr_let_typed(pat, body.clone(), val.clone());
         } else {
             unreachable!()
@@ -265,7 +419,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -278,17 +432,11 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let mut expr = run_on_inferred_type(&expr, self.type_env);
+        let mut expr = self.unwrapping.unwrap_inferred_type(expr);
         if let Expr::Match(scrut, arms) = expr.expr.as_ref() {
             let arms = arms
                 .iter()
-                .map(|(pat, arm_expr)| {
-                    let pat = unwrap_newtype_on_pattern(pat, self.type_env);
-                    // let pat = pat
-                    //     .get_typed_matching(scrut.type_.as_ref().unwrap(), &self.type_env)
-                    //     .unwrap();
-                    (pat, arm_expr.clone())
-                })
+                .map(|(pat, arm_expr)| (self.unwrapping.unwrap_pattern(pat), arm_expr.clone()))
                 .collect();
             expr = expr_match_typed(scrut.clone(), arms);
         } else {
@@ -305,14 +453,16 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a struct literal, and replaces a literal of an unwrapped
+    /// newtype by the expression its one field is built from.
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        let mut expr = run_on_inferred_type(&expr, self.type_env);
+        let mut expr = self.unwrapping.unwrap_inferred_type(expr);
         if let Expr::MakeStruct(tycon, fields) = expr.expr.as_ref() {
-            if is_unwrappable_newtype(tycon, &self.type_env) {
+            if self.unwrapping.is_unwrappable(tycon) {
                 expr = fields[0].2.clone();
             }
         } else {
@@ -334,7 +484,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -351,7 +501,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 
@@ -364,188 +514,46 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
     }
 
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, self.type_env);
+        let expr = self.unwrapping.unwrap_inferred_type(expr);
         EndVisitResult::changed(expr)
     }
 }
 
-// Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
-//
-// This function detects circular newtype patterns and avoids infinite loops.
-//
-// This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_on_type(ty: &Arc<TypeNode>, env: &Map<TyCon, TyConInfo>) -> Arc<TypeNode> {
-    unwrap_newtype_on_type_internal(ty, env)
-}
-
-// Internal implementation of unwrap_newtype
-fn unwrap_newtype_on_type_internal(
-    ty: &Arc<TypeNode>,
-    env: &Map<TyCon, TyConInfo>,
-) -> Arc<TypeNode> {
-    // First, replace the top-level type constructor if it is a newtype.
-    // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
-    // Then `Foo Bool` should be resolved to `() -> Bool`.
-    if let Some(top_tc) = ty.toplevel_tycon().clone() {
-        let top_ti = env.get(&top_tc).unwrap().clone();
-        let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
-        if is_fully_applied && is_unwrappable_newtype(&top_tc, env) {
-            // If the top-level tycon is a fully applied newtype, unwrap it.
-            let ti = env.get(&top_tc).unwrap();
-            // Check if this is a punched struct of a newtype pattern
-            if ti.fields[0].is_punched {
-                // Convert punched struct of newtype pattern to unit type
-                return make_unit_ty();
-            }
-            let field_ty = ty.field_types_via_tycons(env)[0].clone();
-            let result = unwrap_newtype_on_type_internal(&field_ty, env);
-
-            return result;
-        }
-    }
-
-    // If the top-level tycon is not a newtype, recursively process type arguments
-    match &ty.ty {
-        Type::TyVar(_) => ty.clone(),
-        Type::TyCon(_) => ty.clone(),
-        Type::TyApp(fun_ty, arg_ty) => ty
-            .set_tyapp_fun(unwrap_newtype_on_type_internal(fun_ty, env))
-            .set_tyapp_arg(unwrap_newtype_on_type_internal(arg_ty, env)),
-        Type::AssocTy(_, _args) => {
-            unimplemented!("AssocTy is not supported in unwrap_newtype_on_type")
-        }
-    }
-}
-
-// Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
-//
-// This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
-//
-// This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_on_pattern(
-    pat: &Arc<PatternNode>,
-    env: &Map<TyCon, TyConInfo>,
-) -> Arc<PatternNode> {
-    match &pat.pattern {
-        Pattern::Var(v, ty) => {
-            // Ignore user-provided type annotation for variable patterns
-            let mut info = pat.info.clone();
-            unwrap_newtype_on_pattern_info(&mut info, env);
-            Arc::new(PatternNode {
-                pattern: Pattern::Var(v.clone(), ty.clone()),
-                info,
-            })
-        }
-        Pattern::Struct(tc, field_to_pat) => {
-            if is_unwrappable_newtype(tc, env) {
-                assert_eq!(field_to_pat.len(), 1);
-                let (_, _, pat) = &field_to_pat[0];
-                unwrap_newtype_on_pattern(pat, env)
-            } else {
-                let mut field_to_pat = field_to_pat.clone();
-                for (_, _, pat) in &mut field_to_pat {
-                    *pat = unwrap_newtype_on_pattern(pat, env);
-                }
-                let mut info = pat.info.clone();
-                unwrap_newtype_on_pattern_info(&mut info, env);
-                Arc::new(PatternNode {
-                    pattern: Pattern::Struct(tc.clone(), field_to_pat),
-                    info,
-                })
-            }
-        }
-        Pattern::Union(variant, variant_src, subpat) => {
-            let mut info = pat.info.clone();
-            unwrap_newtype_on_pattern_info(&mut info, env);
-            Arc::new(PatternNode {
-                pattern: Pattern::Union(
-                    variant.clone(),
-                    variant_src.clone(),
-                    unwrap_newtype_on_pattern(subpat, env),
-                ),
-                info,
-            })
-        }
-    }
-}
-
-// Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
-//
-// This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
-//
-// This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_on_pattern_info(pat_info: &mut PatternInfo, env: &Map<TyCon, TyConInfo>) {
-    if let Some(ty) = &mut pat_info.type_ {
-        *ty = unwrap_newtype_on_type(ty, env);
-    }
-}
-
-// Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
-//
-// This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
-//
-// This function is supposed to be called after type aliases are resolved.
-pub fn unwrap_newtype_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
-    let tycons = env.clone();
-
-    // Unwrap newtype patterns in the remaining types
-    for (tycon, mut tycon_info) in tycons.into_iter() {
-        for field in &mut tycon_info.fields {
-            let new_ty = unwrap_newtype_on_type(&field.ty, env);
-            field.ty = new_ty;
-        }
-        env.insert(tycon, tycon_info);
-    }
-
-    // Remove newtype pattern types from the tycons map
-    let mut to_remove = Vec::new();
-    for (name, _tycon_info) in env.iter() {
-        if is_unwrappable_newtype(name, env) {
-            to_remove.push(name.clone());
-        }
-    }
-    for name in to_remove {
-        env.remove(&name);
-    }
-}
-
-// Is this type constructor a "newtype", i.e., is it an unbox struct type with only one field?
+/// Is this type constructor a "newtype", i.e., is it an unbox struct type with only one field?
 fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     let ti = env.get(tycon).unwrap();
     ti.is_unbox && ti.variant == TyConVariant::Struct && ti.fields.len() == 1
 }
 
-// Is this type constructor a newtype and unwrappable?
-fn is_unwrappable_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
-    is_unwrappable_newtype_internal(tycon, env)
-}
-
-// Is this type constructor a newtype and unwrappable?
-fn is_unwrappable_newtype_internal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
+/// Is this type constructor a newtype whose field types do not lead back to it?
+///
+/// Replacing a newtype with the type of its field terminates exactly when this walk reaches the
+/// end, so this answer is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite.
+fn is_acyclic_newtype(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     // If this TyCon is not a newtype, return false.
     if !is_newtype(tc, env) {
         return false;
     }
 
     let mut visited = Set::default();
-    let mut seed_tcs = vec![tc.clone()];
-    while let Some(now_tc) = seed_tcs.pop() {
-        visited.insert(now_tc.clone());
-        if !is_newtype(&now_tc, env) {
+    let mut pending_tcs = vec![tc.clone()];
+    while let Some(visiting_tc) = pending_tcs.pop() {
+        visited.insert(visiting_tc.clone());
+        if !is_newtype(&visiting_tc, env) {
             continue;
         }
-        let ti = env.get(&now_tc).unwrap();
+        let ti = env.get(&visiting_tc).unwrap();
         let field_ty = &ti.fields[0].ty;
-        let mut tycons = Set::default();
-        field_ty.collect_tycons(&mut tycons);
-        for tycon in tycons {
-            if tycon == *tc {
+        let mut field_tcs = Set::default();
+        field_ty.collect_tycons(&mut field_tcs);
+        for field_tc in field_tcs {
+            if field_tc == *tc {
                 return false;
             }
-            if visited.contains(&tycon) {
+            if visited.contains(&field_tc) {
                 continue;
             }
-            seed_tcs.push(tycon);
+            pending_tcs.push(field_tc);
         }
     }
 

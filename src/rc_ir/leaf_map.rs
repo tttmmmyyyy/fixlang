@@ -48,7 +48,7 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             out.push(path.clone());
             return;
         }
-        for (i, fty) in ty.value_field_types(type_env) {
+        for (i, fty) in ty.unpunched_field_types(type_env) {
             path.push(i);
             go(&fty, type_env, path, out);
             path.pop();

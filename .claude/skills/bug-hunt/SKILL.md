@@ -178,9 +178,13 @@ laid out" is a measurement of the gap, available with no failing input in hand, 
 evidence even when no input that breaks is found. Prove the probe fires the usual way, on a case
 where the two are known to disagree.
 
-#### Run the same program at every optimization level
+#### Turn a knob the answer must not depend on, and diff what comes out
 
-`fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs; it needs no expected output, the levels check each other. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak — they can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
+The compiler exposes settings that change *how* it works and must not change *what* it answers. Two of them check each other for free, with no expected output to write down.
+
+**The optimization level.** `fix run -O none`, `-O basic`, `-O max`, `-O experimental` must compute the same result. When two levels both complete and return different values, that is a miscompilation by definition — no judgment call about intent — and it points straight at the pass that differs. Compare the *result*, not the *run*: `-O none` and `-O basic` are deliberately weak and can let an `O(n)` program degrade to `O(n²)`. A hang at the lower levels is that known weakness, not a miscompile — take `-O max` / `-O experimental` as the reference, and read a divergence as a bug only when a completing run returns the wrong value.
+
+**How the work was divided.** A stage that splits its work across threads or across units — type checking per global value, code generation per compilation unit — must answer the same however the split fell. Force the divisions apart and diff everything the stage produces: the emitted artifact, the cache it writes, the diagnostics and *their order*. `taskset -c 0` collapses a `num_cpus`-derived worker count to the sequential path, `--max-cu-size` moves the unit boundaries, and running the same command twice on the same input is itself a division-varying experiment. What comes out is one of three answers, all worth having: the outputs agree (the strongest neutrality evidence there is, since it holds over every interleaving the machine happened to produce); they disagree in something a user reads, which is a defect even when every value is right; or the run dies, which is where a resource bound proportional to the split is hiding.
 
 #### Test a neutrality claim by diffing the emitted artifact, optimized form included
 

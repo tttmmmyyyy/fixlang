@@ -832,7 +832,9 @@ impl Program {
             } else {
                 tycons.insert(tycon.clone(), type_decl.tycon_info(&[]));
             }
-            // If the type is a boxed struct, add punched struct types to tycons.
+            // A struct also gets, per field, the type constructor of the struct with that field
+            // punched out, which is what `act_` and `mod_` hold the rest of the struct in while the
+            // field is out.
             if let TypeDeclValue::Struct(s) = &type_decl.value {
                 for i in 0..s.fields.len() {
                     let mut punched_tycon = tycon.clone();
