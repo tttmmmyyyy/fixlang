@@ -169,9 +169,9 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     let mut result = vec![];
     while v.len() > 0 {
         let len = std::cmp::min(max_size, v.len());
-        let mut w = v.split_off(v.len() - len);
-        w.reverse();
-        result.push(w);
+        let mut chunk = v.split_off(v.len() - len);
+        chunk.reverse();
+        result.push(chunk);
     }
     result
 }

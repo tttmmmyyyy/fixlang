@@ -392,10 +392,10 @@ pub fn build_object_files<'c>(
     join_compiler_threads(threads);
 
     // Save object files cache.
-    let result = BuildObjFilesResult { obj_paths };
-    save_build_object_files_cache(&program, config, &result);
+    let obj_files = BuildObjFilesResult { obj_paths };
+    save_build_object_files_cache(&program, config, &obj_files);
 
-    Ok(result)
+    Ok(obj_files)
 }
 
 /// The object files a previous build of this program and configuration left behind, when the cache
@@ -431,7 +431,7 @@ fn load_build_object_files_cache(
 fn save_build_object_files_cache(
     program: &Program,
     config: &Configuration,
-    result: &BuildObjFilesResult,
+    obj_files: &BuildObjFilesResult,
 ) {
     let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
@@ -450,7 +450,7 @@ fn save_build_object_files_cache(
         return;
     };
     cache_step_or_warn(
-        serde_json::to_writer_pretty(file, result),
+        serde_json::to_writer_pretty(file, obj_files),
         &format!("Failed to write object files cache \"{}\"", cache_path),
     );
 }
