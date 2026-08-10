@@ -392,7 +392,9 @@ mod tests {
 
         // The thread that panics is joined first, so a collector that carries the panic on at the
         // first `Err` it sees leaves the slow threads running.
-        let mut threads = vec![spawn_compiler_thread(|| panic!("a worker thread panicked"))];
+        let mut threads = vec![spawn_compiler_thread(|| {
+            panic!("this thread panics on purpose")
+        })];
         for _ in 0..SLOW_THREADS {
             let finished = finished.clone();
             threads.push(spawn_compiler_thread(move || {
