@@ -11084,10 +11084,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type of a higher-kinded parameter that names itself through the type argument of a type of its
-// parameter. The pass that removes higher-kinded type variables rebuilds the type constructor for
-// each argument list, so the copy of the struct and the copy of the form with its field punched out
-// have to stay paired.
+// A type of a higher-kinded parameter that names itself through the type argument of its parameter,
+// so the copy the compiler makes of it is a type it carries as it is. The pass that removes
+// higher-kinded type variables rebuilds the type constructor for each argument list, so the copy of
+// the struct and the copy of the form with its field punched out have to stay paired.
 #[test]
 pub fn test_higher_kinded_newtype_naming_itself_through_its_parameter() {
     let source = r##"
@@ -11098,11 +11098,39 @@ type [f : *->*] It f = unbox struct { next : f (It f) };
 main : IO ();
 main = (
     let it : It Array = It { next : [] };
-    assert_eq(|_|"", it.@next.get_size, 0);;
+    assert_eq(|_|"", it.@next.@size, 0);;
     let it = it.mod_next(|n| n.push_back(It { next : [] }));
-    assert_eq(|_|"", it.@next.get_size, 1);;
+    assert_eq(|_|"", it.@next.@size, 1);;
     let It { next : n } = it;
-    assert_eq(|_|"", n.get_size, 1);;
+    assert_eq(|_|"", n.@size, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// One type of a higher-kinded parameter, used at two type arguments: at one it is a type the
+// compiler replaces with its field, at the other it names itself and stays. The copy made for each
+// argument list has to be paired with the copy of the form with its field punched out made for that
+// same argument list, so that updating the field takes the type apart the way that copy is laid out.
+#[test]
+pub fn test_higher_kinded_newtype_folded_at_one_type_argument_and_kept_at_another() {
+    let source = r##"
+module Main;
+
+type [f : *->*] Wrap f = unbox struct { v : f I64 };
+type Holder a = unbox struct { s : Array (Wrap Holder) };
+
+main : IO ();
+main = (
+    // `Wrap Array` holds an `Array I64` and nothing more, so the compiler carries it as one.
+    let folded = Wrap { v : [1, 2] } : Wrap Array;
+    let folded = folded.mod_v(|a| a.push_back(3));
+    assert_eq(|_|"", folded.@v.@size, 3);;
+    // `Wrap Holder` holds a `Holder I64`, whose field names `Wrap Holder` back.
+    let kept = Wrap { v : Holder { s : [] } } : Wrap Holder;
+    let kept = kept.mod_v(|h| Holder { s : h.@s.push_back(Wrap { v : Holder { s : [] } }) });
+    assert_eq(|_|"", kept.@v.@s.@size, 1);;
     pure()
 );
     "##;

@@ -104,6 +104,11 @@ impl TypeDefn {
             fields,
             source: self.source.clone(),
             document: None,
+            punched_from: if punched_struct_fields.is_empty() {
+                None
+            } else {
+                Some(self.tycon())
+            },
         }
     }
 

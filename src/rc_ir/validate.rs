@@ -411,7 +411,7 @@ mod tests {
     /// A type environment holding the built-in type constructors, which a check consults to tell a
     /// boxed type from an unboxed one.
     fn type_env() -> TypeEnv {
-        TypeEnv::new(bulitin_tycons(), Map::default(), Map::default())
+        TypeEnv::new(bulitin_tycons(), Map::default())
     }
 
     /// A local variable of type `I64`, which is unboxed and so holds no reference-counting unit.
