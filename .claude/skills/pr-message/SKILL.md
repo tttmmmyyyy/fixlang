@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every function the diff touches, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every function the diff touches, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -30,6 +30,17 @@ The body is read before the diff, and it has to make the diff make sense. So the
 - **An added function**: its **role**, written the same way.
 
 When one mechanical change lands identically in many functions — a renamed parameter, an argument threaded through a call chain — describe the change once and name the functions it lands in. Every function is still covered, without the repetition.
+
+## Every text the change shows to a user
+
+The diff carries words a Fix user will read as well as code: a changelog entry, the documentation of a public standard-library value, a compiler diagnostic, the output and the help text of the `fix` command. That wording is a deliverable of the change, and it is reviewed by reading it, so the body carries it in full.
+
+- **Transcribe it.** Quoting the text as the user will see it is the whole requirement — the wording that ships is the thing under review, and prose about it puts something else in front of the reviewer.
+- **Quote a reworded text twice**: what it said, and what it says now. The difference between the two is what the review is about.
+- **Quote a diagnostic together with the source that triggers it**, so the wording can be judged against what the user did to see it.
+- **When one wording pattern repeats across many texts**, quote it once and name where it lands.
+
+A body that leaves this out sends the reviewer into the diff to find the words, where they sit scattered among the code that emits them.
 
 ## A bug fix is two mechanisms
 
