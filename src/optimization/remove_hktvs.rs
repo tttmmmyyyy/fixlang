@@ -38,18 +38,13 @@ use std::sync::Arc;
 
 struct Env {
     tycons: Map<TyCon, TyConInfo>,
-    /// The struct each punched type constructor of `tycons` punches, carrying
-    /// `TypeEnv::punched_from` across this pass: a copy made for one type argument list is paired
-    /// with the copy made for the same arguments of the struct it punches.
-    punched_from: Map<TyCon, TyCon>,
     removed_tycons: Set<TyCon>,
 }
 
 impl Env {
-    fn new(tycons: Map<TyCon, TyConInfo>, punched_from: Map<TyCon, TyCon>) -> Self {
+    fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
         let mut env = Self {
             tycons,
-            punched_from,
             removed_tycons: Set::default(),
         };
         let tycons = env.tycons.keys().cloned().collect::<Vec<_>>();
@@ -101,10 +96,7 @@ impl Env {
 
 pub fn run(prg: &mut Program) {
     // Run on all symbols.
-    let mut env = Env::new(
-        prg.type_env.tycons.as_ref().clone(),
-        prg.type_env.punched_from.as_ref().clone(),
-    );
+    let mut env = Env::new(prg.type_env.tycons.as_ref().clone());
 
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym, &mut env);
@@ -116,7 +108,6 @@ pub fn run(prg: &mut Program) {
     run_on_type_env(&mut env);
 
     prg.type_env.tycons = Arc::new(env.tycons);
-    prg.type_env.punched_from = Arc::new(env.punched_from);
 }
 
 fn run_on_exported_statements(prg: &mut Program, env: &mut Env) {
@@ -269,6 +260,7 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
 
     if !env.tycons.contains_key(&new_tc) {
         let mut new_ti = TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: top_ti.variant.clone(),
             is_unbox: top_ti.is_unbox,
@@ -279,6 +271,18 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
         };
         // Register the new type constructor before processing field types to handle recursive types.
         env.tycons.insert(new_tc.clone(), new_ti.clone());
+
+        // The copy being made punches the same field of the copy made for the struct at these same
+        // type arguments, so it is paired with that one the way their originals are paired. The copy
+        // is registered above first, so the walk for the struct stops here if it comes back.
+        new_ti.punched_from = top_ti.punched_from.as_ref().map(|struct_tc| {
+            let struct_ty = ty.set_toplevel_tycon(Arc::new(struct_tc.clone()));
+            run_on_type(&struct_ty, env)
+                .toplevel_tycon()
+                .unwrap()
+                .as_ref()
+                .clone()
+        });
 
         let mut field_types = ty.field_types_via_tycons(&env.tycons);
         for field_type in &mut field_types {
@@ -296,15 +300,6 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
             new_ti.fields.push(new_field);
         }
         env.tycons.insert(new_tc.clone(), new_ti.clone());
-
-        // The copy just made punches the same field of the copy made for the struct at these same
-        // type arguments, so pair the two the way their originals are paired.
-        if let Some(struct_tc) = env.punched_from.get(top_tc.as_ref()).cloned() {
-            let struct_ty = ty.set_toplevel_tycon(Arc::new(struct_tc));
-            let new_struct_tc = run_on_type(&struct_ty, env).toplevel_tycon().unwrap();
-            env.punched_from
-                .insert(new_tc.clone(), new_struct_tc.as_ref().clone());
-        }
     }
 
     return type_tycon(&tycon(new_tc.name));

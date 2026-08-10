@@ -63,6 +63,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(make_iostate_name()),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -76,6 +77,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], PTR_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -88,6 +90,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -100,6 +103,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I8_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -112,6 +116,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], U16_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -124,6 +129,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I16_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -136,6 +142,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I32_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -148,6 +155,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], U32_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -160,6 +168,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -172,6 +181,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], U64_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -184,6 +194,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], F32_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -196,6 +207,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], F64_NAME)),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Primitive,
             is_unbox: true,
@@ -210,6 +222,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         make_array_tycon(),
         TyConInfo {
+            punched_from: None,
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
             is_unbox: true,
@@ -228,6 +241,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         make_arrow_tycon(),
         TyConInfo {
+            punched_from: None,
             kind: kind_arrow(kind_star(), kind_arrow(kind_star(), kind_star())),
             variant: TyConVariant::Arrow,
             is_unbox: true,
@@ -246,6 +260,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         ret.insert(
             make_funptr_tycon(arity),
             TyConInfo {
+                punched_from: None,
                 kind: make_kind_fun(arity),
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
@@ -263,6 +278,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         make_dynamic_object_tycon(),
         TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::DynamicObject,
             is_unbox: false,
@@ -277,6 +293,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret.insert(
         make_array_storage_tycon(),
         TyConInfo {
+            punched_from: None,
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::ArrayStorage,
             is_unbox: false,
