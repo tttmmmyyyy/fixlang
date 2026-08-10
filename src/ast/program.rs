@@ -1357,18 +1357,17 @@ impl Program {
             output: Result<CheckTaskOutput, Errors>,
             method_impl_idx: Option<usize>,
         }
-        let results = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
-            // Run tasks in the main thread.
-            let mut results = vec![];
-            for task in tasks {
-                let output = (task.task)();
-                results.push(CheckResult {
-                    val_name: task.val_name,
-                    output,
-                    method_impl_idx: task.method_impl_idx,
-                });
+        fn run_check_task(task: CheckTask) -> CheckResult {
+            let output = (task.task)();
+            CheckResult {
+                val_name: task.val_name,
+                output,
+                method_impl_idx: task.method_impl_idx,
             }
-            results
+        }
+        let results: Vec<CheckResult> = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
+            // Run tasks in the main thread.
+            tasks.into_iter().map(run_check_task).collect()
         } else {
             // Run tasks in parallel via a shared work queue: every
             // worker thread pops the next task from the same `Vec`
@@ -1390,12 +1389,7 @@ impl Program {
                             Some(task) => task,
                             None => break,
                         };
-                        let output = (task.task)();
-                        results.push(CheckResult {
-                            val_name: task.val_name,
-                            output,
-                            method_impl_idx: task.method_impl_idx,
-                        });
+                        results.push(run_check_task(task));
                     }
                     results
                 });

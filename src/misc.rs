@@ -111,8 +111,6 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
     {
         Ok(mut file) => {
             use std::io::Write;
-            // file.write_all(source.as_bytes())
-            //     .expect(&format!("Failed to write temporary file {}", file_name));
             file.write_all(source.as_bytes()).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to write temporary file \"{}\": {}",
