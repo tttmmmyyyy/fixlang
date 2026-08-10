@@ -68,10 +68,10 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     for thread in threads {
         match thread.join() {
             Ok(value) => values.push(value),
-            // The payload of the first thread that panicked is the one carried on, by
-            // `resume_unwind`: that thread has already reported through the panic hook, and a
-            // joined payload is a `Box<dyn Any>` rather than a message, so raising it as a fresh
-            // panic would report a second time and call it an unknown error.
+            // Of the threads that panicked, the earliest in the list is the one whose payload is
+            // carried on, by `resume_unwind`: that thread has already reported through the panic
+            // hook, and a joined payload is a `Box<dyn Any>` rather than a message, so raising it
+            // as a fresh panic would report a second time and call it an unknown error.
             Err(payload) => panic_payload = panic_payload.or(Some(payload)),
         }
     }
