@@ -85,7 +85,7 @@ fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
     let mut named_by: Map<TyCon, Vec<TyCon>> = Map::default();
     // The declarations to propagate from, which start as those carrying a higher-kinded type
     // variable.
-    let mut pending = vec![];
+    let mut pending_tycons = vec![];
     for (tc, ti) in tycons {
         match ti.variant {
             TyConVariant::Struct | TyConVariant::Union => {}
@@ -94,7 +94,7 @@ fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
             }
         }
         if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
-            pending.push(tc.clone());
+            pending_tycons.push(tc.clone());
         }
         for named_tycon in named_tycons(ti) {
             named_by.entry(named_tycon).or_default().push(tc.clone());
@@ -102,12 +102,12 @@ fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
     }
 
     let mut removed_tycons = Set::default();
-    while let Some(tc) = pending.pop() {
+    while let Some(tc) = pending_tycons.pop() {
         if !removed_tycons.insert(tc.clone()) {
             continue;
         }
         if let Some(namers) = named_by.get(&tc) {
-            pending.extend(namers.iter().cloned());
+            pending_tycons.extend(namers.iter().cloned());
         }
     }
 
