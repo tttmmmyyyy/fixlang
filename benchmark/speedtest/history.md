@@ -14,6 +14,28 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 342d67aa7f2360bfdd9ab22125b0d2d11cd33e85
+
+Deciding once which one-field unboxed structs are replaced by their field (#231, #234), measured
+against `8a883f8d`, whose row is recorded beside it.
+
+**The corpus does not move.** The only type constructor whose classification changes is the form of
+`Std::DynIterator` with its one field punched out — the type `mod_` and `act_` hold the rest of the
+struct in while the field is out — and no case reaches it. `cp_lib_scc` compiled by the two
+compilers is byte-identical in `.text` and in `.rodata`, and cachegrind gives it the same
+150,092,862 instructions and 234,694,884 memory references.
+
+**Two rows measured in two worktrees differ on the cases that carry an external dependency, by
+about a ten-thousandth of a percent, and that difference is the paths they were built at.** Here the
+eight `cp_lib_*` cases moved by up to 0.0005% while the other forty-three were identical to the
+instruction. A build path feeds the module hash that names the emitted symbols, and cachegrind
+counts the dynamic loader resolving them. Measuring both commits at one path removes it.
+
+**Two executables built by the same compiler are not byte-identical**, so a whole-file hash is not
+the differential to run. The runtime's C source is written to a temporary file whose name carries a
+random number, and that name reaches `.strtab`; two builds of one case differ there by a few bytes
+and nowhere else. Compare `.text`.
+
 ## 598a391a50af0a37273e9c7bdbd3426d5dfdf277
 
 Closure specialization carried along a chain of copies, measured against `4052838928`. A lambda
