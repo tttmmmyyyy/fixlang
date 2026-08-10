@@ -43,53 +43,85 @@ struct Env {
 
 impl Env {
     fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
-        let mut env = Self {
+        let removed_tycons = calculate_removed_tycons(&tycons);
+        Self {
             tycons,
-            removed_tycons: Set::default(),
-        };
-        let tycons = env.tycons.keys().cloned().collect::<Vec<_>>();
-        let mut visited = Set::default();
-        for tycon in tycons {
-            env.calculate_removed_tycons_internal(&tycon, &mut visited);
+            removed_tycons,
         }
-        env
     }
 
     fn is_removed(&self, tycon: &TyCon) -> bool {
         self.removed_tycons.contains(tycon)
     }
+}
 
-    fn calculate_removed_tycons_internal(&mut self, now: &TyCon, visited: &mut Set<TyCon>) {
-        if visited.contains(now) {
-            return;
-        }
-        visited.insert(now.clone());
-        let ti = self.tycons.get(now).unwrap();
+// The type constructors this transformation replaces by a copy per list of type arguments: a struct
+// or a union declared with a higher-kinded type variable, and a struct or a union that names such a
+// declaration in the type of a field, transitively.
+//
+// The type of a field can name the declaration the field belongs to, directly or through other
+// declarations, so "transitively" is taken over a graph that has cycles and the answer is its least
+// fixed point. It is reached by propagating backwards along the edge "names in the type of a field",
+// starting from the declarations that carry a higher-kinded type variable.
+fn calculate_removed_tycons(tycons: &Map<TyCon, TyConInfo>) -> Set<TyCon> {
+    // For each type constructor, the struct and union declarations naming it in the type of a field.
+    let mut named_by: Map<TyCon, Vec<TyCon>> = Map::default();
+    // The declarations to propagate from, which start as those carrying a higher-kinded type
+    // variable.
+    let mut pending = vec![];
+    for (tc, ti) in tycons {
         match ti.variant {
             TyConVariant::Struct | TyConVariant::Union => {}
             _ => {
-                return;
+                continue;
             }
         }
         if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
-            self.removed_tycons.insert(now.clone());
-            return;
+            pending.push(tc.clone());
         }
-        let field_tys = ti
-            .fields
-            .iter()
-            .map(|field| field.ty.clone())
-            .collect::<Vec<_>>();
-        for field_ty in field_tys {
-            let mut tycons = Set::default();
-            field_ty.collect_tycons(&mut tycons);
-            for tycon in tycons {
-                self.calculate_removed_tycons_internal(&tycon, visited);
-                if self.removed_tycons.contains(&tycon) {
-                    self.removed_tycons.insert(now.clone());
-                    return;
-                }
+        for field in &ti.fields {
+            let mut field_tycons = Set::default();
+            field.ty.collect_tycons(&mut field_tycons);
+            for field_tycon in field_tycons {
+                named_by.entry(field_tycon).or_default().push(tc.clone());
             }
+        }
+    }
+
+    let mut removed_tycons = Set::default();
+    while let Some(tc) = pending.pop() {
+        if !removed_tycons.insert(tc.clone()) {
+            continue;
+        }
+        if let Some(namers) = named_by.get(&tc) {
+            pending.extend(namers.iter().cloned());
+        }
+    }
+
+    removed_tycons
+}
+
+// Every type constructor a remaining declaration names is itself declared.
+//
+// A declaration that takes type parameters is left as it is written, so the type constructors it
+// names have to be ones this transformation keeps. A violation surfaces far from its origin, as a
+// later pass looking a declaration up and finding nothing.
+fn assert_every_named_tycon_is_declared(tycons: &Map<TyCon, TyConInfo>) {
+    for (tc, ti) in tycons {
+        let mut named_tycons = Set::default();
+        for field in &ti.fields {
+            field.ty.collect_tycons(&mut named_tycons);
+        }
+        if let Some(struct_tc) = &ti.punched_from {
+            named_tycons.insert(struct_tc.clone());
+        }
+        for named_tycon in &named_tycons {
+            assert!(
+                tycons.contains_key(named_tycon),
+                "The declaration of `{}` names `{}`, which is not declared.",
+                tc.to_string(),
+                named_tycon.to_string()
+            );
         }
     }
 }
@@ -106,6 +138,8 @@ pub fn run(prg: &mut Program) {
 
     // Run on type environment.
     run_on_type_env(&mut env);
+
+    assert_every_named_tycon_is_declared(&env.tycons);
 
     prg.type_env.tycons = Arc::new(env.tycons);
 }
@@ -148,7 +182,12 @@ fn run_on_type_env(env: &mut Env) {
             }
             let mut ti = env.tycons.get(tc).unwrap().clone();
             if ti.tyvars.len() > 0 {
-                // If there are type variables, we cannot process it.
+                // The type of a field of such a declaration has the declaration's type parameters
+                // free in it, and `run_on_type` takes a type with no free type variable, so the
+                // declaration is left as it is written. A declaration naming a type constructor
+                // this transformation removes is removed as well, so one that stays names only
+                // type constructors that stay, which
+                // `assert_every_named_tycon_is_declared` checks.
                 continue;
             }
             for field in &mut ti.fields {
@@ -185,43 +224,6 @@ fn run_on_symbol(sym: &mut Symbol, env: &mut Env) {
         sym.expr = Some(res.expr);
     }
 }
-
-// fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
-//     let mut visited = Set::default();
-//     is_subject_to_removal_internal(tc, env, &mut visited)
-// }
-
-// fn is_subject_to_removal_internal(
-//     tc: &TyCon,
-//     env: &Map<TyCon, TyConInfo>,
-//     visited: &mut Set<TyCon>,
-// ) -> bool {
-//     let ti = env.get(tc).unwrap();
-//     match ti.variant {
-//         TyConVariant::Struct | TyConVariant::Union => {}
-//         _ => {
-//             return false;
-//         }
-//     }
-//     if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
-//         return true;
-//     }
-//     visited.insert(tc.clone());
-//     for field in &ti.fields {
-//         let field_ty = &field.ty;
-//         let mut tycons = Set::default();
-//         field_ty.collect_tycons(&mut tycons);
-//         for tycon in tycons {
-//             if visited.contains(&tycon) {
-//                 continue;
-//             }
-//             if is_subject_to_removal(&tycon, env) {
-//                 return true;
-//             }
-//         }
-//     }
-//     return false;
-// }
 
 fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
     assert!(

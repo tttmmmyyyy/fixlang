@@ -11463,6 +11463,101 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+// Types that name each other in a cycle and reach a type of a higher-kinded parameter, written once
+// in each field order. The compiler rebuilds such a type per type-argument list, and rebuilds every
+// type that names one, so each member of a cycle among them is rebuilt together with the rest of the
+// cycle however the fields are ordered.
+#[test]
+pub fn test_type_cycle_reaching_a_higher_kinded_type_variable() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+
+type FirstY a = unbox struct { p : Array FirstX, q : a };
+type FirstX = unbox struct { r : FirstY I64, s : H Array };
+
+type SecondY a = unbox struct { p : Array SecondX, q : a };
+type SecondX = unbox struct { s : H Array, r : SecondY I64 };
+
+main : IO ();
+main = (
+    let x = FirstX { r : FirstY { p : [], q : 7 }, s : H { d : [1, 2] } };
+    assert_eq(|_|"", x.@r.@q, 7);;
+    assert_eq(|_|"", x.@s.@d.@size, 2);;
+    let y : FirstY String = FirstY { p : [], q : "hi" };
+    assert_eq(|_|"", y.@q, "hi");;
+    let x = SecondX { r : SecondY { p : [], q : 7 }, s : H { d : [1, 2] } };
+    assert_eq(|_|"", x.@r.@q, 7);;
+    assert_eq(|_|"", x.@s.@d.@size, 2);;
+    let y : SecondY String = SecondY { p : [], q : "hi" };
+    assert_eq(|_|"", y.@q, "hi");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// A cycle of three types, one of them a union, reaching a type of a higher-kinded parameter from its
+// last member. A type is rebuilt when it names a rebuilt type in the type of a field, and a union
+// carries that the way a struct does, so the whole cycle is rebuilt from a reach that only one of
+// its members has.
+#[test]
+pub fn test_union_in_a_type_cycle_reaching_a_higher_kinded_type_variable() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+type U = unbox union { l : Array V, r : I64 };
+type V = unbox struct { m : Array W };
+type W = unbox struct { u : Array U, h : H Array };
+
+main : IO ();
+main = (
+    let w = W { u : [U::r(3)], h : H { d : [1, 2] } };
+    let u : U = U::l([V { m : [w] }]);
+    assert_eq(|_|"", u.as_l.@(0).@m.@(0).@u.@(0).as_r, 3);;
+    assert_eq(|_|"", u.as_l.@(0).@m.@(0).@h.@d.@size, 2);;
+    let u = u.mod_l(|vs| vs.push_back(V { m : [] }));
+    assert_eq(|_|"", u.as_l.@size, 2);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// Reading, replacing, updating and destructuring the fields of a type that sits in a cycle reaching
+// a type of a higher-kinded parameter. Updating a field holds the rest of the struct in the type of
+// the struct with that field punched out, which names what the struct names and so is rebuilt
+// alongside it.
+#[test]
+pub fn test_field_operations_on_a_type_cycle_reaching_a_higher_kinded_type_variable() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+type Y a = unbox struct { p : Array X, q : a };
+type X = unbox struct { r : Y I64, s : H Array };
+
+main : IO ();
+main = (
+    let x = X { r : Y { p : [], q : 7 }, s : H { d : [1, 2] } };
+    let x = x.mod_r(|y| y.set_q(y.@q + 1));
+    assert_eq(|_|"", x.@r.@q, 8);;
+    let x = x.mod_s(|h| H { d : h.@d.push_back(3) });
+    assert_eq(|_|"", x.@s.@d.@size, 3);;
+    let t : (I64, X) = x.act_r(|y| (y.@q * 10, y.set_q(0)));
+    assert_eq(|_|"", t.@0, 80);;
+    assert_eq(|_|"", t.@1.@r.@q, 0);;
+    let X { r : y, s : h } = x;
+    assert_eq(|_|"", y.@q, 8);;
+    assert_eq(|_|"", h.@d.@size, 3);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // Two types that name each other through the type argument of a phantom type, so each is reached
 // from itself in two steps. Neither is a type the compiler may replace with its field, and
 // unwrapping the phantom type leaves both of them one-field unboxed structs whose field operations

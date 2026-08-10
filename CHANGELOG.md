@@ -50,6 +50,7 @@
 - A trait alias that stands for one trait along two paths is now accepted. `trait Ring = Ordered + Showable;`, where `Ordered` and `Showable` both stand for `Additive`, was rejected as circular aliasing, and the message named a trait of the standard library that the program never mentions.
 - Two implementations of one trait are now reported as overlapping when one of their heads takes a type parameter of a higher kind, as `impl [f : *->*] Bar f : MyTrait` does beside `impl Bar Array : MyTrait`. Both used to be accepted, and the order they were written in decided which one a call reached.
 - A program that uses an unboxed struct of one field whose type names the struct itself now compiles at `-O max` and `-O experimental`. `type Phantom a = unbox struct { x : I64 }; type C = unbox struct { y : Phantom C };` aborted the compiler as soon as a value of `C` was used, and so did `it.mod_next(f)`, which updates the one field of a `Std::DynIterator`.
+- A program whose types name each other in a cycle and reach a type of a higher-kinded parameter now compiles at `-O max` and `-O experimental`. `type [f : *->*] H f = unbox struct { d : f I64 }; type Y a = unbox struct { p : Array X, q : a }; type X = unbox struct { r : Y I64, s : H Array };` aborted the compiler, and writing the two fields of `X` in the other order made the same program compile.
 
 #### Std
 
