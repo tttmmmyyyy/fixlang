@@ -4,17 +4,18 @@ use crate::{
     error::Errors,
     parse::sourcefile::SourceFile,
 };
-use colored::Colorize;
-use std::io::IsTerminal;
+use colored::{control, ColoredString, Colorize};
+use fxhash::{FxHashMap, FxHashSet};
 use std::{
-    env, fs,
+    cmp, env, fs,
     hash::Hash,
+    io::{self, ErrorKind, IsTerminal, Write},
     panic::resume_unwind,
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
 };
 
-pub type Map<K, V> = fxhash::FxHashMap<K, V>;
+pub type Map<K, V> = FxHashMap<K, V>;
 
 pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K, V> {
     let mut map = Map::default();
@@ -24,7 +25,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
-pub type Set<T> = fxhash::FxHashSet<T>;
+pub type Set<T> = FxHashSet<T>;
 
 pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     let mut set = Set::default();
@@ -110,7 +111,6 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
         .open(&path)
     {
         Ok(mut file) => {
-            use std::io::Write;
             file.write_all(source.as_bytes()).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to write temporary file \"{}\": {}",
@@ -118,7 +118,7 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
                 ))
             })?;
         }
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
             // File already exists, which is fine
         }
         Err(e) => {
@@ -168,7 +168,7 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     v.reverse();
     let mut result = vec![];
     while v.len() > 0 {
-        let len = std::cmp::min(max_size, v.len());
+        let len = cmp::min(max_size, v.len());
         let mut chunk = v.split_off(v.len() - len);
         chunk.reverse();
         result.push(chunk);
@@ -253,7 +253,7 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        match std::env::current_dir() {
+        match env::current_dir() {
             Err(e) => {
                 return Err(Errors::from_msg(format!(
                     "Failed to get the current directory: {}",
@@ -297,8 +297,8 @@ impl Drop for Finally {
 }
 
 pub fn disable_colored_no_tty() {
-    if !std::io::stderr().is_terminal() {
-        colored::control::set_override(false);
+    if !io::stderr().is_terminal() {
+        control::set_override(false);
     }
 }
 
@@ -313,7 +313,7 @@ pub fn warn_msg(msg: &str) {
 // Styling used for interactive prompts that require the user's attention
 // (e.g. the preliminary-commands approval flow). Centralized so the look stays
 // consistent across prompt lines.
-pub fn prompt_style(s: &str) -> colored::ColoredString {
+pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
 
