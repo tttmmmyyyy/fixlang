@@ -543,7 +543,7 @@ fn rc_units_go(
         out.push(path.clone());
         return;
     }
-    for (i, fty) in ty.value_field_types(type_env) {
+    for (i, fty) in ty.unpunched_field_types(type_env) {
         path.push(i);
         rc_units_go(&fty, type_env, path, out);
         path.pop();

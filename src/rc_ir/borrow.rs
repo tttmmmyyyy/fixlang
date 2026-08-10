@@ -313,7 +313,7 @@ fn param_ownership_shape(
         // A field the value holds nothing at keeps its place in the shape, so that a shape index is a
         // field index.
         let mut children = vec![OwnershipShape::NoUnit; ty.field_types(type_env).len()];
-        for (i, fty) in ty.value_field_types(type_env) {
+        for (i, fty) in ty.unpunched_field_types(type_env) {
             path.push(i);
             children[i] = go(var, &fty, owned_units, type_env, path);
             path.pop();

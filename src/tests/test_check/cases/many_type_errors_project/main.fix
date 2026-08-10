@@ -1,0 +1,43 @@
+module Main;
+
+// Twelve values whose bodies each have the same type error, so that the report carries twelve
+// entries that differ only in where they point.
+
+v01 : I64;
+v01 = "a";
+
+v02 : I64;
+v02 = "b";
+
+v03 : I64;
+v03 = "c";
+
+v04 : I64;
+v04 = "d";
+
+v05 : I64;
+v05 = "e";
+
+v06 : I64;
+v06 = "f";
+
+v07 : I64;
+v07 = "g";
+
+v08 : I64;
+v08 = "h";
+
+v09 : I64;
+v09 = "i";
+
+v10 : I64;
+v10 = "j";
+
+v11 : I64;
+v11 = "k";
+
+v12 : I64;
+v12 = "l";
+
+main : IO ();
+main = println $ (v01 + v02 + v03 + v04 + v05 + v06 + v07 + v08 + v09 + v10 + v11 + v12).to_string;

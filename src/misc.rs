@@ -449,6 +449,32 @@ mod tests {
         assert_eq!(join_compiler_threads(threads), vec!["first", "second"]);
     }
 
+    /// Every piece a split produces holds at least one element and at most `max_size` of them, and
+    /// the pieces read back as the input. A consumer turns each piece into a unit of work, so an
+    /// empty piece is a unit with nothing in it.
+    #[test]
+    fn test_split_by_max_size_pieces_are_nonempty() {
+        for max_size in 1..=5 {
+            for len in 0..=12 {
+                let v: Vec<usize> = (0..len).collect();
+                let pieces = split_by_max_size(v.clone(), max_size);
+                assert!(
+                    pieces.iter().all(|piece| !piece.is_empty()),
+                    "max_size = {}, len = {}",
+                    max_size,
+                    len
+                );
+                assert!(
+                    pieces.iter().all(|piece| piece.len() <= max_size),
+                    "max_size = {}, len = {}",
+                    max_size,
+                    len
+                );
+                assert_eq!(pieces.concat(), v, "max_size = {}, len = {}", max_size, len);
+            }
+        }
+    }
+
     /// Splitting a command line into words: a run of spaces separates words, a quoted run — single
     /// or double — stays one word, a backslash escapes the character after it, and an input of
     /// spaces alone yields no word at all.

@@ -48,6 +48,7 @@ impl CaptureStruct {
             name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),
         });
         let tycon_info = TyConInfo {
+            punched_from: None,
             kind: kind_star(),
             variant: TyConVariant::Struct,
             is_unbox: true,
