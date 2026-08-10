@@ -7979,6 +7979,177 @@ pub fn test_struct_act_plugging_in_more_than_once_on_the_only_reference_counted_
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `act` at the `Arrow` functor, whose `map` hands the plug back as a function: the caller decides
+/// how many times the struct is rebuilt, and each rebuild reads the same punched struct, which here
+/// still holds a field of its own beside the hole.
+#[test]
+pub fn test_struct_act_plugging_in_more_than_once_beside_a_sibling_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, q : Array I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1, 2], q : [10, 20] };
+            let k = s.act_p(|p| |r| p.push_back(r));
+            let a = k(7);
+            let b = k(8);
+            assert_eq(|_|"", a.@p, [1, 2, 7]);;
+            assert_eq(|_|"", a.@q, [10, 20]);;
+            assert_eq(|_|"", b.@p, [1, 2, 8]);;
+            assert_eq(|_|"", b.@q, [10, 20]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act` at the `Arrow` functor where the function the update yields is dropped without being
+/// called: the punched struct goes with it, and the field it still holds beside the hole is released
+/// with it.
+#[test]
+pub fn test_struct_act_dropping_the_punched_struct_beside_a_sibling_field() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, q : Array I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1, 2], q : [10, 20] };
+            let k = s.act_p(|p| |r| p.push_back(r));
+            let _ = k;
+            assert_eq(|_|"", 1, 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act` at the pair functor, whose implementation punches with the clone and plugs without the
+/// uniqueness check — the pairing the other functors do not use. The field is shared with a binding
+/// that outlives the update, for a boxed and for an unboxed struct.
+#[test]
+pub fn test_struct_act_at_the_pair_functor() {
+    let source = r##"
+        module Main;
+
+        type U = unbox struct { p : Array I64, q : Array I64 };
+        type B = box struct { p : Array I64, q : Array I64 };
+
+        main : IO ();
+        main = (
+            let a = [1, 2];
+            let u = U { p : a, q : [7] };
+            let (n, u2) = u.act_p(|p| (p.@size, p.push_back(9)));
+            assert_eq(|_|"", n, 2);;
+            assert_eq(|_|"", u2.@p, [1, 2, 9]);;
+            assert_eq(|_|"", u2.@q, [7]);;
+
+            let b = B { p : a, q : [8] };
+            let (m, b2) = b.act_p(|p| (p.@size, p.push_back(9)));
+            assert_eq(|_|"", m, 2);;
+            assert_eq(|_|"", b2.@p, [1, 2, 9]);;
+            assert_eq(|_|"", b2.@q, [8]);;
+            assert_eq(|_|"", b.@p, [1, 2]);;
+
+            assert_eq(|_|"", a, [1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act` and `mod` on a field whose neighbours also hold references: the middle field of an unboxed
+/// struct of three arrays, a field holding a union, a field holding a nested unboxed struct, and a
+/// field holding a closure. The update lands on that field and leaves the others as they were.
+#[test]
+pub fn test_struct_act_beside_fields_that_hold_references() {
+    let source = r##"
+        module Main;
+
+        type Mid = unbox struct { a : Array I64, b : Array I64, c : Array I64 };
+        type WithUnion = unbox struct { o : Option (Array I64), n : I64 };
+        type Inner = unbox struct { v : Array I64, w : I64 };
+        type Outer = unbox struct { i : Inner, s : String };
+        type Closy = unbox struct { f : I64 -> I64, g : Array I64 };
+
+        main : IO ();
+        main = (
+            let m = Mid { a : [1], b : [2, 2], c : [3, 3, 3] };
+            let m = m.act_b(|b| Option::some(b.push_back(9))).as_some;
+            assert_eq(|_|"", [m.@a.@size, m.@b.@size, m.@c.@size], [1, 3, 3]);;
+
+            let m = Mid { a : [1], b : [2, 2], c : [3, 3, 3] };
+            let m = m.mod_b(|b| b.push_back(9));
+            assert_eq(|_|"", [m.@a.@size, m.@b.@size, m.@c.@size], [1, 3, 3]);;
+
+            let m0 = Mid { a : [1], b : [2, 2], c : [3] };
+            let m1 = m0.mod_b(|b| b.push_back(9));
+            assert_eq(|_|"", m0.@b, [2, 2]);;
+            assert_eq(|_|"", m1.@b, [2, 2, 9]);;
+
+            let u = WithUnion { o : Option::some([1, 2]), n : 5 };
+            let u = u.mod_o(|o| o.map(|a| a.push_back(3)));
+            assert_eq(|_|"", u.@o.as_some, [1, 2, 3]);;
+            assert_eq(|_|"", u.@n, 5);;
+
+            let o = Outer { i : Inner { v : [1], w : 2 }, s : "abc" };
+            let o = o.mod_i(|i| i.mod_v(|v| v.push_back(4)));
+            assert_eq(|_|"", o.@i.@v, [1, 4]);;
+            assert_eq(|_|"", o.@s, "abc");;
+
+            let o = Outer { i : Inner { v : [1], w : 2 }, s : "abc" };
+            let o = o.mod_s(|s| s + "d");
+            assert_eq(|_|"", o.@s, "abcd");;
+            assert_eq(|_|"", o.@i.@v, [1]);;
+
+            let k = 3;
+            let c = Closy { f : |x| x + k, g : [1, 2] };
+            let c = c.mod_f(|f| |x| f(x) * 2);
+            assert_eq(|_|"", (c.@f)(1), 8);;
+            assert_eq(|_|"", c.@g, [1, 2]);;
+
+            let m = Mid { a : [1], b : [2], c : [3] };
+            let ms = m.act_b(|b| [b, b.push_back(8)]);
+            assert_eq(|_|"", ms.map(|x| x.@b.@size), [1, 2]);;
+            assert_eq(|_|"", ms.map(|x| x.@a.@size), [1, 1]);;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act` at a functor whose `map` defers the plug-in into a closure, so the punched struct outlives
+/// the `act` and is plugged in only when the result is consumed. Covers a punched struct that holds
+/// no value and one that still holds references.
+#[test]
+pub fn test_struct_act_whose_plug_in_is_deferred() {
+    let source = r##"
+        module Main;
+
+        type S = unbox struct { p : Array I64, n : I64 };
+        type Mid = unbox struct { a : Array I64, b : Array I64, c : I64 };
+
+        main : IO ();
+        main = (
+            let s = S { p : [1, 2], n : 3 };
+            let it : DynIterator S = s.act_p(|p| [p, p.push_back(9), p.push_back(8)].to_iter.to_dyn);
+            assert_eq(|_|"", it.Iterator::map(|t| t.@p.@size + t.@n).to_array, [5, 6, 6]);;
+
+            let m = Mid { a : [1], b : [2, 2], c : 5 };
+            let it : DynIterator Mid = m.act_b(|b| [b, b.push_back(9)].to_iter.to_dyn);
+            let got = it.Iterator::map(|t| t.@a.@size * 100 + t.@b.@size * 10 + t.@c).to_array;
+            assert_eq(|_|"", got, [125, 135]);;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `act` on the only reference-counted field of an unboxed struct, where that field is shared with a
 /// binding that outlives the update: the update leaves that binding's value as it was.
 #[test]
