@@ -91,6 +91,50 @@ mod integration_tests {
         );
     }
 
+    /// The source locations `fix check` reports, in the order it reports them.
+    fn reported_locations(project_dir: &PathBuf) -> Vec<String> {
+        let output = fix_command()
+            .arg("check")
+            .current_dir(project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        stderr
+            .lines()
+            .filter(|line| line.contains(" in \"main.fix\""))
+            .map(|line| line.trim().to_string())
+            .collect()
+    }
+
+    /// Type checking runs each value on a worker thread, and the workers finish in whatever order
+    /// the machine gives them. The report a user reads must not follow that order: the same source
+    /// gets the same report, run after run.
+    #[test]
+    fn test_check_reports_the_same_errors_every_run() {
+        let (_temp_dir, project_dir) = setup_test_env("many_type_errors_project");
+
+        let first = reported_locations(&project_dir);
+        assert_eq!(
+            first.len(),
+            12,
+            "each of the twelve values is reported, but the report is {:?}",
+            first
+        );
+
+        for run in 2..=5 {
+            let again = reported_locations(&project_dir);
+            let mut sorted_first = first.clone();
+            let mut sorted_again = again.clone();
+            sorted_first.sort();
+            sorted_again.sort();
+            assert_eq!(
+                sorted_again, sorted_first,
+                "run {} reports a different set of errors: {:?}",
+                run, again
+            );
+        }
+    }
+
     #[test]
     fn test_check_detects_type_error_in_test_code() {
         let (_temp_dir, project_dir) = setup_test_env("test_type_error_project");
