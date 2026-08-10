@@ -164,6 +164,7 @@ impl Program {
 
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
+            punched_from: None,
             kind: info.tycon_kind.clone(),
             variant: TyConVariant::Opaque,
             is_unbox: false,

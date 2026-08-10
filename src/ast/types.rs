@@ -327,26 +327,34 @@ impl TyCon {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
 
-    // Whether this is the type constructor `IO`.
+    /// Whether this is the type constructor `IO`.
     pub fn is_io(&self) -> bool {
         self == make_io_tycon().as_ref()
     }
 
-    // Whether this is the type `IOState`, the token that an `IO` action threads.
+    /// Whether this is the type `IOState`, the token that an `IO` action threads.
     #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
         return self.name == make_iostate_name();
     }
 
+    /// Renames this struct's type constructor to the one that stands for the struct with one field
+    /// made a hole.
+    ///
+    /// # Arguments
+    /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
+    ///   fields are declared.
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
+    /// Whether this is the type constructor `->` that heads a function type.
     #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
         self == &make_arrow_tycon()
     }
 
+    /// Whether this is the type constructor `Std::Array`.
     #[allow(dead_code)]
     pub fn is_array(&self) -> bool {
         self == &make_array_tycon()
@@ -367,6 +375,13 @@ pub struct TyConInfo {
     // If `def_src` is available, we can also get document from the source code.
     // We use this field only when document is not available in the source code.
     pub document: Option<String>,
+    /// The struct this declaration punches a field out of, for a declaration that has one.
+    ///
+    /// Such a declaration stands for the values of that struct with one field moved out, so a pass
+    /// that rewrites the struct rewrites this declaration the same way. The struct's own
+    /// declaration is in the same table as this one, so a pass that creates a punched declaration
+    /// creates the struct's as well.
+    pub punched_from: Option<TyCon>,
 }
 
 impl TyConInfo {
