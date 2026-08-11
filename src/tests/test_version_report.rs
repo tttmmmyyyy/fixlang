@@ -8,7 +8,7 @@ mod integration_tests {
 
     /// The output of `fix <args>`, stdout followed by stderr. A `fix` invoked with no arguments
     /// writes its help to stderr, and every other form here writes to stdout.
-    fn run(args: &[&str]) -> String {
+    fn fix_output(args: &[&str]) -> String {
         let output = fix_command()
             .args(args)
             .output()
@@ -24,45 +24,45 @@ mod integration_tests {
 
     /// The version reported by `fix --version`, as the whole line it prints.
     fn version_line() -> String {
-        run(&["--version"]).trim_end().to_string()
+        fix_output(&["--version"]).trim_end().to_string()
     }
 
     /// The long option, the short one, the `version` subcommand, and the header of the help each
     /// answer the same line, so a reader holding any one of them holds the version.
     #[test]
     fn test_every_way_of_asking_the_version_answers_the_same_line() {
-        let version = version_line();
-        let released = format!("fix {} (", env!("CARGO_PKG_VERSION"));
-        let revision = version
-            .strip_prefix(&released)
+        let version_line = version_line();
+        let released_prefix = format!("fix {} (", env!("CARGO_PKG_VERSION"));
+        let revision = version_line
+            .strip_prefix(&released_prefix)
             .and_then(|rest| rest.strip_suffix(')'))
             .unwrap_or_else(|| {
                 panic!(
                     "`fix --version` answered `{}`, which does not carry the released version followed by a revision",
-                    version
+                    version_line
                 )
             });
         assert!(
             !revision.is_empty() && !revision.contains(char::is_whitespace),
             "`fix --version` answered `{}`, which names no revision to tell two builds of {} apart",
-            version,
+            version_line,
             env!("CARGO_PKG_VERSION")
         );
 
         for form in [vec!["-V"], vec!["version"]] {
             assert_eq!(
-                run(&form).trim_end(),
-                version,
+                fix_output(&form).trim_end(),
+                version_line,
                 "`fix {}` reported a different version",
                 form.join(" ")
             );
         }
-        for help in [vec!["--help"], vec!["help"], vec![]] {
+        for form in [vec!["--help"], vec!["help"], vec![]] {
             assert_eq!(
-                first_line(&run(&help)),
-                version,
+                first_line(&fix_output(&form)),
+                version_line,
                 "the header of `fix {}` reported a different version",
-                help.join(" ")
+                form.join(" ")
             );
         }
     }
@@ -71,8 +71,8 @@ mod integration_tests {
     /// invoked by, at every depth the command tree reaches.
     #[test]
     fn test_a_subcommand_help_is_headed_by_the_version() {
-        let version = version_line();
-        let version = version
+        let version_line = version_line();
+        let version = version_line
             .strip_prefix("fix ")
             .expect("`fix --version` answered a line that does not begin with the command name");
         for path in [
@@ -85,7 +85,7 @@ mod integration_tests {
             let mut args = path.clone();
             args.push("--help");
             assert_eq!(
-                first_line(&run(&args)),
+                first_line(&fix_output(&args)),
                 format!("fix-{} {}", path.join("-"), version),
                 "the header of `fix {} --help` reported a different version",
                 path.join(" ")
@@ -99,8 +99,8 @@ mod integration_tests {
     fn test_a_subcommand_without_a_subcommand_prints_the_help_of_that_subcommand() {
         for subcommand in ["deps", "edit"] {
             assert_eq!(
-                run(&[subcommand]),
-                run(&[subcommand, "--help"]),
+                fix_output(&[subcommand]),
+                fix_output(&[subcommand, "--help"]),
                 "`fix {}` printed a help other than the one `fix {} --help` prints",
                 subcommand,
                 subcommand
@@ -112,7 +112,7 @@ mod integration_tests {
     /// never seen Fix what they are holding.
     #[test]
     fn test_the_help_says_what_fix_is() {
-        let help = run(&["--help"]);
+        let help = fix_output(&["--help"]);
         let about = help.lines().nth(1).unwrap_or("");
         assert!(
             about.contains("Fix"),
