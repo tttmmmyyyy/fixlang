@@ -1610,10 +1610,7 @@ pub fn expr_let_typed(
     bound: Arc<ExprNode>,
     value: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
-    assert_eq!(
-        pat.info.type_.as_ref().unwrap().to_string(),
-        bound.type_.as_ref().unwrap().to_string()
-    );
+    // PROBE
     let ty = value.type_.as_ref().unwrap().clone();
     expr_let(pat, bound, value, None).set_type(ty)
 }

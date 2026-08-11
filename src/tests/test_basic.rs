@@ -11659,6 +11659,148 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A parameter of a higher kind given the one-element tuple, which the compiler declares as an
+/// unboxed struct of one field and therefore replaces: the field type `f I64` names a replaced type
+/// constructor only once the substitution saturates it, and here that constructor is one no source
+/// file writes.
+#[test]
+pub fn test_higher_kinded_parameter_given_the_one_element_tuple() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64, n : I64 };
+type [f : *->*] B f = box struct { d : f I64, n : I64 };
+type [f : *->*] U f = unbox union { wrapped : f I64, plain : Bool };
+
+main : IO ();
+main = (
+    let h : H Std::Tuple1 = H { d : (1,), n : 2 };
+    assert_eq(|_|"", h.@d.@0, 1);;
+    let h = h.mod_d(|(x,)| (x + 40,));
+    assert_eq(|_|"", h.@d.@0, 41);;
+    let t : (I64, H Std::Tuple1) = h.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 2);;
+    assert_eq(|_|"", t.@1.@n, 3);;
+    let b : B Std::Tuple1 = B { d : (3,), n : 4 };
+    assert_eq(|_|"", b.@d.@0, 3);;
+    let u : U Std::Tuple1 = U::wrapped((5,));
+    assert_eq(|_|"", u.as_wrapped.@0, 5);;
+    let a : Array (H Std::Tuple1) = [h, h];
+    assert_eq(|_|"", a.@(1).@d.@0, 41);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A parameter of kind `*->*->*` given a newtype that takes two parameters, and a parameter of kind
+/// `*->*` given that same newtype with one argument already applied: the occurrence that takes no
+/// arguments stays as it is, and the field the substitution saturates is replaced.
+#[test]
+pub fn test_higher_kinded_parameter_given_a_two_parameter_newtype() {
+    let source = r##"
+module Main;
+
+type NT a b = unbox struct { fn : a -> b };
+type [f : *->*->*] H2 f = unbox struct { d : f I64 Bool, n : I64 };
+type [f : *->*] H1 f = unbox struct { d : f I64, n : I64 };
+
+main : IO ();
+main = (
+    let h : H2 NT = H2 { d : NT { fn : |x| x > 0 }, n : 3 };
+    assert_eq(|_|"", (h.@d.@fn)(5), true);;
+    let h = h.mod_d(|nt| NT { fn : |x| (nt.@fn)(x) || x == 0 });
+    assert_eq(|_|"", (h.@d.@fn)(0), true);;
+    let g : H1 (NT Bool) = H1 { d : NT { fn : |b| if b { 1 } else { 0 } }, n : 4 };
+    assert_eq(|_|"", (g.@d.@fn)(true), 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A newtype whose one field is a newtype that stays, because that one and a third name each other.
+/// The chain of replacements ends at the newtype that stays.
+#[test]
+pub fn test_newtype_replacement_stops_at_a_newtype_that_stays() {
+    let source = r##"
+module Main;
+
+type A = unbox struct { x : B };
+type B = unbox struct { y : C };
+type C = unbox struct { z : Array B };
+
+main : IO ();
+main = (
+    let a = A { x : B { y : C { z : [] } } };
+    assert_eq(|_|"", a.@x.@y.@z.get_size, 0);;
+    let a = a.mod_x(|b| B { y : C { z : [b] } });
+    assert_eq(|_|"", a.@x.@y.@z.get_size, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act_` on the field of a newtype in a functor that can fail: the value is punched out of the
+/// type the newtype became, and where the action produces no value the punched form is dropped
+/// without the field being plugged back.
+#[test]
+pub fn test_act_on_a_newtype_in_a_failing_functor() {
+    let source = r##"
+module Main;
+
+type Bag = unbox struct { items : Array I64 };
+type Pair = unbox struct { l : Bag, r : I64 };
+
+main : IO ();
+main = (
+    let b = Bag { items : [1, 2, 3] };
+    let shared = b.@items;
+    let ok : Option Bag = b.act_items(|a| Option::some(a.push_back(4)));
+    assert_eq(|_|"", ok.as_some.@items.get_size, 4);;
+    assert_eq(|_|"", shared.get_size, 3);;
+    let no : Option Bag = b.act_items(|_| Option::none());
+    assert_eq(|_|"", no.is_none, true);;
+    let r : Result String Bag = b.act_items(|a| Result::ok(a.set(0, 9)));
+    assert_eq(|_|"", r.as_ok.@items.@(0), 9);;
+    let p = Pair { l : b, r : 5 };
+    let p3 : Option Pair = p.act_l(|_| Option::none());
+    assert_eq(|_|"", p3.is_none, true);;
+    assert_eq(|_|"", b.@items.get_size, 3);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A replaced newtype standing at a type argument of a type that stays: inside an array's element
+/// type, inside a union's payload, and where a declaration writes it out at a fixed argument.
+#[test]
+pub fn test_a_replaced_newtype_inside_a_type_argument() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+type Wrapper = unbox struct { w : Array (IO I64) };
+
+main : IO ();
+main = (
+    let arr : Array (H IO) = [H { d : pure(1) }, H { d : pure(2) }];
+    let a = *(arr.@(0).@d);
+    let b = *(arr.@(1).@d);
+    let wr = Wrapper { w : [pure(3), pure(4)] };
+    let c = *(wr.@w.@(0));
+    let d = *(wr.@w.@(1));
+    let opt : Option (H IO) = Option::some(H { d : pure(5) });
+    let e = *(opt.as_some.@d);
+    assert_eq(|_|"", a + b + c + d + e, 15);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// A struct that takes a parameter of a higher kind holds its field at the type that parameter
 /// gives it, and at `IO` that is a type the compiler replaces with its one field. Updating a field
 /// holds the rest of the struct with that field punched out, so the field that stays is laid out at
