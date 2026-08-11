@@ -817,7 +817,7 @@ impl TypeNode {
     // Returns an single element vector for a closure type.
     pub fn get_lambda_srcs(self: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
         if self.is_funptr() || self.is_closure() {
-            let mut type_args = self.collect_type_argments();
+            let mut type_args = self.collect_type_arguments();
             type_args.pop(); // Discard the destination type.
             return type_args;
         }
@@ -830,7 +830,7 @@ impl TypeNode {
     // For a lambda type (i.e., a closure or a function pointer), return the destination type.
     pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
         if self.is_funptr() || self.is_closure() {
-            let mut type_args = self.collect_type_argments();
+            let mut type_args = self.collect_type_arguments();
             type_args.pop().unwrap()
         } else {
             panic!()
@@ -989,7 +989,7 @@ impl TypeNode {
     ) -> Arc<TypeNode> {
         if let Some(tycon) = self.toplevel_tycon() {
             if let Some(tycon_info) = type_env.unwrapped_newtype_info(&tycon) {
-                if tycon_info.tyvars.len() == self.collect_type_argments().len() {
+                if tycon_info.tyvars.len() == self.collect_type_arguments().len() {
                     if tycon_info.fields[0].is_punched {
                         return make_unit_ty();
                     }
@@ -1046,7 +1046,7 @@ impl TypeNode {
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
-        let args = self.collect_type_argments();
+        let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
         let mut subst = Substitution::default();
         for (i, tv) in tycon_info.tyvars.iter().enumerate() {
@@ -1107,11 +1107,11 @@ impl TypeNode {
 
     /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
     /// `vec![a, b, c]`.
-    pub fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
+    pub fn collect_type_arguments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
             Type::TyApp(fun, arg) => {
-                ret.append(&mut fun.collect_type_argments());
+                ret.append(&mut fun.collect_type_arguments());
                 ret.push(arg.clone());
             }
             Type::TyCon(_) => {}
@@ -1785,7 +1785,7 @@ impl TypeNode {
                     let tycon = fun.toplevel_tycon();
                     if let Some(tycon) = tycon {
                         if let Some(tuple_n) = get_tuple_n(&tycon.name) {
-                            return tuple_n as usize != arg.collect_type_argments().len();
+                            return tuple_n as usize != arg.collect_type_arguments().len();
                         }
                     }
                     return true;
@@ -1801,7 +1801,7 @@ impl TypeNode {
                 if let Some(tycon) = tycon {
                     if let Some(n) = get_tuple_n(&tycon.name) {
                         // Tuple case.
-                        let args = self.collect_type_argments();
+                        let args = self.collect_type_arguments();
                         let arg_strs = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
 
                         // In this case, we use special notation when n = 1 or n = args.len().
@@ -1815,7 +1815,7 @@ impl TypeNode {
                     if tycon.name == make_arrow_name_abs() {
                         // `->` case.
                         // In this case we use special notation when the `Arrow` type is fully applied.
-                        let args = self.collect_type_argments();
+                        let args = self.collect_type_arguments();
                         if args.len() == 2 {
                             if args[0].is_closure() {
                                 return format!(

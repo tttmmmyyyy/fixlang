@@ -272,7 +272,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             let field_unit_ty = new_ty;
             let struct_name = body.var_name.clone();
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
-                let field_ty = field_unit_ty.collect_type_argments()[0].clone();
+                let field_ty = field_unit_ty.collect_type_arguments()[0].clone();
                 let unit_ty = make_unit_ty();
                 let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
                 let unit_expr =
