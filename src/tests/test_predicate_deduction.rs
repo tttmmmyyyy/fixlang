@@ -45,7 +45,7 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
 }
 
 #[test]
-pub fn test_unfounded_instance_context_via_equality() {
+pub fn test_unsatisfiable_instance_context_via_equality() {
     // The same program with an associated type that leads out of the instance instead of back into
     // it. What the context asks for is then a constraint of its own, and no instance gives it.
     let source = r##"
@@ -79,7 +79,7 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
 }
 
 #[test]
-pub fn test_nested_instance_context_via_equality() {
+pub fn test_shrinking_instance_context_via_equality() {
     // An instance of the same shape, with everything its context asks for given: deducing
     // `Wrap (Wrap I64) : Show` asks for `Wrap I64 : Show`, which asks for `I64 : Show`, which an
     // instance gives outright. A deduction that reaches the trait it started from, at a smaller

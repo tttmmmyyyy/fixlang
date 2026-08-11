@@ -1171,7 +1171,7 @@ impl TypeCheckContext {
                             .find_map(|cand| cand.as_ref().err())
                             .unwrap();
                         let scm = tc.substitution.substitute_scheme(scm);
-                        let msg = e.with_note(format!(
+                        let msg = e.message_with_note(format!(
                             "`{}` of type `{}` does not match the expected type `{}` since `{}` cannot be deduced.",
                             fullname.to_string(),
                             scm.to_string(),
@@ -1204,7 +1204,7 @@ impl TypeCheckContext {
                         {
                             let cnt = candidates_errors.len() + 1;
                             let scm = tc.substitution.substitute_scheme(scm);
-                            let msg = e.with_note(format!(
+                            let msg = e.message_with_note(format!(
                                 "- ({}) `{}` of type `{}` does not match since `{}` cannot be deduced.",
                                 cnt,
                                 fullname.to_string(),
@@ -1700,7 +1700,7 @@ impl TypeCheckContext {
         unif_err.free_vars_to_vec(&mut tvs);
         let tv_loc_msgs = self.create_tyvar_location_messages(&tvs, None);
         let mut err = Error::from_msg_srcs(
-            unif_err.with_note(format!(
+            unif_err.message_with_note(format!(
                 "Type mismatch. Expected `{}`, found `{}`. They do not match since `{}` cannot be deduced.",
                 expected_ty.to_string(),
                 found_ty.to_string(),
@@ -1794,7 +1794,7 @@ impl TypeCheckContext {
         ) -> Error {
             tc.substitution.substitute_unification_error(&mut unif_err);
             let mut error = Error::from_msg_srcs(
-                unif_err.with_note(format!(
+                unif_err.message_with_note(format!(
                     "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
                     unif_err.to_constraint_string()
                 )),
@@ -2296,11 +2296,11 @@ impl TypeCheckContext {
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         deduction.enter(pred, pred_str);
-        let result = context
+        let deduced = context
             .into_iter()
             .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irr_preds, deduction));
         deduction.leave();
-        result
+        deduced
     }
 
     /// Pattern half of `map_types`: rebuild `pat` with the type of the
@@ -2784,7 +2784,7 @@ impl UnificationErr {
         match self {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
             UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
-                Self::deduced_predicate(way).to_string()
+                Self::reported_predicate(way).to_string()
             }
             UnificationErr::Disjoint(ty1, ty2) => {
                 format!("{} = {}", ty1.to_string(), ty2.to_string())
@@ -2794,7 +2794,7 @@ impl UnificationErr {
 
     /// `sentence`, which names the constraint, followed by what the deduction of that constraint
     /// did where the deduction rather than the constraint is what fails.
-    pub fn with_note(&self, sentence: String) -> String {
+    pub fn message_with_note(&self, sentence: String) -> String {
         match self.note() {
             Some(note) => format!("{} {}", sentence, note),
             None => sentence,
@@ -2843,7 +2843,7 @@ impl UnificationErr {
     }
 
     /// The predicate a failed deduction is about: the one the report names.
-    fn deduced_predicate(way: &[Predicate]) -> &Predicate {
+    fn reported_predicate(way: &[Predicate]) -> &Predicate {
         way.first()
             .expect("a deduction carries the predicate it started from")
     }
