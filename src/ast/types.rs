@@ -426,30 +426,51 @@ impl TyConInfo {
     }
 }
 
+/// A declaration of a type alias: the type it stands for, and the parameters it takes.
 #[derive(Clone)]
 pub struct TyAliasInfo {
+    /// The kind of the type constructor the alias names.
     pub kind: Arc<Kind>,
+    /// The type the alias stands for, written in terms of `tyvars`.
     pub value: Arc<TypeNode>,
+    /// The parameters the alias takes, in the order they are declared.
     pub tyvars: Vec<Arc<TyVar>>,
+    /// Where the declaration was written.
     pub source: Option<Span>,
 }
 
 impl TyAliasInfo {
-    // Get the document of this type alias.
+    /// The documentation comment written above this declaration.
     pub fn get_document(&self) -> Option<String> {
         self.source.as_ref().and_then(|src| src.get_document().ok())
     }
 
+    /// Resolves the namespaces of the type names in the type the alias stands for.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())
     }
 }
 
-// Node of type ast tree with user defined additional information
+/// How deeply a single type may nest before the compiler calls the program endless.
+///
+/// This bounds one type: a chain of a thousand types that each hold the next is a thousand types of
+/// depth one, and a project keeps compiling however many such types it gains. A type reached from
+/// itself at a larger type argument, on the other hand, gains a level at every step and passes any
+/// bound.
+///
+/// Over the benchmark corpus and the examples the deepest type reached is 10; a type written with
+/// 25 nested tuples reaches 27. The bound also caps how deep the walks over a type go — hashing it,
+/// substituting into it, printing it — so raising it costs stack on the programs it exists to
+/// reject.
+pub const MAX_TYPE_DEPTH: usize = 500;
+
+/// A node of a type expression, together with the information the compiler carries alongside it.
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
+    /// The type expression, which is what equality and hashing of a node read.
     pub ty: Type,
+    /// Where the type was written, for a type read from a source file.
     pub info: TypeInfo,
     /// The hash of `ty`, kept once computed.
     ///
@@ -472,6 +493,8 @@ pub struct TypeNode {
 }
 
 impl PartialEq for TypeNode {
+    /// Compares the type expressions; the source information a node carries stays out of the
+    /// comparison.
     fn eq(&self, other: &Self) -> bool {
         self.ty == other.ty
     }

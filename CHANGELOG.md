@@ -47,6 +47,7 @@
 
 #### Language
 
+- A trait constraint that is deduced from itself is now rejected, instead of being accepted with nothing behind it. With `impl Wrap c : Holder { type Held (Wrap c) = Wrap (Wrap c); }`, the instance `impl [c : Holder, Held c = e, e : Show] Wrap c : Show` made deducing `Wrap (Wrap I64) : Show` ask for `Wrap (Wrap I64) : Show` again, and the program compiled although nothing gives `Show` to anything. Where each step asks about a larger type instead of the same one (`type Held (Wrap c) = Wrap (Wrap (Wrap c));`), the compiler used to take memory without end and report nothing; it now reports that the deduction asks about types nested more than 500 deep.
 - A struct pattern now requires the type at its head to be a struct, and reports an error otherwise. `let MyUnion { a : x } = u;` took the union's tag for the payload of `a`, and the build aborted; `let Item { data : x } = 42;`, whose head names an associated type, aborted the compiler.
 - A trait alias that stands for one trait along two paths is now accepted. `trait Ring = Ordered + Showable;`, where `Ordered` and `Showable` both stand for `Additive`, was rejected as circular aliasing, and the message named a trait of the standard library that the program never mentions.
 - Two implementations of one trait are now reported as overlapping when one of their heads takes a type parameter of a higher kind, as `impl [f : *->*] Bar f : MyTrait` does beside `impl Bar Array : MyTrait`. Both used to be accepted, and the order they were written in decided which one a call reached.

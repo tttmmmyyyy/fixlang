@@ -1,7 +1,7 @@
 use super::check_holes::collect_hole_errors;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
-use crate::misc::{collect_results, grow_stack, insert_to_map_vec, Map, Set};
+use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
@@ -18,7 +18,7 @@ use crate::{
         types::{
             is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
             type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
-            TyConVariant, TyVar, Type, TypeNode,
+            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -235,9 +235,14 @@ impl Substitution {
             UnificationErr::Unsatisfiable(predicate) => {
                 self.substitute_predicate(predicate);
             }
-            UnificationErr::Disjoint(type_node, type_node1) => {
-                *type_node = self.substitute_type(type_node);
-                *type_node1 = self.substitute_type(type_node1);
+            UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
+                for predicate in way {
+                    self.substitute_predicate(predicate);
+                }
+            }
+            UnificationErr::Disjoint(ty1, ty2) => {
+                *ty1 = self.substitute_type(ty1);
+                *ty2 = self.substitute_type(ty2);
             }
         }
     }
@@ -1153,24 +1158,24 @@ impl TypeCheckContext {
                 if ok_count == 0 {
                     let mut extra_srcs = vec![];
 
-                    let err_cnt = candidates_check_res
+                    let err_count = candidates_check_res
                         .iter()
                         .filter(|cand| cand.is_err())
                         .count();
                     let expected_type = self.substitute_type(&ty);
-                    let msg = if err_cnt == 1 {
+                    let msg = if err_count == 1 {
                         let (tc, fullname, scm, e) = candidates_check_res
                             .iter()
                             .find_map(|cand| cand.as_ref().err())
                             .unwrap();
                         let scm = tc.substitution.substitute_scheme(scm);
-                        let msg = format!(
+                        let msg = e.message_with_note(format!(
                             "`{}` of type `{}` does not match the expected type `{}` since `{}` cannot be deduced.",
                             fullname.to_string(),
                             scm.to_string(),
                             expected_type.to_string(),
                             e.to_constraint_string(),
-                        );
+                        ));
                         let mut tvs = vec![];
                         scm.free_vars_to_vec(&mut tvs);
                         expected_type.free_vars_to_vec(&mut tvs);
@@ -1195,21 +1200,22 @@ impl TypeCheckContext {
                             .iter()
                             .filter_map(|cand| cand.as_ref().err())
                         {
-                            let cnt = candidates_errors.len() + 1;
+                            let ref_no = candidates_errors.len() + 1;
                             let scm = tc.substitution.substitute_scheme(scm);
-                            let msg = format!(
+                            let msg = e.message_with_note(format!(
                                 "- ({}) `{}` of type `{}` does not match since `{}` cannot be deduced.",
-                                cnt,
+                                ref_no,
                                 fullname.to_string(),
                                 scm.to_string(),
                                 e.to_constraint_string(),
-                            );
+                            ));
                             candidates_errors.push(msg);
                             let mut tvs = vec![];
                             scm.free_vars_to_vec(&mut tvs);
                             e.free_vars_to_vec(&mut tvs);
-                            extra_srcs
-                                .append(&mut self.create_tyvar_location_messages(&tvs, Some(cnt)));
+                            extra_srcs.append(
+                                &mut self.create_tyvar_location_messages(&tvs, Some(ref_no)),
+                            );
                         }
                         if candidates_errors.len() > 0 {
                             msg.push_str("\n");
@@ -1693,12 +1699,12 @@ impl TypeCheckContext {
         unif_err.free_vars_to_vec(&mut tvs);
         let tv_loc_msgs = self.create_tyvar_location_messages(&tvs, None);
         let mut err = Error::from_msg_srcs(
-            format!(
+            unif_err.message_with_note(format!(
                 "Type mismatch. Expected `{}`, found `{}`. They do not match since `{}` cannot be deduced.",
                 expected_ty.to_string(),
                 found_ty.to_string(),
                 unif_err.to_constraint_string(),
-            ),
+            )),
             &[&source],
         );
         err.add_srcs(tv_loc_msgs);
@@ -1787,10 +1793,10 @@ impl TypeCheckContext {
         ) -> Error {
             tc.substitution.substitute_unification_error(&mut unif_err);
             let mut error = Error::from_msg_srcs(
-                format!(
+                unif_err.message_with_note(format!(
                     "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
                     unif_err.to_constraint_string()
-                ),
+                )),
                 &[src],
             );
             let mut tvs = vec![];
@@ -2178,24 +2184,24 @@ impl TypeCheckContext {
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
-        let mut irr_preds = vec![];
-        let mut skip: Set<String> = Set::default();
+        let mut irreducible_preds = vec![];
+        let mut deduction = PredicateDeduction::default();
         while let Some(pred) = self.predicates.pop() {
-            self.reduce_predicate(pred, &mut irr_preds, &mut skip)?;
+            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
         }
-        self.predicates = irr_preds;
+        self.predicates = irreducible_preds;
         Ok(())
     }
 
-    // Reduce a predicate and add reduced predicates to `irr_preds`.
+    // Reduce a predicate and add reduced predicates to `irreducible_preds`.
     fn reduce_predicate(
         &mut self,
         pred: Predicate,
-        irr_preds: &mut Vec<Predicate>,
-        skip: &mut Set<String>,
+        irreducible_preds: &mut Vec<Predicate>,
+        deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env.aliases)? {
-            self.reduce_predicate_noalias(pred, irr_preds, skip)?;
+            self.reduce_predicate_noalias(pred, irreducible_preds, deduction)?;
         }
         Ok(())
     }
@@ -2205,16 +2211,30 @@ impl TypeCheckContext {
     fn reduce_predicate_noalias(
         &mut self,
         mut pred: Predicate,
-        irr_preds: &mut Vec<Predicate>,
-        skip: &mut Set<String>,
+        irreducible_preds: &mut Vec<Predicate>,
+        deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
+        // The constraint as it is asked for, before the associated types in it are reduced, is what
+        // tells one deduction from another here. Two spellings of one constraint are then two
+        // deductions, which costs a turn of the deduction before a circle through an associated
+        // type closes on a spelling it has already met. The depth bound below is what ends a
+        // deduction that keeps finding new spellings.
         let pred_str = pred.to_string();
-        if skip.contains(&pred_str) {
+        if deduction.settled.contains(&pred_str) {
             return Ok(());
         }
-        skip.insert(pred_str);
+        if deduction.on_path.contains(&pred_str) {
+            return Err(UnificationErr::Circular(deduction.way_round(&pred_str)).into());
+        }
         pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
+        // An instance whose context asks for what it gives, on a larger type, never asks twice for
+        // the same predicate, so the check above never meets one of its deductions a second time.
+        // What such a deduction does at every step is ask about a deeper type, and this is where
+        // that ends.
+        if pred.ty.depth() > MAX_TYPE_DEPTH {
+            return Err(UnificationErr::Endless(deduction.way_down(&pred)).into());
+        }
         let mut unifiable = false;
         let assumed_preds = self.assumed_preds.clone();
         for qual_pred_scm in assumed_preds
@@ -2237,10 +2257,22 @@ impl TypeCheckContext {
                     match_subst.substitute_equality(&mut eq);
                     self.add_equality(eq)?;
                 }
-                for mut pred in qual_pred.pred_constraints {
-                    match_subst.substitute_predicate(&mut pred);
-                    self.reduce_predicate(pred, irr_preds, skip)?;
-                }
+                let context = qual_pred
+                    .pred_constraints
+                    .into_iter()
+                    .map(|mut ctx_pred| {
+                        match_subst.substitute_predicate(&mut ctx_pred);
+                        ctx_pred
+                    })
+                    .collect();
+                self.reduce_instance_context(
+                    &pred,
+                    &pred_str,
+                    context,
+                    irreducible_preds,
+                    deduction,
+                )?;
+                deduction.settled.insert(pred_str);
                 return Ok(());
             } else if !unifiable {
                 // If match fails, then we cannot reduce the predicate at now.
@@ -2253,8 +2285,27 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
-        irr_preds.push(pred);
+        irreducible_preds.push(pred);
+        deduction.settled.insert(pred_str);
         return Ok(());
+    }
+
+    /// Deduce the constraints the instance that gives `pred` asks for, with `pred` on the deduction
+    /// while they are deduced, so that a deduction coming back to `pred` is seen for what it is.
+    fn reduce_instance_context(
+        &mut self,
+        pred: &Predicate,
+        pred_str: &str,
+        context: Vec<Predicate>,
+        irreducible_preds: &mut Vec<Predicate>,
+        deduction: &mut PredicateDeduction,
+    ) -> Result<(), UnifOrOtherErr> {
+        deduction.enter(pred, pred_str);
+        let deduced = context
+            .into_iter()
+            .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irreducible_preds, deduction));
+        deduction.leave();
+        deduced
     }
 
     /// Pattern half of `map_types`: rebuild `pat` with the type of the
@@ -2655,36 +2706,202 @@ fn short_span_snippet(span: &Span) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+/// What the deduction of a predicate carries as it descends into the constraints that the instances
+/// it uses ask for.
+///
+/// A predicate is deduced by finding the instance whose head it matches and deducing what that
+/// instance's context asks for. Which of the two sets a predicate is in is what separates one that
+/// holds from one whose deduction needs itself: `on_path` holds the predicates whose deduction has
+/// begun and has yet to end, and `settled` the ones whose deduction ended.
+#[derive(Default)]
+struct PredicateDeduction {
+    /// The predicates whose deduction the current one is inside, outermost first, each with its
+    /// printed form. The printed form is what tells one predicate from another here, and it is kept
+    /// so that the way out costs no more printing than the way in did.
+    path: Vec<(Predicate, String)>,
+    /// The printed form of each predicate on `path`. Meeting one of these again is meeting a
+    /// predicate whose deduction needs itself.
+    on_path: Set<String>,
+    /// The printed form of each predicate whose deduction ended. Recorded on the way out, so that a
+    /// predicate the deduction is still inside is not taken for one already deduced. It keeps a
+    /// predicate that several instance contexts ask for from being deduced once for each of them.
+    settled: Set<String>,
+}
+
+impl PredicateDeduction {
+    /// Record that the deduction of `pred`, whose printed form is `pred_str`, has begun.
+    fn enter(&mut self, pred: &Predicate, pred_str: &str) {
+        self.on_path.insert(pred_str.to_string());
+        self.path.push((pred.clone(), pred_str.to_string()));
+    }
+
+    /// Record that the deduction entered last has ended.
+    fn leave(&mut self) {
+        let (_pred, pred_str) = self
+            .path
+            .pop()
+            .expect("a deduction ends only after it has begun");
+        self.on_path.remove(&pred_str);
+    }
+
+    /// The way from the predicate printed as `pred_str` round to it again, that predicate at both
+    /// ends.
+    fn way_round(&self, pred_str: &str) -> Vec<Predicate> {
+        let start = self
+            .path
+            .iter()
+            .position(|(_ancestor, ancestor_str)| ancestor_str == pred_str)
+            .expect("the caller found the predicate among the deductions it is inside");
+        let (repeated, _repeated_str) = &self.path[start];
+        self.way_from(start, repeated)
+    }
+
+    /// The way from the predicate the deduction started at down to `pred`, `pred` last.
+    fn way_down(&self, pred: &Predicate) -> Vec<Predicate> {
+        self.way_from(0, pred)
+    }
+
+    /// The way from the predicate at `start` of the path down to `last`, `last` last.
+    fn way_from(&self, start: usize, last: &Predicate) -> Vec<Predicate> {
+        self.path[start..]
+            .iter()
+            .map(|(ancestor, _ancestor_str)| ancestor.clone())
+            .chain([last.clone()])
+            .collect()
+    }
+}
+
+/// A constraint that type checking required and could not settle.
+///
+/// A report names the constraint, and adds what the deduction of it did where the deduction rather
+/// than the constraint is what fails.
 #[derive(Clone)]
 pub enum UnificationErr {
+    /// No instance the program declares gives the predicate.
     Unsatisfiable(Predicate),
+    /// Deducing the predicate comes back to the predicate itself, so nothing gives it. Carries the
+    /// way from the predicate round to it, the predicate at both ends.
+    Circular(Vec<Predicate>),
+    /// Deducing the predicate asks for one on a deeper type, and that one for a deeper one again, so
+    /// the deduction does not end. Carries the way down, deepest last.
+    Endless(Vec<Predicate>),
+    /// Two types that are required to be equal and that unification could not make equal.
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl UnificationErr {
+    /// The constraint the report names, printed: the predicate that cannot be deduced, or an
+    /// equation between the two types that cannot be made equal.
     pub fn to_constraint_string(&self) -> String {
         match self {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
+            UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
+                Self::reported_predicate(way).to_string()
+            }
             UnificationErr::Disjoint(ty1, ty2) => {
                 format!("{} = {}", ty1.to_string(), ty2.to_string())
             }
         }
     }
 
-    // Append free type variables to a buffer of type Vec.
+    /// `sentence`, which names the constraint, followed by what the deduction of that constraint
+    /// did where the deduction rather than the constraint is what fails.
+    pub fn message_with_note(&self, sentence: String) -> String {
+        match self.note() {
+            Some(note) => format!("{} {}", sentence, note),
+            None => sentence,
+        }
+    }
+
+    /// What a report adds after naming the constraint, where what fails is the deduction of the
+    /// constraint rather than the constraint itself.
+    fn note(&self) -> Option<String> {
+        match self {
+            UnificationErr::Unsatisfiable(_) | UnificationErr::Disjoint(_, _) => None,
+            // A deduction that comes straight back to where it began is the whole story; a longer
+            // one is told by the constraints it passes through.
+            UnificationErr::Circular(way) if way.len() <= 2 => Some(
+                "Deducing it needs itself: the instance that gives it asks for it again."
+                    .to_string(),
+            ),
+            UnificationErr::Circular(way) => Some(format!(
+                "Deducing it needs itself: {}.",
+                Self::way_string(way)
+            )),
+            // A deduction that has yet to take a step reached the bound on the constraint it was
+            // asked for, which says nothing about any instance.
+            UnificationErr::Endless(way) if way.len() <= 1 => Some(format!(
+                "The type it names nests more than {} deep, which is past the depth the compiler \
+                 settles a constraint about.",
+                MAX_TYPE_DEPTH
+            )),
+            UnificationErr::Endless(way) => Some(format!(
+                "Deducing it asks about types nested more than {} deep, so the deduction does not \
+                 end: {}. An instance whose context asks for what it gives, on a larger type, does \
+                 this.",
+                MAX_TYPE_DEPTH,
+                Self::way_string(way)
+            )),
+        }
+    }
+
+    /// Appends to `buf` the type variables free in the types this error carries.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         match self {
             UnificationErr::Unsatisfiable(p) => p.free_vars_to_vec(buf),
+            UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
+                for pred in way {
+                    pred.free_vars_to_vec(buf);
+                }
+            }
             UnificationErr::Disjoint(ty1, ty2) => {
                 ty1.free_vars_to_vec(buf);
                 ty2.free_vars_to_vec(buf);
             }
         }
     }
+
+    /// The predicate a failed deduction is about: the one the report names.
+    fn reported_predicate(way: &[Predicate]) -> &Predicate {
+        way.first()
+            .expect("a deduction carries the predicate it started from")
+    }
+
+    /// The steps of a deduction, as the report shows them.
+    fn way_string(way: &[Predicate]) -> String {
+        /// How many steps to show. Enough for one turn of a deduction that asks about ever larger
+        /// types to be visible, and short enough that the reader can read what is printed.
+        const SHOWN_STEPS: usize = 3;
+
+        /// One step of the way, quoted and cut short where the predicate is too long to show whole.
+        fn shorten(pred: &Predicate) -> String {
+            format!("`{}`", shorten_for_report(pred.to_string()))
+        }
+
+        // The last step is where the deduction shows what is wrong with it: the predicate it came
+        // back to, or the one on a type too deep to be one the program wrote.
+        let (last, rest) = way
+            .split_last()
+            .expect("a deduction carries the predicate it started from");
+        let mut steps = rest
+            .iter()
+            .take(SHOWN_STEPS)
+            .map(shorten)
+            .collect::<Vec<_>>();
+        if rest.len() > SHOWN_STEPS {
+            steps.push("...".to_string());
+        }
+        steps.push(shorten(last));
+        steps.join(" -> ")
+    }
 }
 
+/// What a step of type checking fails with: a constraint it could not settle, or errors raised for
+/// any other reason.
 pub enum UnifOrOtherErr {
+    /// A constraint the step required and could not settle.
     UnifErr(UnificationErr),
+    /// Errors raised for any other reason, carried as they are.
     Others(Errors),
 }
 
@@ -2714,12 +2931,21 @@ impl From<UnificationErr> for UnifOrOtherErr {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::TypeCheckContext;
     use crate::ast::expr::{
         expr_abs, expr_app, expr_array_lit, expr_eval, expr_ffi_call, expr_if, expr_let,
-        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var,
+        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var, ExprNode,
     };
+    use crate::ast::kind_scope::KindEnv;
+    use crate::ast::name::FullName;
+    use crate::ast::pattern::PatternNode;
+    use crate::ast::program::TypeEnv;
+    use crate::ast::traits::TraitEnv;
+    use crate::ast::types::TyCon;
     use crate::elaboration::typecheckcache::MemoryCache;
+    use crate::fixstd::builtin::make_bool_ty;
+    use crate::misc::Map;
+    use std::sync::Arc;
 
     /// Context over empty environments: the fallback typing reads only the
     /// fresh-type-variable counter, so no program state is needed.

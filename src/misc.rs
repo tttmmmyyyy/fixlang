@@ -280,21 +280,26 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(abs.unwrap())
 }
 
+/// Works deferred to the moment this value is dropped, run latest first.
 pub struct Finally {
+    /// The works deferred so far, in the order they were deferred.
     works: Vec<Box<dyn FnOnce()>>,
 }
 
 impl Finally {
+    /// A `Finally` with no work deferred.
     pub fn new() -> Self {
         Self { works: vec![] }
     }
 
+    /// Defers `work` until this value is dropped.
     pub fn defer<F: FnOnce() + 'static>(&mut self, work: F) {
         self.works.push(Box::new(work));
     }
 }
 
 impl Drop for Finally {
+    /// Runs the deferred works, latest first.
     fn drop(&mut self) {
         for work in self.works.drain(..).rev() {
             work();
@@ -310,10 +315,12 @@ pub fn disable_colored_no_tty() {
     }
 }
 
+/// Prints `msg` to standard error under an `info` label.
 pub fn info_msg(msg: &str) {
     eprintln!("{}: {}", "info".bright_blue().bold(), msg);
 }
 
+/// Prints `msg` to standard error under a `warning` label.
 pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
 }
@@ -324,9 +331,26 @@ pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
 
-// Splits a string by spaces, but keeps the words in quotes as a single word.
+/// `text` cut short where it is too long for a report to carry, with an ellipsis marking the cut.
+///
+/// A type or a constraint that trips one of the compiler's bounds can be a term of any size, and
+/// the whole of one says no more than its beginning does.
+pub fn shorten_for_report(text: String) -> String {
+    /// How much of one term a report shows.
+    const MAX_SHOWN_CHARS: usize = 200;
+
+    match text.char_indices().nth(MAX_SHOWN_CHARS) {
+        Some((cut, _)) => format!("{}...", &text[..cut]),
+        None => text,
+    }
+}
+
+/// Splits `s` at spaces, keeping a quoted run of characters as one word.
+///
+/// Single and double quotes both quote, and a backslash makes the character after it part of the
+/// word it stands in. The quotes and backslashes themselves stay out of the words returned.
 pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
-    let mut result = Vec::new();
+    let mut words = Vec::new();
     let mut current_word = String::new();
     let mut in_quotes = None; // None if not in quotes, Some(') if in single quotes, Some(") if in double quotes
     let mut escaped = false; // true if the previous character is an escape character
@@ -341,7 +365,7 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
         match c {
             ' ' if in_quotes.is_none() => {
                 if !current_word.is_empty() {
-                    result.push(current_word.clone());
+                    words.push(current_word.clone());
                     current_word.clear();
                 }
             }
@@ -355,13 +379,15 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     }
 
     if !current_word.is_empty() {
-        result.push(current_word);
+        words.push(current_word);
     }
 
-    result
+    words
 }
 
-// Upper CamelCase to lower_snake_case
+/// Rewrites `s`, written in `UpperCamelCase`, as `lower_snake_case`.
+///
+/// Requires `s` to be ASCII alphanumeric.
 pub fn upper_camel_to_lower_snake(s: &str) -> String {
     assert!(
         s.chars().all(|c| c.is_ascii_alphanumeric()),
@@ -384,11 +410,15 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread, split_by_max_size,
+        split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+    };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
     /// Every thread has finished by the time a worker's panic is carried on, so unwinding never

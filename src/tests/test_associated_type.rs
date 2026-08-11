@@ -1047,3 +1047,160 @@ pub fn test_associated_type_inner_bound_only_by_equalities() {
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// An equality constraint on an associated type of arity 2 whose extra argument is a concrete type:
+/// the constraint is accepted, and the reduction at the call site takes the implementation's value
+/// for that argument.
+#[test]
+pub fn test_equality_constraint_on_a_two_argument_associated_type() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Conv c p;
+    conv : c -> Conv c I64;
+}
+
+impl Array a : Coll {
+    type Conv (Array a) p = p;
+    conv = |_| 42;
+}
+
+show_conv : [c : Coll, Conv c I64 = e, e : ToString] c -> String;
+show_conv = |x| x.conv.to_string;
+
+main : IO ();
+main = (
+    assert_eq(|_|"", show_conv([1, 2, 3]), "42");;
+    pure()
+);
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An equality constraint is accepted only where the signature also assumes that its first argument
+/// implements the trait the associated type belongs to.
+#[test]
+pub fn test_equality_constraint_whose_trait_is_not_assumed() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Ele c;
+    first : c -> Ele c;
+}
+
+impl Array a : Coll {
+    type Ele (Array a) = a;
+    first = |xs| xs.@(0);
+}
+
+bad : [Ele c = I64] c -> I64;
+bad = |_| 0;
+
+main : IO ();
+main = println(bad([1, 2]).to_string);
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), "is not assumed");
+}
+
+/// Two equality constraints on one associated type application are rejected, which is what leaves
+/// the reduction of a type by the assumed equalities a single answer.
+#[test]
+pub fn test_two_equality_constraints_with_the_same_left_side() {
+    let source = r#"
+module Main;
+
+trait c : Coll {
+    type Ele c;
+    first : c -> Ele c;
+}
+
+impl Array a : Coll {
+    type Ele (Array a) = a;
+    first = |xs| xs.@(0);
+}
+
+bad : [c : Coll, Ele c = I64, Ele c = Bool] c -> I64;
+bad = |_| 0;
+
+main : IO ();
+main = println(bad([1, 2]).to_string);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Multiple equality constraints with the same left side are not allowed.",
+    );
+}
+
+/// Two implementations of a trait that declares an associated type and no value member are reported
+/// as overlapping. This is the check that keeps such an associated type a single answer: a trait
+/// with no value member contributes no global value for the checks that walk those to reach.
+#[test]
+pub fn test_overlapping_instances_of_a_trait_without_value_members() {
+    let source = r#"
+module Main;
+
+type [f : *->*] Hoge f = unbox struct { d : f I64 };
+
+trait c : Marker {
+    type Tag c;
+}
+
+impl [f : *->*] Hoge f : Marker {
+    type Tag (Hoge f) = I64;
+}
+
+impl Hoge Array : Marker {
+    type Tag (Hoge Array) = Bool;
+}
+
+pick : [c : Marker, Tag c = t, t : ToString] c -> t -> String;
+pick = |_, x| x.to_string;
+
+main : IO ();
+main = println(pick(Hoge { d : [1, 2] }, 42));
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Two trait implementations for `Main::Marker` are overlapping.",
+    );
+}
+
+/// Two values of one name whose constraints differ only in an equality on an associated type: the
+/// one whose equality holds for the receiver is the one the overloading resolves to.
+#[test]
+pub fn test_equality_constraint_alone_resolves_the_overload() {
+    let source = r##"
+module Main;
+
+trait c : Holder {
+    type Held c;
+}
+
+type W a = unbox struct { x : a };
+
+impl W a : Holder {
+    type Held (W a) = I64;
+}
+
+namespace NS1 {
+    f : [c : Holder, Held c = String] c -> I64;
+    f = |_| 0;
+}
+
+namespace NS2 {
+    f : [c : Holder, Held c = I64] c -> I64;
+    f = |_| 1;
+}
+
+main : IO ();
+main = (
+    assert_eq(|_|"", (W { x : 1 }).f, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
