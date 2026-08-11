@@ -59,3 +59,15 @@ When conveying the concept of a computation, consider using pseudocode. Pseudoco
 ## Type definitions and function declarations
 
 Type and trait definitions pack much of the information about a computation, and well-chosen names and type names convey a lot to the reader. For type definitions, writing out the Rust code first is effective. A function declaration is the function's type, so writing out just the function declarations first is also good.
+
+## An example of input and output
+
+A declaration says what a function accepts and returns; what it computes is left to the prose. For a transformation — a function that takes a value apart and builds a different one — one input and the output it produces says it in a line:
+
+```
+split(",", "a,,b")  ->  ["a", "", "b"]
+```
+
+Choose the input that answers what the reader would otherwise have to ask: an empty collection, a boundary, an element the transformation drops.
+
+Where the name and the type already carry the behavior — reading a field, replacing a field, constructing a value, performing an effect — state the meaning they leave unsaid and stop there.
