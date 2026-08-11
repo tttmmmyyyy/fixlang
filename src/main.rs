@@ -82,9 +82,20 @@ use std::vec::Vec;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-/// The `git describe` output for the revision the compiler was built from, carrying a `-dirty`
-/// suffix when the working tree held uncommitted changes. Printed by `fix version`.
-const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
+/// The version of the compiler: the released version, followed in parentheses by the revision it
+/// was built from. The revision is the `git describe` output for that source, carrying a `-dirty`
+/// suffix when the working tree held uncommitted changes, and it is what tells two builds of the
+/// same released version apart.
+///
+/// Printed by `fix version`, by `fix --version`, and on the first line of every help message.
+///
+/// `concat!` expands `env!` and leaves a procedural macro call unexpanded, so the released version
+/// joins the revision from inside `git_version!`, as its prefix.
+const VERSION: &str = git_version!(
+    args = ["--abbrev=7", "--always", "--dirty", "--broken"],
+    prefix = concat!(env!("CARGO_PKG_VERSION"), " ("),
+    suffix = ")"
+);
 
 /// Run the `fix` command, exiting with status 1 when it fails.
 fn main() {
@@ -440,8 +451,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     let check_subc = App::new("check")
         .about("Checks whether a Fix project compiles without errors. Type-checks all entities including test code.");
 
-    let app = App::new("Fix-lang")
+    let app = App::new("fix")
         .bin_name("fix")
+        .version(VERSION)
+        .propagate_version(true)
+        .about("The toolchain for Fix, a fast, simple, purely functional language.")
         .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(version_subc)
         .subcommand(build_subc)
@@ -760,7 +774,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     match app.get_matches().subcommand() {
         Some(("version", _args)) => {
-            println!("fix {} ({})", env!("CARGO_PKG_VERSION"), GIT_VERSION);
+            println!("fix {}", VERSION);
             process::exit(0);
         }
         Some(("build", args)) => {

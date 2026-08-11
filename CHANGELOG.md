@@ -41,6 +41,7 @@
 - `--sanitize thread`, or the `sanitize` field of the project file, builds the program with ThreadSanitizer, which reports a data race when one occurs while the program runs; use it to check that every value another thread reaches has been passed through `Std::mark_threaded`. Available on Linux; the instrumented program runs several times slower and uses much more memory.
 - The `threaded` field of a dependency's project file no longer turns multi-threading on for the project being built; the project being built decides the setting. Building a program that calls `Std::mark_threaded` with multi-threading off now fails with an error quoting the call, so a project that depends on a library needing multi-threading sets `threaded = true` in its own project file or passes `--threaded`.
 - The project file's `no_runtime_check` can now be set in the `build.test` section. `fix test` reads it from there, so a project that disables the checks for its program still runs its tests with them.
+- Every help message is now headed by the compiler's version, as `fix 1.5.0 (92a3989)` — the released version, followed by the revision the binary was built from — and `fix --version` and `fix -V` report the same line, which used to be an error. The header read `Fix-lang` alone before, so a help message quoted in a bug report named no version. The line under it now says what `fix` is.
 
 ### Fixed
 
