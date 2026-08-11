@@ -15,7 +15,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
-    misc::{info_msg, spawn_compiler_thread, warn_msg, Map, Set},
+    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -45,7 +45,6 @@ use std::{
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
-    panic::resume_unwind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -57,8 +56,8 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
-/// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
-/// code generation and the RC IR dump build on; the optimizations are separate
+/// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
+/// lowered program needs to run at all; the optimizations over it are separate
 /// (`optimize_rc_program`).
 ///
 /// # Arguments
@@ -390,26 +389,13 @@ pub fn build_object_files<'c>(
             write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
         }));
     }
-    // Every thread is joined before a panic is carried on: a thread still running holds the state
-    // that unwinding tears down, and the process crashes under it. `resume_unwind` carries the
-    // payload of the thread that panicked, which has already reported through the panic hook; a
-    // joined payload is a `Box<dyn Any>`, so a fresh panic here would report a second time, and as
-    // an unknown error.
-    let mut panic_payload = None;
-    for t in threads {
-        if let Err(payload) = t.join() {
-            panic_payload = panic_payload.or(Some(payload));
-        }
-    }
-    if let Some(payload) = panic_payload {
-        resume_unwind(payload);
-    }
+    join_compiler_threads(threads);
 
     // Save object files cache.
-    let result = BuildObjFilesResult { obj_paths };
-    save_build_object_files_cache(&program, config, &result);
+    let obj_files = BuildObjFilesResult { obj_paths };
+    save_build_object_files_cache(&program, config, &obj_files);
 
-    Ok(result)
+    Ok(obj_files)
 }
 
 /// The object files a previous build of this program and configuration left behind, when the cache
@@ -445,7 +431,7 @@ fn load_build_object_files_cache(
 fn save_build_object_files_cache(
     program: &Program,
     config: &Configuration,
-    result: &BuildObjFilesResult,
+    obj_files: &BuildObjFilesResult,
 ) {
     let Some(hash) = build_object_files_cache_hash_or_warn(program, config) else {
         return;
@@ -464,7 +450,7 @@ fn save_build_object_files_cache(
         return;
     };
     cache_step_or_warn(
-        serde_json::to_writer_pretty(file, result),
+        serde_json::to_writer_pretty(file, obj_files),
         &format!("Failed to write object files cache \"{}\"", cache_path),
     );
 }
@@ -685,8 +671,9 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
-// Implement the C `main` function of the program: store `argc` and `argv` into the global variables
-// the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return 0.
+/// Implement the C `main` function of the program: store `argc` and `argv` into the global
+/// variables the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return
+/// 0.
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[

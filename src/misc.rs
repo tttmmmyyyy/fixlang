@@ -4,17 +4,21 @@ use crate::{
     error::Errors,
     parse::sourcefile::SourceFile,
 };
-use colored::Colorize;
-use std::io::IsTerminal;
+use colored::{control, ColoredString, Colorize};
+use fxhash::{FxHashMap, FxHashSet};
 use std::{
-    env, fs,
+    cmp, env, fs,
     hash::Hash,
+    io::{self, ErrorKind, IsTerminal, Write},
+    panic::resume_unwind,
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
 };
 
-pub type Map<K, V> = fxhash::FxHashMap<K, V>;
+pub type Map<K, V> = FxHashMap<K, V>;
 
+/// A map holding the given key-value pairs. When a key is given more than once, the value that
+/// comes last is the one kept.
 pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K, V> {
     let mut map = Map::default();
     for (k, v) in kvs {
@@ -23,8 +27,9 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
-pub type Set<T> = fxhash::FxHashSet<T>;
+pub type Set<T> = FxHashSet<T>;
 
+/// A set holding the given elements, with an element that appears several times held once.
 pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     let mut set = Set::default();
     for elem in iter {
@@ -55,6 +60,34 @@ where
         .expect("failed to spawn a compiler thread")
 }
 
+/// The values the given threads returned, in the order the threads are given.
+///
+/// A thread that panicked carries its panic on from here, once **every** thread has been joined:
+/// unwinding tears down the state the compiler works on, and a thread still running under it reads
+/// and writes memory that is being freed, which crashes the process on top of the panic that was
+/// meant to be reported.
+pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
+    let mut values = vec![];
+    let mut panic_payload = None;
+    for thread in threads {
+        match thread.join() {
+            Ok(value) => values.push(value),
+            // Of the threads that panicked, the earliest in the list is the one whose payload is
+            // carried on, by `resume_unwind`: that thread has already reported through the panic
+            // hook, and a joined payload is an opaque `Box<dyn Any>`, so raising it as a fresh
+            // panic would report a second time and call it an unknown error.
+            Err(payload) => panic_payload = panic_payload.or(Some(payload)),
+        }
+    }
+    if let Some(payload) = panic_payload {
+        resume_unwind(payload);
+    }
+    values
+}
+
+/// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
+/// of the source's content — inserted before the `.fix` extension, so that two sources of the same
+/// name and different content are saved side by side.
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }
@@ -84,9 +117,6 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
         .open(&path)
     {
         Ok(mut file) => {
-            use std::io::Write;
-            // file.write_all(source.as_bytes())
-            //     .expect(&format!("Failed to write temporary file {}", file_name));
             file.write_all(source.as_bytes()).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to write temporary file \"{}\": {}",
@@ -94,7 +124,7 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
                 ))
             })?;
         }
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
             // File already exists, which is fine
         }
         Err(e) => {
@@ -144,10 +174,10 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     v.reverse();
     let mut result = vec![];
     while v.len() > 0 {
-        let len = std::cmp::min(max_size, v.len());
-        let mut w = v.split_off(v.len() - len);
-        w.reverse();
-        result.push(w);
+        let len = cmp::min(max_size, v.len());
+        let mut chunk = v.split_off(v.len() - len);
+        chunk.reverse();
+        result.push(chunk);
     }
     result
 }
@@ -229,7 +259,7 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        match std::env::current_dir() {
+        match env::current_dir() {
             Err(e) => {
                 return Err(Errors::from_msg(format!(
                     "Failed to get the current directory: {}",
@@ -272,9 +302,11 @@ impl Drop for Finally {
     }
 }
 
+/// Turns off the color of every message the compiler prints, when its error output goes somewhere
+/// other than a terminal.
 pub fn disable_colored_no_tty() {
-    if !std::io::stderr().is_terminal() {
-        colored::control::set_override(false);
+    if !io::stderr().is_terminal() {
+        control::set_override(false);
     }
 }
 
@@ -286,10 +318,9 @@ pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
 }
 
-// Styling used for interactive prompts that require the user's attention
-// (e.g. the preliminary-commands approval flow). Centralized so the look stays
-// consistent across prompt lines.
-pub fn prompt_style(s: &str) -> colored::ColoredString {
+/// Styles `s` as a line of an interactive prompt that requires the user's attention, so that every
+/// such prompt looks alike.
+pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
 
@@ -354,7 +385,99 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::any_to_string;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
 
+    /// Every thread has finished by the time a worker's panic is carried on, so unwinding never
+    /// tears down state that a thread still running is working on.
+    #[test]
+    fn test_join_compiler_threads_joins_every_thread() {
+        const SLOW_THREAD_COUNT: usize = 3;
+        let finished_count = Arc::new(AtomicUsize::new(0));
+
+        // The thread that panics is joined first, so a collector that carries the panic on at the
+        // first `Err` it sees leaves the slow threads running.
+        let mut threads = vec![spawn_compiler_thread(|| {
+            panic!("this thread panics on purpose")
+        })];
+        for _ in 0..SLOW_THREAD_COUNT {
+            let finished_count = finished_count.clone();
+            threads.push(spawn_compiler_thread(move || {
+                thread::sleep(Duration::from_millis(500));
+                finished_count.fetch_add(1, Ordering::SeqCst);
+            }));
+        }
+
+        let joined = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)));
+        assert!(joined.is_err(), "the worker's panic is carried on");
+        assert_eq!(
+            finished_count.load(Ordering::SeqCst),
+            SLOW_THREAD_COUNT,
+            "every thread has finished by the time the panic is carried on"
+        );
+    }
+
+    /// The panic carried on holds the worker's own payload, so the renderer the compiler reports
+    /// through still finds the message in it. Raising a fresh panic around the joined
+    /// `Box<dyn Any>` would report the error a second time, and as `(unknown error)`.
+    #[test]
+    fn test_join_compiler_threads_carries_the_workers_own_payload() {
+        const MESSAGE: &str = "this thread panics on purpose";
+        let threads: Vec<JoinHandle<()>> = vec![spawn_compiler_thread(|| panic!("{}", MESSAGE))];
+
+        let payload = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)))
+            .expect_err("the worker's panic is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// The values come back in the order the threads were given, whatever order they finish in.
+    #[test]
+    fn test_join_compiler_threads_returns_values_in_the_order_given() {
+        let threads = vec![
+            // The first thread finishes last, so the assertion below tells the order of the
+            // threads apart from the order they finished in.
+            spawn_compiler_thread(|| {
+                thread::sleep(Duration::from_millis(200));
+                "first"
+            }),
+            spawn_compiler_thread(|| "second"),
+        ];
+
+        assert_eq!(join_compiler_threads(threads), vec!["first", "second"]);
+    }
+
+    /// Every piece a split produces holds at least one element and at most `max_size` of them, and
+    /// the pieces read back as the input. A consumer turns each piece into a unit of work, so an
+    /// empty piece is a unit with nothing in it.
+    #[test]
+    fn test_split_by_max_size_pieces_are_nonempty() {
+        for max_size in 1..=5 {
+            for len in 0..=12 {
+                let v: Vec<usize> = (0..len).collect();
+                let pieces = split_by_max_size(v.clone(), max_size);
+                assert!(
+                    pieces.iter().all(|piece| !piece.is_empty()),
+                    "max_size = {}, len = {}",
+                    max_size,
+                    len
+                );
+                assert!(
+                    pieces.iter().all(|piece| piece.len() <= max_size),
+                    "max_size = {}, len = {}",
+                    max_size,
+                    len
+                );
+                assert_eq!(pieces.concat(), v, "max_size = {}, len = {}", max_size, len);
+            }
+        }
+    }
+
+    /// Splitting a command line into words: a run of spaces separates words, a quoted run — single
+    /// or double — stays one word, a backslash escapes the character after it, and an input of
+    /// spaces alone yields no word at all.
     #[test]
     fn test_split_string() {
         assert_eq!(

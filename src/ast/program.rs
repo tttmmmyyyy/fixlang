@@ -34,7 +34,8 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, spawn_compiler_thread, to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
+    to_absolute_path, Map, Set,
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
@@ -1220,8 +1221,12 @@ impl Program {
         errors.to_result()
     }
 
-    // Perform namespace resolution and type-checking for the specified expression.
-    // This function updates `TypedExpr` in `self.global_values` in-place.
+    /// Resolves namespaces in, and type-checks, the global values named in `val_names`, updating
+    /// their `TypedExpr` in `self.global_values` in place.
+    ///
+    /// # Arguments
+    /// * `method_impl_filter` — decides, for each implementation of a trait method the names cover,
+    ///   whether this run checks it.
     pub fn resolve_namespace_and_check_type(
         &mut self,
         tc: &TypeCheckContext,
@@ -1230,19 +1235,26 @@ impl Program {
     ) -> Result<(), Errors> {
         let nrenv = self.create_name_resolution_env();
 
-        // The typed expression and any tolerated diagnostics
-        // (`errors`) are returned together so the caller can save the
-        // typed expression for the LSP even when the value didn't
-        // type-check cleanly. See `check_type` for the rules on what
-        // counts as "tolerated".
+        /// What checking one value produced. The typed expression and any tolerated diagnostics
+        /// come together so the caller can save the typed expression for the LSP even when the
+        /// value didn't type-check cleanly. See `check_type` for the rules on what counts as
+        /// "tolerated".
         struct CheckTaskOutput {
+            /// The value's expression, with namespaces resolved and types assigned.
             te: TypedExpr,
+            /// The names the expression referred to that the module it is defined in has to
+            /// import, keyed by that module.
             import_required: Map<Name, Vec<FullName>>,
+            /// The tolerated diagnostics the check produced.
             errors: Errors,
         }
+        /// One value to check, as a closure a worker thread can run.
         struct CheckTask {
+            /// The global value to check.
             val_name: FullName,
+            /// Resolves namespaces in the value's expression and type-checks it.
             task: Box<dyn FnOnce() -> Result<CheckTaskOutput, Errors> + Send>,
+            /// Which implementation of the trait method to check; `None` for a simple value.
             method_impl_idx: Option<usize>,
         }
         let mut tasks: Vec<CheckTask> = vec![];
@@ -1353,23 +1365,29 @@ impl Program {
         }
 
         // Run all tasks.
+        /// What one task produced, together with the place in `self` it belongs to.
         struct CheckResult {
+            /// The global value the task checked.
             val_name: FullName,
+            /// The typed expression the check produced, or the errors that stopped it.
             output: Result<CheckTaskOutput, Errors>,
+            /// Which implementation of the trait method the task checked; `None` for a simple
+            /// value.
             method_impl_idx: Option<usize>,
         }
-        let results = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
-            // Run tasks in the main thread.
-            let mut results = vec![];
-            for task in tasks {
-                let output = (task.task)();
-                results.push(CheckResult {
-                    val_name: task.val_name,
-                    output,
-                    method_impl_idx: task.method_impl_idx,
-                });
+        /// Runs `task` and pairs its output with the value the task checked, so that the typed
+        /// expression can be stored back where it came from.
+        fn run_check_task(task: CheckTask) -> CheckResult {
+            let output = (task.task)();
+            CheckResult {
+                val_name: task.val_name,
+                output,
+                method_impl_idx: task.method_impl_idx,
             }
-            results
+        }
+        let results: Vec<CheckResult> = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
+            // Run tasks in the main thread.
+            tasks.into_iter().map(run_check_task).collect()
         } else {
             // Run tasks in parallel via a shared work queue: every
             // worker thread pops the next task from the same `Vec`
@@ -1391,25 +1409,19 @@ impl Program {
                             Some(task) => task,
                             None => break,
                         };
-                        let output = (task.task)();
-                        results.push(CheckResult {
-                            val_name: task.val_name,
-                            output,
-                            method_impl_idx: task.method_impl_idx,
-                        });
+                        results.push(run_check_task(task));
                     }
                     results
                 });
                 threads.push(thread);
             }
-            let mut results = vec![];
-            for thread in threads {
-                results.append(&mut thread.join().unwrap());
-            }
-            results
+            join_compiler_threads(threads)
+                .into_iter()
+                .flatten()
+                .collect()
         };
 
-        // Store results to into members of `self`.
+        // Store the results into members of `self`.
         let mut errors = Errors::empty();
         for result in results {
             if result.output.is_err() {
