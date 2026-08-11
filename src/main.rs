@@ -468,7 +468,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(edit_subc)
         .subcommand(check_subc);
 
-    // Every path the option `opt_id` collects, across all of its occurrences.
+    /// Every path the option `opt_id` collects, across all of its occurrences.
     fn read_path_list_option(args: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
         let Some(paths) = args.get_many::<String>(opt_id) else {
             return vec![];
@@ -476,8 +476,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         paths.map(PathBuf::from).collect()
     }
 
-    // The kind of file the `--output-type` option asks the build to produce, if the invocation
-    // gives that option.
+    /// The kind of file the `--output-type` option asks the build to produce, if the invocation
+    /// gives that option.
     fn read_output_file_type_option(args: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
         match args.get_one::<String>("output-file-type") {
             None => return Ok(None),
@@ -485,6 +485,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
     }
 
+    /// Apply the options of one `fix docs` invocation to the documentation settings `config`
+    /// carries.
     fn read_docs_options(args: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
         let docs_config = match &mut config.subcommand {
             SubCommand::Docs(docs_config) => docs_config,
@@ -516,13 +518,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
-    // The path the `--output` option names for the built file, if the invocation gives that option.
+    /// The path the `--output` option names for the built file, if the invocation gives that
+    /// option.
     fn read_output_file_option(args: &ArgMatches) -> Option<PathBuf> {
         args.get_one::<String>("output-file").map(PathBuf::from)
     }
 
-    // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
-    // has no such option yields an empty list.
+    /// Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
+    /// has no such option yields an empty list.
     fn read_string_list_option(args: &ArgMatches, opt_id: &str) -> Vec<String> {
         args.try_get_many::<String>(opt_id)
             .unwrap_or_default()
@@ -531,8 +534,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect()
     }
 
-    // Every library the invocation links, each paired with how it is bound: `--static-link` names
-    // the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
+    /// Every library the invocation links, each paired with how it is bound: `--static-link` names
+    /// the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
     fn read_library_options(args: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
@@ -548,7 +551,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         options
     }
 
-    // The directories the `--library-paths` option adds to the linker's search path for libraries.
+    /// The directories the `--library-paths` option adds to the linker's search path for
+    /// libraries.
     fn read_library_paths_option(args: &ArgMatches) -> Vec<PathBuf> {
         read_string_list_option(args, "library-paths")
             .into_iter()
@@ -556,16 +560,16 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect()
     }
 
-    // The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
-    // against the host's feature names, checked here for valid regex syntax.
+    /// The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
+    /// against the host's feature names, checked here for valid regex syntax.
     fn read_disable_cpu_feature_option(args: &ArgMatches) -> Result<Vec<String>, Errors> {
         let features = read_string_list_option(args, "disable-cpu-feature");
         ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 
-    // The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
-    // per line.
+    /// The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
+    /// per line.
     fn read_llvm_passes_file_option(args: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
         let Some(path) = args.get_one::<String>("llvm-passes-file") else {
             return Ok(None);
@@ -585,8 +589,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ))
     }
 
-    // The set of project-file declarations the invocation applies to: `--test` selects the test
-    // dependencies and test source files, and its absence the build ones.
+    /// The set of project-file declarations the invocation applies to: `--test` selects the test
+    /// dependencies and test source files, and its absence the build ones.
     fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
         if args.contains_id("test") {
             BuildConfigType::Test
