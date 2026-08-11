@@ -170,6 +170,10 @@ impl TypeEnv {
     /// The struct and the field that `name` is the `act_{field}` function of: `name` is a global
     /// name whose namespace is a struct this environment declares, and whose last component names
     /// one of that struct's fields.
+    ///
+    /// The answer comes from the name alone, so ask it while a value of the struct is still built as
+    /// that struct. A newtype keeps its declaration after `unwrap_newtypes` records it, so this
+    /// still names the struct of a newtype whose values have become values of its one field.
     pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
         if name.is_local() {
             return None;
