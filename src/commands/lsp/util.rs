@@ -831,7 +831,7 @@ pub(super) fn find_trait_or_alias_def_src(program: &Program, trait_: TraitId) ->
 pub(super) fn find_tycon_def_src(program: &Program, tycon: TyCon) -> Option<Span> {
     program
         .type_env
-        .tycons
+        .tycons()
         .get(&tycon)
         .and_then(|ti| ti.source.clone())
 }
@@ -852,7 +852,7 @@ pub(super) fn find_field_def_src(program: &Program, tc: &TyCon, name: &Name) -> 
 pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
     fn document_tycon_or_alias(program: &Program, docs: &mut String, tycon: &TyCon) {
         *docs += &format!("```\n{}\n```", tycon.to_string());
-        if let Some(ti) = program.type_env.tycons.get(&tycon) {
+        if let Some(ti) = program.type_env.tycons().get(&tycon) {
             if let Some(document) = ti.get_document() {
                 *docs += &format!("\n\n{}", document);
             }
@@ -960,7 +960,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
         EndNode::TypeOrTrait(name) => {
             let tycon = TyCon { name: name.clone() };
             let trait_ = TraitId::from_fullname(name.clone());
-            if program.type_env.tycons.contains_key(&tycon) {
+            if program.type_env.tycons().contains_key(&tycon) {
                 document_tycon_or_alias(program, &mut docs, &tycon);
             } else if program.trait_env.traits.contains_key(&trait_) {
                 document_trait_or_alias(program, &mut docs, &trait_);

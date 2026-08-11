@@ -39,7 +39,7 @@ use std::sync::Arc;
 /// Replaces every unwrappable newtype of `prg` with the type of its one field, in the types
 /// recorded throughout the program and in the field types the type environment answers with.
 pub fn run(prg: &mut Program) {
-    let unwrappable_tycons = unwrappable_tycons(&prg.type_env.tycons);
+    let unwrappable_tycons = unwrappable_tycons(&prg.type_env.tycons());
     prg.type_env.unwrap_newtypes(unwrappable_tycons);
 
     let type_env = prg.type_env.clone();

@@ -399,7 +399,7 @@ impl<'a> Overlay<'a> {
     /// The token type for a type constructor: `struct` / `enum` by its variant,
     /// otherwise the generic `type`.
     fn classify_tycon(&self, tc: &TyCon) -> u32 {
-        match self.program.type_env.tycons.get(tc) {
+        match self.program.type_env.tycons().get(tc) {
             Some(info) => match info.variant {
                 TyConVariant::Struct => T_STRUCT,
                 TyConVariant::Union => T_ENUM,

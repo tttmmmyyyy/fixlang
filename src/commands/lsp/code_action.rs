@@ -68,7 +68,7 @@ fn handle_unknown_name(
     for symbol in program.global_values.keys() {
         available_names.push(symbol.clone());
     }
-    for tycon in program.type_env.tycons.keys() {
+    for tycon in program.type_env.tycons().keys() {
         available_names.push(tycon.name.clone());
     }
     for ty_alias in program.type_env.aliases.keys() {

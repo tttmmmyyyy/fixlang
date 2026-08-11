@@ -50,8 +50,12 @@ use std::vec;
 
 #[derive(Clone)]
 pub struct TypeEnv {
-    // List of type constructors including user-defined types.
-    pub tycons: Arc<Map<TyCon, TyConInfo>>,
+    /// The declaration of every type constructor, the built-in ones and the user-defined ones alike.
+    ///
+    /// Private, because the field types held here answer what a value of a type is laid out as, and
+    /// `unwrap_newtypes` puts them in a form the rest of the compiler relies on. A declaration
+    /// enters through `add_tycons`, which puts it in that same form.
+    tycons: Arc<Map<TyCon, TyConInfo>>,
     // List of type aliases.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
     /// The newtypes a value of which has become a value of its one field. Empty until the pass that
@@ -122,12 +126,24 @@ impl TypeEnv {
         self.unwrapped_newtypes.contains(tycon)
     }
 
+    /// Adds the declarations of `new_tycons` to this environment, each with its field types
+    /// unwrapped, so that a declaration minted after the newtype-unwrapping pass answers as the ones
+    /// that were there before it do.
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
+        let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
-        for (tc, ti) in new_tycons.into_iter() {
-            tycons.insert(tc.clone(), ti);
+        for (tycon, mut tycon_info) in new_tycons.into_iter() {
+            for field in &mut tycon_info.fields {
+                field.ty = field.ty.unwrap_newtypes(&declared_type_env);
+            }
+            tycons.insert(tycon, tycon_info);
         }
         self.tycons = Arc::new(tycons);
+    }
+
+    /// The declaration of every type constructor this environment holds, by type constructor.
+    pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
+        &self.tycons
     }
 
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
