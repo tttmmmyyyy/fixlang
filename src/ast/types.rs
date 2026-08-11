@@ -1266,82 +1266,55 @@ impl TypeNode {
         }
     }
 
+    /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
+    /// associated type application have no such constructor, and satisfy nothing.
+    fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => pred(tc.as_ref()),
+            None => false,
+        }
+    }
+
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
     pub fn is_closure(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        tc.name == make_arrow_name_abs()
+        self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
     pub fn is_funptr(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        if let Some(_) = is_funptr_tycon(tc.as_ref()) {
-            return true;
-        } else {
-            return false;
-        }
+        self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
     pub fn is_array(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        return is_array_tycon(tc.as_ref());
+        self.toplevel_tycon_satisfies(is_array_tycon)
     }
 
     // Whether this is the internal `#ArrayStorage` type.
     pub fn is_array_storage(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => is_array_storage_tycon(tc.as_ref()),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(is_array_storage_tycon)
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        return is_punched_array_tycon(tc.as_ref());
+        self.toplevel_tycon_satisfies(is_punched_array_tycon)
     }
 
     // Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_unit(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_unit)
     }
 
     // Whether this is the type `Bool`.
     pub fn is_boolean(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_boolean(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_boolean)
     }
 
     // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
     // `IO a`.
     pub fn is_io(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_io(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_io)
     }
 
     /// Whether the top-level type constructor of this type is a struct.
@@ -1369,23 +1342,13 @@ impl TypeNode {
     /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
     /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        is_dynamic_object_tycon(tc.as_ref())
+        self.toplevel_tycon_satisfies(is_dynamic_object_tycon)
     }
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        is_destructor_object_tycon(tc.as_ref())
+        self.toplevel_tycon_satisfies(is_destructor_object_tycon)
     }
 
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
@@ -1487,6 +1450,36 @@ impl TypeNode {
 
     // Calculate kind.
     pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
+        // The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of kind
+        // `arg_kind`, which `fun_kind` does not accept.
+        fn kind_mismatch_error(
+            application: &Arc<TypeNode>,
+            fun: &Arc<TypeNode>,
+            fun_kind: &Arc<Kind>,
+            arg: &Arc<TypeNode>,
+            arg_kind: &Arc<Kind>,
+        ) -> Errors {
+            let type_strs = TypeNode::to_string_normalize_many(&[
+                application.clone(),
+                fun.clone(),
+                arg.clone(),
+            ]);
+            let application_str = &type_strs[0];
+            let fun_str = &type_strs[1];
+            let arg_str = &type_strs[2];
+            Errors::from_msg_srcs(
+                format!(
+                    "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
+                    application_str,
+                    fun_str,
+                    fun_kind.to_string(),
+                    arg_str,
+                    arg_kind.to_string()
+                ),
+                &[application.get_source()],
+            )
+        }
+
         match &self.ty {
             Type::TyVar(tv) => Ok(tv.kind.clone()),
             Type::TyCon(tc) => Ok(kind_env.tycons.get(&tc).unwrap().clone()),
@@ -1496,49 +1489,11 @@ impl TypeNode {
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
-                            let type_strs = TypeNode::to_string_normalize_many(&[
-                                self.clone(),
-                                fun.clone(),
-                                arg.clone(),
-                            ]);
-                            let self_str = &type_strs[0];
-                            let fun_str = &type_strs[1];
-                            let arg_str = &type_strs[2];
-                            return Err(Errors::from_msg_srcs(
-                                format!(
-                                    "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                                    self_str,
-                                    fun_str,
-                                    fun_kind.to_string(),
-                                    arg_str,
-                                    arg_kind.to_string()
-                                ),
-                                &[self.get_source()],
-                            ));
+                            return Err(kind_mismatch_error(self, fun, &fun_kind, arg, &arg_kind));
                         }
                         Ok(res.clone())
                     }
-                    Kind::Star => {
-                        let type_strs = TypeNode::to_string_normalize_many(&[
-                            self.clone(),
-                            fun.clone(),
-                            arg.clone(),
-                        ]);
-                        let self_str = &type_strs[0];
-                        let fun_str = &type_strs[1];
-                        let arg_str = &type_strs[2];
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                                self_str,
-                                fun_str,
-                                fun_kind.to_string(),
-                                arg_str,
-                                arg_kind.to_string()
-                            ),
-                            &[self.get_source()],
-                        ));
-                    }
+                    Kind::Star => Err(kind_mismatch_error(self, fun, &fun_kind, arg, &arg_kind)),
                 }
             }
             Type::AssocTy(assoc_ty, args) => {
