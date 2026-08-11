@@ -328,6 +328,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a `let`, and rewrites the pattern it binds with, so that a
+    /// pattern matching an unwrapped newtype's struct becomes the pattern of its one field.
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
@@ -360,6 +362,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a `match`, and rewrites the pattern of each arm, so that a
+    /// pattern matching an unwrapped newtype's struct becomes the pattern of its one field.
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         if let Expr::Match(scrut, arms) = expr.expr.as_ref() {

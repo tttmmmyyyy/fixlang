@@ -115,6 +115,7 @@ impl AssocType {
         Ok(())
     }
 
+    /// The trait that declares this associated type, which is the namespace its name sits in.
     pub fn trait_id(&self) -> TraitId {
         let mut namespace = self.name.namespace.names.clone();
         let name = namespace.pop().unwrap();
@@ -123,7 +124,8 @@ impl AssocType {
         }
     }
 
-    // Convert global FullName to absolute path.
+    /// This associated type with its name spelled as an absolute path, so that it names the same
+    /// entity from any namespace.
     pub fn global_to_absolute(&self) -> AssocType {
         let mut name = self.name.clone();
         name.global_to_absolute();
@@ -150,6 +152,8 @@ impl Kind {
         matches!(self, Kind::Star)
     }
 
+    /// This kind written the way Fix source writes it: `*`, `*->*`, and `(*->*)->*`, where an arrow
+    /// on the left of an arrow is parenthesized because `->` associates to the right.
     pub fn to_string(&self) -> String {
         match self {
             Kind::Star => "*".to_string(),
@@ -168,25 +172,35 @@ impl Kind {
     }
 }
 
+/// What kind of declaration a type constructor comes from, which settles how its values are laid out
+/// and what the fields recorded for it mean.
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
+    /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
+    /// `Std::IOState` is one too, and carries nothing.
     Primitive,
+    /// The function type constructor `->`, whose values are closures.
     Arrow,
+    /// `Std::Array`, whose one field is the type its elements share.
     Array,
+    /// A struct, whose fields are laid out one after another in the order they are declared.
     Struct,
+    /// A union, whose fields are its variants, sharing one payload buffer under a tag.
     Union,
-    // Dynamic object is nullble and has the destructor as the first field.
+    /// A dynamic object, which a closure holds its captured values in. Boxed and nullable, laid out
+    /// as a control block, the traverser that reaches the captured values, and then those values.
     DynamicObject,
-    // The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
-    // array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
-    // its own traverser.
+    /// The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
+    /// array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
+    /// its own traverser.
     ArrayStorage,
-    // Opaque type generated from opaque type variable `?it`.
+    /// The type an opaque type variable `?it` is desugared into. It declares no field, and is
+    /// resolved away before code generation.
     Opaque,
 }
 
-// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
-// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
+/// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
+/// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
 const C_SCALAR_NAMES: &[&str] = &[
     I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
     F64_NAME, PTR_NAME,

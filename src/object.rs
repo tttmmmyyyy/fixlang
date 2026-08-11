@@ -1361,6 +1361,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         .as_type()
 }
 
+/// The debug info type of a pointer of the target's width, presented to a debugger under `name`.
 pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
@@ -1370,7 +1371,7 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
         .as_type()
 }
 
-// The type of a union's tag, an index into the union's variants.
+/// The type of a union's tag, an index into the union's variants.
 pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }

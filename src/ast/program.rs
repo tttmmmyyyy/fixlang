@@ -48,11 +48,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::vec;
 
+/// What a program declares about its types: the type constructors and the type aliases it can name,
+/// and which of the newtypes among them a value has stopped being built at.
 #[derive(Clone)]
 pub struct TypeEnv {
-    // List of type constructors including user-defined types.
+    /// The declaration of every type constructor, built-in and user-defined, by its name.
     pub tycons: Arc<Map<TyCon, TyConInfo>>,
-    // List of type aliases.
+    /// The declaration of every type alias, by its name.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
     /// The newtypes a value of which has become a value of its one field. Empty until the pass that
     /// unwraps newtypes runs.
@@ -75,6 +77,8 @@ impl Default for TypeEnv {
 }
 
 impl TypeEnv {
+    /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
+    /// still a type values are built at.
     pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
@@ -122,6 +126,8 @@ impl TypeEnv {
         self.unwrapped_newtypes.contains(tycon)
     }
 
+    /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
+    /// under the same name.
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let mut tycons = self.tycons.as_ref().clone();
         for (tc, ti) in new_tycons.into_iter() {
@@ -130,6 +136,8 @@ impl TypeEnv {
         self.tycons = Arc::new(tycons);
     }
 
+    /// The kind of every name this environment gives a meaning to, type constructors and type
+    /// aliases together in one table.
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
         let mut res = Map::default();
         for (tc, ti) in self.tycons.as_ref().iter() {
@@ -141,9 +149,9 @@ impl TypeEnv {
         res
     }
 
-    // Check if the given function is `act_{field}` function for a field of a struct.
-    //
-    // If so, return (struct tycon, field name).
+    /// The struct and the field that `name` is the `act_{field}` function of: `name` is a global
+    /// name whose namespace is a struct this environment declares, and whose last component names
+    /// one of that struct's fields.
     pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
         if name.is_local() {
             return None;
