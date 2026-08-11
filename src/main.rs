@@ -87,8 +87,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 /// suffix when the working tree held uncommitted changes, and it is what tells two builds of the
 /// same released version apart.
 ///
-/// Printed by `fix version`, by `fix --version`, and on the first line of every help message.
-///
 /// `concat!` expands `env!` and leaves a procedural macro call unexpanded, so the released version
 /// joins the revision from inside `git_version!`, as its prefix.
 const VERSION: &str = git_version!(
@@ -769,9 +767,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         config
     }
 
-    // Print the help of the subcommand `name`, as `fix <name> --help` prints it. Taking the
-    // subcommand from the built `app` is what heads the help with the version and names it by the
-    // path the user types.
+    /// Print the help of the subcommand `name`, as `fix <name> --help` prints it. The subcommand
+    /// comes from the built `app`, so the help carries the version and names the command by the
+    /// path the user types.
     fn print_subcommand_help(app: &mut App, name: &str) {
         app.find_subcommand_mut(name)
             .unwrap_or_else(|| {

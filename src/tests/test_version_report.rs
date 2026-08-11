@@ -18,6 +18,7 @@ mod integration_tests {
         text
     }
 
+    /// The first line of `text`, empty when the text holds no line.
     fn first_line(text: &str) -> &str {
         text.lines().next().unwrap_or("")
     }
