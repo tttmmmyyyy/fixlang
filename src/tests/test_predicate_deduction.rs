@@ -6,7 +6,7 @@
 
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
 };
 
 #[test]
@@ -152,10 +152,19 @@ impl [c : Holder, Held c = e, e : Show] Wrap c : Show {
 main : IO ();
 main = println(Wrap { data : Wrap { data : 42 } }.show);
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "so the deduction does not end",
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("so the deduction does not end"),
+        "the deduction that does not end went unreported:\n{}",
+        errmsg
+    );
+    // The deduction asks about hundreds of constraints, the last of them on a type of thousands of
+    // characters. What the report shows of that is a few steps, each cut short.
+    assert!(
+        errmsg.len() < 4000,
+        "the report is {} characters long, which is more of the way than a reader can read:\n{}",
+        errmsg.len(),
+        errmsg
     );
 }
 
@@ -188,7 +197,8 @@ main = println(need_marker(Foo { x : 42 }).to_string);
 #[test]
 pub fn test_mutually_circular_instance_contexts() {
     // Two instances that each ask for what the other gives. The deduction comes back to where it
-    // started after a turn through both.
+    // started after a turn through both, and the report names the constraint it turned through,
+    // which is what leads the reader to the second instance.
     let source = r##"
 module Main;
 
@@ -206,11 +216,102 @@ need_a = |_| 0;
 main : IO ();
 main = println(need_a(Foo { x : 42 }).to_string);
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    for named in [
         "Deducing it needs itself",
+        "`Main::Foo Std::I64 : Main::A`",
+        "`Main::Foo Std::I64 : Main::B`",
+    ] {
+        assert!(
+            errmsg.contains(named),
+            "`{}` is missing from the report:\n{}",
+            named,
+            errmsg
+        );
+    }
+}
+
+/// A constraint on a type just under the depth bound is deduced, and one past it is reported by the
+/// deduction: the same bound holds for the layout of a type, and the layout is where the report
+/// would come from if the deduction did not carry the bound of its own.
+#[test]
+pub fn test_a_predicate_at_the_depth_bound_is_deduced_and_one_past_it_is_not() {
+    fn source_nesting(levels: usize) -> String {
+        let mut ty = "I64".to_string();
+        for _ in 0..levels {
+            ty = format!("W ({})", ty);
+        }
+        format!(
+            r##"
+module Main;
+
+type W a = unbox struct {{ x : a }};
+
+trait a : Marker {{}}
+
+impl I64 : Marker {{}}
+
+impl [a : Marker] W a : Marker {{}}
+
+need_marker : [a : Marker] a -> I64;
+need_marker = |_| 7;
+
+deep : {} -> I64;
+deep = |w| need_marker(w);
+
+main : IO ();
+main = (
+    let argc = *IO::get_arg_count;
+    let n = if argc < 0 {{ deep(undefined("no value")) }} else {{ 7 }};
+    assert_eq(|_|"", n, 7);;
+    pure()
+);
+            "##,
+            ty
+        )
+    }
+    test_source(&source_nesting(490), Configuration::develop_mode());
+    test_source_fail(
+        &source_nesting(510),
+        Configuration::develop_mode(),
+        "so the deduction does not end",
     );
+}
+
+/// A circle is reported the same way when the constraint settles only after the whole definition
+/// has been checked, which is a report the type checker builds in another place.
+#[test]
+pub fn test_circular_instance_context_settled_at_the_end_of_a_definition() {
+    let source = r##"
+module Main;
+
+trait a : Marker {}
+
+type Foo a = unbox struct { x : a };
+
+impl [Foo a : Marker] Foo a : Marker {}
+
+need_marker : [a : Marker] a -> I64;
+need_marker = |_| 0;
+
+g : I64 -> I64;
+g = |_| need_marker(Foo { x : 42 });
+
+main : IO ();
+main = println(g(0).to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    for named in [
+        "`Main::Foo Std::I64 : Main::Marker`",
+        "Deducing it needs itself",
+    ] {
+        assert!(
+            errmsg.contains(named),
+            "`{}` is missing from the report:\n{}",
+            named,
+            errmsg
+        );
+    }
 }
 
 #[test]
