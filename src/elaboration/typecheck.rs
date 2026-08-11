@@ -2296,13 +2296,9 @@ impl TypeCheckContext {
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         deduction.enter(pred, pred_str);
-        let mut result = Ok(());
-        for ctx_pred in context {
-            result = self.reduce_predicate(ctx_pred, irr_preds, deduction);
-            if result.is_err() {
-                break;
-            }
-        }
+        let result = context
+            .into_iter()
+            .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irr_preds, deduction));
         deduction.leave();
         result
     }
@@ -2752,19 +2748,20 @@ impl PredicateDeduction {
             .position(|(_ancestor, ancestor_str)| ancestor_str == pred_str)
             .expect("the caller found the predicate among the deductions it is inside");
         let (repeated, _repeated_str) = &self.path[start];
-        self.path[start..]
-            .iter()
-            .map(|(ancestor, _ancestor_str)| ancestor.clone())
-            .chain([repeated.clone()])
-            .collect()
+        self.way_from(start, repeated)
     }
 
     /// The way from the predicate the deduction started at down to `pred`, `pred` last.
     fn way_down(&self, pred: &Predicate) -> Vec<Predicate> {
-        self.path
+        self.way_from(0, pred)
+    }
+
+    /// The way from the predicate at `start` of the path down to `last`, `last` last.
+    fn way_from(&self, start: usize, last: &Predicate) -> Vec<Predicate> {
+        self.path[start..]
             .iter()
             .map(|(ancestor, _ancestor_str)| ancestor.clone())
-            .chain([pred.clone()])
+            .chain([last.clone()])
             .collect()
     }
 }
