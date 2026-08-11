@@ -8594,7 +8594,7 @@ pub fn test_growing_type_with_two_arguments() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "laying it out asks for types nested more than",
+        "reaches types nested more than",
     );
 }
 
@@ -8782,7 +8782,7 @@ pub fn test_growing_type_behind_a_pointer() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "`Main::P Std::I64` has no size: laying it out asks for types nested more than",
+        "`Main::P Std::I64` needs endlessly many types: it reaches types nested more than",
     );
 }
 
@@ -8824,7 +8824,7 @@ pub fn test_growing_unboxed_type_has_no_size() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "laying it out asks for types nested more than",
+        "reaches types nested more than",
     );
 }
 
@@ -8974,10 +8974,12 @@ pub fn test_container_recursing_through_its_type_argument_compiles() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A type argument that no field holds asks for no layout, so a type that passes a larger version of
-/// itself through such an argument stays finite.
+/// A type argument no field holds is still one its declaration names, and the passes that
+/// specialize types unfold a declaration at every list of type arguments it is used at. A type that
+/// passes a larger version of itself through such an argument therefore needs endlessly many types,
+/// however small its values are.
 #[test]
-pub fn test_growth_through_an_unheld_type_argument_compiles() {
+pub fn test_growth_through_an_unheld_type_argument_is_rejected() {
     let source = r##"
         module Main;
         type Phantom a = unbox struct { x : I64 };
@@ -8990,6 +8992,185 @@ pub fn test_growth_through_an_unheld_type_argument_compiles() {
         main = (
             let c = C { p : Phantom { x : 1 }, n : 42 };
             assert_eq(|_|"", depth(c), 42);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::C Std::I64` needs endlessly many types",
+    );
+}
+
+/// A type reached only as what a function takes grows the same way one reached as a field does: the
+/// passes that specialize types rewrite it, whatever holds it.
+#[test]
+pub fn test_growth_through_a_function_typed_field_is_rejected() {
+    let source = r##"
+        module Main;
+        type [f : *->*] H f = unbox struct { d : f I64 };
+        type Y a = unbox struct { step : Y (Array a) -> I64, q : a, h : H Array };
+
+        main : IO ();
+        main = (
+            let y : Y I64 = Y { step : |_| 0, q : 3, h : H { d : [1] } };
+            assert_eq(|_|"", y.@q, 3);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Y Std::I64` needs endlessly many types",
+    );
+}
+
+/// A type argument of a higher kind grows like any other: `Grow (Wrap (f I64))` reached from
+/// `Grow f` wraps the argument one more time at every step.
+#[test]
+pub fn test_growth_at_a_higher_kinded_type_argument_is_rejected() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type Wrap a b = unbox struct { w : a -> b };
+        type [f : *->*] Grow f = unbox struct { g : Ph (Grow (Wrap (f I64))), n : I64 };
+
+        main : IO ();
+        main = (
+            let x : Grow (Wrap I64) = Grow { g : Ph { z : 0 }, n : 7 };
+            assert_eq(|_|"", x.@n, 7);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::Grow (Main::Wrap Std::I64)` needs endlessly many types",
+    );
+}
+
+/// A declaration reaches itself at a larger argument through a higher-kinded parameter as well:
+/// `f b` names no constructor until `f` is given one, and `f := A` closes the circle.
+#[test]
+pub fn test_growth_reached_through_a_higher_kinded_parameter_is_rejected() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] B f b = unbox struct { x : Ph (f b), n : I64 };
+        type A a = unbox struct { y : B A (a, a), n : I64 };
+
+        main : IO ();
+        main = (
+            let v : A I64 = A { y : B { x : Ph { z : 0 }, n : 1 }, n : 2 };
+            assert_eq(|_|"", v.@n, 2);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::A Std::I64` needs endlessly many types",
+    );
+}
+
+/// A type argument of a higher kind carries a growing family as well as one of kind `*`: `C (Wrap
+/// g)` reached from `C g` wraps the argument one more time at every step, and the argument is part
+/// of the type it is given to.
+#[test]
+pub fn test_growth_confined_to_a_higher_kinded_argument_is_rejected() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] Wrap f a = unbox struct { w : f a };
+        type [g : *->*] C g = unbox struct { y : Ph (C (Wrap g)), n : I64 };
+
+        main : IO ();
+        main = (
+            let c : C Array = C { y : Ph { z : 0 }, n : 9 };
+            assert_eq(|_|"", c.@n, 9);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::C Std::Array` needs endlessly many types",
+    );
+}
+
+/// A growing family is answered before any optimization runs, so every optimization level answers
+/// it the same way.
+#[test]
+pub fn test_a_growing_family_is_rejected_at_every_optimization_level() {
+    let source = r##"
+        module Main;
+        type Phantom a = unbox struct { x : I64 };
+        type C a = unbox struct { p : Phantom (C (a, a)), n : I64 };
+
+        main : IO ();
+        main = (
+            let c : C I64 = C { p : Phantom { x : 1 }, n : 42 };
+            assert_eq(|_|"", c.@n, 42);;
+            pure()
+        );
+    "##;
+    for opt_level in [
+        FixOptimizationLevel::None,
+        FixOptimizationLevel::Basic,
+        FixOptimizationLevel::Max,
+        FixOptimizationLevel::Experimental,
+    ] {
+        let mut config = Configuration::develop_mode();
+        config.set_fix_opt_level(opt_level);
+        test_source_fail(
+            &source,
+            config,
+            "`Main::C Std::I64` needs endlessly many types",
+        );
+    }
+}
+
+/// A type parameter carried into a recursive occurrence unchanged never grows, so a declaration is
+/// free to name itself under a type argument no field holds.
+#[test]
+pub fn test_self_reference_at_the_same_type_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Phantom a = unbox struct { x : I64 };
+        type C a = unbox struct { p : Phantom (C a), n : a };
+
+        main : IO ();
+        main = (
+            let c : C I64 = C { p : Phantom { x : 1 }, n : 42 };
+            assert_eq(|_|"", c.@n, 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A declaration that applies a higher-kinded parameter of its own to a compound type keeps
+/// compiling: what the argument grows into is decided by the type the program writes, and stacking
+/// two of them ends at the innermost one.
+#[test]
+pub fn test_a_higher_kinded_parameter_applied_to_a_compound_type_compiles() {
+    let source = r##"
+        module Main;
+        type Iden a = unbox struct { data : a };
+        type [m : *->*] StateT s m a = unbox struct { data : s -> m (s, a) };
+
+        run_twice : StateT I64 (StateT I64 Iden) I64 -> I64;
+        run_twice = |st| (
+            let inner = (st.@data)(1);
+            let iden = (inner.@data)(2);
+            let (_, (_, x)) = iden.@data;
+            x
+        );
+
+        main : IO ();
+        main = (
+            let st = StateT { data : |s| StateT { data : |t| Iden { data : (t, (s, 42)) } } };
+            assert_eq(|_|"", run_twice(st), 42);;
             pure()
         );
     "##;
@@ -9014,7 +9195,7 @@ pub fn test_growth_through_a_higher_kinded_parameter_has_no_size() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "laying it out asks for types nested more than",
+        "reaches types nested more than",
     );
 }
 
@@ -9079,7 +9260,7 @@ pub fn test_a_type_at_the_depth_bound_compiles_and_one_past_it_does_not() {
     test_source_fail(
         &source_nesting(505),
         Configuration::develop_mode(),
-        "laying it out asks for types nested more than",
+        "reaches types nested more than",
     );
 }
 

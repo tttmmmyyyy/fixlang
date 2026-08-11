@@ -2,7 +2,12 @@
 
 ## 0. 何を保証し、何を保証しないか
 
-検査が受理するプログラムの集合は、次で**きっかり**定まる。
+この文書が扱うのは、**レイアウトの関係を歩く検査**（`no_size_reason`）である。プログラムの受理には
+もう 1 つ、**宣言を展開する関係を歩く検査**が要る。そちらが何を保証するかは
+`dev-docs/2026-08-11-growing-type-arguments/design.md` が述べる。以下で「検査」と書くのは前者を指し、
+「受理する」はこの検査が報告しないことを指す。
+
+この検査が受理するプログラムの集合は、次で**きっかり**定まる。
 
 > 根から到達する型がすべて、(a) その場のフィールドだけを辿って自分自身に戻らず、
 > (b) **関数型を除いて**、項としての深さが `D`（`MAX_TYPE_DEPTH` = 500）以下である。
@@ -285,7 +290,7 @@ type P a = unbox struct { x : P (a, a), n : I64 };
 |---|---|---|
 | 隣接リスト `Array Node` + `Array (I64, Node)` | 受理 | 受理 |
 | `Option Node` + `Option (I64, Node)` | 受理 | 受理 |
-| `Phantom a = unbox struct { x : I64 }` + `C a = unbox struct { x : Phantom (C (a,a)) }` | 受理 | 受理 |
+| `Phantom a = unbox struct { x : I64 }` + `C a = unbox struct { x : Phantom (C (a,a)) }` | 受理 | 受理（この検査では。宣言を展開する検査が拒否する） |
 | 25 段ネストのタプル | 受理 | 受理 |
 | `A/B` 相互循環 | 拒否 | 拒否 |
 | `A = unbox struct { xs : Array B, b : B }` の循環 | 拒否 | 拒否 |

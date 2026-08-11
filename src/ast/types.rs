@@ -1310,8 +1310,8 @@ impl TypeNode {
     /// do to it.
     ///
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
-    /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
-    /// runs.
+    /// reaching itself that way; `Program::validate_instantiated_types` rejects such a type before
+    /// any of this runs.
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;

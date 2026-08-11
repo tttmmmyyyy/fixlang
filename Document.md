@@ -869,12 +869,18 @@ type Tree = unbox union { leaf : (), node : (Tree, Tree) };  // rejected: no siz
 type Tree = box union { leaf : (), node : (Tree, Tree) };    // fine
 ```
 
-A type that leads to itself at a larger type argument is rejected as well, whether or not a pointer lies on the way: the compiler lays out one object per type, and this asks it for endlessly many. Give the recursive occurrence the same type arguments the declaration takes.
+A type that leads to itself at a larger type argument is rejected as well. The compiler works one type at a time — it lays out an object per type, and it specializes a declaration per list of type arguments it is used at — and such a type asks it for endlessly many. Give the recursive occurrence the same type arguments the declaration takes.
+
+How the larger argument is reached makes no difference. A pointer on the way does not stop it, and neither does an argument no value holds: a type argument the declaration discards, one that appears only as what a function takes or returns, and one passed to a parameter of a higher kind all count.
 
 ```
 type P a = unbox struct { x : P (a, a) };  // rejected: `P I64` leads to `P (I64, I64)`
 type P a =   box struct { x : P (a, a) };  // rejected for the same reason
 type P a =   box struct { x : P a };       // fine
+
+type Phantom a = unbox struct { x : I64 };            // discards its type argument
+type Q a = unbox struct { x : Phantom (Q (a, a)) };   // rejected: the argument grows all the same
+type R a = unbox struct { f : R (Array a) -> I64 };   // rejected: so does this one
 ```
 
 In general, it's recommended that types containing a large amount of data be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.

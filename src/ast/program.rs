@@ -39,7 +39,7 @@ use crate::misc::{
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use crate::type_size::{no_size_reason, LayoutWalk};
+use crate::type_size::{no_build_reason, TypeWalk};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -1836,15 +1836,16 @@ impl Program {
         errors.to_result()
     }
 
-    /// Report every value of the instantiated program whose type has no size, at the expression the
-    /// value appears as.
+    /// Report every value of the instantiated program whose types the compiler cannot build, at the
+    /// expression the value appears as.
     ///
     /// A field of an unboxed type is laid out in place, so a value the unboxed fields reach again
     /// would have to be larger than itself, and a type reached from itself at a larger type argument
-    /// needs endlessly many layouts. `no_size_reason` decides the first and bounds the second. Code
-    /// generation would meet either as a descent through the fields that never ends, so this runs
-    /// once the program's types are instantiated and before any of them is laid out.
-    pub fn validate_layouts(&self) -> Result<(), Errors> {
+    /// needs endlessly many types. `no_build_reason` decides the first and bounds the second. Code
+    /// generation would meet either as a descent that never ends, and so would the passes that
+    /// specialize types before it, so this runs once the program's types are instantiated and
+    /// before any pass rewrites one.
+    pub fn validate_instantiated_types(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
 
         // The entry point and the exported values come first, so that a type they carry is reported
@@ -1865,7 +1866,7 @@ impl Program {
                 .filter_map(|name| self.symbols[*name].expr.as_ref()),
         );
 
-        let mut walk = LayoutWalk::default();
+        let mut walk = TypeWalk::default();
         let mut errors = Errors::empty();
         // A node the compiler built carries no source location, so a round that reports only at
         // located nodes runs first; the second round takes the types that appear at no located node.
@@ -1881,7 +1882,7 @@ impl Program {
                             node.expr.stringify().to_string()
                         )
                     });
-                    if let Some(msg) = no_size_reason(ty, &type_env, &mut walk) {
+                    if let Some(msg) = no_build_reason(ty, &type_env, &mut walk) {
                         errors.append(Errors::from_msg_srcs(msg, &[&node.source]));
                     }
                 })
@@ -1892,7 +1893,7 @@ impl Program {
         // such a symbol has no source location of its own to report at.
         for name in &symbol_names {
             let symbol = &self.symbols[*name];
-            if let Some(msg) = no_size_reason(&symbol.ty, &type_env, &mut walk) {
+            if let Some(msg) = no_build_reason(&symbol.ty, &type_env, &mut walk) {
                 let source = symbol.expr.as_ref().and_then(|expr| expr.source.clone());
                 errors.append(Errors::from_msg_srcs(msg, &[&source]));
             }

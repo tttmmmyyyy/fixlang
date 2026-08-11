@@ -243,7 +243,7 @@ pub fn build_object_files<'c>(
     // generation will actually lay out. A report at this point names a type the compiler built
     // rather than one the user wrote, which is why a user's build does not run it.
     if config.develop_mode {
-        program.validate_layouts()?;
+        program.validate_instantiated_types()?;
     }
 
     dump_rc_ir_stages(&program, config);

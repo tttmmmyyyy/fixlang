@@ -1130,8 +1130,8 @@ impl ObjectType {
     /// The LLVM struct type this object is laid out as.
     ///
     /// The layout of an unboxed field is held in place, so this descends into it. A type reaching
-    /// itself that way has no layout and no end to this descent; `Program::validate_layouts` rejects
-    /// such a type before code generation begins.
+    /// itself that way has no layout and no end to this descent;
+    /// `Program::validate_instantiated_types` rejects such a type before code generation begins.
     pub fn to_struct_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
         for (i, field_type) in self.field_types.iter().enumerate() {

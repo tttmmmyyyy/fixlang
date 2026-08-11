@@ -135,9 +135,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
-    // Reject a value whose type has no layout, now that the program's types are instantiated and
-    // before code generation walks the fields of any of them.
-    program.validate_layouts()?;
+    // Reject a value whose types the compiler cannot build, now that the program's types are
+    // instantiated and before any pass rewrites one of them.
+    program.validate_instantiated_types()?;
 
     Ok(program)
 }
