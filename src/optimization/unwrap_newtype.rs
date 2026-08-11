@@ -8,10 +8,9 @@
 //!
 //! A newtype that takes type parameters is replaced at each instance, with the field type read at
 //! that instance, so `Foo Bool` of `type Foo a = unbox struct { data : () -> a };` becomes
-//! `() -> Bool`. Reading the field type at the instance is a substitution, and a substitution is
-//! what specializes a declaration, so this pass leaves the declarations where they are and the type
-//! environment unwraps what a field-type query substitutes. `TypeNode::unwrap_newtypes` is that
-//! rewrite, and this pass is what tells the type environment which newtypes to apply it to.
+//! `() -> Bool`. The declarations stay where they are, and a field-type query unwraps what its
+//! substitution saturates: `TypeNode::unwrap_newtypes` is that rewrite, and this pass is what tells
+//! the type environment which newtypes to apply it to.
 //!
 //! The declarations stay because a newtype can occur without its arguments. Take
 //! `type [f : *->*] Foo f = box struct { data : f () };` and a program holding a `Foo IO`. `Foo` is
@@ -80,8 +79,8 @@ fn unwrap_inferred_type(expr: &Arc<ExprNode>, type_env: &TypeEnv) -> Arc<ExprNod
     expr.set_type(type_.unwrap_newtypes(type_env))
 }
 
-/// `pat` with each unwrapped struct pattern replaced by the pattern of its one field, and the type
-/// recorded in every pattern that stays unwrapped.
+/// `pat` with the pattern of an unwrapped newtype's one field in place of the struct pattern that
+/// matched it, and with the type recorded in every pattern unwrapped.
 ///
 /// This is supposed to be called after type aliases are resolved.
 fn unwrap_pattern(pat: &Arc<PatternNode>, type_env: &TypeEnv) -> Arc<PatternNode> {
