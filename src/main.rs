@@ -61,7 +61,7 @@ use configuration::{
     OutputFileType, Sanitizer, SubCommand,
 };
 use constants::{
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
+    DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
     OPTIMIZATION_LEVEL_NONE, PROJECT_FILE_PATH,
 };
@@ -505,8 +505,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // `out-dir` option
         let dir = m
             .get_one::<String>("out-dir")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+            .expect("the `--out-dir` option carries a default value");
         docs_config.out_dir = PathBuf::from(dir);
 
         // `test` option
@@ -685,7 +684,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `max_cu_size`.
         config.max_cu_size = *args
             .get_one::<usize>("max-cu-size")
-            .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+            .expect("the `--max-cu-size` option carries a default value");
 
         // Set `llvm_passes_override`.
         // Reading the file here puts the passes into `Configuration::object_generation_hash`, so
@@ -775,7 +774,12 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     // path the user types.
     fn print_subcommand_help(app: &mut App, name: &str) {
         app.find_subcommand_mut(name)
-            .expect("a subcommand the command line reached is absent from the command")
+            .unwrap_or_else(|| {
+                panic!(
+                    "the command line reached the subcommand `{}`, which the command does not define",
+                    name
+                )
+            })
             .print_help()
             .unwrap();
     }
@@ -845,6 +849,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             }
             _ => print_subcommand_help(&mut app, "edit"),
         },
-        _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
+        // A command line naming no subcommand is answered by the help, and one naming a subcommand
+        // the command does not define by an error, both before the match is reached.
+        subcommand => unreachable!(
+            "the command line reached the subcommand {:?}, which has no handler",
+            subcommand.map(|(name, _args)| name)
+        ),
     }
 }
