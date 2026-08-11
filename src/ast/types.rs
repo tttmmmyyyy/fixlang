@@ -446,6 +446,19 @@ impl TyAliasInfo {
     }
 }
 
+/// How deeply a single type may nest before the compiler calls the program endless.
+///
+/// This is a property of one type, not of the program: a chain of a thousand types that each hold
+/// the next is a thousand types of depth one, and a project keeps compiling however many such types
+/// it gains. A type reached from itself at a larger type argument, on the other hand, gains a level
+/// at every step and passes any bound.
+///
+/// Over the benchmark corpus and the examples the deepest type reached is 10; a type written with
+/// 25 nested tuples reaches 27. The bound also caps how deep the walks over a type go — hashing it,
+/// substituting into it, printing it — so raising it costs stack on the programs it exists to
+/// reject.
+pub const MAX_TYPE_DEPTH: usize = 500;
+
 // Node of type ast tree with user defined additional information
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {

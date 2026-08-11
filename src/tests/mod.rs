@@ -42,6 +42,7 @@ mod test_match_return_outer;
 mod test_memcheck;
 mod test_no_runtime_check_setting;
 mod test_opaque_type;
+mod test_predicate_deduction;
 mod test_preliminary_commands;
 mod test_provenance;
 mod test_punched_array;
