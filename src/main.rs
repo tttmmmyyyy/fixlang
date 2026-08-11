@@ -373,11 +373,11 @@ fn run_cli() {
     let deps_update = App::new("update")
         .about("Update the lock file so that it satisfies the dependencies specified in the project file, and install the dependencies. By default, build lock file is updated. Use --test to update test lock file.")
         .arg(test_flag.clone());
-    let add_about_str = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
+    let deps_add_about = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
     Repositories for a Fix project is searched in the registry files listed in the configuration file (\"~/.fixconfig.toml\") and the default registry \"{}\".", DEFAULT_REGISTRY);
-    let add_about_str: &'static str = add_about_str.leak();
+    let deps_add_about: &'static str = deps_add_about.leak();
     let deps_add = App::new("add")
-        .about(add_about_str)
+        .about(deps_add_about)
         .arg(
             Arg::new("projects")
                 .multiple_values(true)
@@ -469,8 +469,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(check_subc);
 
     // Every path the option `opt_id` collects, across all of its occurrences.
-    fn read_path_list_option(m: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
-        let Some(paths) = m.get_many::<String>(opt_id) else {
+    fn read_path_list_option(args: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
+        let Some(paths) = args.get_many::<String>(opt_id) else {
             return vec![];
         };
         paths.map(PathBuf::from).collect()
@@ -478,14 +478,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // The kind of file the `--output-type` option asks the build to produce, if the invocation
     // gives that option.
-    fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
-        match m.get_one::<String>("output-file-type") {
+    fn read_output_file_type_option(args: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
+        match args.get_one::<String>("output-file-type") {
             None => return Ok(None),
             Some(file_type) => Ok(Some(OutputFileType::from_str(file_type)?)),
         }
     }
 
-    fn read_docs_options(m: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
+    fn read_docs_options(args: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
         let docs_config = match &mut config.subcommand {
             SubCommand::Docs(docs_config) => docs_config,
             subcommand => unreachable!(
@@ -495,36 +495,36 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         };
 
         // `modules` option
-        docs_config.modules = read_string_list_option(m, "modules");
+        docs_config.modules = read_string_list_option(args, "modules");
 
         // `with-compiler-defined-methods` option
         docs_config.include_compiler_defined_methods =
-            m.contains_id("include-compiler-defined-methods");
+            args.contains_id("include-compiler-defined-methods");
 
         // `private` option
-        docs_config.include_private = m.contains_id("private");
+        docs_config.include_private = args.contains_id("private");
 
         // `out-dir` option
-        let dir = m
+        let dir = args
             .get_one::<String>("out-dir")
             .expect("the `--out-dir` option carries a default value");
         docs_config.out_dir = PathBuf::from(dir);
 
         // `test` option
-        docs_config.mode = get_build_mode(m);
+        docs_config.mode = get_build_mode(args);
 
         Ok(())
     }
 
     // The path the `--output` option names for the built file, if the invocation gives that option.
-    fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
-        m.get_one::<String>("output-file").map(PathBuf::from)
+    fn read_output_file_option(args: &ArgMatches) -> Option<PathBuf> {
+        args.get_one::<String>("output-file").map(PathBuf::from)
     }
 
     // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
     // has no such option yields an empty list.
-    fn read_string_list_option(m: &ArgMatches, opt_id: &str) -> Vec<String> {
-        m.try_get_many::<String>(opt_id)
+    fn read_string_list_option(args: &ArgMatches, opt_id: &str) -> Vec<String> {
+        args.try_get_many::<String>(opt_id)
             .unwrap_or_default()
             .unwrap_or_default()
             .cloned()
@@ -533,14 +533,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // Every library the invocation links, each paired with how it is bound: `--static-link` names
     // the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
-    fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
+    fn read_library_options(args: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
             ("static-link-library", LinkType::Static),
             ("dynamic-link-library", LinkType::Dynamic),
         ] {
             options.extend(
-                read_string_list_option(m, opt_id)
+                read_string_list_option(args, opt_id)
                     .into_iter()
                     .map(|name| (name, link_type)),
             );
@@ -549,8 +549,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     }
 
     // The directories the `--library-paths` option adds to the linker's search path for libraries.
-    fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
-        read_string_list_option(m, "library-paths")
+    fn read_library_paths_option(args: &ArgMatches) -> Vec<PathBuf> {
+        read_string_list_option(args, "library-paths")
             .into_iter()
             .map(PathBuf::from)
             .collect()
@@ -558,16 +558,16 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
     // against the host's feature names, checked here for valid regex syntax.
-    fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
-        let features = read_string_list_option(m, "disable-cpu-feature");
+    fn read_disable_cpu_feature_option(args: &ArgMatches) -> Result<Vec<String>, Errors> {
+        let features = read_string_list_option(args, "disable-cpu-feature");
         ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 
     // The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
     // per line.
-    fn read_llvm_passes_file_option(m: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
-        let Some(path) = m.get_one::<String>("llvm-passes-file") else {
+    fn read_llvm_passes_file_option(args: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
+        let Some(path) = args.get_one::<String>("llvm-passes-file") else {
             return Ok(None);
         };
         let content = fs::read_to_string(path).map_err(|e| {
