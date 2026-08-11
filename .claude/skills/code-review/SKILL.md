@@ -939,12 +939,22 @@ Function comment shape:
   ```
   A bare restatement adds nothing: `the position` for `pos` says only what the name already says, where `0-indexed byte offset into the source string` states the meaning.
 - Add a `# Returns` section only when the return value needs explanation beyond the type — and then say what the value *means*, such as what a `None`, an empty collection, or a particular variant signifies here. Keep this to the surprising cases; the *Don't enumerate None / error cases* convention still suppresses routine failures.
-- Show what a transformation computes with one input and the output it produces, under an `# Examples` heading. A function that takes a value apart and builds a different one — parsing, splitting, folding, rewriting a tree — is read faster from an example than from a sentence, and the example pins down what the sentence leaves vague. Choose the input that answers what the reader would otherwise have to ask: an empty collection, a boundary, an element the function drops.
+- Add an `# Examples` section when the description alone would leave the reader unable to say what the function returns for an input they have in mind. One input and the output it produces settles that in a line, and settles it more exactly than a second sentence would. The gap it closes is usually one of these:
+  - a **transformation** leaves open what the output is made of: which parts of the input survive, in what order, and what an empty or repeated part becomes;
+  - a **predicate** leaves open where the line falls: the reflexive case, the empty case, and — when two arguments share a type — which of the two the question is about;
+  - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function.
+
+  So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips.
   ```rust
   /// Splits the text at each occurrence of the separator.
   ///
   /// # Examples
   /// `split_all(",", "a,,b")` yields `["a", "", "b"]`, and `split_all(",", "")` yields `[""]`.
+
+  /// Reports whether the range covers the position.
+  ///
+  /// # Examples
+  /// `covers(0..3, 3)` is `false`, and `covers(0..0, 0)` is `false`.
   ```
   Where the name and the signature already carry the behavior, state the meaning they leave unsaid and stop there: reading or replacing a field, constructing a value, an operation whose content is the effect it performs.
 
