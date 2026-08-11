@@ -139,9 +139,9 @@ type [f : *->*] Foo f = box struct { data : f () };
 
 ### 4.2 型環境が畳み込みを持つ
 
-畳む型構築子の集合を型環境が持ち、フィールド型を答える 3 つの入口がその集合を通る。
-3 つの入口 (`field_types` / `unpunched_field_types` / `fields`) はすでに 1 つの漏斗
-`fields_with_instance_types` を共有しているので、置く場所はそこ 1 か所である。
+畳む型構築子の集合を型環境が持ち、フィールド型を答える 2 つの入口がその集合を通る。
+2 つの入口 (`field_types` / `unpunched_field_types`) はすでに 1 つの漏斗を共有しているので、
+置く場所はそこ 1 か所である。
 
 以下の例はすべて、次の 2 つの宣言のもとでのものである。`IO` は unbox 1 フィールドなので畳まれ、
 `Foo` は box なので残る。`Foo` の唯一のフィールドの名前は `data` である。
@@ -153,7 +153,8 @@ type [f : *->*] Foo f = box struct { data : f () };
 
 ```rust
 pub struct TypeEnv {
-    pub tycons: Arc<Map<TyCon, TyConInfo>>,
+    /// 型構築子ごとの宣言。private。この環境に入る宣言はすべて畳まれた形になる (4.3)。
+    tycons: Arc<Map<TyCon, TyConInfo>>,
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
     /// 1 フィールドの値そのものになった newtype。この環境が答えるフィールド型には、
     /// ここに載った型構築子が飽和して現れることはない。
@@ -161,13 +162,16 @@ pub struct TypeEnv {
 }
 
 impl TypeEnv {
-    /// `tycons` の各 newtype の値が、その 1 フィールドの値になったことを記録する。
-    /// `unwrap_newtype` パスが `{IO}` を渡して呼ぶ。
-    pub fn set_unwrapped_newtypes(&mut self, tycons: Set<TyCon>);
+    /// `newtypes` の各 newtype の値が、その 1 フィールドの値になったことを記録し、
+    /// 保存されている全宣言のフィールド型を畳む。`unwrap_newtype` パスが `{IO}` を渡して呼ぶ。
+    pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>);
 
-    /// `tc` の値が、その 1 フィールドの値になっているか。
-    /// `IO` に対して真、`Foo` に対して偽を返す。
-    pub fn is_unwrapped_newtype(&self, tc: &TyCon) -> bool;
+    /// `new_tycons` の宣言を、フィールド型を畳んでから加える。パスの後に宣言を作るパスの受け口。
+    pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>);
+
+    /// `tycon` の値がその 1 フィールドの値になっているなら、その宣言。`IO` に対して `Some`、
+    /// `Foo` に対して `None` を返す。
+    pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo>;
 }
 
 impl TypeNode {
@@ -180,18 +184,18 @@ impl TypeNode {
     ///     IO#PunchedAt0 ()  -> ()   唯一のフィールドが穴なら、その値は何も持たない
     pub fn unwrap_newtypes(self: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode>;
 
-    /// `tycon_info` が宣言するフィールドを、`self` の型引数を代入しただけの型とともに返す。
+    /// `tycon_info` の各フィールドが宣言されている型に、`self` の型引数を代入したもの。
     ///
-    ///     Foo IO  -> [(data, IO ())]
-    ///     IO ()   -> [(runner, IOState -> (IOState, ()))]
-    fn substitute_type_arguments(&self, tycon_info: &TyConInfo) -> Vec<(Field, Arc<TypeNode>)>;
+    ///     Foo IO  -> [IO ()]
+    ///     IO ()   -> [IOState -> (IOState, ())]
+    fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>>;
 
-    /// `self` が持つフィールドを、この instance での型とともに返す。代入で飽和した newtype は
+    /// `tycon_info` の各フィールドを、この instance で値が持つ型。代入で飽和した newtype は
     /// 畳まれているので、返る型はコード生成がそのままレイアウトできるものである。
     ///
-    ///     Foo IO  -> [(data, IOState -> (IOState, ()))]
-    ///     IO ()   -> [(runner, IOState -> (IOState, ()))]
-    fn fields_with_instance_types(&self, type_env: &TypeEnv) -> Vec<(Field, Arc<TypeNode>)>;
+    ///     Foo IO  -> [IOState -> (IOState, ())]
+    ///     IO ()   -> [IOState -> (IOState, ())]
+    fn instance_field_types(&self, tycon_info: &TyConInfo, type_env: &TypeEnv) -> Vec<Arc<TypeNode>>;
 }
 ```
 
@@ -199,25 +203,25 @@ impl TypeNode {
 だけに出る。`Foo` の宣言のフィールド型 `f ()` に `f := IO` を代入すると `IO ()` になり、
 そこで初めて `IO` が飽和する。畳み込みが代入の後に要るのはこの 1 か所である。
 
-層は 2 段になる。下が代入だけを行う `substitute_type_arguments` で、`unwrap_newtypes` はこれを
-使う。上が代入に畳み込みを重ねた `fields_with_instance_types` で、公開されている 3 つの入口は
-これを使う。畳み込みが自分の中で下の層だけを見るので、2 つの関数が互いを呼び合うことはない。
+層は 2 段になる。下が代入だけを行う `declared_field_types` で、`unwrap_newtypes` はこれを使う。
+上が代入に畳み込みを重ねた `instance_field_types` で、公開されている入口はこれを使う。
+畳み込みが自分の中で下の層だけを見るので、2 つの関数が互いを呼び合うことはない。
 
 擬似コードで書くと次のようになる。
 
 ```
 unwrap_newtypes(T, env):
     tc := T の先頭の型構築子
-    if tc が飽和していて env.is_unwrapped_newtype(tc):
+    if tc が飽和していて env.unwrapped_newtype_info(tc) が宣言を返す:
         if tc の唯一のフィールドが穴:      return ()
-        f := substitute_type_arguments(T)[0] の型
+        f := declared_field_types(T, tc の宣言)[0]
         return unwrap_newtypes(f, env)     # 畳んだ先も畳む
     T の型適用の各部分に再帰する
 
-fields_with_instance_types(T, env):
-    fields := substitute_type_arguments(T, T の宣言)
-    if T の宣言が高階のパラメータを持たない: return fields    # 4.3
-    fields の各型に unwrap_newtypes を当てて返す
+instance_field_types(T, tycon_info, env):
+    field_types := declared_field_types(T, tycon_info)
+    if tycon_info が高階のパラメータを持たない: return field_types    # 4.3
+    field_types の各型に unwrap_newtypes を当てて返す
 ```
 
 `unwrap_newtype` パスは、畳む集合を計算して型環境に載せ、式の型と構造体操作を今日どおり
@@ -262,6 +266,24 @@ fields_with_instance_types(T, env):
 したがって高階の宣言を自分で書かないプログラムでは、漏斗の追加コストは
 `tyvars` を 1 回なめる分だけになる。
 
+この近道が買うものは測ってある。近道を外して**常に畳む**版 (付録 B.3) と比べると、型環境の大きな
+プログラム (minilib の monad) で **2.8% のコンパイル時間**である (付録 A.5)。
+
+近道は「保存された宣言のフィールド型が畳み済みである」ことに寄りかかる。これは宣言が型環境に入る
+口をすべて畳ませることで、構成から従わせる。
+
+| 宣言が入る口 | 畳み済みである理由 |
+|---|---|
+| `TypeEnv::new` | パスより前。畳む集合が空なので畳み込みは恒等 |
+| `TypeEnv::unwrap_newtypes` | 全宣言のフィールド型を畳む |
+| `TypeEnv::add_tycons` | 受け取った宣言のフィールド型を畳む |
+| `program.rs` の中の書き換え | `tycons` は private なので、外から宣言を入れる道が無い |
+
+`add_tycons` は、パスの後に宣言を作るパス (`defunctionalize_fix`、`closure_specialization`) の
+受け口である。それらが渡す capture struct のフィールド型は式の型から来るので今日はすでに畳み済み
+だが (付録 A.5 で実測)、それは**出所の性質**であって、口の側の保証ではない。宣言の側から型を組む
+将来のパスは畳み込まれていない型を持ち込むので、口の側で畳む。
+
 ### 4.4 停止性
 
 `unwrap_newtypes` の再帰は 2 方向ある。
@@ -271,7 +293,7 @@ fields_with_instance_types(T, env):
   (`is_acyclic_newtype`)、この判定は改修で変えない。よって「newtype をそのフィールド型で
   置き換える」関係は非巡回で、有限回で底に着く。
 
-底に着いたフィールド型は、`substitute_type_arguments` すなわち**代入だけ**で得たものである。
+底に着いたフィールド型は、`declared_field_types` すなわち**代入だけ**で得たものである。
 型引数へ降りて新しい型を作ることはしない。3 節で見た止まらない再帰は、ここに無い。
 
 ### 4.5 型の共有を壊さないこと
@@ -283,12 +305,18 @@ fields_with_instance_types(T, env):
 畳み込みも同じ規律に従う必要がある。漏斗は代入した型に対して呼ばれ、代入した型は共有を持つからである。
 
 - **歩いた節点の答えを覚える。** 木ではなくグラフを歩く。
-- **子が両方とも変わらなければ、元の節点をそのまま返す。** 出てくる型は、入ってきた型と同じだけ共有
-  される。`Substitution::substitute_type` が同じことをしている。
-- 覚える表は**節点のアドレス**で引き、**節点自身を答えの隣に置く**。畳み込みは途中で型を作るので、
-  持たずに捨てた節点はそのアドレスを後から作られる節点に譲り、その節点が別の型の答えを受け取る。
+- **子が両方とも変わらなければ、元の節点をそのまま返す。** `Substitution::substitute_type` が
+  同じことをしている。
+- 覚える表は**型で引く**。`TypeNode` はハッシュを節点に持ち、`Arc` の等価はポインタ一致で短絡する
+  ので、この鍵は安い。プロジェクトが型の表に使っている鍵もこれである。
 
-これを守らないと何が起きるかは実測してある (付録 A.4)。
+型で引く表は、**構造の等しい別の節点を 1 つに束ねる**。2 つ目の出現は 1 つ目に与えた答えを受け取る
+ので、答えの節点は入力の節点と同一とは限らない。値は同じであり、型はどこでも構造で比較されるので
+差は出ない。出てくるグラフの共有はむしろ増える。
+
+節点のアドレスで引く表も考えられるが、それには「表に入れた節点を手放さない」という規律が要る。
+畳み込みは途中で型を作るので、持たずに捨てた節点はそのアドレスを後から作られる節点に譲り、その節点が
+別の型の答えを受け取る。この規律を守らないと何が起きるかは実測してある (付録 A.4)。
 
 ### 4.6 詰め直しの処理が要らないこと
 
@@ -446,7 +474,9 @@ speedtest コーパスの 517 個の `.fix` にも 1 つも無い。これらに
 - `mod_r` (穴を開けて差し戻す操作) を通しても、穴の開いた型は残らない。
 - 畳んだ型構築子の名前が出力に残るのは、シンボル名の名前空間 (`Main::M::@r#...`) と、
   `let` パターンに書かれた利用者の型注釈だけである。後者は 2 つのパスがどちらも意図して
-  書き換えない (`Pattern::Var` の注釈)。型検査の後は誰も読まない。
+  書き換えない (`Pattern::Var` の注釈)。この注釈は `Symbol::hash` が
+  `Expr::stringify` 経由で印字するので、最適化の後にオブジェクトキャッシュの鍵へ入る。
+  鍵に余分な情報が入るだけで、区別を失う方向には働かない。
 
 ## A.4 共有を壊すと何が起きるか
 
@@ -472,6 +502,52 @@ Std::Option (Std::I64 -> Std::I64 Std::I64)               I64 に I64 を適用�
 直後に解放されるので、番地が空く。後から作られた別の節点がその番地を取ると、表がその節点に
 **別の型の答え**を返す。落ちたのが高階の宣言を持つ 2 件だけだったのは、漏斗が畳み込みを呼ぶ
 経路がそこにしか無く、一時的な型もそこでしか作られないからである。
+
+## A.5 近道の値段と、その前提が成り立っている理由
+
+**近道 (4.3) を外すといくら払うか。** 漏斗が常に畳む版 (付録 B.3) をビルドし、同じワークツリーから
+同じ引数で測った。直列、CPU 時間 (user + sys)。
+
+| | 近道あり (4.3) | 常に畳む (B.3) | 差 |
+|---|---|---|---|
+| speedtest コーパス 43 件 x 3 往復 | 59.75 / 60.54 / 61.05 秒 | 60.30 / 60.53 / 61.37 秒 | +0.5% (往復の順位が入れ替わる) |
+| minilib の monad x 2 往復 | 66.98 / 67.38 秒 | 68.80 / 69.29 秒 | **+2.8%** |
+
+コーパスは高階の宣言を持たないので、近道が**最も得をする条件**である。そこで差が出ないことは、
+近道の節約が小さいことを言う。型環境が大きく宣言の多い minilib では 2 往復とも同方向に出た。
+両者が同じ機械語を出すことは、コーパス 8 件の `--emit-llvm` と `--emit-rc-ir` のバイト一致で
+確かめてある。
+
+**近道の前提が今日は成り立っている理由。** `add_tycons` に渡される宣言のフィールド型が畳み込みで
+変化したら止まる表明を置き、スイート全件を流した。**1 度も鳴らない** (1379 + 139 passed)。
+`defunctionalize_fix` と `closure_specialization` が渡す capture struct のフィールド型は
+`state.scope` と式の型から来るので、パスが畳んだ後の型だからである。したがって `add_tycons` の
+畳み込みは今日のふるまいを変えず、口の側の保証としてだけ働く。
+
+## A.6 畳んだ型は共有を持つので、型を文字列で比べる所が指数になる
+
+畳み込みは共有を持つ型を作る (4.5)。`unwrap(F X) = I64 -> (X, X)` のような newtype を k 段
+重ねると、畳んだ型は節点数 O(k) のグラフだが、木として展開すると 2^k である。値のレイアウトは
+O(k) のままなので、プログラムそのものは小さい。
+
+型の等価判定を `TypeNode::to_string` の文字列比較で行っている箇所がある
+(`expr_let_typed`、`expr_match_typed`、`closure_specialization` の 4 か所)。`to_string` は
+節点ごとのメモを持たない木の走査なので、この 2^k を毎回払う。
+
+| k | `-O none` | `-O max` (この改修) | `-O max` (改修前) |
+|---|---|---|---|
+| 14 | 1.77 秒 / 112 MB | 4.90 秒 / 117 MB | 3.16 秒 / 834 MB |
+| 16 | 1.40 秒 / 117 MB | 8.32 秒 / 126 MB | 11.78 秒 / 3.05 GB |
+| 18 | 1.09 秒 / 115 MB | 27.86 秒 / 180 MB | 47.87 秒 / 11.9 GB |
+| 20 | 1.24 秒 / 119 MB | 59.38 秒 / 359 MB | 160.95 秒 / **47.0 GB** |
+
+改修前の畳み込みは節点をすべて作り直していたので、木を実体化していた。共有を保つようにした
+改修は、k=20 で**メモリを 130 分の 1**にし、2.7 倍速くする。残る指数は時間だけで、その出所は
+畳み込みではなく文字列比較である。`expr_let_typed` の表明 1 つを外すと k=20 が 59.4 秒から
+38.0 秒になる。
+
+根本は「型の等価判定を文字列で行っていること」で、この改修の範囲外である。`TypeNode` は節点ごとに
+ハッシュを持ち、それはグラフ走査 1 回で求まる。
 
 # 付録 B: 退けた案
 
@@ -511,4 +587,7 @@ Std::Option (Std::I64 -> Std::I64 Std::I64)               I64 に I64 を適用�
 答えるフィールド型は畳み済み」という規則は 4.3 の規則より単純である。
 
 退けた理由はコストである。この形では 4.3 の補題が使えず、`field_types` の呼び出しごとに
-型を歩き直すことになる。コード生成はこれを非常に多く呼ぶ。
+型を歩き直すことになる。実装して測った結果は付録 A.5 にある。型環境の大きなプログラムで 2.8%。
+
+単純さの差は、4.3 の前提を口の側で守らせることで無くなった (4.3 の表を見よ)。残るのはこの
+2.8% だけなので、近道を採る。

@@ -45,7 +45,7 @@ pub(super) fn handle_workspace_symbol(
     };
 
     // Type constructors.
-    for (tycon, tycon_info) in program.type_env.tycons.as_ref() {
+    for (tycon, tycon_info) in program.type_env.tycons() {
         if tycon.name.to_string().contains('#') {
             continue;
         }

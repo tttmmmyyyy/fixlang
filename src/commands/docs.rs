@@ -463,7 +463,7 @@ fn is_private_field_accessor(program: &Program, name: &FullName) -> bool {
     }
     // The namespace of a field accessor is the full name of its owning struct/union.
     let tycon = TyCon::new(name.namespace.clone().to_fullname());
-    let Some(ty_info) = program.type_env.tycons.get(&tycon) else {
+    let Some(ty_info) = program.type_env.tycons().get(&tycon) else {
         return false;
     };
     let accessor_prefixes: &[&str] = match ty_info.variant {
@@ -535,7 +535,7 @@ fn type_entries(
 
     let mut entries = vec![];
 
-    for (ty_name, ty_info) in program.type_env.tycons.iter() {
+    for (ty_name, ty_info) in program.type_env.tycons().iter() {
         let name = ty_name.name.clone();
 
         if !is_entry_should_be_documented(program, &name, mod_name, config) {

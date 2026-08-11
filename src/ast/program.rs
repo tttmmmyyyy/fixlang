@@ -53,7 +53,11 @@ use std::vec;
 #[derive(Clone)]
 pub struct TypeEnv {
     /// The declaration of every type constructor, built-in and user-defined, by its name.
-    pub tycons: Arc<Map<TyCon, TyConInfo>>,
+    ///
+    /// Private, because the field types held here answer what a value of a type is laid out as, and
+    /// `unwrap_newtypes` puts them in a form the rest of the compiler relies on. A declaration
+    /// enters through `add_tycons`, which puts it in that same form.
+    tycons: Arc<Map<TyCon, TyConInfo>>,
     /// The declaration of every type alias, by its name.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
     /// The newtypes a value of which has become a value of its one field. Empty until the pass that
@@ -93,6 +97,9 @@ impl TypeEnv {
     ///
     /// The declarations are read as they stand while they are rewritten, so each one is unwrapped
     /// from the same starting point.
+    ///
+    /// Every newtype recorded is one this environment declares, which is what lets
+    /// `unwrapped_newtype_info` answer with a declaration rather than with the possibility of one.
     pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
         for tycon in &newtypes {
             assert!(
@@ -113,7 +120,8 @@ impl TypeEnv {
     }
 
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
-    /// otherwise.
+    /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
+    /// states where it records them.
     pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;
@@ -127,13 +135,23 @@ impl TypeEnv {
     }
 
     /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
-    /// under the same name.
+    /// under the same name, each with its field types unwrapped, so that a declaration minted after
+    /// the newtype-unwrapping pass answers as the ones that were there before it do.
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
+        let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
-        for (tc, ti) in new_tycons.into_iter() {
-            tycons.insert(tc.clone(), ti);
+        for (tycon, mut tycon_info) in new_tycons.into_iter() {
+            for field in &mut tycon_info.fields {
+                field.ty = field.ty.unwrap_newtypes(&declared_type_env);
+            }
+            tycons.insert(tycon, tycon_info);
         }
         self.tycons = Arc::new(tycons);
+    }
+
+    /// The declaration of every type constructor this environment holds, by its name.
+    pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
+        &self.tycons
     }
 
     /// The kind of every name this environment gives a meaning to, type constructors and type
