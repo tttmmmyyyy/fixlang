@@ -143,6 +143,14 @@ type [f : *->*] Foo f = box struct { data : f () };
 3 つの入口 (`field_types` / `unpunched_field_types` / `fields`) はすでに 1 つの漏斗
 `fields_with_instance_types` を共有しているので、置く場所はそこ 1 か所である。
 
+以下の例はすべて、次の 2 つの宣言のもとでのものである。`IO` は unbox 1 フィールドなので畳まれ、
+`Foo` は box なので残る。`Foo` の唯一のフィールドの名前は `data` である。
+
+```fix
+type IO a = unbox struct { runner : IOState -> (IOState, a) };
+type [f : *->*] Foo f = box struct { data : f () };
+```
+
 ```rust
 pub struct TypeEnv {
     pub tycons: Arc<Map<TyCon, TyConInfo>>,
@@ -154,27 +162,45 @@ pub struct TypeEnv {
 
 impl TypeEnv {
     /// `tycons` の各 newtype の値が、その 1 フィールドの値になったことを記録する。
+    /// `unwrap_newtype` パスが `{IO}` を渡して呼ぶ。
     pub fn set_unwrapped_newtypes(&mut self, tycons: Set<TyCon>);
 
     /// `tc` の値が、その 1 フィールドの値になっているか。
+    /// `IO` に対して真、`Foo` に対して偽を返す。
     pub fn is_unwrapped_newtype(&self, tc: &TyCon) -> bool;
 }
 
 impl TypeNode {
     /// `self` の中で飽和して現れる各 unwrapped newtype を、その instance における 1 フィールドの
-    /// 型で置き換えた型。穴の開いたフィールドを持つ形は、何も持たないので `()` になる。
+    /// 型で置き換えた型。
+    ///
+    ///     IO ()             -> IOState -> (IOState, ())   飽和しているので畳む
+    ///     Array (IO ())     -> Array (IOState -> (IOState, ()))   型引数の中も畳む
+    ///     Foo IO            -> Foo IO   `IO` は引数を伴わないので畳めない
+    ///     IO#PunchedAt0 ()  -> ()   唯一のフィールドが穴なら、その値は何も持たない
     pub fn unwrap_newtypes(self: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode>;
 
     /// `self` が持つフィールドを、宣言に `self` の型引数を代入しただけの型とともに返す。
+    ///
+    ///     Foo IO  -> [(data, IO ())]
+    ///     IO ()   -> [(runner, IOState -> (IOState, ()))]
     fn fields_with_substituted_types(
         &self,
         tycons: &Map<TyCon, TyConInfo>,
     ) -> Vec<(Field, Arc<TypeNode>)>;
 
-    /// `self` が持つフィールドを、この instance での型とともに返す。
+    /// `self` が持つフィールドを、この instance での型とともに返す。代入で飽和した newtype は
+    /// 畳まれているので、返る型はコード生成がそのままレイアウトできるものである。
+    ///
+    ///     Foo IO  -> [(data, IOState -> (IOState, ()))]
+    ///     IO ()   -> [(runner, IOState -> (IOState, ()))]
     fn fields_with_instance_types(&self, type_env: &TypeEnv) -> Vec<(Field, Arc<TypeNode>)>;
 }
 ```
+
+畳み込みそのものをするのは `unwrap_newtypes` で、フィールドを答える 2 つの違いは `Foo IO` の行
+だけに出る。`Foo` の宣言のフィールド型 `f ()` に `f := IO` を代入すると `IO ()` になり、
+そこで初めて `IO` が飽和する。畳み込みが代入の後に要るのはこの 1 か所である。
 
 層は 2 段になる。下が代入だけを行う `fields_with_substituted_types` で、`unwrap_newtypes` は
 これを使う。上が代入に畳み込みを重ねた `fields_with_instance_types` で、公開されている 3 つの
