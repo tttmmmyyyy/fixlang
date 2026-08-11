@@ -33,10 +33,20 @@ mod integration_tests {
     fn test_every_way_of_asking_the_version_answers_the_same_line() {
         let version = version_line();
         let released = format!("fix {} (", env!("CARGO_PKG_VERSION"));
+        let revision = version
+            .strip_prefix(&released)
+            .and_then(|rest| rest.strip_suffix(')'))
+            .unwrap_or_else(|| {
+                panic!(
+                    "`fix --version` answered `{}`, which does not carry the released version followed by a revision",
+                    version
+                )
+            });
         assert!(
-            version.starts_with(&released) && version.ends_with(')'),
-            "`fix --version` answered `{}`, which does not carry the released version followed by a revision",
-            version
+            !revision.is_empty() && !revision.contains(char::is_whitespace),
+            "`fix --version` answered `{}`, which names no revision to tell two builds of {} apart",
+            version,
+            env!("CARGO_PKG_VERSION")
         );
 
         for form in [vec!["-V"], vec!["version"]] {
@@ -47,7 +57,7 @@ mod integration_tests {
                 form.join(" ")
             );
         }
-        for help in [vec!["--help"], vec![]] {
+        for help in [vec!["--help"], vec!["help"], vec![]] {
             assert_eq!(
                 first_line(&run(&help)),
                 version,
@@ -58,31 +68,42 @@ mod integration_tests {
     }
 
     /// A subcommand's help is headed by the same version, under the name that subcommand is
-    /// invoked by.
+    /// invoked by, at every depth the command tree reaches.
     #[test]
     fn test_a_subcommand_help_is_headed_by_the_version() {
         let version = version_line();
         let version = version
             .strip_prefix("fix ")
             .expect("`fix --version` answered a line that does not begin with the command name");
-        assert_eq!(
-            first_line(&run(&["build", "--help"])),
-            format!("fix-build {}", version)
-        );
+        for path in [
+            vec!["build"],
+            vec!["deps"],
+            vec!["edit"],
+            vec!["deps", "add"],
+            vec!["edit", "explicit-import"],
+        ] {
+            let mut args = path.clone();
+            args.push("--help");
+            assert_eq!(
+                first_line(&run(&args)),
+                format!("fix-{} {}", path.join("-"), version),
+                "the header of `fix {} --help` reported a different version",
+                path.join(" ")
+            );
+        }
     }
 
-    /// A subcommand prints its own help when the command line names none of its subcommands, and
-    /// that help is headed by the version as well, so no path to a help message loses it.
+    /// A subcommand reached with none of its own subcommands prints the help that
+    /// `fix <name> --help` prints, so the two paths to one help message cannot drift apart.
     #[test]
-    fn test_a_subcommand_help_reached_without_a_subcommand_is_headed_by_the_version() {
-        let version = version_line();
-        let version = version
-            .strip_prefix("fix ")
-            .expect("`fix --version` answered a line that does not begin with the command name");
+    fn test_a_subcommand_without_a_subcommand_prints_the_help_of_that_subcommand() {
         for subcommand in ["deps", "edit"] {
             assert_eq!(
-                first_line(&run(&[subcommand])),
-                format!("fix-{} {}", subcommand, version)
+                run(&[subcommand]),
+                run(&[subcommand, "--help"]),
+                "`fix {}` printed a help other than the one `fix {} --help` prints",
+                subcommand,
+                subcommand
             );
         }
     }
