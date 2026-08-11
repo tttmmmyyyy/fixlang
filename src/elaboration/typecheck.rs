@@ -2828,6 +2828,13 @@ impl UnificationErr {
                 "Deducing it needs itself: {}.",
                 Self::way_string(way)
             )),
+            // A deduction that has yet to take a step reached the bound on the constraint it was
+            // asked for, which says nothing about any instance.
+            UnificationErr::Endless(way) if way.len() <= 1 => Some(format!(
+                "The type it names nests more than {} deep, which is past the depth the compiler \
+                 settles a constraint about.",
+                MAX_TYPE_DEPTH
+            )),
             UnificationErr::Endless(way) => Some(format!(
                 "Deducing it asks about types nested more than {} deep, so the deduction does not \
                  end: {}. An instance whose context asks for what it gives, on a larger type, does \
