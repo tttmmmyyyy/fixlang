@@ -324,6 +324,20 @@ pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
 
+/// `text` cut short where it is too long for a report to carry, with an ellipsis marking the cut.
+///
+/// A type or a constraint that trips one of the compiler's bounds can be a term of any size, and
+/// the whole of one says no more than its beginning does.
+pub fn shorten_for_report(text: String) -> String {
+    /// How much of one term a report shows.
+    const MAX_SHOWN_CHARS: usize = 200;
+
+    match text.char_indices().nth(MAX_SHOWN_CHARS) {
+        Some((cut, _)) => format!("{}...", &text[..cut]),
+        None => text,
+    }
+}
+
 // Splits a string by spaces, but keeps the words in quotes as a single word.
 pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     let mut result = Vec::new();

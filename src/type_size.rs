@@ -32,7 +32,7 @@
 
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TypeNode, MAX_TYPE_DEPTH};
-use crate::misc::{grow_stack, Set};
+use crate::misc::{grow_stack, shorten_for_report, Set};
 use crate::object::{ty_to_object_ty, ObjectFieldType};
 use std::sync::Arc;
 
@@ -163,16 +163,8 @@ fn no_size_in_place(
 /// where a type reached from itself at a larger argument shows itself. The type actually at fault
 /// is one the walk built on the way, and printing that one would print a term as deep as the bound.
 fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
-    /// How much of a type to print before cutting it short. A type that trips the bound can be a
-    /// term of any size, and the whole of one says no more than its beginning does.
-    const MAX_SHOWN_CHARS: usize = 200;
-
     fn shorten(ty: &Arc<TypeNode>) -> String {
-        let text = ty.to_string();
-        match text.char_indices().nth(MAX_SHOWN_CHARS) {
-            Some((cut, _)) => format!("{}...", &text[..cut]),
-            None => text,
-        }
+        shorten_for_report(ty.to_string())
     }
 
     /// How many steps of the way down to show. Enough for one turn of a growing family to be

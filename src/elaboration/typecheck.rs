@@ -1,7 +1,9 @@
 use super::check_holes::collect_hole_errors;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
-use crate::misc::{collect_results, grow_stack, insert_to_map_vec, Map, Set};
+use crate::misc::{
+    collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set,
+};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
@@ -2214,12 +2216,17 @@ impl TypeCheckContext {
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
+        // The constraint as it is asked for, before the associated types in it are reduced, is what
+        // tells one deduction from another here. Two spellings of one constraint are then two
+        // deductions, which costs a turn of the deduction before a circle through an associated
+        // type closes on a spelling it has already met. The depth bound below is what ends a
+        // deduction that keeps finding new spellings.
         let pred_str = pred.to_string();
         if deduction.settled.contains(&pred_str) {
             return Ok(());
         }
         if deduction.on_path.contains(&pred_str) {
-            return Err(UnificationErr::Circular(deduction.way_round(&pred, &pred_str)).into());
+            return Err(UnificationErr::Circular(deduction.way_round(&pred_str)).into());
         }
         pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
         // An instance whose context asks for what it gives, on a larger type, never asks twice for
@@ -2738,16 +2745,17 @@ impl PredicateDeduction {
 
     /// The way from the predicate printed as `pred_str` round to it again, that predicate at both
     /// ends.
-    fn way_round(&self, pred: &Predicate, pred_str: &str) -> Vec<Predicate> {
+    fn way_round(&self, pred_str: &str) -> Vec<Predicate> {
         let start = self
             .path
             .iter()
             .position(|(_ancestor, ancestor_str)| ancestor_str == pred_str)
-            .expect("the caller found `pred` among the deductions it is inside");
+            .expect("the caller found the predicate among the deductions it is inside");
+        let (repeated, _repeated_str) = &self.path[start];
         self.path[start..]
             .iter()
             .map(|(ancestor, _ancestor_str)| ancestor.clone())
-            .chain([pred.clone()])
+            .chain([repeated.clone()])
             .collect()
     }
 
@@ -2848,17 +2856,9 @@ impl UnificationErr {
         /// How many steps to show. Enough for one turn of a deduction that asks about ever larger
         /// types to be visible, and short enough that the reader can read what is printed.
         const SHOWN_STEPS: usize = 3;
-        /// How much of a predicate to print before cutting it short. A predicate that ends a
-        /// deduction can name a type of any size, and the whole of one says no more than its
-        /// beginning does.
-        const MAX_SHOWN_CHARS: usize = 200;
 
         fn shorten(pred: &Predicate) -> String {
-            let text = pred.to_string();
-            match text.char_indices().nth(MAX_SHOWN_CHARS) {
-                Some((cut, _)) => format!("`{}...`", &text[..cut]),
-                None => format!("`{}`", text),
-            }
+            format!("`{}`", shorten_for_report(pred.to_string()))
         }
 
         // The last step is where the deduction shows what is wrong with it: the predicate it came
