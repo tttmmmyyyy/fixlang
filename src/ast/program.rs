@@ -90,6 +90,13 @@ impl TypeEnv {
     /// The declarations are read as they stand while they are rewritten, so each one is unwrapped
     /// from the same starting point.
     pub fn unwrap_newtypes(&mut self, tycons: Set<TyCon>) {
+        for tycon in &tycons {
+            assert!(
+                self.tycons.contains_key(tycon),
+                "`{}` is unwrapped, though this environment holds no declaration of it.",
+                tycon.to_string()
+            );
+        }
         self.unwrapped_newtypes = Arc::new(tycons);
         let declared = self.clone();
         let mut rewritten = self.tycons.as_ref().clone();
