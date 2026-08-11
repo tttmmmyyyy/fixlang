@@ -340,7 +340,7 @@ pub fn shorten_for_report(text: String) -> String {
 
 // Splits a string by spaces, but keeps the words in quotes as a single word.
 pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
-    let mut result = Vec::new();
+    let mut words = Vec::new();
     let mut current_word = String::new();
     let mut in_quotes = None; // None if not in quotes, Some(') if in single quotes, Some(") if in double quotes
     let mut escaped = false; // true if the previous character is an escape character
@@ -355,7 +355,7 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
         match c {
             ' ' if in_quotes.is_none() => {
                 if !current_word.is_empty() {
-                    result.push(current_word.clone());
+                    words.push(current_word.clone());
                     current_word.clear();
                 }
             }
@@ -369,10 +369,10 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     }
 
     if !current_word.is_empty() {
-        result.push(current_word);
+        words.push(current_word);
     }
 
-    result
+    words
 }
 
 // Upper CamelCase to lower_snake_case
@@ -398,11 +398,15 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread, split_by_max_size,
+        split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+    };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
     /// Every thread has finished by the time a worker's panic is carried on, so unwinding never

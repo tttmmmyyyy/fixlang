@@ -171,15 +171,15 @@ fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
     /// visible, and short enough that the types printed are ones the reader can read.
     const SHOWN_STEPS: usize = 3;
 
-    let shown = asked_for
+    let steps = asked_for
         .iter()
         .take(SHOWN_STEPS)
         .map(|ty| format!("`{}`", shorten(ty)))
         .collect::<Vec<_>>();
-    let way_down = if shown.is_empty() {
+    let way_down = if steps.is_empty() {
         String::new()
     } else {
-        format!(" ({} -> ...)", shown.join(" -> "))
+        format!(" ({} -> ...)", steps.join(" -> "))
     };
     format!(
         "`{}` has no size: laying it out asks for types nested more than {} deep{}, so it needs \
