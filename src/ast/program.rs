@@ -83,9 +83,31 @@ impl TypeEnv {
         }
     }
 
-    /// Records that a value of each newtype in `tycons` has become a value of its one field.
-    pub fn set_unwrapped_newtypes(&mut self, tycons: Set<TyCon>) {
+    /// Makes a value of each newtype in `tycons` a value of its one field: records them, then
+    /// rewrites the stored declarations so that no field type this environment reports has one of
+    /// them saturated in it.
+    ///
+    /// The declarations are read as they stand while they are rewritten, so each one is unwrapped
+    /// from the same starting point.
+    pub fn unwrap_newtypes(&mut self, tycons: Set<TyCon>) {
         self.unwrapped_newtypes = Arc::new(tycons);
+        let declared = self.clone();
+        let mut rewritten = self.tycons.as_ref().clone();
+        for (_tycon, tycon_info) in &mut rewritten {
+            for field in &mut tycon_info.fields {
+                field.ty = field.ty.unwrap_newtypes(&declared);
+            }
+        }
+        self.tycons = Arc::new(rewritten);
+    }
+
+    /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
+    /// otherwise.
+    pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
+        if !self.unwrapped_newtypes.contains(tycon) {
+            return None;
+        }
+        Some(self.tycons.get(tycon).unwrap())
     }
 
     /// Whether a value of `tycon` has become a value of its one field.

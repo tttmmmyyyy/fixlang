@@ -40,21 +40,8 @@ use std::sync::Arc;
 /// Replaces every unwrappable newtype of `prg` with the type of its one field, in the types
 /// recorded throughout the program and in the field types the type environment answers with.
 pub fn run(prg: &mut Program) {
-    prg.type_env
-        .set_unwrapped_newtypes(unwrappable_tycons(&prg.type_env.tycons));
-
-    // The field types a declaration is stored with are unwrapped here, once, so that the only
-    // unwrapping a field-type query is left with is what substituting a type argument saturates.
-    // The declarations are read as this pass received them, so each one is unwrapped from the same
-    // starting point.
-    let type_env = prg.type_env.clone();
-    let mut tycons = type_env.tycons.as_ref().clone();
-    for (_tc, tycon_info) in &mut tycons {
-        for field in &mut tycon_info.fields {
-            field.ty = field.ty.unwrap_newtypes(&type_env);
-        }
-    }
-    prg.type_env.tycons = Arc::new(tycons);
+    let unwrappable_tycons = unwrappable_tycons(&prg.type_env.tycons);
+    prg.type_env.unwrap_newtypes(unwrappable_tycons);
 
     let type_env = prg.type_env.clone();
     for (_name, sym) in &mut prg.symbols {
@@ -471,7 +458,7 @@ fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
 /// Is this type constructor a newtype whose field types do not lead back to it?
 ///
 /// Replacing a newtype with the type of its field terminates exactly when this walk reaches the
-/// end, so this answer is what makes `NewtypeUnwrapping::unwrap_type` a finite rewrite.
+/// end, so this answer is what makes `TypeNode::unwrap_newtypes` a finite rewrite.
 fn is_acyclic_newtype(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     // If this TyCon is not a newtype, return false.
     if !is_newtype(tc, env) {
