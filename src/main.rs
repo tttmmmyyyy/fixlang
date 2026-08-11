@@ -171,7 +171,8 @@ fn run_cli() {
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
-        // .default_value(OPTIMIZATION_LEVEL_MAX) // we do not set default value because we want to check whether this option is specified by user explicitly.
+        // The option carries no default value, so that an invocation that gives it explicitly is
+        // told apart from one that leaves the level to the project file or to `--debug`.
         .help("Optimization level.");
     let disable_cpu_feature = Arg::new("disable-cpu-feature")
         .long("disable-cpu-feature")
@@ -372,11 +373,11 @@ fn run_cli() {
     let deps_update = App::new("update")
         .about("Update the lock file so that it satisfies the dependencies specified in the project file, and install the dependencies. By default, build lock file is updated. Use --test to update test lock file.")
         .arg(test_flag.clone());
-    let add_about_str = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
+    let deps_add_about = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
     Repositories for a Fix project is searched in the registry files listed in the configuration file (\"~/.fixconfig.toml\") and the default registry \"{}\".", DEFAULT_REGISTRY);
-    let add_about_str: &'static str = add_about_str.leak();
+    let deps_add_about: &'static str = deps_add_about.leak();
     let deps_add = App::new("add")
-        .about(add_about_str)
+        .about(deps_add_about)
         .arg(
             Arg::new("projects")
                 .multiple_values(true)
@@ -467,76 +468,82 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(edit_subc)
         .subcommand(check_subc);
 
-    // Every path the option `opt_id` collects, across all of its occurrences.
-    fn read_path_list_option(m: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
-        let Some(paths) = m.get_many::<String>(opt_id) else {
+    /// Every path the option `opt_id` collects, across all of its occurrences.
+    fn read_path_list_option(args: &ArgMatches, opt_id: &str) -> Vec<PathBuf> {
+        let Some(paths) = args.get_many::<String>(opt_id) else {
             return vec![];
         };
         paths.map(PathBuf::from).collect()
     }
 
-    // The kind of file the `--output-type` option asks the build to produce, if the invocation
-    // gives that option.
-    fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
-        match m.get_one::<String>("output-file-type") {
+    /// The kind of file the `--output-type` option asks the build to produce, if the invocation
+    /// gives that option.
+    fn read_output_file_type_option(args: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
+        match args.get_one::<String>("output-file-type") {
             None => return Ok(None),
             Some(file_type) => Ok(Some(OutputFileType::from_str(file_type)?)),
         }
     }
 
-    fn read_docs_options(m: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
+    /// Apply the options of one `fix docs` invocation to the documentation settings `config`
+    /// carries.
+    fn read_docs_options(args: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
         let docs_config = match &mut config.subcommand {
             SubCommand::Docs(docs_config) => docs_config,
-            _ => panic!("Invalid subcommand."),
+            subcommand => unreachable!(
+                "the options of `fix docs` were read into the configuration of `fix {}`",
+                subcommand.command_type_string()
+            ),
         };
 
         // `modules` option
-        docs_config.modules = read_string_list_option(m, "modules");
+        docs_config.modules = read_string_list_option(args, "modules");
 
         // `with-compiler-defined-methods` option
         docs_config.include_compiler_defined_methods =
-            m.contains_id("include-compiler-defined-methods");
+            args.contains_id("include-compiler-defined-methods");
 
         // `private` option
-        docs_config.include_private = m.contains_id("private");
+        docs_config.include_private = args.contains_id("private");
 
         // `out-dir` option
-        let dir = m
+        let dir = args
             .get_one::<String>("out-dir")
             .expect("the `--out-dir` option carries a default value");
         docs_config.out_dir = PathBuf::from(dir);
 
         // `test` option
-        docs_config.mode = get_build_mode(m);
+        docs_config.mode = get_build_mode(args);
 
         Ok(())
     }
 
-    // The path the `--output` option names for the built file, if the invocation gives that option.
-    fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
-        m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
+    /// The path the `--output` option names for the built file, if the invocation gives that
+    /// option.
+    fn read_output_file_option(args: &ArgMatches) -> Option<PathBuf> {
+        args.get_one::<String>("output-file").map(PathBuf::from)
     }
 
-    // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
-    // has no such option yields an empty list.
-    fn read_string_list_option(m: &ArgMatches, opt_id: &str) -> Vec<String> {
-        m.try_get_many::<String>(opt_id)
+    /// Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
+    /// has no such option yields an empty list.
+    fn read_string_list_option(args: &ArgMatches, opt_id: &str) -> Vec<String> {
+        args.try_get_many::<String>(opt_id)
             .unwrap_or_default()
             .unwrap_or_default()
             .cloned()
             .collect()
     }
 
-    // Every library the invocation links, each paired with how it is bound: `--static-link` names
-    // the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
-    fn read_library_options(m: &ArgMatches) -> Vec<(String, LinkType)> {
+    /// Every library the invocation links, each paired with how it is bound: `--static-link` names
+    /// the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
+    fn read_library_options(args: &ArgMatches) -> Vec<(String, LinkType)> {
         let mut options = vec![];
         for (opt_id, link_type) in [
             ("static-link-library", LinkType::Static),
             ("dynamic-link-library", LinkType::Dynamic),
         ] {
             options.extend(
-                read_string_list_option(m, opt_id)
+                read_string_list_option(args, opt_id)
                     .into_iter()
                     .map(|name| (name, link_type)),
             );
@@ -544,26 +551,27 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         options
     }
 
-    // The directories the `--library-paths` option adds to the linker's search path for libraries.
-    fn read_library_paths_option(m: &ArgMatches) -> Vec<PathBuf> {
-        read_string_list_option(m, "library-paths")
+    /// The directories the `--library-paths` option adds to the linker's search path for
+    /// libraries.
+    fn read_library_paths_option(args: &ArgMatches) -> Vec<PathBuf> {
+        read_string_list_option(args, "library-paths")
             .into_iter()
             .map(PathBuf::from)
             .collect()
     }
 
-    // The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
-    // against the host's feature names, checked here for valid regex syntax.
-    fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
-        let features = read_string_list_option(m, "disable-cpu-feature");
+    /// The CPU features the `--disable-cpu-feature` option turns off, as regex patterns matched
+    /// against the host's feature names, checked here for valid regex syntax.
+    fn read_disable_cpu_feature_option(args: &ArgMatches) -> Result<Vec<String>, Errors> {
+        let features = read_string_list_option(args, "disable-cpu-feature");
         ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 
-    // The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
-    // per line.
-    fn read_llvm_passes_file_option(m: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
-        let Some(path) = m.get_one::<String>("llvm-passes-file") else {
+    /// The LLVM passes listed in the file given by `--llvm-passes-file`, one pass-pipeline string
+    /// per line.
+    fn read_llvm_passes_file_option(args: &ArgMatches) -> Result<Option<Vec<String>>, Errors> {
+        let Some(path) = args.get_one::<String>("llvm-passes-file") else {
             return Ok(None);
         };
         let content = fs::read_to_string(path).map_err(|e| {
@@ -581,8 +589,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ))
     }
 
-    // The set of project-file declarations the invocation applies to: `--test` selects the test
-    // dependencies and test source files, and its absence the build ones.
+    /// The set of project-file declarations the invocation applies to: `--test` selects the test
+    /// dependencies and test source files, and its absence the build ones.
     fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
         if args.contains_id("test") {
             BuildConfigType::Test
@@ -652,7 +660,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 OPTIMIZATION_LEVEL_EXPERIMENTAL => {
                     config.set_fix_opt_level(FixOptimizationLevel::Experimental)
                 }
-                _ => panic!("Unknown optimization level: {}", opt_level),
+                _ => unreachable!(
+                    "the `--opt-level` option accepted the value `{}`, which names no optimization level",
+                    opt_level
+                ),
             }
         }
 
