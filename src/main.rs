@@ -171,7 +171,8 @@ fn run_cli() {
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
-        // .default_value(OPTIMIZATION_LEVEL_MAX) // we do not set default value because we want to check whether this option is specified by user explicitly.
+        // The option carries no default value, so that an invocation that gives it explicitly is
+        // told apart from one that leaves the level to the project file or to `--debug`.
         .help("Optimization level.");
     let disable_cpu_feature = Arg::new("disable-cpu-feature")
         .long("disable-cpu-feature")
@@ -487,7 +488,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     fn read_docs_options(m: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
         let docs_config = match &mut config.subcommand {
             SubCommand::Docs(docs_config) => docs_config,
-            _ => panic!("Invalid subcommand."),
+            subcommand => unreachable!(
+                "the options of `fix docs` were read into the configuration of `fix {}`",
+                subcommand.command_type_string()
+            ),
         };
 
         // `modules` option
@@ -514,7 +518,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // The path the `--output` option names for the built file, if the invocation gives that option.
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
-        m.get_one::<String>("output-file").map(|s| PathBuf::from(s))
+        m.get_one::<String>("output-file").map(PathBuf::from)
     }
 
     // Every value the option `opt_id` collects, across all of its occurrences. A subcommand that
@@ -652,7 +656,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 OPTIMIZATION_LEVEL_EXPERIMENTAL => {
                     config.set_fix_opt_level(FixOptimizationLevel::Experimental)
                 }
-                _ => panic!("Unknown optimization level: {}", opt_level),
+                _ => unreachable!(
+                    "the `--opt-level` option accepted the value `{}`, which names no optimization level",
+                    opt_level
+                ),
             }
         }
 
