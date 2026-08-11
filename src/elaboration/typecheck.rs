@@ -1,9 +1,7 @@
 use super::check_holes::collect_hole_errors;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
-use crate::misc::{
-    collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set,
-};
+use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
