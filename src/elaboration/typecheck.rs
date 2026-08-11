@@ -240,9 +240,9 @@ impl Substitution {
                     self.substitute_predicate(predicate);
                 }
             }
-            UnificationErr::Disjoint(type_node, type_node1) => {
-                *type_node = self.substitute_type(type_node);
-                *type_node1 = self.substitute_type(type_node1);
+            UnificationErr::Disjoint(ty1, ty2) => {
+                *ty1 = self.substitute_type(ty1);
+                *ty2 = self.substitute_type(ty2);
             }
         }
     }
@@ -1158,12 +1158,12 @@ impl TypeCheckContext {
                 if ok_count == 0 {
                     let mut extra_srcs = vec![];
 
-                    let err_cnt = candidates_check_res
+                    let err_count = candidates_check_res
                         .iter()
                         .filter(|cand| cand.is_err())
                         .count();
                     let expected_type = self.substitute_type(&ty);
-                    let msg = if err_cnt == 1 {
+                    let msg = if err_count == 1 {
                         let (tc, fullname, scm, e) = candidates_check_res
                             .iter()
                             .find_map(|cand| cand.as_ref().err())
@@ -1200,11 +1200,11 @@ impl TypeCheckContext {
                             .iter()
                             .filter_map(|cand| cand.as_ref().err())
                         {
-                            let cnt = candidates_errors.len() + 1;
+                            let ref_no = candidates_errors.len() + 1;
                             let scm = tc.substitution.substitute_scheme(scm);
                             let msg = e.message_with_note(format!(
                                 "- ({}) `{}` of type `{}` does not match since `{}` cannot be deduced.",
-                                cnt,
+                                ref_no,
                                 fullname.to_string(),
                                 scm.to_string(),
                                 e.to_constraint_string(),
@@ -1213,8 +1213,9 @@ impl TypeCheckContext {
                             let mut tvs = vec![];
                             scm.free_vars_to_vec(&mut tvs);
                             e.free_vars_to_vec(&mut tvs);
-                            extra_srcs
-                                .append(&mut self.create_tyvar_location_messages(&tvs, Some(cnt)));
+                            extra_srcs.append(
+                                &mut self.create_tyvar_location_messages(&tvs, Some(ref_no)),
+                            );
                         }
                         if candidates_errors.len() > 0 {
                             msg.push_str("\n");
@@ -2183,24 +2184,24 @@ impl TypeCheckContext {
     /// Reduces predicates stored in `self.predicates` as long as possible.
     /// If a predicate is unsatisfiable, returns `Err`.
     pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
-        let mut irr_preds = vec![];
+        let mut irreducible_preds = vec![];
         let mut deduction = PredicateDeduction::default();
         while let Some(pred) = self.predicates.pop() {
-            self.reduce_predicate(pred, &mut irr_preds, &mut deduction)?;
+            self.reduce_predicate(pred, &mut irreducible_preds, &mut deduction)?;
         }
-        self.predicates = irr_preds;
+        self.predicates = irreducible_preds;
         Ok(())
     }
 
-    // Reduce a predicate and add reduced predicates to `irr_preds`.
+    // Reduce a predicate and add reduced predicates to `irreducible_preds`.
     fn reduce_predicate(
         &mut self,
         pred: Predicate,
-        irr_preds: &mut Vec<Predicate>,
+        irreducible_preds: &mut Vec<Predicate>,
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env.aliases)? {
-            self.reduce_predicate_noalias(pred, irr_preds, deduction)?;
+            self.reduce_predicate_noalias(pred, irreducible_preds, deduction)?;
         }
         Ok(())
     }
@@ -2210,7 +2211,7 @@ impl TypeCheckContext {
     fn reduce_predicate_noalias(
         &mut self,
         mut pred: Predicate,
-        irr_preds: &mut Vec<Predicate>,
+        irreducible_preds: &mut Vec<Predicate>,
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
@@ -2264,7 +2265,13 @@ impl TypeCheckContext {
                         ctx_pred
                     })
                     .collect();
-                self.reduce_instance_context(&pred, &pred_str, context, irr_preds, deduction)?;
+                self.reduce_instance_context(
+                    &pred,
+                    &pred_str,
+                    context,
+                    irreducible_preds,
+                    deduction,
+                )?;
                 deduction.settled.insert(pred_str);
                 return Ok(());
             } else if !unifiable {
@@ -2278,7 +2285,7 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
-        irr_preds.push(pred);
+        irreducible_preds.push(pred);
         deduction.settled.insert(pred_str);
         return Ok(());
     }
@@ -2290,13 +2297,13 @@ impl TypeCheckContext {
         pred: &Predicate,
         pred_str: &str,
         context: Vec<Predicate>,
-        irr_preds: &mut Vec<Predicate>,
+        irreducible_preds: &mut Vec<Predicate>,
         deduction: &mut PredicateDeduction,
     ) -> Result<(), UnifOrOtherErr> {
         deduction.enter(pred, pred_str);
         let deduced = context
             .into_iter()
-            .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irr_preds, deduction));
+            .try_for_each(|ctx_pred| self.reduce_predicate(ctx_pred, irreducible_preds, deduction));
         deduction.leave();
         deduced
     }
@@ -2764,6 +2771,10 @@ impl PredicateDeduction {
     }
 }
 
+/// A constraint that type checking required and could not settle.
+///
+/// A report names the constraint, and adds what the deduction of it did where the deduction rather
+/// than the constraint is what fails.
 #[derive(Clone)]
 pub enum UnificationErr {
     /// No instance the program declares gives the predicate.
@@ -2774,10 +2785,13 @@ pub enum UnificationErr {
     /// Deducing the predicate asks for one on a deeper type, and that one for a deeper one again, so
     /// the deduction does not end. Carries the way down, deepest last.
     Endless(Vec<Predicate>),
+    /// Two types that are required to be equal and that unification could not make equal.
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl UnificationErr {
+    /// The constraint the report names, printed: the predicate that cannot be deduced, or an
+    /// equation between the two types that cannot be made equal.
     pub fn to_constraint_string(&self) -> String {
         match self {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
@@ -2831,7 +2845,7 @@ impl UnificationErr {
         }
     }
 
-    // Append free type variables to a buffer of type Vec.
+    /// Appends to `buf` the type variables free in the types this error carries.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         match self {
             UnificationErr::Unsatisfiable(p) => p.free_vars_to_vec(buf),
@@ -2882,8 +2896,12 @@ impl UnificationErr {
     }
 }
 
+/// What a step of type checking fails with: a constraint it could not settle, or errors raised for
+/// any other reason.
 pub enum UnifOrOtherErr {
+    /// A constraint the step required and could not settle.
     UnifErr(UnificationErr),
+    /// Errors raised for any other reason, carried as they are.
     Others(Errors),
 }
 
@@ -2913,12 +2931,21 @@ impl From<UnificationErr> for UnifOrOtherErr {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::TypeCheckContext;
     use crate::ast::expr::{
         expr_abs, expr_app, expr_array_lit, expr_eval, expr_ffi_call, expr_if, expr_let,
-        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var,
+        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var, ExprNode,
     };
+    use crate::ast::kind_scope::KindEnv;
+    use crate::ast::name::FullName;
+    use crate::ast::pattern::PatternNode;
+    use crate::ast::program::TypeEnv;
+    use crate::ast::traits::TraitEnv;
+    use crate::ast::types::TyCon;
     use crate::elaboration::typecheckcache::MemoryCache;
+    use crate::fixstd::builtin::make_bool_ty;
+    use crate::misc::Map;
+    use std::sync::Arc;
 
     /// Context over empty environments: the fallback typing reads only the
     /// fresh-type-variable counter, so no program state is needed.

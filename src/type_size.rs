@@ -163,6 +163,7 @@ fn no_size_in_place(
 /// where a type reached from itself at a larger argument shows itself. The type actually at fault
 /// is one the walk built on the way, and printing that one would print a term as deep as the bound.
 fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
+    /// One type as the report shows it, cut short where it is too long to show whole.
     fn shorten(ty: &Arc<TypeNode>) -> String {
         shorten_for_report(ty.to_string())
     }
@@ -171,15 +172,15 @@ fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
     /// visible, and short enough that the types printed are ones the reader can read.
     const SHOWN_STEPS: usize = 3;
 
-    let shown = asked_for
+    let steps = asked_for
         .iter()
         .take(SHOWN_STEPS)
         .map(|ty| format!("`{}`", shorten(ty)))
         .collect::<Vec<_>>();
-    let way_down = if shown.is_empty() {
+    let way_down = if steps.is_empty() {
         String::new()
     } else {
-        format!(" ({} -> ...)", shown.join(" -> "))
+        format!(" ({} -> ...)", steps.join(" -> "))
     };
     format!(
         "`{}` has no size: laying it out asks for types nested more than {} deep{}, so it needs \
