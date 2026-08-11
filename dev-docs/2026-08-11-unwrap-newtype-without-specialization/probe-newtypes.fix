@@ -1,0 +1,49 @@
+module Main;
+
+// A newtype of kind `*->*` that is not `IO`.
+type M a = unbox struct { r : I64 -> (I64, a) };
+
+// A newtype of kind `*`, over a type that holds a buffer.
+type Name = unbox struct { data : Array U8 };
+
+// A newtype whose one field is another newtype.
+type NN a = unbox struct { inner : M a };
+
+// A newtype that itself takes a higher-kinded parameter.
+type [f : *->*] W f = unbox struct { x : f I64 };
+
+// A kept boxed struct carrying an unsaturated newtype.
+type [f : *->*] Foo f = box struct { data : f I64 };
+
+// A kept boxed struct whose declared field type names a newtype directly.
+type Holder = box struct { m : M I64, k : I64 };
+
+run_m : M a -> I64 -> (I64, a);
+run_m = |m, i| (m.@r)(i);
+
+main : IO ();
+main = (
+    let m : M I64 = M { r : |i| (i + 1, i * 2) };
+    let (s1, v1) = run_m(m, 10);
+
+    // `mod_` punches the field out and plugs it back in.
+    let m2 = m.mod_r(|f| |i| f(i + 100));
+    let (s2, v2) = run_m(m2, 20);
+
+    let n : Name = Name { data : "abc".get_bytes };
+    let nlen = n.@data.get_size;
+
+    let nn : NN I64 = NN { inner : m };
+    let (s3, v3) = run_m(nn.@inner, 30);
+
+    let w : W M = W { x : m };
+    let (s4, v4) = run_m(w.@x, 40);
+
+    let foo : Foo M = Foo { data : m };
+    let (s5, v5) = run_m(foo.@data, 50);
+
+    let h : Holder = Holder { m : m, k : 7 };
+    let (s6, v6) = run_m(h.@m, 60);
+
+    println((s1 + v1 + s2 + v2 + nlen + s3 + v3 + s4 + v4 + s5 + v5 + s6 + v6 + h.@k).to_string)
+);
