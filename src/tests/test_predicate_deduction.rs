@@ -276,7 +276,7 @@ main = (
     test_source_fail(
         &source_nesting(510),
         Configuration::develop_mode(),
-        "so the deduction does not end",
+        "past the depth the compiler settles a constraint about",
     );
 }
 
@@ -343,5 +343,42 @@ main = println(pick(Foo { x : 1 }, 5).to_string);
         &source,
         Configuration::develop_mode(),
         "Deducing it needs itself",
+    );
+}
+
+/// A deduction that takes a first step and then circles among the steps after it: the report shows
+/// the circle the deduction closes on rather than the step that led into it.
+#[test]
+pub fn test_circular_instance_context_reached_after_a_first_step() {
+    let source = r##"
+module Main;
+
+trait a : A {}
+trait a : B {}
+trait a : C {}
+
+type Foo a = unbox struct { x : a };
+
+impl [Foo a : B] Foo a : A {}
+impl [Foo a : C] Foo a : B {}
+impl [Foo a : B] Foo a : C {}
+
+need_a : [a : A] a -> I64;
+need_a = |_| 0;
+
+g : I64 -> I64;
+g = |_| need_a(Foo { x : 42 });
+
+main : IO ();
+main = println(g(0).to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "Deducing it needs itself: `Main::Foo Std::I64 : Main::B` -> \
+             `Main::Foo Std::I64 : Main::C` -> `Main::Foo Std::I64 : Main::B`."
+        ),
+        "the circle the deduction closes on went unreported:\n{}",
+        errmsg
     );
 }
