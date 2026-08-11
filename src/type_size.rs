@@ -31,23 +31,10 @@
 //! type.
 
 use crate::ast::program::TypeEnv;
-use crate::ast::types::TypeNode;
-use crate::misc::{grow_stack, Set};
+use crate::ast::types::{TypeNode, MAX_TYPE_DEPTH};
+use crate::misc::{grow_stack, shorten_for_report, Set};
 use crate::object::{ty_to_object_ty, ObjectFieldType};
 use std::sync::Arc;
-
-/// How deeply a single type may nest before it is called endless.
-///
-/// This is a property of one type, not of the program: a chain of a thousand types that each hold
-/// the next is a thousand types of depth one, and a project keeps compiling however many such types
-/// it gains. A type reached from itself at a larger argument, on the other hand, gains a level at
-/// every step and passes any bound.
-///
-/// Over the benchmark corpus and the examples the deepest type reached is 10; a type written with
-/// 25 nested tuples reaches 27. The bound also caps how deep the walks over a type go — hashing it,
-/// substituting into it, printing it — so raising it costs stack on the programs it exists to
-/// reject.
-const MAX_TYPE_DEPTH: usize = 500;
 
 /// What the walk carries from one root to the next, so that a type is answered once however many
 /// values carry it.
@@ -176,31 +163,24 @@ fn no_size_in_place(
 /// where a type reached from itself at a larger argument shows itself. The type actually at fault
 /// is one the walk built on the way, and printing that one would print a term as deep as the bound.
 fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
-    /// How much of a type to print before cutting it short. A type that trips the bound can be a
-    /// term of any size, and the whole of one says no more than its beginning does.
-    const MAX_SHOWN_CHARS: usize = 200;
-
+    /// One type as the report shows it, cut short where it is too long to show whole.
     fn shorten(ty: &Arc<TypeNode>) -> String {
-        let text = ty.to_string();
-        match text.char_indices().nth(MAX_SHOWN_CHARS) {
-            Some((cut, _)) => format!("{}...", &text[..cut]),
-            None => text,
-        }
+        shorten_for_report(ty.to_string())
     }
 
     /// How many steps of the way down to show. Enough for one turn of a growing family to be
     /// visible, and short enough that the types printed are ones the reader can read.
     const SHOWN_STEPS: usize = 3;
 
-    let shown = asked_for
+    let steps = asked_for
         .iter()
         .take(SHOWN_STEPS)
         .map(|ty| format!("`{}`", shorten(ty)))
         .collect::<Vec<_>>();
-    let way_down = if shown.is_empty() {
+    let way_down = if steps.is_empty() {
         String::new()
     } else {
-        format!(" ({} -> ...)", shown.join(" -> "))
+        format!(" ({} -> ...)", steps.join(" -> "))
     };
     format!(
         "`{}` has no size: laying it out asks for types nested more than {} deep{}, so it needs \
