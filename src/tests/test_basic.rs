@@ -11659,6 +11659,78 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A struct that takes a parameter of a higher kind holds its field at the type that parameter
+/// gives it, and at `IO` that is a type the compiler replaces with its one field. Updating a field
+/// holds the rest of the struct with that field punched out, so the field that stays is laid out at
+/// the closure the replacement leaves, boxed and unboxed alike.
+#[test]
+pub fn test_field_operations_on_a_higher_kinded_type_whose_field_becomes_a_closure() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64, n : I64 };
+type [f : *->*] B f = box struct { d : f I64, n : I64 };
+
+main : IO ();
+main = (
+    let h : H IO = H { d : pure(1), n : 10 };
+    let v = *h.@d;
+    assert_eq(|_|"", v, 1);;
+    let h = h.mod_d(|io| io.map(|x| x + 100));
+    let v = *h.@d;
+    assert_eq(|_|"", v, 101);;
+    let h = h.set_n(20);
+    let t : (I64, H IO) = h.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 20);;
+    let h = t.@1;
+    assert_eq(|_|"", h.@n, 21);;
+    let H { d : io, n : n } = h;
+    let v = *io;
+    assert_eq(|_|"", v, 101);;
+    assert_eq(|_|"", n, 21);;
+    let b : B IO = B { d : pure(2), n : 30 };
+    let b = b.mod_d(|io| io.map(|x| x * 3));
+    let v = *b.@d;
+    assert_eq(|_|"", v, 6);;
+    let t : (I64, B IO) = b.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 30);;
+    assert_eq(|_|"", t.@1.@n, 31);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A union that takes a parameter of a higher kind carries its variant at the type that parameter
+/// gives it, and at `IO` that is a type the compiler replaces with its one field. Making a value of
+/// the variant, asking which variant a value is, and taking the payload out all work on the closure
+/// the replacement leaves, boxed and unboxed alike.
+#[test]
+pub fn test_higher_kinded_union_whose_variant_becomes_a_closure() {
+    let source = r##"
+module Main;
+
+type [f : *->*] U f = unbox union { wrapped : f I64, plain : Bool };
+type [f : *->*] B f = box union { wrapped : f I64, plain : Bool };
+
+main : IO ();
+main = (
+    let u : U IO = U::wrapped(pure(42));
+    let n = *u.as_wrapped;
+    assert_eq(|_|"", n, 42);;
+    let u : U IO = U::plain(true);
+    assert_eq(|_|"", u.is_plain, true);;
+    let b : B IO = B::wrapped(pure(7));
+    let m = *b.as_wrapped;
+    assert_eq(|_|"", m, 7);;
+    let b : B IO = B::plain(false);
+    assert_eq(|_|"", b.is_wrapped, false);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
 // one, all three reached from one cycle of types. The compiler rebuilds each of them per
 // type-argument list, keeping a union's variants and a boxed struct's boxedness, and the same
