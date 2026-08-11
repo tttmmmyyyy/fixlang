@@ -395,7 +395,7 @@ fn run_cli() {
                 .help("Output the result in JSON format. NOTE: this option is experimental and may be removed in the future."),
         );
 
-    let mut deps_subc = deps
+    let deps_subc = deps
         .subcommand(deps_install)
         .subcommand(deps_update)
         .subcommand(deps_add)
@@ -443,7 +443,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
          This command checks if the project has errors, and for each source file,\n\
          collects all referenced names and rewrites import statements.",
     );
-    let mut edit_subc = App::new("edit")
+    let edit_subc = App::new("edit")
         .about("Edit source code.")
         .subcommand(edit_explicit_import);
 
@@ -451,7 +451,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     let check_subc = App::new("check")
         .about("Checks whether a Fix project compiles without errors. Type-checks all entities including test code.");
 
-    let app = App::new("fix")
+    let mut app = App::new("fix")
         .bin_name("fix")
         .version(VERSION)
         .propagate_version(true)
@@ -463,10 +463,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(test_subc)
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
-        .subcommand(deps_subc.clone())
+        .subcommand(deps_subc)
         .subcommand(docs_subc)
         .subcommand(init_subc)
-        .subcommand(edit_subc.clone())
+        .subcommand(edit_subc)
         .subcommand(check_subc);
 
     // Every path the option `opt_id` collects, across all of its occurrences.
@@ -770,11 +770,22 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         config
     }
 
+    // Print the help of the subcommand `name`, as `fix <name> --help` prints it. Taking the
+    // subcommand from the built `app` is what heads the help with the version and names it by the
+    // path the user types.
+    fn print_subcommand_help(app: &mut App, name: &str) {
+        app.find_subcommand_mut(name)
+            .expect("a subcommand the command line reached is absent from the command")
+            .print_help()
+            .unwrap();
+    }
+
     let fix_config = panic_if_err(ConfigFile::load());
 
-    match app.get_matches().subcommand() {
+    let matches = app.get_matches_mut();
+    match matches.subcommand() {
         Some(("version", _args)) => {
-            println!("fix {}", VERSION);
+            print!("{}", app.render_version());
             process::exit(0);
         }
         Some(("build", args)) => {
@@ -802,7 +813,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             Some(("list", args)) => {
                 deps::deps_list_command(args, &fix_config);
             }
-            _ => deps_subc.print_help().unwrap(),
+            _ => print_subcommand_help(&mut app, "deps"),
         },
         Some(("language-server", _args)) => {
             launch_language_server();
@@ -832,7 +843,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             Some(("explicit-import", _args)) => {
                 panic_if_err(edit_explict_import::run_explicit_import_command());
             }
-            _ => edit_subc.print_help().unwrap(),
+            _ => print_subcommand_help(&mut app, "edit"),
         },
         _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
     }

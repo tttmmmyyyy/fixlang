@@ -71,6 +71,22 @@ mod integration_tests {
         );
     }
 
+    /// A subcommand prints its own help when the command line names none of its subcommands, and
+    /// that help is headed by the version as well, so no path to a help message loses it.
+    #[test]
+    fn test_a_subcommand_help_reached_without_a_subcommand_is_headed_by_the_version() {
+        let version = version_line();
+        let version = version
+            .strip_prefix("fix ")
+            .expect("`fix --version` answered a line that does not begin with the command name");
+        for subcommand in ["deps", "edit"] {
+            assert_eq!(
+                first_line(&run(&[subcommand])),
+                format!("fix-{} {}", subcommand, version)
+            );
+        }
+    }
+
     /// The line under the version says what `fix` is, so the help alone tells a reader who has
     /// never seen Fix what they are holding.
     #[test]
