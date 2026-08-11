@@ -163,6 +163,7 @@ fn no_size_in_place(
 /// where a type reached from itself at a larger argument shows itself. The type actually at fault
 /// is one the walk built on the way, and printing that one would print a term as deep as the bound.
 fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
+    /// One type as the report shows it, cut short where it is too long to show whole.
     fn shorten(ty: &Arc<TypeNode>) -> String {
         shorten_for_report(ty.to_string())
     }

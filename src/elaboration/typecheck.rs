@@ -2771,6 +2771,10 @@ impl PredicateDeduction {
     }
 }
 
+/// A constraint that type checking required and could not settle.
+///
+/// A report names the constraint, and adds what the deduction of it did where the deduction rather
+/// than the constraint is what fails.
 #[derive(Clone)]
 pub enum UnificationErr {
     /// No instance the program declares gives the predicate.
@@ -2781,10 +2785,13 @@ pub enum UnificationErr {
     /// Deducing the predicate asks for one on a deeper type, and that one for a deeper one again, so
     /// the deduction does not end. Carries the way down, deepest last.
     Endless(Vec<Predicate>),
+    /// Two types that are required to be equal and that unification could not make equal.
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl UnificationErr {
+    /// The constraint the report names, printed: the predicate that cannot be deduced, or an
+    /// equation between the two types that cannot be made equal.
     pub fn to_constraint_string(&self) -> String {
         match self {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
@@ -2831,7 +2838,7 @@ impl UnificationErr {
         }
     }
 
-    // Append free type variables to a buffer of type Vec.
+    /// Appends to `buf` the type variables free in the types this error carries.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         match self {
             UnificationErr::Unsatisfiable(p) => p.free_vars_to_vec(buf),
@@ -2882,8 +2889,12 @@ impl UnificationErr {
     }
 }
 
+/// What a step of type checking fails with: a constraint it could not settle, or errors raised for
+/// any other reason.
 pub enum UnifOrOtherErr {
+    /// A constraint the step required and could not settle.
     UnifErr(UnificationErr),
+    /// Errors raised for any other reason, carried as they are.
     Others(Errors),
 }
 
