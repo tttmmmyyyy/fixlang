@@ -83,26 +83,26 @@ impl TypeEnv {
         }
     }
 
-    /// Makes a value of each newtype in `tycons` a value of its one field: records them, then
+    /// Makes a value of each newtype in `newtypes` a value of its one field: records them, then
     /// rewrites the stored declarations so that no field type this environment reports has one of
     /// them saturated in it.
     ///
     /// The declarations are read as they stand while they are rewritten, so each one is unwrapped
     /// from the same starting point.
-    pub fn unwrap_newtypes(&mut self, tycons: Set<TyCon>) {
-        for tycon in &tycons {
+    pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
+        for tycon in &newtypes {
             assert!(
                 self.tycons.contains_key(tycon),
                 "`{}` is unwrapped, though this environment holds no declaration of it.",
                 tycon.to_string()
             );
         }
-        self.unwrapped_newtypes = Arc::new(tycons);
-        let declared = self.clone();
+        self.unwrapped_newtypes = Arc::new(newtypes);
+        let declared_type_env = self.clone();
         let mut rewritten = self.tycons.as_ref().clone();
         for (_tycon, tycon_info) in &mut rewritten {
             for field in &mut tycon_info.fields {
-                field.ty = field.ty.unwrap_newtypes(&declared);
+                field.ty = field.ty.unwrap_newtypes(&declared_type_env);
             }
         }
         self.tycons = Arc::new(rewritten);

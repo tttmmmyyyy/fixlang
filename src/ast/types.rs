@@ -932,7 +932,7 @@ impl TypeNode {
     /// meet a punched type wants this one only to lay the fields out or to address one by its index;
     /// `unpunched_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
-        self.instance_field_types(self.toplevel_tycon_info_ref(type_env), type_env)
+        self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)
     }
 
     /// `self` with every unwrapped newtype it applies saturated replaced by the type of that
@@ -944,7 +944,7 @@ impl TypeNode {
     /// arguments, and an unsaturated occurrence is not a type any value has — a type of kind `*`
     /// headed by a type constructor is saturated.
     pub fn unwrap_newtypes(self: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode> {
-        self.unwrap_newtypes_sharing(type_env, &mut Map::default())
+        self.unwrap_newtypes_memoized(type_env, &mut Map::default())
     }
 
     /// `unwrap_newtypes`, answering from `unwrapped` a node the walk has already reached.
@@ -954,7 +954,7 @@ impl TypeNode {
     /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
     /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
     /// one that was walked.
-    fn unwrap_newtypes_sharing(
+    fn unwrap_newtypes_memoized(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
         unwrapped: &mut Map<Arc<TypeNode>, Arc<TypeNode>>,
@@ -962,13 +962,13 @@ impl TypeNode {
         if let Some(ty) = unwrapped.get(self) {
             return ty.clone();
         }
-        let ty = self.unwrap_newtypes_walk(type_env, unwrapped);
+        let ty = self.unwrap_newtypes_node(type_env, unwrapped);
         unwrapped.insert(self.clone(), ty.clone());
         ty
     }
 
     /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
-    fn unwrap_newtypes_walk(
+    fn unwrap_newtypes_node(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
         unwrapped: &mut Map<Arc<TypeNode>, Arc<TypeNode>>,
@@ -979,8 +979,8 @@ impl TypeNode {
                     if tycon_info.fields[0].is_punched {
                         return make_unit_ty();
                     }
-                    let field_ty = self.substitute_type_arguments(tycon_info)[0].clone();
-                    return field_ty.unwrap_newtypes_sharing(type_env, unwrapped);
+                    let field_ty = self.declared_field_types(tycon_info)[0].clone();
+                    return field_ty.unwrap_newtypes_memoized(type_env, unwrapped);
                 }
             }
         }
@@ -988,8 +988,8 @@ impl TypeNode {
             Type::TyVar(_) => self.clone(),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => {
-                let new_fun_ty = fun_ty.unwrap_newtypes_sharing(type_env, unwrapped);
-                let new_arg_ty = arg_ty.unwrap_newtypes_sharing(type_env, unwrapped);
+                let new_fun_ty = fun_ty.unwrap_newtypes_memoized(type_env, unwrapped);
+                let new_arg_ty = arg_ty.unwrap_newtypes_memoized(type_env, unwrapped);
                 if Arc::ptr_eq(&new_fun_ty, fun_ty) && Arc::ptr_eq(&new_arg_ty, arg_ty) {
                     return self.clone();
                 }
@@ -1016,12 +1016,12 @@ impl TypeNode {
         tycon_info: &TyConInfo,
         type_env: &TypeEnv,
     ) -> Vec<Arc<TypeNode>> {
-        let mut field_types = self.substitute_type_arguments(tycon_info);
-        let takes_higher_kinded_argument = tycon_info.tyvars.iter().any(|tv| !tv.kind.is_star());
-        if takes_higher_kinded_argument {
+        let mut field_types = self.declared_field_types(tycon_info);
+        let takes_higher_kinded_parameter = tycon_info.tyvars.iter().any(|tv| !tv.kind.is_star());
+        if takes_higher_kinded_parameter {
             let mut unwrapped = Map::default();
             for field_ty in &mut field_types {
-                *field_ty = field_ty.unwrap_newtypes_sharing(type_env, &mut unwrapped);
+                *field_ty = field_ty.unwrap_newtypes_memoized(type_env, &mut unwrapped);
             }
         }
         field_types
@@ -1031,7 +1031,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    fn substitute_type_arguments(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
+    fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
         let mut subst = Substitution::default();
@@ -1053,7 +1053,7 @@ impl TypeNode {
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
-        let tycon_info = self.toplevel_tycon_info_ref(type_env);
+        let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
             .into_iter()
             .enumerate()
@@ -1377,13 +1377,7 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
-        self.toplevel_tycon_info_ref(type_env).clone()
-    }
-
-    /// The declaration of this type's outermost type constructor, borrowed from `type_env`. Panics
-    /// for a closure type, a type variable, or a type constructor absent from `type_env`.
-    fn toplevel_tycon_info_ref<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
+    pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
         type_env.tycons.get(&tycon).unwrap()
