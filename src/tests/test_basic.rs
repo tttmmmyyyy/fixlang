@@ -8996,6 +8996,107 @@ pub fn test_growth_through_an_unheld_type_argument_compiles() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A declaration reaching a higher-kinded one is specialized no further than the layout asks for,
+/// so a type argument that grows through a field holding nothing stays finite.
+#[test]
+pub fn test_growth_reaching_a_higher_kinded_declaration_compiles() {
+    let source = r##"
+        module Main;
+        type [f : *->*] H f = unbox struct { d : f I64 };
+        type Ph a = unbox struct { z : I64 };
+        type Y a = unbox struct { p : Ph (Y (Array a)), h : H Array };
+
+        main : IO ();
+        main = (
+            let y : Y I64 = Y { p : Ph { z : 0 }, h : H { d : [1] } };
+            assert_eq(|_|"", y.@p.@z, 0);;
+            assert_eq(|_|"", y.@h.@d.@(0), 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type reached only as what a function takes grows the same way one reached as a field does, and
+/// stays finite the same way.
+#[test]
+pub fn test_growth_through_a_function_typed_field_compiles() {
+    let source = r##"
+        module Main;
+        type [f : *->*] H f = unbox struct { d : f I64 };
+        type Y a = unbox struct { step : Y (Array a) -> I64, q : a, h : H Array };
+
+        main : IO ();
+        main = (
+            let y : Y I64 = Y { step : |_| 0, q : 3, h : H { d : [1] } };
+            assert_eq(|_|"", y.@q, 3);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type argument of a higher kind grows like any other: `Grow (Wrap (f I64))` reached from
+/// `Grow f` wraps the argument one more time at every step.
+#[test]
+pub fn test_growth_at_a_higher_kinded_type_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type Wrap a b = unbox struct { w : a -> b };
+        type [f : *->*] Grow f = unbox struct { g : Ph (Grow (Wrap (f I64))), n : I64 };
+
+        main : IO ();
+        main = (
+            let x : Grow (Wrap I64) = Grow { g : Ph { z : 0 }, n : 7 };
+            assert_eq(|_|"", x.@n, 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A declaration reaches itself at a larger argument through a higher-kinded parameter as well:
+/// `f b` names no constructor until `f` is given one, and `f := A` closes the circle.
+#[test]
+pub fn test_growth_through_a_higher_kinded_parameter_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] B f b = unbox struct { x : Ph (f b), n : I64 };
+        type A a = unbox struct { y : B A (a, a), n : I64 };
+
+        main : IO ();
+        main = (
+            let v : A I64 = A { y : B { x : Ph { z : 0 }, n : 1 }, n : 2 };
+            assert_eq(|_|"", v.@n, 2);;
+            assert_eq(|_|"", v.@y.@n, 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A growing family can live entirely in an argument of a higher kind: `C (Wrap g)` reached from
+/// `C g` wraps the argument one more time at every step.
+#[test]
+pub fn test_growth_confined_to_a_higher_kinded_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] Wrap f a = unbox struct { w : f a };
+        type [g : *->*] C g = unbox struct { y : Ph (C (Wrap g)), n : I64 };
+
+        main : IO ();
+        main = (
+            let c : C Array = C { y : Ph { z : 0 }, n : 9 };
+            assert_eq(|_|"", c.@n, 9);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// A type constructor reaching itself at a larger argument through a higher-kinded parameter grows
 /// like any other: the application `f b` names no constructor until `f` is given one.
 #[test]

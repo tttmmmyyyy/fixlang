@@ -18,7 +18,7 @@ use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
     make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_io_tycon, make_iostate_name,
-    make_tuple_name_abs,
+    make_tuple_name_abs, make_unit_ty,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -471,6 +471,36 @@ pub struct TypeNode {
     depth_cache: OnceLock<usize>,
 }
 
+/// What one `unwrap_newtypes` walk has answered, for each node it has reached.
+///
+/// A type is a directed acyclic graph: substituting an argument that a declaration mentions twice
+/// makes both occurrences the same node. Walking such a type as a tree costs as much as the tree it
+/// unfolds to, which doubles at every level of a type like `P (a, a)`, so the walk asks here first.
+///
+/// A node is looked up by its address, and is kept beside its answer. Keeping it is what makes the
+/// address stand for it: a walk builds types of its own on the way, and one dropped without being
+/// kept would leave its address to be taken by a node allocated later, which would then be answered
+/// with a type that is not its own.
+#[derive(Default)]
+struct UnwrappedTypes {
+    answers: Map<usize, (Arc<TypeNode>, Arc<TypeNode>)>,
+}
+
+impl UnwrappedTypes {
+    /// What this walk answered for `ty`, if it has reached it.
+    fn get(&self, ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
+        self.answers
+            .get(&(Arc::as_ptr(ty) as usize))
+            .map(|(_ty, unwrapped)| unwrapped.clone())
+    }
+
+    /// Records that this walk answers `ty` with `unwrapped`.
+    fn insert(&mut self, ty: &Arc<TypeNode>, unwrapped: Arc<TypeNode>) {
+        self.answers
+            .insert(Arc::as_ptr(ty) as usize, (ty.clone(), unwrapped));
+    }
+}
+
 impl PartialEq for TypeNode {
     fn eq(&self, other: &Self) -> bool {
         self.ty == other.ty
@@ -904,27 +934,102 @@ impl TypeNode {
     /// meet a punched type wants this one only to lay the fields out or to address one by its index;
     /// `unpunched_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
-        self.field_types_via_tycons(&type_env.tycons)
-    }
-
-    /// The types of the fields `self` declares, with `self`'s type arguments substituted for the
-    /// declaration's type variables. An array declares its element type as its one field. The
-    /// declarations are read from `tycons`.
-    pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
-        self.fields_with_instance_types(tycons)
+        self.fields_with_instance_types(type_env)
             .into_iter()
             .map(|(_, ty)| ty)
             .collect()
     }
 
-    /// The fields `self` declares, each with its type at this instance — the declaration read from
-    /// `tycons`, with `self`'s type arguments substituted for the declaration's type variables.
-    fn fields_with_instance_types(
-        &self,
-        tycons: &Map<TyCon, TyConInfo>,
-    ) -> Vec<(Field, Arc<TypeNode>)> {
+    /// `self` with every unwrapped newtype it applies saturated replaced by the type of that
+    /// newtype's one field at the instance. The form of a newtype with its one field punched out
+    /// holds nothing, so it becomes the unit type.
+    ///
+    /// With `IO` unwrapped, `IO ()` becomes `IOState -> (IOState, ())` and `Array (IO ())` becomes
+    /// `Array (IOState -> (IOState, ()))`. `Foo IO` stays as it is: the `IO` there takes no
+    /// arguments, and an unsaturated occurrence is not a type any value has — a type of kind `*`
+    /// headed by a type constructor is saturated.
+    pub fn unwrap_newtypes(self: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode> {
+        self.unwrap_newtypes_sharing(type_env, &mut UnwrappedTypes::default())
+    }
+
+    /// `unwrap_newtypes`, answering a node the walk has already reached from `unwrapped`.
+    fn unwrap_newtypes_sharing(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        unwrapped: &mut UnwrappedTypes,
+    ) -> Arc<TypeNode> {
+        if let Some(ty) = unwrapped.get(self) {
+            return ty;
+        }
+        let ty = self.unwrap_newtypes_walk(type_env, unwrapped);
+        unwrapped.insert(self, ty.clone());
+        ty
+    }
+
+    /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
+    fn unwrap_newtypes_walk(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        unwrapped: &mut UnwrappedTypes,
+    ) -> Arc<TypeNode> {
+        if let Some(tycon) = self.toplevel_tycon() {
+            if type_env.is_unwrapped_newtype(&tycon) {
+                let tycon_info = type_env.tycons.get(tycon.as_ref()).unwrap();
+                if tycon_info.tyvars.len() == self.collect_type_argments().len() {
+                    if tycon_info.fields[0].is_punched {
+                        return make_unit_ty();
+                    }
+                    let field_ty = self.substitute_type_arguments(tycon_info)[0].1.clone();
+                    return field_ty.unwrap_newtypes_sharing(type_env, unwrapped);
+                }
+            }
+        }
+        match &self.ty {
+            Type::TyVar(_) => self.clone(),
+            Type::TyCon(_) => self.clone(),
+            Type::TyApp(fun_ty, arg_ty) => {
+                let new_fun_ty = fun_ty.unwrap_newtypes_sharing(type_env, unwrapped);
+                let new_arg_ty = arg_ty.unwrap_newtypes_sharing(type_env, unwrapped);
+                if Arc::ptr_eq(&new_fun_ty, fun_ty) && Arc::ptr_eq(&new_arg_ty, arg_ty) {
+                    return self.clone();
+                }
+                self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)
+            }
+            Type::AssocTy(_, _) => {
+                unimplemented!("AssocTy is not supported in unwrap_newtypes")
+            }
+        }
+    }
+
+    /// The fields `self` declares, each with the type a value of `self` holds it at.
+    ///
+    /// Substituting a type argument can saturate an unwrapped newtype: the field `data : f ()` of
+    /// `Foo` becomes `IO ()` at `Foo IO`, and a value holds the field at what that unwraps to. Only
+    /// a declaration taking a parameter of a higher kind can saturate anything, since a parameter of
+    /// kind `*` is never applied to arguments and substituting for one leaves every application
+    /// spine as it stands; the field types a declaration is stored with are unwrapped once, by the
+    /// pass that unwraps newtypes.
+    fn fields_with_instance_types(&self, type_env: &TypeEnv) -> Vec<(Field, Arc<TypeNode>)> {
+        let tycon_info = self.toplevel_tycon_info_via_tycons(&type_env.tycons);
+        let fields = self.substitute_type_arguments(&tycon_info);
+        if tycon_info.tyvars.iter().all(|tv| tv.kind == kind_star()) {
+            return fields;
+        }
+        fields
+            .into_iter()
+            .map(|(field, ty)| {
+                let ty = ty.unwrap_newtypes(type_env);
+                (field, ty)
+            })
+            .collect()
+    }
+
+    /// The fields `tycon_info` declares, each with `self`'s type arguments substituted for the
+    /// declaration's type variables. The types are as the declaration writes them, so one can name a
+    /// newtype the program has unwrapped; `fields_with_instance_types` answers with the types values
+    /// are built at.
+    fn substitute_type_arguments(&self, tycon_info: &TyConInfo) -> Vec<(Field, Arc<TypeNode>)> {
         let args = self.collect_type_argments();
-        let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
         let mut subst = Substitution::default();
         for (i, tv) in tycon_info.tyvars.iter().enumerate() {
@@ -933,10 +1038,10 @@ impl TypeNode {
         }
         tycon_info
             .fields
-            .into_iter()
+            .iter()
             .map(|f| {
                 let ty = subst.substitute_type(&f.ty);
-                (f, ty)
+                (f.clone(), ty)
             })
             .collect()
     }
@@ -948,7 +1053,7 @@ impl TypeNode {
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
-        self.fields_with_instance_types(&type_env.tycons)
+        self.fields_with_instance_types(type_env)
             .into_iter()
             .enumerate()
             .filter(|(_, (field, _))| !field.is_punched)
@@ -960,7 +1065,7 @@ impl TypeNode {
     /// one per variant for a union, and the element field alone for `Array`. The field types carry
     /// the type parameters of the declaration; `field_types` substitutes this type's arguments in.
     pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
-        self.fields_with_instance_types(&type_env.tycons)
+        self.fields_with_instance_types(type_env)
             .into_iter()
             .map(|(field, _)| field)
             .collect()
@@ -1288,7 +1393,7 @@ impl TypeNode {
 
     /// The declaration of this type's outermost type constructor, taken from a table of type
     /// constructors held apart from a `TypeEnv`.
-    pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
+    fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
         tycons.get(&tycon).unwrap().clone()

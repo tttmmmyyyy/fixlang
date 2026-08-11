@@ -1,7 +1,6 @@
 use super::{
     closure_specialization, dead_symbol_elimination, defunctionalize_fix, inline, inline_local,
-    optimize_act, remove_hktvs, remove_tyanno, simplify_symbol_names, skip_eval, uncurry,
-    unwrap_newtype,
+    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -42,14 +41,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_remove_tyanno_optimization(),
         "remove_tyanno",
         remove_tyanno::run,
-    );
-
-    run_pass(
-        prg,
-        config,
-        config.enable_remove_hktvs_transformation(),
-        "remove_hktvs",
-        remove_hktvs::run,
     );
 
     run_pass(

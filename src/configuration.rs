@@ -710,10 +710,6 @@ impl Configuration {
         true
     }
 
-    pub fn enable_remove_hktvs_transformation(&self) -> bool {
-        self.force_all_optimizations() || self.enable_unwrap_newtype_optimization()
-    }
-
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }

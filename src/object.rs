@@ -1511,6 +1511,15 @@ pub fn ty_to_object_ty(
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
         let tc = ty.toplevel_tycon().unwrap();
+        // A value of an unwrapped newtype is a value of its one field, so no value is laid out at
+        // one. Reaching here with one means a type escaped the rewrite, and its values would
+        // silently be laid out as the struct they were to stop being: an unboxed struct of one
+        // field has the layout of that field, so nothing further down would notice.
+        assert!(
+            !type_env.is_unwrapped_newtype(&tc),
+            "A value of `{}` is laid out, though a value of this newtype has become a value of its one field.",
+            ty.to_string()
+        );
         let ti = type_env.tycons.get(&tc).unwrap();
         match ti.variant {
             TyConVariant::Primitive => {

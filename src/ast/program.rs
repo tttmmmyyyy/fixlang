@@ -54,6 +54,14 @@ pub struct TypeEnv {
     pub tycons: Arc<Map<TyCon, TyConInfo>>,
     // List of type aliases.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
+    /// The newtypes a value of which has become a value of its one field. Empty until the pass that
+    /// unwraps newtypes runs.
+    ///
+    /// A field type this environment reports has none of these saturated in it, so a value is never
+    /// built at the struct one of them was declared as. The declarations stay, because a newtype
+    /// carried by a higher-kinded type variable occurs without its arguments, and such an occurrence
+    /// still names one.
+    unwrapped_newtypes: Arc<Set<TyCon>>,
 }
 
 impl Default for TypeEnv {
@@ -61,6 +69,7 @@ impl Default for TypeEnv {
         Self {
             tycons: Arc::new(Default::default()),
             aliases: Arc::new(Default::default()),
+            unwrapped_newtypes: Arc::new(Default::default()),
         }
     }
 }
@@ -70,7 +79,18 @@ impl TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
             aliases: Arc::new(aliases),
+            unwrapped_newtypes: Arc::new(Default::default()),
         }
+    }
+
+    /// Records that a value of each newtype in `tycons` has become a value of its one field.
+    pub fn set_unwrapped_newtypes(&mut self, tycons: Set<TyCon>) {
+        self.unwrapped_newtypes = Arc::new(tycons);
+    }
+
+    /// Whether a value of `tycon` has become a value of its one field.
+    pub fn is_unwrapped_newtype(&self, tycon: &TyCon) -> bool {
+        self.unwrapped_newtypes.contains(tycon)
     }
 
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
