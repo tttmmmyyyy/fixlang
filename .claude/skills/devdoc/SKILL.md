@@ -62,7 +62,9 @@ Type and trait definitions pack much of the information about a computation, and
 
 ## An example of input and output
 
-A declaration says what a function accepts and returns; what it computes is left to the prose. For a transformation — a function that takes a value apart and builds a different one — one input and the output it produces says it in a line:
+A declaration says what a function accepts and returns; what it computes is left to the prose. For a transformation — a function that takes a value apart and builds a different one — one input and the output it produces says it in a line. Head it with **Examples**, so the reader sees at a glance that what follows is a case rather than the rule:
+
+**Examples**
 
 ```
 split(",", "a,,b")  ->  ["a", "", "b"]
