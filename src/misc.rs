@@ -4,18 +4,21 @@ use crate::{
     error::Errors,
     parse::sourcefile::SourceFile,
 };
-use colored::Colorize;
-use std::io::IsTerminal;
+use colored::{control, ColoredString, Colorize};
+use fxhash::{FxHashMap, FxHashSet};
 use std::{
-    env, fs,
+    cmp, env, fs,
     hash::Hash,
+    io::{self, ErrorKind, IsTerminal, Write},
     panic::resume_unwind,
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
 };
 
-pub type Map<K, V> = fxhash::FxHashMap<K, V>;
+pub type Map<K, V> = FxHashMap<K, V>;
 
+/// A map holding the given key-value pairs. When a key is given more than once, the value that
+/// comes last is the one kept.
 pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K, V> {
     let mut map = Map::default();
     for (k, v) in kvs {
@@ -24,8 +27,9 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
-pub type Set<T> = fxhash::FxHashSet<T>;
+pub type Set<T> = FxHashSet<T>;
 
+/// A set holding the given elements, with an element that appears several times held once.
 pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     let mut set = Set::default();
     for elem in iter {
@@ -81,6 +85,9 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values
 }
 
+/// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
+/// of the source's content — inserted before the `.fix` extension, so that two sources of the same
+/// name and different content are saved side by side.
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }
@@ -110,9 +117,6 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
         .open(&path)
     {
         Ok(mut file) => {
-            use std::io::Write;
-            // file.write_all(source.as_bytes())
-            //     .expect(&format!("Failed to write temporary file {}", file_name));
             file.write_all(source.as_bytes()).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to write temporary file \"{}\": {}",
@@ -120,7 +124,7 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
                 ))
             })?;
         }
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
             // File already exists, which is fine
         }
         Err(e) => {
@@ -170,10 +174,10 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     v.reverse();
     let mut result = vec![];
     while v.len() > 0 {
-        let len = std::cmp::min(max_size, v.len());
-        let mut w = v.split_off(v.len() - len);
-        w.reverse();
-        result.push(w);
+        let len = cmp::min(max_size, v.len());
+        let mut chunk = v.split_off(v.len() - len);
+        chunk.reverse();
+        result.push(chunk);
     }
     result
 }
@@ -255,7 +259,7 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        match std::env::current_dir() {
+        match env::current_dir() {
             Err(e) => {
                 return Err(Errors::from_msg(format!(
                     "Failed to get the current directory: {}",
@@ -298,9 +302,11 @@ impl Drop for Finally {
     }
 }
 
+/// Turns off the color of every message the compiler prints, when its error output goes somewhere
+/// other than a terminal.
 pub fn disable_colored_no_tty() {
-    if !std::io::stderr().is_terminal() {
-        colored::control::set_override(false);
+    if !io::stderr().is_terminal() {
+        control::set_override(false);
     }
 }
 
@@ -312,10 +318,9 @@ pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
 }
 
-// Styling used for interactive prompts that require the user's attention
-// (e.g. the preliminary-commands approval flow). Centralized so the look stays
-// consistent across prompt lines.
-pub fn prompt_style(s: &str) -> colored::ColoredString {
+/// Styles `s` as a line of an interactive prompt that requires the user's attention, so that every
+/// such prompt looks alike.
+pub fn prompt_style(s: &str) -> ColoredString {
     s.bright_green().bold()
 }
 
@@ -470,6 +475,9 @@ mod tests {
         }
     }
 
+    /// Splitting a command line into words: a run of spaces separates words, a quoted run — single
+    /// or double — stays one word, a backslash escapes the character after it, and an input of
+    /// spaces alone yields no word at all.
     #[test]
     fn test_split_string() {
         assert_eq!(
