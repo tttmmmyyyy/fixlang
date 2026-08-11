@@ -2854,6 +2854,7 @@ impl UnificationErr {
         /// types to be visible, and short enough that the reader can read what is printed.
         const SHOWN_STEPS: usize = 3;
 
+        /// One step of the way, quoted and cut short where the predicate is too long to show whole.
         fn shorten(pred: &Predicate) -> String {
             format!("`{}`", shorten_for_report(pred.to_string()))
         }

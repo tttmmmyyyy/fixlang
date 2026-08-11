@@ -9,11 +9,11 @@ use crate::{
     tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
 };
 
+/// `Wrap (Wrap I64) : Show` is given by the instance below, whose context asks for
+/// `Held (Wrap I64) : Show`. The associated type sends that back to `Wrap (Wrap I64) : Show`, which
+/// is what is being deduced, so nothing gives `Show` here.
 #[test]
 pub fn test_circular_instance_context_via_equality() {
-    // `Wrap (Wrap I64) : Show` is given by the instance below, whose context asks for
-    // `Held (Wrap I64) : Show`. The associated type sends that back to `Wrap (Wrap I64) : Show`,
-    // which is what is being deduced, so nothing gives `Show` here.
     let source = r##"
 module Main;
 
@@ -44,10 +44,11 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     );
 }
 
+/// The program of `test_circular_instance_context_via_equality` with an associated type that leads
+/// out of the instance instead of back into it. What the context asks for is then a constraint of
+/// its own, and no instance gives it.
 #[test]
 pub fn test_unsatisfiable_instance_context_via_equality() {
-    // The same program with an associated type that leads out of the instance instead of back into
-    // it. What the context asks for is then a constraint of its own, and no instance gives it.
     let source = r##"
 module Main;
 
@@ -78,12 +79,12 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     );
 }
 
+/// An instance of the shape used in `test_circular_instance_context_via_equality`, with everything
+/// its context asks for given: deducing `Wrap (Wrap I64) : Show` asks for `Wrap I64 : Show`, which
+/// asks for `I64 : Show`, which an instance gives outright. A deduction that reaches the trait it
+/// started from, at a smaller type each time, is what a program writes, and is accepted.
 #[test]
 pub fn test_shrinking_instance_context_via_equality() {
-    // An instance of the same shape, with everything its context asks for given: deducing
-    // `Wrap (Wrap I64) : Show` asks for `Wrap I64 : Show`, which asks for `I64 : Show`, which an
-    // instance gives outright. A deduction that reaches the trait it started from, at a smaller
-    // type each time, is what a program writes, and stays accepted.
     let source = r##"
 module Main;
 
@@ -124,11 +125,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The associated type sends the deduction to a type one `Wrap` larger every time, so it never asks
+/// for the same constraint twice. The bound on how deep a type the deduction asks about is what
+/// ends it.
 #[test]
 pub fn test_growing_instance_context_via_equality() {
-    // The associated type sends the deduction to a type one `Wrap` larger every time, so it never
-    // asks for the same constraint twice. The bound on how deep a type the deduction asks about is
-    // what ends it.
     let source = r##"
 module Main;
 
@@ -168,10 +169,10 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     );
 }
 
+/// A trait with no members: the instance says that `Foo a : Marker` holds when `Foo a : Marker`
+/// holds, which gives `Foo I64 : Marker` no more than declaring no instance would.
 #[test]
 pub fn test_circular_instance_context_of_trait_without_members() {
-    // A trait with no members: the instance says that `Foo a : Marker` holds when `Foo a : Marker`
-    // holds, which gives `Foo I64 : Marker` no more than declaring no instance would.
     let source = r##"
 module Main;
 
@@ -194,11 +195,11 @@ main = println(need_marker(Foo { x : 42 }).to_string);
     );
 }
 
+/// Two instances that each ask for what the other gives. The deduction comes back to where it
+/// started after a turn through both, and the report names the constraint it turned through, which
+/// is what leads the reader to the second instance.
 #[test]
 pub fn test_mutually_circular_instance_contexts() {
-    // Two instances that each ask for what the other gives. The deduction comes back to where it
-    // started after a turn through both, and the report names the constraint it turned through,
-    // which is what leads the reader to the second instance.
     let source = r##"
 module Main;
 
@@ -236,6 +237,7 @@ main = println(need_a(Foo { x : 42 }).to_string);
 /// would come from if the deduction did not carry the bound of its own.
 #[test]
 pub fn test_a_predicate_at_the_depth_bound_is_deduced_and_one_past_it_is_not() {
+    /// A program that requires `Marker` of `I64` wrapped in `levels` nested `W`s.
     fn source_nesting(levels: usize) -> String {
         let mut ty = "I64".to_string();
         for _ in 0..levels {
@@ -279,7 +281,7 @@ main = (
 }
 
 /// A circle is reported the same way when the constraint settles only after the whole definition
-/// has been checked, which is a report the type checker builds in another place.
+/// has been checked, where `check_type` builds the report.
 #[test]
 pub fn test_circular_instance_context_settled_at_the_end_of_a_definition() {
     let source = r##"
@@ -314,10 +316,10 @@ main = println(g(0).to_string);
     }
 }
 
+/// A trait whose only member is an associated type. The instance gives the associated type
+/// outright, but the constraint that lets the program name it is deduced from itself.
 #[test]
 pub fn test_circular_instance_context_of_associated_type() {
-    // A trait whose only member is an associated type. The instance gives the associated type
-    // outright, but the constraint that lets the program name it is deduced from itself.
     let source = r##"
 module Main;
 
