@@ -711,13 +711,11 @@ impl Configuration {
     }
 
     pub fn enable_remove_hktvs_transformation(&self) -> bool {
-        // PROBE: is the pair optional for everything downstream?
-        false
+        self.force_all_optimizations() || self.enable_unwrap_newtype_optimization()
     }
 
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
-        // PROBE: turned off together with remove_hktvs.
-        false
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_inline_optimization(&self) -> bool {
