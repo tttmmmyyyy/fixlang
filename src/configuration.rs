@@ -93,6 +93,29 @@ impl OutputFileType {
             OutputFileType::DynamicLibrary => "dylib",
         }
     }
+
+    /// What a build of this kind calls its output file when the settings name no path for it. The
+    /// name follows what the platform's linker and loader expect of the kind.
+    pub fn default_file_name(&self) -> &'static str {
+        match self {
+            OutputFileType::Executable => {
+                if env::consts::OS == "windows" {
+                    "a.exe"
+                } else {
+                    "a.out"
+                }
+            }
+            OutputFileType::DynamicLibrary => {
+                if env::consts::OS == "windows" {
+                    "lib.dll"
+                } else if env::consts::OS == "macos" {
+                    "lib.dylib"
+                } else {
+                    "lib.so"
+                }
+            }
+        }
+    }
 }
 
 /// The valgrind tool the built program is run under in `run` mode.
@@ -632,27 +655,7 @@ impl Configuration {
 
     pub fn get_output_file_path(&self) -> PathBuf {
         match &self.out_file_path {
-            None => {
-                let path = match self.output_file_type {
-                    OutputFileType::Executable => {
-                        if env::consts::OS == "windows" {
-                            "a.exe"
-                        } else {
-                            "a.out"
-                        }
-                    }
-                    OutputFileType::DynamicLibrary => {
-                        if env::consts::OS == "windows" {
-                            "lib.dll"
-                        } else if env::consts::OS == "macos" {
-                            "lib.dylib"
-                        } else {
-                            "lib.so"
-                        }
-                    }
-                };
-                PathBuf::from(path)
-            }
+            None => PathBuf::from(self.output_file_type.default_file_name()),
             Some(out_file_path) => out_file_path.clone(),
         }
     }

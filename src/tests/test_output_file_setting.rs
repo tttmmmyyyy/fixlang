@@ -8,6 +8,7 @@
 //! Each case project under `test_output_file_setting/cases` prints a line naming which program is
 //! running, which is how these tests read off what a run built.
 
+use crate::configuration::OutputFileType;
 use crate::tests::test_util::{assert_failed, assert_succeeded, run_fix, setup_case_projects};
 use std::path::Path;
 use std::process::Command;
@@ -28,26 +29,14 @@ const NAMED_OUTPUT: &str = "myprogram";
 /// have.
 const UNKNOWN_OUTPUT_TYPE: &str = "shared";
 
-/// What a build calls a dynamic library when the project does not name the output file, following
-/// `Configuration::get_output_file_path`.
+/// What a build calls a dynamic library when the project does not name the output file.
 fn dynamic_library_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "lib.dll"
-    } else if cfg!(target_os = "macos") {
-        "lib.dylib"
-    } else {
-        "lib.so"
-    }
+    OutputFileType::DynamicLibrary.default_file_name()
 }
 
-/// What a build calls an executable when the project does not name the output file, following
-/// `Configuration::get_output_file_path`.
+/// What a build calls an executable when the project does not name the output file.
 fn executable_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "a.exe"
-    } else {
-        "a.out"
-    }
+    OutputFileType::Executable.default_file_name()
 }
 
 /// Runs the program at `path` and returns what it printed on its standard output.
