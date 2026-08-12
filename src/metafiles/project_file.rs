@@ -276,14 +276,15 @@ impl ProjectFile {
     // Read the project file at `PROJECT_FILE_PATH` as the root project.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
-        let mut pf = ProjectFile::read_file(&proj_file_path)?;
-        pf.role = ProjectFileRole::Root;
-        pf.source = Some(ProjectOrigin::Local(to_absolute_path(
-            pf.path
+        let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
+        proj_file.role = ProjectFileRole::Root;
+        proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
+            proj_file
+                .path
                 .parent()
                 .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
         )?));
-        Ok(pf)
+        Ok(proj_file)
     }
 
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
@@ -346,9 +347,9 @@ impl ProjectFile {
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut data = String::new();
+        let mut hash_source = String::new();
         for dep in &deps {
-            data += serde_json::to_string(&dep).unwrap().as_str();
+            hash_source += serde_json::to_string(&dep).unwrap().as_str();
         }
 
         // Also include the content of path-based dependencies' project files in the hash.
@@ -358,13 +359,13 @@ impl ProjectFile {
             if let Some(path) = &dep.path {
                 let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
                 if let Ok(content) = fs::read_to_string(&proj_file_path) {
-                    data += &content;
+                    hash_source += &content;
                 }
             }
         }
 
         // Calculate the hash value.
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 
     pub fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
@@ -1162,8 +1163,8 @@ impl ProjectFile {
 
         // Check if the project file already has the dependencies.
         let existing_deps = self.get_dependencies(mode);
-        for prj_ver in &projs {
-            let proj_name = &prj_ver.0;
+        for proj in &projs {
+            let proj_name = &proj.0;
             if existing_deps.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
                     "The project file already has a dependency on \"{}\".",
@@ -1178,12 +1179,12 @@ impl ProjectFile {
 
             // For each project to be added, search it in the registry file.
             let mut added_indices = Set::default();
-            for (i, proj_var) in projs.iter().enumerate() {
-                let (proj_name, version) = proj_var;
+            for (i, proj) in projs.iter().enumerate() {
+                let (proj_name, version) = proj;
                 if let Some(proj_info) = reg_file
                     .projects
                     .iter()
-                    .find(|prj_info| &prj_info.name == proj_name)
+                    .find(|proj_info| &proj_info.name == proj_name)
                 {
                     // If the project is found in the registry, add it to the project file.
                     info_msg(&format!(
@@ -1257,10 +1258,10 @@ impl ProjectFile {
         }
 
         // Check if all the projects have been added.
-        for proj_var in projs {
+        for proj in projs {
             return Err(Errors::from_msg(format!(
                 "The project \"{}\" is not found in the registries.",
-                proj_var.0
+                proj.0
             )));
         }
 
@@ -1291,13 +1292,13 @@ impl ProjectFile {
     pub fn retrieve_registry_file(loc: &str) -> Result<RegistryFile, Errors> {
         let reg_file_content = if Url::parse(loc).is_ok() {
             // The location is a URL.
-            let reg_res = reqwest::blocking::get(loc).map_err(|e| {
+            let response = reqwest::blocking::get(loc).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",
                     loc, e
                 ))
             })?;
-            reg_res.text().map_err(|e| {
+            response.text().map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",
                     loc, e
