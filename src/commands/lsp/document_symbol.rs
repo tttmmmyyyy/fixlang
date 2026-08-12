@@ -31,7 +31,7 @@ pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, pro
     let mut symbols = Vec::new();
 
     // Extract type constructors from type environment
-    for (tycon, tycon_info) in program.type_env.tycons.as_ref() {
+    for (tycon, tycon_info) in program.type_env.tycons() {
         // Skip compiler-defined entities
         if tycon.name.to_string().contains('#') {
             continue;

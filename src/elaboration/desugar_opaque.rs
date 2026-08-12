@@ -514,10 +514,10 @@ pub fn resolve_opaque_type_in_type(
         };
 
         // Compute arity from the lhs of the first resolution.
-        let arity = resolutions[0].lhs.collect_type_argments().len();
+        let arity = resolutions[0].lhs.collect_type_arguments().len();
 
         // Split the type args into prefix (arity args) and rest.
-        let all_args = ty.collect_type_argments();
+        let all_args = ty.collect_type_arguments();
         assert!(
             all_args.len() >= arity,
             "Opaque tycon `{}` expects arity {} but only {} args applied",

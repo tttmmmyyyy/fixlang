@@ -8996,6 +8996,107 @@ pub fn test_growth_through_an_unheld_type_argument_compiles() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A declaration reaching a higher-kinded one is specialized no further than the layout asks for,
+/// so a type argument that grows through a field holding nothing stays finite.
+#[test]
+pub fn test_growth_reaching_a_higher_kinded_declaration_compiles() {
+    let source = r##"
+        module Main;
+        type [f : *->*] H f = unbox struct { d : f I64 };
+        type Ph a = unbox struct { z : I64 };
+        type Y a = unbox struct { p : Ph (Y (Array a)), h : H Array };
+
+        main : IO ();
+        main = (
+            let y : Y I64 = Y { p : Ph { z : 0 }, h : H { d : [1] } };
+            assert_eq(|_|"", y.@p.@z, 0);;
+            assert_eq(|_|"", y.@h.@d.@(0), 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type reached only as what a function takes grows the same way one reached as a field does, and
+/// stays finite the same way.
+#[test]
+pub fn test_growth_through_a_function_typed_field_compiles() {
+    let source = r##"
+        module Main;
+        type [f : *->*] H f = unbox struct { d : f I64 };
+        type Y a = unbox struct { step : Y (Array a) -> I64, q : a, h : H Array };
+
+        main : IO ();
+        main = (
+            let y : Y I64 = Y { step : |_| 0, q : 3, h : H { d : [1] } };
+            assert_eq(|_|"", y.@q, 3);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type argument of a higher kind grows like any other: `Grow (Wrap (f I64))` reached from
+/// `Grow f` wraps the argument one more time at every step.
+#[test]
+pub fn test_growth_at_a_higher_kinded_type_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type Wrap a b = unbox struct { w : a -> b };
+        type [f : *->*] Grow f = unbox struct { g : Ph (Grow (Wrap (f I64))), n : I64 };
+
+        main : IO ();
+        main = (
+            let x : Grow (Wrap I64) = Grow { g : Ph { z : 0 }, n : 7 };
+            assert_eq(|_|"", x.@n, 7);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A declaration reaches itself at a larger argument through a higher-kinded parameter as well:
+/// `f b` names no constructor until `f` is given one, and `f := A` closes the circle.
+#[test]
+pub fn test_growth_through_a_higher_kinded_parameter_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] B f b = unbox struct { x : Ph (f b), n : I64 };
+        type A a = unbox struct { y : B A (a, a), n : I64 };
+
+        main : IO ();
+        main = (
+            let v : A I64 = A { y : B { x : Ph { z : 0 }, n : 1 }, n : 2 };
+            assert_eq(|_|"", v.@n, 2);;
+            assert_eq(|_|"", v.@y.@n, 1);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A growing family can live entirely in an argument of a higher kind: `C (Wrap g)` reached from
+/// `C g` wraps the argument one more time at every step.
+#[test]
+pub fn test_growth_confined_to_a_higher_kinded_argument_compiles() {
+    let source = r##"
+        module Main;
+        type Ph a = unbox struct { z : I64 };
+        type [f : *->*] Wrap f a = unbox struct { w : f a };
+        type [g : *->*] C g = unbox struct { y : Ph (C (Wrap g)), n : I64 };
+
+        main : IO ();
+        main = (
+            let c : C Array = C { y : Ph { z : 0 }, n : 9 };
+            assert_eq(|_|"", c.@n, 9);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// A type constructor reaching itself at a larger argument through a higher-kinded parameter grows
 /// like any other: the application `f b` names no constructor until `f` is given one.
 #[test]
@@ -11463,10 +11564,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Types that name each other in a cycle and reach a type of a higher-kinded parameter, written once
-// in each field order. The compiler rebuilds such a type per type-argument list, and rebuilds every
-// type that names one, so each member of a cycle among them is rebuilt together with the rest of the
-// cycle however the fields are ordered.
+/// Types that name each other in a cycle and reach a type of a higher-kinded parameter, written once
+/// in each field order, so that the type of the higher-kinded parameter is reached once before the
+/// rest of the cycle and once after it.
 #[test]
 pub fn test_type_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11498,10 +11598,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A union that takes a type parameter, sitting in a cycle that reaches a type of a higher-kinded
-// parameter through the struct it names. A declaration that takes type parameters is left as it is
-// written, so the union has to be rebuilt per type-argument list together with the struct it names,
-// which the compiler decides for a union the way it decides it for a struct.
+/// A union that takes a type parameter, sitting in a cycle that reaches a type of a higher-kinded
+/// parameter through the struct it names. The variant types of a union are read at each type
+/// argument it is used at, the way a struct's field types are, so the cycle is walked through a
+/// union as well as through a struct.
 #[test]
 pub fn test_parameterized_union_in_a_type_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11526,10 +11626,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Reading, replacing, updating and destructuring the fields of a type that sits in a cycle reaching
-// a type of a higher-kinded parameter. Updating a field holds the rest of the struct in the type of
-// the struct with that field punched out, which names what the struct names and so is rebuilt
-// alongside it.
+/// Reading, replacing, updating and destructuring the fields of a type that sits in a cycle reaching
+/// a type of a higher-kinded parameter. Updating a field holds the rest of the struct in the type of
+/// the struct with that field punched out, whose remaining fields are read from the same declaration
+/// and so are laid out where the struct's are.
 #[test]
 pub fn test_field_operations_on_a_type_in_a_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11558,10 +11658,224 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
-// one, all three reached from one cycle of types. The compiler rebuilds each of them per
-// type-argument list, keeping a union's variants and a boxed struct's boxedness, and the same
-// declaration rebuilt at two different type arguments stays two types.
+/// A parameter of a higher kind given the one-element tuple, which the compiler declares as an
+/// unboxed struct of one field and therefore replaces: the field type `f I64` names a replaced type
+/// constructor only once the substitution saturates it, and here that constructor is one no source
+/// file writes.
+#[test]
+pub fn test_higher_kinded_parameter_given_the_one_element_tuple() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64, n : I64 };
+type [f : *->*] B f = box struct { d : f I64, n : I64 };
+type [f : *->*] U f = unbox union { wrapped : f I64, plain : Bool };
+
+main : IO ();
+main = (
+    let h : H Std::Tuple1 = H { d : (1,), n : 2 };
+    assert_eq(|_|"", h.@d.@0, 1);;
+    let h = h.mod_d(|(x,)| (x + 40,));
+    assert_eq(|_|"", h.@d.@0, 41);;
+    let t : (I64, H Std::Tuple1) = h.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 2);;
+    assert_eq(|_|"", t.@1.@n, 3);;
+    let b : B Std::Tuple1 = B { d : (3,), n : 4 };
+    assert_eq(|_|"", b.@d.@0, 3);;
+    let u : U Std::Tuple1 = U::wrapped((5,));
+    assert_eq(|_|"", u.as_wrapped.@0, 5);;
+    let a : Array (H Std::Tuple1) = [h, h];
+    assert_eq(|_|"", a.@(1).@d.@0, 41);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A parameter of kind `*->*->*` given a newtype that takes two parameters, and a parameter of kind
+/// `*->*` given that same newtype with one argument already applied: the occurrence that takes no
+/// arguments stays as it is, and the field the substitution saturates is replaced.
+#[test]
+pub fn test_higher_kinded_parameter_given_a_two_parameter_newtype() {
+    let source = r##"
+module Main;
+
+type NT a b = unbox struct { fn : a -> b };
+type [f : *->*->*] H2 f = unbox struct { d : f I64 Bool, n : I64 };
+type [f : *->*] H1 f = unbox struct { d : f I64, n : I64 };
+
+main : IO ();
+main = (
+    let h : H2 NT = H2 { d : NT { fn : |x| x > 0 }, n : 3 };
+    assert_eq(|_|"", (h.@d.@fn)(5), true);;
+    let h = h.mod_d(|nt| NT { fn : |x| (nt.@fn)(x) || x == 0 });
+    assert_eq(|_|"", (h.@d.@fn)(0), true);;
+    let g : H1 (NT Bool) = H1 { d : NT { fn : |b| if b { 1 } else { 0 } }, n : 4 };
+    assert_eq(|_|"", (g.@d.@fn)(true), 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A newtype whose one field is a newtype that stays, because that one and a third name each other.
+/// The chain of replacements ends at the newtype that stays.
+#[test]
+pub fn test_newtype_replacement_stops_at_a_newtype_that_stays() {
+    let source = r##"
+module Main;
+
+type A = unbox struct { x : B };
+type B = unbox struct { y : C };
+type C = unbox struct { z : Array B };
+
+main : IO ();
+main = (
+    let a = A { x : B { y : C { z : [] } } };
+    assert_eq(|_|"", a.@x.@y.@z.get_size, 0);;
+    let a = a.mod_x(|b| B { y : C { z : [b] } });
+    assert_eq(|_|"", a.@x.@y.@z.get_size, 1);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `act_` on the field of a newtype in a functor that can fail: the value is punched out of the
+/// type the newtype became, and where the action produces no value the punched form is dropped
+/// without the field being plugged back.
+#[test]
+pub fn test_act_on_a_newtype_in_a_failing_functor() {
+    let source = r##"
+module Main;
+
+type Bag = unbox struct { items : Array I64 };
+type Pair = unbox struct { l : Bag, r : I64 };
+
+main : IO ();
+main = (
+    let b = Bag { items : [1, 2, 3] };
+    let shared = b.@items;
+    let ok : Option Bag = b.act_items(|a| Option::some(a.push_back(4)));
+    assert_eq(|_|"", ok.as_some.@items.get_size, 4);;
+    assert_eq(|_|"", shared.get_size, 3);;
+    let no : Option Bag = b.act_items(|_| Option::none());
+    assert_eq(|_|"", no.is_none, true);;
+    let r : Result String Bag = b.act_items(|a| Result::ok(a.set(0, 9)));
+    assert_eq(|_|"", r.as_ok.@items.@(0), 9);;
+    let p = Pair { l : b, r : 5 };
+    let p3 : Option Pair = p.act_l(|_| Option::none());
+    assert_eq(|_|"", p3.is_none, true);;
+    assert_eq(|_|"", b.@items.get_size, 3);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A replaced newtype standing at a type argument of a type that stays: inside an array's element
+/// type, inside a union's payload, and where a declaration writes it out at a fixed argument.
+#[test]
+pub fn test_a_replaced_newtype_inside_a_type_argument() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64 };
+type Wrapper = unbox struct { w : Array (IO I64) };
+
+main : IO ();
+main = (
+    let arr : Array (H IO) = [H { d : pure(1) }, H { d : pure(2) }];
+    let a = *(arr.@(0).@d);
+    let b = *(arr.@(1).@d);
+    let wr = Wrapper { w : [pure(3), pure(4)] };
+    let c = *(wr.@w.@(0));
+    let d = *(wr.@w.@(1));
+    let opt : Option (H IO) = Option::some(H { d : pure(5) });
+    let e = *(opt.as_some.@d);
+    assert_eq(|_|"", a + b + c + d + e, 15);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A struct that takes a parameter of a higher kind holds its field at the type that parameter
+/// gives it, and at `IO` that is a type the compiler replaces with its one field. Updating a field
+/// holds the rest of the struct with that field punched out, so the field that stays is laid out at
+/// the closure the replacement leaves, boxed and unboxed alike.
+#[test]
+pub fn test_field_operations_on_a_higher_kinded_type_whose_field_becomes_a_closure() {
+    let source = r##"
+module Main;
+
+type [f : *->*] H f = unbox struct { d : f I64, n : I64 };
+type [f : *->*] B f = box struct { d : f I64, n : I64 };
+
+main : IO ();
+main = (
+    let h : H IO = H { d : pure(1), n : 10 };
+    let v = *h.@d;
+    assert_eq(|_|"", v, 1);;
+    let h = h.mod_d(|io| io.map(|x| x + 100));
+    let v = *h.@d;
+    assert_eq(|_|"", v, 101);;
+    let h = h.set_n(20);
+    let t : (I64, H IO) = h.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 20);;
+    let h = t.@1;
+    assert_eq(|_|"", h.@n, 21);;
+    let H { d : io, n : n } = h;
+    let v = *io;
+    assert_eq(|_|"", v, 101);;
+    assert_eq(|_|"", n, 21);;
+    let b : B IO = B { d : pure(2), n : 30 };
+    let b = b.mod_d(|io| io.map(|x| x * 3));
+    let v = *b.@d;
+    assert_eq(|_|"", v, 6);;
+    let t : (I64, B IO) = b.act_n(|n| (n, n + 1));
+    assert_eq(|_|"", t.@0, 30);;
+    assert_eq(|_|"", t.@1.@n, 31);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A union that takes a parameter of a higher kind carries its variant at the type that parameter
+/// gives it, and at `IO` that is a type the compiler replaces with its one field. Making a value of
+/// the variant, asking which variant a value is, and taking the payload out all work on the closure
+/// the replacement leaves, boxed and unboxed alike.
+#[test]
+pub fn test_higher_kinded_union_whose_variant_becomes_a_closure() {
+    let source = r##"
+module Main;
+
+type [f : *->*] U f = unbox union { wrapped : f I64, plain : Bool };
+type [f : *->*] B f = box union { wrapped : f I64, plain : Bool };
+
+main : IO ();
+main = (
+    let u : U IO = U::wrapped(pure(42));
+    let n = *u.as_wrapped;
+    assert_eq(|_|"", n, 42);;
+    let u : U IO = U::plain(true);
+    assert_eq(|_|"", u.is_plain, true);;
+    let b : B IO = B::wrapped(pure(7));
+    let m = *b.as_wrapped;
+    assert_eq(|_|"", m, 7);;
+    let b : B IO = B::plain(false);
+    assert_eq(|_|"", b.is_wrapped, false);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
+/// one, all three reached from one cycle of types. A union keeps its variants and a boxed struct its
+/// boxedness at every type argument it is used at, and one declaration used at two different type
+/// arguments stays two types.
 #[test]
 pub fn test_higher_kinded_union_and_boxed_struct_reached_from_a_type_cycle() {
     let source = r##"
@@ -11615,10 +11929,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
-// reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
-// type with that field punched out, which carries the type argument the value was made at, so the
-// punched form is rebuilt per type-argument list alongside the type it is punched from.
+/// Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
+/// reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
+/// type with that field punched out, which carries the type argument the value was made at, so the
+/// punched form is laid out at that argument the way the type it is punched from is.
 #[test]
 pub fn test_field_update_on_a_parameterized_type_in_a_cycle_reaching_a_higher_kinded_type_variable()
 {

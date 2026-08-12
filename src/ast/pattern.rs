@@ -49,7 +49,7 @@ impl PatternNode {
                     return None;
                 }
 
-                let type_ti = type_env.tycons.get(&type_tc)?;
+                let type_ti = type_env.tycons().get(&type_tc)?;
                 let mut field_name_to_idx = Map::default();
                 for (i, field) in type_ti.fields.iter().enumerate() {
                     field_name_to_idx.insert(field.name.clone(), i);
@@ -83,7 +83,7 @@ impl PatternNode {
                     return None;
                 }
 
-                let type_ti = type_env.tycons.get(&type_tc)?;
+                let type_ti = type_env.tycons().get(&type_tc)?;
                 let mut variant_name_to_idx = Map::default();
                 for (i, field) in type_ti.fields.iter().enumerate() {
                     variant_name_to_idx.insert(field.name.clone(), i);
@@ -792,7 +792,7 @@ impl Pattern {
         type_env: &'b TypeEnv,
     ) -> (usize, TyCon, &'b TyConInfo) {
         let tc: TyCon = TyCon::new(variant_name.namespace.clone().to_fullname());
-        let ti = type_env.tycons.get(&tc).unwrap();
+        let ti = type_env.tycons().get(&tc).unwrap();
         let variant_idx = ti
             .fields
             .iter()

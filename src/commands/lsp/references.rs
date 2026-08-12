@@ -87,7 +87,7 @@ fn find_all_references(
         EndNode::Trait(trait_id) => find_trait_references(program, trait_id, include_declaration),
         EndNode::TypeOrTrait(name) => {
             let tycon = TyCon { name: name.clone() };
-            if program.type_env.tycons.contains_key(&tycon)
+            if program.type_env.tycons().contains_key(&tycon)
                 || program.type_env.aliases.contains_key(&tycon)
             {
                 find_type_references(program, &tycon, include_declaration)

@@ -18,7 +18,7 @@ use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
     make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_io_tycon, make_iostate_name,
-    make_tuple_name_abs,
+    make_tuple_name_abs, make_unit_ty,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -115,6 +115,7 @@ impl AssocType {
         Ok(())
     }
 
+    /// The trait that declares this associated type, which is the namespace its name sits in.
     pub fn trait_id(&self) -> TraitId {
         let mut namespace = self.name.namespace.names.clone();
         let name = namespace.pop().unwrap();
@@ -123,7 +124,8 @@ impl AssocType {
         }
     }
 
-    // Convert global FullName to absolute path.
+    /// This associated type with its name spelled as an absolute path, so that it names the same
+    /// entity from any namespace.
     pub fn global_to_absolute(&self) -> AssocType {
         let mut name = self.name.clone();
         name.global_to_absolute();
@@ -145,6 +147,13 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Whether this is `*`, the kind of a type that has values of its own.
+    pub fn is_star(&self) -> bool {
+        matches!(self, Kind::Star)
+    }
+
+    /// This kind written the way Fix source writes it: `*`, `*->*`, and `(*->*)->*`, where an arrow
+    /// on the left of an arrow is parenthesized because `->` associates to the right.
     pub fn to_string(&self) -> String {
         match self {
             Kind::Star => "*".to_string(),
@@ -163,25 +172,35 @@ impl Kind {
     }
 }
 
+/// What kind of declaration a type constructor comes from, which settles how its values are laid out
+/// and what the fields recorded for it mean.
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
+    /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
+    /// `Std::IOState` is one too, and carries nothing.
     Primitive,
+    /// The function type constructor `->`, whose values are closures.
     Arrow,
+    /// `Std::Array`, whose one field is the type its elements share.
     Array,
+    /// A struct, whose fields are laid out one after another in the order they are declared.
     Struct,
+    /// A union, whose fields are its variants, sharing one payload buffer under a tag.
     Union,
-    // Dynamic object is nullble and has the destructor as the first field.
+    /// A dynamic object, which a closure holds its captured values in. Boxed and nullable, laid out
+    /// as a control block, the traverser that reaches the captured values, and then those values.
     DynamicObject,
-    // The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
-    // array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
-    // its own traverser.
+    /// The internal `#ArrayStorage` object: a control block and a raw element buffer, holding an
+    /// array's elements. Boxed; its element lifetime is driven by the owning `Array` value, not by
+    /// its own traverser.
     ArrayStorage,
-    // Opaque type generated from opaque type variable `?it`.
+    /// The type an opaque type variable `?it` is desugared into. It declares no field, and is
+    /// resolved away before code generation.
     Opaque,
 }
 
-// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
-// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
+/// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
+/// The names `CTypeSizes::get_c_types` builds for the C numeric type aliases must all appear here.
 const C_SCALAR_NAMES: &[&str] = &[
     I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
     F64_NAME, PTR_NAME,
@@ -234,7 +253,7 @@ impl TyCon {
         self: &TyCon,
         typechecker: &mut TypeCheckContext,
     ) -> Arc<TypeNode> {
-        let ti = typechecker.type_env.tycons.get(self).unwrap();
+        let ti = typechecker.type_env.tycons().get(self).unwrap();
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
@@ -798,7 +817,7 @@ impl TypeNode {
     // Returns an single element vector for a closure type.
     pub fn get_lambda_srcs(self: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
         if self.is_funptr() || self.is_closure() {
-            let mut type_args = self.collect_type_argments();
+            let mut type_args = self.collect_type_arguments();
             type_args.pop(); // Discard the destination type.
             return type_args;
         }
@@ -811,7 +830,7 @@ impl TypeNode {
     // For a lambda type (i.e., a closure or a function pointer), return the destination type.
     pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
         if self.is_funptr() || self.is_closure() {
-            let mut type_args = self.collect_type_argments();
+            let mut type_args = self.collect_type_arguments();
             type_args.pop().unwrap()
         } else {
             panic!()
@@ -927,27 +946,107 @@ impl TypeNode {
     /// meet a punched type wants this one only to lay the fields out or to address one by its index;
     /// `unpunched_field_types` answers which of the slots hold a value.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
-        self.field_types_via_tycons(&type_env.tycons)
+        self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)
     }
 
-    /// The types of the fields `self` declares, with `self`'s type arguments substituted for the
-    /// declaration's type variables. An array declares its element type as its one field. The
-    /// declarations are read from `tycons`.
-    pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
-        self.fields_with_instance_types(tycons)
-            .into_iter()
-            .map(|(_, ty)| ty)
-            .collect()
+    /// `self` with every unwrapped newtype it applies saturated replaced by the type of that
+    /// newtype's one field at the instance. The form of a newtype with its one field punched out
+    /// holds nothing, so it becomes the unit type.
+    ///
+    /// With `IO` unwrapped, `IO ()` becomes `IOState -> (IOState, ())` and `Array (IO ())` becomes
+    /// `Array (IOState -> (IOState, ()))`. `Foo IO` stays as it is: the `IO` there takes no
+    /// arguments, and an unsaturated occurrence is not a type any value has — a type of kind `*`
+    /// headed by a type constructor is saturated.
+    pub fn unwrap_newtypes(self: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TypeNode> {
+        self.unwrap_newtypes_memoized(type_env, &mut Map::default())
     }
 
-    /// The fields `self` declares, each with its type at this instance — the declaration read from
-    /// `tycons`, with `self`'s type arguments substituted for the declaration's type variables.
-    fn fields_with_instance_types(
+    /// `unwrap_newtypes`, answering from `unwrapped` a node the walk has already reached.
+    ///
+    /// A type is a directed acyclic graph: substituting an argument that a declaration mentions
+    /// twice makes both occurrences the same node. Walking such a type as a tree costs as much as
+    /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
+    /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
+    /// one that was walked.
+    fn unwrap_newtypes_memoized(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        unwrapped: &mut Map<Arc<TypeNode>, Arc<TypeNode>>,
+    ) -> Arc<TypeNode> {
+        if let Some(ty) = unwrapped.get(self) {
+            return ty.clone();
+        }
+        let ty = self.unwrap_newtypes_node(type_env, unwrapped);
+        unwrapped.insert(self.clone(), ty.clone());
+        ty
+    }
+
+    /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
+    fn unwrap_newtypes_node(
+        self: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+        unwrapped: &mut Map<Arc<TypeNode>, Arc<TypeNode>>,
+    ) -> Arc<TypeNode> {
+        if let Some(tycon) = self.toplevel_tycon() {
+            if let Some(tycon_info) = type_env.unwrapped_newtype_info(&tycon) {
+                if tycon_info.tyvars.len() == self.collect_type_arguments().len() {
+                    if tycon_info.fields[0].is_punched {
+                        return make_unit_ty();
+                    }
+                    let field_ty = self.declared_field_types(tycon_info)[0].clone();
+                    return field_ty.unwrap_newtypes_memoized(type_env, unwrapped);
+                }
+            }
+        }
+        match &self.ty {
+            Type::TyVar(_) => self.clone(),
+            Type::TyCon(_) => self.clone(),
+            Type::TyApp(fun_ty, arg_ty) => {
+                let new_fun_ty = fun_ty.unwrap_newtypes_memoized(type_env, unwrapped);
+                let new_arg_ty = arg_ty.unwrap_newtypes_memoized(type_env, unwrapped);
+                if Arc::ptr_eq(&new_fun_ty, fun_ty) && Arc::ptr_eq(&new_arg_ty, arg_ty) {
+                    return self.clone();
+                }
+                self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)
+            }
+            Type::AssocTy(_, _) => {
+                unimplemented!("AssocTy is not supported in unwrap_newtypes")
+            }
+        }
+    }
+
+    /// The type each field of `tycon_info` holds at this instance: the type the declaration writes,
+    /// with `self`'s type arguments substituted for the declaration's type variables, and with the
+    /// unwrapped newtypes the substitution saturates replaced by what they unwrap to.
+    ///
+    /// Substituting can saturate one: the field `data : f ()` of `Foo` becomes `IO ()` at `Foo IO`,
+    /// and a value holds that field at the closure `IO ()` unwraps to. Only a declaration taking a
+    /// parameter of a higher kind can saturate anything, since a parameter of kind `*` is never
+    /// applied to arguments and substituting for one leaves every application spine as it stands;
+    /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
+    /// newtypes.
+    fn instance_field_types(
         &self,
-        tycons: &Map<TyCon, TyConInfo>,
-    ) -> Vec<(Field, Arc<TypeNode>)> {
-        let args = self.collect_type_argments();
-        let tycon_info = self.toplevel_tycon_info_via_tycons(tycons);
+        tycon_info: &TyConInfo,
+        type_env: &TypeEnv,
+    ) -> Vec<Arc<TypeNode>> {
+        let mut field_types = self.declared_field_types(tycon_info);
+        let takes_higher_kinded_parameter = tycon_info.tyvars.iter().any(|tv| !tv.kind.is_star());
+        if takes_higher_kinded_parameter {
+            let mut unwrapped = Map::default();
+            for field_ty in &mut field_types {
+                *field_ty = field_ty.unwrap_newtypes_memoized(type_env, &mut unwrapped);
+            }
+        }
+        field_types
+    }
+
+    /// The type each field of `tycon_info` is declared with, with `self`'s type arguments
+    /// substituted for the declaration's type variables. The types are as the declaration writes
+    /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
+    /// with the types values are built at.
+    fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
+        let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
         let mut subst = Substitution::default();
         for (i, tv) in tycon_info.tyvars.iter().enumerate() {
@@ -956,11 +1055,8 @@ impl TypeNode {
         }
         tycon_info
             .fields
-            .into_iter()
-            .map(|f| {
-                let ty = subst.substitute_type(&f.ty);
-                (f, ty)
-            })
+            .iter()
+            .map(|field| subst.substitute_type(&field.ty))
             .collect()
     }
 
@@ -971,21 +1067,11 @@ impl TypeNode {
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
-        self.fields_with_instance_types(&type_env.tycons)
+        let tycon_info = self.toplevel_tycon_info(type_env);
+        self.instance_field_types(tycon_info, type_env)
             .into_iter()
             .enumerate()
-            .filter(|(_, (field, _))| !field.is_punched)
-            .map(|(i, (_, ty))| (i, ty))
-            .collect()
-    }
-
-    /// The fields declared for this type's outermost type constructor: one per field for a struct,
-    /// one per variant for a union, and the element field alone for `Array`. The field types carry
-    /// the type parameters of the declaration; `field_types` substitutes this type's arguments in.
-    pub fn fields(&self, type_env: &TypeEnv) -> Vec<Field> {
-        self.fields_with_instance_types(&type_env.tycons)
-            .into_iter()
-            .map(|(field, _)| field)
+            .filter(|(i, _)| !tycon_info.fields[*i].is_punched)
             .collect()
     }
 
@@ -1021,11 +1107,11 @@ impl TypeNode {
 
     /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
     /// `vec![a, b, c]`.
-    pub fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
+    pub fn collect_type_arguments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
             Type::TyApp(fun, arg) => {
-                ret.append(&mut fun.collect_type_argments());
+                ret.append(&mut fun.collect_type_arguments());
                 ret.push(arg.clone());
             }
             Type::TyCon(_) => {}
@@ -1180,82 +1266,55 @@ impl TypeNode {
         }
     }
 
+    /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
+    /// associated type application have no such constructor, and satisfy nothing.
+    fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
+        match self.toplevel_tycon() {
+            Some(tc) => pred(tc.as_ref()),
+            None => false,
+        }
+    }
+
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
     pub fn is_closure(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        tc.name == make_arrow_name_abs()
+        self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
     pub fn is_funptr(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        if let Some(_) = is_funptr_tycon(tc.as_ref()) {
-            return true;
-        } else {
-            return false;
-        }
+        self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
     pub fn is_array(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        return is_array_tycon(tc.as_ref());
+        self.toplevel_tycon_satisfies(is_array_tycon)
     }
 
     // Whether this is the internal `#ArrayStorage` type.
     pub fn is_array_storage(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => is_array_storage_tycon(tc.as_ref()),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(is_array_storage_tycon)
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        return is_punched_array_tycon(tc.as_ref());
+        self.toplevel_tycon_satisfies(is_punched_array_tycon)
     }
 
     // Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_unit(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_unit)
     }
 
     // Whether this is the type `Bool`.
     pub fn is_boolean(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_boolean(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_boolean)
     }
 
     // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
     // `IO a`.
     pub fn is_io(&self) -> bool {
-        match self.toplevel_tycon() {
-            Some(tc) => tc.is_io(),
-            None => false,
-        }
+        self.toplevel_tycon_satisfies(TyCon::is_io)
     }
 
     /// Whether the top-level type constructor of this type is a struct.
@@ -1283,38 +1342,22 @@ impl TypeNode {
     /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
     /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        is_dynamic_object_tycon(tc.as_ref())
+        self.toplevel_tycon_satisfies(is_dynamic_object_tycon)
     }
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
-        let tc = self.toplevel_tycon();
-        if tc.is_none() {
-            return false;
-        }
-        let tc = tc.unwrap();
-        is_destructor_object_tycon(tc.as_ref())
+        self.toplevel_tycon_satisfies(is_destructor_object_tycon)
     }
 
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
-        self.toplevel_tycon_info_via_tycons(&type_env.tycons)
-    }
-
-    /// The declaration of this type's outermost type constructor, taken from a table of type
-    /// constructors held apart from a `TypeEnv`.
-    pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
+    pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
-        tycons.get(&tycon).unwrap().clone()
+        type_env.tycons().get(&tycon).unwrap()
     }
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
@@ -1407,6 +1450,36 @@ impl TypeNode {
 
     // Calculate kind.
     pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
+        // The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of kind
+        // `arg_kind`, which `fun_kind` does not accept.
+        fn kind_mismatch_error(
+            application: &Arc<TypeNode>,
+            fun: &Arc<TypeNode>,
+            fun_kind: &Arc<Kind>,
+            arg: &Arc<TypeNode>,
+            arg_kind: &Arc<Kind>,
+        ) -> Errors {
+            let type_strs = TypeNode::to_string_normalize_many(&[
+                application.clone(),
+                fun.clone(),
+                arg.clone(),
+            ]);
+            let application_str = &type_strs[0];
+            let fun_str = &type_strs[1];
+            let arg_str = &type_strs[2];
+            Errors::from_msg_srcs(
+                format!(
+                    "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
+                    application_str,
+                    fun_str,
+                    fun_kind.to_string(),
+                    arg_str,
+                    arg_kind.to_string()
+                ),
+                &[application.get_source()],
+            )
+        }
+
         match &self.ty {
             Type::TyVar(tv) => Ok(tv.kind.clone()),
             Type::TyCon(tc) => Ok(kind_env.tycons.get(&tc).unwrap().clone()),
@@ -1416,49 +1489,11 @@ impl TypeNode {
                 match &*fun_kind {
                     Kind::Arrow(arg2, res) => {
                         if arg_kind != *arg2 {
-                            let type_strs = TypeNode::to_string_normalize_many(&[
-                                self.clone(),
-                                fun.clone(),
-                                arg.clone(),
-                            ]);
-                            let self_str = &type_strs[0];
-                            let fun_str = &type_strs[1];
-                            let arg_str = &type_strs[2];
-                            return Err(Errors::from_msg_srcs(
-                                format!(
-                                    "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                                    self_str,
-                                    fun_str,
-                                    fun_kind.to_string(),
-                                    arg_str,
-                                    arg_kind.to_string()
-                                ),
-                                &[self.get_source()],
-                            ));
+                            return Err(kind_mismatch_error(self, fun, &fun_kind, arg, &arg_kind));
                         }
                         Ok(res.clone())
                     }
-                    Kind::Star => {
-                        let type_strs = TypeNode::to_string_normalize_many(&[
-                            self.clone(),
-                            fun.clone(),
-                            arg.clone(),
-                        ]);
-                        let self_str = &type_strs[0];
-                        let fun_str = &type_strs[1];
-                        let arg_str = &type_strs[2];
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                                self_str,
-                                fun_str,
-                                fun_kind.to_string(),
-                                arg_str,
-                                arg_kind.to_string()
-                            ),
-                            &[self.get_source()],
-                        ));
-                    }
+                    Kind::Star => Err(kind_mismatch_error(self, fun, &fun_kind, arg, &arg_kind)),
                 }
             }
             Type::AssocTy(assoc_ty, args) => {
@@ -1750,7 +1785,7 @@ impl TypeNode {
                     let tycon = fun.toplevel_tycon();
                     if let Some(tycon) = tycon {
                         if let Some(tuple_n) = get_tuple_n(&tycon.name) {
-                            return tuple_n as usize != arg.collect_type_argments().len();
+                            return tuple_n as usize != arg.collect_type_arguments().len();
                         }
                     }
                     return true;
@@ -1766,7 +1801,7 @@ impl TypeNode {
                 if let Some(tycon) = tycon {
                     if let Some(n) = get_tuple_n(&tycon.name) {
                         // Tuple case.
-                        let args = self.collect_type_argments();
+                        let args = self.collect_type_arguments();
                         let arg_strs = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
 
                         // In this case, we use special notation when n = 1 or n = args.len().
@@ -1780,7 +1815,7 @@ impl TypeNode {
                     if tycon.name == make_arrow_name_abs() {
                         // `->` case.
                         // In this case we use special notation when the `Arrow` type is fully applied.
-                        let args = self.collect_type_argments();
+                        let args = self.collect_type_arguments();
                         if args.len() == 2 {
                             if args[0].is_closure() {
                                 return format!(

@@ -650,7 +650,7 @@ impl TypeCheckContext {
         source: &Option<Span>,
         strict: bool,
     ) -> Result<Option<&TyConInfo>, Errors> {
-        match self.type_env.tycons.get(tc) {
+        match self.type_env.tycons().get(tc) {
             Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti)),
             Some(_) if strict => Err(Errors::from_msg_srcs(
                 format!("Type `{}` is not a struct.", tc.to_string()),
@@ -827,7 +827,7 @@ impl TypeCheckContext {
                 &[&cond.source],
             ));
         };
-        let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
+        let cond_ti = self.type_env.tycons().get(&cond_tycon).unwrap().clone();
         if cond_ti.variant != TyConVariant::Union {
             return Err(Errors::from_msg_srcs(
                 format!(

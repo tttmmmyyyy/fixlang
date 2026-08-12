@@ -1361,6 +1361,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         .as_type()
 }
 
+/// The debug info type of a pointer of the target's width, presented to a debugger under `name`.
 pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
@@ -1370,7 +1371,7 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
         .as_type()
 }
 
-// The type of a union's tag, an index into the union's variants.
+/// The type of a union's tag, an index into the union's variants.
 pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
@@ -1511,7 +1512,16 @@ pub fn ty_to_object_ty(
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
         let tc = ty.toplevel_tycon().unwrap();
-        let ti = type_env.tycons.get(&tc).unwrap();
+        // A value of an unwrapped newtype is a value of its one field, so no value is laid out at
+        // one. Reaching here with one means a type escaped the rewrite, and its values would
+        // silently be laid out as the struct they were to stop being: an unboxed struct of one
+        // field has the layout of that field, so nothing further down would notice.
+        assert!(
+            !type_env.is_unwrapped_newtype(&tc),
+            "A value of `{}` is laid out, though a value of this newtype has become a value of its one field.",
+            ty.to_string()
+        );
+        let ti = type_env.tycons().get(&tc).unwrap();
         match ti.variant {
             TyConVariant::Primitive => {
                 assert!(capture.is_empty());

@@ -219,7 +219,7 @@ pub(super) fn handle_rename(
             // Resolve to either a type or a trait. Type takes precedence
             // because in `program.type_env` aliases are also registered.
             let tycon = TyCon { name: name.clone() };
-            if program.type_env.tycons.contains_key(&tycon)
+            if program.type_env.tycons().contains_key(&tycon)
                 || program.type_env.aliases.contains_key(&tycon)
             {
                 collect_type_rename_edits(program, &tycon, new_name)

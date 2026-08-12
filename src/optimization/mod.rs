@@ -12,7 +12,6 @@ mod let_elimination;
 pub mod optimization;
 mod optimize_act;
 mod pull_let;
-mod remove_hktvs;
 mod remove_tyanno;
 pub mod rename;
 mod simplify_symbol_names;
