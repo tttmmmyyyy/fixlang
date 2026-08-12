@@ -20,6 +20,7 @@ use crate::object::{create_obj, lambda_return_part_types, union_tag_type, Object
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
+use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
@@ -44,6 +45,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                     None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
                 },
             };
+            // Where the optimizer minted a body for the places that call it, say so, rather than
+            // leaving the call to LLVM's own accounting: LLVM decides such a call by a discount
+            // worth sixty times its threshold, granted only while the function is referred to
+            // exactly once, so a second reference anywhere flips the decision for the call in the
+            // hot path.
+            if func.inline_into_callers {
+                self.add_enum_attribute(fn_val, "alwaysinline", AttributeLoc::Function);
+            }
             // A function is implemented once. A name minted here that collides with one already
             // implemented would take a second body, appended after the first `entry` block and never
             // reached, dropping one of the two.

@@ -149,6 +149,7 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
                     (renamed, unit.clone())
                 })
                 .collect(),
+            inline_into_callers: func.inline_into_callers,
         }
     }
 }

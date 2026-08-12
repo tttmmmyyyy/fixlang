@@ -469,6 +469,7 @@ mod tests {
             body,
             source: None,
             borrowed_units: Set::default(),
+            inline_into_callers: false,
         }
     }
 

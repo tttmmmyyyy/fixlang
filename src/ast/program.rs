@@ -219,6 +219,11 @@ pub struct Symbol {
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
+    /// Whether the back end is asked to inline every call of this global. Closure specialization
+    /// sets it on the bodies it mints for the places that use them — a lambda lifted out of an
+    /// expression, and a copy of a function specialized on the lambdas its callers pass — where the
+    /// body is small enough to stand at those places.
+    pub inline_into_callers: bool,
     // If you add new fields, be sure to update `hash()` method.
 }
 
@@ -252,6 +257,9 @@ impl Symbol {
         if let Some(expr) = &self.expr {
             hash_source.push_str(&expr.expr.stringify().to_string());
         }
+
+        hash_source.push_str("<inline_into_callers>");
+        hash_source.push_str(&self.inline_into_callers.to_string());
 
         format!("{:x}", md5::compute(hash_source))
     }
@@ -1828,6 +1836,7 @@ impl Program {
                 generic_name: name.clone(),
                 ty: ty.clone(),
                 expr: None,
+                inline_into_callers: false,
             });
         }
         Ok(inst_name)

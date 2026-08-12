@@ -181,6 +181,8 @@ impl LiftedFix {
             generic_name: self.func_name,
             ty: self.func_expr.type_.as_ref().unwrap().clone(),
             expr: Some(self.func_expr),
+            // This body calls itself, so it stands as a function of its own.
+            inline_into_callers: false,
         }
     }
 }

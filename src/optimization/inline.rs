@@ -241,6 +241,11 @@ impl InlineCosts {
         self.costs.get(name).map_or(0, |c| c.call_count)
     }
 
+    /// How big the symbol's expression is, counted as the walk meets its nodes.
+    pub fn get_complexity(&self, name: &FullName) -> usize {
+        self.costs.get(name).map_or(0, |c| c.complexity)
+    }
+
     // After `InlineCostCalculator` has been executed, add its result to `InlineCosts`.
     fn add_cost_calculation_result(&mut self, cost: InlineCostCalculator) {
         // For each global symbol called from the symbol where `InlineCostCalculator` has been executed, add the call count.

@@ -22,7 +22,7 @@ use crate::{
     },
     graph::Graph,
     misc::{Map, Set},
-    optimization::{pull_let, rename::rename_free_names},
+    optimization::{inline, pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -151,6 +151,19 @@ The names carry one `#closure` stem, so that a dump says which pass produced the
 The capture struct's type constructor is named by `CaptureStruct`, which this pass gives the prefix
 `#CapList` and `defunctionalize_fix` gives `#FixCap`: those two are chosen together at that
 constructor and read against each other, so they sit outside this stem.
+
+## Where the bodies this pass mints belong
+
+A lifted lambda's body stands where the lambda was written, and a copy is made for the callers that
+pass the values it is keyed on: both belong at the places that call them, and a call left standing
+there costs the loop around it a call and the registers the call convention spills. So each of them
+carries `Symbol::inline_into_callers`, which code generation writes out as the `alwaysinline`
+attribute, and `keep_inline_requests_on_small_bodies` withdraws where the body is too large to sit
+at every call site.
+
+Saying it is what keeps the outcome off LLVM's own accounting, which grants a call of such a body a
+discount worth sixty times its threshold — but only while the function is referred to exactly once,
+so any second reference to it decides the call in the hot path the other way.
 
 ## Relations to other optimizations
 
@@ -570,6 +583,24 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 
     let specializable_slots = Rc::new(find_specializable_slots(&prg.symbols, &lifted.borrow()));
     realize_all(prg, &lifted, specializable_slots, show_build_times);
+    keep_inline_requests_on_small_bodies(prg);
+}
+
+/// The size a body this pass mints may reach and still be asked for at every place that calls it.
+/// Past it the back end decides on its own, because a body that large spends more registers at each
+/// call site than the call it saves: the merge loop of `Array::sort_stable` is one such body, and
+/// putting it into its caller costs half again as much work.
+const INLINABLE_BODY_COMPLEXITY_LIMIT: usize = 60;
+
+/// Leave the request to inline a minted body standing only where the body is small enough for every
+/// place that calls it to hold a copy.
+fn keep_inline_requests_on_small_bodies(prg: &mut Program) {
+    let costs = inline::calculate_inline_costs(prg);
+    for (name, sym) in &mut prg.symbols {
+        if sym.inline_into_callers {
+            sym.inline_into_callers = costs.get_complexity(name) <= INLINABLE_BODY_COMPLEXITY_LIMIT;
+        }
+    }
 }
 
 // Lift every lambda in the program to a global function, until lifting one leaves nothing more to
@@ -710,6 +741,12 @@ fn realize_all(
                 generic_name: original.generic_name.clone(),
                 ty,
                 expr: Some(trav_res.expr),
+                // A copy is made for the callers that pass the values it is keyed on, so it belongs
+                // where they are; `keep_inline_requests_on_small_bodies` decides whether it fits
+                // there. The copy that substitutes nothing is the function itself and asks for
+                // whatever the function asked for.
+                inline_into_callers: original.inline_into_callers
+                    || name != request.func_copy.origin,
             },
         );
         global_names.insert(name);
@@ -1394,6 +1431,9 @@ impl ClosureSpecializationVisitor {
             generic_name: lambda_func_name.clone(),
             ty: func_ty.clone(),
             expr: Some(func),
+            // The body stands where the lambda was written, so it belongs at the places that call
+            // it; `keep_inline_requests_on_small_bodies` decides whether it fits there.
+            inline_into_callers: true,
         });
         self.lifted
             .borrow_mut()

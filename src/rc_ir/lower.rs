@@ -232,7 +232,12 @@ impl<'a> Lowerer<'a> {
             let func_ref = FuncRef {
                 name: sym.name.clone(),
             };
-            LoweredSymbol::Func(self.lower_lambda_as_function(&expr, func_ref, vec![]))
+            LoweredSymbol::Func(self.lower_lambda_as_function(
+                &expr,
+                func_ref,
+                vec![],
+                sym.inline_into_callers,
+            ))
         } else {
             // A non-funptr symbol is a global value; lower its initializer.
             let init = self.lower_body(expr);
@@ -253,13 +258,15 @@ impl<'a> Lowerer<'a> {
 
     /// Lower a lambda into a top-level function. `captures` are the values captured from the
     /// enclosing scope (already resolved to enclosing RC IR variables), in the order the closure
-    /// stores them; for a funptr (no captures) it is empty. The body is lowered under a fresh
+    /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
+    /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
         func_ref: FuncRef,
         captures: Vec<(FullName, RcVar)>,
+        inline_into_callers: bool,
     ) -> RcFunc {
         let lam_ty = lam.type_.clone().unwrap();
         let (params, body) = lam.destructure_lam();
@@ -326,6 +333,7 @@ impl<'a> Lowerer<'a> {
             body: body_expr,
             source: lam.source.clone(),
             borrowed_units: Set::default(),
+            inline_into_callers,
         }
     }
 
@@ -486,7 +494,9 @@ impl<'a> Lowerer<'a> {
             .collect();
 
         let func_ref = self.fresh_closure_ref();
-        let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures);
+        // A lambda still written in place is reached through the closure that holds it, so its
+        // callers are not known here.
+        let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures, false);
         let previous = self.funcs.insert(func_ref.clone(), rc_func);
         assert!(
             previous.is_none(),
