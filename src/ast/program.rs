@@ -1008,7 +1008,15 @@ impl Program {
         self.add_global_value_common(name, (expr, scm), None, None, document, true)
     }
 
-    // Add a global value.
+    /// Registers a global value whose body is `expr` and whose type is `scm`.
+    ///
+    /// # Arguments
+    /// * `decl_src` — where the value's type signature is written.
+    /// * `defn_src` — where the left hand side of the value's definition is written.
+    /// * `document` — the documentation of the value, for a value whose `decl_src` is
+    ///   unavailable; otherwise the documentation is read from the source code.
+    /// * `compiler_defined_method` — marks a method the compiler generates for a type, such as
+    ///   `@{field}` or `set_{field}`, which `fix docs` leaves out.
     fn add_global_value_common(
         &mut self,
         name: FullName,
@@ -1031,7 +1039,8 @@ impl Program {
         self.add_global_value_gv(name, gv)
     }
 
-    // Add a global value.
+    /// Registers an already-built global value under `name`, reporting an error that points at
+    /// both declarations when the name is taken.
     pub fn add_global_value_gv(&mut self, name: FullName, gv: GlobalValue) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.global_values.contains_key(&name) {
@@ -1055,7 +1064,9 @@ impl Program {
         Ok(())
     }
 
-    // Add global values.
+    /// Pairs each definition with the type signature carrying the same name and registers the
+    /// pairs as global values. A name that carries two definitions, two signatures, a definition
+    /// without a signature, or a signature without a definition is reported as an error.
     pub fn add_global_values(
         &mut self,
         defns: Vec<GlobalValueDefn>,
@@ -1063,8 +1074,12 @@ impl Program {
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
+        /// The two halves of one global value, collected while pairing them up by name. A half
+        /// stays `None` until it is met.
         struct GlobalValue {
+            /// The definition, e.g. `main = println("Hello World");`.
             defn: Option<GlobalValueDefn>,
+            /// The type signature, e.g. `main : IO ();`.
             decl: Option<GlobalValueDecl>,
         }
         let mut global_values: Map<FullName, GlobalValue> = Default::default();
@@ -1239,7 +1254,10 @@ impl Program {
         Ok((te, check_errors))
     }
 
-    // Create NameResolutionEnv used for symbols defined in the specified module.
+    /// Builds the program-wide table that name resolution reads: every type constructor, trait
+    /// and associated type a capitalized name can resolve to, plus each module's import
+    /// statements. A `NameResolutionContext` fixes the module a name is written in and shares
+    /// this table.
     pub fn create_name_resolution_env(&self) -> Arc<NameResolutionEnv> {
         Arc::new(NameResolutionEnv::new(
             &self.tycon_names_with_aliases(),
