@@ -341,16 +341,7 @@ impl ProjectFile {
 
     // Calculate the hash value of the `dependencies` section.
     pub fn calculate_dependencies_hash(&self, mode: BuildConfigType) -> String {
-        // Get dependencies based on mode.
-        let mut deps = match mode {
-            BuildConfigType::Test => {
-                // Merge dependencies and test_dependencies
-                let mut all_deps = self.dependencies.clone();
-                all_deps.extend(self.test_dependencies.clone());
-                all_deps
-            }
-            BuildConfigType::Build => self.dependencies.clone(),
-        };
+        let mut deps = self.get_dependencies(mode);
 
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
@@ -577,6 +568,32 @@ impl ProjectFile {
         }
     }
 
+    /// The optimization level an `opt_level` field of this project file names, or an error pointing
+    /// at the project file when it names no level the compiler has.
+    fn read_opt_level(&self, opt_level: &str) -> Result<FixOptimizationLevel, Errors> {
+        FixOptimizationLevel::from_str(opt_level).ok_or_else(|| {
+            Errors::from_msg_srcs(
+                format!("Unknown optimization level: \"{}\"", opt_level),
+                &[&Some(self.project_file_span(0, 0))],
+            )
+        })
+    }
+
+    /// Links the libraries a `static_links` or `dynamic_links` field names, each bound to the
+    /// program in the way `link_type` describes.
+    fn link_libraries(
+        config: &mut Configuration,
+        libraries: Option<&[String]>,
+        link_type: LinkType,
+    ) {
+        let Some(libraries) = libraries else {
+            return;
+        };
+        config
+            .linked_libraries
+            .extend(libraries.iter().map(|name| (name.clone(), link_type)));
+    }
+
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
@@ -638,53 +655,33 @@ impl ProjectFile {
         }
 
         // Append static libraries.
-        if let Some(static_libs) = self.build.static_links.as_ref() {
-            config.linked_libraries.append(
-                &mut static_libs
-                    .iter()
-                    .map(|lib_name| (lib_name.clone(), LinkType::Static))
-                    .collect(),
-            );
-        }
+        Self::link_libraries(config, self.build.static_links.as_deref(), LinkType::Static);
         if mode == BuildConfigType::Test {
-            if let Some(static_libs) = self
-                .build
-                .test
-                .as_ref()
-                .and_then(|test| test.static_links.as_ref())
-            {
-                config.linked_libraries.append(
-                    &mut static_libs
-                        .iter()
-                        .map(|lib_name| (lib_name.clone(), LinkType::Static))
-                        .collect(),
-                );
-            }
+            Self::link_libraries(
+                config,
+                self.build
+                    .test
+                    .as_ref()
+                    .and_then(|test| test.static_links.as_deref()),
+                LinkType::Static,
+            );
         }
 
         // Append dynamic libraries.
-        if let Some(dynamic_libs) = self.build.dynamic_links.as_ref() {
-            config.linked_libraries.append(
-                &mut dynamic_libs
-                    .iter()
-                    .map(|lib_name| (lib_name.clone(), LinkType::Dynamic))
-                    .collect(),
-            );
-        }
+        Self::link_libraries(
+            config,
+            self.build.dynamic_links.as_deref(),
+            LinkType::Dynamic,
+        );
         if mode == BuildConfigType::Test {
-            if let Some(dynamic_libs) = self
-                .build
-                .test
-                .as_ref()
-                .and_then(|test| test.dynamic_links.as_ref())
-            {
-                config.linked_libraries.append(
-                    &mut dynamic_libs
-                        .iter()
-                        .map(|lib_name| (lib_name.clone(), LinkType::Dynamic))
-                        .collect(),
-                );
-            }
+            Self::link_libraries(
+                config,
+                self.build
+                    .test
+                    .as_ref()
+                    .and_then(|test| test.dynamic_links.as_deref()),
+                LinkType::Dynamic,
+            );
         }
 
         // Append library search paths.
@@ -816,14 +813,7 @@ impl ProjectFile {
 
         // Set optimization level.
         if let Some(opt_level) = self.build.opt_level.as_ref() {
-            if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                config.set_fix_opt_level(opt_level);
-            } else {
-                return Err(Errors::from_msg_srcs(
-                    format!("Unknown optimization level: \"{}\"", opt_level),
-                    &[&Some(self.project_file_span(0, 0))],
-                ));
-            }
+            config.set_fix_opt_level(self.read_opt_level(opt_level)?);
         }
         if mode == BuildConfigType::Test {
             if let Some(opt_level) = self
@@ -832,14 +822,7 @@ impl ProjectFile {
                 .as_ref()
                 .and_then(|test| test.opt_level.as_ref())
             {
-                if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                    config.set_fix_opt_level(opt_level);
-                } else {
-                    return Err(Errors::from_msg_srcs(
-                        format!("Unknown optimization level: \"{}\"", opt_level),
-                        &[&Some(self.project_file_span(0, 0))],
-                    ));
-                }
+                config.set_fix_opt_level(self.read_opt_level(opt_level)?);
             }
         }
 

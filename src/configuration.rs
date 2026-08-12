@@ -128,7 +128,6 @@ pub enum ValgrindTool {
     // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
     // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
     // but how can we do similar things in Fix?
-    // DataRaceDetection,
 }
 
 impl fmt::Display for ValgrindTool {
@@ -210,7 +209,6 @@ pub enum SubCommand {
 pub enum BuildConfigType {
     Build,
     Test,
-    // Lsp,
 }
 
 impl Default for BuildConfigType {
@@ -1138,14 +1136,16 @@ int main() {
         }
         let output = String::from_utf8_lossy(&output.stdout);
         let mut lines = output.lines();
-        let char = lines.next().unwrap().parse().unwrap();
-        let short = lines.next().unwrap().parse().unwrap();
-        let int = lines.next().unwrap().parse().unwrap();
-        let long = lines.next().unwrap().parse().unwrap();
-        let long_long = lines.next().unwrap().parse().unwrap();
-        let size_t = lines.next().unwrap().parse().unwrap();
-        let float = lines.next().unwrap().parse().unwrap();
-        let double = lines.next().unwrap().parse().unwrap();
+        // The program prints one size per line, in the order the fields are read here.
+        let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
+        let char = next_size();
+        let short = next_size();
+        let int = next_size();
+        let long = next_size();
+        let long_long = next_size();
+        let size_t = next_size();
+        let float = next_size();
+        let double = next_size();
         let sizes = CTypeSizes {
             char,
             short,
