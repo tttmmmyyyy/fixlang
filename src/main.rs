@@ -48,14 +48,8 @@ mod tests;
 mod tool;
 mod type_size;
 
-use crate::error::Errors;
-use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
-use clap::ArgAction;
-use clap::ArgMatches;
-use clap::PossibleValue;
-use clap::{value_parser, App, AppSettings, Arg};
-use commands::lsp::server::launch_language_server;
-use commands::{check, clean, deps, docs, run};
+use clap::{value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue};
+use commands::{check, clean, deps, docs, lsp::server::launch_language_server, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
     OutputFileType, Sanitizer, SubCommand,
@@ -66,16 +60,17 @@ use constants::{
     PROJECT_FILE_PATH,
 };
 use edit::edit_explict_import;
-use error::panic_if_err;
+use error::{panic_if_err, Errors};
 use git_version::git_version;
-use metafiles::config_file::ConfigFile;
-use metafiles::project_file::ProjectFile;
+use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
 use mimalloc::MiMalloc;
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
-use std::process;
-use std::vec::Vec;
+use misc::{disable_colored_no_tty, spawn_compiler_thread};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process,
+    vec::Vec,
+};
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
 /// through the Fix runtime instead.
