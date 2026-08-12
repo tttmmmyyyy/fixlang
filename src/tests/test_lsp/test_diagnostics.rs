@@ -108,15 +108,23 @@ mod tests {
         // during elaboration, later than the narrowing reads the parsed buffer — so the tolerant
         // run covers every value of the project, the broken implementation in `lib.fix` among
         // them.
-        let _ = ctx.complete_with_timeout("main.fix", 7, 20, Duration::from_secs(60));
+        let items = ctx.complete_with_timeout("main.fix", 7, 20, Duration::from_secs(60));
+
+        // A dot completion ranks its candidates, and the tolerant re-check is what ranks them: a
+        // reply whose candidates carry no sort key was answered without that run, and says
+        // nothing about what such a run leaves behind.
+        assert!(
+            items.iter().any(|item| item.get("sortText").is_some()),
+            "the completion after the dot is expected to rank its candidates, but none of its {} items carries a sort key",
+            items.len()
+        );
 
         ctx.client
             .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
         let after = ctx.client.get_diagnostics(lib);
         assert_eq!(
-            after.len(),
-            before.len(),
-            "the report on `lib.fix` is still expected, but its diagnostics are {:?}",
+            after, before,
+            "the same report on `lib.fix` is still expected, but its diagnostics are {:?}",
             after
         );
 
