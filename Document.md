@@ -2938,7 +2938,7 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path. The field names the file fix build writes. fix run and fix test build an executable in a temporary place and run it; giving them -o keeps that executable at the path it names.</td>
+            <td>Output file path. The field names the file fix build writes. fix run and fix test build an executable in a temporary place and run it; giving them -o keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger.</td>
         </tr>
         <tr>
             <td>output_type</td>
