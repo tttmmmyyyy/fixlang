@@ -1202,10 +1202,10 @@ impl Program {
         mut tc: TypeCheckContext,
     ) -> Result<(TypedExpr, Errors), Errors> {
         // Load type-checking cache file.
-        let cache = tc.cache.load_cache(val_name, req_scm, ver_hash);
-        if cache.is_some() {
+        let cached_te = tc.cache.load_cache(val_name, req_scm, ver_hash);
+        if cached_te.is_some() {
             // If cache is available,
-            te = cache.unwrap();
+            te = cached_te.unwrap();
             return Ok((te, Errors::empty()));
         }
 
@@ -1268,7 +1268,7 @@ impl Program {
         let target_set: Option<Set<&FullName>> = target_symbols.map(|s| s.iter().collect());
 
         // Names of global values to be checked.
-        let mut checked_names: Vec<FullName> = vec![];
+        let mut names_to_check: Vec<FullName> = vec![];
         for (name, gv) in self.global_values.iter() {
             if let Some(set) = target_set.as_ref() {
                 if !set.contains(name) {
@@ -1279,12 +1279,12 @@ impl Program {
                 SymbolExpr::Simple(_) => {
                     // Check simple values only if they are in `modules`.
                     if modules.contains(&name.module()) {
-                        checked_names.push(name.clone());
+                        names_to_check.push(name.clone());
                     }
                 }
                 SymbolExpr::Method(_) => {
                     // We filter methods by `method_impl_filter`.
-                    checked_names.push(name.clone());
+                    names_to_check.push(name.clone());
                 }
             }
         }
@@ -1296,7 +1296,7 @@ impl Program {
 
         errors.eat_err(self.resolve_namespace_and_check_type(
             tc,
-            &checked_names,
+            &names_to_check,
             method_impl_filter,
         ));
         errors.to_result()
@@ -1390,7 +1390,7 @@ impl Program {
                         let scm = member.scm.clone();
                         let scm_via_defn = member.scm_via_defn.clone();
                         let impl_src = member.expr.expr.source.clone();
-                        let def_src = gv.decl_src.clone();
+                        let decl_src = gv.decl_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
@@ -1411,7 +1411,7 @@ impl Program {
                                         &impl_src
                                             .as_ref()
                                             .map(|s| s.to_head_character()),
-                                        &def_src
+                                        &decl_src
                                             .as_ref()
                                             .map(|s| s.to_head_character()),
                                     ],

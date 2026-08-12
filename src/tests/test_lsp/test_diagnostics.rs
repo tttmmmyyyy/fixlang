@@ -18,9 +18,9 @@ mod tests {
     /// path inside it.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_lsp/cases");
+        let cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_lsp/cases");
         let project_dir = temp_dir.path().join(project_name);
-        copy_dir_recursive(&cases.join(project_name), &project_dir)
+        copy_dir_recursive(&cases_dir.join(project_name), &project_dir)
             .expect("Failed to copy test case");
         (temp_dir, project_dir)
     }
