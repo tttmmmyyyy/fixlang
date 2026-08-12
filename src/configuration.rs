@@ -1232,8 +1232,7 @@ mod tests {
     /// Two builds reuse each other's object files exactly when they agree on this hash, so each
     /// setting that reaches code generation gives the hash a value of its own.
     ///
-    /// Each setting is written to its field, so that the list names what the hash reads rather than
-    /// what a setter does on the way there.
+    /// Each setting is written to its field, so that the list names what the hash reads.
     #[test]
     fn test_object_generation_hash_separates_code_generation_settings() {
         let baseline = hash_after(|_| {});
@@ -1248,8 +1247,8 @@ mod tests {
             (
                 "fix_opt_level",
                 Box::new(|config: &mut Configuration| {
-                    // The level a lowered `FIX_MAX_OPT_LEVEL` leaves the configuration at is the
-                    // one this must not pick, so it is chosen against what is there.
+                    // `FIX_MAX_OPT_LEVEL` decides the level the configuration starts at, so the
+                    // level here is chosen to differ from the one that is there.
                     config.fix_opt_level = if config.fix_opt_level == FixOptimizationLevel::None {
                         FixOptimizationLevel::Max
                     } else {
