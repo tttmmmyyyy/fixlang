@@ -274,7 +274,8 @@ impl ProjectFile {
         }
     }
 
-    // Read the project file at `PROJECT_FILE_PATH` as the root project.
+    /// Reads the project file of the current directory as the root project of the build, with its
+    /// `role` and `source` populated.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
@@ -288,7 +289,9 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
+    /// Reads the project file at `path`, checks its fields, and checks that the project accepts the
+    /// running compiler's version. The returned file carries the default `role` and `source`, which
+    /// the loader sets to match where the file came from.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
@@ -341,7 +344,13 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    // Calculate the hash value of the `dependencies` section.
+    /// The hash that decides when the lock file has to be built again: it covers the dependency
+    /// entries this project declares, and the whole project file of each path dependency, so that a
+    /// change to what a local dependency itself depends on reaches the hash.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also covers the entries of the `test_dependencies` section.
     pub fn calculate_dependencies_hash(&self, mode: BuildConfigType) -> String {
         let mut deps = self.get_dependencies(mode);
 
@@ -369,6 +378,11 @@ impl ProjectFile {
         format!("{:x}", md5::compute(hash_source))
     }
 
+    /// Checks that `name` is a non-empty string of alphanumeric characters and hyphens.
+    ///
+    /// # Arguments
+    ///
+    /// * `span` - The place in the project file the error points at, if the name was read from one.
     pub fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
         // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
         if name.is_empty() {
@@ -1287,9 +1301,12 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Retrieve the registry file at the specified location.
-    //
-    // - `loc`: The location of the registry file, which is a url or a file path.
+    /// Retrieves the registry file at `loc` and parses it.
+    ///
+    /// # Arguments
+    ///
+    /// * `loc` - A URL the file is fetched over HTTP from, or a path it is read from. A location
+    ///   that parses as a URL is treated as one.
     pub fn retrieve_registry_file(loc: &str) -> Result<RegistryFile, Errors> {
         let reg_file_content = if Url::parse(loc).is_ok() {
             // The location is a URL.
