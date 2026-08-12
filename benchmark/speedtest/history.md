@@ -14,6 +14,24 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## b90ec410b0466aa3463fdcbcebeeb1b76e863d56
+
+Unwrapping a newtype where a field type is read instead of specializing the declaration in advance
+(#245), measured against `342d67aa`.
+
+**The corpus does not move.** The two compilers emit the same machine code: all 51 cases were built
+with both and their `--emit-llvm` and `--emit-rc-ir` output is byte-identical, with only the module
+hash normalized, so the symbol hashes were compared as they stand. The rows agree with that. Every
+instruction count that moved did so by about fourteen instructions, in both directions, which is the
+build path reaching the dynamic loader through the module hash — the same effect recorded under
+`342d67aa`, and here it lands on more cases because both rows were measured in different worktrees.
+The largest movement is 0.0068% (`sum_by_loop_iter_cap`, 206,383 to 206,397).
+
+**A row could not be written between `9b002b1b` and this one.** Row 107 of `log.csv` held two rows
+joined at a missing newline, so it carried 549 of the 275 columns the header names, and the harness
+checks that before writing: a run reached the check after measuring every case and aborted there.
+The join was undone by keeping the first of the two, the second being the row that already follows.
+
 ## 342d67aa7f2360bfdd9ab22125b0d2d11cd33e85
 
 Deciding once which one-field unboxed structs are replaced by their field (#231, #234), measured
