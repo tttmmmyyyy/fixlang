@@ -1305,13 +1305,23 @@ mod tests {
             ),
         ];
 
+        let mut settings_by_hash: Map<String, &str> = Map::default();
         for (name, edit) in settings {
+            let hash = hash_after(edit);
             assert_ne!(
-                baseline,
-                hash_after(edit),
+                baseline, hash,
                 "`{}` reaches code generation, so it belongs in the object generation hash.",
                 name
             );
+            // Two settings landing on one hash would share each other's object files, so the hash
+            // separates the settings from one another as well as from the baseline.
+            if let Some(other) = settings_by_hash.insert(hash, name) {
+                panic!(
+                    "`{}` and `{}` generate different code, so the object generation hash has to \
+                     tell them apart.",
+                    name, other
+                );
+            }
         }
     }
 }
