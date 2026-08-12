@@ -1223,9 +1223,8 @@ impl Program {
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
-        // A run that finds the expression in the cache returns it without checking it (see the
-        // cache lookup above), so the cache may hold only what a strict check accepted. Two things
-        // disqualify a result:
+        // A run whose `load_cache` finds the expression returns it without checking it, so the
+        // cache may hold only what a strict check accepted. Two things disqualify a result:
         //
         // - a tolerated diagnostic, which the next run owes the user and would not produce again;
         // - an `error_tolerant` check, which swallows every type error and reports none, so its
