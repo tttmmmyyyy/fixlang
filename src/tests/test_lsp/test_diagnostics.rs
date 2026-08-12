@@ -90,7 +90,7 @@ mod tests {
     /// its result be kept, the next strict run would answer from it and publish that file as
     /// clean — the project would not compile while the editor showed nothing.
     #[test]
-    fn test_a_completion_leaves_another_files_error_reported() {
+    fn test_a_completion_leaves_the_error_of_another_file_reported() {
         let mut ctx =
             LspCompletionCtx::setup("diagnostics-after-completion", &["lib.fix", "main.fix"]);
         let lib_file = Path::new("lib.fix");
