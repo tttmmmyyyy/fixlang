@@ -1317,11 +1317,11 @@ mod tests {
             );
             // Two settings landing on one hash would share each other's object files, so the hash
             // separates the settings from one another as well as from the baseline.
-            if let Some(other) = settings_by_hash.insert(hash, name) {
+            if let Some(other_setting) = settings_by_hash.insert(hash, name) {
                 panic!(
                     "`{}` and `{}` generate different code, so the object generation hash has to \
                      tell them apart.",
-                    name, other
+                    name, other_setting
                 );
             }
         }

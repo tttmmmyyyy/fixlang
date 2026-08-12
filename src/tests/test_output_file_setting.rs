@@ -23,19 +23,19 @@ const PROGRAM_OUTPUT: &str = "I am the program";
 const TEST_OUTPUT: &str = "I am the test suite";
 
 /// The output file the `named_output` project asks for.
-const NAMED_OUTPUT: &str = "myprogram";
+const NAMED_OUTPUT_FILE: &str = "myprogram";
 
 /// The kind of output file the `unknown_output_type` project asks for, which the compiler does not
 /// have.
 const UNKNOWN_OUTPUT_TYPE: &str = "shared";
 
 /// What a build calls a dynamic library when the project does not name the output file.
-fn dynamic_library_name() -> &'static str {
+fn default_dynamic_library_name() -> &'static str {
     OutputFileType::DynamicLibrary.default_file_name()
 }
 
 /// What a build calls an executable when the project does not name the output file.
-fn executable_name() -> &'static str {
+fn default_executable_name() -> &'static str {
     OutputFileType::Executable.default_file_name()
 }
 
@@ -61,14 +61,14 @@ fn test_build_produces_the_kind_the_project_file_names() {
         "`fix build` should succeed for a project asking for a dynamic library.",
     );
     assert!(
-        project_dir.join(dynamic_library_name()).exists(),
+        project_dir.join(default_dynamic_library_name()).exists(),
         "`fix build` should produce \"{}\", which is the dynamic library the project file asks for.",
-        dynamic_library_name(),
+        default_dynamic_library_name(),
     );
     assert!(
-        !project_dir.join(executable_name()).exists(),
+        !project_dir.join(default_executable_name()).exists(),
         "`fix build` should leave \"{}\" alone, because the project file asks for a dynamic library.",
-        executable_name(),
+        default_executable_name(),
     );
 }
 
@@ -85,14 +85,14 @@ fn test_the_output_type_option_overwrites_the_project_file() {
         "`fix build --output-type exe` should succeed for a project asking for a dynamic library.",
     );
     assert!(
-        run_program(&project_dir.join(executable_name())).contains(PROGRAM_OUTPUT),
+        run_program(&project_dir.join(default_executable_name())).contains(PROGRAM_OUTPUT),
         "`fix build --output-type exe` should produce \"{}\", the program the option asks for.",
-        executable_name(),
+        default_executable_name(),
     );
     assert!(
-        !project_dir.join(dynamic_library_name()).exists(),
+        !project_dir.join(default_dynamic_library_name()).exists(),
         "`fix build --output-type exe` should leave \"{}\" alone, because the option decides the kind.",
-        dynamic_library_name(),
+        default_dynamic_library_name(),
     );
 }
 
@@ -168,11 +168,11 @@ fn test_a_test_run_leaves_the_output_file_of_a_build() {
         &run_fix(&project_dir, &["build", "-O", "none"]),
         "`fix build` should succeed for a project naming its output file.",
     );
-    let output_file = project_dir.join(NAMED_OUTPUT);
+    let output_file = project_dir.join(NAMED_OUTPUT_FILE);
     assert!(
         run_program(&output_file).contains(PROGRAM_OUTPUT),
         "`fix build` should write the program to \"{}\", which the project file names.",
-        NAMED_OUTPUT,
+        NAMED_OUTPUT_FILE,
     );
     assert_succeeded(
         &run_fix(&project_dir, &["test", "-O", "none"]),
@@ -181,7 +181,7 @@ fn test_a_test_run_leaves_the_output_file_of_a_build() {
     assert!(
         run_program(&output_file).contains(PROGRAM_OUTPUT),
         "`fix test` should leave \"{}\" as the program `fix build` wrote there.",
-        NAMED_OUTPUT,
+        NAMED_OUTPUT_FILE,
     );
 }
 
@@ -199,10 +199,10 @@ fn test_a_run_writes_no_output_file() {
             ),
         );
         assert!(
-            !project_dir.join(NAMED_OUTPUT).exists(),
+            !project_dir.join(NAMED_OUTPUT_FILE).exists(),
             "`fix {}` should write no file at \"{}\", which names what `fix build` produces.",
             command,
-            NAMED_OUTPUT,
+            NAMED_OUTPUT_FILE,
         );
     }
 }
@@ -224,13 +224,13 @@ fn test_a_library_build_does_not_reuse_the_objects_of_a_program_build() {
         "`fix build --output-type dylib` should produce a dynamic library beside the program.",
     );
     assert!(
-        run_program(&project_dir.join(executable_name())).contains(PROGRAM_OUTPUT),
+        run_program(&project_dir.join(default_executable_name())).contains(PROGRAM_OUTPUT),
         "the program of the first build should stand beside the dynamic library.",
     );
     assert!(
-        project_dir.join(dynamic_library_name()).exists(),
+        project_dir.join(default_dynamic_library_name()).exists(),
         "the second build should produce \"{}\", the dynamic library it was asked for.",
-        dynamic_library_name(),
+        default_dynamic_library_name(),
     );
 }
 
@@ -251,12 +251,12 @@ fn test_a_program_build_does_not_reuse_the_objects_of_a_library_build() {
         "`fix build` should produce the program beside the dynamic library.",
     );
     assert!(
-        project_dir.join(dynamic_library_name()).exists(),
+        project_dir.join(default_dynamic_library_name()).exists(),
         "the dynamic library of the first build should stand beside the program.",
     );
     assert!(
-        run_program(&project_dir.join(executable_name())).contains(PROGRAM_OUTPUT),
+        run_program(&project_dir.join(default_executable_name())).contains(PROGRAM_OUTPUT),
         "the second build should produce \"{}\", the program it was asked for.",
-        executable_name(),
+        default_executable_name(),
     );
 }
