@@ -142,7 +142,7 @@ main = (
         test_source_fail(
             source,
             Configuration::develop_mode(),
-            "Duplicate field in struct pattern.",
+            "Duplicate field `a` of struct `Main::S`.",
         );
     }
 

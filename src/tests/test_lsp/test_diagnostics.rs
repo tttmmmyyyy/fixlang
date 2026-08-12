@@ -81,4 +81,46 @@ mod tests {
             diag
         );
     }
+
+    /// A struct literal that gives one field twice is reported in the editor, on the repeated field
+    /// name, with the first occurrence of that name as a related location.
+    ///
+    /// The two names are what the programmer chooses between, so a report anchored to the whole
+    /// literal would leave them to find the pair themselves.
+    #[test]
+    fn test_duplicate_struct_field_is_reported_on_both_field_names() {
+        let (_temp_dir, project_dir) = setup_test_env("duplicate_struct_field");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let duplicates: Vec<&Value> = diagnostics
+            .iter()
+            .filter(|diag| {
+                diag["message"]
+                    .as_str()
+                    .map_or(false, |m| m.contains("Duplicate field"))
+            })
+            .collect();
+        assert_eq!(
+            duplicates.len(),
+            1,
+            "one report is expected, but the diagnostics are {:?}",
+            diagnostics
+        );
+        let diag = duplicates[0];
+
+        // `main.fix` writes the literal on the 6th line, which the protocol counts from zero, with
+        // the repeated `x` at the 36th column and the first `x` at the 20th.
+        assert_eq!(diag["range"]["start"]["line"], 5, "on the literal's line");
+        assert_eq!(
+            diag["range"]["start"]["character"], 35,
+            "at the repeated field name, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["character"], 19,
+            "naming the first occurrence, but the report is {:?}",
+            diag
+        );
+    }
 }

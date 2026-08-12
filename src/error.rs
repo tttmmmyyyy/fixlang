@@ -215,7 +215,6 @@ impl Error {
         err
     }
 
-    #[allow(dead_code)]
     pub fn add_src(&mut self, src_desc: String, src: Span) {
         self.srcs.push((src_desc, src));
     }
