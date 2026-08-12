@@ -11564,10 +11564,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Types that name each other in a cycle and reach a type of a higher-kinded parameter, written once
-// in each field order. The compiler rebuilds such a type per type-argument list, and rebuilds every
-// type that names one, so each member of a cycle among them is rebuilt together with the rest of the
-// cycle however the fields are ordered.
+/// Types that name each other in a cycle and reach a type of a higher-kinded parameter, written once
+/// in each field order, so that the type of the higher-kinded parameter is reached once before the
+/// rest of the cycle and once after it.
 #[test]
 pub fn test_type_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11599,10 +11598,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A union that takes a type parameter, sitting in a cycle that reaches a type of a higher-kinded
-// parameter through the struct it names. A declaration that takes type parameters is left as it is
-// written, so the union has to be rebuilt per type-argument list together with the struct it names,
-// which the compiler decides for a union the way it decides it for a struct.
+/// A union that takes a type parameter, sitting in a cycle that reaches a type of a higher-kinded
+/// parameter through the struct it names. The variant types of a union are read at each type
+/// argument it is used at, the way a struct's field types are, so the cycle is walked through a
+/// union as well as through a struct.
 #[test]
 pub fn test_parameterized_union_in_a_type_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11627,10 +11626,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Reading, replacing, updating and destructuring the fields of a type that sits in a cycle reaching
-// a type of a higher-kinded parameter. Updating a field holds the rest of the struct in the type of
-// the struct with that field punched out, which names what the struct names and so is rebuilt
-// alongside it.
+/// Reading, replacing, updating and destructuring the fields of a type that sits in a cycle reaching
+/// a type of a higher-kinded parameter. Updating a field holds the rest of the struct in the type of
+/// the struct with that field punched out, whose remaining fields are read from the same declaration
+/// and so are laid out where the struct's are.
 #[test]
 pub fn test_field_operations_on_a_type_in_a_cycle_reaching_a_higher_kinded_type_variable() {
     let source = r##"
@@ -11873,10 +11872,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
-// one, all three reached from one cycle of types. The compiler rebuilds each of them per
-// type-argument list, keeping a union's variants and a boxed struct's boxedness, and the same
-// declaration rebuilt at two different type arguments stays two types.
+/// A union and a boxed struct that carry a higher-kinded type variable, beside a struct that carries
+/// one, all three reached from one cycle of types. A union keeps its variants and a boxed struct its
+/// boxedness at every type argument it is used at, and one declaration used at two different type
+/// arguments stays two types.
 #[test]
 pub fn test_higher_kinded_union_and_boxed_struct_reached_from_a_type_cycle() {
     let source = r##"
@@ -11930,10 +11929,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
-// reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
-// type with that field punched out, which carries the type argument the value was made at, so the
-// punched form is rebuilt per type-argument list alongside the type it is punched from.
+/// Updating and taking apart a field of a type that takes a type parameter and sits in a cycle
+/// reaching a type of a higher-kinded parameter. Updating a field holds the rest of the value in the
+/// type with that field punched out, which carries the type argument the value was made at, so the
+/// punched form is laid out at that argument the way the type it is punched from is.
 #[test]
 pub fn test_field_update_on_a_parameterized_type_in_a_cycle_reaching_a_higher_kinded_type_variable()
 {

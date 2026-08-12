@@ -710,22 +710,39 @@ impl Configuration {
         true
     }
 
+    /// Make a value of a newtype — an unboxed struct of exactly one field — a value of that field,
+    /// so that a type written in that shape, such as `Std::IO`, a state monad or an iterator,
+    /// becomes the function it wraps. The gain is that change of type: only once an expression is
+    /// typed as a closure can the inlining and the closure specialization below take hold of it, so
+    /// it runs at `Max` and above alongside them.
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Substitute the definition of a global value into the places that name it, and discard a
+    /// global that nothing names, repeating until the program stops changing. Runs at `Max` and
+    /// above.
     pub fn enable_inline_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Substitute a function bound to a local name into the place it is applied, turning
+    /// `let f = |x| e; f(y)` into `e[x := y]`. Runs at `Max` and above.
     pub fn enable_inline_local_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Copy a function for the closure it is handed, so that the copy calls that closure's body
+    /// directly instead of reaching it through a function pointer and a capture list. Runs at `Max`
+    /// and above.
     pub fn enable_closure_specialization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// Replace an act-family function — `Std::Array::act(i)` and a struct's `act_{field}` — at the
+    /// functors `Std::Identity`, `Std::Const` and `Std::Tuple2` by an implementation written for
+    /// that functor. It rewrites the definitions of global symbols, so it is placed above the
+    /// inlining that would otherwise dissolve them. Runs at `Max` and above.
     pub fn enable_act_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }

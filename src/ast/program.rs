@@ -48,15 +48,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::vec;
 
+/// What a program declares about its types: the type constructors and the type aliases it can name,
+/// and which of the newtypes among them a value has stopped being built at.
 #[derive(Clone)]
 pub struct TypeEnv {
-    /// The declaration of every type constructor, the built-in ones and the user-defined ones alike.
+    /// The declaration of every type constructor, built-in and user-defined, by its name.
     ///
     /// Private, because the field types held here answer what a value of a type is laid out as, and
     /// `unwrap_newtypes` puts them in a form the rest of the compiler relies on. A declaration
     /// enters through `add_tycons`, which puts it in that same form.
     tycons: Arc<Map<TyCon, TyConInfo>>,
-    // List of type aliases.
+    /// The declaration of every type alias, by its name.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
     /// The newtypes a value of which has become a value of its one field. Empty until the pass that
     /// unwraps newtypes runs.
@@ -79,6 +81,8 @@ impl Default for TypeEnv {
 }
 
 impl TypeEnv {
+    /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
+    /// still a type values are built at.
     pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
@@ -130,9 +134,9 @@ impl TypeEnv {
         self.unwrapped_newtypes.contains(tycon)
     }
 
-    /// Adds the declarations of `new_tycons` to this environment, each with its field types
-    /// unwrapped, so that a declaration minted after the newtype-unwrapping pass answers as the ones
-    /// that were there before it do.
+    /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
+    /// under the same name, each with its field types unwrapped, so that a declaration minted after
+    /// the newtype-unwrapping pass answers as the ones that were there before it do.
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
@@ -145,11 +149,13 @@ impl TypeEnv {
         self.tycons = Arc::new(tycons);
     }
 
-    /// The declaration of every type constructor this environment holds, by type constructor.
+    /// The declaration of every type constructor this environment holds, by its name.
     pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
         &self.tycons
     }
 
+    /// The kind of every name this environment gives a meaning to, type constructors and type
+    /// aliases together in one table.
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
         let mut res = Map::default();
         for (tc, ti) in self.tycons.as_ref().iter() {
@@ -161,9 +167,13 @@ impl TypeEnv {
         res
     }
 
-    // Check if the given function is `act_{field}` function for a field of a struct.
-    //
-    // If so, return (struct tycon, field name).
+    /// The struct and the field that `name` is the `act_{field}` function of: `name` is a global
+    /// name whose namespace is a struct this environment declares, and whose last component names
+    /// one of that struct's fields.
+    ///
+    /// The answer comes from the name alone, so ask it while a value of the struct is still built as
+    /// that struct. A newtype keeps its declaration after `unwrap_newtypes` records it, so this
+    /// still names the struct of a newtype whose values have become values of its one field.
     pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
         if name.is_local() {
             return None;

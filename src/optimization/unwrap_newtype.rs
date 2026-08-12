@@ -23,6 +23,7 @@ use crate::{
     ast::{
         export_statement::IOType,
         expr::{expr_let_typed, expr_make_struct, expr_match_typed, expr_var, Expr, ExprNode},
+        name::FullName,
         pattern::{Pattern, PatternInfo, PatternNode},
         program::{Program, Symbol, TypeEnv},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -176,6 +177,17 @@ struct ExprUnwrapper<'a> {
     type_env: &'a TypeEnv,
 }
 
+impl<'a> ExprUnwrapper<'a> {
+    /// Whether the local name `var_name` is bound to a value of an unwrapped newtype, read from the
+    /// type the scope records for that binding.
+    fn is_local_of_unwrapped_newtype(&self, var_name: &FullName, state: &VisitState) -> bool {
+        assert!(var_name.is_local());
+        let ty = state.scope.get_local(&var_name.name).unwrap().unwrap();
+        self.type_env
+            .is_unwrapped_newtype(ty.toplevel_tycon().unwrap().as_ref())
+    }
+}
+
 impl<'a> ExprVisitor for ExprUnwrapper<'a> {
     fn start_visit_tyanno(
         &mut self,
@@ -239,10 +251,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             // @ : F -> F = |s| s
             let field_ty = new_ty;
             let struct_name = body.var_name.clone();
-            assert!(struct_name.is_local());
-            let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
-            let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
+            if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
         } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructSetBody>() {
@@ -262,11 +271,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             // punch : F -> (F, ()) = |s| (s, ())
             let field_unit_ty = new_ty;
             let struct_name = body.var_name.clone();
-            assert!(struct_name.is_local());
-            let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
-            let struct_tc = struct_ty.toplevel_tycon().unwrap();
-            if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
-                let field_ty = field_unit_ty.collect_type_argments()[0].clone();
+            if self.is_local_of_unwrapped_newtype(&struct_name, state) {
+                let field_ty = field_unit_ty.collect_type_arguments()[0].clone();
                 let unit_ty = make_unit_ty();
                 let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
                 let unit_expr =
@@ -328,6 +334,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a `let`, and rewrites the pattern it binds with, so that a
+    /// pattern matching an unwrapped newtype's struct becomes the pattern of its one field.
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
@@ -360,6 +368,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         StartVisitResult::VisitChildren
     }
 
+    /// Unwraps the type recorded for a `match`, and rewrites the pattern of each arm, so that a
+    /// pattern matching an unwrapped newtype's struct becomes the pattern of its one field.
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         if let Expr::Match(scrut, arms) = expr.expr.as_ref() {

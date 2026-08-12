@@ -3614,8 +3614,8 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
         // length is unchanged.
-        let punched_ty = ret_ty.collect_type_argments().get(0).unwrap().clone();
-        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
+        let punched_ty = ret_ty.collect_type_arguments().get(0).unwrap().clone();
+        let elem_ty = ret_ty.collect_type_arguments().get(1).unwrap().clone();
         let buf = get_array_storage_buf(gc, &array);
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, idx);
 
@@ -8838,7 +8838,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
 
 /// Runs the action held by a value of type `IO a` and returns its result.
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
-    let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
+    let res_ty = io.ty.collect_type_arguments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
     let runner_ty = type_fun(
         make_iostate_ty(),
