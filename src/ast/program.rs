@@ -1186,8 +1186,8 @@ impl Program {
     ///   carry tolerated diagnostics from `check_type` (holes,
     ///   cannot-infer, unsatisfied predicates, disjoint equalities).
     ///   The caller should always save `te` (so the LSP can hover on
-    ///   it) and propagate `errors`. The cache is only written when
-    ///   `errors` is empty.
+    ///   it) and propagate `errors`. The cache is written only for a
+    ///   strict check that produced no `errors`.
     /// * `Err(errs)` — a hard failure happened before substitution
     ///   completed (e.g. resolve_namespace, resolve_type_aliases, or
     ///   the substitution itself blew up). No useful typed expression
@@ -1223,11 +1223,14 @@ impl Program {
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
-        // Save the result to cache file only when there are no
-        // tolerated errors. Otherwise the cached typed expression
-        // would mask the diagnostics on the next run (cache load
-        // bypasses check_type entirely).
-        if !check_errors.has_diagnostics() {
+        // A run that finds the expression in the cache returns it without checking it (see the
+        // cache lookup above), so the cache may hold only what a strict check accepted. Two things
+        // disqualify a result:
+        //
+        // - a tolerated diagnostic, which the next run owes the user and would not produce again;
+        // - an `error_tolerant` check, which swallows every type error and reports none, so its
+        //   result would enter as a clean entry and the value would be published as type-correct.
+        if !tc.error_tolerant && !check_errors.has_diagnostics() {
             tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
         }
 

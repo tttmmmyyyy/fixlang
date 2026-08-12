@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::LspClient;
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::Value;
@@ -80,5 +81,45 @@ mod tests {
             "the related location is in `main.fix`, but the report is {:?}",
             diag
         );
+    }
+
+    /// A completion request leaves the error of another file reported.
+    ///
+    /// A completion re-checks the program in error-tolerant mode, which reports no diagnostic
+    /// whatever it finds. Should such a run reach an entity of a file the user is not editing and
+    /// its result be kept, the next strict run would answer from it and publish that file as
+    /// clean — the project would not compile while the editor showed nothing.
+    #[test]
+    fn test_a_completion_leaves_another_files_error_reported() {
+        let mut ctx =
+            LspCompletionCtx::setup("diagnostics-after-completion", &["lib.fix", "main.fix"]);
+        let lib = Path::new("lib.fix");
+
+        let before = ctx.client.get_diagnostics(lib);
+        assert_eq!(
+            before.len(),
+            1,
+            "`lib.fix` is expected to be reported before any completion, but its diagnostics are {:?}",
+            before
+        );
+
+        // The dot of `v.@y.to_string`. The cursor sits in the body of a trait-implementation
+        // member, whose symbol the completion cannot narrow its check to — the symbol is built
+        // during elaboration, later than the narrowing reads the parsed buffer — so the tolerant
+        // run covers every value of the project, the broken implementation in `lib.fix` among
+        // them.
+        let _ = ctx.complete_with_timeout("main.fix", 7, 20, Duration::from_secs(60));
+
+        ctx.client
+            .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+        let after = ctx.client.get_diagnostics(lib);
+        assert_eq!(
+            after.len(),
+            before.len(),
+            "the report on `lib.fix` is still expected, but its diagnostics are {:?}",
+            after
+        );
+
+        ctx.shutdown();
     }
 }
