@@ -167,4 +167,39 @@ mod integration_tests {
             list_cache_files(&project_dir),
         );
     }
+
+    /// A test build and a plain build over one project directory share the type-check cache, and
+    /// each still produces its own program.
+    ///
+    /// The two builds see different sets of tuple sizes, so the trait implementations the compiler
+    /// generates for tuples differ between them; those generated sources reach no module's
+    /// dependency hash, which is what makes the two builds' entries meet under one key.
+    #[test]
+    fn a_test_build_and_a_plain_build_share_the_cache_without_corrupting_it() {
+        let (_temp_dir, project_dir) = setup_test_env("test_and_build");
+
+        let test_run = fix_command()
+            .arg("test")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix test");
+        assert_eq!(
+            String::from_utf8_lossy(&test_run.stdout).trim(),
+            "(1, 2, 3, 4, 5, 6, 7)",
+            "the test entry point prints the seven-tuple.\nstderr: {}",
+            String::from_utf8_lossy(&test_run.stderr),
+        );
+
+        let build_run = fix_command()
+            .arg("run")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix run");
+        assert_eq!(
+            String::from_utf8_lossy(&build_run.stdout).trim(),
+            "(1, 2)",
+            "the main entry point prints the pair.\nstderr: {}",
+            String::from_utf8_lossy(&build_run.stderr),
+        );
+    }
 }

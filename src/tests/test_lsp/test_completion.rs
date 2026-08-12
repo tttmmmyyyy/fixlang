@@ -1224,4 +1224,71 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// The receiver of a dot completion is found on a line whose earlier text is multi-byte, where
+    /// the protocol's UTF-16 column and the buffer's byte offset differ.
+    #[test]
+    fn test_completion_dot_sort_after_multibyte_text_on_the_line() {
+        let (_temp_dir, project_dir) = setup_test_env("completion-dot-sort-array");
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(5))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(Path::new("main.fix"))
+            .expect("open main.fix");
+        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+
+        let abs_path = project_dir.join("main.fix");
+        let with_multibyte = fs::read_to_string(&abs_path)
+            .expect("read main.fix")
+            .replace(
+                "    let _ = arr.",
+                "    let _ = /* \u{65e5}\u{672c}\u{8a9e} */ arr.",
+            );
+        let uri = format!("file://{}", abs_path.display());
+        client
+            .send_notification(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": { "uri": uri, "version": 2 },
+                    "contentChanges": [ { "text": with_multibyte } ]
+                }),
+            )
+            .expect("send didChange");
+
+        // The cursor sits right after the dot, whose UTF-16 column is six less than its byte
+        // offset in the line.
+        let line = with_multibyte
+            .lines()
+            .position(|l| l.trim_end().ends_with("arr."))
+            .expect("find the receiver line") as u32;
+        let col = with_multibyte
+            .lines()
+            .nth(line as usize)
+            .unwrap()
+            .chars()
+            .count() as u32;
+        let id = client
+            .send_request(
+                "textDocument/completion",
+                json!({
+                    "textDocument": { "uri": uri },
+                    "position": { "line": line, "character": col }
+                }),
+            )
+            .expect("send completion");
+        let items = collect_completion_items(&mut client, id, Duration::from_secs(60))
+            .expect("completion did not respond within 60s");
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("`Std::Array::push_back` is expected among the candidates");
+        assert!(
+            sort_push_back.starts_with("0a"),
+            "`Std::Array::push_back` is expected in tier 0, sub-tier `a`, for an `Array I64` receiver, but its sort key is {:?}",
+            sort_push_back
+        );
+
+        let _ = client.shutdown(Duration::from_millis(500));
+    }
 }
