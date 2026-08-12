@@ -219,6 +219,20 @@ impl SubCommand {
         }
     }
 
+    /// Whether the settings that describe the output file — its kind and its path — apply to this
+    /// subcommand. `fix build` produces that file; `fix run` and `fix test` build an executable in
+    /// a temporary place, run it, and remove it, so what they build is not the file those settings
+    /// describe.
+    pub fn produces_output_file(&self) -> bool {
+        match self {
+            SubCommand::Build => true,
+            SubCommand::Run => false,
+            SubCommand::Test => false,
+            SubCommand::Diagnostics(_) => false,
+            SubCommand::Docs(_) => false,
+        }
+    }
+
     /// Which section of the project file this subcommand's settings come from.
     pub fn build_mode(&self) -> BuildConfigType {
         match self {

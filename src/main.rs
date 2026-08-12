@@ -672,9 +672,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
 
-        // Set `output_file_type`. The `--output-type` argument exists only on
-        // the `build` subcommand; `run` and `test` always build an executable.
-        if matches!(config.subcommand, SubCommand::Build) {
+        // Set `output_file_type`. The `--output-type` argument exists only on the subcommand that
+        // produces the output file, so reading it is asked for only there.
+        if config.subcommand.produces_output_file() {
             if let Some(output_file_type) = read_output_file_type_option(args)? {
                 config.output_file_type = output_file_type;
             }

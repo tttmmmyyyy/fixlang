@@ -1,7 +1,7 @@
 use crate::{
     configuration::{
         BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer,
-        SubCommand, ValgrindTool,
+        ValgrindTool,
     },
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
@@ -856,7 +856,7 @@ impl ProjectFile {
         // and `fix test` build an executable in a temporary place, run it, and remove it, so a
         // project file asking a build for a dynamic library still gets a program it can run, and a
         // test run leaves the output file of a build where it is.
-        if matches!(config.subcommand, SubCommand::Build) {
+        if config.subcommand.produces_output_file() {
             if let Some(output) = self.build.output.as_ref() {
                 config.out_file_path = Some(PathBuf::from(output));
             }
