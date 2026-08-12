@@ -3,7 +3,7 @@ use crate::{
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     error::{panic_if_err, panic_with_msg, Errors},
-    misc::save_temporary_source,
+    misc::{save_temporary_source, Set},
     parse::parser::check_grammar_accepts,
 };
 use std::{
@@ -210,6 +210,58 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
         .map(|path| fs::read_to_string(path).expect("Failed to read an emitted LLVM IR file"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// The functions `ir` defines, each paired with whether it carries the function attribute
+/// `attribute`.
+///
+/// LLVM writes the attributes of a function as a reference to a group listed at the end of the
+/// module — `define ... @f(...) #2 {` against `attributes #2 = { alwaysinline }` — so each `define`
+/// line is read here against those listings.
+pub fn llvm_functions_carrying(ir: &str, attribute: &str) -> Vec<(String, bool)> {
+    // The groups holding `attribute`, by the number a `define` line names them with.
+    let mut groups: Set<&str> = Set::default();
+    for line in ir.lines() {
+        let Some(listing) = line.strip_prefix("attributes ") else {
+            continue;
+        };
+        let Some((group, attributes)) = listing.split_once('=') else {
+            continue;
+        };
+        let holds = attributes
+            .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+            .any(|word| word == attribute);
+        if holds {
+            groups.insert(group.trim());
+        }
+    }
+
+    let mut functions = vec![];
+    for line in ir.lines() {
+        if !line.starts_with("define ") {
+            continue;
+        }
+        let Some(name) = llvm_function_name(line) else {
+            continue;
+        };
+        // The groups a function carries stand between its parameter list and its body.
+        let after_parameters = line.rsplit_once(')').map_or("", |(_, tail)| tail);
+        let carries = after_parameters
+            .split_whitespace()
+            .any(|token| groups.contains(token));
+        functions.push((name.to_string(), carries));
+    }
+    functions
+}
+
+/// The name of the function a `define` line defines. A name that is not a bare identifier — which
+/// every name the compiler mints for a Fix value is — stands quoted.
+fn llvm_function_name(define_line: &str) -> Option<&str> {
+    let after_sigil = define_line.split_once('@')?.1;
+    match after_sigil.strip_prefix('"') {
+        Some(quoted) => quoted.split_once('"').map(|(name, _)| name),
+        None => after_sigil.split_once('(').map(|(name, _)| name),
+    }
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
