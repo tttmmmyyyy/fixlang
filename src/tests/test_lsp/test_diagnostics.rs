@@ -93,14 +93,14 @@ mod tests {
     fn test_a_completion_leaves_another_files_error_reported() {
         let mut ctx =
             LspCompletionCtx::setup("diagnostics-after-completion", &["lib.fix", "main.fix"]);
-        let lib = Path::new("lib.fix");
+        let lib_file = Path::new("lib.fix");
 
-        let before = ctx.client.get_diagnostics(lib);
+        let diagnostics_before = ctx.client.get_diagnostics(lib_file);
         assert_eq!(
-            before.len(),
+            diagnostics_before.len(),
             1,
             "`lib.fix` is expected to be reported before any completion, but its diagnostics are {:?}",
-            before
+            diagnostics_before
         );
 
         // The dot of `v.@y.to_string`. The cursor sits in the body of a trait-implementation
@@ -121,11 +121,11 @@ mod tests {
 
         ctx.client
             .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
-        let after = ctx.client.get_diagnostics(lib);
+        let diagnostics_after = ctx.client.get_diagnostics(lib_file);
         assert_eq!(
-            after, before,
+            diagnostics_after, diagnostics_before,
             "the same report on `lib.fix` is still expected, but its diagnostics are {:?}",
-            after
+            diagnostics_after
         );
 
         ctx.shutdown();
