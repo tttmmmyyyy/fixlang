@@ -1,5 +1,5 @@
 use crate::commands::build::build;
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use rand::Rng;
@@ -14,6 +14,14 @@ pub fn run(
     mut config: Configuration,
     inherit_streams: bool,
 ) -> Result<Result<Output, io::Error>, Errors> {
+    // The kind of the output file describes what `fix build` produces, so the settings that name a
+    // dynamic library reach `fix build` alone (`ProjectFile::set_config`, `set_config_from_args`).
+    // A shared object put here would be handed to the operating system as a program to execute.
+    assert!(
+        matches!(config.output_file_type, OutputFileType::Executable),
+        "a run builds an executable, which is what it then runs"
+    );
+
     fs::create_dir_all(DOT_FIXLANG)
         .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
     fs::create_dir_all(RUN_PATH)

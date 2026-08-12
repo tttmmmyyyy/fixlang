@@ -3047,14 +3047,14 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>-o, --output</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>出力ファイルパス</td>
+            <td>出力ファイルパス。fix build が成果物を書き出す先です。fix run と fix test は一時的な場所に実行ファイルを作り、実行して消します。</td>
         </tr>
         <tr>
             <td>output_type</td>
             <td>--output-type</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>出力ファイルタイプ（実行ファイル/動的ライブラリ）</td>
+            <td>出力ファイルタイプ（実行ファイル/動的ライブラリ）。fix build が作るものを指定します。fix run と fix test は実行ファイルを作ります。--output-type オプションは fix build にのみあります。</td>
         </tr>
         <tr>
             <td>backtrace</td>

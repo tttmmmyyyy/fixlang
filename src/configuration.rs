@@ -827,6 +827,11 @@ impl Configuration {
         hash_source.push_str(&self.skip_eval.to_string());
         hash_source.push_str(&self.c_type_sizes.to_string());
         hash_source.push_str(&self.max_split_scalars.to_string());
+        // The kind of the output file reaches the code in two ways: a dynamic library is generated
+        // with position-independent relocations (`get_target_machine`), and an executable is the
+        // only kind that carries the entry point (`elaborate_via_config`). An object built for one
+        // kind therefore fails to link into the other.
+        hash_source.push_str(self.output_file_type.to_str());
         push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
@@ -1192,6 +1197,107 @@ int main() {
                 sizes.save_to_file()?;
                 Ok(sizes)
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The object generation hash of a build configuration to which `edit` has been applied.
+    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
+        let mut config = Configuration::release_mode(SubCommand::Build)
+            .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
+        edit(&mut config);
+        config.object_generation_hash()
+    }
+
+    /// Two builds reuse each other's object files exactly when they agree on this hash, so each
+    /// setting that reaches code generation gives the hash a value of its own.
+    ///
+    /// Each setting is written to its field, so that the list names what the hash reads rather than
+    /// what a setter does on the way there.
+    #[test]
+    fn test_object_generation_hash_separates_code_generation_settings() {
+        let baseline = hash_after(|_| {});
+
+        let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![
+            (
+                "output_file_type",
+                Box::new(|config: &mut Configuration| {
+                    config.output_file_type = OutputFileType::DynamicLibrary
+                }),
+            ),
+            (
+                "fix_opt_level",
+                Box::new(|config: &mut Configuration| {
+                    // The level a lowered `FIX_MAX_OPT_LEVEL` leaves the configuration at is the
+                    // one this must not pick, so it is chosen against what is there.
+                    config.fix_opt_level = if config.fix_opt_level == FixOptimizationLevel::None {
+                        FixOptimizationLevel::Max
+                    } else {
+                        FixOptimizationLevel::None
+                    }
+                }),
+            ),
+            (
+                "llvm_passes_override",
+                Box::new(|config: &mut Configuration| {
+                    config.llvm_passes_override = Some(vec!["default<O0>".to_string()])
+                }),
+            ),
+            (
+                "debug_info",
+                Box::new(|config: &mut Configuration| config.debug_info = true),
+            ),
+            (
+                "threaded",
+                Box::new(|config: &mut Configuration| config.threaded = true),
+            ),
+            (
+                "sanitizer",
+                Box::new(|config: &mut Configuration| config.sanitizer = Sanitizer::Thread),
+            ),
+            (
+                "backtrace",
+                Box::new(|config: &mut Configuration| config.backtrace = true),
+            ),
+            (
+                "no_runtime_check",
+                Box::new(|config: &mut Configuration| config.no_runtime_check = true),
+            ),
+            (
+                "skip_eval",
+                Box::new(|config: &mut Configuration| config.skip_eval = true),
+            ),
+            (
+                "max_split_scalars",
+                Box::new(|config: &mut Configuration| config.max_split_scalars += 1),
+            ),
+            (
+                "c_type_sizes",
+                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+            ),
+            (
+                "disable_cpu_features_regex",
+                Box::new(|config: &mut Configuration| {
+                    config.disable_cpu_features_regex.push("avx.*".to_string())
+                }),
+            ),
+            (
+                "subcommand",
+                Box::new(|config: &mut Configuration| config.subcommand = SubCommand::Run),
+            ),
+        ];
+
+        for (name, edit) in settings {
+            assert_ne!(
+                baseline,
+                hash_after(edit),
+                "`{}` reaches code generation, so it belongs in the object generation hash.",
+                name
+            );
         }
     }
 }

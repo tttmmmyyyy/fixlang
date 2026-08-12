@@ -1,7 +1,7 @@
 use crate::{
-    configuration::BuildConfigType,
     configuration::{
-        Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer, ValgrindTool,
+        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer,
+        SubCommand, ValgrindTool,
     },
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
@@ -843,14 +843,26 @@ impl ProjectFile {
             }
         }
 
-        // Set output file.
-        if let Some(output) = self.build.output.as_ref() {
-            config.out_file_path = Some(PathBuf::from(output));
-        }
+        // The kind of file a build produces is read whatever the invocation is, so that a project
+        // file naming a kind that does not exist is reported by every command that reads it.
+        let output_file_type = self
+            .build
+            .output_type
+            .as_ref()
+            .map(|output_type| OutputFileType::from_str(output_type))
+            .transpose()?;
 
-        // Set the output file type.
-        if let Some(output_file_type) = self.build.output_type.as_ref() {
-            config.output_file_type = OutputFileType::from_str(output_file_type)?;
+        // Set the output file and its kind. The two describe what `fix build` produces; `fix run`
+        // and `fix test` build an executable in a temporary place, run it, and remove it, so a
+        // project file asking a build for a dynamic library still gets a program it can run, and a
+        // test run leaves the output file of a build where it is.
+        if matches!(config.subcommand, SubCommand::Build) {
+            if let Some(output) = self.build.output.as_ref() {
+                config.out_file_path = Some(PathBuf::from(output));
+            }
+            if let Some(output_file_type) = output_file_type {
+                config.output_file_type = output_file_type;
+            }
         }
 
         // Set backtrace mode.

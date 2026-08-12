@@ -1,0 +1,4 @@
+module Test;
+
+test : IO ();
+test = println("I am the test suite");

@@ -213,7 +213,9 @@ fn run_cli() {
         .takes_value(true)
         .possible_value(PossibleValue::new("exe").help("Builds an executable file."))
         .possible_value(PossibleValue::new("dylib").help("Builds a dynamic library."))
-        .default_value("exe");
+        // The option carries no default value, so that an invocation that gives it explicitly is
+        // told apart from one that leaves the kind to the project file.
+        .help("The kind of file the build produces. An executable file, unless this option or the project file asks for a dynamic library.");
     let verbose = Arg::new("verbose")
         .long("verbose")
         .short('v')

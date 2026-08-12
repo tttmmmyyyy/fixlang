@@ -2938,14 +2938,14 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path</td>
+            <td>Output file path. It is where fix build writes what it produces; fix run and fix test build an executable in a temporary place, run it, and remove it.</td>
         </tr>
         <tr>
             <td>output_type</td>
             <td>--output-type</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file type (executable/dynamic library)</td>
+            <td>Output file type (executable/dynamic library). It is what fix build produces; fix run and fix test build an executable, and the --output-type option is available on fix build alone.</td>
         </tr>
         <tr>
             <td>backtrace</td>
