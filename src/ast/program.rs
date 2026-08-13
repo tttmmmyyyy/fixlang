@@ -219,10 +219,10 @@ pub struct Symbol {
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
-    /// Whether the back end is asked to inline every call of this global. Closure specialization
-    /// sets it on the bodies it mints for the places that use them — a lambda lifted out of an
-    /// expression, and a copy of a function specialized on the lambdas its callers pass — where the
-    /// body is small enough to stand at those places.
+    /// Whether the back end is asked to inline every call of this global. Written by
+    /// `inline::request_inline_into_callers`, which runs once the optimization passes have left the
+    /// program in the shape code generation sees; everything that builds a symbol before then
+    /// leaves it `false`.
     pub inline_into_callers: bool,
     // If you add new fields, be sure to update `hash()` method.
 }

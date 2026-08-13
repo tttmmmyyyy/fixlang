@@ -1,11 +1,10 @@
-//! What closure specialization asks of the back end, read off the emitted LLVM IR.
+//! What the optimizer asks of the back end about inlining, read off the emitted LLVM IR.
 //!
-//! The pass mints bodies for the places that call them — a lambda lifted out of an expression, and
-//! a copy of a function specialized on the lambdas its callers pass — and asks the back end to
-//! inline every call of one small enough to stand at those places. The request is the
-//! `alwaysinline` attribute on the generated function, which is where these assert against it: the
-//! program answers the same whether or not the request is made, so a suite that only runs the
-//! program stays green with every one of them withdrawn.
+//! A global whose body is small enough to stand where it is called is one the back end is asked to
+//! inline at every call, which reaches the back end as the `alwaysinline` attribute on each
+//! function generated from that global. That is where these assert against it: the program answers
+//! the same whether or not the request is made, so a suite that only runs the program stays green
+//! with every one of them withdrawn.
 
 #[cfg(test)]
 mod integration_tests {
@@ -133,12 +132,12 @@ main : IO () = (
         emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
     }
 
-    /// Every body the pass mints stands where its callers are, so every one of them is asked for at
-    /// every call: the lambda lifted out of `main`, and the copy of `fold` specialized on it. A
-    /// lambda that stays where it was written is reached through the closure holding it instead, and
-    /// is asked for nowhere.
+    /// The small bodies the optimizer leaves behind are asked for at every call — the lambda lifted
+    /// out of `main`, and the copy of `fold` specialized on it. A lambda that stays where it was
+    /// written is reached through the closure holding it, so no call site of it is known and it is
+    /// asked for nowhere.
     #[test]
-    fn test_the_bodies_the_pass_mints_are_asked_for_at_every_call() {
+    fn test_a_small_body_is_asked_for_at_every_call_and_a_closure_is_not() {
         let ir = build_run_and_read_ir(SMALL_LAMBDA_SOURCE, SMALL_LAMBDA_OUTPUT);
         let functions = llvm_functions_carrying(&ir, ALWAYS_INLINE);
 
@@ -159,8 +158,8 @@ main : IO () = (
                 .collect::<Vec<_>>();
             assert!(
                 unasked.is_empty(),
-                "a body named with `{}` stands where its callers are, so it should carry `{}`, but \
-                 these do not: {:?}",
+                "a body named with `{}` is small enough to stand at its call sites, so it should \
+                 carry `{}`, but these do not: {:?}",
                 minted_with,
                 ALWAYS_INLINE,
                 unasked
@@ -182,7 +181,7 @@ main : IO () = (
     }
 
     /// A body too large for every place that calls it to hold a copy is left to the back end's own
-    /// accounting, while the copies that are small enough are still asked for in the same build.
+    /// accounting, while the small bodies of the same build are still asked for.
     #[test]
     fn test_a_body_too_large_to_stand_at_its_call_sites_is_not_asked_for() {
         let ir = build_run_and_read_ir(OVERSIZED_LAMBDA_SOURCE, OVERSIZED_LAMBDA_OUTPUT);
@@ -233,9 +232,10 @@ main : IO () = (
 
     /// A copy the RC IR makes of a function — for the ownership of its inputs, for their
     /// uniqueness, for their locality — is called where the function it copies was called, so it
-    /// carries the request that function carried.
+    /// carries the request that function carried. The request is decided once per global, which is
+    /// what makes the copies agree.
     #[test]
-    fn test_a_copy_of_a_minted_body_is_asked_for_where_the_body_it_copies_is() {
+    fn test_a_copy_carries_the_request_of_the_function_it_copies() {
         let ir = build_run_and_read_ir(COPIED_BODIES_SOURCE, COPIED_BODIES_OUTPUT);
         let functions = llvm_functions_carrying(&ir, ALWAYS_INLINE);
 

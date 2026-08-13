@@ -57,8 +57,7 @@ pub fn run(fix_mod: &mut Program) {
                     generic_name,
                     ty,
                     expr: Some(expr.clone()),
-                    // The uncurried version holds the same body, reached the same way.
-                    inline_into_callers: sym.inline_into_callers,
+                    inline_into_callers: false,
                 },
             );
         }

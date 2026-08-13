@@ -45,11 +45,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                     None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
                 },
             };
-            // Where the optimizer minted a body for the places that call it, say so, rather than
-            // leaving the call to LLVM's own accounting: LLVM decides such a call by a discount
-            // worth sixty times its threshold, granted only while the function is referred to
-            // exactly once, so a second reference anywhere flips the decision for the call in the
-            // hot path.
+            // The request the optimizer recorded for a body small enough to stand where it is
+            // called (`inline::request_inline_into_callers`), written out as the attribute that
+            // carries it.
             if func.inline_into_callers {
                 self.add_enum_attribute(fn_val, "alwaysinline", AttributeLoc::Function);
             }

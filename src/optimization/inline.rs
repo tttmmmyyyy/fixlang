@@ -17,6 +17,12 @@ use crate::{
 
 use super::application_inlining;
 
+/// The size a body may reach and still be put where it is called.
+///
+/// It decides two things: which global's expression this pass substitutes into its call sites, and
+/// which global the back end is asked to inline into every place that calls it
+/// (`request_inline_into_callers`). Both ask whether a body is small enough that holding a copy of
+/// it at each call site costs less than the call it saves, so both read the same size here.
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// How many times `run` rewrites the program before it stops asking for more.
@@ -43,6 +49,29 @@ pub fn run(prg: &mut Program) {
         if !run_one(prg, &mut skip_symbols) {
             break;
         }
+    }
+}
+
+/// Record on each global whether the back end is to inline every call of it: the ones whose body is
+/// small enough to stand where it is called (`INLINE_COST_THRESHOLD`).
+///
+/// The back end left to itself decides such a call by a discount worth sixty times its own
+/// threshold, which it grants only while the function is referred to exactly once — so a second
+/// reference, including one its own passes create by duplicating a call, decides the call in the
+/// hot path the other way. Saying which bodies belong at their call sites is what keeps the outcome
+/// off that edge.
+///
+/// It runs over the program the passes leave behind, so that each version they minted — a lambda
+/// lifted to a global of its own, a copy specialized on the lambdas its callers pass, an uncurried
+/// function-pointer version — is measured as the body it ends up with. One answer per global is
+/// also what the answer has to be: code generation derives several functions from one global (a
+/// borrowing version, a version per input uniqueness, one per locality), and they differ in size
+/// enough that judging them apart would ask for the small versions of a body whose large versions
+/// must stay where they are.
+pub fn request_inline_into_callers(prg: &mut Program) {
+    let costs = calculate_inline_costs(prg);
+    for (name, sym) in &mut prg.symbols {
+        sym.inline_into_callers = costs.get_complexity(name) <= INLINE_COST_THRESHOLD as usize;
     }
 }
 
@@ -242,7 +271,7 @@ impl InlineCosts {
     }
 
     /// How big the symbol's expression is, counted as the walk meets its nodes.
-    pub fn get_complexity(&self, name: &FullName) -> usize {
+    fn get_complexity(&self, name: &FullName) -> usize {
         self.costs.get(name).map_or(0, |c| c.complexity)
     }
 
