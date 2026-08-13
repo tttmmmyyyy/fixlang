@@ -10,6 +10,20 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::{self, Output, Stdio};
 
+/// Builds the program as an executable under `RUN_PATH` and runs it, passing it the arguments
+/// `config.run_program_args` carries. The executable is then moved to the path
+/// `config.out_file_path` names, and removed when the settings name no path.
+///
+/// # Arguments
+///
+/// * `inherit_streams` - Hands the program the standard streams of the `fix` process, so that it
+///   reads from the terminal and writes to it as it runs. Otherwise its output is collected into
+///   the returned `Output`.
+///
+/// # Returns
+///
+/// The outer result reports what went wrong while building the program, and the inner one what
+/// went wrong while starting the built executable.
 pub fn run(
     mut config: Configuration,
     inherit_streams: bool,
@@ -74,7 +88,8 @@ pub fn run(
     Ok(output)
 }
 
-// Implementation of `fix run` command.
+/// Builds the program, runs it with the terminal's streams attached, and exits the `fix` process
+/// with the status the program returned. A program that a signal ends aborts `fix` instead.
 pub fn run_command(config: &Configuration) {
     let output = run(config.clone(), true);
     let output = panic_if_err(output);
