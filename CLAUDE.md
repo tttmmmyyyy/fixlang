@@ -44,9 +44,11 @@ This project implements the Fix programming language compiler and related tools 
   1. `code-review` over the change, and act on the findings it reports.
   2. `bug-hunt` against the subsystem the change touched.
   3. `pr-message` to write the pull request body, then open the pull request.
+  4. Put the pull request's number into the changelog entries the change adds, and push.
 
 ## Changelog
 
 - **When a round of modifications is complete**, add an entry describing the change to `CHANGELOG.md`.
   - Add it under the `## [Unreleased]` section at the top, in the appropriate category (`### Added` / `### Changed`) and subcategory (`#### Language` / `#### Tool` / `#### Std`), following the style of existing entries.
+  - **Open the entry with the numbers behind it**: the issues the change closes and the pull request that carries it, in ascending order, then a colon — `- #297, #316: Two global values of one namespace whose names differ only in ...`. Write the numbers that exist: an entry with no issue names its pull request alone, and one whose change has neither carries no numbers. The pull request's number is added once the pull request is open (see "Finishing a Change").
   - **Performance improvements that do not change observable behavior do NOT need a changelog entry.** The changelog documents user-visible changes (new/changed/fixed behavior), not internal speedups.
