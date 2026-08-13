@@ -1142,3 +1142,26 @@ pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Verifies that resolving one opaque type constructor whose concrete type is
+/// another opaque type constructor reaches the concrete type behind the second
+/// one, so a chain of opaque-returning functions compiles and runs.
+#[test]
+pub fn test_opaque_concrete_type_is_another_opaque_type() {
+    let source = r#"
+        module Main;
+
+        inner : [?b : Iterator, Item ?b = I64] I64 -> ?b;
+        inner = |n| Iterator::range(0, n);
+
+        outer : [?a : Iterator, Item ?a = I64] I64 -> ?a;
+        outer = |n| inner(n);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"chained opaque", outer(4).to_array, [0, 1, 2, 3]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
