@@ -36,6 +36,22 @@ mod tests {
         client.get_diagnostics(file)
     }
 
+    /// The diagnostic whose message contains `text`, of which the test expects exactly one.
+    fn sole_diagnostic_containing<'a>(diagnostics: &'a [Value], text: &str) -> &'a Value {
+        let matching: Vec<&Value> = diagnostics
+            .iter()
+            .filter(|diag| diag["message"].as_str().map_or(false, |m| m.contains(text)))
+            .collect();
+        assert_eq!(
+            matching.len(),
+            1,
+            "one report containing `{}` is expected, but the diagnostics are {:?}",
+            text,
+            diagnostics
+        );
+        matching[0]
+    }
+
     /// Two implementations of one trait that can apply to the same type are reported in the editor,
     /// on the first `impl`, with the second named as a related location.
     ///
@@ -47,21 +63,7 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("overlapping_instances");
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
-        let overlapping: Vec<&Value> = diagnostics
-            .iter()
-            .filter(|diag| {
-                diag["message"]
-                    .as_str()
-                    .map_or(false, |m| m.contains("are overlapping"))
-            })
-            .collect();
-        assert_eq!(
-            overlapping.len(),
-            1,
-            "one report is expected, but the diagnostics are {:?}",
-            diagnostics
-        );
-        let diag = overlapping[0];
+        let diag = sole_diagnostic_containing(&diagnostics, "are overlapping");
 
         // `main.fix` writes the two implementations on the 9th and the 13th line, which the
         // protocol counts from zero.
@@ -95,21 +97,7 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env(project_name);
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
-        let duplicates: Vec<&Value> = diagnostics
-            .iter()
-            .filter(|diag| {
-                diag["message"]
-                    .as_str()
-                    .map_or(false, |m| m.contains("Duplicate field"))
-            })
-            .collect();
-        assert_eq!(
-            duplicates.len(),
-            1,
-            "one report is expected, but the diagnostics are {:?}",
-            diagnostics
-        );
-        let diag = duplicates[0];
+        let diag = sole_diagnostic_containing(&diagnostics, "Duplicate field");
 
         assert_eq!(
             diag["range"]["start"]["line"], line,

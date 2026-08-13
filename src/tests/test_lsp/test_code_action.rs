@@ -24,6 +24,47 @@ mod tests {
             .collect()
     }
 
+    /// Whether the diagnostic's code is `code`.
+    fn has_code(diag: &Value, code: &str) -> bool {
+        diag.get("code")
+            .and_then(|c| c.as_str())
+            .map_or(false, |c| c == code)
+    }
+
+    /// The first diagnostic whose code is `code`, of which the test expects one to be published.
+    fn diagnostic_with_code<'a>(diagnostics: &'a [Value], code: &str) -> &'a Value {
+        diagnostics
+            .iter()
+            .find(|diag| has_code(diag, code))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Should have a '{}' diagnostic. Got: {:?}",
+                    code, diagnostics
+                )
+            })
+    }
+
+    /// The start and the end of the diagnostic's range, each as a line and a character.
+    fn range_of(diag: &Value) -> (u32, u32, u32, u32) {
+        let range = diag.get("range").expect("Diagnostic should have a range");
+        let start = range.get("start").expect("Range should have a start");
+        let end = range.get("end").expect("Range should have an end");
+        (
+            start.get("line").unwrap().as_u64().unwrap() as u32,
+            start.get("character").unwrap().as_u64().unwrap() as u32,
+            end.get("line").unwrap().as_u64().unwrap() as u32,
+            end.get("character").unwrap().as_u64().unwrap() as u32,
+        )
+    }
+
+    /// The titles of the code actions.
+    fn action_titles(actions: &[Value]) -> Vec<String> {
+        actions
+            .iter()
+            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
+            .collect()
+    }
+
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
@@ -155,10 +196,7 @@ mod tests {
             "severity": 1
         });
         let actions = ctx.code_actions("main.fix", vec![fake_trait_diag], 0, 0, 0, 7);
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("MyTrait")),
             "Quick fix should suggest importing `MyTrait`. Got actions: {:?}",
@@ -177,10 +215,7 @@ mod tests {
             "severity": 1
         });
         let actions = ctx.code_actions("main.fix", vec![fake_assoc_diag], 0, 0, 0, 6);
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("MyElem")),
             "Quick fix should suggest importing associated type `MyElem`. Got actions: {:?}",
@@ -204,24 +239,10 @@ mod tests {
         );
 
         // Find the "missing-trait-impl" diagnostic.
-        let missing_diag = diagnostics
-            .iter()
-            .find(|d| {
-                d.get("code")
-                    .and_then(|c| c.as_str())
-                    .map(|c| c == "missing-trait-impl")
-                    .unwrap_or(false)
-            })
-            .expect("Should have a 'missing-trait-impl' diagnostic");
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-trait-impl");
 
         // Get the range of the diagnostic.
-        let range = missing_diag.get("range").unwrap().clone();
-        let start = range.get("start").unwrap();
-        let end = range.get("end").unwrap();
-        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
-        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
-        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
-        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+        let (start_line, start_col, end_line, end_col) = range_of(missing_diag);
 
         // Request code actions with the real diagnostic.
         let actions = ctx.code_actions(
@@ -239,10 +260,7 @@ mod tests {
             "Should have at least one quick fix action."
         );
 
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("stub")),
             "Quick fix should suggest inserting stub implementations. Got: {:?}",
@@ -321,23 +339,9 @@ mod tests {
         let mut ctx = LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
-        let missing_diag = diagnostics
-            .iter()
-            .find(|d| {
-                d.get("code")
-                    .and_then(|c| c.as_str())
-                    .map(|c| c == "missing-struct-field")
-                    .unwrap_or(false)
-            })
-            .expect("Should have a 'missing-struct-field' diagnostic");
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-struct-field");
 
-        let range = missing_diag.get("range").unwrap().clone();
-        let start = range.get("start").unwrap();
-        let end = range.get("end").unwrap();
-        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
-        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
-        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
-        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+        let (start_line, start_col, end_line, end_col) = range_of(missing_diag);
 
         let actions = ctx.code_actions(
             "main.fix",
@@ -404,20 +408,15 @@ mod tests {
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
         assert!(
-            !diagnostics.iter().any(|d| d
-                .get("code")
-                .and_then(|c| c.as_str())
-                .map(|c| c == "missing-struct-field")
-                .unwrap_or(false)),
+            !diagnostics
+                .iter()
+                .any(|d| has_code(d, "missing-struct-field")),
             "missing-struct-field diagnostic should be gone after applying the quick fix. Got: {:?}",
             diagnostics
         );
-        let hole_diag = diagnostics.iter().find(|d| {
-            d.get("code")
-                .and_then(|c| c.as_str())
-                .map(|c| c == "missing-expression")
-                .unwrap_or(false)
-        });
+        let hole_diag = diagnostics
+            .iter()
+            .find(|d| has_code(d, "missing-expression"));
         assert!(
             hole_diag.is_some(),
             "Expected a `missing-expression` diagnostic for the inserted `?`. Got: {:?}",
@@ -447,24 +446,9 @@ mod tests {
             "The repeated field should be reported as well. Got: {:?}",
             diagnostics
         );
-        let missing_diag = diagnostics
-            .iter()
-            .find(|d| {
-                d.get("code")
-                    .and_then(|c| c.as_str())
-                    .map(|c| c == "missing-struct-field")
-                    .unwrap_or(false)
-            })
-            .expect("Should have a 'missing-struct-field' diagnostic")
-            .clone();
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-struct-field").clone();
 
-        let range = missing_diag.get("range").unwrap().clone();
-        let start = range.get("start").unwrap();
-        let end = range.get("end").unwrap();
-        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
-        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
-        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
-        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+        let (start_line, start_col, end_line, end_col) = range_of(&missing_diag);
 
         let actions = ctx.code_actions(
             "main.fix",
