@@ -8,7 +8,7 @@ use crate::{configuration::Configuration, tests::test_util::test_source};
 /// same namespace differs from the accessor only in a character no file name can carry. Both are
 /// read here, and each must answer with its own body.
 #[test]
-fn test_a_field_accessor_and_a_value_named_alike_keep_their_own_bodies() {
+fn test_an_accessor_and_a_value_differing_only_in_punctuation_keep_their_own_bodies() {
     let source = r#"
         module Main;
 

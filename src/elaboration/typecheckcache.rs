@@ -82,10 +82,10 @@ impl FileCache {
         let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
         let digest = format!("{:x}", md5::compute(key));
 
-        let readable = name
+        let readable_name = name
             .to_string()
             .replace(|c: char| !c.is_alphanumeric(), "_");
-        format!("{}_{}", readable, digest)
+        format!("{}_{}", readable_name, digest)
     }
 }
 
@@ -234,12 +234,12 @@ mod tests {
     fn cache_files_of_names_differing_only_in_punctuation_stay_apart() {
         let cache = FileCache::new();
         let scheme = Scheme::from_type(type_tyvar_star("a"));
-        let accessor = FullName::from_strs(&["Main", "S"], "@b");
-        let value = FullName::from_strs(&["Main", "S"], "_b");
+        let accessor_name = FullName::from_strs(&["Main", "S"], "@b");
+        let value_name = FullName::from_strs(&["Main", "S"], "_b");
 
         assert_ne!(
-            cache.cache_file_name(&accessor, &scheme, "0"),
-            cache.cache_file_name(&value, &scheme, "0"),
+            cache.cache_file_name(&accessor_name, &scheme, "0"),
+            cache.cache_file_name(&value_name, &scheme, "0"),
         );
     }
 
@@ -251,17 +251,17 @@ mod tests {
     fn cache_files_of_entries_differing_in_one_component_stay_apart() {
         let cache = FileCache::new();
         let name = FullName::from_strs(&["Std", "ToString"], "to_string");
-        let of_i64 = Scheme::from_type(make_i64_ty());
-        let of_bool = Scheme::from_type(make_bool_ty());
+        let i64_scheme = Scheme::from_type(make_i64_ty());
+        let bool_scheme = Scheme::from_type(make_bool_ty());
 
         assert_ne!(
-            cache.cache_file_name(&name, &of_i64, "0"),
-            cache.cache_file_name(&name, &of_bool, "0"),
+            cache.cache_file_name(&name, &i64_scheme, "0"),
+            cache.cache_file_name(&name, &bool_scheme, "0"),
             "two entries of one name whose types differ share a file",
         );
         assert_ne!(
-            cache.cache_file_name(&name, &of_i64, "0"),
-            cache.cache_file_name(&name, &of_i64, "1"),
+            cache.cache_file_name(&name, &i64_scheme, "0"),
+            cache.cache_file_name(&name, &i64_scheme, "1"),
             "an entry keeps its file when the sources it depends on change",
         );
     }
