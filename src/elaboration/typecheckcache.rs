@@ -217,6 +217,7 @@ mod tests {
     use super::FileCache;
     use crate::ast::name::FullName;
     use crate::ast::types::{type_tyvar_star, Scheme};
+    use crate::fixstd::builtin::{make_bool_ty, make_i64_ty};
 
     // A field accessor and a value the user writes are two entities whose names differ only in a
     // character a file name cannot carry. Their cache files must stay apart: a shared file hands
@@ -231,6 +232,29 @@ mod tests {
         assert_ne!(
             cache.cache_file_name(&accessor, &scheme, "0"),
             cache.cache_file_name(&value, &scheme, "0"),
+        );
+    }
+
+    // The key has three components — the name of the value, the type it is checked against, and
+    // the hash of the sources it depends on — and each one alone tells two entries apart. The
+    // implementations of one trait method defined in a single module share the name and the hash
+    // and differ in the type; an edit to a source the value depends on changes the hash alone.
+    #[test]
+    fn cache_files_of_entries_differing_in_one_component_stay_apart() {
+        let cache = FileCache::new();
+        let name = FullName::from_strs(&["Std", "ToString"], "to_string");
+        let of_i64 = Scheme::from_type(make_i64_ty());
+        let of_bool = Scheme::from_type(make_bool_ty());
+
+        assert_ne!(
+            cache.cache_file_name(&name, &of_i64, "0"),
+            cache.cache_file_name(&name, &of_bool, "0"),
+            "two entries of one name whose types differ share a file",
+        );
+        assert_ne!(
+            cache.cache_file_name(&name, &of_i64, "0"),
+            cache.cache_file_name(&name, &of_i64, "1"),
+            "an entry keeps its file when the sources it depends on change",
         );
     }
 }
