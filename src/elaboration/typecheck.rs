@@ -31,7 +31,8 @@ use crate::{
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
-use std::mem::{replace, swap};
+use serde_json::{json, Value};
+use std::mem;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -706,7 +707,7 @@ impl TypeCheckContext {
             };
             let mut err = Error::from_msg_srcs(msg, &[source]);
             err.code = Some(ERR_MISSING_STRUCT_FIELD);
-            err.data = Some(serde_json::json!(missing));
+            err.data = Some(json!(missing));
             errors.append(Errors::from_err(err));
         }
         // Each name the struct doesn't declare is reported once, in the order
@@ -1133,7 +1134,7 @@ impl TypeCheckContext {
                         &[&src],
                     );
                     err.code = Some(ERR_UNKNOWN_NAME);
-                    err.data = Some(serde_json::Value::String(var.name.to_string()));
+                    err.data = Some(Value::String(var.name.to_string()));
                     return Err(Errors::from_err(err));
                 }
                 let mut candidates_check_res: Vec<
@@ -1234,7 +1235,7 @@ impl TypeCheckContext {
                     };
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = Some(serde_json::Value::String(var.name.to_string()));
+                    error.data = Some(Value::String(var.name.to_string()));
                     error.add_srcs(extra_srcs);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
@@ -1251,10 +1252,10 @@ impl TypeCheckContext {
                     );
                     let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
                     err.code = Some(ERR_AMBIGUOUS_NAME);
-                    err.data = Some(serde_json::Value::Array(
+                    err.data = Some(Value::Array(
                         candidates
                             .iter()
-                            .map(|name| serde_json::Value::String(name.to_string()))
+                            .map(|name| Value::String(name.to_string()))
                             .collect(),
                     ));
                     return Err(Errors::from_err(err));
@@ -1919,7 +1920,7 @@ impl TypeCheckContext {
     /// pending equalities, which the new bindings may let unify or reduce.
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
         self.substitution.compose(subst);
-        let eqs = replace(&mut self.equalities, vec![]);
+        let eqs = mem::replace(&mut self.equalities, vec![]);
         for eq in eqs {
             self.add_equality(eq)?;
         }
@@ -2055,7 +2056,7 @@ impl TypeCheckContext {
                 }
                 _ => {}
             }
-            swap(&mut ty1, &mut ty2);
+            mem::swap(&mut ty1, &mut ty2);
         }
 
         // Case: Either is usage of associated type.
@@ -2070,7 +2071,7 @@ impl TypeCheckContext {
                 self.add_equality(eq)?;
                 return Ok(());
             }
-            swap(&mut ty1, &mut ty2);
+            mem::swap(&mut ty1, &mut ty2);
         }
 
         // Other case.

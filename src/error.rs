@@ -1,9 +1,11 @@
-use crate::misc::{Map, Set};
-use crate::{misc, parse::sourcefile::Span};
+use crate::misc::{insert_to_map_vec, Map, Set};
+use crate::parse::sourcefile::Span;
 use colored::{Color, Colorize};
 use serde_json::Value;
 use std::{
-    fmt::Display,
+    any::Any,
+    fmt::{self, Display, Formatter},
+    mem, panic,
     path::{Path, PathBuf},
 };
 
@@ -38,7 +40,7 @@ pub struct Errors {
 }
 
 impl Display for Errors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string())
     }
 }
@@ -63,7 +65,7 @@ impl Errors {
 
     pub fn to_result(&mut self) -> Result<(), Errors> {
         if self.has_error() {
-            Err(std::mem::replace(self, Errors::empty()))
+            Err(mem::replace(self, Errors::empty()))
         } else {
             Ok(())
         }
@@ -73,7 +75,7 @@ impl Errors {
     /// error-severity items in `self`. Useful for printing warnings before
     /// checking `to_result()`.
     pub fn take_warnings(&mut self) -> Errors {
-        let (warnings, errors) = std::mem::take(&mut self.errs)
+        let (warnings, errors) = mem::take(&mut self.errs)
             .into_iter()
             .partition(|err| err.severity == Severity::Warning);
         self.errs = errors;
@@ -155,7 +157,7 @@ impl Errors {
                 None => spanless_fallback.to_path_buf(),
                 Some((_, span)) => span.input.file_path.clone(),
             };
-            misc::insert_to_map_vec(&mut map, &path, err.clone());
+            insert_to_map_vec(&mut map, &path, err.clone());
         }
 
         // Convert the hashmap into a vector.
@@ -246,14 +248,14 @@ impl Error {
 fn panic_notrace(msg: &str) -> ! {
     // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
     // We replace it to empty.
-    std::panic::set_hook(Box::new(move |info| {
+    panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
     }));
     panic!("{}", msg);
 }
 
-pub fn any_to_string(any: &dyn std::any::Any) -> String {
+pub fn any_to_string(any: &dyn Any) -> String {
     if let Some(s) = any.downcast_ref::<String>() {
         s.clone()
     } else if let Some(s) = any.downcast_ref::<&str>() {
