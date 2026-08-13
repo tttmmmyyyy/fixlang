@@ -21,6 +21,8 @@ use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
+use crate::constants::STRUCT_GETTER_SYMBOL;
+use crate::constants::SYMBOL_TABLE_GETTER_SYMBOL;
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
@@ -2449,7 +2451,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         };
         let func = self
             .module
-            .add_function(&name.to_string(), llvm_fn_ty, Some(linkage));
+            .add_function(&object_symbol_name(name), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
         if fn_ty.is_funptr() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
@@ -2493,25 +2495,35 @@ impl<'c, 'm> Generator<'c, 'm> {
     // subprogram as the debug scope the body is generated under. The returned guard closes the scope
     // when it is dropped; it is `None` when the build carries no debug info.
     //
+    // `name` is what a debugger calls the function: the Fix name, spelled as the program spells it.
+    // The symbol `func` carries is the encoding of that name (`object_symbol_name`), and it goes to
+    // the subprogram as the linkage name.
+    //
     // Attaching the subprogram here, where the body is created, is what keeps it off a function that
     // has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a module
     // declares every global it refers to but defines only its own.
     pub fn push_debug_subprogram(
         &mut self,
         func: FunctionValue<'c>,
+        name: &str,
         span: Option<Span>,
     ) -> Option<PopDebugScopeGuard<'c>> {
         if !self.has_di() {
             return None;
         }
-        let fn_name = func.get_name().to_str().unwrap().to_string();
-        let subprogram = self.create_debug_subprogram(&fn_name, span);
+        let linkage_name = func.get_name().to_str().unwrap().to_string();
+        let subprogram = self.create_debug_subprogram(name, &linkage_name, span);
         func.set_subprogram(subprogram);
         Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
     }
 
     // Create debug info subprogram.
-    fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram<'c> {
+    fn create_debug_subprogram(
+        &self,
+        fn_name: &str,
+        linkage_name: &str,
+        span: Option<Span>,
+    ) -> DISubprogram<'c> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
             span.start_line_no()
@@ -2523,7 +2535,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         di_builder.create_function(
             di_compile_unit.as_debug_info_scope(),
             fn_name,
-            None,
+            Some(linkage_name),
             file,
             line_no as u32,
             subroutine_type,
@@ -2878,9 +2890,20 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
     v.get_zero_extended_constant() == Some(1)
 }
 
+// The name under which the value `name` enters the symbol table of an object file.
+//
+// A field getter carries the getter symbol in its Fix name (`Main::Point::@x`), which a symbol table
+// cannot hold as it stands, so it is written as `SYMBOL_TABLE_GETTER_SYMBOL` here. Every symbol a
+// Fix name reaches an object file under is written through this function, which is what makes the
+// module defining a value and the modules calling into it name it identically.
+pub(crate) fn object_symbol_name(name: &FullName) -> String {
+    name.to_string()
+        .replace(STRUCT_GETTER_SYMBOL, SYMBOL_TABLE_GETTER_SYMBOL)
+}
+
 // The name of the LLVM function through which the global `name`, of a type other than funptr, is
 // obtained. It is the name every module — the one defining the global and the ones calling into it —
 // declares and looks the accessor up under.
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
-    format!("Get#{}", name.to_string())
+    format!("Get#{}", object_symbol_name(name))
 }

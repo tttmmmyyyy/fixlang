@@ -14,7 +14,7 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, Generator, Object};
+use crate::generator::{global_accessor_name, object_symbol_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -33,7 +33,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
-            let fn_val = match self.module.get_function(&func.name.name.to_string()) {
+            let fn_val = match self
+                .module
+                .get_function(&object_symbol_name(&func.name.name))
+            {
                 Some(fn_val) => fn_val,
                 // A function of the program is declared from the program's global types, so that this
                 // module and every module calling into it build the same signature. A version the
@@ -79,7 +82,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let bb = self.context.append_basic_block(fn_val, "entry");
         self.builder().position_at_end(bb);
 
-        let _di_scope_guard = self.push_debug_subprogram(fn_val, func.source.clone());
+        let _di_scope_guard =
+            self.push_debug_subprogram(fn_val, &func.name.name.to_string(), func.source.clone());
 
         let _scope_guard = self.push_scope();
 
@@ -570,7 +574,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let global_var = self.module.add_global(
             obj_embed_ty,
             None,
-            &format!("GlobalVar#{}", global_init.symbol.to_string()),
+            &format!("GlobalVar#{}", object_symbol_name(&global_init.symbol)),
         );
         global_var.set_initializer(&obj_embed_ty.const_zero());
         global_var.set_linkage(Linkage::Internal);
@@ -588,7 +592,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let init_flag = self.module.add_global(
             flag_ty,
             None,
-            &format!("InitFlag#{}", global_init.symbol.to_string()),
+            &format!("InitFlag#{}", object_symbol_name(&global_init.symbol)),
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
@@ -597,7 +601,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
-        let _di_scope_guard = self.push_debug_subprogram(acc_fn, global_init.init.source.clone());
+        let _di_scope_guard = self.push_debug_subprogram(
+            acc_fn,
+            &global_init.symbol.to_string(),
+            global_init.init.source.clone(),
+        );
 
         // Branch to the initialization code only on the first access.
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
@@ -622,7 +630,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             (init_bb, end_bb, None)
         } else {
-            let init_fn_name = format!("InitOnce#{}", global_init.symbol.to_string());
+            let init_fn_name = format!("InitOnce#{}", object_symbol_name(&global_init.symbol));
             let init_fn = self.module.add_function(
                 &init_fn_name,
                 self.context.void_type().fn_type(&[], false),
@@ -638,7 +646,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
             self.builder().build_unconditional_branch(end_bb).unwrap();
             let init_bb = self.context.append_basic_block(init_fn, "init_bb");
-            let guard = self.push_debug_subprogram(init_fn, global_init.init.source.clone());
+            let guard = self.push_debug_subprogram(
+                init_fn,
+                &format!("InitOnce#{}", global_init.symbol.to_string()),
+                global_init.init.source.clone(),
+            );
             (init_bb, end_bb, guard)
         };
 
