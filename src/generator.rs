@@ -21,8 +21,8 @@ use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
-use crate::constants::STRUCT_GETTER_SYMBOL;
-use crate::constants::SYMBOL_TABLE_GETTER_SYMBOL;
+use crate::constants::SYMBOL_VERSION_SEPARATOR;
+use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
@@ -2716,10 +2716,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// A symbol this module defines is one an object file's symbol table can hold, which is the
-    /// spelling `object_file_symbol_name` gives a Fix name. A symbol carrying the getter symbol is
-    /// read by the linker as `symbol@version`, and stops it from building the dynamic symbol table
-    /// of a shared library, so this names the offending symbol at the module that minted it, in
-    /// every build whatever its output type.
+    /// spelling `object_file_symbol_name` gives a Fix name. A symbol carrying
+    /// `SYMBOL_VERSION_SEPARATOR` is read by the linker as `symbol@version`, and stops it from
+    /// building the dynamic symbol table of a shared library, so this names the offending symbol at
+    /// the module that minted it, in every build whatever its output type.
     ///
     /// What the module only declares is left out: the C function `FFI_CALL` names is spelled as the
     /// library spells it, a version specifier included.
@@ -2735,10 +2735,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             .filter(|global| global.get_initializer().is_some())
             .map(|global| global.get_name().to_str().unwrap().to_string());
         for symbol in defined_function_symbols.chain(defined_global_symbols) {
-            if symbol.contains(STRUCT_GETTER_SYMBOL) {
+            if symbol.contains(SYMBOL_VERSION_SEPARATOR) {
                 panic_with_msg(&format!(
                     "the symbol `{}` carries `{}`, which a symbol table cannot hold",
-                    symbol, STRUCT_GETTER_SYMBOL
+                    symbol, SYMBOL_VERSION_SEPARATOR
                 ));
             }
         }
@@ -2911,10 +2911,11 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 
 /// The name under which the value `name` enters the symbol table of an object file.
 ///
-/// A field getter carries the getter symbol in its Fix name, which a symbol table cannot hold as it
-/// stands, so it is written as `SYMBOL_TABLE_GETTER_SYMBOL` here. Every symbol a Fix name reaches an
-/// object file under is written through this function, which is what makes the module defining a
-/// value and the modules calling into it name it identically.
+/// A Fix name carries `SYMBOL_VERSION_SEPARATOR` wherever it names a field getter, and a symbol
+/// table cannot hold that character, so it is written as `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE`
+/// here. Every symbol a Fix name reaches an object file under is written through this function,
+/// which is what makes the module defining a value and the modules calling into it name it
+/// identically.
 ///
 /// # Examples
 ///
@@ -2923,13 +2924,16 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     let name = name.to_string();
     assert!(
-        !name.contains(SYMBOL_TABLE_GETTER_SYMBOL),
+        !name.contains(SYMBOL_VERSION_SEPARATOR_SUBSTITUTE),
         "the name `{}` carries `{}`, which stands for `{}` in a symbol table",
         name,
-        SYMBOL_TABLE_GETTER_SYMBOL,
-        STRUCT_GETTER_SYMBOL
+        SYMBOL_VERSION_SEPARATOR_SUBSTITUTE,
+        SYMBOL_VERSION_SEPARATOR
     );
-    name.replace(STRUCT_GETTER_SYMBOL, SYMBOL_TABLE_GETTER_SYMBOL)
+    name.replace(
+        SYMBOL_VERSION_SEPARATOR,
+        SYMBOL_VERSION_SEPARATOR_SUBSTITUTE,
+    )
 }
 
 /// The name of the LLVM function through which the global `name`, of a type other than funptr, is
