@@ -2938,14 +2938,14 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path. The field names the file fix build writes. fix run and fix test build an executable in a temporary place and run it; giving them -o keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger.</td>
+            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger.</td>
         </tr>
         <tr>
             <td>output_type</td>
             <td>--output-type</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file type (executable/dynamic library). It is what fix build produces; fix run and fix test build an executable, and the --output-type option is available on fix build alone.</td>
+            <td>Output file type (executable/dynamic library). It is what <code>fix build</code> produces; <code>fix run</code> and <code>fix test</code> build an executable, and the <code>--output-type</code> option is available on <code>fix build</code> alone.</td>
         </tr>
         <tr>
             <td>backtrace</td>
@@ -2966,14 +2966,14 @@ The following table shows how each setting is handled.
             <td>--no-runtime-check</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Disable runtime checks. fix test reads it from the build.test section, which defaults to keeping the checks.</td>
+            <td>Disable runtime checks. <code>fix test</code> reads it from the <code>build.test</code> section, which defaults to keeping the checks.</td>
         </tr>
         <tr>
             <td>skip_eval</td>
             <td>--skip-eval</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Skip the evaluation instructed by the eval syntax. fix test reads it from the build.test section, which defaults to keeping the evaluation.</td>
+            <td>Skip the evaluation instructed by the <code>eval</code> syntax. <code>fix test</code> reads it from the <code>build.test</code> section, which defaults to keeping the evaluation.</td>
         </tr>
     </tbody>
 </table>

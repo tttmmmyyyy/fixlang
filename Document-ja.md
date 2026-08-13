@@ -3047,14 +3047,14 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>-o, --output</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>出力ファイルパス。このフィールドは fix build が書き出すファイルを指します。fix run と fix test は一時的な場所に実行ファイルを作って実行し、-o を与えるとその実行ファイルを指定のパスに残します。テストが見つけた不具合をデバッガで追うときは、こうして残したバイナリを使います。</td>
+            <td>出力ファイルパス。このフィールドは <code>fix build</code> が書き出すファイルを指します。<code>fix run</code> と <code>fix test</code> は一時的な場所に実行ファイルを作って実行し、<code>-o</code> を与えるとその実行ファイルを指定のパスに残します。テストが見つけた不具合をデバッガで追うときは、こうして残したバイナリを使います。</td>
         </tr>
         <tr>
             <td>output_type</td>
             <td>--output-type</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>出力ファイルタイプ（実行ファイル/動的ライブラリ）。fix build が作るものを指定します。fix run と fix test は実行ファイルを作ります。--output-type オプションは fix build にのみあります。</td>
+            <td>出力ファイルタイプ（実行ファイル/動的ライブラリ）。<code>fix build</code> が作るものを指定します。<code>fix run</code> と <code>fix test</code> は実行ファイルを作ります。<code>--output-type</code> オプションは <code>fix build</code> にのみあります。</td>
         </tr>
         <tr>
             <td>backtrace</td>
@@ -3075,14 +3075,14 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>--no-runtime-check</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>実行時チェックの無効化。fix test はこれを build.test セクションから読み、既定では検査を残します。</td>
+            <td>実行時チェックの無効化。<code>fix test</code> はこれを <code>build.test</code> セクションから読み、既定では検査を残します。</td>
         </tr>
         <tr>
             <td>skip_eval</td>
             <td>--skip-eval</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>eval構文が指示する評価を飛ばす。fix test はこれを build.test セクションから読み、既定では評価を残します。</td>
+            <td><code>eval</code> 構文が指示する評価を飛ばす。<code>fix test</code> はこれを <code>build.test</code> セクションから読み、既定では評価を残します。</td>
         </tr>
     </tbody>
 </table>
