@@ -53,7 +53,15 @@ type VersionHash = String;
 // A name and a printed type each occupy one line, so joining the two with a newline gives a
 // distinct string to every distinct pair.
 fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
-    format!("{}\n{}", name.to_string(), type_.to_string_normalize())
+    let name = name.to_string();
+    let type_ = type_.to_string_normalize();
+    assert!(
+        !name.contains('\n') && !type_.contains('\n'),
+        "a component of a cache key spans two lines: name \"{}\", type \"{}\"",
+        name,
+        type_
+    );
+    format!("{}\n{}", name, type_)
 }
 
 // A cache implementation that stores cache in files.
