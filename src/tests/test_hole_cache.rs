@@ -18,6 +18,7 @@ mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process;
     use tempfile::TempDir;
 
     /// Absolute path to the `cases/` directory shipped alongside this
@@ -41,7 +42,7 @@ mod integration_tests {
 
     /// Run `fix check` in `project_dir` and return the full process
     /// output.
-    fn run_check(project_dir: &Path) -> std::process::Output {
+    fn run_check(project_dir: &Path) -> process::Output {
         fix_command()
             .arg("check")
             .current_dir(project_dir)

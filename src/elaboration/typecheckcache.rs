@@ -226,9 +226,11 @@ impl TypeCheckCache for MemoryCache {
 #[cfg(test)]
 mod tests {
     use super::FileCache;
-    use crate::ast::name::FullName;
-    use crate::ast::types::{type_tyvar_star, Scheme};
-    use crate::fixstd::builtin::{make_bool_ty, make_i64_ty};
+    use crate::{
+        ast::name::FullName,
+        ast::types::{type_tyvar_star, Scheme},
+        fixstd::builtin::{make_bool_ty, make_i64_ty},
+    };
 
     /// A field accessor and a value the user writes are two entities whose names differ only in a
     /// character a file name cannot carry. Their cache files must stay apart: a shared file hands
