@@ -104,13 +104,13 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let cache_file = self.cache_file_path(name, type_, version_hash);
-        let cache_file_str = cache_file.to_string_lossy().to_string();
-        let mut cache_file = match File::create(&cache_file) {
+        let cache_file_path = self.cache_file_path(name, type_, version_hash);
+        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
+        let mut cache_file = match File::create(&cache_file_path) {
             Err(_) => {
                 warn_msg(&format!(
                     "Failed to create cache file \"{}\".",
-                    cache_file_str
+                    cache_file_path_str
                 ));
                 return;
             }
@@ -122,7 +122,7 @@ impl TypeCheckCache for FileCache {
             Err(_) => {
                 warn_msg(&format!(
                     "Failed to write cache file \"{}\".",
-                    cache_file_str
+                    cache_file_path_str
                 ));
             }
         }
@@ -134,12 +134,12 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) -> Option<TypedExpr> {
-        let cache_file = self.cache_file_path(name, type_, version_hash);
-        let cache_file_str = cache_file.to_string_lossy().to_string();
-        if !cache_file.exists() {
+        let cache_file_path = self.cache_file_path(name, type_, version_hash);
+        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
+        if !cache_file_path.exists() {
             return None;
         }
-        let mut cache_file = match File::open(&cache_file) {
+        let mut cache_file = match File::open(&cache_file_path) {
             Err(_) => {
                 return None;
             }
@@ -151,7 +151,7 @@ impl TypeCheckCache for FileCache {
             Err(why) => {
                 warn_msg(&format!(
                     "Failed to read cache file \"{}\": {}.",
-                    cache_file_str, why
+                    cache_file_path_str, why
                 ));
                 return None;
             }
@@ -161,7 +161,7 @@ impl TypeCheckCache for FileCache {
             Err(why) => {
                 warn_msg(&format!(
                     "Failed to parse content of cache file \"{}\": {}.",
-                    cache_file_str, why
+                    cache_file_path_str, why
                 ));
                 return None;
             }
@@ -196,12 +196,12 @@ impl TypeCheckCache for MemoryCache {
         let mut data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entry = data.entry(entity_id).or_insert_with(|| VecDeque::new());
+        let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
-        while entry.len() >= CACHE_GENERATION as usize {
-            entry.pop_back();
+        while entries.len() >= CACHE_GENERATION as usize {
+            entries.pop_back();
         }
-        entry.push_front((version_hash, expr.clone()));
+        entries.push_front((version_hash, expr.clone()));
     }
 
     fn load_cache(
@@ -213,8 +213,8 @@ impl TypeCheckCache for MemoryCache {
         let data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entry = data.get(&entity_id)?;
-        let expr = entry
+        let entries = data.get(&entity_id)?;
+        let expr = entries
             .iter()
             .find(|(hash, _)| hash == &version_hash)?
             .1

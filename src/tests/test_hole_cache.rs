@@ -66,13 +66,13 @@ mod integration_tests {
     /// name begins with the given prefix.
     ///
     /// # Arguments
-    /// * `value_prefix` — the head of a cache file name, which holds the value's
-    ///   full name with each non-alphanumeric character replaced by `_`:
+    /// * `file_name_prefix` — the head of a cache file name, which holds the
+    ///   value's full name with each non-alphanumeric character replaced by `_`:
     ///   `Main::hole_val` is written `Main__hole_val`.
-    fn has_cache_entry_for(project_dir: &Path, value_prefix: &str) -> bool {
+    fn has_cache_entry_for(project_dir: &Path, file_name_prefix: &str) -> bool {
         list_cache_files(project_dir)
             .iter()
-            .any(|name| name.starts_with(value_prefix))
+            .any(|file_name| file_name.starts_with(file_name_prefix))
     }
 
     /// A hole-bearing value must not have a typecheck cache file
