@@ -851,7 +851,8 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    // Set the source locations of two unified type variables to the same one.
+    /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
+    /// them points at. Where both already carry one, `tv2`'s is the one kept.
     pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let mut src = None;
         if let Some(tv1_src) = self.tyvar_expr.get(&tv1) {
@@ -1718,7 +1719,8 @@ impl TypeCheckContext {
         err
     }
 
-    // Check that the `TypeCheckContext` is "fresh", i.e., it state variables are default.
+    /// Panics unless no inference has run in this context yet: no type variable issued, an empty
+    /// substitution, and no pending predicate, equality, fixed type variable or required import.
     pub fn assert_freshness(&self) {
         assert!(self.tyvar_id == 0);
         assert!(self.substitution.is_empty());
@@ -1927,6 +1929,9 @@ impl TypeCheckContext {
         Ok(())
     }
 
+    /// Records `eq` among the pending equalities, once neither of its sides can be simplified any
+    /// further. Where the accumulated substitution or the known equalities do simplify a side, the
+    /// two sides are unified instead, and an equality whose sides came out equal is dropped.
     fn add_equality(&mut self, mut eq: Equality) -> Result<(), UnifOrOtherErr> {
         // We add only equalities that are not trivial, and cannot be simplified further.
         // If the equation can be simplified in some way, then unify lhs and rhs of the equation, instead of adding it to `equalities`.
@@ -1971,7 +1976,11 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce a type by replacing associated type to its value.
+    /// Replaces each use of an associated type in `ty` by the value an assumed equality gives it,
+    /// as deep as the assumed equalities reach, and leaves the rest of the type as it stands.
+    ///
+    /// An associated type met on the way also requires the trait that declares it of its first
+    /// argument, so that predicate joins the pending ones.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
         match &ty.ty {
             Type::TyVar(_) => Ok(ty),
@@ -2026,7 +2035,14 @@ impl TypeCheckContext {
         }
     }
 
-    // Unify two types.
+    /// Makes `ty1` and `ty2` one type, extending the accumulated substitution with the bindings
+    /// that takes.
+    ///
+    /// A type variable free to be bound takes the other type as its value. A type variable held
+    /// fixed stands for a type the caller may not choose, so it agrees with itself alone. A use of
+    /// an associated type on either side becomes a pending equality, to be settled once enough is
+    /// known about its arguments. Two types no substitution can make equal give
+    /// `UnificationErr::Disjoint`.
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,

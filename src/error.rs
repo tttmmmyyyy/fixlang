@@ -40,6 +40,7 @@ pub struct Errors {
 }
 
 impl Display for Errors {
+    /// Writes each diagnostic as the compiler prints it, passing over a message already written.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string())
     }
@@ -63,6 +64,9 @@ impl Errors {
         !self.errs.is_empty()
     }
 
+    /// Takes every diagnostic out of `self` as an error, leaving `self` empty, once one of them
+    /// has error severity. A collection of warnings alone is a success and stays where it is, for
+    /// a later `take_warnings` to print.
     pub fn to_result(&mut self) -> Result<(), Errors> {
         if self.has_error() {
             Err(mem::replace(self, Errors::empty()))
@@ -82,6 +86,7 @@ impl Errors {
         Errors { errs: warnings }
     }
 
+    /// Moves every diagnostic of `other` to the end of this collection, keeping their order.
     pub fn append(&mut self, mut other: Errors) {
         self.errs.append(&mut other.errs);
     }
@@ -217,14 +222,25 @@ impl Error {
         err
     }
 
+    /// Attaches one more source location to this diagnostic, shown after the ones already
+    /// attached.
+    ///
+    /// # Arguments
+    /// * `src_desc` — the line printed above the quoted source, telling the reader what the
+    ///   location is to the diagnostic, such as "The value is defined at:".
     pub fn add_src(&mut self, src_desc: String, src: Span) {
         self.srcs.push((src_desc, src));
     }
 
+    /// Attaches several described source locations at once, in the given order, after the ones
+    /// already attached.
     pub fn add_srcs(&mut self, mut desc_srcs: Vec<(String, Span)>) {
         self.srcs.append(&mut desc_srcs);
     }
 
+    /// Renders this diagnostic as the compiler prints it: the severity label, the message, and
+    /// then each attached location as its description followed by the quoted source with the
+    /// span underlined in the severity's color.
     pub fn to_string(&self) -> String {
         let mut str = String::default();
         let (label, underline_color) = self.severity.label_and_underline_color();
@@ -255,6 +271,8 @@ fn panic_notrace(msg: &str) -> ! {
     panic!("{}", msg);
 }
 
+/// The message a panic payload carries. A payload of a type other than `String` or `&str` gives
+/// "(unknown error)", since the panic's own message is out of reach then.
 pub fn any_to_string(any: &dyn Any) -> String {
     if let Some(s) = any.downcast_ref::<String>() {
         s.clone()

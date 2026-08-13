@@ -65,12 +65,16 @@ mod tests {
             .collect()
     }
 
+    /// The directory holding the Fix projects these tests run the language server on.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
+    /// Copies the named case project into a temporary directory, so that tests editing their
+    /// project's files run beside one another, and returns that directory with the canonical path
+    /// of the copy inside it.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -82,13 +86,25 @@ mod tests {
         (temp_dir, test_case_dst)
     }
 
+    /// A language server running on a copy of one case project, with its documents open and its
+    /// first diagnostics published.
     struct LspQuickFixCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// The copy of the case project the server was started on.
         project_dir: PathBuf,
+        /// Holds the temporary directory containing `project_dir` alive; dropping it deletes the
+        /// copy.
         _temp_dir: TempDir,
     }
 
     impl LspQuickFixCtx {
+        /// Starts a server on a copy of the named case project, opens each of `files`, and waits
+        /// for the diagnostics of the last of them, which the tests read.
+        ///
+        /// # Arguments
+        /// * `files` — paths relative to the project directory; the last of them is the one whose
+        ///   diagnostics are awaited.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -109,6 +125,7 @@ mod tests {
             }
         }
 
+        /// The URI the server names the project's `file` by, as the responses spell it.
         fn file_uri(&self, file: &str) -> String {
             format!("file://{}", self.project_dir.join(file).display())
         }
@@ -156,6 +173,7 @@ mod tests {
             }
         }
 
+        /// Ends the session and fails the test if the server's reader thread met an error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -166,12 +184,11 @@ mod tests {
         }
     }
 
-    /// Test that quick fix suggests importing an associated type when it is unknown.
+    /// An `unknown-name` diagnostic naming an associated type draws a quick fix that imports the
+    /// type, as one naming a trait does.
     ///
-    /// The quickfix project compiles cleanly (all names are imported).
-    /// We send fabricated diagnostics with code "unknown-name" to test
-    /// that the code action handler can find the names in available_names.
-    /// First, we verify traits work (baseline), then check associated types.
+    /// The test writes the diagnostics itself and the case project compiles cleanly, so what is
+    /// exercised is the search for the named entity among the ones the file could import.
     #[test]
     fn test_quickfix_import_associated_type() {
         let mut ctx = LspQuickFixCtx::setup("quickfix", &["lib.fix", "main.fix"]);
