@@ -51,16 +51,21 @@ impl FileCache {
     }
 
     // Determine the filename for a cache file.
+    //
+    // The digest is what identifies the entry: it is taken over the three components at once, so
+    // two entries meet in one file only when all three agree. The part in front of it names the
+    // value for someone reading the cache directory, and is filename-safe because it keeps only
+    // alphanumeric characters; several values can wear the same one.
     fn cache_file_name(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> String {
         let name = name.to_string();
-        // To make it filename-safe, replace all non-alphanumeric characters with underscores.
-        let name = name.replace(|c: char| !c.is_alphanumeric(), "_");
-
         let type_ = type_.to_string_normalize();
-        // To make it filename-safe, take md5 hash.
-        let type_ = format!("{:x}", md5::compute(type_));
+        // A name, a printed type and a hash each occupy one line, so joining the three with a
+        // newline gives a distinct string to every distinct triple.
+        let key = format!("{}\n{}\n{}", name, type_, version_hash);
+        let digest = format!("{:x}", md5::compute(key));
 
-        format!("{}_{}_{}", name, type_, version_hash)
+        let readable = name.replace(|c: char| !c.is_alphanumeric(), "_");
+        format!("{}_{}", readable, digest)
     }
 }
 
@@ -199,5 +204,28 @@ impl TypeCheckCache for MemoryCache {
             .1
             .clone();
         Some(expr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FileCache;
+    use crate::ast::name::FullName;
+    use crate::ast::types::{type_tyvar_star, Scheme};
+
+    // A field accessor and a value the user writes are two entities whose names differ only in a
+    // character a file name cannot carry. Their cache files must stay apart: a shared file hands
+    // one entity the body of the other, and the read skips type checking, so nothing reports it.
+    #[test]
+    fn cache_files_of_names_differing_only_in_punctuation_stay_apart() {
+        let cache = FileCache::new();
+        let scheme = Scheme::from_type(type_tyvar_star("a"));
+        let accessor = FullName::from_strs(&["Main", "S"], "@b");
+        let value = FullName::from_strs(&["Main", "S"], "_b");
+
+        assert_ne!(
+            cache.cache_file_name(&accessor, &scheme, "0"),
+            cache.cache_file_name(&value, &scheme, "0"),
+        );
     }
 }

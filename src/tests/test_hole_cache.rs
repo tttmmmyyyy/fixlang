@@ -62,10 +62,9 @@ mod integration_tests {
             .collect()
     }
 
-    /// `cache_file_name` (in `typecheckcache.rs`) replaces non-alphanumeric
-    /// characters of the value name with `_`, so `Main::hole_val` becomes
-    /// `Main__hole_val`. The full file name is
-    /// `Main__hole_val_<scheme_md5>_<version_hash>`. We just match by
+    /// A cache file is named `<value name>_<digest>` by `cache_file_name` (in
+    /// `typecheckcache.rs`), where the value name keeps only its alphanumeric
+    /// characters — `Main::hole_val` becomes `Main__hole_val`. We just match by
     /// prefix.
     fn has_cache_entry_for(project_dir: &Path, value_prefix: &str) -> bool {
         list_cache_files(project_dir)
