@@ -18,7 +18,6 @@ use std::{
     fs::{self, remove_file, File},
     io::Write,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 /// The head of a test source: the `Main` module declaration followed by `Array::assert_unique`,
