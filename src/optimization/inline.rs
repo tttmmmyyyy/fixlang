@@ -66,6 +66,12 @@ pub fn run(prg: &mut Program) {
 /// borrowing version, a version per input uniqueness, one per locality), and they differ in size
 /// enough that judging them apart would ask for the small versions of a body whose large versions
 /// must stay where they are.
+///
+/// A body that calls itself is asked for as well, unlike the bodies this pass substitutes at their
+/// call sites. Tail-call elimination turns a direct self-call into a loop before the back end
+/// decides anything, so such a body is a loop by then — and a loop entered many times, which is
+/// where the request pays most. A self-call that survives to the decision makes the request inert:
+/// the back end declines to put a body inside itself.
 pub fn request_inline_into_callers(prg: &mut Program) {
     let costs = calculate_inline_costs(prg);
     for (name, sym) in &mut prg.symbols {
