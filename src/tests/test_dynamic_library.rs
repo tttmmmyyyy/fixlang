@@ -60,7 +60,7 @@ fn build_driver(project_dir: &Path, link_arguments: &[&str]) -> PathBuf {
 fn assert_an_opened_library_answers(opt_level: &str) {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "exported_getter");
     let library = build_library(&project_dir, opt_level);
-    // Where the loader is a library of its own rather than a part of the C library.
+    // Linux keeps the loader in a library of its own, which the driver names on its link line.
     let link_arguments: &[&str] = if cfg!(target_os = "linux") {
         &["-ldl"]
     } else {
@@ -96,14 +96,15 @@ fn test_a_library_built_at_none_is_loaded_and_called() {
     assert_an_opened_library_answers("none");
 }
 
-/// The same at the level that optimizes while still splitting the code into compilation units.
+/// A library built at the level that optimizes while still splitting the code into compilation
+/// units, so the symbols carrying values between them enter the library's symbol table.
 #[test]
 fn test_a_library_built_at_basic_is_loaded_and_called() {
     assert_an_opened_library_answers("basic");
 }
 
-/// The same at the level that compiles the whole program as one unit, where the values it carries
-/// need no symbol of their own.
+/// A library built at the level that compiles the whole program as one compilation unit, where the
+/// values it carries need no symbol of their own.
 #[test]
 fn test_a_library_built_at_max_is_loaded_and_called() {
     assert_an_opened_library_answers("max");

@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// `Main::sum_point`, which `FFI_EXPORT` offers under this name.
+// The type of `Main::sum_point`, which `FFI_EXPORT` offers as `fix_sum_point`.
 typedef long long (*sum_point_fn)(long long);
 
 int main(int argc, char **argv) {

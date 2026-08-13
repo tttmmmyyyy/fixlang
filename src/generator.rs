@@ -2715,14 +2715,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // A symbol this module defines is one an object file's symbol table can hold, which is what
-    // `object_file_symbol_name` gives a Fix name. A symbol carrying the getter symbol is read by the
-    // linker as `symbol@version`, and stops it from building the dynamic symbol table of a shared
-    // library, so this says which symbol the table cannot hold where it was minted rather than
-    // leaving the linker to report it against a program that happens to be built as a library.
-    //
-    // What the module only declares is left out: the C function `FFI_CALL` names is spelled as the
-    // library spells it, a version specifier included.
+    /// A symbol this module defines is one an object file's symbol table can hold, which is the
+    /// spelling `object_file_symbol_name` gives a Fix name. A symbol carrying the getter symbol is
+    /// read by the linker as `symbol@version`, and stops it from building the dynamic symbol table
+    /// of a shared library, so this names the offending symbol at the module that minted it, in
+    /// every build whatever its output type.
+    ///
+    /// What the module only declares is left out: the C function `FFI_CALL` names is spelled as the
+    /// library spells it, a version specifier included.
     pub fn assert_defined_symbols_fit_a_symbol_table(&self) {
         let defined_function_symbols = self
             .module
@@ -2909,12 +2909,17 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
     v.get_zero_extended_constant() == Some(1)
 }
 
-// The name under which the value `name` enters the symbol table of an object file.
-//
-// A field getter carries the getter symbol in its Fix name (`Main::Point::@x`), which a symbol table
-// cannot hold as it stands, so it is written as `SYMBOL_TABLE_GETTER_SYMBOL` here. Every symbol a
-// Fix name reaches an object file under is written through this function, which is what makes the
-// module defining a value and the modules calling into it name it identically.
+/// The name under which the value `name` enters the symbol table of an object file.
+///
+/// A field getter carries the getter symbol in its Fix name, which a symbol table cannot hold as it
+/// stands, so it is written as `SYMBOL_TABLE_GETTER_SYMBOL` here. Every symbol a Fix name reaches an
+/// object file under is written through this function, which is what makes the module defining a
+/// value and the modules calling into it name it identically.
+///
+/// # Examples
+///
+/// The getter of the field `x` of `Main::Point` is the Fix name `Main::Point::@x`, and enters a
+/// symbol table as `Main::Point::$x`.
 pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     let name = name.to_string();
     assert!(
