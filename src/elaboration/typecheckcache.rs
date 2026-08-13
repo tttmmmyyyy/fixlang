@@ -87,6 +87,13 @@ impl FileCache {
             .replace(|c: char| !c.is_alphanumeric(), "_");
         format!("{}_{}", readable_name, digest)
     }
+
+    // The path of the file that holds the cache entry for a value, creating the cache directory if
+    // it is absent.
+    fn cache_file_path(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> PathBuf {
+        let cache_file_name = self.cache_file_name(name, type_, version_hash);
+        touch_directory(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
+    }
 }
 
 impl TypeCheckCache for FileCache {
@@ -97,9 +104,7 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let cache_file_name: String = self.cache_file_name(name, type_, version_hash);
-        let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
-        let cache_file = cache_dir.join(cache_file_name);
+        let cache_file = self.cache_file_path(name, type_, version_hash);
         let cache_file_str = cache_file.to_string_lossy().to_string();
         let mut cache_file = match File::create(&cache_file) {
             Err(_) => {
@@ -129,9 +134,7 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) -> Option<TypedExpr> {
-        let cache_file_name: String = self.cache_file_name(name, type_, version_hash);
-        let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
-        let cache_file = cache_dir.join(cache_file_name);
+        let cache_file = self.cache_file_path(name, type_, version_hash);
         let cache_file_str = cache_file.to_string_lossy().to_string();
         if !cache_file.exists() {
             return None;
