@@ -9615,6 +9615,9 @@ pub fn test_type_wildcard_applied_without_kind_is_error() {
     test_source_fail(&source, Configuration::develop_mode(), "Kind mismatch");
 }
 
+/// A type annotation inside a definition that names the type variables of the definition's own
+/// signature, one of them of a higher kind: `let reader : ReaderT e m e = ...` in a value of type
+/// `[m : Monad] e -> m e` annotates with the `e` and the `m` the signature bound.
 #[test]
 pub fn test_regression_higher_kinded_type_variable_in_type_annotation() {
     let source = r##"
@@ -9670,6 +9673,9 @@ pub fn test_regression_higher_kinded_type_variable_in_type_annotation() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `match` on an `Option`, over the representations its payload takes: unboxed, boxed, and a
+/// closure. The boxed and the closure payload are also read out of the matched `Option` after the
+/// match, where the arm has to have left them alive.
 #[test]
 pub fn test_match_option() {
     let source = r##"

@@ -1,10 +1,9 @@
 //! Code generation from the RC IR to LLVM.
 //!
-//! The LLVM back end consumes the RC IR (with its explicit `Retain`/`Release` nodes). Reference
-//! counting is driven entirely by the RC nodes: variable reads are plain and the read-getters do not
-//! release their container — the explicit `Release` nodes dispose it. Non-reference-counting work
-//! (closure layout, FFI, struct/array construction, the inline-LLVM builtins) reuses the existing
-//! `Generator` helpers unchanged.
+//! Every retain and release the generated code performs comes from a `Retain` or `Release` node of
+//! the RC IR: a variable read yields the value alone, and a read-getter leaves its container to the
+//! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
+//! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
