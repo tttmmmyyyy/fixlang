@@ -2,8 +2,7 @@
 Inlining optimization.
 */
 
-use std::{mem, sync::Arc};
-
+use super::application_inlining;
 use crate::{
     ast::{
         expr::ExprNode,
@@ -14,8 +13,7 @@ use crate::{
     misc::{Map, Set},
     optimization::uncurry::is_std_fix,
 };
-
-use super::application_inlining;
+use std::{mem, sync::Arc};
 
 /// The size a body may reach and still be put where it is called, counted over the Fix expression
 /// as `InlineCosts` counts it.
