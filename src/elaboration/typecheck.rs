@@ -680,13 +680,13 @@ impl TypeCheckContext {
     ) -> Result<(), Errors> {
         let mut errors = duplicate_field_errors(tc, fields);
 
-        let field_names: Vec<Name> = ti.fields.iter().map(|f| f.name.clone()).collect();
-        let field_names_in_struct_defn: Set<Name> = Set::from_iter(field_names.iter().cloned());
-        let field_names_in_expression: Set<Name> =
+        let declared_field_names: Vec<Name> = ti.fields.iter().map(|f| f.name.clone()).collect();
+        let struct_field_names: Set<Name> = Set::from_iter(declared_field_names.iter().cloned());
+        let literal_field_names: Set<Name> =
             Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
-        let missing: Vec<Name> = field_names
+        let missing: Vec<Name> = declared_field_names
             .iter()
-            .filter(|f| !field_names_in_expression.contains(*f))
+            .filter(|f| !literal_field_names.contains(*f))
             .cloned()
             .collect();
         if !missing.is_empty() {
@@ -713,7 +713,7 @@ impl TypeCheckContext {
         // the literal writes them.
         let mut reported_unknown: Set<Name> = Set::default();
         for (name, _, _) in fields {
-            if field_names_in_struct_defn.contains(name) || !reported_unknown.insert(name.clone()) {
+            if struct_field_names.contains(name) || !reported_unknown.insert(name.clone()) {
                 continue;
             }
             errors.append(Errors::from_msg_srcs(
