@@ -1,6 +1,6 @@
-// LSP integration tests for "textDocument/codeAction" (quick fix) feature.
-//
-// Verifies that quick fix suggestions include import actions for associated types.
+// LSP integration tests for the "textDocument/codeAction" (quick fix) feature: importing the
+// module that declares a name the file uses, stubbing the members an implementation leaves out,
+// and filling in the fields a struct literal leaves out.
 
 #[cfg(test)]
 mod tests {
@@ -349,8 +349,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Test that quick fix suggests inserting `name: ?` placeholders for
-    /// missing fields of a struct literal.
+    /// A `missing-struct-field` diagnostic draws a quick fix that inserts a `name: ?` placeholder
+    /// for the field the literal leaves out, and applying that edit clears the diagnostic, leaving
+    /// the inserted hole as the one thing reported.
     #[test]
     fn test_quickfix_missing_struct_field() {
         let mut ctx = LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);

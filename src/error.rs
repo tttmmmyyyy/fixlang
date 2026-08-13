@@ -35,7 +35,9 @@ impl Severity {
     }
 }
 
+/// The diagnostics gathered over a piece of compilation, errors and warnings together.
 pub struct Errors {
+    /// The diagnostics, in the order they were reported.
     errs: Vec<Error>,
 }
 
@@ -47,6 +49,7 @@ impl Display for Errors {
 }
 
 impl Errors {
+    /// A collection holding no diagnostic.
     pub fn empty() -> Errors {
         Errors { errs: vec![] }
     }
@@ -91,7 +94,8 @@ impl Errors {
         self.errs.append(&mut other.errs);
     }
 
-    // Append the error in `res` if it is an error.
+    /// Appends the diagnostics of a failed `res` to this collection, so that the caller carries on
+    /// and reports them together with whatever it finds afterwards.
     pub fn eat_err(&mut self, res: Result<(), Errors>) {
         match res {
             Ok(_v) => {}
@@ -101,7 +105,8 @@ impl Errors {
         }
     }
 
-    // Otherwise, append the error in `res` if it is an error.
+    /// Hands the value of a successful `res` to `act_if_ok`, and appends the diagnostics of a
+    /// failed one to this collection.
     pub fn eat_err_or<T>(&mut self, res: Result<T, Errors>, act_if_ok: impl FnOnce(T)) {
         match res {
             Ok(v) => act_if_ok(v),
@@ -111,22 +116,28 @@ impl Errors {
         }
     }
 
+    /// A collection holding one error of the given message, with no source location attached.
     pub fn from_msg(msg: String) -> Errors {
         Errors {
             errs: vec![Error::from_msg(msg)],
         }
     }
 
+    /// A collection holding one error of the given message, attached to each of the given
+    /// locations that is present.
     pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Errors {
         Errors {
             errs: vec![Error::from_msg_srcs(msg, srcs)],
         }
     }
 
+    /// A collection holding the given diagnostic alone.
     pub fn from_err(err: Error) -> Errors {
         Errors { errs: vec![err] }
     }
 
+    /// A collection holding one error whose message is `msg`, a colon, and the display form of
+    /// `err`: `msg` says what the compiler was doing, and `err` is the failure that arose in it.
     pub fn from_msg_err<E>(msg: &str, err: E) -> Errors
     where
         E: Display,
@@ -134,6 +145,8 @@ impl Errors {
         Errors::from_msg(format!("{}: {}", msg, err))
     }
 
+    /// Renders every diagnostic as the compiler prints it, each on its own lines. A diagnostic
+    /// whose rendering repeats one already written is left out.
     pub fn to_string(&self) -> String {
         let mut msg_set = Set::default();
         let mut str = String::default();
@@ -149,11 +162,12 @@ impl Errors {
         str
     }
 
-    // Organize all `Error`s by the path of their (first) `Span`. An `Error`
-    // with no `Span` is grouped under `spanless_fallback`, letting a caller
-    // that needs every error attached to a real file route the location-less
-    // ones there (the language server uses the project file, since a
-    // diagnostic with no file is not displayable).
+    /// Groups the diagnostics by the file of their first source location, ordered by path.
+    ///
+    /// # Arguments
+    /// * `spanless_fallback` — the file a diagnostic carrying no source location is grouped
+    ///   under, so that every diagnostic belongs to some file even where the compiler could not
+    ///   point at one.
     pub fn organize_by_path(&self, spanless_fallback: &Path) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
         let mut map: Map<PathBuf, Vec<Error>> = Map::default();
@@ -175,15 +189,20 @@ impl Errors {
     }
 }
 
+/// One diagnostic: what went wrong, where in the source it is, and how severe it is.
 #[derive(Clone)]
 pub struct Error {
+    /// The text shown after the severity label.
     pub msg: String,
-    // The list of source locations.
-    // The first element is the description of the source code location such as "The error occurs at:" or "The value is defined at:".
+    /// The source locations this diagnostic concerns, each paired with the line printed above the
+    /// quoted source, such as "The error occurs at:" or "The value is defined at:". The first
+    /// location decides which file the diagnostic belongs to.
     pub srcs: Vec<(String, Span)>,
-    // The error code.
+    /// The code naming the kind of this diagnostic, such as `WARN_DEPRECATED`. It reaches an
+    /// editor through the language server, which offers a fix for the kinds it recognizes.
     pub code: Option<&'static str>,
-    // The metadata. Content depends on the error code.
+    /// Data about this diagnostic beyond its text, such as the name a fix has to insert. Its
+    /// shape is decided by `code`.
     pub data: Option<Value>,
     /// Severity of this diagnostic. Construct warnings via
     /// `Error::warning_from_msg_srcs`; the other constructors produce
@@ -192,6 +211,7 @@ pub struct Error {
 }
 
 impl Error {
+    /// A diagnostic of error severity carrying the given message, with no source location.
     pub fn from_msg(msg: String) -> Error {
         Error {
             msg,
@@ -202,6 +222,8 @@ impl Error {
         }
     }
 
+    /// A diagnostic of error severity carrying the given message, attached to each of the given
+    /// locations that is present, with no description above the quoted source.
     pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Error {
         Error {
             msg,
@@ -261,6 +283,8 @@ impl Error {
     }
 }
 
+/// Panics with `msg`, having installed a panic hook that prints the message alone, so that the
+/// thread name, the panic location and the backtrace note stay out of the compiler's output.
 fn panic_notrace(msg: &str) -> ! {
     // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
     // We replace it to empty.
@@ -283,11 +307,13 @@ pub fn any_to_string(any: &dyn Any) -> String {
     }
 }
 
+/// Ends the process, printing `msg` in the form a reported error takes.
 pub fn panic_with_msg(msg: &str) -> ! {
     let errs = Errors::from_msg(msg.to_string());
     panic_notrace(&errs.to_string())
 }
 
-pub fn panic_if_err<T>(err: Result<T, Errors>) -> T {
-    err.unwrap_or_else(|errs| panic_notrace(&errs.to_string()))
+/// The value of a successful `res`. A failed one ends the process with its diagnostics printed.
+pub fn panic_if_err<T>(res: Result<T, Errors>) -> T {
+    res.unwrap_or_else(|errs| panic_notrace(&errs.to_string()))
 }

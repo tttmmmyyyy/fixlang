@@ -14,6 +14,10 @@ mod struct_destructure_tests {
         tests::test_util::test_source,
     };
 
+    /// Destructures of a boxed struct whose fields are boxed, in each shape that decides how many
+    /// times a value is retained and released: the container's last use, a use of the container
+    /// after the destructure, a field the continuation drops, and a pattern reaching into an inner
+    /// boxed struct.
     const BOXED_DESTRUCTURE_SOURCE: &str = r#"
 module Main;
 
@@ -52,11 +56,13 @@ main : IO () = (
 );
 "#;
 
-    // A destructure consumes its container, so a function whose only use of a boxed parameter is to
-    // destructure it consumes that parameter and cannot borrow it. Ownership inference must see that
-    // consume: a version that borrowed the parameter would release a container it does not own, and
-    // the caller's value would die while it still holds it. The recursion keeps the callee from being
-    // inlined into the caller, so the call goes through the inferred parameter ownership.
+    /// A function whose only use of a boxed parameter is to destructure it, called twice on one
+    /// value the caller keeps using.
+    ///
+    /// A destructure consumes its container, so ownership inference has to give the parameter to
+    /// the callee: a callee that borrowed it would release a container it does not own, and the
+    /// caller's value would die while the caller still holds it. The recursion keeps the callee out
+    /// of the caller, so the call goes through the inferred parameter ownership.
     const DESTRUCTURED_PARAMETER_SOURCE: &str = r#"
 module Main;
 
