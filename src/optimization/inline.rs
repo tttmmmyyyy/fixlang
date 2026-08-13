@@ -17,12 +17,15 @@ use crate::{
 
 use super::application_inlining;
 
-/// The size a body may reach and still be put where it is called.
+/// The size a body may reach and still be put where it is called, counted over the Fix expression
+/// as `InlineCosts` counts it.
 ///
-/// It decides two things: which global's expression this pass substitutes into its call sites, and
+/// Two decisions read it: which global's expression this pass substitutes into its call sites, and
 /// which global the back end is asked to inline into every place that calls it
-/// (`request_inline_into_callers`). Both ask whether a body is small enough that holding a copy of
-/// it at each call site costs less than the call it saves, so both read the same size here.
+/// (`request_inline_into_callers`, which reads this size and nothing else). What each of them
+/// weighs is what a copy of the body costs at a call site against the call it saves, and the count
+/// of expression nodes stands for that cost — it is not the count of instructions the body
+/// generates, which reference counting and the bounds checks still to be inserted also feed.
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// How many times `run` rewrites the program before it stops asking for more.
@@ -71,7 +74,10 @@ pub fn run(prg: &mut Program) {
 pub fn request_inline_into_callers(prg: &mut Program) {
     let costs = calculate_inline_costs(prg);
     for (name, sym) in &mut prg.symbols {
-        sym.inline_into_callers = costs.get_complexity(name) <= INLINE_COST_THRESHOLD as usize;
+        // A global of any other type is a value, reached through the function that computes it
+        // once; it has no calls to inline.
+        sym.inline_into_callers =
+            sym.ty.is_funptr() && costs.get_complexity(name) <= INLINE_COST_THRESHOLD as usize;
     }
 }
 
