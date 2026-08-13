@@ -211,17 +211,45 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
-
 /// The functions `ir` defines, each paired with whether it carries the function attribute
 /// `attribute`.
 ///
 /// LLVM writes the attributes of a function as a reference to a group listed at the end of the
 /// module — `define ... @f(...) #2 {` against `attributes #2 = { alwaysinline }` — so each `define`
-/// line is read here against those listings.
+/// line is read here against those listings. A module numbers its groups on its own, so `ir`
+/// holding several of them is read one module at a time.
 pub fn llvm_function_attribute_flags(ir: &str, attribute: &str) -> Vec<(String, bool)> {
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut module_starts: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.starts_with(LLVM_MODULE_HEADER))
+        .map(|(index, _)| index)
+        .collect();
+    if module_starts.first() != Some(&0) {
+        module_starts.insert(0, 0);
+    }
+    module_starts.push(lines.len());
+
+    let mut functions = vec![];
+    for module in module_starts.windows(2) {
+        functions.extend(module_function_attribute_flags(
+            &lines[module[0]..module[1]],
+            attribute,
+        ));
+    }
+    functions
+}
+
+/// The line LLVM writes at the head of a module, which is where one module's text ends and the
+/// next one's begins.
+const LLVM_MODULE_HEADER: &str = "; ModuleID =";
+
+/// The functions one module defines, each paired with whether it carries `attribute`.
+fn module_function_attribute_flags(lines: &[&str], attribute: &str) -> Vec<(String, bool)> {
     // The groups holding `attribute`, by the number a `define` line names them with.
     let mut groups: Set<&str> = Set::default();
-    for line in ir.lines() {
+    for line in lines {
         let Some(listing) = line.strip_prefix("attributes ") else {
             continue;
         };
@@ -237,7 +265,7 @@ pub fn llvm_function_attribute_flags(ir: &str, attribute: &str) -> Vec<(String, 
     }
 
     let mut functions = vec![];
-    for line in ir.lines() {
+    for line in lines {
         if !line.starts_with("define ") {
             continue;
         }

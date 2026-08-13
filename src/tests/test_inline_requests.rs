@@ -102,11 +102,16 @@ main : IO () = (
     /// this build alone. `FIX_MAX_OPT_LEVEL` is pinned to the level asked for, so that the level is
     /// the one this test wants whatever the level the suite is being run at.
     fn build_run_and_read_ir(source: &str, expected_output: &str) -> String {
+        build_run_and_read_ir_at(source, expected_output, OPT_LEVEL)
+    }
+
+    /// The same, at the optimization level named — for a test whose subject is the level itself.
+    fn build_run_and_read_ir_at(source: &str, expected_output: &str, opt_level: &str) -> String {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dir = temp_dir.path();
-        let build_output = fix_build_source_command(dir, source, OPT_LEVEL)
+        let build_output = fix_build_source_command(dir, source, opt_level)
             .arg("--emit-llvm")
-            .env("FIX_MAX_OPT_LEVEL", OPT_LEVEL)
+            .env("FIX_MAX_OPT_LEVEL", opt_level)
             .output()
             .expect("Failed to execute fix build");
         assert!(
@@ -133,6 +138,56 @@ main : IO () = (
         );
 
         emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
+    }
+
+    /// A build below the level the request is made at asks for nothing. The level is what decides
+    /// whether the back end is handed a pipeline to act on a request at all.
+    #[test]
+    fn test_a_build_below_the_requesting_level_asks_for_nothing() {
+        let ir = build_run_and_read_ir_at(SMALL_LAMBDA_SOURCE, SMALL_LAMBDA_OUTPUT, "basic");
+        let asked = llvm_function_attribute_flags(&ir, ALWAYS_INLINE)
+            .into_iter()
+            .filter(|(_, asked)| *asked)
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        assert!(
+            asked.is_empty(),
+            "a build below `{}` makes no request, so no function should carry `{}`, but these do: \
+             {:?}",
+            OPT_LEVEL,
+            ALWAYS_INLINE,
+            asked
+        );
+    }
+
+    /// A body asked for at every call is one the module keeps to itself: the request is made where
+    /// the whole program is one compilation unit, and a definition visible outside its module is
+    /// called from modules that hold only its declaration, which carries no body to put at a call.
+    #[test]
+    fn test_a_body_asked_for_at_every_call_is_local_to_its_module() {
+        let ir = build_run_and_read_ir(COPIED_BODIES_SOURCE, COPIED_BODIES_OUTPUT);
+        let asked = llvm_function_attribute_flags(&ir, ALWAYS_INLINE)
+            .into_iter()
+            .filter(|(_, asked)| *asked)
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        assert!(
+            !asked.is_empty(),
+            "the build should ask for some body at every call, and it asked for none"
+        );
+
+        let visible = ir
+            .lines()
+            .filter(|line| line.starts_with("define "))
+            .filter(|line| !line.contains(" private ") && !line.contains(" internal "))
+            .filter(|line| asked.iter().any(|name| line.contains(name.as_str())))
+            .collect::<Vec<_>>();
+        assert!(
+            visible.is_empty(),
+            "a definition carrying `{}` should be local to its module, and these are not: {:?}",
+            ALWAYS_INLINE,
+            visible
+        );
     }
 
     /// The small bodies the optimizer leaves behind are asked for at every call — the lambda lifted

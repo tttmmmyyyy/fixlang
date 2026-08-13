@@ -244,7 +244,8 @@ impl Symbol {
         // so the type the trait is implemented appears in the type of the symbol.
     }
 
-    /// The MD5 hash of this symbol's name, type and expression, in hexadecimal.
+    /// The MD5 hash of everything about this symbol that decides the code generated for it — its
+    /// name, its type, its expression, and what it asks of the back end — in hexadecimal.
     pub fn hash(&self) -> String {
         let mut hash_source = String::new();
         hash_source.push_str("<name>");
