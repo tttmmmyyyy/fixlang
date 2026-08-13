@@ -23,6 +23,9 @@ mod integration_tests {
     /// places that call it are not known where it is generated.
     const IN_PLACE_CLOSURE: &str = "::closure#";
 
+    /// The optimization level these read, which is the level the request is made at.
+    const OPT_LEVEL: &str = "max";
+
     /// A lambda passed to a global function, which is the shape both techniques of the pass act on:
     /// the lambda is lifted to a global function, and `fold` is copied into a version that calls
     /// that function by name.
@@ -101,9 +104,9 @@ main : IO () = (
     fn build_run_and_read_ir(source: &str, expected_output: &str) -> String {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dir = temp_dir.path();
-        let build = fix_build_source_command(dir, source, "max")
+        let build = fix_build_source_command(dir, source, OPT_LEVEL)
             .arg("--emit-llvm")
-            .env("FIX_MAX_OPT_LEVEL", "max")
+            .env("FIX_MAX_OPT_LEVEL", OPT_LEVEL)
             .output()
             .expect("Failed to execute fix build");
         assert!(
@@ -243,9 +246,9 @@ main : IO () = (
         let copies = functions
             .iter()
             .filter_map(|(name, asked)| {
-                let copied = functions
-                    .iter()
-                    .find(|(other, _)| name.starts_with(&format!("{}#", other)))?;
+                let copied = functions.iter().find(|(other, _)| {
+                    name.starts_with(other.as_str()) && name[other.len()..].starts_with('#')
+                })?;
                 Some((name, *asked, copied.1))
             })
             .collect::<Vec<_>>();

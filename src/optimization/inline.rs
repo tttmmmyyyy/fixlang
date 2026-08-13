@@ -272,13 +272,21 @@ impl InlineCosts {
         }
     }
 
+    /// The cost recorded for the symbol named `name`. `calculate_inline_costs` records one for
+    /// every symbol of the program it walks, so every name of that program has one.
+    fn get(&self, name: &FullName) -> &InlineCost {
+        self.costs
+            .get(name)
+            .unwrap_or_else(|| panic!("no inline cost is recorded for `{}`", name.to_string()))
+    }
+
     pub fn get_call_count(&self, name: &FullName) -> usize {
-        self.costs.get(name).map_or(0, |c| c.call_count)
+        self.get(name).call_count
     }
 
     /// How big the symbol's expression is, counted as the walk meets its nodes.
     fn get_complexity(&self, name: &FullName) -> usize {
-        self.costs.get(name).map_or(0, |c| c.complexity)
+        self.get(name).complexity
     }
 
     // After `InlineCostCalculator` has been executed, add its result to `InlineCosts`.

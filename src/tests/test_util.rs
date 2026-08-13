@@ -225,9 +225,9 @@ pub fn llvm_functions_carrying(ir: &str, attribute: &str) -> Vec<(String, bool)>
         let Some(listing) = line.strip_prefix("attributes ") else {
             continue;
         };
-        let Some((group, attributes)) = listing.split_once('=') else {
-            continue;
-        };
+        let (group, attributes) = listing
+            .split_once('=')
+            .unwrap_or_else(|| panic!("this listing gives no attributes: {}", line));
         let holds = attributes
             .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
             .any(|word| word == attribute);
@@ -241,27 +241,35 @@ pub fn llvm_functions_carrying(ir: &str, attribute: &str) -> Vec<(String, bool)>
         if !line.starts_with("define ") {
             continue;
         }
-        let Some(name) = llvm_function_name(line) else {
-            continue;
-        };
         // The groups a function carries stand between its parameter list and its body.
-        let after_parameters = line.rsplit_once(')').map_or("", |(_, tail)| tail);
+        let (_, after_parameters) = line
+            .rsplit_once(')')
+            .unwrap_or_else(|| panic!("this definition closes no parameter list: {}", line));
         let carries = after_parameters
             .split_whitespace()
             .any(|token| groups.contains(token));
-        functions.push((name.to_string(), carries));
+        functions.push((llvm_function_name(line).to_string(), carries));
     }
     functions
 }
 
 /// The name of the function a `define` line defines. A name that is not a bare identifier — which
 /// every name the compiler mints for a Fix value is — stands quoted.
-fn llvm_function_name(define_line: &str) -> Option<&str> {
-    let after_sigil = define_line.split_once('@')?.1;
-    match after_sigil.strip_prefix('"') {
-        Some(quoted) => quoted.split_once('"').map(|(name, _)| name),
-        None => after_sigil.split_once('(').map(|(name, _)| name),
-    }
+fn llvm_function_name(define_line: &str) -> &str {
+    let (_, after_sigil) = define_line
+        .split_once('@')
+        .unwrap_or_else(|| panic!("this definition names no function: {}", define_line));
+    let (name_onwards, ends_at) = match after_sigil.strip_prefix('"') {
+        Some(quoted) => (quoted, '"'),
+        None => (after_sigil, '('),
+    };
+    let (name, _) = name_onwards.split_once(ends_at).unwrap_or_else(|| {
+        panic!(
+            "the name this definition gives is unterminated: {}",
+            define_line
+        )
+    });
+    name
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
