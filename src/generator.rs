@@ -2495,35 +2495,25 @@ impl<'c, 'm> Generator<'c, 'm> {
     // subprogram as the debug scope the body is generated under. The returned guard closes the scope
     // when it is dropped; it is `None` when the build carries no debug info.
     //
-    // `name` is what a debugger calls the function: the Fix name, spelled as the program spells it.
-    // The symbol `func` carries is the encoding of that name (`object_symbol_name`), and it goes to
-    // the subprogram as the linkage name.
-    //
     // Attaching the subprogram here, where the body is created, is what keeps it off a function that
     // has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a module
     // declares every global it refers to but defines only its own.
     pub fn push_debug_subprogram(
         &mut self,
         func: FunctionValue<'c>,
-        name: &str,
         span: Option<Span>,
     ) -> Option<PopDebugScopeGuard<'c>> {
         if !self.has_di() {
             return None;
         }
-        let linkage_name = func.get_name().to_str().unwrap().to_string();
-        let subprogram = self.create_debug_subprogram(name, &linkage_name, span);
+        let fn_name = func.get_name().to_str().unwrap().to_string();
+        let subprogram = self.create_debug_subprogram(&fn_name, span);
         func.set_subprogram(subprogram);
         Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
     }
 
     // Create debug info subprogram.
-    fn create_debug_subprogram(
-        &self,
-        fn_name: &str,
-        linkage_name: &str,
-        span: Option<Span>,
-    ) -> DISubprogram<'c> {
+    fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram<'c> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
             span.start_line_no()
@@ -2535,7 +2525,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         di_builder.create_function(
             di_compile_unit.as_debug_info_scope(),
             fn_name,
-            Some(linkage_name),
+            None,
             file,
             line_no as u32,
             subroutine_type,
@@ -2720,6 +2710,35 @@ impl<'c, 'm> Generator<'c, 'm> {
                 panic_with_msg(&format!(
                     "the declaration of `{}` carries a debug info subprogram",
                     func.get_name().to_str().unwrap()
+                ));
+            }
+        }
+    }
+
+    // A symbol this module defines is one an object file's symbol table can hold, which is what
+    // `object_symbol_name` gives a Fix name. A symbol carrying the getter symbol is read by the
+    // linker as `symbol@version`, and stops it from building the dynamic symbol table of a shared
+    // library, so this says which symbol is unwritable where it was minted rather than leaving the
+    // linker to report it against a program that happens to be built as a library.
+    //
+    // What the module only declares is left out: the C function `FFI_CALL` names is spelled as the
+    // library spells it, a version specifier included.
+    pub fn assert_defined_symbols_are_writable(&self) {
+        let defined_functions = self
+            .module
+            .get_functions()
+            .filter(|func| func.count_basic_blocks() > 0)
+            .map(|func| func.get_name().to_str().unwrap().to_string());
+        let defined_globals = self
+            .module
+            .get_globals()
+            .filter(|global| global.get_initializer().is_some())
+            .map(|global| global.get_name().to_str().unwrap().to_string());
+        for symbol in defined_functions.chain(defined_globals) {
+            if symbol.contains(STRUCT_GETTER_SYMBOL) {
+                panic_with_msg(&format!(
+                    "the symbol `{}` carries `{}`, which a symbol table cannot hold",
+                    symbol, STRUCT_GETTER_SYMBOL
                 ));
             }
         }
