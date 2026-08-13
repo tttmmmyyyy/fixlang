@@ -2916,8 +2916,15 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 // Fix name reaches an object file under is written through this function, which is what makes the
 // module defining a value and the modules calling into it name it identically.
 pub(crate) fn object_symbol_name(name: &FullName) -> String {
-    name.to_string()
-        .replace(STRUCT_GETTER_SYMBOL, SYMBOL_TABLE_GETTER_SYMBOL)
+    let name = name.to_string();
+    assert!(
+        !name.contains(SYMBOL_TABLE_GETTER_SYMBOL),
+        "the name `{}` carries `{}`, which stands for `{}` in a symbol table",
+        name,
+        SYMBOL_TABLE_GETTER_SYMBOL,
+        STRUCT_GETTER_SYMBOL
+    );
+    name.replace(STRUCT_GETTER_SYMBOL, SYMBOL_TABLE_GETTER_SYMBOL)
 }
 
 // The name of the LLVM function through which the global `name`, of a type other than funptr, is
