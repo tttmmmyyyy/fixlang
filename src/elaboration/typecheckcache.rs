@@ -11,20 +11,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+/// A type-check cache held by the threads that check a program together.
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
 
-// A trait for objects which manage caching of typechecked expressions.
-//
-// `RefUnwindSafe` is a supertrait so that `Arc<dyn TypeCheckCache + Send + Sync>`
-// satisfies `UnwindSafe`. The diagnostics thread captures one such `Arc` and
-// runs the captured closure under `catch_unwind`; without this bound the
-// closure isn't unwind-safe and the caller has to wrap it in
-// `AssertUnwindSafe`. Both built-in impls (`FileCache`, `MemoryCache`) are
-// `RefUnwindSafe` for free — `FileCache` is empty and `MemoryCache`'s only
-// field is a `Mutex`, whose poisoning protocol makes it unconditionally
-// `RefUnwindSafe`.
+/// Keeps the expressions produced by type checking, so that a value asked for again under the same
+/// type and the same sources is taken back instead of checked afresh.
+///
+/// `RefUnwindSafe` is a supertrait so that `Arc<dyn TypeCheckCache + Send + Sync>` satisfies
+/// `UnwindSafe`, which a closure carrying one across a `catch_unwind` boundary requires.
 pub trait TypeCheckCache: RefUnwindSafe {
-    // Saves a typechecked expression to the cache.
+    /// Stores `expr` as the result of checking the global value `name` against `type_`, under the
+    /// hash of the sources that value depends on.
     fn save_cache(
         &self,
         expr: &TypedExpr,
@@ -32,8 +29,8 @@ pub trait TypeCheckCache: RefUnwindSafe {
         type_: &Arc<Scheme>,
         version_hash: &str,
     );
-    // Loads a typechecked expression from the cache.
-    // Returns None if the cache is not found.
+    /// Answers with the expression stored for the global value `name` checked against `type_`
+    /// under `version_hash`.
     fn load_cache(
         &self,
         name: &FullName,
@@ -64,20 +61,27 @@ fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
     format!("{}\n{}", name, type_)
 }
 
-// A cache implementation that stores cache in files.
+/// A cache that gives every entry a file of its own, so the entries outlive the run that wrote
+/// them.
 pub struct FileCache {}
 
 impl FileCache {
+    /// Creates a handle to the cache. Every handle reaches the same entries, which live under
+    /// `TYPE_CHECK_CACHE_PATH` relative to the working directory.
     pub fn new() -> Self {
         FileCache {}
     }
 
-    // Determine the filename for a cache file.
-    //
-    // The digest is what identifies the entry: it is taken over the entity and the version hash at
-    // once, so two entries meet in one file only when both agree. The part in front of it names
-    // the value for someone reading the cache directory, and is filename-safe because it keeps
-    // only alphanumeric characters; several values can wear the same one.
+    /// The name of the file that holds the cache entry for a value.
+    ///
+    /// The digest is what identifies the entry: it is taken over the entity and the version hash at
+    /// once, so two entries meet in one file only when both agree. The part in front of it names
+    /// the value for someone reading the cache directory, and is filename-safe because it keeps
+    /// only alphanumeric characters; several values can wear the same one.
+    ///
+    /// # Examples
+    ///
+    /// The entries of `Main::hole_val` are filed under names of the form `Main__hole_val_<digest>`.
     fn cache_file_name(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> String {
         let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
         let digest = format!("{:x}", md5::compute(key));
@@ -87,9 +91,18 @@ impl FileCache {
             .replace(|c: char| !c.is_alphanumeric(), "_");
         format!("{}_{}", readable_name, digest)
     }
+
+    /// The path of the file that holds the cache entry for a value, creating the cache directory if
+    /// it is absent.
+    fn cache_file_path(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> PathBuf {
+        let cache_file_name = self.cache_file_name(name, type_, version_hash);
+        touch_directory(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
+    }
 }
 
 impl TypeCheckCache for FileCache {
+    /// Writes the expression into the entry's own file. A file that cannot be created or written
+    /// is reported as a warning and leaves the entry absent.
     fn save_cache(
         &self,
         expr: &TypedExpr,
@@ -97,15 +110,13 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let cache_file_name: String = self.cache_file_name(name, type_, version_hash);
-        let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
-        let cache_file = cache_dir.join(cache_file_name);
-        let cache_file_str = cache_file.to_string_lossy().to_string();
-        let mut cache_file = match File::create(&cache_file) {
+        let cache_file_path = self.cache_file_path(name, type_, version_hash);
+        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
+        let mut cache_file = match File::create(&cache_file_path) {
             Err(_) => {
                 warn_msg(&format!(
                     "Failed to create cache file \"{}\".",
-                    cache_file_str
+                    cache_file_path_str
                 ));
                 return;
             }
@@ -117,26 +128,26 @@ impl TypeCheckCache for FileCache {
             Err(_) => {
                 warn_msg(&format!(
                     "Failed to write cache file \"{}\".",
-                    cache_file_str
+                    cache_file_path_str
                 ));
             }
         }
     }
 
+    /// Reads the entry's own file and answers with the expression it holds. A file that cannot be
+    /// read or parsed is reported as a warning and answers as an absent entry does.
     fn load_cache(
         &self,
         name: &FullName,
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) -> Option<TypedExpr> {
-        let cache_file_name: String = self.cache_file_name(name, type_, version_hash);
-        let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
-        let cache_file = cache_dir.join(cache_file_name);
-        let cache_file_str = cache_file.to_string_lossy().to_string();
-        if !cache_file.exists() {
+        let cache_file_path = self.cache_file_path(name, type_, version_hash);
+        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
+        if !cache_file_path.exists() {
             return None;
         }
-        let mut cache_file = match File::open(&cache_file) {
+        let mut cache_file = match File::open(&cache_file_path) {
             Err(_) => {
                 return None;
             }
@@ -148,7 +159,7 @@ impl TypeCheckCache for FileCache {
             Err(why) => {
                 warn_msg(&format!(
                     "Failed to read cache file \"{}\": {}.",
-                    cache_file_str, why
+                    cache_file_path_str, why
                 ));
                 return None;
             }
@@ -158,7 +169,7 @@ impl TypeCheckCache for FileCache {
             Err(why) => {
                 warn_msg(&format!(
                     "Failed to parse content of cache file \"{}\": {}.",
-                    cache_file_str, why
+                    cache_file_path_str, why
                 ));
                 return None;
             }
@@ -167,14 +178,19 @@ impl TypeCheckCache for FileCache {
     }
 }
 
+/// How many versions of one entity `MemoryCache` keeps. Storing a further version drops the one
+/// stored longest ago.
 const CACHE_GENERATION: u64 = 3;
 
-// Memory Cache.
+/// A cache that holds its entries in memory, so they last as long as the process that filled it.
 pub struct MemoryCache {
+    /// The stored expressions, grouped by the entity they belong to. Within a group the version
+    /// stored most recently comes first, and at most `CACHE_GENERATION` versions are held.
     data: Mutex<BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>>,
 }
 
 impl MemoryCache {
+    /// Creates a cache holding no entries.
     pub fn new() -> Self {
         MemoryCache {
             data: Mutex::new(BTreeMap::default()),
@@ -183,6 +199,8 @@ impl MemoryCache {
 }
 
 impl TypeCheckCache for MemoryCache {
+    /// Puts the expression at the front of the entity's versions, dropping the versions stored
+    /// longest ago to stay within `CACHE_GENERATION`.
     fn save_cache(
         &self,
         expr: &TypedExpr,
@@ -193,14 +211,15 @@ impl TypeCheckCache for MemoryCache {
         let mut data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entry = data.entry(entity_id).or_insert_with(|| VecDeque::new());
+        let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
-        while entry.len() >= CACHE_GENERATION as usize {
-            entry.pop_back();
+        while entries.len() >= CACHE_GENERATION as usize {
+            entries.pop_back();
         }
-        entry.push_front((version_hash, expr.clone()));
+        entries.push_front((version_hash, expr.clone()));
     }
 
+    /// Searches the entity's versions for the one stored under `version_hash`.
     fn load_cache(
         &self,
         name: &FullName,
@@ -210,8 +229,8 @@ impl TypeCheckCache for MemoryCache {
         let data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entry = data.get(&entity_id)?;
-        let expr = entry
+        let entries = data.get(&entity_id)?;
+        let expr = entries
             .iter()
             .find(|(hash, _)| hash == &version_hash)?
             .1
@@ -223,9 +242,11 @@ impl TypeCheckCache for MemoryCache {
 #[cfg(test)]
 mod tests {
     use super::FileCache;
-    use crate::ast::name::FullName;
-    use crate::ast::types::{type_tyvar_star, Scheme};
-    use crate::fixstd::builtin::{make_bool_ty, make_i64_ty};
+    use crate::{
+        ast::name::FullName,
+        ast::types::{type_tyvar_star, Scheme},
+        fixstd::builtin::{make_bool_ty, make_i64_ty},
+    };
 
     /// A field accessor and a value the user writes are two entities whose names differ only in a
     /// character a file name cannot carry. Their cache files must stay apart: a shared file hands

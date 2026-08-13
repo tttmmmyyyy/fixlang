@@ -18,6 +18,7 @@ mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process;
     use tempfile::TempDir;
 
     /// Absolute path to the `cases/` directory shipped alongside this
@@ -41,7 +42,7 @@ mod integration_tests {
 
     /// Run `fix check` in `project_dir` and return the full process
     /// output.
-    fn run_check(project_dir: &Path) -> std::process::Output {
+    fn run_check(project_dir: &Path) -> process::Output {
         fix_command()
             .arg("check")
             .current_dir(project_dir)
@@ -66,13 +67,13 @@ mod integration_tests {
     /// name begins with the given prefix.
     ///
     /// # Arguments
-    /// * `value_prefix` — the head of a cache file name, which holds the value's
-    ///   full name with each non-alphanumeric character replaced by `_`:
+    /// * `file_name_prefix` — the head of a cache file name, which holds the
+    ///   value's full name with each non-alphanumeric character replaced by `_`:
     ///   `Main::hole_val` is written `Main__hole_val`.
-    fn has_cache_entry_for(project_dir: &Path, value_prefix: &str) -> bool {
+    fn has_cache_entry_for(project_dir: &Path, file_name_prefix: &str) -> bool {
         list_cache_files(project_dir)
             .iter()
-            .any(|name| name.starts_with(value_prefix))
+            .any(|file_name| file_name.starts_with(file_name_prefix))
     }
 
     /// A hole-bearing value must not have a typecheck cache file
@@ -139,8 +140,9 @@ mod integration_tests {
     }
 
     /// Once the user fills in the hole, `fix check` succeeds and a
-    /// cache file appears for the now-clean value (i.e. the cache
-    /// suppression is gated on having errors, not permanent).
+    /// cache file appears for the now-clean value: the cache is
+    /// withheld for as long as the value reports an error, and written
+    /// again once it type-checks cleanly.
     #[test]
     fn fixed_value_is_cached_after_edit() {
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
