@@ -665,66 +665,6 @@ impl TypeCheckContext {
         }
     }
 
-    /// Reject an `Expr::MakeStruct` literal whose field list fails to
-    /// name each declared field exactly once: a field given twice, a
-    /// declared field left out, or a field the struct doesn't have.
-    /// All of them are reported together, so one compilation shows
-    /// every way the list is wrong. Strict mode only — tolerant mode
-    /// skips this check so the user can keep typing inside a partially
-    /// written struct literal.
-    fn validate_make_struct_fields(
-        &self,
-        ti: &TyConInfo,
-        tc: &Arc<TyCon>,
-        fields: &[(Name, Option<Span>, Arc<ExprNode>)],
-        source: &Option<Span>,
-    ) -> Result<(), Errors> {
-        let mut errors = duplicate_field_errors(tc, fields);
-
-        let declared_field_names: Vec<Name> = ti.fields.iter().map(|f| f.name.clone()).collect();
-        let struct_field_names: Set<Name> = Set::from_iter(declared_field_names.iter().cloned());
-        let literal_field_names: Set<Name> =
-            Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
-        let missing: Vec<Name> = declared_field_names
-            .iter()
-            .filter(|f| !literal_field_names.contains(*f))
-            .cloned()
-            .collect();
-        if !missing.is_empty() {
-            let msg = if missing.len() == 1 {
-                format!(
-                    "Missing field `{}` of struct `{}`.",
-                    missing[0],
-                    tc.to_string()
-                )
-            } else {
-                let list = missing
-                    .iter()
-                    .map(|n| format!("`{}`", n))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-            };
-            let mut err = Error::from_msg_srcs(msg, &[source]);
-            err.code = Some(ERR_MISSING_STRUCT_FIELD);
-            err.data = Some(json!(missing));
-            errors.append(Errors::from_err(err));
-        }
-        // Each name the struct doesn't declare is reported once, in the order
-        // the literal writes them.
-        let mut reported_unknown: Set<Name> = Set::default();
-        for (name, _, _) in fields {
-            if struct_field_names.contains(name) || !reported_unknown.insert(name.clone()) {
-                continue;
-            }
-            errors.append(Errors::from_msg_srcs(
-                format!("Unknown field `{}` for struct `{}`.", name, tc.to_string()),
-                &[source],
-            ));
-        }
-        errors.to_result()
-    }
-
     /// Unify the outer expected type with the constructed struct
     /// type, then return a `name -> field type` map the caller can
     /// look each provided field expression up in. Returns an empty
@@ -1441,16 +1381,23 @@ impl TypeCheckContext {
                 // borrow the type checker mutably.
                 let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?.cloned();
 
-                // 2. Strict-only: reject missing or unknown fields
-                // with a rich diagnostic. Tolerant accepts the
-                // literal as-is so the user can keep typing inside a
-                // partially written struct literal.
-                if strict {
+                // 2. Strict-only: pair each field with the declared
+                // field it names — reporting a repeat, an omission
+                // and an unknown name — and take the list in
+                // declaration order, which is the order code
+                // generation reads the values in. Tolerant keeps the
+                // list as written so the user can keep typing inside
+                // a partially written struct literal; the resulting
+                // typed tree may be structurally ill-formed for
+                // codegen, but tolerant elaborates aren't fed to it.
+                let mut typed_fields = if strict {
                     let ti = tycon_info
                         .as_ref()
                         .expect("strict mode resolves the head to a struct or reports an error");
-                    self.validate_make_struct_fields(ti, tc, fields, &ei.source)?;
-                }
+                    make_struct_fields_in_declaration_order(ti, tc, fields, &ei.source)?
+                } else {
+                    fields.clone()
+                };
 
                 // 3. Compute the `name -> expected field type` map
                 // (after unifying the outer expected type with the
@@ -1460,19 +1407,15 @@ impl TypeCheckContext {
                 let known_field_tys =
                     self.compute_make_struct_field_tys(tc, tycon_info.as_ref(), &ty, &ei.source)?;
 
-                // 4. Type each provided field expression in source
-                // order — matching the `Expr::App` convention that
-                // sub-expression side effects happen in the order
-                // the user wrote them.
-                let mut typed_fields = fields.clone();
+                // 4. Type each field expression.
                 for (name, _, field_expr) in typed_fields.iter_mut() {
                     let field_ty = match known_field_tys.get(name) {
                         Some(field_ty) => field_ty.clone(),
                         None => {
                             // No expected type to check the field expression against: the head
                             // names no struct, or the struct has no such field.
-                            // `validate_make_struct_fields` rejects both in strict mode and
-                            // tolerates them in `error_tolerant` mode.
+                            // `make_struct_fields_in_declaration_order` rejects both in strict
+                            // mode and tolerates them in `error_tolerant` mode.
                             assert!(
                                 self.error_tolerant,
                                 "struct `{}` has no field `{}`",
@@ -1483,18 +1426,6 @@ impl TypeCheckContext {
                         }
                     };
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
-                }
-
-                // 5. Strict-only: reorder to struct-definition order
-                // for codegen (see `reorder_make_struct_fields_to_def_order`).
-                // Tolerant keeps source order — the resulting typed
-                // tree may be structurally ill-formed for codegen,
-                // but tolerant elaborates aren't fed to codegen.
-                if strict {
-                    let ti = tycon_info
-                        .as_ref()
-                        .expect("strict mode resolves the head to a struct or reports an error");
-                    typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
                 }
 
                 Ok(ei.set_make_struct_fields(typed_fields))
@@ -1593,27 +1524,19 @@ impl TypeCheckContext {
                 // struct's fields, and the value is destructured in its field order.
                 let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
                 if !tolerate {
-                    duplicate_field_errors(tc, pats).to_result()?;
-                }
-                if let Some(ti) = tycon_info {
-                    let pattern_field_names = pats
-                        .iter()
-                        .map(|(name, _, _)| name.clone())
-                        .collect::<Set<_>>();
-                    let struct_field_names =
-                        ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                    for field_name in pattern_field_names {
-                        if !struct_field_names.contains(&field_name) && !tolerate {
-                            return Err(Errors::from_msg_srcs(
-                                format!(
-                                    "Unknown field `{}` for struct `{}`.",
-                                    field_name,
-                                    tc.name.to_string()
-                                ),
-                                &[&pat.info.source],
-                            ));
+                    // Every way the field list is wrong is reported together, as it is for a
+                    // struct literal.
+                    let mut errors = duplicate_field_errors(tc, pats);
+                    if let Some(ti) = tycon_info {
+                        let struct_field_names =
+                            ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                        for (name, name_src, _) in pats {
+                            if !struct_field_names.contains(name) {
+                                errors.append(unknown_field_error(tc, name, name_src));
+                            }
                         }
                     }
+                    errors.to_result()?;
                 }
                 for (_, _, p) in pats {
                     if let Err(e) = self.validate_pattern(p) {
@@ -2686,63 +2609,146 @@ impl TypeCheckContext {
     }
 }
 
-/// Report each field name that a struct literal or a struct pattern for the
-/// struct `tc` gives more than once: a field list names each field of the
-/// struct exactly once. Each repeat is one diagnostic, located at the repeat
-/// and carrying the first occurrence of that name as a related location.
+/// The report for a field name a struct literal or a struct pattern for the
+/// struct `tc` gives twice, located at the repeat and carrying the first
+/// occurrence of that name as a related location.
+fn duplicate_field_error(
+    tc: &Arc<TyCon>,
+    name: &Name,
+    name_src: &Option<Span>,
+    first_src: &Option<Span>,
+) -> Error {
+    let mut err = Error::from_msg_srcs(
+        format!("Duplicate field `{}` of struct `{}`.", name, tc.to_string()),
+        &[name_src],
+    );
+    if let Some(first_src) = first_src {
+        err.add_src(
+            "The field is given here first.".to_string(),
+            first_src.clone(),
+        );
+    }
+    err
+}
+
+/// The report for a name the struct `tc` does not declare, located at the name.
+fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, name_src: &Option<Span>) -> Errors {
+    Errors::from_msg_srcs(
+        format!("Unknown field `{}` for struct `{}`.", name, tc.to_string()),
+        &[name_src],
+    )
+}
+
+/// The report for declared fields a struct literal leaves out, located at the
+/// whole literal, which is where the editor's quick fix inserts them.
+fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>) -> Error {
+    let msg = if missing.len() == 1 {
+        format!(
+            "Missing field `{}` of struct `{}`.",
+            missing[0],
+            tc.to_string()
+        )
+    } else {
+        let list = missing
+            .iter()
+            .map(|n| format!("`{}`", n))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
+    };
+    let mut err = Error::from_msg_srcs(msg, &[source]);
+    err.code = Some(ERR_MISSING_STRUCT_FIELD);
+    err.data = Some(json!(missing));
+    err
+}
+
+/// Report each field name that a struct pattern for the struct `tc` matches
+/// more than once: a field list names each field of the struct exactly once.
 ///
 /// # Examples
-/// For the fields of `S { a : 1, b : 2, a : 3 }` this returns one error, at the
-/// second `a`; for `S { a : 1, b : 2 }` it returns none.
-fn duplicate_field_errors<T>(tc: &Arc<TyCon>, fields: &[(Name, Option<Span>, T)]) -> Errors {
+/// For the sub-patterns of `S { a : x, b : y, a : z }` this returns one error,
+/// at the second `a`; for `S { a : x, b : y }` it returns none.
+fn duplicate_field_errors(
+    tc: &Arc<TyCon>,
+    fields: &[(Name, Option<Span>, Arc<PatternNode>)],
+) -> Errors {
     let mut errors = Errors::empty();
-    let mut first_spans: Map<Name, Option<Span>> = Map::default();
-    for (name, span, _) in fields {
-        let Some(first_span) = first_spans.get(name).cloned() else {
-            first_spans.insert(name.clone(), span.clone());
+    let mut first_srcs: Map<Name, Option<Span>> = Map::default();
+    for (name, name_src, _) in fields {
+        let Some(first_src) = first_srcs.get(name).cloned() else {
+            first_srcs.insert(name.clone(), name_src.clone());
             continue;
         };
-        let mut err = Error::from_msg_srcs(
-            format!("Duplicate field `{}` of struct `{}`.", name, tc.to_string()),
-            &[span],
-        );
-        if let Some(first_span) = first_span {
-            err.add_src("The field is given here first.".to_string(), first_span);
-        }
-        errors.append(Errors::from_err(err));
+        errors.append(Errors::from_err(duplicate_field_error(
+            tc, name, name_src, &first_src,
+        )));
     }
     errors
 }
 
-/// Reorder a `MakeStruct`'s typed fields into struct-definition
-/// order. Codegen reads field values by position
-/// (`generator.rs::eval_make_struct` uses `fields[i]` as the slot
-/// index), so the strict elaboration path must hand it the fields
-/// in the order they appear in the struct declaration even when the
-/// user wrote them in a different order.
+/// Pair each field of an `Expr::MakeStruct` literal with the declared field of
+/// `ti` it names, and answer with the list in declaration order.
 ///
-/// Requires `fields` to name each field of `ti` exactly once; the strict path
-/// guarantees that via `validate_make_struct_fields`.
-fn reorder_make_struct_fields_to_def_order(
+/// Code generation reads a struct's field values by position
+/// (`rc_ir/lower.rs::lower_make_struct` lowers the values in list order), so
+/// the literal reaches it in the order the struct declares its fields even
+/// where the user wrote them in another order.
+///
+/// A field list names each declared field exactly once, and every way it fails
+/// to is reported: a name the struct doesn't declare, a name given twice, and a
+/// declared field left out. All of them come back together, so one compilation
+/// shows every way the list is wrong.
+///
+/// # Examples
+/// For `S { b : 2, a : 1 }` on `type S = struct { a : I64, b : I64 };` this
+/// answers with `a` before `b`; for `S { a : 1, a : 2 }` it reports the repeat
+/// and the missing `b`.
+fn make_struct_fields_in_declaration_order(
     ti: &TyConInfo,
-    fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
-) -> Vec<(Name, Option<Span>, Arc<ExprNode>)> {
-    let name_to_idx: Map<Name, usize> = ti
+    tc: &Arc<TyCon>,
+    fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+    source: &Option<Span>,
+) -> Result<Vec<(Name, Option<Span>, Arc<ExprNode>)>, Errors> {
+    let mut errors = Errors::empty();
+    let name_to_idx: Map<&Name, usize> = ti
         .fields
         .iter()
         .enumerate()
-        .map(|(i, f)| (f.name.clone(), i))
+        .map(|(idx, f)| (&f.name, idx))
         .collect();
     let mut slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
         (0..ti.fields.len()).map(|_| None).collect();
-    for f in fields {
-        let idx = name_to_idx[&f.0];
-        slots[idx] = Some(f);
+    for field in fields {
+        let (name, name_src, _) = field;
+        let Some(&idx) = name_to_idx.get(name) else {
+            errors.append(unknown_field_error(tc, name, name_src));
+            continue;
+        };
+        match &slots[idx] {
+            Some((_, first_src, _)) => errors.append(Errors::from_err(duplicate_field_error(
+                tc, name, name_src, first_src,
+            ))),
+            None => slots[idx] = Some(field.clone()),
+        }
     }
-    slots
-        .into_iter()
-        .map(|s| s.expect("every declared field is given a value exactly once"))
-        .collect()
+
+    // Draining the slots yields the fields in declaration order and the names of
+    // the declared fields no field claimed, so the answer is as long as the
+    // declaration whenever nothing is missing.
+    let mut ordered = Vec::with_capacity(ti.fields.len());
+    let mut missing = Vec::new();
+    for (declared, slot) in ti.fields.iter().zip(slots) {
+        match slot {
+            Some(field) => ordered.push(field),
+            None => missing.push(declared.name.clone()),
+        }
+    }
+    if !missing.is_empty() {
+        errors.append(Errors::from_err(missing_fields_error(tc, &missing, source)));
+    }
+
+    errors.to_result()?;
+    Ok(ordered)
 }
 
 /// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.

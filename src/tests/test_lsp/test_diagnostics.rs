@@ -142,4 +142,54 @@ mod tests {
         // and the first `x` at the 19th.
         assert_sole_duplicate_field_report("duplicate_struct_pattern_field", 6, 24, 18);
     }
+
+    /// A name the struct does not declare is reported in the editor on that name, in a struct
+    /// pattern as in a struct literal.
+    ///
+    /// The name is the text the programmer has to fix, so a report anchored on the whole literal
+    /// would put the squiggle on the fields that are right as well.
+    #[test]
+    fn test_unknown_struct_field_is_reported_on_the_field_name() {
+        let (_temp_dir, project_dir) = setup_test_env("unknown_struct_field");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let unknown: Vec<&Value> = diagnostics
+            .iter()
+            .filter(|diag| {
+                diag["message"]
+                    .as_str()
+                    .map_or(false, |m| m.contains("Unknown field"))
+            })
+            .collect();
+        assert_eq!(
+            unknown.len(),
+            2,
+            "the pattern and the literal are both reported, but the diagnostics are {:?}",
+            diagnostics
+        );
+
+        // `main.fix` writes the pattern's `z` on the 7th line at the 19th column, and the
+        // literal's `w` on the 13th line at the 28th; the protocol counts both from zero.
+        let pattern_report = unknown
+            .iter()
+            .find(|diag| diag["message"].as_str().unwrap().contains("`z`"))
+            .expect("the pattern's unknown field is reported");
+        assert_eq!(pattern_report["range"]["start"]["line"], 6);
+        assert_eq!(
+            pattern_report["range"]["start"]["character"], 18,
+            "at the pattern's field name, but the report is {:?}",
+            pattern_report
+        );
+
+        let literal_report = unknown
+            .iter()
+            .find(|diag| diag["message"].as_str().unwrap().contains("`w`"))
+            .expect("the literal's unknown field is reported");
+        assert_eq!(literal_report["range"]["start"]["line"], 12);
+        assert_eq!(
+            literal_report["range"]["start"]["character"], 27,
+            "at the literal's field name, but the report is {:?}",
+            literal_report
+        );
+    }
 }

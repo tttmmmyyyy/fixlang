@@ -114,6 +114,36 @@ main = (
         );
     }
 
+    /// A name the struct does not declare is an unknown field at each of its occurrences, even
+    /// where the literal gives it twice: the struct has no such field for the second one to
+    /// repeat.
+    #[test]
+    pub fn test_struct_literal_repeated_unknown_field_is_unknown_at_each_occurrence() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64 };
+
+main : IO ();
+main = (
+    let s = S { zz : 1, zz : 2 };
+    println(s.@a.to_string)
+);
+"#;
+        let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+        assert!(
+            errmsg.contains("Unknown field `zz` for struct `Main::S`."),
+            "the undeclared name is reported, but the message is:\n{}",
+            errmsg
+        );
+        assert!(
+            !errmsg.contains("Duplicate field `zz`"),
+            "a name the struct does not declare is not reported as a repeat of one of its fields, \
+             but the message is:\n{}",
+            errmsg
+        );
+    }
+
     /// A field name the struct does not declare is reported as an unknown field.
     #[test]
     pub fn test_struct_literal_unknown_field_rejected() {

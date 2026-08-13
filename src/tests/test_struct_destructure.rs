@@ -134,7 +134,39 @@ main : IO () = (
 // name given twice are both rejected with a source-level diagnostic.
 #[cfg(test)]
 mod struct_pattern_validation_tests {
-    use crate::{configuration::Configuration, tests::test_util::test_source_fail};
+    use crate::{
+        configuration::Configuration,
+        tests::test_util::{run_source_assert_failed, test_source_fail},
+    };
+
+    /// A pattern that both repeats a field and names one the struct does not declare is reported
+    /// for both, so one compilation shows every way the field list is wrong, as it does for a
+    /// struct literal.
+    #[test]
+    pub fn test_struct_pattern_duplicate_and_unknown_fields_both_reported() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64, b : I64 };
+
+main : IO ();
+main = (
+    let S { a : x, a : y, zz : z } = S { a : 1, b : 2 };
+    println((x + y).to_string)
+);
+"#;
+        let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+        assert!(
+            errmsg.contains("Duplicate field `a` of struct `Main::S`."),
+            "the repeated field is reported, but the message is:\n{}",
+            errmsg
+        );
+        assert!(
+            errmsg.contains("Unknown field `zz` for struct `Main::S`."),
+            "the undeclared field is reported, but the message is:\n{}",
+            errmsg
+        );
+    }
 
     /// A field named twice in one struct pattern is reported, with the field and the struct named.
     #[test]
