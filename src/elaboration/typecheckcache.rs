@@ -42,6 +42,20 @@ pub trait TypeCheckCache: RefUnwindSafe {
     ) -> Option<TypedExpr>;
 }
 
+// The entity a cache entry belongs to: a global value, together with the type it was checked
+// against. A cache that lets two entities meet in one entry hands one of them the typed expression
+// of the other, and the read installs it without checking it.
+type EntityIdentity = String;
+
+// The hash of the sources the entity depends on, which tells the entries of one entity apart.
+type VersionHash = String;
+
+// A name and a printed type each occupy one line, so joining the two with a newline gives a
+// distinct string to every distinct pair.
+fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
+    format!("{}\n{}", name.to_string(), type_.to_string_normalize())
+}
+
 // A cache implementation that stores cache in files.
 pub struct FileCache {}
 
@@ -52,19 +66,17 @@ impl FileCache {
 
     // Determine the filename for a cache file.
     //
-    // The digest is what identifies the entry: it is taken over the three components at once, so
-    // two entries meet in one file only when all three agree. The part in front of it names the
-    // value for someone reading the cache directory, and is filename-safe because it keeps only
-    // alphanumeric characters; several values can wear the same one.
+    // The digest is what identifies the entry: it is taken over the entity and the version hash at
+    // once, so two entries meet in one file only when both agree. The part in front of it names
+    // the value for someone reading the cache directory, and is filename-safe because it keeps
+    // only alphanumeric characters; several values can wear the same one.
     fn cache_file_name(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> String {
-        let name = name.to_string();
-        let type_ = type_.to_string_normalize();
-        // A name, a printed type and a hash each occupy one line, so joining the three with a
-        // newline gives a distinct string to every distinct triple.
-        let key = format!("{}\n{}\n{}", name, type_, version_hash);
+        let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
         let digest = format!("{:x}", md5::compute(key));
 
-        let readable = name.replace(|c: char| !c.is_alphanumeric(), "_");
+        let readable = name
+            .to_string()
+            .replace(|c: char| !c.is_alphanumeric(), "_");
         format!("{}_{}", readable, digest)
     }
 }
@@ -147,9 +159,6 @@ impl TypeCheckCache for FileCache {
     }
 }
 
-type EntityIdentity = String;
-type VersionHash = String;
-
 const CACHE_GENERATION: u64 = 3;
 
 // Memory Cache.
@@ -163,10 +172,6 @@ impl MemoryCache {
             data: Mutex::new(BTreeMap::default()),
         }
     }
-
-    fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
-        format!("{}_{}", name.to_string(), type_.to_string_normalize())
-    }
 }
 
 impl TypeCheckCache for MemoryCache {
@@ -178,7 +183,7 @@ impl TypeCheckCache for MemoryCache {
         version_hash: &str,
     ) {
         let mut data = self.data.lock().unwrap();
-        let entity_id = MemoryCache::entity_identity(name, type_);
+        let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
         let entry = data.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
@@ -195,7 +200,7 @@ impl TypeCheckCache for MemoryCache {
         version_hash: &str,
     ) -> Option<TypedExpr> {
         let data = self.data.lock().unwrap();
-        let entity_id = MemoryCache::entity_identity(name, type_);
+        let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
         let entry = data.get(&entity_id)?;
         let expr = entry
