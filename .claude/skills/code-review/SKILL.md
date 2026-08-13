@@ -40,7 +40,7 @@ The checkpoint is a record of work done, so it is written only by a review that 
 A review reaches past the hunks it was handed, because code improves only where someone is already working: the stretches between hunks are the stretches nobody ever cleans. Three rings, and the ring decides what an aspect may do:
 
 - **Ring 1 — the diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
-- **Ring 2 — the rest of each touched file.** Behavior-preserving cleanups apply, under the budget below; whatever else the aspect notices here becomes a finding.
+- **Ring 2 — the rest of each touched file.** Behavior-preserving cleanups apply; whatever else the aspect notices here becomes a finding.
 - **Ring 3 — the rest of the project.** Findings only. Aspects read ring 3 freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
 
 ### What may be edited in ring 2
@@ -57,17 +57,15 @@ Everything else stays a finding in ring 2: item renames, moves, signature change
 
 An unused private item outside the hunks is a finding as well, even though deleting it would compile: CLAUDE.md keeps such an item — and the `dead_code` warning it carries — as the reminder that a staged rollout still has a step to go, so the author decides whether it has served its purpose.
 
-### Budget
+### How far to carry it
 
-Ring-2 work is opportunistic, so it is capped: **at most five edits per file per aspect**, taken nearest-first outward from the hunks, each one justifiable on its own. When candidates remain past the cap, report how many and let the author decide whether to widen. Three aspects sit outside the cap:
+An aspect applies its conventions to the whole of each touched file, working nearest-first outward from the hunks, each edit justifiable on its own. A file left half-converted reads worse than one at either end state, and the stretch a review declines to clean is the stretch that stays uncleaned.
 
-- `shorten-qualifiers` applies its whole-file convention uncapped — a half-converted import block reads worse than either end state.
-- `code-quality`'s fail-loud fallback scan already covers the whole touched file as a correctness check, and runs as written in ring 1.
-- `no-personal-info` works in ring 1 alone: it gates what this diff would add to the history.
+`no-personal-info` is the exception: it works ring 1 alone, gating what this diff would add to the history.
 
 ### Modes
 
-Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2, budget applied).
+Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2).
 
 **The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own with a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
 
@@ -834,7 +832,7 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
 
 1. **Collect changed files**: Run `git diff --name-only <base>` to find affected files.
 
-2. **Identify cleanup targets**: For each affected file, search the **entire file**. The diff is used only to determine *which files* to process. In `in-diff` mode, fix the violations that sit in the diff hunks and list the file's remaining ones as ring-2 candidates; in `neighborhood` mode, fix those. This convention runs uncapped in ring 2 — a file whose import block is half converted reads worse than one at either end state. Look for:
+2. **Identify cleanup targets**: For each affected file, search the **entire file**. The diff is used only to determine *which files* to process. In `in-diff` mode, fix the violations that sit in the diff hunks and list the file's remaining ones as ring-2 candidates; in `neighborhood` mode, fix those. Look for:
    - **Wildcard imports**: `use module::*;` (and grouped variants like `use module::{*}`).
    - **Qualified paths**: `crate::module::Ident`, `crate::module::{A, B}`, `module::submodule::Ident`. Paths used as types, function calls, trait bounds, or in expressions.
    - **Blank lines inside the top-of-file `use` block**: any empty line between two `use` statements at the start of the file. These are typically `rust-analyzer`-inserted section breaks (std / external crates / `crate` / `super`) that the project does not want.
