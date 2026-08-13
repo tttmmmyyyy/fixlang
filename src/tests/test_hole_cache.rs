@@ -140,8 +140,9 @@ mod integration_tests {
     }
 
     /// Once the user fills in the hole, `fix check` succeeds and a
-    /// cache file appears for the now-clean value (i.e. the cache
-    /// suppression is gated on having errors, not permanent).
+    /// cache file appears for the now-clean value: the cache is
+    /// withheld for as long as the value reports an error, and written
+    /// again once it type-checks cleanly.
     #[test]
     fn fixed_value_is_cached_after_edit() {
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
