@@ -8,8 +8,8 @@
 //! A C program reaches the library either by opening it at run time or by naming it on its own link
 //! line, and the case projects here cover one each.
 
-use crate::configuration::OutputFileType;
-use crate::tests::test_util::{assert_succeeded, fix_command, setup_case_projects};
+use crate::configuration::{Configuration, FixOptimizationLevel, OutputFileType};
+use crate::tests::test_util::{assert_succeeded, fix_command, setup_case_projects, test_source};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -133,4 +133,41 @@ fn test_a_library_on_a_link_line_is_called() {
         &output,
         "the driver should get the answer of the exported function.",
     );
+}
+
+/// A value whose own name begins with the getter symbol reaches the symbol table under the same
+/// spelling from the unit that defines it and from the unit that reads it.
+///
+/// The getter symbol heads the name of a field's getter, and Fix takes it at the head of any value
+/// name, so a program can write one itself. Separate compilation, which `max_cu_size` divides, runs
+/// at `Basic` and below, so the level comes down to it: at a higher one the whole program is one
+/// unit and no read crosses a boundary.
+#[test]
+fn test_a_value_named_with_the_getter_symbol_crosses_compilation_units() {
+    const SOURCE: &str = r#"
+        module Main;
+
+        @marker : I64;
+        @marker = 42;
+
+        @twice : I64 -> I64;
+        @twice = |x| x + x;
+
+        namespace Inner {
+            @deep : I64;
+            @deep = 5;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"marker", @marker, 42);;
+            assert_eq(|_|"twice", @twice(@marker), 84);;
+            assert_eq(|_|"deep", Inner::@deep, 5);;
+            pure()
+        );
+    "#;
+    let mut config = Configuration::develop_mode();
+    config.set_fix_opt_level(FixOptimizationLevel::Basic);
+    config.max_cu_size = 1;
+    test_source(SOURCE, config);
 }
