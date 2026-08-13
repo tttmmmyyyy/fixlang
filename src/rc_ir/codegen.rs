@@ -595,7 +595,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
-        let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+        let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -606,7 +606,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
             let flag = self
                 .builder()
-                .build_load(flag_ty, init_flag, "load_init_flag")
+                .build_load(flag_ty, init_flag_ptr, "load_init_flag")
                 .unwrap()
                 .into_int_value();
             let is_zero = self
@@ -634,7 +634,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
-                    init_flag.into(),
+                    init_flag_ptr.into(),
                     init_fn.as_global_value().as_pointer_value().into(),
                 ],
             );
@@ -659,7 +659,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         if !self.config.threaded {
             self.builder()
-                .build_store(init_flag, self.context.i8_type().const_int(1, false))
+                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
                 .unwrap();
             self.builder().build_unconditional_branch(end_bb).unwrap();
         } else {

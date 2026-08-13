@@ -2482,13 +2482,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let func = self.module.add_function(
+        let acc_fn = self.module.add_function(
             &acc_fn_name,
             acc_fn_ty,
             Some(self.config.external_if_separated()),
         );
-        self.add_global_object(name.clone(), func, ty);
-        Some(func)
+        self.add_global_object(name.clone(), acc_fn, ty);
+        Some(acc_fn)
     }
 
     // Give `func`, whose body is about to be emitted, its debug-info subprogram and open that
