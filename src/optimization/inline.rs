@@ -36,6 +36,13 @@ pub const INLINE_COST_THRESHOLD: i32 = 30;
 /// left here is a term twice as large to finish with.
 const MAX_ROUNDS: usize = 10;
 
+/// Substitute the definitions of globals into the places that name them, round after round until the
+/// program stops changing or `MAX_ROUNDS` rounds have passed. A global that nothing names, and that
+/// is neither the entry point nor exported, is dropped along the way.
+///
+/// A primitive literal, and a global that is one name standing for another, go wherever the name
+/// occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping an inline-LLVM operation
+/// go into the calls of it. A body that calls itself stays where it is.
 pub fn run(prg: &mut Program) {
     // Calculate free variables of all symbols.
     for (_name, sym) in &mut prg.symbols {
@@ -82,7 +89,13 @@ pub fn request_inline_into_callers(prg: &mut Program) {
     }
 }
 
-// Run inlining optimization once.
+/// One round of `run`: substitute into each symbol once and discard the symbols nothing names.
+/// Returns whether the program changed.
+///
+/// # Arguments
+/// * `stable_symbols` — the symbols with nothing left to substitute into them, carried from round to
+///   round: a symbol listed here is passed through untouched, and a symbol this round leaves
+///   unchanged joins it.
 pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut changed = false;
 
@@ -255,8 +268,9 @@ impl InlineCost {
     }
 }
 
-// The map from each symbol to the cost of inlining it.
+/// What each symbol of a program costs to inline, and how often the program names it.
 pub struct InlineCosts {
+    /// One entry per symbol of the program walked, and one per global name those symbols use.
     pub costs: Map<FullName, InlineCost>,
 }
 
@@ -267,6 +281,8 @@ impl InlineCosts {
         }
     }
 
+    /// Give `name` an entry of its own if it has none yet, with nothing counted and every flag
+    /// false, for the walks to fill in as they meet the name.
     fn insert_cost_if_absent(&mut self, name: &FullName) {
         if !self.costs.contains_key(name) {
             self.costs.insert(name.clone(), InlineCost::new());
@@ -291,7 +307,9 @@ impl InlineCosts {
         self.get(name).complexity
     }
 
-    // After `InlineCostCalculator` has been executed, add its result to `InlineCosts`.
+    /// Take in what the walk of one symbol found: every global name that symbol uses has its call
+    /// count raised, and the symbol itself gets the size, the self-reference and the lambda shape the
+    /// walk measured.
     fn add_cost_calculation_result(&mut self, cost: InlineCostCalculator) {
         // For each global symbol called from the symbol where `InlineCostCalculator` has been executed, add the call count.
         for (sym, count) in cost.call_count {

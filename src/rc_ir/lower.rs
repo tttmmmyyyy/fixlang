@@ -211,6 +211,8 @@ impl<'a> Lowerer<'a> {
             })
     }
 
+    /// The `Ret` terminating a body with the value of `var`, placed at the source the variable came
+    /// from, so a return is shown at the value it returns.
     fn ret_node(var: RcVar) -> RcExprNode {
         let source = var.source.clone();
         RcExprNode {
@@ -221,6 +223,10 @@ impl<'a> Lowerer<'a> {
 
     // --- symbols ---
 
+    /// Lower one instantiated symbol: a funptr symbol becomes a top-level function under the
+    /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
+    /// The counter naming the lambdas lifted out restarts here, so they are numbered within the
+    /// symbol they were written in.
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
@@ -339,6 +345,9 @@ impl<'a> Lowerer<'a> {
 
     // --- expressions (A-normalization: lower to an atom, appending bindings) ---
 
+    /// Lower `expr` to the single variable holding its value, appending to `bindings` everything
+    /// that must be evaluated to reach it. An expression that is already an atom — a local variable,
+    /// a global name — becomes that atom and appends nothing.
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
@@ -470,6 +479,9 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower a lambda written in place to a closure value: its body becomes a top-level function
+    /// under a fresh name, and the binding appended builds the closure from that function and the
+    /// values it captures, in the order the closure stores them.
     fn lower_lam(
         &mut self,
         expr: &ExprNode,

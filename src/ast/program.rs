@@ -197,7 +197,8 @@ impl TypeEnv {
         }
     }
 
-    // Resolve type aliases in type constructors.
+    /// Replace every type alias written in the definition of a type constructor of this environment
+    /// by the type it stands for, so that a stage reading a field or variant type meets no alias.
     pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let type_env = self.clone();
@@ -211,13 +212,22 @@ impl TypeEnv {
     }
 }
 
-// Symbols are Fix values that are instantiated:
-// their types are fixed to concrete types, and given unique names.
+/// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
+/// symbol per type it is used at, and the program that reaches code generation is made of these.
 #[derive(Clone)]
 pub struct Symbol {
+    /// The name this symbol is known by, unique across the program. Instantiation builds it from
+    /// `generic_name` and a hash of `ty` (`determine_symbol_name`); a pass that mints a symbol
+    /// appends a segment of its own.
     pub name: FullName,
+    /// The name of the global value this symbol is an instantiation of, shared by the instantiations
+    /// of it at every type.
     pub generic_name: FullName,
+    /// The type this symbol stands at. It holds no type variable: a value whose type is still open
+    /// after instantiation is an error.
     pub ty: Arc<TypeNode>,
+    /// The expression computing the value, specialized to `ty`. `None` between the moment the
+    /// instantiation is required and the moment `instantiate_symbol` fills it in.
     pub expr: Option<Arc<ExprNode>>,
     /// Whether the back end is asked to inline every call of this global. Written by
     /// `inline::request_inline_into_callers`, which runs once the optimization passes have left the
@@ -1819,7 +1829,9 @@ impl Program {
         Ok(ret)
     }
 
-    // Require instantiating a generic value such to a specified type.
+    /// Ask that the generic value `name` be instantiated at type `ty`, and return the name that
+    /// instantiation is known by. Asking twice for the same name and type yields that one name and
+    /// queues one symbol, whose expression is filled in when the queue is drained.
     pub fn require_instantiation(
         &mut self,
         name: &FullName,
@@ -1843,8 +1855,9 @@ impl Program {
         Ok(inst_name)
     }
 
-    // Determine the name of instantiated generic value so that it has a specified type.
-    // tc: a typechecker (substituion) under which ty should be interpreted.
+    /// The name the instantiation of the generic value `name` at type `ty` is known by: `name` with
+    /// a hash of `ty` appended. Two requests for the same type therefore name one symbol, and
+    /// requests for different types name different ones.
     fn determine_symbol_name(
         &self,
         name: &FullName,

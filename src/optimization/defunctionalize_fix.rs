@@ -175,6 +175,8 @@ struct LiftedFix {
 }
 
 impl LiftedFix {
+    /// The global symbol the lifted function becomes. It is its own generic origin, nothing having
+    /// instantiated it, and it stands at the type its expression carries.
     fn into_symbol(self) -> Symbol {
         Symbol {
             name: self.func_name.clone(),
