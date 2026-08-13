@@ -367,7 +367,7 @@ pub fn build_object_files<'c>(
             // If debug info is generated, finalize it.
             gc.finalize_di();
 
-            gc.assert_defined_symbols_are_writable();
+            gc.assert_defined_symbols_fit_a_symbol_table();
 
             // Add frame-pointer attribute to all functions for better backtraces on macOS
             if config.no_elim_frame_pointers() {

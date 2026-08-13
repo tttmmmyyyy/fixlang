@@ -2449,9 +2449,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             Linkage::Internal
         };
-        let func = self
-            .module
-            .add_function(&object_symbol_name(name), llvm_fn_ty, Some(linkage));
+        let func =
+            self.module
+                .add_function(&object_file_symbol_name(name), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
         if fn_ty.is_funptr() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
@@ -2716,25 +2716,25 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // A symbol this module defines is one an object file's symbol table can hold, which is what
-    // `object_symbol_name` gives a Fix name. A symbol carrying the getter symbol is read by the
+    // `object_file_symbol_name` gives a Fix name. A symbol carrying the getter symbol is read by the
     // linker as `symbol@version`, and stops it from building the dynamic symbol table of a shared
-    // library, so this says which symbol is unwritable where it was minted rather than leaving the
-    // linker to report it against a program that happens to be built as a library.
+    // library, so this says which symbol the table cannot hold where it was minted rather than
+    // leaving the linker to report it against a program that happens to be built as a library.
     //
     // What the module only declares is left out: the C function `FFI_CALL` names is spelled as the
     // library spells it, a version specifier included.
-    pub fn assert_defined_symbols_are_writable(&self) {
-        let defined_functions = self
+    pub fn assert_defined_symbols_fit_a_symbol_table(&self) {
+        let defined_function_symbols = self
             .module
             .get_functions()
             .filter(|func| func.count_basic_blocks() > 0)
             .map(|func| func.get_name().to_str().unwrap().to_string());
-        let defined_globals = self
+        let defined_global_symbols = self
             .module
             .get_globals()
             .filter(|global| global.get_initializer().is_some())
             .map(|global| global.get_name().to_str().unwrap().to_string());
-        for symbol in defined_functions.chain(defined_globals) {
+        for symbol in defined_function_symbols.chain(defined_global_symbols) {
             if symbol.contains(STRUCT_GETTER_SYMBOL) {
                 panic_with_msg(&format!(
                     "the symbol `{}` carries `{}`, which a symbol table cannot hold",
@@ -2915,7 +2915,7 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 // cannot hold as it stands, so it is written as `SYMBOL_TABLE_GETTER_SYMBOL` here. Every symbol a
 // Fix name reaches an object file under is written through this function, which is what makes the
 // module defining a value and the modules calling into it name it identically.
-pub(crate) fn object_symbol_name(name: &FullName) -> String {
+pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     let name = name.to_string();
     assert!(
         !name.contains(SYMBOL_TABLE_GETTER_SYMBOL),
@@ -2931,5 +2931,5 @@ pub(crate) fn object_symbol_name(name: &FullName) -> String {
 // obtained. It is the name every module — the one defining the global and the ones calling into it —
 // declares and looks the accessor up under.
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
-    format!("Get#{}", object_symbol_name(name))
+    format!("Get#{}", object_file_symbol_name(name))
 }

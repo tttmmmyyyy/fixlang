@@ -3,7 +3,7 @@
 //! The library offers the functions `FFI_EXPORT` names. Beside them stand the symbols that carry a
 //! value from one compilation unit to another — a build below `-O max` splits its code into several
 //! — and every one of them enters the library's symbol table, under the spelling
-//! `object_symbol_name` gives a Fix name.
+//! `object_file_symbol_name` gives a Fix name.
 //!
 //! A C program reaches the library either by opening it at run time or by naming it on its own link
 //! line, and the case projects here cover one each.
@@ -57,7 +57,7 @@ fn build_driver(project_dir: &Path, link_arguments: &[&str]) -> PathBuf {
 
 /// Builds the `exported_getter` library at `opt_level`, opens it from the driver, and asserts that
 /// the function it exports answers what the Fix source says it does.
-fn assert_library_answers(opt_level: &str) {
+fn assert_an_opened_library_answers(opt_level: &str) {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "exported_getter");
     let library = build_library(&project_dir, opt_level);
     // Where the loader is a library of its own rather than a part of the C library.
@@ -93,20 +93,20 @@ fn assert_library_answers(opt_level: &str) {
 /// the symbols carrying values between them enter the library's symbol table.
 #[test]
 fn test_a_library_built_at_none_is_loaded_and_called() {
-    assert_library_answers("none");
+    assert_an_opened_library_answers("none");
 }
 
 /// The same at the level that optimizes while still splitting the code into compilation units.
 #[test]
 fn test_a_library_built_at_basic_is_loaded_and_called() {
-    assert_library_answers("basic");
+    assert_an_opened_library_answers("basic");
 }
 
 /// The same at the level that compiles the whole program as one unit, where the values it carries
 /// need no symbol of their own.
 #[test]
 fn test_a_library_built_at_max_is_loaded_and_called() {
-    assert_library_answers("max");
+    assert_an_opened_library_answers("max");
 }
 
 /// A C program built against the library calls the function it exports and gets the answer the Fix

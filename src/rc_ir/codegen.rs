@@ -14,7 +14,7 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, object_symbol_name, Generator, Object};
+use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -35,7 +35,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         for (fref, func) in prog.funcs.iter() {
             let fn_val = match self
                 .module
-                .get_function(&object_symbol_name(&func.name.name))
+                .get_function(&object_file_symbol_name(&func.name.name))
             {
                 Some(fn_val) => fn_val,
                 // A function of the program is declared from the program's global types, so that this
@@ -573,7 +573,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let global_var = self.module.add_global(
             obj_embed_ty,
             None,
-            &format!("GlobalVar#{}", object_symbol_name(&global_init.symbol)),
+            &format!("GlobalVar#{}", object_file_symbol_name(&global_init.symbol)),
         );
         global_var.set_initializer(&obj_embed_ty.const_zero());
         global_var.set_linkage(Linkage::Internal);
@@ -591,7 +591,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let init_flag = self.module.add_global(
             flag_ty,
             None,
-            &format!("InitFlag#{}", object_symbol_name(&global_init.symbol)),
+            &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
@@ -625,7 +625,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             (init_bb, end_bb, None)
         } else {
-            let init_fn_name = format!("InitOnce#{}", object_symbol_name(&global_init.symbol));
+            let init_fn_name = format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol));
             let init_fn = self.module.add_function(
                 &init_fn_name,
                 self.context.void_type().fn_type(&[], false),
