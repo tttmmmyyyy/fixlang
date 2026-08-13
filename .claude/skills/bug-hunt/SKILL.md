@@ -148,6 +148,14 @@ A hand-written declaration binds a separate code path with no compiler link betw
 
 Untested code is where a latent bug survives, because a tested path carrying a bug would already have failed — so a gap in the suite is a map to where the bugs are. Enumerate the cases the target handles — the match arms, the error branches, the boundaries (empty, one element, the degenerate shape), the opt-level and config combinations — and cross off the ones a test exercises; a coverage tool (`cargo-llvm-cov`) mechanizes the same census. Craft the input that drives execution into what is left, run it, and read the result with a detector. This is the `test-sufficiency` review lens turned offensive: that aspect flags the gap for the author, a hunt shoots into it.
 
+#### Feed a corpus of broken inputs to the mode whose whole specification is "do not fail"
+
+Some modes exist to keep going on input the normal mode rejects: an error-tolerant elaboration serving an editor mid-edit, a parser's error recovery, a documentation generator over a project that does not build, any partial answer computed while the user is still typing. Such a mode has no expected output to write down, which is why it is usually tested with a handful of hand-picked cases — and that is also what makes it cheap to hunt, because **"it must not crash" is the entire specification, so any invalid input is a test and the crash is the oracle**.
+
+Write dozens of broken inputs — one per way the normal mode can reject something, taken from that mode's own diagnostics — and drive the degraded mode over all of them **in one process**, catching the failure per input so the first crash does not end the sweep. What comes back is a partition of the invalid inputs into the ones the mode survives and the ones it does not, which is a map of where the guarantee it withdrew is still being relied on.
+
+Two things make the reading honest. Confirm each input **reaches** the code under test: an input rejected earlier — a parse error, a missing file — never arrives, and a corpus of those looks exactly like a clean sweep. And run the same inputs through the strict mode as the control, so a crash that belongs to both modes is not filed against the degraded one.
+
 ### Detectors
 
 #### Show the detector fires before trusting its silence
