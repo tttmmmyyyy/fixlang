@@ -709,13 +709,17 @@ impl TypeCheckContext {
             err.data = Some(serde_json::json!(missing));
             errors.append(Errors::from_err(err));
         }
-        for f in &field_names_in_expression {
-            if !field_names_in_struct_defn.contains(f) {
-                errors.append(Errors::from_msg_srcs(
-                    format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
-                    &[source],
-                ));
+        // Each name the struct doesn't declare is reported once, in the order
+        // the literal writes them.
+        let mut reported_unknown: Set<Name> = Set::default();
+        for (name, _, _) in fields {
+            if field_names_in_struct_defn.contains(name) || !reported_unknown.insert(name.clone()) {
+                continue;
             }
+            errors.append(Errors::from_msg_srcs(
+                format!("Unknown field `{}` for struct `{}`.", name, tc.to_string()),
+                &[source],
+            ));
         }
         errors.to_result()
     }

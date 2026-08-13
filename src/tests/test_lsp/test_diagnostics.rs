@@ -82,14 +82,17 @@ mod tests {
         );
     }
 
-    /// A struct literal that gives one field twice is reported in the editor, on the repeated field
-    /// name, with the first occurrence of that name as a related location.
-    ///
-    /// The two names are what the programmer chooses between, so a report anchored to the whole
-    /// literal would leave them to find the pair themselves.
-    #[test]
-    fn test_duplicate_struct_field_is_reported_on_both_field_names() {
-        let (_temp_dir, project_dir) = setup_test_env("duplicate_struct_field");
+    /// Assert that `main.fix` of the named case project draws one report of a repeated struct
+    /// field, at `line` and `character`, naming the first occurrence of the name at
+    /// `first_character` of the same line as a related location. The protocol counts lines and
+    /// columns from zero.
+    fn assert_sole_duplicate_field_report(
+        project_name: &str,
+        line: u64,
+        character: u64,
+        first_character: u64,
+    ) {
+        let (_temp_dir, project_dir) = setup_test_env(project_name);
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
         let duplicates: Vec<&Value> = diagnostics
@@ -108,20 +111,35 @@ mod tests {
         );
         let diag = duplicates[0];
 
-        // `main.fix` writes the literal on the 6th line, which the protocol counts from zero, with
-        // the repeated `x` at the 36th column and the first `x` at the 20th.
-        assert_eq!(diag["range"]["start"]["line"], 5, "on the literal's line");
         assert_eq!(
-            diag["range"]["start"]["character"], 35,
+            diag["range"]["start"]["line"], line,
+            "on the field list's line, but the report is {:?}",
+            diag
+        );
+        assert_eq!(
+            diag["range"]["start"]["character"], character,
             "at the repeated field name, but the report is {:?}",
             diag
         );
         assert_eq!(diag["severity"], 1, "as an error");
         assert_eq!(
-            diag["relatedInformation"][0]["location"]["range"]["start"]["character"], 19,
+            diag["relatedInformation"][0]["location"]["range"]["start"]["character"],
+            first_character,
             "naming the first occurrence, but the report is {:?}",
             diag
         );
+    }
+
+    /// A struct literal that gives one field twice is reported in the editor, on the repeated field
+    /// name, with the first occurrence of that name as a related location.
+    ///
+    /// The two names are what the programmer chooses between, so a report anchored to the whole
+    /// literal would leave them to find the pair themselves.
+    #[test]
+    fn test_duplicate_struct_field_is_reported_on_both_field_names() {
+        // `main.fix` writes the literal on the 6th line, with the repeated `x` at the 36th column
+        // and the first `x` at the 20th.
+        assert_sole_duplicate_field_report("duplicate_struct_field", 5, 35, 19);
     }
 
     /// A struct pattern that matches one field twice is reported in the editor on the repeated
@@ -132,38 +150,8 @@ mod tests {
     /// literal's report reaching the editor says nothing about the pattern's.
     #[test]
     fn test_duplicate_struct_pattern_field_is_reported_on_both_field_names() {
-        let (_temp_dir, project_dir) = setup_test_env("duplicate_struct_pattern_field");
-        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
-
-        let duplicates: Vec<&Value> = diagnostics
-            .iter()
-            .filter(|diag| {
-                diag["message"]
-                    .as_str()
-                    .map_or(false, |m| m.contains("Duplicate field"))
-            })
-            .collect();
-        assert_eq!(
-            duplicates.len(),
-            1,
-            "one report is expected, but the diagnostics are {:?}",
-            diagnostics
-        );
-        let diag = duplicates[0];
-
-        // `main.fix` writes the pattern on the 7th line, which the protocol counts from zero, with
-        // the repeated `x` at the 25th column and the first `x` at the 19th.
-        assert_eq!(diag["range"]["start"]["line"], 6, "on the pattern's line");
-        assert_eq!(
-            diag["range"]["start"]["character"], 24,
-            "at the repeated field name, but the report is {:?}",
-            diag
-        );
-        assert_eq!(diag["severity"], 1, "as an error");
-        assert_eq!(
-            diag["relatedInformation"][0]["location"]["range"]["start"]["character"], 18,
-            "naming the first occurrence, but the report is {:?}",
-            diag
-        );
+        // `main.fix` writes the pattern on the 7th line, with the repeated `x` at the 25th column
+        // and the first `x` at the 19th.
+        assert_sole_duplicate_field_report("duplicate_struct_pattern_field", 6, 24, 18);
     }
 }
