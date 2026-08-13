@@ -10,7 +10,7 @@ mod tests {
         tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
     };
 
-    /// A field given twice is reported rather than leaving another field without a value.
+    /// A literal that repeats a field is reported, with the field and the struct named.
     #[test]
     pub fn test_struct_literal_duplicate_field_rejected() {
         let source = r#"
@@ -31,8 +31,8 @@ main = (
         );
     }
 
-    /// A duplicate is reported even when every declared field of the struct is given, which is the
-    /// case the missing-field check cannot see.
+    /// A repeat is reported when the field list names every declared field, so that every declared
+    /// field has a value.
     #[test]
     pub fn test_struct_literal_duplicate_field_with_every_field_given_rejected() {
         let source = r#"
@@ -53,7 +53,7 @@ main = (
         );
     }
 
-    /// Every repeated field name is reported, not only the first one the field list runs into.
+    /// Every repeated field name of one literal is reported.
     #[test]
     pub fn test_struct_literal_every_repeated_field_reported() {
         let source = r#"
@@ -114,7 +114,7 @@ main = (
         );
     }
 
-    /// A field the struct does not declare is reported rather than given a value of its own.
+    /// A field name the struct does not declare is reported as an unknown field.
     #[test]
     pub fn test_struct_literal_unknown_field_rejected() {
         let source = r#"

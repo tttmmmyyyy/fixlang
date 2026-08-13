@@ -427,9 +427,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Test that the quick fix for a missing struct field is still offered when the same literal
-    /// also gives one field twice: the missing-field diagnostic keeps the code and the data the
-    /// quick fix reads, instead of giving way to the first mistake the field list is reported for.
+    /// Test that the quick fix for a missing struct field is offered when the same literal also
+    /// gives one field twice: beside the report of the repeat, the missing-field diagnostic keeps
+    /// the code and the data the quick fix reads.
     #[test]
     fn test_quickfix_missing_struct_field_beside_a_duplicate() {
         let mut ctx = LspQuickFixCtx::setup(

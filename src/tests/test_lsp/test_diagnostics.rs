@@ -133,8 +133,8 @@ mod tests {
     /// A struct literal that gives one field twice is reported in the editor, on the repeated field
     /// name, with the first occurrence of that name as a related location.
     ///
-    /// The two names are what the programmer chooses between, so a report anchored to the whole
-    /// literal would leave them to find the pair themselves.
+    /// The programmer chooses between the two names, so the test checks the position of the report
+    /// and of its related location.
     #[test]
     fn test_duplicate_struct_field_is_reported_on_both_field_names() {
         // `main.fix` writes the literal on the 6th line, with the repeated `x` at the 36th column
