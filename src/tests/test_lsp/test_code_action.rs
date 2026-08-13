@@ -426,4 +426,70 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// Test that the quick fix for a missing struct field is still offered when the same literal
+    /// also gives one field twice: the missing-field diagnostic keeps the code and the data the
+    /// quick fix reads, instead of giving way to the first mistake the field list is reported for.
+    #[test]
+    fn test_quickfix_missing_struct_field_beside_a_duplicate() {
+        let mut ctx = LspQuickFixCtx::setup(
+            "quickfix_missing_struct_field_with_duplicate",
+            &["main.fix"],
+        );
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            diagnostics.iter().any(|d| d
+                .get("message")
+                .and_then(|m| m.as_str())
+                .map(|m| m.contains("Duplicate field"))
+                .unwrap_or(false)),
+            "The repeated field should be reported as well. Got: {:?}",
+            diagnostics
+        );
+        let missing_diag = diagnostics
+            .iter()
+            .find(|d| {
+                d.get("code")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c == "missing-struct-field")
+                    .unwrap_or(false)
+            })
+            .expect("Should have a 'missing-struct-field' diagnostic")
+            .clone();
+
+        let range = missing_diag.get("range").unwrap().clone();
+        let start = range.get("start").unwrap();
+        let end = range.get("end").unwrap();
+        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
+        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
+        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
+        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![missing_diag],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+
+        let action = actions
+            .iter()
+            .find(|a| {
+                a.get("title")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t.contains("missing field") && t.contains("`z`"))
+                    .unwrap_or(false)
+            })
+            .expect("Should find an 'Add missing field `z`' action");
+        assert!(
+            action.get("edit").is_some(),
+            "The action should carry an edit. Got: {:?}",
+            action
+        );
+
+        ctx.shutdown();
+    }
 }

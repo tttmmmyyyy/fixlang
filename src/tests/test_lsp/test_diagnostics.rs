@@ -123,4 +123,47 @@ mod tests {
             diag
         );
     }
+
+    /// A struct pattern that matches one field twice is reported in the editor on the repeated
+    /// field name, with the first occurrence of that name as a related location, just as a struct
+    /// literal is.
+    ///
+    /// A pattern's field-name spans come from a different parser path than a literal's, so the
+    /// literal's report reaching the editor says nothing about the pattern's.
+    #[test]
+    fn test_duplicate_struct_pattern_field_is_reported_on_both_field_names() {
+        let (_temp_dir, project_dir) = setup_test_env("duplicate_struct_pattern_field");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let duplicates: Vec<&Value> = diagnostics
+            .iter()
+            .filter(|diag| {
+                diag["message"]
+                    .as_str()
+                    .map_or(false, |m| m.contains("Duplicate field"))
+            })
+            .collect();
+        assert_eq!(
+            duplicates.len(),
+            1,
+            "one report is expected, but the diagnostics are {:?}",
+            diagnostics
+        );
+        let diag = duplicates[0];
+
+        // `main.fix` writes the pattern on the 7th line, which the protocol counts from zero, with
+        // the repeated `x` at the 25th column and the first `x` at the 19th.
+        assert_eq!(diag["range"]["start"]["line"], 6, "on the pattern's line");
+        assert_eq!(
+            diag["range"]["start"]["character"], 24,
+            "at the repeated field name, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["character"], 18,
+            "naming the first occurrence, but the report is {:?}",
+            diag
+        );
+    }
 }
