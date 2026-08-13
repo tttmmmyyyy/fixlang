@@ -83,14 +83,14 @@ mod tests {
     }
 
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
-    /// field, at `line` and `character`, naming the first occurrence of the name at
-    /// `first_character` of the same line as a related location. The protocol counts lines and
-    /// columns from zero.
+    /// field, at `line` and `repeat_character`, naming the first occurrence of the name at
+    /// `first_occurrence_character` of the same line as a related location. The protocol counts
+    /// lines and columns from zero.
     fn assert_sole_duplicate_field_report(
         project_name: &str,
         line: u64,
-        character: u64,
-        first_character: u64,
+        repeat_character: u64,
+        first_occurrence_character: u64,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(project_name);
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
@@ -117,14 +117,14 @@ mod tests {
             diag
         );
         assert_eq!(
-            diag["range"]["start"]["character"], character,
+            diag["range"]["start"]["character"], repeat_character,
             "at the repeated field name, but the report is {:?}",
             diag
         );
         assert_eq!(diag["severity"], 1, "as an error");
         assert_eq!(
             diag["relatedInformation"][0]["location"]["range"]["start"]["character"],
-            first_character,
+            first_occurrence_character,
             "naming the first occurrence, but the report is {:?}",
             diag
         );
