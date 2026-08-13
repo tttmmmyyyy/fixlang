@@ -82,6 +82,10 @@
 - LSP: A completion request no longer makes the language server exit when the file annotates an expression with an unknown type variable, such as `let x = (3 : b);`. The request now answers with type-aware candidates, including when the cursor is inside the annotated expression itself.
 - An internal compiler error is now reported on its own. The message used to be followed by a second error, or by a crash that buried it.
 - LSP: A completion request no longer clears the errors reported for another file. A project that did not compile could show no error in the editor until the file holding the error was edited again.
+- The project file's `[build] output_type` now decides what `fix build` produces. A build produced an executable whatever the field said, so a project asking for a dynamic library got one only by passing `--output-type dylib` on every build.
+- `fix run` and `fix test` no longer die with signal 11 in a project whose `[build] output_type` is `"dylib"`. They built a dynamic library and executed it as if it were a program.
+- `fix test` no longer writes the test binary over the program, in a project whose `[build] output` names where `fix build` writes it. Give `fix test` a `-o` to keep a test binary.
+- Building a dynamic library and an executable in one directory now works in either order. The second build reused the object files of the first and failed to link them, reporting `relocation R_X86_64_32S ... recompile with -fPIC` or `undefined reference to 'main'`; deleting the `.fixlang` directory was the way out.
 
 ## [1.4.0] - 2026-06-22
 

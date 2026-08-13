@@ -1,5 +1,5 @@
 use crate::commands::build::build;
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use rand::Rng;
@@ -10,10 +10,32 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::{self, Output, Stdio};
 
+/// Builds the program as an executable under `RUN_PATH` and runs it, passing it the arguments
+/// `config.run_program_args` carries. The executable is then moved to the path
+/// `config.out_file_path` names, and removed when the settings name no path.
+///
+/// # Arguments
+///
+/// * `inherit_streams` - Hands the program the standard streams of the `fix` process, so that it
+///   reads from the terminal and writes to it as it runs. Otherwise its output is collected into
+///   the returned `Output`.
+///
+/// # Returns
+///
+/// The outer result reports what went wrong while building the program, and the inner one what
+/// went wrong while starting the built executable.
 pub fn run(
     mut config: Configuration,
     inherit_streams: bool,
 ) -> Result<Result<Output, io::Error>, Errors> {
+    // The kind of the output file describes what `fix build` produces, so the settings that name a
+    // dynamic library reach `fix build` alone (`ProjectFile::set_config`, `set_config_from_args`).
+    // A shared object put here would be handed to the operating system as a program to execute.
+    assert!(
+        matches!(config.output_file_type, OutputFileType::Executable),
+        "a run builds an executable, which is what it then runs"
+    );
+
     fs::create_dir_all(DOT_FIXLANG)
         .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
     fs::create_dir_all(RUN_PATH)
@@ -66,7 +88,8 @@ pub fn run(
     Ok(output)
 }
 
-// Implementation of `fix run` command.
+/// Builds the program, runs it with the terminal's streams attached, and exits the `fix` process
+/// with the status the program returned. A program that a signal ends aborts `fix` instead.
 pub fn run_command(config: &Configuration) {
     let output = run(config.clone(), true);
     let output = panic_if_err(output);

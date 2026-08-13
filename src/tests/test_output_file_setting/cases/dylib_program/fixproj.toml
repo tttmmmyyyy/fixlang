@@ -1,0 +1,11 @@
+[general]
+name = "dylib-program"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+output_type = "dylib"
+
+[build.test]
+files = ["test.fix"]
