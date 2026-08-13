@@ -15,7 +15,7 @@
 
 #[cfg(test)]
 mod debug_info_tests {
-    use crate::tests::test_util::fix_command;
+    use crate::tests::test_util::fix_command_at_opt_level;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -25,17 +25,13 @@ mod debug_info_tests {
 
     // Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
     // to `fix build` as well, assert the build succeeds, and return the directory holding the built
-    // `prog`. `FIX_MAX_OPT_LEVEL` is pinned to the level asked for, because the suite runs under a
-    // level taken from that variable and it caps the `-O` given here.
+    // `prog`.
     fn build_with_g(source: &str, opt_level: &str, extra_args: &[&str]) -> TempDir {
         let temp = TempDir::new().expect("Failed to create temp directory");
         fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
-        let build = fix_command()
-            .args([
-                "build", "-g", "-O", opt_level, "-f", "main.fix", "-o", "prog",
-            ])
+        let build = fix_command_at_opt_level("build", opt_level)
+            .args(["-g", "-f", "main.fix", "-o", "prog"])
             .args(extra_args)
-            .env("FIX_MAX_OPT_LEVEL", opt_level)
             .current_dir(temp.path())
             .output()
             .expect("Failed to execute `fix build`");
