@@ -68,8 +68,8 @@ pub struct RcFunc {
     /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
     /// consume sites and each parameter's ownership shape.
     pub borrowed_units: Set<VarPath>,
-    /// Whether the back end inlines every call of this function. Code generation writes it out as
-    /// the `alwaysinline` attribute; a version cloned from a function carries it.
+    /// Whether the back end is asked to inline every call of this function. Code generation writes
+    /// it out as the `alwaysinline` attribute; a version cloned from a function carries it.
     pub inline_into_callers: bool,
 }
 

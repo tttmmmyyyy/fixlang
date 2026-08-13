@@ -113,7 +113,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_inline_into_callers_requests(),
+        config.enable_request_inline_into_callers(),
         "request_inline_into_callers",
         inline::request_inline_into_callers,
     );

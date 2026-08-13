@@ -218,7 +218,7 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
 /// LLVM writes the attributes of a function as a reference to a group listed at the end of the
 /// module — `define ... @f(...) #2 {` against `attributes #2 = { alwaysinline }` — so each `define`
 /// line is read here against those listings.
-pub fn llvm_functions_carrying(ir: &str, attribute: &str) -> Vec<(String, bool)> {
+pub fn llvm_function_attribute_flags(ir: &str, attribute: &str) -> Vec<(String, bool)> {
     // The groups holding `attribute`, by the number a `define` line names them with.
     let mut groups: Set<&str> = Set::default();
     for line in ir.lines() {
@@ -253,17 +253,17 @@ pub fn llvm_functions_carrying(ir: &str, attribute: &str) -> Vec<(String, bool)>
     functions
 }
 
-/// The name of the function a `define` line defines. A name that is not a bare identifier — which
-/// every name the compiler mints for a Fix value is — stands quoted.
+/// The name of the function a `define` line defines. LLVM writes a name in quotes wherever it holds
+/// anything outside a bare identifier, as every name the compiler mints for a Fix value does.
 fn llvm_function_name(define_line: &str) -> &str {
     let (_, after_sigil) = define_line
         .split_once('@')
         .unwrap_or_else(|| panic!("this definition names no function: {}", define_line));
-    let (name_onwards, ends_at) = match after_sigil.strip_prefix('"') {
+    let (name_onwards, terminator) = match after_sigil.strip_prefix('"') {
         Some(quoted) => (quoted, '"'),
         None => (after_sigil, '('),
     };
-    let (name, _) = name_onwards.split_once(ends_at).unwrap_or_else(|| {
+    let (name, _) = name_onwards.split_once(terminator).unwrap_or_else(|| {
         panic!(
             "the name this definition gives is unterminated: {}",
             define_line

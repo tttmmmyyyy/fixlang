@@ -2,15 +2,15 @@
 //!
 //! A global whose body is small enough to stand where it is called is one the back end is asked to
 //! inline at every call, which reaches the back end as the `alwaysinline` attribute on each
-//! function generated from that global. That is where these assert against it: the program answers
+//! function generated from that global. These tests assert on that attribute: the program answers
 //! the same whether or not the request is made, so a suite that only runs the program stays green
-//! with every one of them withdrawn.
+//! with every request withdrawn.
 
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
     use crate::tests::test_util::{
-        emitted_llvm_ir, fix_build_source_command, llvm_functions_carrying, EmittedIr,
+        emitted_llvm_ir, fix_build_source_command, llvm_function_attribute_flags, EmittedIr,
     };
     use std::process::Command;
     use tempfile::TempDir;
@@ -104,30 +104,30 @@ main : IO () = (
     fn build_run_and_read_ir(source: &str, expected_output: &str) -> String {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dir = temp_dir.path();
-        let build = fix_build_source_command(dir, source, OPT_LEVEL)
+        let build_output = fix_build_source_command(dir, source, OPT_LEVEL)
             .arg("--emit-llvm")
             .env("FIX_MAX_OPT_LEVEL", OPT_LEVEL)
             .output()
             .expect("Failed to execute fix build");
         assert!(
-            build.status.success(),
+            build_output.status.success(),
             "the build should succeed.\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
+            String::from_utf8_lossy(&build_output.stdout),
+            String::from_utf8_lossy(&build_output.stderr),
         );
 
-        let run = Command::new(dir.join("a.out"))
+        let run_output = Command::new(dir.join("a.out"))
             .current_dir(dir)
             .output()
             .expect("Failed to execute the built program");
         assert!(
-            run.status.success(),
+            run_output.status.success(),
             "the built program should run cleanly, but exited with {}.\nstderr: {}",
-            run.status,
-            String::from_utf8_lossy(&run.stderr),
+            run_output.status,
+            String::from_utf8_lossy(&run_output.stderr),
         );
         assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
+            String::from_utf8_lossy(&run_output.stdout).trim(),
             expected_output,
             "the program should answer the same with the bodies the pass minted inlined",
         );
@@ -142,7 +142,7 @@ main : IO () = (
     #[test]
     fn test_a_small_body_is_asked_for_at_every_call_and_a_closure_is_not() {
         let ir = build_run_and_read_ir(SMALL_LAMBDA_SOURCE, SMALL_LAMBDA_OUTPUT);
-        let functions = llvm_functions_carrying(&ir, ALWAYS_INLINE);
+        let functions = llvm_function_attribute_flags(&ir, ALWAYS_INLINE);
 
         for minted_with in [CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX] {
             let minted = functions
@@ -188,7 +188,7 @@ main : IO () = (
     #[test]
     fn test_a_body_too_large_to_stand_at_its_call_sites_is_not_asked_for() {
         let ir = build_run_and_read_ir(OVERSIZED_LAMBDA_SOURCE, OVERSIZED_LAMBDA_OUTPUT);
-        let functions = llvm_functions_carrying(&ir, ALWAYS_INLINE);
+        let functions = llvm_function_attribute_flags(&ir, ALWAYS_INLINE);
 
         let oversized = functions
             .iter()
@@ -240,7 +240,7 @@ main : IO () = (
     #[test]
     fn test_a_copy_carries_the_request_of_the_function_it_copies() {
         let ir = build_run_and_read_ir(COPIED_BODIES_SOURCE, COPIED_BODIES_OUTPUT);
-        let functions = llvm_functions_carrying(&ir, ALWAYS_INLINE);
+        let functions = llvm_function_attribute_flags(&ir, ALWAYS_INLINE);
 
         // A copy is named after the function it copies, with a segment of its own appended.
         let copies = functions
@@ -253,15 +253,15 @@ main : IO () = (
             })
             .collect::<Vec<_>>();
 
-        let of_asked = copies
+        let copies_of_asked = copies
             .iter()
             .filter(|(_, _, copied_asked)| *copied_asked)
             .collect::<Vec<_>>();
         assert!(
-            !of_asked.is_empty(),
+            !copies_of_asked.is_empty(),
             "the RC IR should copy a body the pass minted, but the build generated no copy of one"
         );
-        let dropped = of_asked
+        let dropped = copies_of_asked
             .iter()
             .filter(|(_, asked, _)| !asked)
             .map(|(name, _, _)| name.as_str())

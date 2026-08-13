@@ -20,12 +20,9 @@ use super::application_inlining;
 /// The size a body may reach and still be put where it is called, counted over the Fix expression
 /// as `InlineCosts` counts it.
 ///
-/// Two decisions read it: which global's expression this pass substitutes into its call sites, and
-/// which global the back end is asked to inline into every place that calls it
-/// (`request_inline_into_callers`, which reads this size and nothing else). What each of them
-/// weighs is what a copy of the body costs at a call site against the call it saves, and the count
-/// of expression nodes stands for that cost — it is not the count of instructions the body
-/// generates, which reference counting and the bounds checks still to be inserted also feed.
+/// What the count weighs is what a copy of the body costs at a call site against the call it saves.
+/// It measures the expression the optimizer holds; the instructions the body finally generates
+/// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// How many times `run` rewrites the program before it stops asking for more.
@@ -74,8 +71,8 @@ pub fn run(prg: &mut Program) {
 pub fn request_inline_into_callers(prg: &mut Program) {
     let costs = calculate_inline_costs(prg);
     for (name, sym) in &mut prg.symbols {
-        // A global of any other type is a value, reached through the function that computes it
-        // once; it has no calls to inline.
+        // A funptr global is a function, and its calls are what the request speaks of; a global of
+        // any other type is a value, reached through the function that computes it once.
         sym.inline_into_callers =
             sym.ty.is_funptr() && costs.get_complexity(name) <= INLINE_COST_THRESHOLD as usize;
     }
@@ -280,6 +277,7 @@ impl InlineCosts {
             .unwrap_or_else(|| panic!("no inline cost is recorded for `{}`", name.to_string()))
     }
 
+    /// How many times the program names the symbol, counted over every expression the walk covered.
     pub fn get_call_count(&self, name: &FullName) -> usize {
         self.get(name).call_count
     }
