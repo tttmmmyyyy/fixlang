@@ -62,10 +62,13 @@ mod integration_tests {
             .collect()
     }
 
-    /// A cache file is named `<value name>_<digest>` by `cache_file_name` (in
-    /// `typecheckcache.rs`), where the value name keeps only its alphanumeric
-    /// characters — `Main::hole_val` becomes `Main__hole_val`. We just match by
-    /// prefix.
+    /// Reports whether the cache directory holds an entry for a value whose file
+    /// name begins with the given prefix.
+    ///
+    /// # Arguments
+    /// * `value_prefix` — the head of a cache file name, which holds the value's
+    ///   full name with each non-alphanumeric character replaced by `_`:
+    ///   `Main::hole_val` is written `Main__hole_val`.
     fn has_cache_entry_for(project_dir: &Path, value_prefix: &str) -> bool {
         list_cache_files(project_dir)
             .iter()

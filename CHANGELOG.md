@@ -82,7 +82,7 @@
 - LSP: A completion request no longer makes the language server exit when the file annotates an expression with an unknown type variable, such as `let x = (3 : b);`. The request now answers with type-aware candidates, including when the cursor is inside the annotated expression itself.
 - An internal compiler error is now reported on its own. The message used to be followed by a second error, or by a crash that buried it.
 - LSP: A completion request no longer clears the errors reported for another file. A project that did not compile could show no error in the editor until the file holding the error was edited again.
-- Two global values of one namespace whose names differ only in characters that are not letters or digits are no longer compiled from one another's body. A struct's field `b` comes with an accessor named `@b`, so a value named `_b` in the same namespace shared its type-check cache entry: whichever body was checked first was compiled for both, and a type error in the other went unreported.
+- Two global values of one namespace whose names differ only in characters that are not letters or digits are no longer compiled from one another's body. A struct's field `b` comes with an accessor named `@b`, so a program that also defines `_b` beside it read one of the two where it wrote the other, and a type error in the body that was dropped went unreported.
 
 ## [1.4.0] - 2026-06-22
 

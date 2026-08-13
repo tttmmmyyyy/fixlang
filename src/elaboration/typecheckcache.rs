@@ -42,16 +42,16 @@ pub trait TypeCheckCache: RefUnwindSafe {
     ) -> Option<TypedExpr>;
 }
 
-// The entity a cache entry belongs to: a global value, together with the type it was checked
-// against. A cache that lets two entities meet in one entry hands one of them the typed expression
-// of the other, and the read installs it without checking it.
+/// The entity a cache entry belongs to: a global value, together with the type it was checked
+/// against. A cache that lets two entities meet in one entry hands one of them the typed
+/// expression of the other, and the read installs it without checking it.
 type EntityIdentity = String;
 
-// The hash of the sources the entity depends on, which tells the entries of one entity apart.
+/// The hash of the sources the entity depends on, which tells the entries of one entity apart.
 type VersionHash = String;
 
-// A name and a printed type each occupy one line, so joining the two with a newline gives a
-// distinct string to every distinct pair.
+/// A name and a printed type each occupy one line, so joining the two with a newline gives a
+/// distinct string to every distinct pair.
 fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
     let name = name.to_string();
     let type_ = type_.to_string_normalize();
@@ -227,9 +227,9 @@ mod tests {
     use crate::ast::types::{type_tyvar_star, Scheme};
     use crate::fixstd::builtin::{make_bool_ty, make_i64_ty};
 
-    // A field accessor and a value the user writes are two entities whose names differ only in a
-    // character a file name cannot carry. Their cache files must stay apart: a shared file hands
-    // one entity the body of the other, and the read skips type checking, so nothing reports it.
+    /// A field accessor and a value the user writes are two entities whose names differ only in a
+    /// character a file name cannot carry. Their cache files must stay apart: a shared file hands
+    /// one entity the body of the other, and the read skips type checking, so nothing reports it.
     #[test]
     fn cache_files_of_names_differing_only_in_punctuation_stay_apart() {
         let cache = FileCache::new();
@@ -243,10 +243,10 @@ mod tests {
         );
     }
 
-    // The key has three components — the name of the value, the type it is checked against, and
-    // the hash of the sources it depends on — and each one alone tells two entries apart. The
-    // implementations of one trait method defined in a single module share the name and the hash
-    // and differ in the type; an edit to a source the value depends on changes the hash alone.
+    /// The key has three components — the name of the value, the type it is checked against, and
+    /// the hash of the sources it depends on — and each one alone tells two entries apart. The
+    /// implementations of one trait method defined in a single module share the name and the hash
+    /// and differ in the type; an edit to a source the value depends on changes the hash alone.
     #[test]
     fn cache_files_of_entries_differing_in_one_component_stay_apart() {
         let cache = FileCache::new();
