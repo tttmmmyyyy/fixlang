@@ -76,6 +76,7 @@ pub enum OutputFileType {
 }
 
 impl OutputFileType {
+    /// Reads the kind an `output_type` setting or an `--output-type` option names.
     pub fn from_str(file_type: &str) -> Result<Self, Errors> {
         match file_type {
             "exe" => Ok(OutputFileType::Executable),
@@ -87,6 +88,7 @@ impl OutputFileType {
         }
     }
 
+    /// The name this kind is written under in a project file and on the command line.
     pub fn to_str(&self) -> &str {
         match self {
             OutputFileType::Executable => "exe",
@@ -128,7 +130,6 @@ pub enum ValgrindTool {
     // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
     // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
     // but how can we do similar things in Fix?
-    // DataRaceDetection,
 }
 
 impl fmt::Display for ValgrindTool {
@@ -196,31 +197,42 @@ impl Sanitizer {
     }
 }
 
-// Subcommands of the `fix` command.
+/// The subcommand of the `fix` command that the invocation selected, carrying the settings that
+/// belong to that subcommand alone.
 #[derive(Clone)]
 pub enum SubCommand {
+    /// Build the program and write it to the output file.
     Build,
+    /// Build the program and run it.
     Run,
+    /// Build the test program and run it.
     Test,
+    /// Elaborate the source files and report the errors and warnings found in them, for the
+    /// language server.
     Diagnostics(DiagnosticsConfig),
+    /// Generate documentation for the modules.
     Docs(DocsConfig),
 }
 
+/// Which section of the project file a build reads its settings from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildConfigType {
+    /// The `build` section.
     Build,
+    /// The `build.test` sub-section, whose settings a test build uses in place of the ones the
+    /// `build` section gives.
     Test,
-    // Lsp,
 }
 
 impl Default for BuildConfigType {
+    /// The settings of the `build` section.
     fn default() -> Self {
         BuildConfigType::Build
     }
 }
 
 impl SubCommand {
-    // Should we run preliminary commands before building the program?
+    /// Whether the `preliminary_commands` the project files list are run before the build.
     pub fn run_preliminary_commands(&self) -> bool {
         match self {
             SubCommand::Build => true,
@@ -231,7 +243,8 @@ impl SubCommand {
         }
     }
 
-    // Should we build program binary?
+    /// Whether the build goes on to generate code and link a binary. Reporting diagnostics and
+    /// generating documentation stop with the elaborated program in hand.
     pub fn build_binary(&self) -> bool {
         match self {
             SubCommand::Build => true,
@@ -266,7 +279,8 @@ impl SubCommand {
         }
     }
 
-    // Should we typecheck the program?
+    /// Whether the source files are type-checked. Generating documentation reads the declarations
+    /// alone, so it leaves the bodies unchecked.
     pub fn typecheck(&self) -> bool {
         match self {
             SubCommand::Build => true,
@@ -277,6 +291,7 @@ impl SubCommand {
         }
     }
 
+    /// The name this subcommand is typed under on the command line.
     pub fn command_type_string(&self) -> &str {
         match self {
             SubCommand::Build => "build",
@@ -1138,14 +1153,16 @@ int main() {
         }
         let output = String::from_utf8_lossy(&output.stdout);
         let mut lines = output.lines();
-        let char = lines.next().unwrap().parse().unwrap();
-        let short = lines.next().unwrap().parse().unwrap();
-        let int = lines.next().unwrap().parse().unwrap();
-        let long = lines.next().unwrap().parse().unwrap();
-        let long_long = lines.next().unwrap().parse().unwrap();
-        let size_t = lines.next().unwrap().parse().unwrap();
-        let float = lines.next().unwrap().parse().unwrap();
-        let double = lines.next().unwrap().parse().unwrap();
+        // The program prints one size per line, in the order the fields are read here.
+        let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
+        let char = next_size();
+        let short = next_size();
+        let int = next_size();
+        let long = next_size();
+        let long_long = next_size();
+        let size_t = next_size();
+        let float = next_size();
+        let double = next_size();
         let sizes = CTypeSizes {
             char,
             short,
