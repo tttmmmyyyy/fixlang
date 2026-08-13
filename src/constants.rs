@@ -79,12 +79,16 @@ pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";
 pub const STRUCT_ACT_SYMBOL: &str = "act_";
 
-/// What the getter symbol of a Fix name is written as in the symbol table of an object file.
-///
-/// ELF reads `@` in a symbol name as the separator of `symbol@version`, so GNU ld refuses a symbol
-/// carrying one while it builds the dynamic symbol table of a shared library. `$` is legal there,
-/// and no Fix name contains it, so the two spellings stand for the same set of names.
-pub const SYMBOL_TABLE_GETTER_SYMBOL: &str = "$";
+// The spelling of a Fix name in an object file's symbol table.
+/// The character an object file's symbol table cannot hold. ELF reads it in a symbol name as the
+/// separator of `symbol@version`, so GNU ld refuses a symbol carrying one while it builds the
+/// dynamic symbol table of a shared library. A Fix name carries one wherever it names a field
+/// getter (`STRUCT_GETTER_SYMBOL`).
+pub const SYMBOL_VERSION_SEPARATOR: &str = "@";
+
+/// What `SYMBOL_VERSION_SEPARATOR` is written as in a symbol table. `$` is legal there, and no Fix
+/// name contains it, so the two spellings stand for the same set of names.
+pub const SYMBOL_VERSION_SEPARATOR_SUBSTITUTE: &str = "$";
 
 // Union methods.
 pub const UNION_AS_SYMBOL: &str = "as_";
