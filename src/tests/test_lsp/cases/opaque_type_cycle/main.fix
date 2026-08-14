@@ -1,0 +1,10 @@
+module Main;
+
+f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+f = |n| g(n);
+
+g : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+g = |n| f(n);
+
+main : IO ();
+main = println(f(0).to_array.to_string);

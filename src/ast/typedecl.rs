@@ -2,8 +2,8 @@ use crate::ast::kind_scope::KindScope;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::types::{
-    kind_arrow, kind_star, type_from_tyvar, type_tyapp, type_tycon, Kind, TyAliasInfo, TyCon,
-    TyConInfo, TyConVariant, TyVar, TypeNode,
+    apply_type_args, kind_arrow, kind_star, type_from_tyvar, Kind, TyAliasInfo, TyCon, TyConInfo,
+    TyConVariant, TyVar, TypeNode,
 };
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
@@ -139,11 +139,12 @@ impl TypeDefn {
     // Return TypeNode defined by this type definition.
     // If the definition is higher kinded, it returns a fully applied type (i.e., returns a type of kind `*`).
     pub fn applied_type(&self) -> Arc<TypeNode> {
-        let mut ty = type_tycon(&Arc::new(self.tycon()));
-        for tv in &self.tyvars {
-            ty = type_tyapp(ty, type_from_tyvar(tv.clone()));
-        }
-        ty
+        let args: Vec<Arc<TypeNode>> = self
+            .tyvars
+            .iter()
+            .map(|tyvar| type_from_tyvar(tyvar.clone()))
+            .collect();
+        apply_type_args(&Arc::new(self.tycon()), &args)
     }
 
     pub fn fields(&self) -> &Vec<Field> {

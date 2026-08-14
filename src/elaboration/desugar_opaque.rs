@@ -41,9 +41,10 @@
 //   using a defn_to_impl substitution that maps `c -> Array a`.
 //
 // After type-checking, the concrete type behind `#wrap_opaque`'s domain variable is extracted
-// (see `fill_opaque_concrete_types` in typecheck.rs). During instantiation, `#wrap_opaque`
-// applications are removed and opaque TyCons are replaced with concrete types
-// (see `resolve_opaque_type_in_type`, `remove_opaque_wrapper_func`).
+// (see `fill_opaque_concrete_types` in typecheck.rs), and a concrete type written in terms of the
+// opaque TyCon it stands for is rejected (see `validate_opaque_types_are_acyclic`). During
+// instantiation, `#wrap_opaque` applications are removed and opaque TyCons are replaced with
+// concrete types (see `resolve_opaque_type_in_type`, `remove_opaque_wrapper_func`).
 
 use crate::ast::equality::Equality;
 use crate::ast::expr::{expr_app, expr_array_lit, expr_var, Expr, ExprNode};
@@ -53,22 +54,25 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{GlobalValue, Program, SymbolExpr, TypedExpr};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
-    collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_from_tyvar, type_fun,
-    type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant,
-    TyVar, Type, TypeNode,
+    apply_type_args, collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon,
+    type_from_tyvar, type_fun, type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon,
+    TyConInfo, TyConVariant, TyVar, Type, TypeNode,
 };
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
-use crate::elaboration::typecheck::Substitution;
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
+use crate::error::Errors;
+use crate::graph::Graph;
 use crate::misc::{insert_to_map_vec, Map, Set};
+use crate::parse::sourcefile::Span;
 use std::sync::Arc;
 
-// Information about an opaque type variable in a scheme.
-//
-// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it` in module `Std`:
-//   tyvar = ?it (kind *)
-//   tycon = Std::repeat::?it
-//   tycon_vars = [a]
-//   tycon_kind = * -> *
+/// Information about an opaque type variable in a scheme.
+///
+/// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it` in module `Std`:
+///   tyvar = ?it (kind *)
+///   tycon = Std::repeat::?it
+///   tycon_vars = [a]
+///   tycon_kind = * -> *
 struct OpaqueInfo {
     // The opaque type variable.
     tyvar: Arc<TyVar>,
@@ -81,7 +85,7 @@ struct OpaqueInfo {
 }
 
 impl Program {
-    // Desugar opaque type variables. See the module-level comment for an overview.
+    /// Desugar opaque type variables. See the module-level comment for an overview.
     pub fn desugar_opaque_types(&mut self) {
         let gv_names: Vec<FullName> = self.global_values.keys().cloned().collect();
 
@@ -108,6 +112,7 @@ impl Program {
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
         for (gv_name, opaque_infos) in &targets {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
+            let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
             // Generate one #wrap_opaque per function/method.
@@ -135,7 +140,7 @@ impl Program {
                 SymbolExpr::Simple(te) => {
                     te.expr = wrap_with_opaque(&wrap_name, te.expr.clone());
                     te.opaque_types =
-                        build_opaque_resolutions(opaque_infos, &Substitution::default());
+                        build_opaque_resolutions(opaque_infos, &Substitution::default(), decl_src);
                 }
                 SymbolExpr::Method(impls) => {
                     for impl_ in impls.iter_mut() {
@@ -154,8 +159,11 @@ impl Program {
                         impl_.scm_via_defn =
                             rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
                         impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
-                        impl_.expr.opaque_types =
-                            build_opaque_resolutions(opaque_infos, &defn_to_impl);
+                        impl_.expr.opaque_types = build_opaque_resolutions(
+                            opaque_infos,
+                            &defn_to_impl,
+                            impl_.lhs_srcs.first().cloned(),
+                        );
                     }
                 }
             }
@@ -232,12 +240,200 @@ impl Program {
             }
         }
     }
+
+    /// Rejects an opaque type whose concrete type is written in terms of that opaque type itself.
+    ///
+    /// Type-checking writes the concrete type it found for an opaque TyCon into `self.opaque_types`,
+    /// and instantiation puts that type in the TyCon's place (`resolve_opaque_type_in_type`),
+    /// repeating while the result is again an opaque TyCon so that a chain of opaque types is
+    /// followed to its end. A concrete type that leads, along such a chain, back to the resolution
+    /// it came from is the type of no value, and the replacement would never terminate.
+    ///
+    /// Only the concrete types filled in so far are read, so a run that checks part of the program
+    /// reports the cycles lying within that part.
+    pub fn validate_opaque_types_are_acyclic(&self, tc: &TypeCheckContext) -> Result<(), Errors> {
+        // One node per resolution: an opaque TyCon of a trait member has one resolution per
+        // implementation, and which of them applies is decided by the lhs, so a chain that leaves
+        // one implementation for another is a chain between two nodes of one TyCon name.
+        let mut tycon_names: Vec<&FullName> = self.opaque_types.keys().collect();
+        tycon_names.sort();
+        let mut resolutions: Vec<&OpaqueTyConResolution> = vec![];
+        let mut nodes_of_tycon: Map<&FullName, Vec<usize>> = Map::default();
+        for tycon_name in tycon_names {
+            for resolution in &self.opaque_types[tycon_name] {
+                nodes_of_tycon
+                    .entry(tycon_name)
+                    .or_default()
+                    .push(resolutions.len());
+                resolutions.push(resolution);
+            }
+        }
+
+        // An edge runs to every resolution that could replace an opaque TyCon of the concrete type.
+        let mut tc = tc.clone();
+        let mut edges: Vec<Vec<usize>> = vec![vec![]; resolutions.len()];
+        for (from, resolution) in resolutions.iter().enumerate() {
+            let Some(rhs) = &resolution.rhs else {
+                continue;
+            };
+            for application in collect_opaque_applications(rhs, &self.opaque_types) {
+                for to in &nodes_of_tycon[&application.tycon_name] {
+                    if application.can_be_resolved_by(&mut tc, &resolutions[*to].lhs)? {
+                        edges[from].push(*to);
+                    }
+                }
+            }
+        }
+
+        // Every resolution of a cycle determines the others and none of them a type, so the
+        // strongly connected component is what the report is about. A component of one resolution
+        // is a cycle when that resolution's concrete type is written in terms of itself.
+        let refers_to_itself: Vec<bool> = edges
+            .iter()
+            .enumerate()
+            .map(|(node, targets)| targets.contains(&node))
+            .collect();
+        let graph = Graph::new_with_edges(resolutions, edges);
+        let component_of_node = graph.compute_sccs();
+        let mut nodes_of_component: Map<usize, Vec<usize>> = Map::default();
+        for (node, component) in component_of_node.iter().enumerate() {
+            nodes_of_component.entry(*component).or_default().push(node);
+        }
+
+        let mut errors = Errors::empty();
+        for component in 0..nodes_of_component.len() {
+            let component_nodes = &nodes_of_component[&component];
+            if component_nodes.len() == 1 && !refers_to_itself[component_nodes[0]] {
+                continue;
+            }
+            errors.append(opaque_cycle_error(&graph, component_nodes));
+        }
+        errors.to_result()
+    }
 }
 
-// Collect OpaqueInfo for each opaque type variable in the scheme.
-//
-// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
-// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
+/// The error reported for `cycle_nodes`, the resolutions of one cycle: each one's concrete type is
+/// written in terms of another of them, so none of them names a type.
+fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, cycle_nodes: &[usize]) -> Errors {
+    let msg = if cycle_nodes.len() == 1 {
+        format!(
+            "The concrete type of the opaque type `{}` cannot be determined, because the definition gives it a type which contains that opaque type itself.",
+            graph.get(cycle_nodes[0]).lhs.to_string(),
+        )
+    } else {
+        let opaque_type_names = cycle_nodes
+            .iter()
+            .map(|node| format!("`{}`", graph.get(*node).lhs.to_string()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "The concrete types of the opaque types {} cannot be determined, because they are written in terms of each other.",
+            opaque_type_names,
+        )
+    };
+    let srcs: Vec<&Option<Span>> = cycle_nodes
+        .iter()
+        .map(|node| &graph.get(*node).src)
+        .collect();
+    Errors::from_msg_srcs(msg, &srcs)
+}
+
+/// An opaque TyCon as it appears in a type, applied to the arguments its resolutions take.
+struct OpaqueApplication {
+    /// The name of the opaque TyCon standing at the head of this application.
+    tycon_name: FullName,
+    /// The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
+    /// `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
+    /// could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
+    applied_type: Option<Arc<TypeNode>>,
+}
+
+impl OpaqueApplication {
+    /// Whether the resolution whose left hand side is `lhs` could be the one that replaces this
+    /// application.
+    ///
+    /// Instantiation reaches the application with its type variables already substituted and
+    /// matches what it holds then against `lhs` (see `resolve_opaque_type_in_type`), so the
+    /// resolution can replace it exactly when some instance of the application is an instance of
+    /// `lhs`. The application's type variables are renamed apart first: it and `lhs` are written in
+    /// two schemes of their own, and a name they happen to share would otherwise tie them to one
+    /// type.
+    fn can_be_resolved_by(
+        &self,
+        tc: &mut TypeCheckContext,
+        lhs: &Arc<TypeNode>,
+    ) -> Result<bool, Errors> {
+        let Some(applied_type) = &self.applied_type else {
+            return Ok(true);
+        };
+        let applied_type = tc.instantiate_type(applied_type);
+        tc.are_unifiable(&applied_type, lhs)
+    }
+}
+
+/// Collect the applications of opaque TyCons in `ty`, at every depth.
+fn collect_opaque_applications(
+    ty: &Arc<TypeNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+) -> Vec<OpaqueApplication> {
+    let mut applications = vec![];
+    collect_opaque_applications_inner(ty, opaque_resolutions, &mut applications);
+    applications
+}
+
+/// Appends to `applications` every application of an opaque TyCon met while walking `ty`,
+/// descending into the type arguments of one so that an opaque TyCon standing inside another is
+/// collected as well.
+fn collect_opaque_applications_inner(
+    ty: &Arc<TypeNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+    applications: &mut Vec<OpaqueApplication>,
+) {
+    if let Some(tycon) = ty.toplevel_tycon() {
+        if let Some(resolutions) = opaque_resolutions.get(&tycon.name) {
+            let arity = opaque_tycon_arity(resolutions);
+            let args = ty.collect_type_arguments();
+            let applied_type = if args.len() >= arity {
+                Some(apply_type_args(&tycon, &args[..arity]))
+            } else {
+                None
+            };
+            applications.push(OpaqueApplication {
+                tycon_name: tycon.name.clone(),
+                applied_type,
+            });
+            // The arguments are types of their own; the TyCon they are applied to is this
+            // application and is covered by the entry just pushed.
+            for arg in args {
+                collect_opaque_applications_inner(&arg, opaque_resolutions, applications);
+            }
+            return;
+        }
+    }
+    match &ty.ty {
+        Type::TyVar(_) | Type::TyCon(_) => {}
+        Type::TyApp(tyfun, arg) => {
+            collect_opaque_applications_inner(tyfun, opaque_resolutions, applications);
+            collect_opaque_applications_inner(arg, opaque_resolutions, applications);
+        }
+        Type::AssocTy(_, args) => {
+            for arg in args {
+                collect_opaque_applications_inner(arg, opaque_resolutions, applications);
+            }
+        }
+    }
+}
+
+/// The number of type arguments an opaque TyCon takes, read from the left hand side of its
+/// resolutions, which all apply it to the same number of arguments.
+fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
+    resolutions[0].lhs.collect_type_arguments().len()
+}
+
+/// Collect OpaqueInfo for each opaque type variable in the scheme.
+///
+/// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
+/// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
 fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo> {
     // Find all opaque type variables in the scheme.
     let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);
@@ -275,35 +471,39 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
 }
 
 impl OpaqueInfo {
-    // Build the TyCon applied to its type arguments.
-    // Example: for tycon `Std::repeat::?it` and tycon_vars `[a]`, returns `?it a`.
+    /// Build the TyCon applied to its type arguments.
+    /// Example: for tycon `Std::repeat::?it` and tycon_vars `[a]`, returns `?it a`.
     fn opaque_tycon_applied(&self) -> Arc<TypeNode> {
-        let mut ty = type_tycon(&self.tycon);
-        for gv in &self.tycon_vars {
-            ty = type_tyapp(ty, type_from_tyvar(gv.clone()));
-        }
-        ty
+        let args: Vec<Arc<TypeNode>> = self
+            .tycon_vars
+            .iter()
+            .map(|tycon_var| type_from_tyvar(tycon_var.clone()))
+            .collect();
+        apply_type_args(&self.tycon, &args)
     }
 
-    // Build a substitution mapping the opaque TyVar to the TyCon application.
-    // Example: `?it` -> `?it a` (where `?it` on the right is the TyCon).
+    /// Build a substitution mapping the opaque TyVar to the TyCon application.
+    /// Example: `?it` -> `?it a` (where `?it` on the right is the TyCon).
     fn tyvar_to_tycon_substitution(&self) -> Substitution {
         Substitution::single(&self.tyvar.name, self.opaque_tycon_applied())
     }
 }
 
-// Build OpaqueTyConResolution entries with the correct lhs and rhs = None.
-// The rhs is filled in later by type-checking (see `fill_opaque_concrete_types`).
-//
-// `defn_to_impl` maps trait-definition type variables to impl-specific types.
-// For non-method values, pass `Substitution::default()` (identity).
-//
-// Example (simple): for `repeat`, lhs = `?it a`.
-// Example (method): for `impl Array a : ToIter`, defn_to_impl maps `c -> Array a`,
-// so lhs = `?it (Array a)`.
+/// Build OpaqueTyConResolution entries with the correct lhs and rhs = None.
+/// The rhs is filled in later by type-checking (see `fill_opaque_concrete_types`).
+///
+/// `defn_to_impl` maps trait-definition type variables to impl-specific types.
+/// For non-method values, pass `Substitution::default()` (identity).
+///
+/// `src` is the source of the definition whose type-checking fills in the rhs.
+///
+/// Example (simple): for `repeat`, lhs = `?it a`.
+/// Example (method): for `impl Array a : ToIter`, defn_to_impl maps `c -> Array a`,
+/// so lhs = `?it (Array a)`.
 fn build_opaque_resolutions(
     opaque_infos: &[OpaqueInfo],
     defn_to_impl: &Substitution,
+    src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
     let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
@@ -311,12 +511,16 @@ fn build_opaque_resolutions(
         result
             .entry(info.tycon.name.clone())
             .or_default()
-            .push(OpaqueTyConResolution { lhs, rhs: None });
+            .push(OpaqueTyConResolution {
+                lhs,
+                rhs: None,
+                src: src.clone(),
+            });
     }
     result
 }
 
-// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
+/// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
 fn apply_opaque_substitution(scm: &Arc<Scheme>, sub: &Substitution) -> Arc<Scheme> {
     let new_ty = sub.substitute_type(&scm.ty);
 
@@ -343,10 +547,10 @@ fn apply_opaque_substitution(scm: &Arc<Scheme>, sub: &Substitution) -> Arc<Schem
     )
 }
 
-// Rewrite a scheme: replace opaque TyVars with TyCon applications and remove opaque constraints.
-//
-// Example: `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
-// becomes `a -> I64 -> ?it a` (where `?it` is now a TyCon, and opaque constraints are removed).
+/// Rewrite a scheme: replace opaque TyVars with TyCon applications and remove opaque constraints.
+///
+/// Example: `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
+/// becomes `a -> I64 -> ?it a` (where `?it` is now a TyCon, and opaque constraints are removed).
 fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme> {
     // Build combined substitution for all opaque tyvars.
     let mut sub = Substitution::default();
@@ -356,10 +560,10 @@ fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme>
     apply_opaque_substitution(scm, &sub)
 }
 
-// Rewrite a trait impl's scheme. The impl may use different names for opaque type variables
-// than the trait definition (e.g., `?iter` vs `?it`), so we compute the name correspondence
-// by matching the trait defn scheme type (which uses defn names like `c -> ?it`) against
-// `impl_scm.ty` (which uses impl names like `Array a -> ?iter`).
+/// Rewrite a trait impl's scheme. The impl may use different names for opaque type variables
+/// than the trait definition (e.g., `?iter` vs `?it`), so we compute the name correspondence
+/// by matching the trait defn scheme type (which uses defn names like `c -> ?it`) against
+/// `impl_scm.ty` (which uses impl names like `Array a -> ?iter`).
 fn rewrite_impl_scheme(
     impl_scm: &Arc<Scheme>,
     defn_scm: &Arc<Scheme>,
@@ -396,14 +600,14 @@ fn rewrite_impl_scheme(
     apply_opaque_substitution(impl_scm, &sub)
 }
 
-// Build the scheme for the #wrap_opaque function.
-//
-// #wrap_opaque bridges the concrete implementation type to the opaque type.
-// Its type is `(original_fn_type_with_fresh_vars) -> (rewritten_fn_type_with_opaque_tycons)`.
-//
-// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`:
-//   #wrap_opaque : [x : Iterator, Item x = a] (a -> I64 -> x) -> (a -> I64 -> ?it a)
-//   where `x` is a fresh variable replacing `?it` in the domain.
+/// Build the scheme for the #wrap_opaque function.
+///
+/// #wrap_opaque bridges the concrete implementation type to the opaque type.
+/// Its type is `(original_fn_type_with_fresh_vars) -> (rewritten_fn_type_with_opaque_tycons)`.
+///
+/// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`:
+///   #wrap_opaque : [x : Iterator, Item x = a] (a -> I64 -> x) -> (a -> I64 -> ?it a)
+///   where `x` is a fresh variable replacing `?it` in the domain.
 fn build_wrap_scheme(
     orig_scm: &Arc<Scheme>,
     new_scm: &Arc<Scheme>,
@@ -474,9 +678,9 @@ fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode>
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
 }
 
-// Build a placeholder expression for the #wrap_opaque body.
-// Produces `_undefined_internal([])` which type-checks as `a` (any type).
-// #wrap_opaque is removed during instantiation so this is never executed.
+/// Build a placeholder expression for the #wrap_opaque body.
+/// Produces `_undefined_internal([])` which type-checks as `a` (any type).
+/// #wrap_opaque is removed during instantiation so this is never executed.
 fn build_undefined_expr() -> Arc<ExprNode> {
     let mut placeholder_name = FullName::new(
         &NameSpace::new(vec!["Std".to_string()]),
@@ -487,14 +691,14 @@ fn build_undefined_expr() -> Arc<ExprNode> {
     expr_app(expr_var(placeholder_name, None), vec![empty_array], None)
 }
 
-// Replace opaque TyCons in a type with their concrete types.
-//
-// Each OpaqueTyConResolution maps `lhs` (e.g., `?it a`) to `rhs` (e.g., `ArrayIterator a`).
-// The lhs is matched against the type to find the appropriate substitution, and
-// the rhs is substituted accordingly.
-//
-// Example: `?it (Array I64)` with resolution `?it (Array a) -> ArrayIterator a`
-// is resolved to `ArrayIterator I64`.
+/// Replace opaque TyCons in a type with their concrete types.
+///
+/// Each OpaqueTyConResolution maps `lhs` (e.g., `?it a`) to `rhs` (e.g., `ArrayIterator a`).
+/// The lhs is matched against the type to find the appropriate substitution, and
+/// the rhs is substituted accordingly.
+///
+/// Example: `?it (Array I64)` with resolution `?it (Array a) -> ArrayIterator a`
+/// is resolved to `ArrayIterator I64`.
 pub fn resolve_opaque_type_in_type(
     ty: &Arc<TypeNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -503,25 +707,24 @@ pub fn resolve_opaque_type_in_type(
 
     // Loop: resolution may produce another opaque tycon at top level.
     loop {
-        let tc = match ty.toplevel_tycon() {
-            Some(tc) => tc,
+        let tycon = match ty.toplevel_tycon() {
+            Some(tycon) => tycon,
             None => break,
         };
 
-        let resolutions = match opaque_resolutions.get(&tc.name) {
-            Some(r) => r,
+        let resolutions = match opaque_resolutions.get(&tycon.name) {
+            Some(resolutions) => resolutions,
             None => break, // not an opaque tycon
         };
 
-        // Compute arity from the lhs of the first resolution.
-        let arity = resolutions[0].lhs.collect_type_arguments().len();
+        let arity = opaque_tycon_arity(resolutions);
 
         // Split the type args into prefix (arity args) and rest.
         let all_args = ty.collect_type_arguments();
         assert!(
             all_args.len() >= arity,
             "Opaque tycon `{}` expects arity {} but only {} args applied",
-            tc.name.to_string(),
+            tycon.name.to_string(),
             arity,
             all_args.len()
         );
@@ -531,24 +734,20 @@ pub fn resolve_opaque_type_in_type(
             .collect();
         let rest_args = &all_args[arity..];
 
-        // Rebuild the prefix: TyCon applied to prefix_args.
-        let mut prefix = type_tycon(&tc);
-        for arg in &prefix_args {
-            prefix = type_tyapp(prefix, arg.clone());
-        }
+        let prefix = apply_type_args(&tycon, &prefix_args);
 
         // Try matching each resolution's lhs against the prefix.
         let mut matched = false;
-        for oct in resolutions {
+        for resolution in resolutions {
             let matching = Substitution::matching_no_kind_check(
-                &oct.lhs,
+                &resolution.lhs,
                 &prefix,
                 &[], // no fixed tyvars
             );
 
             if let Some(sub) = matching {
                 // Apply the matching to rhs, then apply rest args.
-                let rhs = oct
+                let rhs = resolution
                     .rhs
                     .as_ref()
                     .expect("opaque type resolution rhs should be filled in by type-checking");
@@ -565,7 +764,7 @@ pub fn resolve_opaque_type_in_type(
         if !matched {
             panic!(
                 "No matching OpaqueTyConResolution found for opaque tycon `{}`",
-                tc.name.to_string()
+                tycon.name.to_string()
             );
         }
     }
@@ -592,8 +791,8 @@ pub fn resolve_opaque_type_in_type(
     }
 }
 
-// Remove the #wrap_opaque application from the top level of an expression.
-// Transforms `#wrap_opaque(expr)` to `expr`. Only checks the outermost application.
+/// Remove the #wrap_opaque application from the top level of an expression.
+/// Transforms `#wrap_opaque(expr)` to `expr`. Only checks the outermost application.
 pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     if let Expr::App(func, args) = expr.expr.as_ref() {
         if args.len() == 1 {
@@ -607,7 +806,7 @@ pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     expr
 }
 
-// Recursively replace opaque TyCons in all type annotations of a pattern tree.
+/// Recursively replace opaque TyCons in all type annotations of a pattern tree.
 fn resolve_opaque_tycon_in_pattern(
     pat: &Arc<PatternNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -642,7 +841,7 @@ fn resolve_opaque_tycon_in_pattern(
     }
 }
 
-// Recursively replace opaque TyCons in all type annotations of an expression tree.
+/// Recursively replace opaque TyCons in all type annotations of an expression tree.
 pub fn resolve_opaque_tycon_in_expr(
     expr: &Arc<ExprNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,

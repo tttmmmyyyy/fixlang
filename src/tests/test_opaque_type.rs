@@ -131,6 +131,26 @@ pub fn test_opaque_higher_kinded() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The kind of an opaque type is taken from the trait it is constrained by, so a higher-kinded
+/// opaque type needs no kind signature of its own.
+#[test]
+pub fn test_opaque_higher_kinded_without_a_kind_signature() {
+    let source = r#"
+        module Main;
+
+        safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
+        safe_div = |x, y| if y == 0 { none() } else { some(x / y) };
+
+        main : IO ();
+        main = (
+            let result = safe_div(100, 10).bind(|x| safe_div(x, 2));
+            let _ = result;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_opaque_zip_with_index() {
     // Use case 5: Opaque type with normal type variable mixed in signature
@@ -756,6 +776,341 @@ pub fn test_opaque_branch_type_mismatch() {
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
+/// A definition that returns a value of the very opaque type it is declared to return leaves the
+/// concrete type undetermined, and is reported.
+#[test]
+pub fn test_opaque_concrete_type_is_the_opaque_type_itself() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| f(n + 1);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::f::?it` cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// The concrete type is undetermined just as well when it carries the opaque type inside another
+/// type rather than being it.
+#[test]
+pub fn test_opaque_concrete_type_contains_the_opaque_type_itself() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| f(n + 1).map(|x| x);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::f::?it` cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// Two values whose concrete types are each written in terms of the other's determine neither, and
+/// the report names both.
+#[test]
+pub fn test_opaque_concrete_types_of_two_values_contain_each_other() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| g(n);
+
+        g : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        g = |n| f(n);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::f::?it`, `Main::g::?it` cannot be determined, because they are written in terms of each other",
+    );
+}
+
+/// One implementation of a trait member may return what another implementation of the same member
+/// returns, since the type the second one gives the opaque type is the concrete type of the first.
+///
+/// Both implementations give their concrete type to one opaque type constructor, so a check that
+/// asked whether a constructor's concrete type names that constructor would reject this program.
+#[test]
+pub fn test_opaque_impl_returns_what_another_impl_returns() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter = Array::to_iter;
+        }
+
+        type Wrap = box struct { v : Array I64 };
+
+        impl Wrap : ToIter {
+            type Elem Wrap = I64;
+            to_iter = |w| w.@v.ToIter::to_iter;
+        }
+
+        main : IO ();
+        main = (
+            let arr = Wrap { v : [1, 2, 3] }.ToIter::to_iter.to_array;
+            assert_eq(|_|"delegating impl", arr, [1, 2, 3]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Two implementations of one trait member that each return what the other returns determine no
+/// concrete type, and are reported on the implementations.
+#[test]
+pub fn test_opaque_two_impls_return_what_each_other_returns() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+        type Even = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter = |o| Even { n : o.@n }.to_iter;
+        }
+
+        impl Even : ToIter {
+            to_iter = |e| Odd { n : e.@n }.to_iter;
+        }
+
+        main : IO ();
+        main = println(Odd { n : 1 }.to_iter.to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because they are written in terms of each other",
+    );
+}
+
+/// An implementation that returns what itself returns is reported on that implementation, and the
+/// implementation of the same member for another type, which does determine a concrete type, is
+/// left out of the report.
+#[test]
+pub fn test_opaque_one_impl_returns_what_itself_returns() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+        type Even = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter = |o| Odd { n : o.@n }.to_iter;
+        }
+
+        impl Even : ToIter {
+            to_iter = |e| Iterator::range(0, e.@n);
+        }
+
+        main : IO ();
+        main = println(Even { n : 2 }.to_iter.to_array.to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Main::Odd") && errmsg.contains("to_iter = |o|"),
+        "the implementation for `Odd` determines no concrete type, and the report is:\n{}",
+        errmsg
+    );
+    assert!(
+        !errmsg.contains("Even"),
+        "the implementation for `Even` determines a concrete type, and the report is:\n{}",
+        errmsg
+    );
+}
+
+/// An implementation for a type of one parameter that returns what the member returns for that
+/// parameter is reported.
+///
+/// Each step of such a resolution reaches a smaller type and the chain ends, but instantiation
+/// resolves the member's type as the implementation writes it, where the parameter is a type
+/// variable and no implementation matches, so the concrete type is one the compiler cannot use.
+#[test]
+pub fn test_opaque_impl_returns_what_the_member_returns_for_its_parameter() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Leaf = box struct { n : I64 };
+
+        impl Leaf : ToIter {
+            to_iter = |l| Iterator::range(0, l.@n);
+        }
+
+        type Wrap a = box struct { inner : a };
+
+        impl [a : ToIter] Wrap a : ToIter {
+            to_iter = |w| w.@inner.to_iter;
+        }
+
+        main : IO ();
+        main = println(Wrap { inner : Leaf { n : 3 } }.to_iter.to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// A definition may call itself and use what the call returns; what leaves the concrete type
+/// undetermined is giving the opaque return type back as the result.
+#[test]
+pub fn test_opaque_recursive_definition_that_returns_a_concrete_type() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| (
+            let size = if n <= 0 { 0 } else { f(n - 1).to_array.@size };
+            Iterator::range(0, size + 1)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"recursive opaque", f(2).to_array, [0, 1, 2]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A concrete type that carries the opaque type it stands for at a larger type argument
+/// determines no type either: each step of the replacement reaches a bigger type.
+#[test]
+pub fn test_opaque_concrete_type_grows_the_opaque_type_it_stands_for() {
+    let source = r#"
+        module Main;
+
+        trait a : Any {
+            any : a -> I64;
+        }
+
+        impl I64 : Any {
+            any = |_| 1;
+        }
+
+        impl [a : Any] Array a : Any {
+            any = |_| 0;
+        }
+
+        f : [?t : Any] a -> ?t;
+        f = |x| f([x]);
+
+        main : IO ();
+        main = println(f(0).any.to_string);
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// An opaque type constructor that takes no type arguments stands where a type variable of kind
+/// `* -> *` is expected, and the concrete type behind it is put in that place.
+#[test]
+pub fn test_opaque_type_constructor_of_no_arguments_as_a_higher_kinded_argument() {
+    let source = r#"
+        module Main;
+
+        trait [f : *->*] f : Extract {
+            extract : f a -> a;
+        }
+
+        impl Option : Extract {
+            extract = |o| o.as_some;
+        }
+
+        mk : [?m : * -> *, ?m : Extract] I64 -> ?m I64;
+        mk = |x| some(x);
+
+        type [f : *->*] Holder f = box struct { v : f I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder { v : mk(3) };
+            assert_eq(|_|"held value", h.@v.extract, 3);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An implementation of a trait member with an opaque return type owes the constraint the member
+/// declares at the implementing type, and an iterator whose items are of another type is reported.
+#[test]
+pub fn test_opaque_member_implementation_owes_the_constraint_at_its_own_type() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] c -> I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |_, n| Iterator::range(0, n);
+        }
+
+        impl Bool : Make {
+            make = |_, n| Iterator::range(0, n);
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the implementation for I64", Make::make(0, 3).to_array, [0, 1, 2]);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Std::I64 = Std::Bool",
+    );
+}
+
 // ============================================================
 // 2-4. Opaque type trait constraint not satisfied at use site
 // ============================================================
@@ -1137,6 +1492,29 @@ pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
         main = (
             let arr = vals.to_array;
             assert_eq(|_|"empty wrapped iter", arr, []);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that resolving one opaque type constructor whose concrete type is
+/// another opaque type constructor reaches the concrete type behind the second
+/// one, so a chain of opaque-returning functions compiles and runs.
+#[test]
+pub fn test_opaque_concrete_type_is_another_opaque_type() {
+    let source = r#"
+        module Main;
+
+        inner : [?b : Iterator, Item ?b = I64] I64 -> ?b;
+        inner = |n| Iterator::range(0, n);
+
+        outer : [?a : Iterator, Item ?a = I64] I64 -> ?a;
+        outer = |n| inner(n);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"chained opaque", outer(4).to_array, [0, 1, 2, 3]);;
             pure()
         );
     "#;
