@@ -887,6 +887,31 @@ pub fn test_opaque_in_impl_type_param() {
     test_source_fail(&source, Configuration::develop_mode(), "is not allowed");
 }
 
+/// An opaque type variable written inside the type an implementation is for, where the check on
+/// the implementing type does not reach it. It stands for no type, and the type checker says so.
+#[test]
+pub fn test_opaque_inside_the_implementing_type() {
+    let source = r#"
+        module Main;
+
+        trait c : Describe {
+            describe : c -> I64;
+        }
+
+        impl Array ?a : Describe {
+            describe = |_| 1;
+        }
+
+        main : IO ();
+        main = println(Describe::describe([1, 2]).to_string);
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "the type variable `?a` is unresolved",
+    );
+}
+
 // ============================================================
 // 2-2. V-3: Equality constraint formal parameter checks
 // ============================================================
