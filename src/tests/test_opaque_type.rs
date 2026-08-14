@@ -899,6 +899,104 @@ pub fn test_opaque_two_impls_return_what_each_other_returns() {
     );
 }
 
+/// An implementation that returns what itself returns is reported on that implementation, and the
+/// implementation of the same member for another type, which does determine a concrete type, is
+/// left out of the report.
+#[test]
+pub fn test_opaque_one_impl_returns_what_itself_returns() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+        type Even = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter = |o| Odd { n : o.@n }.to_iter;
+        }
+
+        impl Even : ToIter {
+            to_iter = |e| Iterator::range(0, e.@n);
+        }
+
+        main : IO ();
+        main = println(Even { n : 2 }.to_iter.to_array.to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("Main::Odd") && errmsg.contains("to_iter = |o|"),
+        "the implementation for `Odd` determines no concrete type, and the report is:\n{}",
+        errmsg
+    );
+    assert!(
+        !errmsg.contains("Even"),
+        "the implementation for `Even` determines a concrete type, and the report is:\n{}",
+        errmsg
+    );
+}
+
+/// An implementation for a type of one parameter that returns what the member returns for that
+/// parameter is reported.
+///
+/// Each step of such a resolution reaches a smaller type and the chain ends, but instantiation
+/// resolves the member's type as the implementation writes it, where the parameter is a type
+/// variable and no implementation matches, so the concrete type is one the compiler cannot use.
+#[test]
+pub fn test_opaque_impl_returns_what_the_member_returns_for_its_parameter() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Leaf = box struct { n : I64 };
+
+        impl Leaf : ToIter {
+            to_iter = |l| Iterator::range(0, l.@n);
+        }
+
+        type Wrap a = box struct { inner : a };
+
+        impl [a : ToIter] Wrap a : ToIter {
+            to_iter = |w| w.@inner.to_iter;
+        }
+
+        main : IO ();
+        main = println(Wrap { inner : Leaf { n : 3 } }.to_iter.to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// A definition may call itself and use what the call returns: what leaves the concrete type
+/// undetermined is giving the opaque return type back as the result, and not the recursion.
+#[test]
+pub fn test_opaque_recursive_definition_that_returns_a_concrete_type() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| (
+            let size = if n <= 0 { 0 } else { f(n - 1).to_array.@size };
+            Iterator::range(0, size + 1)
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"recursive opaque", f(2).to_array, [0, 1, 2]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // ============================================================
 // 2-4. Opaque type trait constraint not satisfied at use site
 // ============================================================
