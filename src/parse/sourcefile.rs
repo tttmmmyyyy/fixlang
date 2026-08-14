@@ -85,11 +85,16 @@ impl SourceFile {
     /// are two files still, and the entry written for one names the other's file wrongly.
     pub fn hash(&self) -> Result<String, Errors> {
         if self.hash.lock().unwrap().is_none() {
-            // A path holds no NUL byte, so putting one between the path and the content keeps the
-            // pair a distinct string for every distinct file.
-            let path_and_content =
-                format!("{}\0{}", self.file_path.to_string_lossy(), self.string()?);
-            let hash_str = format!("{:x}", md5::compute(path_and_content));
+            // The path goes in with its length in front of it, which fixes where it ends: every
+            // pair of a path and a content gives a sequence of bytes of its own, and no other pair
+            // gives that one. The path is taken as the bytes it is made of, so two paths that
+            // differ outside what is spelled in UTF-8 differ here too.
+            let mut context = md5::Context::new();
+            let path = self.file_path.as_os_str().as_encoded_bytes();
+            context.consume((path.len() as u64).to_le_bytes());
+            context.consume(path);
+            context.consume(self.string()?);
+            let hash_str = format!("{:x}", context.compute());
             let mut hash = self.hash.lock().unwrap();
             *hash = Some(hash_str);
         }
@@ -377,9 +382,9 @@ mod tests {
     use std::path::PathBuf;
 
     /// The caches of the compiler are named by the hash of a source file, so two files that differ
-    /// get two names. The path and the content are hashed as one string, and a boundary between
-    /// them that can move gives one name to a pair of files: `("ab", "c")` and `("a", "bc")` are
-    /// two files, and each keeps a name of its own.
+    /// get two names. The path and the content are hashed one after the other, and a boundary
+    /// between them that can move gives one name to a pair of files: `("ab", "c")` and
+    /// `("a", "bc")` are two files, and each keeps a name of its own.
     #[test]
     fn test_the_hash_separates_the_path_from_the_content() {
         let hash_of = |path: &str, content: &str| {
