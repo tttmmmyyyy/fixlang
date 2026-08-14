@@ -339,6 +339,71 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_higher_kinde
     test_source(&source, Configuration::develop_mode());
 }
 
+#[test]
+pub fn test_opaque_trait_variable_of_a_higher_kind_fixed_by_a_constraint_alone() {
+    // The trait's type variable `c` is of kind `* -> *`, and the declared type of `make` does not
+    // name it; the equality `Item ?it = c I64` is what fixes it. The type each implementation is
+    // for is a type constructor, and the opaque type constructor takes it as its argument, so each
+    // implementation hides an iterator of its own.
+    let source = r##"
+        module Main;
+
+        trait [c : *->*] c : Make {
+            make : [?it : Iterator, Item ?it = c I64] I64 -> ?it;
+        }
+
+        impl Array : Make {
+            make = |n| Iterator::range(0, n).map(|i| [i]);
+        }
+
+        impl Option : Make {
+            make = |n| Iterator::range(0, n).map(|i| some(i));
+        }
+
+        main : IO ();
+        main = (
+            let xs : Array (Array I64) = Make::make(2).to_array;
+            assert_eq(|_|"make for Array", xs, [[0], [1]]);;
+            let ys : Array (Option I64) = Make::make(2).to_array;
+            assert_eq(|_|"make for Option", ys.map(|o| o.as_some), [0, 1]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_reached_through_a_caller() {
+    // A caller generic in the trait's type variable calls the member at that variable. Each
+    // instantiation of the caller reaches the implementation for the type it is instantiated at.
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |n| Iterator::range(0, n);
+        }
+
+        impl Bool : Make {
+            make = |n| Iterator::range(0, n).map(|x| x % 2 == 0);
+        }
+
+        collect : [c : Make] I64 -> Array c;
+        collect = |n| Make::make(n).to_array;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"collect at I64", collect(3), [0, 1, 2]);;
+            assert_eq(|_|"collect at Bool", collect(3), [true, false, true]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
