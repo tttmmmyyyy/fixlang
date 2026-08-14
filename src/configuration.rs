@@ -46,14 +46,21 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
+/// Appends a hash of `text` to `hash_source`, a hash source that concatenates several values.
+///
+/// The hash is as long whatever the text is, so the value cannot run into the one appended next and
+/// `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
+fn push_text_hash(hash_source: &mut String, text: &str) {
+    hash_source.push_str(&format!("{:x}", md5::compute(text)));
+}
+
 /// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
 ///
-/// The count comes first so that a list's items cannot be read as the next list's, and each item is
-/// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
+/// The count comes first so that a list's items cannot be read as the next list's.
 fn push_list_hash(hash_source: &mut String, items: &[String]) {
     hash_source.push_str(&items.len().to_string());
     for item in items {
-        hash_source.push_str(&format!("{:x}", md5::compute(item)));
+        push_text_hash(hash_source, item);
     }
 }
 
@@ -379,10 +386,12 @@ pub struct Configuration {
     pub ld_flags: Vec<String>,
     // Create debug info.
     pub debug_info: bool,
-    /// The directory the build runs in, read once when the configuration is created. A build with
-    /// debug information writes it into the generated code as the directory of its compilation
-    /// unit, and the file names the debug information carries beside it are relative, so a debugger
-    /// resolves them against it.
+    /// The directory the build runs in, read once when the configuration is created.
+    ///
+    /// `Generator::create_debug_info` writes it into the generated code as the directory of the
+    /// compilation unit, and the file names the debug information carries beside it are relative,
+    /// so a debugger resolves them against it. That is its one reader, which is what lets
+    /// `object_generation_hash` cover it for a build with debug information alone.
     pub compilation_directory: PathBuf,
     // Whether to emit LLVM IR.
     pub emit_llvm: bool,
@@ -872,11 +881,12 @@ impl Configuration {
         let mut hash_source = String::new();
         hash_source.push_str(&self.fix_opt_level.to_string());
         hash_source.push_str(&self.debug_info.to_string());
-        // The compilation directory is written into the debug information, which is the one way it
-        // reaches the generated code, so a build without debug information takes objects generated
-        // in another directory.
+        // `Generator::create_debug_info` writes the compilation directory into the debug
+        // information, which is the one way it reaches the generated code, so a build without debug
+        // information takes objects generated in another directory. A second reader of the field
+        // would make this condition wrong.
         if self.debug_info {
-            hash_source.push_str(&self.compilation_directory.to_string_lossy());
+            push_text_hash(&mut hash_source, &self.compilation_directory.to_string_lossy());
         }
         hash_source.push_str(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
