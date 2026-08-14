@@ -213,9 +213,7 @@ impl PatternNode {
                 // `validate_variant_name` requires the name to be a variant of the union being
                 // matched, and gives it that union's namespace, so `None` arrives only in
                 // `error_tolerant` mode: the pattern then takes a fresh type variable, and its
-                // sub-pattern has no variant type to match against. The index and the type
-                // constructor are taken by value because the steps below borrow the type checker
-                // mutably.
+                // sub-pattern has no variant type to match against.
                 let variant = Pattern::resolve_union_variant(&variant_name, &typechecker.type_env);
                 let (ty, union_tc_and_variant_ty) = match variant {
                     Some((variant_idx, tc)) => {
@@ -807,13 +805,8 @@ impl Pattern {
 
     /// From a variant name, gets the variant index and the type constructor of the union.
     ///
-    /// `validate_variant_name` gives the name the union's namespace, and this reads it back.
-    ///
-    /// # Returns
-    /// `None` when the name is not one that function produced: it carries no namespace, its
-    /// namespace names no type, or that type has no such variant. Every caller that runs before
-    /// the validation has passed — the `error_tolerant` elaboration the language server drives —
-    /// reaches this, so a diagnostic the user has yet to fix costs only the pattern's type.
+    /// The name's namespace is the union's, as `validate_variant_name` leaves it, and this reads
+    /// that namespace back; a name that validation has yet to accept resolves to `None`.
     pub fn resolve_union_variant(variant_name: &FullName, type_env: &TypeEnv) -> Option<(usize, TyCon)> {
         if variant_name.namespace.is_local() {
             return None;
