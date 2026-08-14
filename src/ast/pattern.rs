@@ -216,8 +216,8 @@ impl PatternNode {
                 // sub-pattern has no variant type to match against. The index and the type
                 // constructor are taken by value because the steps below borrow the type checker
                 // mutably.
-                let variant = Pattern::get_variant_info(&variant_name, &typechecker.type_env);
-                let (ty, variant_ty) = match variant {
+                let variant = Pattern::resolve_union_variant(&variant_name, &typechecker.type_env);
+                let (ty, union_tc_and_variant_ty) = match variant {
                     Some((variant_idx, tc)) => {
                         let union_ty = tc.get_struct_union_value_type(typechecker);
                         let variant_ty =
@@ -243,7 +243,7 @@ impl PatternNode {
                 let (subpat, var_ty) = typechecker.tolerate_pattern_typed(typed, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
-                if let Some((tc, variant_ty)) = variant_ty {
+                if let Some((tc, variant_ty)) = union_tc_and_variant_ty {
                     let unify_res = UnifOrOtherErr::extract_others(
                         typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
                     )?;
@@ -814,7 +814,7 @@ impl Pattern {
     /// namespace names no type, or that type has no such variant. Every caller that runs before
     /// the validation has passed — the `error_tolerant` elaboration the language server drives —
     /// reaches this, so a diagnostic the user has yet to fix costs only the pattern's type.
-    pub fn get_variant_info(variant_name: &FullName, type_env: &TypeEnv) -> Option<(usize, TyCon)> {
+    pub fn resolve_union_variant(variant_name: &FullName, type_env: &TypeEnv) -> Option<(usize, TyCon)> {
         if variant_name.namespace.is_local() {
             return None;
         }
