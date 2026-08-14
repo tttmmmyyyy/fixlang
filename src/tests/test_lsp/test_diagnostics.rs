@@ -83,6 +83,47 @@ mod tests {
         );
     }
 
+    /// Two values whose opaque return types are written in terms of each other are reported in the
+    /// editor, on the first declaration, with the second named as a related location.
+    ///
+    /// Determining the concrete type behind an opaque type is the work of type-checking, so this
+    /// report is made where a run for the editor and a run for `fix build` part company; and a
+    /// program the editor leaves unreported here is one whose build does not terminate.
+    #[test]
+    fn test_opaque_types_written_in_terms_of_each_other_are_reported_on_both_declarations() {
+        let (_temp_dir, project_dir) = setup_test_env("opaque_type_cycle");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let cyclic: Vec<&Value> = diagnostics
+            .iter()
+            .filter(|diag| {
+                diag["message"]
+                    .as_str()
+                    .map_or(false, |m| m.contains("written in terms of each other"))
+            })
+            .collect();
+        assert_eq!(
+            cyclic.len(),
+            1,
+            "one report is expected, but the diagnostics are {:?}",
+            diagnostics
+        );
+        let diag = cyclic[0];
+
+        // `main.fix` declares `f` on the 3rd line and `g` on the 6th, which the protocol counts
+        // from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 2,
+            "at the declaration of `f`"
+        );
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["line"], 5,
+            "naming the declaration of `g`, but the report is {:?}",
+            diag
+        );
+    }
+
     /// A completion request leaves the error of another file reported.
     ///
     /// A completion re-checks the program in error-tolerant mode, which reports no diagnostic

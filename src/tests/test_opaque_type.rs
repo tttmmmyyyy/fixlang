@@ -756,6 +756,78 @@ pub fn test_opaque_branch_type_mismatch() {
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
+/// A definition that returns a value of the very opaque type it is declared to return leaves the
+/// concrete type undetermined, and is reported.
+#[test]
+pub fn test_opaque_concrete_type_is_the_opaque_type_itself() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| f(n + 1);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "gives it a type which contains `Main::f::?it` itself",
+    );
+}
+
+/// The concrete type is undetermined just as well when it carries the opaque type inside another
+/// type rather than being it.
+#[test]
+pub fn test_opaque_concrete_type_contains_the_opaque_type_itself() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| f(n + 1).map(|x| x);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "gives it a type which contains `Main::f::?it` itself",
+    );
+}
+
+/// Two values whose concrete types are each written in terms of the other's determine neither, and
+/// the report names both.
+#[test]
+pub fn test_opaque_concrete_types_of_two_values_contain_each_other() {
+    let source = r#"
+        module Main;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| g(n);
+
+        g : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        g = |n| f(n);
+
+        main : IO ();
+        main = (
+            let it = f(0);
+            println("ok")
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Main::f::?it` -> `Main::g::?it` -> `Main::f::?it` are written in terms of each other",
+    );
+}
+
 // ============================================================
 // 2-4. Opaque type trait constraint not satisfied at use site
 // ============================================================

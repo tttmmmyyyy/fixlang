@@ -55,6 +55,8 @@
 - #239, #248: A program whose types name each other in a cycle and reach a type of a higher-kinded parameter now compiles at `-O max` and `-O experimental`. `type [f : *->*] H f = unbox struct { d : f I64 }; type Y a = unbox struct { p : Array X, q : a }; type X = unbox struct { r : Y I64, s : H Array };` aborted the compiler, and writing the two fields of `X` in the other order made the same program compile.
 - #245, #280: A program whose types reach themselves at a larger type argument through a field holding nothing now compiles at `-O max` and `-O experimental`, as it already did at `-O none` and `-O basic`. `type [f : *->*] H f = unbox struct { d : f I64 }; type Ph a = unbox struct { z : I64 }; type Y a = unbox struct { p : Ph (Y (Array a)), h : H Array };` consumed memory without end at the higher levels.
 
+- #310: A definition that gives its opaque return type a concrete type containing that opaque type itself is now reported as an error, instead of making the compiler run without end. `f : [?it : Iterator, Item ?it = I64] I64 -> ?it; f = |n| f(n + 1);` passed `fix check` and never finished building; where the opaque return types of several values are written in terms of each other, the report names them all.
+
 #### Std
 
 - Fixed a bug where `String::from_bytes` updated the length of a shared byte array in place instead of cloning it, truncating the caller's array.
