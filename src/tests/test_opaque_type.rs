@@ -775,7 +775,7 @@ pub fn test_opaque_concrete_type_is_the_opaque_type_itself() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "gives it a type which contains `Main::f::?it` itself",
+        "`Main::f::?it` cannot be determined, because the definition gives it a type which contains that opaque type itself",
     );
 }
 
@@ -798,7 +798,7 @@ pub fn test_opaque_concrete_type_contains_the_opaque_type_itself() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "gives it a type which contains `Main::f::?it` itself",
+        "`Main::f::?it` cannot be determined, because the definition gives it a type which contains that opaque type itself",
     );
 }
 
@@ -824,7 +824,78 @@ pub fn test_opaque_concrete_types_of_two_values_contain_each_other() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "`Main::f::?it` -> `Main::g::?it` -> `Main::f::?it` are written in terms of each other",
+        "`Main::f::?it`, `Main::g::?it` cannot be determined, because they are written in terms of each other",
+    );
+}
+
+/// One implementation of a trait member may return what another implementation of the same member
+/// returns, since the type the second one gives the opaque type is the concrete type of the first.
+///
+/// Both implementations give their concrete type to one opaque type constructor, so a check that
+/// asked whether a constructor's concrete type names that constructor would reject this program.
+#[test]
+pub fn test_opaque_impl_returns_what_another_impl_returns() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter = Array::to_iter;
+        }
+
+        type Wrap = box struct { v : Array I64 };
+
+        impl Wrap : ToIter {
+            type Elem Wrap = I64;
+            to_iter = |w| w.@v.ToIter::to_iter;
+        }
+
+        main : IO ();
+        main = (
+            let arr = Wrap { v : [1, 2, 3] }.ToIter::to_iter.to_array;
+            assert_eq(|_|"delegating impl", arr, [1, 2, 3]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Two implementations of one trait member that each return what the other returns determine no
+/// concrete type, and are reported on the implementations.
+#[test]
+pub fn test_opaque_two_impls_return_what_each_other_returns() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+        type Even = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter = |o| Even { n : o.@n }.to_iter;
+        }
+
+        impl Even : ToIter {
+            to_iter = |e| Odd { n : e.@n }.to_iter;
+        }
+
+        main : IO ();
+        main = println(Odd { n : 1 }.to_iter.to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because they are written in terms of each other",
     );
 }
 

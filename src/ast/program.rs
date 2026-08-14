@@ -1339,7 +1339,7 @@ impl Program {
 
         // The concrete types of opaque types are known only once the values are checked, and a
         // cycle among them has to be reported before instantiation puts each in the other's place.
-        errors.eat_err(self.validate_opaque_types_are_acyclic());
+        errors.eat_err(self.validate_opaque_types_are_acyclic(tc));
 
         errors.to_result()
     }

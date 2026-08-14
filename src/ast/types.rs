@@ -2789,6 +2789,9 @@ pub struct OpaqueTyConResolution {
     // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
+    // The source of the definition whose type-checking fills in `rhs`: the declaration of a
+    // simple value, and the member's name in the implementation for a trait member.
+    pub src: Option<Span>,
 }
 
 #[cfg(test)]

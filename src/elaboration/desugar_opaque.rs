@@ -59,8 +59,9 @@ use crate::ast::types::{
     TyVar, Type, TypeNode,
 };
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
-use crate::elaboration::typecheck::Substitution;
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
+use crate::graph::Graph;
 use crate::misc::{insert_to_map_vec, Map, Set};
 use crate::parse::sourcefile::Span;
 use std::sync::Arc;
@@ -111,6 +112,7 @@ impl Program {
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
         for (gv_name, opaque_infos) in &targets {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
+            let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
             // Generate one #wrap_opaque per function/method.
@@ -138,7 +140,7 @@ impl Program {
                 SymbolExpr::Simple(te) => {
                     te.expr = wrap_with_opaque(&wrap_name, te.expr.clone());
                     te.opaque_types =
-                        build_opaque_resolutions(opaque_infos, &Substitution::default());
+                        build_opaque_resolutions(opaque_infos, &Substitution::default(), decl_src);
                 }
                 SymbolExpr::Method(impls) => {
                     for impl_ in impls.iter_mut() {
@@ -157,8 +159,11 @@ impl Program {
                         impl_.scm_via_defn =
                             rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
                         impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
-                        impl_.expr.opaque_types =
-                            build_opaque_resolutions(opaque_infos, &defn_to_impl);
+                        impl_.expr.opaque_types = build_opaque_resolutions(
+                            opaque_infos,
+                            &defn_to_impl,
+                            impl_.lhs_srcs.first().cloned(),
+                        );
                     }
                 }
             }
@@ -241,135 +246,191 @@ impl Program {
     /// Type-checking writes the concrete type it found for an opaque TyCon into `self.opaque_types`,
     /// and instantiation puts that type in the TyCon's place (`resolve_opaque_type_in_type`),
     /// repeating while the result is again an opaque TyCon so that a chain of opaque types is
-    /// followed to its end. A concrete type that contains, directly or along such a chain, the
-    /// TyCon it stands for is the type of no value, and the replacement would never terminate.
+    /// followed to its end. A concrete type that leads, along such a chain, back to the resolution
+    /// it came from is the type of no value, and the replacement would never terminate.
     ///
     /// Only the concrete types filled in so far are read, so a run that checks part of the program
     /// reports the cycles lying within that part.
-    pub fn validate_opaque_types_are_acyclic(&self) -> Result<(), Errors> {
-        // The opaque TyCons each opaque TyCon's concrete type is written in terms of.
-        let mut refers_to: Map<FullName, Set<FullName>> = Map::default();
-        for (tycon_name, resolutions) in &self.opaque_types {
-            let mut referred = Set::default();
-            for resolution in resolutions {
-                let Some(rhs) = &resolution.rhs else {
-                    continue;
-                };
-                let mut tycons_in_rhs = Set::default();
-                rhs.collect_tycons(&mut tycons_in_rhs);
-                for tycon in tycons_in_rhs {
-                    if self.opaque_types.contains_key(&tycon.name) {
-                        referred.insert(tycon.name);
+    pub fn validate_opaque_types_are_acyclic(&self, tc: &TypeCheckContext) -> Result<(), Errors> {
+        // One node per resolution: an opaque TyCon of a trait member has one resolution per
+        // implementation, and which of them applies is decided by the lhs, so a chain that leaves
+        // one implementation for another is a chain between two nodes of one TyCon name.
+        let mut tycon_names: Vec<&FullName> = self.opaque_types.keys().collect();
+        tycon_names.sort_by_key(|tycon_name| tycon_name.to_string());
+        let mut resolutions: Vec<&OpaqueTyConResolution> = vec![];
+        let mut nodes_of_tycon: Map<&FullName, Vec<usize>> = Map::default();
+        for tycon_name in tycon_names {
+            for resolution in &self.opaque_types[tycon_name] {
+                nodes_of_tycon
+                    .entry(tycon_name)
+                    .or_default()
+                    .push(resolutions.len());
+                resolutions.push(resolution);
+            }
+        }
+
+        // An edge runs to every resolution that could replace an opaque TyCon of the concrete type.
+        let mut tc = tc.clone();
+        let mut edges: Vec<Vec<usize>> = vec![vec![]; resolutions.len()];
+        for (from, resolution) in resolutions.iter().enumerate() {
+            let Some(rhs) = &resolution.rhs else {
+                continue;
+            };
+            for application in collect_opaque_applications(rhs, &self.opaque_types) {
+                for to in &nodes_of_tycon[&application.tycon_name] {
+                    if application.can_be_resolved_by(&mut tc, &resolutions[*to].lhs)? {
+                        edges[from].push(*to);
                     }
                 }
             }
-            refers_to.insert(tycon_name.clone(), referred);
         }
 
-        let mut start_names: Vec<&FullName> = refers_to.keys().collect();
-        start_names.sort_by_key(|name| name.to_string());
-        let mut visited = Set::default();
-        let mut cycles = vec![];
-        for name in start_names {
-            collect_opaque_cycles(name, &refers_to, &mut visited, &mut vec![], &mut cycles);
+        // Every resolution of a cycle determines the others and none of them a type, so the
+        // strongly connected component is what the report is about. A component of one resolution
+        // is a cycle when that resolution's concrete type is written in terms of itself.
+        let refers_to_itself: Vec<bool> = edges
+            .iter()
+            .enumerate()
+            .map(|(node, to)| to.contains(&node))
+            .collect();
+        let graph = Graph::new_with_edges(resolutions, edges);
+        let component_of_node = graph.compute_sccs();
+        let mut nodes_of_component: Map<usize, Vec<usize>> = Map::default();
+        for (node, component) in component_of_node.iter().enumerate() {
+            nodes_of_component.entry(*component).or_default().push(node);
         }
 
         let mut errors = Errors::empty();
-        for cycle in cycles {
-            errors.append(self.opaque_cycle_error(&cycle));
+        for component in 0..nodes_of_component.len() {
+            let members = &nodes_of_component[&component];
+            if members.len() == 1 && !refers_to_itself[members[0]] {
+                continue;
+            }
+            errors.append(opaque_cycle_error(&graph, members));
         }
         errors.to_result()
     }
+}
 
-    /// The error reported for `cycle`, whose opaque TyCons have each one's concrete type written in
-    /// terms of the next, and the last one's in terms of the first.
-    fn opaque_cycle_error(&self, cycle: &[FullName]) -> Errors {
-        let value_names: Vec<FullName> = cycle.iter().map(opaque_tycon_value_name).collect();
-        let head_tycon = &cycle[0];
-        let head_value = &value_names[0];
-        let msg = if cycle.len() == 1 {
-            format!(
-                "The concrete type of the opaque type `{}` of `{}` cannot be determined, because the definition of `{}` gives it a type which contains `{}` itself.",
-                head_tycon.name,
-                head_value.to_string(),
-                head_value.to_string(),
-                head_tycon.to_string(),
-            )
-        } else {
-            let route = cycle
-                .iter()
-                .chain(std::iter::once(head_tycon))
-                .map(|tycon_name| format!("`{}`", tycon_name.to_string()))
-                .collect::<Vec<_>>()
-                .join(" -> ");
-            format!(
-                "The concrete type of the opaque type `{}` of `{}` cannot be determined, because the concrete types of {} are written in terms of each other.",
-                head_tycon.name,
-                head_value.to_string(),
-                route,
-            )
+// The error reported for `members`, the resolutions of one cycle: each one's concrete type is
+// written in terms of another of them, so none of them names a type.
+fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, members: &[usize]) -> Errors {
+    let msg = if members.len() == 1 {
+        format!(
+            "The concrete type of the opaque type `{}` cannot be determined, because the definition gives it a type which contains that opaque type itself.",
+            graph.get(members[0]).lhs.to_string(),
+        )
+    } else {
+        let opaque_types = members
+            .iter()
+            .map(|member| format!("`{}`", graph.get(*member).lhs.to_string()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "The concrete types of the opaque types {} cannot be determined, because they are written in terms of each other.",
+            opaque_types,
+        )
+    };
+    let srcs: Vec<&Option<Span>> = members
+        .iter()
+        .map(|member| &graph.get(*member).src)
+        .collect();
+    Errors::from_msg_srcs(msg, &srcs)
+}
+
+// An opaque TyCon as it appears in a type, applied to the arguments its resolutions take.
+struct OpaqueApplication {
+    tycon_name: FullName,
+    // The TyCon applied to those arguments, and `None` where fewer of them are applied, which
+    // leaves every resolution of the TyCon as one that could resolve it.
+    applied: Option<Arc<TypeNode>>,
+}
+
+impl OpaqueApplication {
+    // Whether the resolution whose left hand side is `lhs` could be the one that replaces this
+    // application.
+    //
+    // Instantiation reaches the application with its type variables already substituted and matches
+    // what it holds then against `lhs` (see `resolve_opaque_type_in_type`), so the resolution can
+    // replace it exactly when some instance of the application is an instance of `lhs`. The
+    // application's type variables are renamed apart first: it and `lhs` are written in two schemes
+    // of their own, and a name they happen to share would otherwise tie them to one type.
+    fn can_be_resolved_by(
+        &self,
+        tc: &mut TypeCheckContext,
+        lhs: &Arc<TypeNode>,
+    ) -> Result<bool, Errors> {
+        let Some(applied) = &self.applied else {
+            return Ok(true);
         };
-        // The declaration of a value is where its opaque type variable is written.
-        let srcs: Vec<Option<Span>> = value_names
-            .iter()
-            .map(|value_name| {
-                self.global_values
-                    .get(value_name)
-                    .and_then(|gv| gv.decl_src.clone())
-            })
-            .collect();
-        Errors::from_msg_srcs(msg, &srcs.iter().collect::<Vec<_>>())
+        let applied = tc.instantiate_type(applied);
+        tc.are_unifiable(&applied, lhs)
     }
 }
 
-// Append to `cycles` each cycle of `refers_to` reachable from `name`.
-//
-// `path` holds the nodes the walk has entered and not left, so a node it already holds closes a
-// cycle; `visited` holds the nodes whose descendants the walk has already covered.
-fn collect_opaque_cycles(
-    name: &FullName,
-    refers_to: &Map<FullName, Set<FullName>>,
-    visited: &mut Set<FullName>,
-    path: &mut Vec<FullName>,
-    cycles: &mut Vec<Vec<FullName>>,
+// Collect the applications of opaque TyCons in `ty`, at every depth.
+fn collect_opaque_applications(
+    ty: &Arc<TypeNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+) -> Vec<OpaqueApplication> {
+    let mut applications = vec![];
+    collect_opaque_applications_inner(ty, opaque_resolutions, &mut applications);
+    applications
+}
+
+fn collect_opaque_applications_inner(
+    ty: &Arc<TypeNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+    applications: &mut Vec<OpaqueApplication>,
 ) {
-    if let Some(entered_at) = path.iter().position(|entered| entered == name) {
-        // Start the cycle at its least name, so that which node the walk started from does not
-        // change the report.
-        let mut cycle = path[entered_at..].to_vec();
-        let least_at = cycle
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, name)| name.to_string())
-            .unwrap()
-            .0;
-        cycle.rotate_left(least_at);
-        cycles.push(cycle);
-        return;
+    if let Some(tycon) = ty.toplevel_tycon() {
+        if let Some(resolutions) = opaque_resolutions.get(&tycon.name) {
+            let arity = opaque_tycon_arity(resolutions);
+            let args = ty.collect_type_arguments();
+            let applied = if args.len() >= arity {
+                Some(apply_type_args(&tycon, &args[..arity]))
+            } else {
+                None
+            };
+            applications.push(OpaqueApplication {
+                tycon_name: tycon.name.clone(),
+                applied,
+            });
+            // The arguments are types of their own; the TyCon they are applied to is this
+            // application and is covered by the entry just pushed.
+            for arg in args {
+                collect_opaque_applications_inner(&arg, opaque_resolutions, applications);
+            }
+            return;
+        }
     }
-    if !visited.insert(name.clone()) {
-        return;
+    match &ty.ty {
+        Type::TyVar(_) | Type::TyCon(_) => {}
+        Type::TyApp(tyfun, arg) => {
+            collect_opaque_applications_inner(tyfun, opaque_resolutions, applications);
+            collect_opaque_applications_inner(arg, opaque_resolutions, applications);
+        }
+        Type::AssocTy(_, args) => {
+            for arg in args {
+                collect_opaque_applications_inner(arg, opaque_resolutions, applications);
+            }
+        }
     }
-    path.push(name.clone());
-    let mut referred: Vec<&FullName> = refers_to[name].iter().collect();
-    referred.sort_by_key(|name| name.to_string());
-    for next in referred {
-        collect_opaque_cycles(next, refers_to, visited, path, cycles);
-    }
-    path.pop();
 }
 
-// The name of the TyCon generated for an opaque type variable of a global value.
-//
-// Example: `Std::repeat::?it` for the value `Std::repeat` and the opaque type variable `?it`.
-fn opaque_tycon_name(value_name: &FullName, opaque_tyvar_name: &Name) -> FullName {
-    FullName::new(&value_name.to_namespace(), opaque_tyvar_name)
+// The number of type arguments an opaque TyCon takes, read from the left hand side of its
+// resolutions, which all apply it to the same number of arguments.
+fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
+    resolutions[0].lhs.collect_type_arguments().len()
 }
 
-// The global value in whose type signature the opaque type variable behind `tycon_name` is
-// written. Inverse of `opaque_tycon_name`.
-fn opaque_tycon_value_name(tycon_name: &FullName) -> FullName {
-    tycon_name.namespace.clone().to_fullname()
+// The TyCon applied to the given type arguments, in order.
+fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
+    let mut applied = type_tycon(tycon);
+    for arg in args {
+        applied = type_tyapp(applied, arg.clone());
+    }
+    applied
 }
 
 // Collect OpaqueInfo for each opaque type variable in the scheme.
@@ -401,7 +462,7 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
             for gv in gen_vars.iter().rev() {
                 tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
             }
-            let tycon_name = opaque_tycon_name(gv_name, &opq_var.name);
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
             OpaqueInfo {
                 tyvar: opq_var.clone(),
                 tycon: tycon(tycon_name),
@@ -436,12 +497,15 @@ impl OpaqueInfo {
 // `defn_to_impl` maps trait-definition type variables to impl-specific types.
 // For non-method values, pass `Substitution::default()` (identity).
 //
+// `src` is the source of the definition whose type-checking fills in the rhs.
+//
 // Example (simple): for `repeat`, lhs = `?it a`.
 // Example (method): for `impl Array a : ToIter`, defn_to_impl maps `c -> Array a`,
 // so lhs = `?it (Array a)`.
 fn build_opaque_resolutions(
     opaque_infos: &[OpaqueInfo],
     defn_to_impl: &Substitution,
+    src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
     let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
@@ -449,7 +513,11 @@ fn build_opaque_resolutions(
         result
             .entry(info.tycon.name.clone())
             .or_default()
-            .push(OpaqueTyConResolution { lhs, rhs: None });
+            .push(OpaqueTyConResolution {
+                lhs,
+                rhs: None,
+                src: src.clone(),
+            });
     }
     result
 }
@@ -651,8 +719,7 @@ pub fn resolve_opaque_type_in_type(
             None => break, // not an opaque tycon
         };
 
-        // Compute arity from the lhs of the first resolution.
-        let arity = resolutions[0].lhs.collect_type_arguments().len();
+        let arity = opaque_tycon_arity(resolutions);
 
         // Split the type args into prefix (arity args) and rest.
         let all_args = ty.collect_type_arguments();
@@ -864,26 +931,5 @@ pub fn resolve_opaque_tycon_in_expr(
             expr.set_ffi_call_args(new_args)
         }
         _ => expr,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{opaque_tycon_name, opaque_tycon_value_name};
-    use crate::ast::name::FullName;
-
-    /// The value an opaque TyCon was generated for is read back out of the TyCon's name, so the
-    /// name a TyCon is given and the name read back out of it must stay each other's inverse.
-    #[test]
-    fn the_name_of_an_opaque_tycon_names_the_value_it_was_generated_for() {
-        let value_name = FullName::from_strs(&["Main", "ToIt"], "to_it");
-        let tycon_name = opaque_tycon_name(&value_name, &"?it".to_string());
-        assert_eq!(tycon_name.to_string(), "Main::ToIt::to_it::?it");
-        assert!(
-            opaque_tycon_value_name(&tycon_name) == value_name,
-            "`{}` should be the TyCon of `{}`.",
-            tycon_name.to_string(),
-            value_name.to_string()
-        );
     }
 }

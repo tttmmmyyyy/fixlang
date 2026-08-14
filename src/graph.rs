@@ -20,7 +20,6 @@ impl<T> Graph<T> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn new_with_edges(elems: Vec<T>, edges: Vec<Vec<usize>>) -> Self {
         let len = elems.len();
         assert_eq!(len, edges.len());
