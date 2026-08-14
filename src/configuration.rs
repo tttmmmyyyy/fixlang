@@ -662,6 +662,8 @@ impl Configuration {
         self.fix_opt_level
     }
 
+    /// The effort the LLVM pass pipeline is asked for. Every Fix level above `None` asks for the
+    /// same default effort, so the levels above it differ in the compiler's own passes alone.
     pub fn get_llvm_opt_level(&self) -> OptimizationLevel {
         match self.fix_opt_level {
             FixOptimizationLevel::None => OptimizationLevel::None,
@@ -682,10 +684,17 @@ impl Configuration {
         false
     }
 
+    /// Split the program's symbols into several compilation units, each hashed and cached on its
+    /// own, so that a rebuild regenerates only the units whose inputs changed. A function of a unit
+    /// is externally visible, since another unit calls it. Runs at `Basic` and below; above that the
+    /// program is one unit, which is what lets a pass see all of it at once.
     pub fn enable_separated_compilation(&self) -> bool {
         !self.force_all_optimizations() && self.fix_opt_level <= FixOptimizationLevel::Basic
     }
 
+    /// Give each global function a version taking one, two, ... arguments at once, and send every
+    /// call to the version matching the number of arguments it supplies, so that a saturated call
+    /// passes them directly instead of building a closure per argument. Runs at `Basic` and above.
     pub fn enable_uncurry_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
@@ -792,8 +801,8 @@ impl Configuration {
         }
     }
 
-    // Check if frame pointers should not be eliminated.
-    // This is necessary on macOS when backtrace is enabled, as backtrace() relies on frame pointers.
+    /// Whether the generated code must keep its frame pointers. macOS's `backtrace()` walks them, so
+    /// a build that prints a backtrace there keeps them.
     pub fn no_elim_frame_pointers(&self) -> bool {
         self.backtrace && env::consts::OS == "macos"
     }

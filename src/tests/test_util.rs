@@ -211,6 +211,7 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
 /// The functions `ir` defines, each paired with whether it carries the function attribute
 /// `attribute`.
 ///

@@ -45,6 +45,9 @@ pub struct RcProgram {
 /// uncurried funptr versions.
 #[derive(Clone)]
 pub struct RcFunc {
+    /// The name this function is defined and called under, unique across the program: lowering mints
+    /// a fresh one for each lambda it lifts, and a pass that copies a function appends a segment of
+    /// its own.
     pub name: FuncRef,
     /// The lambda's arrow type (funptr or closure). It determines the LLVM function signature and
     /// distinguishes the funptr and closure ABIs.
@@ -55,8 +58,14 @@ pub struct RcFunc {
     /// `Some` for the closure ABI: the trailing capture-pointer parameter, from which the body
     /// projects the captured values. `None` for the funptr ABI, which has no captures.
     pub capture: Option<RcVar>,
+    /// The type of the value the body returns, which for a funptr-ABI function is the result after
+    /// all of its parameters rather than the arrow taking the rest of them.
     pub ret_ty: Arc<TypeNode>,
+    /// The body, evaluated with the parameters and the capture in scope. Its `Ret` returns the
+    /// function's value.
     pub body: RcExprNode,
+    /// The source the lambda this function came from was written at, which code generation records
+    /// as the function's debug location. `None` where no source spells the function out.
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
