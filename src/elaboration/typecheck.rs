@@ -1046,17 +1046,28 @@ impl TypeCheckContext {
     /// **An arm elaborates its sub-expressions in the order the source
     /// writes them.** Elaborating one sub-expression leaves the type
     /// checker changed — a type variable bound, a predicate or an
-    /// equality added to the pending ones, an overloaded name settled on
-    /// one candidate — so the order the arm walks in decides what is
-    /// known when each of the remaining sub-expressions is checked. It
-    /// therefore decides which of several errors is the one reported, and
-    /// it decides which candidate an overloaded name resolves to, so a
-    /// program can be accepted under one order and rejected under
-    /// another. Source order is the one the programmer can predict, and
-    /// an arm that holds its sub-expressions in another order for a later
-    /// stage — as the `Expr::MakeStruct` arm holds them in the struct's
-    /// declaration order for code generation — reorders them after the
-    /// walk rather than before it.
+    /// equality added to the pending ones — so each sub-expression is
+    /// checked knowing what the ones before it settled, and type
+    /// information flows from earlier sub-expressions to later ones.
+    ///
+    /// Programmers write with that flow in mind: the sub-expression
+    /// that settles a type goes first and the one that needs it
+    /// follows. An annotation is one way to settle it (`f(y : T, y.g)`),
+    /// and an expression whose type is already known is another
+    /// (`f(g(y), y.h)`, where `g`'s parameter type settles `y`). Where
+    /// the type so settled is what lets an overloaded name pick one of
+    /// its candidates, the order decides whether the program compiles,
+    /// so changing it rejects programs that compile today.
+    ///
+    /// `Expr::App` is the compiler's own use of the rule: it elaborates
+    /// the function before the argument, and elaborates the argument
+    /// first where the source wrote the call as `x.f`, so that the
+    /// receiver's type reaches the resolution of `f`.
+    ///
+    /// An arm that holds its sub-expressions in another order for a
+    /// later stage — as the `Expr::MakeStruct` arm holds them in the
+    /// struct's declaration order for code generation — reorders them
+    /// after the walk rather than before it.
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1238,6 +1249,10 @@ impl TypeCheckContext {
                 let arg_tv = self.new_tyvar_star();
                 self.add_tyvar_source(arg_tv.name.clone(), arg.source.clone());
                 let arg_ty = type_from_tyvar(arg_tv);
+                // The source's order, as this function's comment requires: a
+                // call written `x.f` elaborates `x` first, so the receiver's
+                // type is settled when `f` is resolved and an overloaded `f`
+                // can pick the candidate that takes it.
                 if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
                     let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;

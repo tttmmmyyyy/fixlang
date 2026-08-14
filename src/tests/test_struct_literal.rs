@@ -200,6 +200,46 @@ main = (
         );
     }
 
+    /// A field expression settles a type that a later field expression needs, so the order the
+    /// literal writes its fields in decides whether the program compiles.
+    ///
+    /// `pin(y)` settles the element type of `y`, and only with it settled does the receiver of
+    /// `y.pick` carry enough type for the overloaded name to pick one of its two candidates. The
+    /// literal writes that field first and the struct declares it second, so a walk that followed
+    /// the declaration would meet `y.pick` with an unsettled element type and report the name as
+    /// ambiguous — the program below compiles today and would stop compiling.
+    #[test]
+    pub fn test_struct_literal_field_settles_a_type_a_later_field_needs() {
+        let source = r#"
+module Main;
+
+namespace AI {
+    pick : Array I64 -> I64;
+    pick = |_| 1;
+}
+
+namespace AB {
+    pick : Array Bool -> I64;
+    pick = |_| 2;
+}
+
+pin : Array I64 -> I64;
+pin = |_| 0;
+
+type Pair = struct { p : I64, q : I64 };
+
+main : IO ();
+main = (
+    let y = [];
+    let s = Pair { q : pin(y), p : y.pick };
+    assert_eq(|_|"the candidate taking an array of I64", s.@p, 1);;
+    assert_eq(|_|"the field that settled the element type", s.@q, 0);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// Fields written in an order other than the declaration's still reach the field they name.
     #[test]
     pub fn test_struct_literal_fields_out_of_declaration_order() {
