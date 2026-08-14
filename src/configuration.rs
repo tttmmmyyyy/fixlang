@@ -11,7 +11,8 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+    compilation_directory, platform_thread_sanitizer_supported, platform_valgrind_supported,
+    warn_msg, Finally, Map,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -864,6 +865,13 @@ impl Configuration {
         let mut hash_source = String::new();
         hash_source.push_str(&self.fix_opt_level.to_string());
         hash_source.push_str(&self.debug_info.to_string());
+        // The directory the build runs in is written into the debug information as the directory of
+        // the compilation unit, which is what a debugger resolves the file names beside it against.
+        // That is the one way the directory reaches the generated code, so a build without debug
+        // information takes objects generated in another directory.
+        if self.debug_info {
+            hash_source.push_str(&compilation_directory().to_string_lossy());
+        }
         hash_source.push_str(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse

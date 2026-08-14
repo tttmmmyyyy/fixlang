@@ -237,6 +237,41 @@ mod debug_info_tests {
         );
     }
 
+    // A program whose debug information the two tests below read.
+    const HELLO_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = println("hello");
+    "#;
+
+    // Build the Fix source `file`, named as the working directory `dir` reaches it, with debug
+    // information, writing the program to `output` in that directory.
+    fn build_g_in(dir: &Path, file: &str, output: &str) {
+        let build = fix_command()
+            .args(["build", "-g", "-f", file, "-o", output])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g -f {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            file,
+            dir.display(),
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr),
+        );
+    }
+
+    // Whether the program built at `path` carries `text`. A file name and a directory of the debug
+    // information reach the program as strings of its own, so its bytes carry them.
+    fn program_carries(path: &Path, text: &str) -> bool {
+        let program = fs::read(path).expect("Failed to read the built program");
+        program
+            .windows(text.len())
+            .any(|bytes| bytes == text.as_bytes())
+    }
+
     // Debug information names the file the code was compiled from, so a program built after its
     // source moved must name the source where it is now. Nothing but the path differs between the
     // two builds here, and the second one reuses the object files the first one cached unless the
@@ -244,51 +279,54 @@ mod debug_info_tests {
     // holds another one.
     #[test]
     fn test_debug_info_names_the_source_after_it_moved() {
-        const SOURCE: &str = r#"
-            module Main;
-
-            main : IO ();
-            main = println("hello");
-        "#;
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        let build = |file: &str, output: &str| {
-            let build = fix_command()
-                .args(["build", "-g", "-f", file, "-o", output])
-                .current_dir(dir)
-                .output()
-                .expect("Failed to execute `fix build`");
-            assert!(
-                build.status.success(),
-                "`fix build -g -f {}` failed:\nstdout:\n{}\nstderr:\n{}",
-                file,
-                String::from_utf8_lossy(&build.stdout),
-                String::from_utf8_lossy(&build.stderr),
-            );
-        };
 
-        fs::write(dir.join("main.fix"), SOURCE).expect("Failed to write main.fix");
-        build("main.fix", "before_move");
+        fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+        build_g_in(dir, "main.fix", "before_move");
 
         fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
         fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
-        build("src/app.fix", "after_move");
+        build_g_in(dir, "src/app.fix", "after_move");
 
-        // The file name reaches the program as one of the strings of its debug information, so the
-        // bytes of the program carry it.
-        let program = fs::read(dir.join("after_move")).expect("Failed to read the built program");
-        let carries = |name: &str| {
-            program
-                .windows(name.len())
-                .any(|bytes| bytes == name.as_bytes())
-        };
+        let program = dir.join("after_move");
         assert!(
-            carries("app.fix"),
+            program_carries(&program, "app.fix"),
             "the program built after the move does not name \"app.fix\", the file it was built from"
         );
         assert!(
-            !carries("main.fix"),
+            !program_carries(&program, "main.fix"),
             "the program built after the move names \"main.fix\", where its source no longer is"
+        );
+    }
+
+    // The file names debug information carries are relative, and a debugger resolves them against
+    // the directory of the compilation unit, which is where the build ran. A project built again
+    // after it moved must therefore record its new directory — the objects cached in it were
+    // generated for the old one.
+    #[test]
+    fn test_debug_info_names_the_directory_after_the_project_moved() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let before_move = temp.path().join("before_move");
+        let after_move = temp.path().join("after_move");
+
+        fs::create_dir(&before_move).expect("Failed to create the project directory");
+        fs::write(before_move.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+        build_g_in(&before_move, "main.fix", "prog");
+
+        // The build's own directory moves with the project, so the objects it cached are there to
+        // be taken.
+        fs::rename(&before_move, &after_move).expect("Failed to move the project directory");
+        build_g_in(&after_move, "main.fix", "prog");
+
+        let program = after_move.join("prog");
+        assert!(
+            program_carries(&program, after_move.to_str().unwrap()),
+            "the program built after the move does not name the directory it was built in"
+        );
+        assert!(
+            !program_carries(&program, before_move.to_str().unwrap()),
+            "the program built after the move names the directory the project has left"
         );
     }
 

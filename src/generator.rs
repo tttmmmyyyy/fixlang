@@ -28,6 +28,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
+use crate::misc::compilation_directory;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::object::build_free_boxed;
@@ -81,7 +82,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
-use std::{cell::RefCell, env, iter::successors, sync::Arc};
+use std::{cell::RefCell, iter::successors, sync::Arc};
 
 // A value bound to a name in the current scope.
 #[derive(Clone)]
@@ -809,10 +810,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             FlagBehavior::Warning,
             debug_metadata_version,
         );
-        let cur_dir = match env::current_dir() {
-            Err(why) => panic!("Failed to get current directory: {}", why),
-            Ok(dir) => dir,
-        };
+        let cur_dir = compilation_directory();
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
             DWARFSourceLanguage::C,
