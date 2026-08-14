@@ -807,7 +807,10 @@ impl Pattern {
     ///
     /// The name's namespace is the union's, as `validate_variant_name` leaves it, and this reads
     /// that namespace back; a name that validation has yet to accept resolves to `None`.
-    pub fn resolve_union_variant(variant_name: &FullName, type_env: &TypeEnv) -> Option<(usize, TyCon)> {
+    pub fn resolve_union_variant(
+        variant_name: &FullName,
+        type_env: &TypeEnv,
+    ) -> Option<(usize, TyCon)> {
         if variant_name.namespace.is_local() {
             return None;
         }
