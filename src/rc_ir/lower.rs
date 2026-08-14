@@ -604,12 +604,15 @@ impl<'a> Lowerer<'a> {
     ) -> MatchArm {
         match &pat.pattern {
             Pattern::Union(variant_name, _, subpat) => {
-                let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env)
+                let variant_idx = scrutinee
+                    .ty
+                    .field_index(self.type_env, &variant_name.name)
                     .unwrap_or_else(|| {
                         panic!(
-                            "Pattern `{}` names no variant, and lowering runs on a program the \
+                            "union `{}` has no variant `{}`, and lowering runs on a program the \
                              type checker has accepted.",
-                            variant_name.to_string()
+                            scrutinee.ty.to_string(),
+                            variant_name.name
                         )
                     });
                 let payload_ty = scrutinee.ty.field_types(self.type_env)[variant_idx].clone();

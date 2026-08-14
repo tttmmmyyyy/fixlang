@@ -216,8 +216,7 @@ impl PatternNode {
                 // sub-pattern has no variant type to match against. The index and the type
                 // constructor are taken by value because the steps below borrow the type checker
                 // mutably.
-                let variant = Pattern::get_variant_info(&variant_name, &typechecker.type_env)
-                    .map(|(variant_idx, tc, _ti)| (variant_idx, tc));
+                let variant = Pattern::get_variant_info(&variant_name, &typechecker.type_env);
                 let (ty, variant_ty) = match variant {
                     Some((variant_idx, tc)) => {
                         let union_ty = tc.get_struct_union_value_type(typechecker);
@@ -806,8 +805,7 @@ impl Pattern {
         }
     }
 
-    /// From a variant name, gets the variant index, the type constructor of the union, and the
-    /// type constructor info.
+    /// From a variant name, gets the variant index and the type constructor of the union.
     ///
     /// `validate_variant_name` gives the name the union's namespace, and this reads it back.
     ///
@@ -816,10 +814,7 @@ impl Pattern {
     /// namespace names no type, or that type has no such variant. Every caller that runs before
     /// the validation has passed — the `error_tolerant` elaboration the language server drives —
     /// reaches this, so a diagnostic the user has yet to fix costs only the pattern's type.
-    pub fn get_variant_info<'a, 'b>(
-        variant_name: &'a FullName,
-        type_env: &'b TypeEnv,
-    ) -> Option<(usize, TyCon, &'b TyConInfo)> {
+    pub fn get_variant_info(variant_name: &FullName, type_env: &TypeEnv) -> Option<(usize, TyCon)> {
         if variant_name.namespace.is_local() {
             return None;
         }
@@ -829,7 +824,7 @@ impl Pattern {
             .fields
             .iter()
             .position(|v: &Field| &v.name == &variant_name.name)?;
-        Some((variant_idx, tc, ti))
+        Some((variant_idx, tc))
     }
 
     // Checks if patterns which are used in `match` syntax are exhaustive.
