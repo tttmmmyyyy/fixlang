@@ -108,16 +108,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         dead_symbol_elimination::run,
     );
 
-    // Runs last, so that each global is measured as the body it ends up with — after the copies
-    // specialization made and the function-pointer versions uncurrying added.
-    run_pass(
-        prg,
-        config,
-        config.enable_request_inline_into_callers(),
-        "request_inline_into_callers",
-        inline::request_inline_into_callers,
-    );
-
     if config.emit_symbols {
         let _sw = StopWatch::new("simplify_symbol_names::run", config.show_build_times);
         simplify_symbol_names::run(prg);
