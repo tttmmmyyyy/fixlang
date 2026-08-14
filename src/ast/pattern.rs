@@ -210,43 +210,63 @@ impl PatternNode {
                 ))
             }
             Pattern::Union(variant_name, _, subpat) => {
-                let (variant_idx, tc, _ti) =
-                    Pattern::get_variant_info(&variant_name, &typechecker.type_env);
-
-                // Get the union type and variant type.
-                let union_ty = tc.get_struct_union_value_type(typechecker);
-                let variant_ty = union_ty.field_types(&typechecker.type_env)[variant_idx].clone();
+                // `validate_variant_name` requires the name to be a variant of the union being
+                // matched, and gives it that union's namespace, so `None` arrives only in
+                // `error_tolerant` mode: the pattern then takes a fresh type variable, and its
+                // sub-pattern has no variant type to match against. The index and the type
+                // constructor are taken by value because the steps below borrow the type checker
+                // mutably.
+                let variant = Pattern::get_variant_info(&variant_name, &typechecker.type_env)
+                    .map(|(variant_idx, tc, _ti)| (variant_idx, tc));
+                let (ty, variant_ty) = match variant {
+                    Some((variant_idx, tc)) => {
+                        let union_ty = tc.get_struct_union_value_type(typechecker);
+                        let variant_ty =
+                            union_ty.field_types(&typechecker.type_env)[variant_idx].clone();
+                        (union_ty, Some((tc, variant_ty)))
+                    }
+                    None => {
+                        assert!(
+                            typechecker.error_tolerant,
+                            "union pattern `{}` names no variant",
+                            variant_name.to_string()
+                        );
+                        (typechecker.fresh_ty_with_src(&self.info.source), None)
+                    }
+                };
 
                 // Infer the type of the subpattern. In
                 // `error_tolerant` mode, a failure becomes a
                 // fresh-tyvar typed sub-pattern with no bindings — the
-                // surrounding union pattern still gets `union_ty`
+                // surrounding union pattern still gets its type
                 // assigned, so the match arm can proceed.
                 let typed = subpat.get_typed(typechecker);
                 let (subpat, var_ty) = typechecker.tolerate_pattern_typed(typed, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
-                let unify_res = UnifOrOtherErr::extract_others(
-                    typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
-                )?;
-                if unify_res.is_err() && !typechecker.error_tolerant {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
-                            subpat.pattern.to_string(),
-                            variant_name.to_string(),
-                            tc.to_string(),
-                        ),
-                        &[&subpat.info.source],
-                    ));
+                if let Some((tc, variant_ty)) = variant_ty {
+                    let unify_res = UnifOrOtherErr::extract_others(
+                        typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
+                    )?;
+                    if unify_res.is_err() && !typechecker.error_tolerant {
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
+                                subpat.pattern.to_string(),
+                                variant_name.to_string(),
+                                tc.to_string(),
+                            ),
+                            &[&subpat.info.source],
+                        ));
+                    }
+                    // In error_tolerant mode the unify mismatch is
+                    // swallowed; the sub-pattern keeps its inferred type
+                    // so the body that references its bindings can still
+                    // be elaborated.
                 }
-                // In error_tolerant mode the unify mismatch is
-                // swallowed; the sub-pattern keeps its inferred type
-                // so the body that references its bindings can still
-                // be elaborated.
 
                 // Return the typed pattern.
-                Ok((self.set_type(union_ty).set_union_pat(subpat), var_ty))
+                Ok((self.set_type(ty).set_union_pat(subpat), var_ty))
             }
         }
     }
@@ -786,19 +806,30 @@ impl Pattern {
         }
     }
 
-    // From a fully-resolved variant name, gets the variant index, the type constructor of the union, and the type constructor info.
+    /// From a variant name, gets the variant index, the type constructor of the union, and the
+    /// type constructor info.
+    ///
+    /// `validate_variant_name` gives the name the union's namespace, and this reads it back.
+    ///
+    /// # Returns
+    /// `None` when the name is not one that function produced: it carries no namespace, its
+    /// namespace names no type, or that type has no such variant. Every caller that runs before
+    /// the validation has passed — the `error_tolerant` elaboration the language server drives —
+    /// reaches this, so a diagnostic the user has yet to fix costs only the pattern's type.
     pub fn get_variant_info<'a, 'b>(
         variant_name: &'a FullName,
         type_env: &'b TypeEnv,
-    ) -> (usize, TyCon, &'b TyConInfo) {
+    ) -> Option<(usize, TyCon, &'b TyConInfo)> {
+        if variant_name.namespace.is_local() {
+            return None;
+        }
         let tc: TyCon = TyCon::new(variant_name.namespace.clone().to_fullname());
-        let ti = type_env.tycons().get(&tc).unwrap();
+        let ti = type_env.tycons().get(&tc)?;
         let variant_idx = ti
             .fields
             .iter()
-            .position(|v: &Field| &v.name == &variant_name.name)
-            .unwrap();
-        (variant_idx, tc, ti)
+            .position(|v: &Field| &v.name == &variant_name.name)?;
+        Some((variant_idx, tc, ti))
     }
 
     // Checks if patterns which are used in `match` syntax are exhaustive.

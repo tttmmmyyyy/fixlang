@@ -818,6 +818,38 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A union pattern whose variant name the matched union does not
+    /// have is an error the strict typechecker reports. The completion
+    /// pipeline runs `error_tolerant`, so the pattern reaches type
+    /// assignment with the namespace it was written with, and the
+    /// server has to keep serving the rest of the body: the `arr.`
+    /// receiver further down the same body still earns its `Array I64`
+    /// type, which puts `Std::Array::push_back` in Tier 0.
+    ///
+    /// The project's `main.fix` puts the six shapes that reach this
+    /// state in one body, each above the `match` that writes it.
+    #[test]
+    fn test_completion_dot_sort_past_unresolved_union_pattern() {
+        let mut ctx = LspCompletionCtx::setup("completion-union-pattern-unresolved", &["main.fix"]);
+
+        // The cursor sits just after the dot of `    let _ = arr.`,
+        // the 21st line of main.fix (line 20 counting from 0) and its
+        // column 16.
+        let items = ctx.complete("main.fix", 20, 16);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with('0'),
+            "Std::Array::push_back should land in Tier 0 for an Array I64 \
+             receiver even though every `match` earlier in the same body \
+             names a variant that cannot be resolved; got {:?}",
+            sort_push_back,
+        );
+
+        ctx.shutdown();
+    }
+
     /// When the user types a bare identifier (`mpq`) in a non-dot
     /// context after `import GMP.Q;`, the `GMP.Q::mpq` global must
     /// (a) appear in the completion response and (b) carry a

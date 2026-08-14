@@ -65,6 +65,7 @@
 
 #### Tool
 
+- #309: LSP: Asking for completion in a body that holds a `match` whose variant name the compiler cannot resolve no longer ends the language server. Editing a `match` passes through that state all the time — a typo in a variant name, a matched value whose type is not written yet, a variant of another union — and the server exited on the completion request, so the editor lost diagnostics, completion and hover until it was restarted.
 - #151, #184: `fix build` now exits with a failure status when linking fails. It printed the linker's error and exited 0, so a build that produced no output file looked like a success to `fix build && ./prog`, to a `make` rule and to a CI step.
 - #114: On AArch64 targets (Apple Silicon and other 64-bit ARM), an integer narrower than 32 bits crossed the FFI boundary as a wrong number: a function exported with `FFI_EXPORT` returned one to its foreign caller, and `FFI_CALL` passed one to a foreign function that takes one. A function of type `I8 -> I8 -> I8` exported and called from C with `-100` and `30` answered 186 instead of -70. This covers `I8`, `U8`, `I16` and `U16`, and the `Std::FFI` aliases of the same widths such as `CChar` and `CShort`. x86-64 targets were unaffected.
 - #114: Writing `()` as a parameter type in `FFI_CALL` now reports an error pointing at that parameter, instead of aborting the compiler.

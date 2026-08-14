@@ -604,7 +604,14 @@ impl<'a> Lowerer<'a> {
     ) -> MatchArm {
         match &pat.pattern {
             Pattern::Union(variant_name, _, subpat) => {
-                let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env);
+                let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Pattern `{}` names no variant, and lowering runs on a program the \
+                             type checker has accepted.",
+                            variant_name.to_string()
+                        )
+                    });
                 let payload_ty = scrutinee.ty.field_types(self.type_env)[variant_idx].clone();
                 let mut payload = self.fresh_var("payload", payload_ty, pat.info.source.clone());
                 // When the payload is bound whole to a source variable (e.g. `Some(x)`), that name is
