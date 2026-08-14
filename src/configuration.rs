@@ -886,7 +886,10 @@ impl Configuration {
         // information takes objects generated in another directory. A second reader of the field
         // would make this condition wrong.
         if self.debug_info {
-            push_text_hash(&mut hash_source, &self.compilation_directory.to_string_lossy());
+            push_text_hash(
+                &mut hash_source,
+                &self.compilation_directory.to_string_lossy(),
+            );
         }
         hash_source.push_str(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
