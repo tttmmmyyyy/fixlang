@@ -6,8 +6,9 @@
 // Fix call chain. Assertions are mangle-name-independent (they check `file:line`, not the
 // mangled/closure frame names), so they stay valid across name-mangling changes.
 //
-// Three scenarios instead check only that `-g` builds at all, needing no debugger: one per
-// optimization level, and two over recursive types.
+// Four scenarios need no debugger: three check only that `-g` builds at all — one per optimization
+// level, and two over recursive types — and one reads the source file name out of the bytes of the
+// built program.
 //
 // Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
 // macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
@@ -15,7 +16,7 @@
 
 #[cfg(test)]
 mod debug_info_tests {
-    use crate::tests::test_util::fix_command_at_opt_level;
+    use crate::tests::test_util::{fix_command, fix_command_at_opt_level};
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -233,6 +234,61 @@ mod debug_info_tests {
         "#,
             "none",
             &[],
+        );
+    }
+
+    // Debug information names the file the code was compiled from, so a program built after its
+    // source moved must name the source where it is now. Nothing but the path differs between the
+    // two builds here, and the second one reuses the object files the first one cached unless the
+    // path takes part in naming them — sending a debugger to a path that holds no such file, or
+    // holds another one.
+    #[test]
+    fn test_debug_info_names_the_source_after_it_moved() {
+        const SOURCE: &str = r#"
+            module Main;
+
+            main : IO ();
+            main = println("hello");
+        "#;
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let build = |file: &str, output: &str| {
+            let build = fix_command()
+                .args(["build", "-g", "-f", file, "-o", output])
+                .current_dir(dir)
+                .output()
+                .expect("Failed to execute `fix build`");
+            assert!(
+                build.status.success(),
+                "`fix build -g -f {}` failed:\nstdout:\n{}\nstderr:\n{}",
+                file,
+                String::from_utf8_lossy(&build.stdout),
+                String::from_utf8_lossy(&build.stderr),
+            );
+        };
+
+        fs::write(dir.join("main.fix"), SOURCE).expect("Failed to write main.fix");
+        build("main.fix", "before_move");
+
+        fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
+        fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
+        build("src/app.fix", "after_move");
+
+        // The file name reaches the program as one of the strings of its debug information, so the
+        // bytes of the program carry it.
+        let program = fs::read(dir.join("after_move")).expect("Failed to read the built program");
+        let carries = |name: &str| {
+            program
+                .windows(name.len())
+                .any(|bytes| bytes == name.as_bytes())
+        };
+        assert!(
+            carries("app.fix"),
+            "the program built after the move does not name \"app.fix\", the file it was built from"
+        );
+        assert!(
+            !carries("main.fix"),
+            "the program built after the move names \"main.fix\", where its source no longer is"
         );
     }
 

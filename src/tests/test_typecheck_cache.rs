@@ -98,10 +98,11 @@ main : IO ();
 main = println((old_val + new_val).to_string);
 "#;
 
-    /// Builds `main.fix` in `dir` and returns what the compiler wrote to stderr.
-    fn build(dir: &Path) -> String {
+    /// Builds the Fix source `file`, named as the working directory `dir` reaches it, and returns
+    /// what the compiler wrote to stderr.
+    fn build(dir: &Path, file: &str) -> String {
         let out = fix_command()
-            .args(["build", "--file", "main.fix", "-o", "out"])
+            .args(["build", "--file", file, "-o", "out"])
             .current_dir(dir)
             .output()
             .expect("failed to run fix build");
@@ -123,7 +124,7 @@ main = println((old_val + new_val).to_string);
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let cold = build(dir);
+        let cold = build(dir, "main.fix");
         assert!(
             cold.contains("`Main::old_val` is deprecated"),
             "the first build must report the deprecated use.\nstderr: {}",
@@ -135,7 +136,7 @@ main = println((old_val + new_val).to_string);
             cold
         );
 
-        let warm = build(dir);
+        let warm = build(dir, "main.fix");
         assert!(
             warm.contains("`Main::old_val` is deprecated"),
             "the second build serves `Main::main` from the type-check cache and lost the \
@@ -147,5 +148,39 @@ main = println((old_val + new_val).to_string);
             "the second build attributed the deprecated use to another file.\nstderr: {}",
             warm
         );
+    }
+
+    /// Two files of equal content are two files still, and each build owes the user a warning
+    /// anchored in the file it was given. The cache belongs to the working directory, so building
+    /// both from one place has them share it, and the entry carries the span of the use. An entry
+    /// that a file of equal content may claim answers the second build with a span pointing into
+    /// the first build's file, and the warning is then dropped as belonging to a file this build
+    /// never read.
+    #[test]
+    fn two_files_of_equal_content_are_each_reported_in_their_own_file() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        for sub_dir in ["a", "b"] {
+            fs::create_dir(dir.join(sub_dir)).expect("Failed to create the directory of a file");
+            fs::write(dir.join(sub_dir).join("main.fix"), DEPRECATED_USE)
+                .expect("Failed to write main.fix");
+        }
+
+        for sub_dir in ["a", "b"] {
+            let file = format!("{}/main.fix", sub_dir);
+            let stderr = build(dir, &file);
+            assert!(
+                stderr.contains("`Main::old_val` is deprecated"),
+                "building \"{}\" must report the deprecated use.\nstderr: {}",
+                file,
+                stderr
+            );
+            assert!(
+                stderr.contains(&format!("in \"{}\"", file)),
+                "building \"{}\" attributed the deprecated use to another file.\nstderr: {}",
+                file,
+                stderr
+            );
+        }
     }
 }

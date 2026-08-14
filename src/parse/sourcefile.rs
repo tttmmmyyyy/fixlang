@@ -15,7 +15,7 @@ pub struct SourceFile {
     #[serde(skip)]
     // Cached content of the file.
     string: Arc<Mutex<Option<String>>>,
-    // Hash of the file content.
+    // Cached value of `hash`.
     #[serde(skip)]
     hash: Arc<Mutex<Option<String>>>,
 }
@@ -76,10 +76,20 @@ impl SourceFile {
         }
     }
 
+    /// A hash naming this source file: the path it is read from, together with its content.
+    ///
+    /// The caches of the compiler are keyed by this hash, and the path belongs in it because the
+    /// path reaches what a cache entry carries. Every `Span` records the file it points into, so
+    /// the file path travels with a cached typed expression into the diagnostics reported about
+    /// it, and with a cached object file into its debug information. Two files of equal content
+    /// are two files still, and the entry written for one names the other's file wrongly.
     pub fn hash(&self) -> Result<String, Errors> {
         if self.hash.lock().unwrap().is_none() {
-            let hash = md5::compute(self.string()?);
-            let hash_str = format!("{:x}", hash);
+            // A path holds no NUL byte, so putting one between the path and the content keeps the
+            // pair a distinct string for every distinct file.
+            let identified_content =
+                format!("{}\0{}", self.file_path.to_string_lossy(), self.string()?);
+            let hash_str = format!("{:x}", md5::compute(identified_content));
             let mut hash = self.hash.lock().unwrap();
             *hash = Some(hash_str);
         }
