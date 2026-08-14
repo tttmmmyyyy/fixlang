@@ -14,6 +14,10 @@ mod struct_destructure_tests {
         tests::test_util::test_source,
     };
 
+    /// Destructures of a boxed struct whose fields are boxed, in each shape that decides how many
+    /// times a value is retained and released: the container's last use, a use of the container
+    /// after the destructure, a field the continuation drops, and a pattern reaching into an inner
+    /// boxed struct.
     const BOXED_DESTRUCTURE_SOURCE: &str = r#"
 module Main;
 
@@ -52,11 +56,13 @@ main : IO () = (
 );
 "#;
 
-    // A destructure consumes its container, so a function whose only use of a boxed parameter is to
-    // destructure it consumes that parameter and cannot borrow it. Ownership inference must see that
-    // consume: a version that borrowed the parameter would release a container it does not own, and
-    // the caller's value would die while it still holds it. The recursion keeps the callee from being
-    // inlined into the caller, so the call goes through the inferred parameter ownership.
+    /// A function whose only use of a boxed parameter is to destructure it, called twice on one
+    /// value the caller keeps using.
+    ///
+    /// A destructure consumes its container, so ownership inference has to give the parameter to
+    /// the callee: a callee that borrowed it would release a container it does not own, and the
+    /// caller's value would die while the caller still holds it. The recursion keeps the callee out
+    /// of the caller, so the call goes through the inferred parameter ownership.
     const DESTRUCTURED_PARAMETER_SOURCE: &str = r#"
 module Main;
 
@@ -80,11 +86,17 @@ main : IO () = (
 );
 "#;
 
+    /// Destructuring a boxed struct of boxed fields binds each field to its value: where the
+    /// destructure is the container's last use, where the container is used after it, where one of
+    /// the fields is dropped, and where the pattern reaches into an inner boxed struct.
     #[test]
     pub fn test_boxed_struct_destructure_correctness() {
         test_source(BOXED_DESTRUCTURE_SOURCE, Configuration::develop_mode());
     }
 
+    /// The destructures of `BOXED_DESTRUCTURE_SOURCE` leave every value released exactly once,
+    /// checked under valgrind. A dropped field and a container used after the destructure are
+    /// where a retain or a release too few shows itself.
     #[test]
     pub fn test_boxed_struct_destructure_memory_safety() {
         if !platform_valgrind_supported() {
@@ -99,11 +111,16 @@ main : IO () = (
         test_source(BOXED_DESTRUCTURE_SOURCE, config);
     }
 
+    /// A function whose only use of a boxed parameter is to destructure it answers with the field
+    /// values of the argument it was given, and the caller's value serves the calls that follow.
     #[test]
     pub fn test_destructured_parameter_correctness() {
         test_source(DESTRUCTURED_PARAMETER_SOURCE, Configuration::develop_mode());
     }
 
+    /// An argument passed to a function that destructures it stays valid for the caller's later
+    /// uses, checked under valgrind: a callee that released a container it does not own would kill
+    /// the caller's value while the caller still holds it.
     #[test]
     pub fn test_destructured_parameter_memory_safety() {
         if !platform_valgrind_supported() {
@@ -123,9 +140,41 @@ main : IO () = (
 // name given twice are both rejected with a source-level diagnostic.
 #[cfg(test)]
 mod struct_pattern_validation_tests {
-    use crate::{configuration::Configuration, tests::test_util::test_source_fail};
+    use crate::{
+        configuration::Configuration,
+        tests::test_util::{run_source_assert_failed, test_source_fail},
+    };
 
-    /// A field named twice in one struct pattern is reported rather than bound twice.
+    /// A pattern that both repeats a field and names one the struct does not declare is reported
+    /// for both, so one compilation shows every way the field list is wrong, as it does for a
+    /// struct literal.
+    #[test]
+    pub fn test_struct_pattern_duplicate_and_unknown_fields_both_reported() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64, b : I64 };
+
+main : IO ();
+main = (
+    let S { a : x, a : y, zz : z } = S { a : 1, b : 2 };
+    println((x + y).to_string)
+);
+"#;
+        let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+        assert!(
+            errmsg.contains("Duplicate field `a` of struct `Main::S`."),
+            "the repeated field is reported, but the message is:\n{}",
+            errmsg
+        );
+        assert!(
+            errmsg.contains("Unknown field `zz` for struct `Main::S`."),
+            "the undeclared field is reported, but the message is:\n{}",
+            errmsg
+        );
+    }
+
+    /// A field named twice in one struct pattern is reported, with the field and the struct named.
     #[test]
     pub fn test_struct_pattern_duplicate_field_rejected() {
         let source = r#"
@@ -142,11 +191,11 @@ main = (
         test_source_fail(
             source,
             Configuration::develop_mode(),
-            "Duplicate field in struct pattern.",
+            "Duplicate field `a` of struct `Main::S`.",
         );
     }
 
-    /// A field the struct does not declare is reported rather than matched.
+    /// A field name the struct does not declare is reported as an unknown field of that struct.
     #[test]
     pub fn test_struct_pattern_unknown_field_rejected() {
         let source = r#"

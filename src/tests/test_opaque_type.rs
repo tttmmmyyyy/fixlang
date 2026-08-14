@@ -131,6 +131,26 @@ pub fn test_opaque_higher_kinded() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The kind of an opaque type is taken from the trait it is constrained by, so a higher-kinded
+/// opaque type needs no kind signature of its own.
+#[test]
+pub fn test_opaque_higher_kinded_without_a_kind_signature() {
+    let source = r#"
+        module Main;
+
+        safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
+        safe_div = |x, y| if y == 0 { none() } else { some(x / y) };
+
+        main : IO ();
+        main = (
+            let result = safe_div(100, 10).bind(|x| safe_div(x, 2));
+            let _ = result;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_opaque_zip_with_index() {
     // Use case 5: Opaque type with normal type variable mixed in signature
@@ -995,6 +1015,100 @@ pub fn test_opaque_recursive_definition_that_returns_a_concrete_type() {
         );
     "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// A concrete type that carries the opaque type it stands for at a larger type argument
+/// determines no type either: each step of the replacement reaches a bigger type.
+#[test]
+pub fn test_opaque_concrete_type_grows_the_opaque_type_it_stands_for() {
+    let source = r#"
+        module Main;
+
+        trait a : Any {
+            any : a -> I64;
+        }
+
+        impl I64 : Any {
+            any = |_| 1;
+        }
+
+        impl [a : Any] Array a : Any {
+            any = |_| 0;
+        }
+
+        f : [?t : Any] a -> ?t;
+        f = |x| f([x]);
+
+        main : IO ();
+        main = println(f(0).any.to_string);
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be determined, because the definition gives it a type which contains that opaque type itself",
+    );
+}
+
+/// An opaque type constructor that takes no type arguments stands where a type variable of kind
+/// `* -> *` is expected, and the concrete type behind it is put in that place.
+#[test]
+pub fn test_opaque_type_constructor_of_no_arguments_as_a_higher_kinded_argument() {
+    let source = r#"
+        module Main;
+
+        trait [f : *->*] f : Extract {
+            extract : f a -> a;
+        }
+
+        impl Option : Extract {
+            extract = |o| o.as_some;
+        }
+
+        mk : [?m : * -> *, ?m : Extract] I64 -> ?m I64;
+        mk = |x| some(x);
+
+        type [f : *->*] Holder f = box struct { v : f I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder { v : mk(3) };
+            assert_eq(|_|"held value", h.@v.extract, 3);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An implementation of a trait member with an opaque return type owes the constraint the member
+/// declares at the implementing type, and an iterator whose items are of another type is reported.
+#[test]
+pub fn test_opaque_member_implementation_owes_the_constraint_at_its_own_type() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] c -> I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |_, n| Iterator::range(0, n);
+        }
+
+        impl Bool : Make {
+            make = |_, n| Iterator::range(0, n);
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the implementation for I64", Make::make(0, 3).to_array, [0, 1, 2]);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Std::I64 = Std::Bool",
+    );
 }
 
 // ============================================================

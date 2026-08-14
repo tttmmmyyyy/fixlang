@@ -2,6 +2,7 @@ use crate::{
     commands::run::run,
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
+    env_vars::MAX_OPT_LEVEL_VAR,
     error::{panic_if_err, panic_with_msg, Errors},
     misc::{save_temporary_source, Set},
     parse::parser::check_grammar_accepts,
@@ -81,6 +82,22 @@ pub fn fix_command() -> Command {
     build_fix();
     let mut command = Command::new(fix_binary_path());
     command.env("PATH", path_env_with_fix_binary_dir());
+    command
+}
+
+/// A `fix <subcommand>` command that works at `opt_level`, whatever level the suite is being run
+/// at. Use this for a test whose subject is a level: an optimization the compiler performs there, a
+/// program shape only that level produces, or a build that has to be reachable at it.
+///
+/// The suite runs under the level `MAX_OPT_LEVEL_VAR` names, and that level caps the one `-O` asks
+/// for, so the variable is pinned to `opt_level` beside the argument. `-O` belongs to the
+/// subcommand, which is why the subcommand is given here rather than by the caller.
+pub fn fix_command_at_opt_level(subcommand: &str, opt_level: &str) -> Command {
+    let mut command = fix_command();
+    command
+        .arg(subcommand)
+        .args(["-O", opt_level])
+        .env(MAX_OPT_LEVEL_VAR, opt_level);
     command
 }
 
