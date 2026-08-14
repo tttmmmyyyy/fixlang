@@ -165,6 +165,41 @@ main = (
         );
     }
 
+    /// Field expressions are type-checked in the order the literal writes them, so the first error
+    /// reported is the first one the programmer reads.
+    ///
+    /// Elaborating one field leaves the type checker changed, so the order the fields are walked in
+    /// decides which of several errors is reported and which candidate an overloaded name settles
+    /// on. A literal is handed to code generation in declaration order, and this pins that the
+    /// reordering happens after the walk rather than before it: the fields below are written in the
+    /// reverse of the declaration's order, and both are ill-typed.
+    #[test]
+    pub fn test_struct_literal_fields_are_type_checked_in_source_order() {
+        let source = r#"
+module Main;
+
+type S = struct { a : I64, b : I64 };
+
+main : IO ();
+main = (
+    let s = S { b : "written first", a : true };
+    println(s.@a.to_string)
+);
+"#;
+        let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+        assert!(
+            errmsg.contains("Std::String"),
+            "the field written first is the one reported, but the message is:\n{}",
+            errmsg
+        );
+        assert!(
+            !errmsg.contains("Std::Bool"),
+            "the field written second is reported only after the first one is fixed, but the \
+             message is:\n{}",
+            errmsg
+        );
+    }
+
     /// Fields written in an order other than the declaration's still reach the field they name.
     #[test]
     pub fn test_struct_literal_fields_out_of_declaration_order() {
