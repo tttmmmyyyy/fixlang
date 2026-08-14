@@ -47,8 +47,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     None => self.declare_lambda_function(&func.fn_ty, &func.name.name),
                 },
             };
-            // The request `inline::request_inline_into_callers` recorded for a body small enough to
-            // stand where it is called.
+            // The request recorded on the global this function was lowered from.
             if func.inline_into_callers {
                 self.add_enum_attribute(fn_val, "alwaysinline", AttributeLoc::Function);
             }

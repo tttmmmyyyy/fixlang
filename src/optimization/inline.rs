@@ -52,38 +52,6 @@ pub fn run(prg: &mut Program) {
     }
 }
 
-/// Record on each global whether the back end is to inline every call of it: the ones whose body is
-/// small enough to stand where it is called (`INLINE_COST_THRESHOLD`).
-///
-/// The back end left to itself decides such a call by a discount worth sixty times its own
-/// threshold, which it grants only while the function is referred to exactly once — so a second
-/// reference, including one its own passes create by duplicating a call, decides the call in the
-/// hot path the other way. Saying which bodies belong at their call sites is what keeps the outcome
-/// off that edge.
-///
-/// It runs over the program the passes leave behind, so that each version they minted — a lambda
-/// lifted to a global of its own, a copy specialized on the lambdas its callers pass, an uncurried
-/// function-pointer version — is measured as the body it ends up with. One answer per global is
-/// also what the answer has to be: code generation derives several functions from one global (a
-/// borrowing version, a version per input uniqueness, one per locality), and they differ in size
-/// enough that judging them apart would ask for the small versions of a body whose large versions
-/// must stay where they are.
-///
-/// A body that calls itself is asked for as well, unlike the bodies this pass substitutes at their
-/// call sites. Tail-call elimination turns a direct self-call into a loop before the back end
-/// decides anything, so such a body is a loop by then — and a loop entered many times, which is
-/// where the request pays most. A self-call that survives to the decision makes the request inert:
-/// the back end declines to put a body inside itself.
-pub fn request_inline_into_callers(prg: &mut Program) {
-    let costs = calculate_inline_costs(prg);
-    for (name, sym) in &mut prg.symbols {
-        // A funptr global is a function, and its calls are what the request speaks of; a global of
-        // any other type is a value, reached through the function that computes it once.
-        sym.inline_into_callers =
-            sym.ty.is_funptr() && costs.get_complexity(name) <= INLINE_COST_THRESHOLD as usize;
-    }
-}
-
 /// One round of `run`: substitute into each symbol once and discard the symbols nothing names.
 /// Returns whether the program changed.
 ///
@@ -304,11 +272,6 @@ impl InlineCosts {
     /// How many times the program names the symbol, counted over every expression the walk covered.
     fn get_call_count(&self, name: &FullName) -> usize {
         self.get(name).call_count
-    }
-
-    /// How big the symbol's expression is, counted as the walk meets its nodes.
-    fn get_complexity(&self, name: &FullName) -> usize {
-        self.get(name).complexity
     }
 
     /// Take in what the walk of one symbol found: every global name that symbol uses has its call

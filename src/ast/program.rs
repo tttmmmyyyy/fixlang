@@ -229,10 +229,9 @@ pub struct Symbol {
     /// The expression computing the value, specialized to `ty`. `None` between the moment the
     /// instantiation is required and the moment `instantiate_symbol` fills it in.
     pub expr: Option<Arc<ExprNode>>,
-    /// Whether the back end is asked to inline every call of this global. Written by
-    /// `inline::request_inline_into_callers`, which runs once the optimization passes have left the
-    /// program in the shape code generation sees; everything that builds a symbol before then
-    /// leaves it `false`.
+    /// Whether the back end is asked to inline every call of this global. Everything that builds a
+    /// symbol leaves it `false`, so no request reaches the back end; the field and the path that
+    /// carries it to code generation are here for a pass that decides to make one.
     pub inline_into_callers: bool,
     // If you add new fields, be sure to update `hash()` method.
 }

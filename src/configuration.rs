@@ -772,13 +772,6 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    /// Ask the back end to inline every call of a global whose body is small enough to stand where
-    /// it is called. Runs at `Max` and above, where the program is built for speed and the back end
-    /// is given a pipeline to act on the request with.
-    pub fn enable_request_inline_into_callers(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
-    }
-
     /// Copy a function for the closure it is handed, so that the copy calls that closure's body
     /// directly instead of reaching it through a function pointer and a capture list. Runs at `Max`
     /// and above.
