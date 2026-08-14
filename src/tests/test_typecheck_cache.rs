@@ -173,6 +173,64 @@ main = (
         );
     }
 
+    /// Two implementations of one trait method whose declared type fixes the trait's type variable
+    /// through a constraint alone, reached both directly and through a caller generic in that
+    /// variable. Each implementation hides an iterator of its own.
+    const TWO_IMPLEMENTATIONS: &str = r#"module Main;
+
+trait c : Make {
+    make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+}
+
+impl I64 : Make {
+    make = |n| Iterator::range(0, n);
+}
+
+impl Bool : Make {
+    make = |n| Iterator::range(0, n).map(|x| x % 2 == 0);
+}
+
+collect : [c : Make] I64 -> Array c;
+collect = |n| Make::make(n).to_array;
+
+main : IO ();
+main = (
+    let is : Array I64 = Make::make(3).to_array;
+    let bs : Array Bool = Make::make(3).to_array;
+    let ci : Array I64 = collect(2);
+    let cb : Array Bool = collect(2);
+    println(is.to_string + " / " + bs.to_string + " / " + ci.to_string + " / " + cb.to_string)
+);
+"#;
+
+    /// A run that reads the cache serves each implementation the typed expression of that
+    /// implementation, so the program prints what the run that filled the cache printed.
+    #[test]
+    fn a_warm_cache_serves_each_implementation_its_own_body() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(dir.join("main.fix"), TWO_IMPLEMENTATIONS).expect("Failed to write main.fix");
+
+        let run = || {
+            let out = fix_command()
+                .args(["run", "--file", "main.fix"])
+                .current_dir(dir)
+                .output()
+                .expect("failed to run fix run");
+            assert!(
+                out.status.success(),
+                "fix run failed in {}:\n{}",
+                dir.display(),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+
+        let expected = "[0, 1, 2] / [true, false, true] / [0, 1] / [true, false]";
+        assert_eq!(run(), expected, "the run that fills the cache");
+        assert_eq!(run(), expected, "the run that reads the cache");
+    }
+
     /// A deprecation warning is collected after type checking, out of the typed expression and the
     /// span it carries — which on the second build comes from the cache. Both builds owe the user
     /// the same warning, anchored in the file the use is written in.

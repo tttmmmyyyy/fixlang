@@ -472,6 +472,68 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_with_implementatio
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The implementation for `Array a` calls the member at `a`, so the iterator it hides is written in
+/// terms of the one another implementation hides. Each implementation's opaque type constructor
+/// resolves to its own concrete type, told apart by the type the implementation is for.
+#[test]
+pub fn test_opaque_implementation_for_a_generic_type_calling_the_member_at_its_parameter() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |n| Iterator::range(0, n);
+        }
+
+        impl [a : Make] Array a : Make {
+            make = |n| Iterator::range(0, n).map(|_| Make::make(n).to_array);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(3).to_array;
+            assert_eq(|_|"make for I64", is, [0, 1, 2]);;
+            let xs : Array (Array I64) = Make::make(2).to_array;
+            assert_eq(|_|"make for Array I64", xs, [[0, 1], [0, 1]]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A trait member declares a type variable of a higher kind, and an implementation's head declares
+/// one of another kind. The two are bound in two places, so the implementation's scheme carries the
+/// member's variable at the kind the member gives it and its own at the kind its head gives it.
+#[test]
+pub fn test_member_kind_signature_is_independent_of_the_implementation_head() {
+    let source = r##"
+        module Main;
+
+        type MyPair a b = box struct { p : a, q : b };
+
+        type [f : *->*->*] Wrap2 f = box struct { x : f I64 I64 };
+
+        trait c : Describe {
+            describe : [g : *->*] g I64 -> c -> I64;
+        }
+
+        impl [h : *->*->*] Wrap2 h : Describe {
+            describe = |_, _| 42;
+        }
+
+        main : IO ();
+        main = (
+            let w : Wrap2 MyPair = Wrap2 { x : MyPair { p : 1, q : 2 } };
+            assert_eq(|_|"describe", Describe::describe(Option::some(1), w), 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
