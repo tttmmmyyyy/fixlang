@@ -1,0 +1,16 @@
+module Main;
+
+type Vector2 = unbox struct { x: F64, y: F64 };
+
+read_z : Vector2 -> F64;
+read_z = |v| (
+    let Vector2 { z: a } = v;
+    a
+);
+
+main : IO ();
+main = (
+    eval Vector2 { x: 1.0, w: 2.0 };
+    eval read_z(Vector2 { x: 1.0, y: 2.0 });
+    pure()
+);

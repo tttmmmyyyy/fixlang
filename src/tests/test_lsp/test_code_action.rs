@@ -1,6 +1,6 @@
-// LSP integration tests for "textDocument/codeAction" (quick fix) feature.
-//
-// Verifies that quick fix suggestions include import actions for associated types.
+// LSP integration tests for the "textDocument/codeAction" (quick fix) feature: importing the
+// module that declares a name the file uses, stubbing the members an implementation leaves out,
+// and filling in the fields a struct literal leaves out.
 
 #[cfg(test)]
 mod tests {
@@ -24,12 +24,57 @@ mod tests {
             .collect()
     }
 
+    /// Whether the diagnostic's code is `code`.
+    fn has_code(diag: &Value, code: &str) -> bool {
+        diag.get("code")
+            .and_then(|c| c.as_str())
+            .map_or(false, |c| c == code)
+    }
+
+    /// The first diagnostic whose code is `code`, of which the test expects one to be published.
+    fn diagnostic_with_code<'a>(diagnostics: &'a [Value], code: &str) -> &'a Value {
+        diagnostics
+            .iter()
+            .find(|diag| has_code(diag, code))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Should have a '{}' diagnostic. Got: {:?}",
+                    code, diagnostics
+                )
+            })
+    }
+
+    /// The start and the end of the diagnostic's range, each as a line and a character.
+    fn range_of(diag: &Value) -> (u32, u32, u32, u32) {
+        let range = diag.get("range").expect("Diagnostic should have a range");
+        let start = range.get("start").expect("Range should have a start");
+        let end = range.get("end").expect("Range should have an end");
+        (
+            start.get("line").unwrap().as_u64().unwrap() as u32,
+            start.get("character").unwrap().as_u64().unwrap() as u32,
+            end.get("line").unwrap().as_u64().unwrap() as u32,
+            end.get("character").unwrap().as_u64().unwrap() as u32,
+        )
+    }
+
+    /// The titles of the code actions.
+    fn action_titles(actions: &[Value]) -> Vec<String> {
+        actions
+            .iter()
+            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
+            .collect()
+    }
+
+    /// The directory holding the Fix projects these tests run the language server on.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
+    /// Copies the named case project into a temporary directory, so that tests editing their
+    /// project's files run beside one another, and returns that directory with the canonical path
+    /// of the copy inside it.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -41,13 +86,25 @@ mod tests {
         (temp_dir, test_case_dst)
     }
 
+    /// A language server running on a copy of one case project, with its documents open and its
+    /// first diagnostics published.
     struct LspQuickFixCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// The copy of the case project the server was started on.
         project_dir: PathBuf,
+        /// Holds the temporary directory containing `project_dir` alive; dropping it deletes the
+        /// copy.
         _temp_dir: TempDir,
     }
 
     impl LspQuickFixCtx {
+        /// Starts a server on a copy of the named case project, opens each of `files`, and waits
+        /// for the diagnostics of the last of them, which the tests read.
+        ///
+        /// # Arguments
+        /// * `files` — paths relative to the project directory; the last of them is the one whose
+        ///   diagnostics are awaited.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -68,6 +125,7 @@ mod tests {
             }
         }
 
+        /// The URI the server names the project's `file` by, as the responses spell it.
         fn file_uri(&self, file: &str) -> String {
             format!("file://{}", self.project_dir.join(file).display())
         }
@@ -115,6 +173,7 @@ mod tests {
             }
         }
 
+        /// Ends the session and fails the test if the server's reader thread met an error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -125,12 +184,11 @@ mod tests {
         }
     }
 
-    /// Test that quick fix suggests importing an associated type when it is unknown.
+    /// An `unknown-name` diagnostic naming an associated type draws a quick fix that imports the
+    /// type, as one naming a trait does.
     ///
-    /// The quickfix project compiles cleanly (all names are imported).
-    /// We send fabricated diagnostics with code "unknown-name" to test
-    /// that the code action handler can find the names in available_names.
-    /// First, we verify traits work (baseline), then check associated types.
+    /// The test writes the diagnostics itself and the case project compiles cleanly, so what is
+    /// exercised is the search for the named entity among the ones the file could import.
     #[test]
     fn test_quickfix_import_associated_type() {
         let mut ctx = LspQuickFixCtx::setup("quickfix", &["lib.fix", "main.fix"]);
@@ -155,10 +213,7 @@ mod tests {
             "severity": 1
         });
         let actions = ctx.code_actions("main.fix", vec![fake_trait_diag], 0, 0, 0, 7);
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("MyTrait")),
             "Quick fix should suggest importing `MyTrait`. Got actions: {:?}",
@@ -177,10 +232,7 @@ mod tests {
             "severity": 1
         });
         let actions = ctx.code_actions("main.fix", vec![fake_assoc_diag], 0, 0, 0, 6);
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("MyElem")),
             "Quick fix should suggest importing associated type `MyElem`. Got actions: {:?}",
@@ -204,24 +256,10 @@ mod tests {
         );
 
         // Find the "missing-trait-impl" diagnostic.
-        let missing_diag = diagnostics
-            .iter()
-            .find(|d| {
-                d.get("code")
-                    .and_then(|c| c.as_str())
-                    .map(|c| c == "missing-trait-impl")
-                    .unwrap_or(false)
-            })
-            .expect("Should have a 'missing-trait-impl' diagnostic");
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-trait-impl");
 
         // Get the range of the diagnostic.
-        let range = missing_diag.get("range").unwrap().clone();
-        let start = range.get("start").unwrap();
-        let end = range.get("end").unwrap();
-        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
-        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
-        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
-        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+        let (start_line, start_col, end_line, end_col) = range_of(missing_diag);
 
         // Request code actions with the real diagnostic.
         let actions = ctx.code_actions(
@@ -239,10 +277,7 @@ mod tests {
             "Should have at least one quick fix action."
         );
 
-        let titles: Vec<String> = actions
-            .iter()
-            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
-            .collect();
+        let titles = action_titles(&actions);
         assert!(
             titles.iter().any(|t| t.contains("stub")),
             "Quick fix should suggest inserting stub implementations. Got: {:?}",
@@ -314,30 +349,17 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Test that quick fix suggests inserting `name: ?` placeholders for
-    /// missing fields of a struct literal.
+    /// A `missing-struct-field` diagnostic draws a quick fix that inserts a `name: ?` placeholder
+    /// for the field the literal leaves out, and applying that edit clears the diagnostic, leaving
+    /// the inserted hole as the one thing reported.
     #[test]
     fn test_quickfix_missing_struct_field() {
         let mut ctx = LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
-        let missing_diag = diagnostics
-            .iter()
-            .find(|d| {
-                d.get("code")
-                    .and_then(|c| c.as_str())
-                    .map(|c| c == "missing-struct-field")
-                    .unwrap_or(false)
-            })
-            .expect("Should have a 'missing-struct-field' diagnostic");
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-struct-field");
 
-        let range = missing_diag.get("range").unwrap().clone();
-        let start = range.get("start").unwrap();
-        let end = range.get("end").unwrap();
-        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
-        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
-        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
-        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+        let (start_line, start_col, end_line, end_col) = range_of(missing_diag);
 
         let actions = ctx.code_actions(
             "main.fix",
@@ -404,24 +426,70 @@ mod tests {
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
         assert!(
-            !diagnostics.iter().any(|d| d
-                .get("code")
-                .and_then(|c| c.as_str())
-                .map(|c| c == "missing-struct-field")
-                .unwrap_or(false)),
+            !diagnostics
+                .iter()
+                .any(|d| has_code(d, "missing-struct-field")),
             "missing-struct-field diagnostic should be gone after applying the quick fix. Got: {:?}",
             diagnostics
         );
-        let hole_diag = diagnostics.iter().find(|d| {
-            d.get("code")
-                .and_then(|c| c.as_str())
-                .map(|c| c == "missing-expression")
-                .unwrap_or(false)
-        });
+        let hole_diag = diagnostics
+            .iter()
+            .find(|d| has_code(d, "missing-expression"));
         assert!(
             hole_diag.is_some(),
             "Expected a `missing-expression` diagnostic for the inserted `?`. Got: {:?}",
             diagnostics
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Test that the quick fix for a missing struct field is offered when the same literal also
+    /// gives one field twice: beside the report of the repeat, the missing-field diagnostic keeps
+    /// the code and the data the quick fix reads.
+    #[test]
+    fn test_quickfix_missing_struct_field_beside_a_duplicate() {
+        let mut ctx = LspQuickFixCtx::setup(
+            "quickfix_missing_struct_field_with_duplicate",
+            &["main.fix"],
+        );
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            diagnostics.iter().any(|d| d
+                .get("message")
+                .and_then(|m| m.as_str())
+                .map(|m| m.contains("Duplicate field"))
+                .unwrap_or(false)),
+            "The repeated field should be reported as well. Got: {:?}",
+            diagnostics
+        );
+        let missing_diag = diagnostic_with_code(&diagnostics, "missing-struct-field").clone();
+
+        let (start_line, start_col, end_line, end_col) = range_of(&missing_diag);
+
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![missing_diag],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+
+        let action = actions
+            .iter()
+            .find(|a| {
+                a.get("title")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t.contains("missing field") && t.contains("`z`"))
+                    .unwrap_or(false)
+            })
+            .expect("Should find an 'Add missing field `z`' action");
+        assert!(
+            action.get("edit").is_some(),
+            "The action should carry an edit. Got: {:?}",
+            action
         );
 
         ctx.shutdown();
