@@ -606,10 +606,12 @@ impl TraitMemberImpl {
             // A member's declaration fixes the trait's type variable, which `validate_constraints`
             // has required by now, so the type standing in for that variable reaches the
             // declaration's type or one of its constraints, and `scm_via_defn` generalizes every
-            // type variable of it.
+            // type variable of it. An opaque type variable is the one kind a scheme never
+            // generalizes; one written inside an implementation's head stands for no type, and the
+            // type checker reports it, so it reaches here and takes no kind.
             for tyvar_name in impl_type.free_vars().keys() {
                 assert!(
-                    kind_scope.scope.contains_key(tyvar_name),
+                    kind_scope.scope.contains_key(tyvar_name) || is_opaque_tyvar(tyvar_name),
                     "the type `{}` this implementation is for names `{}`, which its scheme `{}` leaves ungeneralized",
                     impl_type.to_string(),
                     tyvar_name,
