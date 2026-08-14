@@ -657,7 +657,7 @@ impl TraitImpl {
 
         // Then substitute `tyvar_name` with `impl_type`.
         // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
-        let impl_subst = Substitution::single(&tyvar_name, impl_type);
+        let impl_subst = self.trait_tyvar_to_impl_type(trait_defn);
         impl_subst.substitute_qualtype(&mut method_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
@@ -682,6 +682,14 @@ impl TraitImpl {
     /// `impl [a : ToString, b : ToString] (a, b) : ToString`.
     pub fn impl_type(&self) -> Arc<TypeNode> {
         self.qual_pred.predicate.ty.clone()
+    }
+
+    /// The substitution sending the trait's type variable to the type this implementation is for:
+    /// `c` to `(a, b)` for `impl [a : ToString, b : ToString] (a, b) : ToString` of
+    /// `trait c : ToString`. It carries a member's declaration to this implementation wherever the
+    /// declaration names the trait's type variable.
+    pub fn trait_tyvar_to_impl_type(&self, trait_defn: &TraitDefn) -> Substitution {
+        Substitution::single(&trait_defn.type_var.name, self.impl_type())
     }
 }
 

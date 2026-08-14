@@ -602,6 +602,21 @@ impl TraitMemberImpl {
                 .insert(tyvar.name.clone(), tyvar.kind.clone())
                 .unwrap();
         }
+        for impl_type in self.trait_tyvar_to_impl_type.data.values() {
+            // A member's declaration fixes the trait's type variable, which `validate_constraints`
+            // has required by now, so the type standing in for that variable reaches the
+            // declaration's type or one of its constraints, and `scm_via_defn` generalizes every
+            // type variable of it.
+            for tyvar_name in impl_type.free_vars().keys() {
+                assert!(
+                    kind_scope.scope.contains_key(tyvar_name),
+                    "the type `{}` this implementation is for names `{}`, which its scheme `{}` leaves ungeneralized",
+                    impl_type.to_string(),
+                    tyvar_name,
+                    self.scm_via_defn.to_string()
+                );
+            }
+        }
         self.trait_tyvar_to_impl_type.set_kinds(&kind_scope);
         Ok(())
     }
@@ -1947,10 +1962,7 @@ impl Program {
                             expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
                             lhs_srcs,
-                            trait_tyvar_to_impl_type: Substitution::single(
-                                &trait_.type_var.name,
-                                trait_impl.impl_type(),
-                            ),
+                            trait_tyvar_to_impl_type: trait_impl.trait_tyvar_to_impl_type(trait_),
                         });
                     }
                 }

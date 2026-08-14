@@ -315,7 +315,7 @@ pub fn test_opaque_member_implementation_owes_the_constraint_that_fixes_the_trai
 /// reaches the opaque type constructor's argument through the trait's type variable, which a
 /// constraint of `make`'s declared type fixes alone.
 #[test]
-pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_type_with_a_higher_kinded_parameter() {
+pub fn test_opaque_implementing_type_with_a_higher_kinded_parameter() {
     let source = r##"
         module Main;
 
@@ -344,7 +344,7 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_type_with_a_
 /// constructor, and the opaque type constructor takes it as its argument, so each implementation
 /// hides an iterator of its own.
 #[test]
-pub fn test_opaque_trait_variable_of_a_higher_kind_fixed_by_a_constraint_alone() {
+pub fn test_opaque_trait_variable_of_a_higher_kind() {
     let source = r##"
         module Main;
 
