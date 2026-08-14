@@ -959,11 +959,13 @@ impl TypeCheckContext {
         opaque_types: &mut Map<FullName, Vec<OpaqueTyConResolution>>,
     ) {
         let instantiations = self.opaque_instantiations.clone();
-        for (k, v) in instantiations {
-            let fullname_str = k.strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX).unwrap();
+        for (wrap_tyvar_name, instantiated_tyvar) in instantiations {
+            let fullname_str = wrap_tyvar_name
+                .strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX)
+                .unwrap();
             let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
             let rhs = self
-                .substitute_and_reduce_type(&type_from_tyvar(v))
+                .substitute_and_reduce_type(&type_from_tyvar(instantiated_tyvar))
                 .unwrap_or_else(|_| panic!("failed to reduce opaque type rhs"));
             if let Some(resolutions) = opaque_types.get_mut(&opaque_tycon_name) {
                 for resolution in resolutions {

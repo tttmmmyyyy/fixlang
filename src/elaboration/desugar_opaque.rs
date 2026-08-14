@@ -92,17 +92,17 @@ impl Program {
         let gv_names: Vec<FullName> = self.global_values.keys().cloned().collect();
 
         // Collect opaque infos for global values that have opaque type variables.
-        let mut targets: Vec<(FullName, Vec<OpaqueInfo>)> = vec![];
+        let mut opaque_global_values: Vec<(FullName, Vec<OpaqueInfo>)> = vec![];
         for gv_name in &gv_names {
             let gv = self.global_values.get(gv_name).unwrap();
             let opaque_infos = collect_opaque_infos(&gv.scm, gv_name);
             if !opaque_infos.is_empty() {
-                targets.push((gv_name.clone(), opaque_infos));
+                opaque_global_values.push((gv_name.clone(), opaque_infos));
             }
         }
 
         // Step 1 & 2: Register opaque TyCons and add constraints to TraitEnv.
-        for (gv_name, opaque_infos) in &targets {
+        for (gv_name, opaque_infos) in &opaque_global_values {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
 
             for info in opaque_infos {
@@ -112,7 +112,7 @@ impl Program {
         }
 
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
-        for (gv_name, opaque_infos) in &targets {
+        for (gv_name, opaque_infos) in &opaque_global_values {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
             let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
@@ -463,19 +463,19 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
 
     opaque_vars
         .into_iter()
-        .map(|opq_var| {
+        .map(|opaque_var| {
             // TyCon kind: gen_var kinds → opaque tyvar kind.
             // E.g., for gen_vars [a : *] and opaque tyvar ?it : *, the TyCon kind is * -> *.
-            let mut tc_kind: Arc<Kind> = opq_var.kind.clone();
-            for gv in gen_vars.iter().rev() {
-                tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
+            let mut tycon_kind: Arc<Kind> = opaque_var.kind.clone();
+            for gen_var in gen_vars.iter().rev() {
+                tycon_kind = kind_arrow(gen_var.kind.clone(), tycon_kind);
             }
-            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opaque_var.name);
             OpaqueInfo {
-                tyvar: opq_var.clone(),
+                tyvar: opaque_var.clone(),
                 tycon: tycon(tycon_name),
                 tycon_vars: gen_vars.clone(),
-                tycon_kind: tc_kind,
+                tycon_kind,
             }
         })
         .collect()
@@ -516,10 +516,10 @@ fn build_opaque_resolutions(
     defn_to_impl: &Substitution,
     src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
-    let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
+    let mut resolutions: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
         let lhs = defn_to_impl.substitute_type(&info.opaque_tycon_applied());
-        result
+        resolutions
             .entry(info.tycon.name.clone())
             .or_default()
             .push(OpaqueTyConResolution {
@@ -528,7 +528,7 @@ fn build_opaque_resolutions(
                 src: src.clone(),
             });
     }
-    result
+    resolutions
 }
 
 /// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
@@ -619,9 +619,10 @@ fn rewrite_impl_scheme(
 
         // Build TyCon application using the impl's type expressions for each type argument.
         let mut ty = type_tycon(&info.tycon);
-        for defn_gv in &info.tycon_vars {
-            let impl_gv_ty = defn_to_impl.substitute_type(&type_from_tyvar(defn_gv.clone()));
-            ty = type_tyapp(ty, impl_gv_ty);
+        for defn_tycon_var in &info.tycon_vars {
+            let impl_tycon_arg_ty =
+                defn_to_impl.substitute_type(&type_from_tyvar(defn_tycon_var.clone()));
+            ty = type_tyapp(ty, impl_tycon_arg_ty);
         }
 
         assert!(sub.merge(&Substitution::single(impl_opaque_name, ty)));

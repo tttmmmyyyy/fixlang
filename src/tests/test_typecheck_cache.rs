@@ -158,18 +158,18 @@ main = (
         let dir = temp.path();
         fs::write(dir.join("main.fix"), BROKEN_IMPLEMENTATION).expect("Failed to write main.fix");
 
-        let (cold_succeeded, cold) = try_build(dir);
+        let (cold_succeeded, cold_stderr) = try_build(dir);
         assert!(
-            !cold_succeeded && cold.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
+            !cold_succeeded && cold_stderr.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the first build must reject the implementation whose body is not an iterator.\nstderr: {}",
-            cold
+            cold_stderr
         );
 
-        let (warm_succeeded, warm) = try_build(dir);
+        let (warm_succeeded, warm_stderr) = try_build(dir);
         assert!(
-            !warm_succeeded && warm.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
+            !warm_succeeded && warm_stderr.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the second build read the cache and accepted the program the first build rejected.\nstderr: {}",
-            warm
+            warm_stderr
         );
     }
 
@@ -182,29 +182,29 @@ main = (
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let cold = build(dir);
+        let cold_stderr = build(dir);
         assert!(
-            cold.contains("`Main::old_val` is deprecated"),
+            cold_stderr.contains("`Main::old_val` is deprecated"),
             "the first build must report the deprecated use.\nstderr: {}",
-            cold
+            cold_stderr
         );
         assert!(
-            cold.contains("in \"main.fix\""),
+            cold_stderr.contains("in \"main.fix\""),
             "the first build must attribute the use to the file it is written in.\nstderr: {}",
-            cold
+            cold_stderr
         );
 
-        let warm = build(dir);
+        let warm_stderr = build(dir);
         assert!(
-            warm.contains("`Main::old_val` is deprecated"),
+            warm_stderr.contains("`Main::old_val` is deprecated"),
             "the second build serves `Main::main` from the type-check cache and lost the \
              deprecation warning with it.\nstderr: {}",
-            warm
+            warm_stderr
         );
         assert!(
-            warm.contains("in \"main.fix\""),
+            warm_stderr.contains("in \"main.fix\""),
             "the second build attributed the deprecated use to another file.\nstderr: {}",
-            warm
+            warm_stderr
         );
     }
 }

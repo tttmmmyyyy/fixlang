@@ -455,7 +455,10 @@ impl SymbolExpr {
     pub fn source(&self) -> Option<Span> {
         match self {
             SymbolExpr::Simple(e) => e.expr.source.clone(),
-            SymbolExpr::Method(ms) => ms.first().map(|m| m.expr.expr.source.clone()).flatten(),
+            SymbolExpr::Method(impls) => impls
+                .first()
+                .map(|impl_| impl_.expr.expr.source.clone())
+                .flatten(),
         }
     }
 
@@ -465,7 +468,10 @@ impl SymbolExpr {
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         match self {
             SymbolExpr::Simple(e) => e.find_node_at(pos),
-            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(name, pos)).next(),
+            SymbolExpr::Method(impls) => impls
+                .iter()
+                .filter_map(|impl_| impl_.find_node_at(name, pos))
+                .next(),
         }
     }
 
@@ -1598,8 +1604,11 @@ impl Program {
             // forward, but still install the typed expression below so
             // the LSP can hover on its sub-expressions.
             errors.append(output.errors);
-            for (k, mut v) in output.te.opaque_types.drain() {
-                self.opaque_types.entry(k).or_default().append(&mut v);
+            for (tycon_name, mut resolutions) in output.te.opaque_types.drain() {
+                self.opaque_types
+                    .entry(tycon_name)
+                    .or_default()
+                    .append(&mut resolutions);
             }
             self.merge_import_required(output.import_required);
             let gv = self.global_values.get_mut(&result.val_name).unwrap();
@@ -1946,8 +1955,8 @@ impl Program {
                 let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
                 let instances = self.trait_env.impls.get(trait_id);
-                if let Some(insntances) = instances {
-                    for trait_impl in insntances {
+                if let Some(instances) = instances {
+                    for trait_impl in instances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
