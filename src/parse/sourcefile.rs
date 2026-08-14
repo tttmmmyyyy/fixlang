@@ -87,9 +87,9 @@ impl SourceFile {
         if self.hash.lock().unwrap().is_none() {
             // A path holds no NUL byte, so putting one between the path and the content keeps the
             // pair a distinct string for every distinct file.
-            let identified_content =
+            let path_and_content =
                 format!("{}\0{}", self.file_path.to_string_lossy(), self.string()?);
-            let hash_str = format!("{:x}", md5::compute(identified_content));
+            let hash_str = format!("{:x}", md5::compute(path_and_content));
             let mut hash = self.hash.lock().unwrap();
             *hash = Some(hash_str);
         }

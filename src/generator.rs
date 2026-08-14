@@ -812,12 +812,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         // The compilation directory reaches the generated code here alone, which
         // `Configuration::object_generation_hash` rests on: it covers the directory for a build
         // with debug information and leaves it out of the key of any other build.
-        let cur_dir = self.config.compilation_directory.clone();
+        let compilation_directory = self.config.compilation_directory.clone();
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
             DWARFSourceLanguage::C,
             "NA",
-            cur_dir.to_str().unwrap(),
+            compilation_directory.to_str().unwrap(),
             "fix",
             false,
             "",

@@ -109,7 +109,7 @@ main = println("s");
 
     /// A temporary directory holding `a/main.fix` and `b/main.fix`, two files whose content is
     /// `DEPRECATED_USE`. Built from that directory, the two share the cache it holds.
-    fn two_files_of_equal_content() -> TempDir {
+    fn dir_of_two_files_of_equal_content() -> TempDir {
         let temp = TempDir::new().expect("Failed to create temp directory");
         for sub_dir in ["a", "b"] {
             let sub_dir = temp.path().join(sub_dir);
@@ -123,19 +123,19 @@ main = println("s");
     /// `extra_args` to `fix build` as well, and returns what the compiler wrote to stderr. The
     /// program is written to `out` in that directory.
     fn build(dir: &Path, file: &str, extra_args: &[&str]) -> String {
-        let out = fix_command()
+        let build_output = fix_command()
             .args(["build", "--file", file, "-o", "out"])
             .args(extra_args)
             .current_dir(dir)
             .output()
             .expect("failed to run fix build");
         assert!(
-            out.status.success(),
+            build_output.status.success(),
             "fix build failed in {}:\n{}",
             dir.display(),
-            String::from_utf8_lossy(&out.stderr)
+            String::from_utf8_lossy(&build_output.stderr)
         );
-        String::from_utf8_lossy(&out.stderr).to_string()
+        String::from_utf8_lossy(&build_output.stderr).to_string()
     }
 
     /// A deprecation warning is collected after type checking, out of the typed expression and the
@@ -181,7 +181,7 @@ main = println("s");
     /// never read.
     #[test]
     fn two_files_of_equal_content_are_each_reported_in_their_own_file() {
-        let temp = two_files_of_equal_content();
+        let temp = dir_of_two_files_of_equal_content();
         let dir = temp.path();
 
         for sub_dir in ["a", "b"] {
@@ -212,7 +212,7 @@ main = println("s");
     /// files and has to generate code — which is where the spans are read.
     #[test]
     fn a_build_with_debug_information_reads_the_spans_out_of_its_own_file() {
-        let temp = two_files_of_equal_content();
+        let temp = dir_of_two_files_of_equal_content();
         let dir = temp.path();
 
         build(dir, "a/main.fix", &[]);

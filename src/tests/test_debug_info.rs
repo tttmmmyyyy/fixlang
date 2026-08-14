@@ -332,12 +332,12 @@ mod debug_info_tests {
         );
     }
 
-    // The directory the build runs in reaches the generated code through the debug information and
+    // The compilation directory reaches the generated code through the debug information and
     // nowhere else, which is what lets a build without debug information take the object files
     // generated in another directory. One source built in one directory, with `-g` and without it,
     // answers both halves.
     #[test]
-    fn test_the_build_directory_reaches_the_program_only_through_debug_information() {
+    fn test_the_compilation_directory_reaches_the_program_only_through_debug_information() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         // The directory a build records is the one it reads back from the operating system, which
         // has the symbolic links on the way resolved. A temporary directory is reached through one
@@ -348,13 +348,13 @@ mod debug_info_tests {
         build_with_g_in(&dir, "main.fix", "with_g", "none", &[]);
         build_in(&dir, "main.fix", "without_g", "none", &[]);
 
-        let directory = dir.to_str().expect("The temporary directory is not UTF-8");
+        let dir_str = dir.to_str().expect("The temporary directory is not UTF-8");
         assert!(
-            program_carries(&dir.join("with_g"), directory),
+            program_carries(&dir.join("with_g"), dir_str),
             "the program built with debug information does not name the directory it was built in"
         );
         assert!(
-            !program_carries(&dir.join("without_g"), directory),
+            !program_carries(&dir.join("without_g"), dir_str),
             "the program built without debug information names the directory it was built in, so \
              that directory has to take part in naming the object files of such a build as well"
         );
