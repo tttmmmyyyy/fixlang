@@ -291,7 +291,7 @@ impl Program {
         let refers_to_itself: Vec<bool> = edges
             .iter()
             .enumerate()
-            .map(|(node, to)| to.contains(&node))
+            .map(|(node, targets)| targets.contains(&node))
             .collect();
         let graph = Graph::new_with_edges(resolutions, edges);
         let component_of_node = graph.compute_sccs();
@@ -302,38 +302,38 @@ impl Program {
 
         let mut errors = Errors::empty();
         for component in 0..nodes_of_component.len() {
-            let members = &nodes_of_component[&component];
-            if members.len() == 1 && !refers_to_itself[members[0]] {
+            let component_nodes = &nodes_of_component[&component];
+            if component_nodes.len() == 1 && !refers_to_itself[component_nodes[0]] {
                 continue;
             }
-            errors.append(opaque_cycle_error(&graph, members));
+            errors.append(opaque_cycle_error(&graph, component_nodes));
         }
         errors.to_result()
     }
 }
 
-// The error reported for `members`, the resolutions of one cycle: each one's concrete type is
+// The error reported for `cycle_nodes`, the resolutions of one cycle: each one's concrete type is
 // written in terms of another of them, so none of them names a type.
-fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, members: &[usize]) -> Errors {
-    let msg = if members.len() == 1 {
+fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, cycle_nodes: &[usize]) -> Errors {
+    let msg = if cycle_nodes.len() == 1 {
         format!(
             "The concrete type of the opaque type `{}` cannot be determined, because the definition gives it a type which contains that opaque type itself.",
-            graph.get(members[0]).lhs.to_string(),
+            graph.get(cycle_nodes[0]).lhs.to_string(),
         )
     } else {
-        let opaque_types = members
+        let opaque_type_names = cycle_nodes
             .iter()
-            .map(|member| format!("`{}`", graph.get(*member).lhs.to_string()))
+            .map(|node| format!("`{}`", graph.get(*node).lhs.to_string()))
             .collect::<Vec<_>>()
             .join(", ");
         format!(
             "The concrete types of the opaque types {} cannot be determined, because they are written in terms of each other.",
-            opaque_types,
+            opaque_type_names,
         )
     };
-    let srcs: Vec<&Option<Span>> = members
+    let srcs: Vec<&Option<Span>> = cycle_nodes
         .iter()
-        .map(|member| &graph.get(*member).src)
+        .map(|node| &graph.get(*node).src)
         .collect();
     Errors::from_msg_srcs(msg, &srcs)
 }
@@ -344,7 +344,7 @@ struct OpaqueApplication {
     // The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
     // `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
     // could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
-    applied: Option<Arc<TypeNode>>,
+    applied_type: Option<Arc<TypeNode>>,
 }
 
 impl OpaqueApplication {
@@ -361,11 +361,11 @@ impl OpaqueApplication {
         tc: &mut TypeCheckContext,
         lhs: &Arc<TypeNode>,
     ) -> Result<bool, Errors> {
-        let Some(applied) = &self.applied else {
+        let Some(applied_type) = &self.applied_type else {
             return Ok(true);
         };
-        let applied = tc.instantiate_type(applied);
-        tc.are_unifiable(&applied, lhs)
+        let applied_type = tc.instantiate_type(applied_type);
+        tc.are_unifiable(&applied_type, lhs)
     }
 }
 
@@ -388,14 +388,14 @@ fn collect_opaque_applications_inner(
         if let Some(resolutions) = opaque_resolutions.get(&tycon.name) {
             let arity = opaque_tycon_arity(resolutions);
             let args = ty.collect_type_arguments();
-            let applied = if args.len() >= arity {
+            let applied_type = if args.len() >= arity {
                 Some(apply_type_args(&tycon, &args[..arity]))
             } else {
                 None
             };
             applications.push(OpaqueApplication {
                 tycon_name: tycon.name.clone(),
-                applied,
+                applied_type,
             });
             // The arguments are types of their own; the TyCon they are applied to is this
             // application and is covered by the entry just pushed.
