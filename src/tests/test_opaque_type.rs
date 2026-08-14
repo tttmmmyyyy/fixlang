@@ -404,6 +404,74 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_reached_through_a_
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The type each implementation is for names its own type variable `c`, which is also the name the
+/// trait gives its type variable. The substitution carrying the declaration to an implementation
+/// replaces the trait's `c` by `Array c`, and the `c` it puts there is the implementation's own, so
+/// each implementation still hides an iterator of its own.
+#[test]
+pub fn test_opaque_implementing_type_named_after_the_trait_variable() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl Array c : Make {
+            make = |n| Iterator::range(0, n).map(|_| []);
+        }
+
+        impl Option c : Make {
+            make = |n| Iterator::range(0, n).map(|_| Option::none()).filter(|_| true);
+        }
+
+        main : IO ();
+        main = (
+            let xs : Array (Array I64) = Make::make(2).to_array;
+            assert_eq(|_|"make for Array", xs, [[], []]);;
+            let ys : Array (Option Bool) = Make::make(3).to_array;
+            assert_eq(|_|"make for Option", ys.map(|o| o.is_none), [true, true, true]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Each implementation of a member whose declared type fixes the trait's type variable through a
+/// constraint alone writes a type signature of its own, naming the opaque type variable as it
+/// likes. The concrete type is found against the signature the implementor wrote, and the type the
+/// implementation is for still tells the two implementations apart.
+#[test]
+pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_with_implementation_signatures() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make : [?iter : Iterator, Item ?iter = I64] I64 -> ?iter;
+            make = |n| Iterator::range(0, n);
+        }
+
+        impl Bool : Make {
+            make : [?jter : Iterator, Item ?jter = Bool] I64 -> ?jter;
+            make = |n| Iterator::range(0, n).map(|x| x % 2 == 0);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(3).to_array;
+            assert_eq(|_|"make for I64", is, [0, 1, 2]);;
+            let bs : Array Bool = Make::make(3).to_array;
+            assert_eq(|_|"make for Bool", bs, [true, false, true]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
