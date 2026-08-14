@@ -975,8 +975,8 @@ pub fn test_opaque_impl_returns_what_the_member_returns_for_its_parameter() {
     );
 }
 
-/// A definition may call itself and use what the call returns: what leaves the concrete type
-/// undetermined is giving the opaque return type back as the result, and not the recursion.
+/// A definition may call itself and use what the call returns; what leaves the concrete type
+/// undetermined is giving the opaque return type back as the result.
 #[test]
 pub fn test_opaque_recursive_definition_that_returns_a_concrete_type() {
     let source = r#"

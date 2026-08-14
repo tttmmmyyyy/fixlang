@@ -312,8 +312,8 @@ impl Program {
     }
 }
 
-// The error reported for `cycle_nodes`, the resolutions of one cycle: each one's concrete type is
-// written in terms of another of them, so none of them names a type.
+/// The error reported for `cycle_nodes`, the resolutions of one cycle: each one's concrete type is
+/// written in terms of another of them, so none of them names a type.
 fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, cycle_nodes: &[usize]) -> Errors {
     let msg = if cycle_nodes.len() == 1 {
         format!(
@@ -338,24 +338,26 @@ fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, cycle_nodes: &[usiz
     Errors::from_msg_srcs(msg, &srcs)
 }
 
-// An opaque TyCon as it appears in a type, applied to the arguments its resolutions take.
+/// An opaque TyCon as it appears in a type, applied to the arguments its resolutions take.
 struct OpaqueApplication {
+    /// The name of the opaque TyCon standing at the head of this application.
     tycon_name: FullName,
-    // The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
-    // `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
-    // could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
+    /// The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
+    /// `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
+    /// could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
     applied_type: Option<Arc<TypeNode>>,
 }
 
 impl OpaqueApplication {
-    // Whether the resolution whose left hand side is `lhs` could be the one that replaces this
-    // application.
-    //
-    // Instantiation reaches the application with its type variables already substituted and matches
-    // what it holds then against `lhs` (see `resolve_opaque_type_in_type`), so the resolution can
-    // replace it exactly when some instance of the application is an instance of `lhs`. The
-    // application's type variables are renamed apart first: it and `lhs` are written in two schemes
-    // of their own, and a name they happen to share would otherwise tie them to one type.
+    /// Whether the resolution whose left hand side is `lhs` could be the one that replaces this
+    /// application.
+    ///
+    /// Instantiation reaches the application with its type variables already substituted and
+    /// matches what it holds then against `lhs` (see `resolve_opaque_type_in_type`), so the
+    /// resolution can replace it exactly when some instance of the application is an instance of
+    /// `lhs`. The application's type variables are renamed apart first: it and `lhs` are written in
+    /// two schemes of their own, and a name they happen to share would otherwise tie them to one
+    /// type.
     fn can_be_resolved_by(
         &self,
         tc: &mut TypeCheckContext,
@@ -369,7 +371,7 @@ impl OpaqueApplication {
     }
 }
 
-// Collect the applications of opaque TyCons in `ty`, at every depth.
+/// Collect the applications of opaque TyCons in `ty`, at every depth.
 fn collect_opaque_applications(
     ty: &Arc<TypeNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -379,6 +381,9 @@ fn collect_opaque_applications(
     applications
 }
 
+/// Appends to `applications` every application of an opaque TyCon met while walking `ty`,
+/// descending into the type arguments of one so that an opaque TyCon standing inside another is
+/// collected as well.
 fn collect_opaque_applications_inner(
     ty: &Arc<TypeNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -419,13 +424,13 @@ fn collect_opaque_applications_inner(
     }
 }
 
-// The number of type arguments an opaque TyCon takes, read from the left hand side of its
-// resolutions, which all apply it to the same number of arguments.
+/// The number of type arguments an opaque TyCon takes, read from the left hand side of its
+/// resolutions, which all apply it to the same number of arguments.
 fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
     resolutions[0].lhs.collect_type_arguments().len()
 }
 
-// The TyCon applied to the given type arguments, in order.
+/// The TyCon applied to the given type arguments, in order.
 fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
     let mut applied = type_tycon(tycon);
     for arg in args {
