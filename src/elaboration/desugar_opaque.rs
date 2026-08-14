@@ -150,7 +150,8 @@ impl Program {
                         // rhs does, and the rhs is filled during type-checking against `impl_.scm`,
                         // which a type annotation the implementor writes can name differently from
                         // `impl_.scm_via_defn`. So each of the two schemes is rewritten under the
-                        // substitution that reaches it, and the resolutions take the one of `scm`.
+                        // substitution that reaches it, and the resolutions take the one of
+                        // `impl_.scm`.
                         let defn_to_impl = defn_to_impl_substitution(
                             &scm,
                             &impl_.scm,
@@ -576,11 +577,11 @@ fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme>
 /// `Array a` annotated `[?iter : Iterator, Item ?iter = a] Array a -> ?iter`, it takes `c` to
 /// `Array a` and `?it` to `?iter`.
 ///
-/// Matching the two declared types answers for every type variable that type names. The trait's own
-/// type variable need not be among them — a member can fix it by a constraint alone, as
-/// `make : [?it : Iterator, Item ?it = c] I64 -> ?it` does — and `trait_tyvar_to_impl_type` is what
-/// it stands for. The two are read as one substitution, so a type variable of the implementation
-/// that carries the trait's name for its own stays the implementation's.
+/// Matching the two declared types answers for every type variable that type names, and
+/// `trait_tyvar_to_impl_type` answers for the trait's own type variable, which a member can fix
+/// through a constraint alone, as `make : [?it : Iterator, Item ?it = c] I64 -> ?it` does. The two
+/// are read as one substitution, so a type variable of the implementation that carries the trait's
+/// name for its own stays the implementation's.
 fn defn_to_impl_substitution(
     defn_scm: &Arc<Scheme>,
     impl_scm: &Arc<Scheme>,

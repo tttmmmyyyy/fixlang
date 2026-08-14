@@ -247,14 +247,14 @@ pub fn test_opaque_higher_arity_associated_type() {
 }
 
 // ============================================================
-// A trait member whose declared type does not name the trait's type variable
+// A trait member whose declared type fixes the trait's type variable through a constraint alone
 // ============================================================
 
+/// The declared type of `make` is `I64 -> ?it`, and the equality `Item ?it = c` alone fixes the
+/// trait's type variable `c`. Each implementation hides its own concrete iterator behind `?it`,
+/// and the caller reaches the one it asks for.
 #[test]
 pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone() {
-    // The declared type of `make` is `I64 -> ?it`, which does not name the trait's type variable
-    // `c`; the equality `Item ?it = c` is what fixes it. Each implementation still hides its own
-    // concrete iterator behind `?it`, and the caller reaches the one it asks for.
     let source = r##"
         module Main;
 
@@ -282,11 +282,11 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `impl Bool : Make` owes an iterator of `Bool`, since `Item ?it = c` holds `c` to the type the
+/// implementation is for. The iterator this one returns has `I64` elements, and the constraint it
+/// breaks is the implementation's own.
 #[test]
 pub fn test_opaque_member_implementation_owes_the_constraint_that_fixes_the_trait_variable() {
-    // `impl Bool : Make` owes an iterator of `Bool`, since `Item ?it = c` holds `c` to the type the
-    // implementation is for. The iterator this one returns has `I64` elements, and the constraint
-    // it breaks is the implementation's own.
     let source = r##"
         module Main;
 
@@ -311,11 +311,11 @@ pub fn test_opaque_member_implementation_owes_the_constraint_that_fixes_the_trai
     );
 }
 
+/// The type `Wrap f` this implementation is for takes a type variable of kind `* -> *`. That kind
+/// reaches the opaque type constructor's argument through the trait's type variable, which a
+/// constraint of `make`'s declared type fixes alone.
 #[test]
 pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_type_with_a_higher_kinded_parameter() {
-    // The type `Wrap f` this implementation is for takes a type variable of kind `* -> *`. That
-    // kind reaches the opaque type constructor's argument through the trait's type variable, which
-    // the declared type of `make` does not name.
     let source = r##"
         module Main;
 
@@ -339,12 +339,12 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_type_with_a_
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The trait's type variable `c` is of kind `* -> *`, and the equality `Item ?it = c I64` alone
+/// fixes it in the declared type of `make`. The type each implementation is for is a type
+/// constructor, and the opaque type constructor takes it as its argument, so each implementation
+/// hides an iterator of its own.
 #[test]
 pub fn test_opaque_trait_variable_of_a_higher_kind_fixed_by_a_constraint_alone() {
-    // The trait's type variable `c` is of kind `* -> *`, and the declared type of `make` does not
-    // name it; the equality `Item ?it = c I64` is what fixes it. The type each implementation is
-    // for is a type constructor, and the opaque type constructor takes it as its argument, so each
-    // implementation hides an iterator of its own.
     let source = r##"
         module Main;
 
@@ -372,10 +372,10 @@ pub fn test_opaque_trait_variable_of_a_higher_kind_fixed_by_a_constraint_alone()
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A caller generic in the trait's type variable calls the member at that variable. Each
+/// instantiation of the caller reaches the implementation for the type it is instantiated at.
 #[test]
 pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_reached_through_a_caller() {
-    // A caller generic in the trait's type variable calls the member at that variable. Each
-    // instantiation of the caller reaches the implementation for the type it is instantiated at.
     let source = r##"
         module Main;
 

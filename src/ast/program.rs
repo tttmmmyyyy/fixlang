@@ -570,10 +570,10 @@ pub struct TraitMemberImpl {
     /// The trait's type variable, sent to the type this implementation is for: `c` to `Array a` for
     /// `impl [a : ToString] Array a : ToIter` of `trait c : ToIter`.
     ///
-    /// A member's declared type need not name the trait's type variable — `make : [?it : Iterator,
-    /// Item ?it = c] I64 -> ?it` fixes it by a constraint alone — and no matching of that type
-    /// against this implementation's recovers it there. Opaque-type desugaring reads it from here,
-    /// so that each implementation gets the opaque type constructor applied to its own type.
+    /// Matching the member's declared type against this implementation's answers for the type
+    /// variables that declaration names; this field answers for the trait's type variable, which a
+    /// declaration such as `make : [?it : Iterator, Item ?it = c] I64 -> ?it` fixes through a
+    /// constraint alone.
     pub trait_tyvar_to_impl_type: Substitution,
 }
 
