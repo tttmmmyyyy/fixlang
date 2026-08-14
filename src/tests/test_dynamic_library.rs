@@ -113,6 +113,11 @@ fn test_a_library_built_at_max_is_loaded_and_called() {
 /// A C program built against the library calls the function it exports and gets the answer the Fix
 /// source gives, which the program reports through its exit status. The library is on the driver's
 /// link line, so the exported name has to be in the library's symbol table at link time as well.
+///
+/// The driver runs in the directory holding the library, which is where a Mach-O program looks for
+/// it: the path a program built against a library records is the library's install name, and a
+/// build gives the library the name it writes it under (`lib.dylib`), which resolves against the
+/// working directory.
 #[test]
 fn test_a_library_on_a_link_line_is_called() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "linked_program");
@@ -127,6 +132,7 @@ fn test_a_library_on_a_link_line_is_called() {
     );
 
     let output = Command::new(&driver)
+        .current_dir(&library_directory)
         .output()
         .expect("Failed to execute the driver");
     assert_succeeded(
