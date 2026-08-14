@@ -283,7 +283,7 @@ pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone() {
 }
 
 #[test]
-pub fn test_opaque_implementation_of_a_member_fixing_the_trait_variable_by_a_constraint() {
+pub fn test_opaque_member_implementation_owes_the_constraint_that_fixes_the_trait_variable() {
     // `impl Bool : Make` owes an iterator of `Bool`, since `Item ?it = c` holds `c` to the type the
     // implementation is for. The iterator this one returns has `I64` elements, and the constraint
     // it breaks is the implementation's own.
@@ -312,7 +312,7 @@ pub fn test_opaque_implementation_of_a_member_fixing_the_trait_variable_by_a_con
 }
 
 #[test]
-pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_higher_kinded_type() {
+pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_type_with_a_higher_kinded_parameter() {
     // The type `Wrap f` this implementation is for takes a type variable of kind `* -> *`. That
     // kind reaches the opaque type constructor's argument through the trait's type variable, which
     // the declared type of `make` does not name.

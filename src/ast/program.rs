@@ -360,9 +360,9 @@ impl GlobalValue {
         self.scm.check_kinds(kind_env)?;
         match &mut self.expr {
             SymbolExpr::Simple(_) => {}
-            SymbolExpr::Method(ms) => {
-                for m in ms {
-                    m.set_kinds(kind_env)?;
+            SymbolExpr::Method(impls) => {
+                for impl_ in impls {
+                    impl_.set_kinds(kind_env)?;
                 }
             }
         }

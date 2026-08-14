@@ -100,7 +100,7 @@ main = println((old_val + new_val).to_string);
 
     /// Builds `main.fix` in `dir` and returns whether the build succeeded together with what the
     /// compiler wrote to stderr.
-    fn run_build(dir: &Path) -> (bool, String) {
+    fn try_build(dir: &Path) -> (bool, String) {
         let out = fix_command()
             .args(["build", "--file", "main.fix", "-o", "out"])
             .current_dir(dir)
@@ -115,7 +115,7 @@ main = println((old_val + new_val).to_string);
     /// Builds `main.fix` in `dir`, requiring the build to succeed, and returns what the compiler
     /// wrote to stderr.
     fn build(dir: &Path) -> String {
-        let (succeeded, stderr) = run_build(dir);
+        let (succeeded, stderr) = try_build(dir);
         assert!(
             succeeded,
             "fix build failed in {}:\n{}",
@@ -129,7 +129,7 @@ main = println((old_val + new_val).to_string);
     /// trait's type variable through a constraint alone. Each implementation is an entry of its
     /// own, told apart by the type it is for; sharing one entry would let the second build serve
     /// the sound implementation's typed expression for the broken one and report nothing.
-    const A_BROKEN_IMPLEMENTATION: &str = r#"module Main;
+    const BROKEN_IMPLEMENTATION: &str = r#"module Main;
 
 trait c : Make {
     make : [?it : Iterator, Item ?it = c] I64 -> ?it;
@@ -156,16 +156,16 @@ main = (
     fn a_warm_cache_rejects_what_a_cold_cache_rejected() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(dir.join("main.fix"), A_BROKEN_IMPLEMENTATION).expect("Failed to write main.fix");
+        fs::write(dir.join("main.fix"), BROKEN_IMPLEMENTATION).expect("Failed to write main.fix");
 
-        let (cold_succeeded, cold) = run_build(dir);
+        let (cold_succeeded, cold) = try_build(dir);
         assert!(
             !cold_succeeded && cold.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the first build must reject the implementation whose body is not an iterator.\nstderr: {}",
             cold
         );
 
-        let (warm_succeeded, warm) = run_build(dir);
+        let (warm_succeeded, warm) = try_build(dir);
         assert!(
             !warm_succeeded && warm.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the second build read the cache and accepted the program the first build rejected.\nstderr: {}",
