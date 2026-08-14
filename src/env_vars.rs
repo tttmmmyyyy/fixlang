@@ -2,16 +2,20 @@ use crate::configuration::FixOptimizationLevel;
 use crate::misc::warn_msg;
 use std::env;
 
-/// Get the maximum optimization level from the FIX_MAX_OPT_LEVEL environment variable.
-/// Returns None if the environment variable is not set or has an invalid value.
+/// The environment variable holding the highest optimization level a build works at. It also
+/// decides the level of a build that asks for none.
+pub const MAX_OPT_LEVEL_VAR: &str = "FIX_MAX_OPT_LEVEL";
+
+/// The highest optimization level a build works at, as `MAX_OPT_LEVEL_VAR` gives it. A value the
+/// variable does not hold, and a value it holds that names no level, both give `Max`.
 pub fn get_max_opt_level() -> FixOptimizationLevel {
-    if let Ok(var) = env::var("FIX_MAX_OPT_LEVEL") {
+    if let Ok(var) = env::var(MAX_OPT_LEVEL_VAR) {
         if let Some(level) = FixOptimizationLevel::from_str(&var) {
             return level;
         }
         warn_msg(&format!(
-            "Invalid value for FIX_MAX_OPT_LEVEL: \"{}\". Using default value.",
-            var
+            "Invalid value for {}: \"{}\". Using default value.",
+            MAX_OPT_LEVEL_VAR, var
         ));
     }
     FixOptimizationLevel::Max

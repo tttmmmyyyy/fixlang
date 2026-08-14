@@ -317,7 +317,6 @@ pub fn build_object_files<'c>(
 
         let entry_io_value = program.entry_io_value.clone();
         threads.push(spawn_compiler_thread(move || {
-            // Create GenerationContext.
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
             let module = Generator::create_module(
@@ -364,7 +363,6 @@ pub fn build_object_files<'c>(
                 }
             }
 
-            // If debug info is generated, finalize it.
             gc.finalize_di();
 
             gc.assert_defined_symbols_fit_a_symbol_table();
@@ -379,7 +377,6 @@ pub fn build_object_files<'c>(
                 emit_llvm(gc.module, &config, false);
             }
 
-            // LLVM level optimization.
             optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
             if config.emit_llvm {
@@ -387,7 +384,6 @@ pub fn build_object_files<'c>(
                 emit_llvm(gc.module, &config, true);
             }
 
-            // Generate object file.
             write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
         }));
     }

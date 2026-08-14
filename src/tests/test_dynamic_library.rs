@@ -9,7 +9,9 @@
 //! line, and the case projects here cover one each.
 
 use crate::configuration::{Configuration, FixOptimizationLevel, OutputFileType};
-use crate::tests::test_util::{assert_succeeded, fix_command, setup_case_projects, test_source};
+use crate::tests::test_util::{
+    assert_succeeded, fix_command_at_opt_level, setup_case_projects, test_source,
+};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -24,13 +26,8 @@ const DRIVER_ARGUMENT: i64 = 10;
 const DRIVER_OUTPUT: &str = "21";
 
 /// Builds `project_dir` as a dynamic library at `opt_level` and returns the path of the library.
-///
-/// The suite runs under an optimization level taken from `FIX_MAX_OPT_LEVEL`, which caps the level
-/// `-O` asks for, so the variable is pinned here to the level under test.
 fn build_library(project_dir: &Path, opt_level: &str) -> PathBuf {
-    let output = fix_command()
-        .args(["build", "-O", opt_level])
-        .env("FIX_MAX_OPT_LEVEL", opt_level)
+    let output = fix_command_at_opt_level("build", opt_level)
         .current_dir(project_dir)
         .output()
         .expect("Failed to execute `fix build`");

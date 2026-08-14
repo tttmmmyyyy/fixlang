@@ -12,7 +12,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -123,17 +123,15 @@ mod integration_tests {
     /// that is known to answer correctly.
     ///
     /// # Arguments
-    /// * `opt_level` - pinned through `FIX_MAX_OPT_LEVEL`, so the level is the one this test asks
-    ///   for whatever the level the suite is being run at.
+    /// * `opt_level` - the level the case is built at, which decides which specializations exist.
     /// * `expected_output` - what the case prints on stdout.
     fn build_run_and_read_rc_ir(
         project_dir: &Path,
         opt_level: &str,
         expected_output: &str,
     ) -> String {
-        let build = fix_command()
-            .args(["build", "-O", opt_level, "--emit-rc-ir", "all"])
-            .env("FIX_MAX_OPT_LEVEL", opt_level)
+        let build = fix_command_at_opt_level("build", opt_level)
+            .args(["--emit-rc-ir", "all"])
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute fix build");
