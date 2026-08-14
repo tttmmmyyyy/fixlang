@@ -279,7 +279,7 @@ impl<'a> Lowerer<'a> {
         let src_tys = lam_ty.get_lambda_srcs();
         assert_eq!(params.len(), src_tys.len());
 
-        let saved_env = mem::take(&mut self.scope);
+        let saved_scope = mem::take(&mut self.scope);
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
@@ -328,7 +328,7 @@ impl<'a> Lowerer<'a> {
         let ret_var = self.lower_to_var(&body, &mut bindings);
         let body_expr = Self::fold_bindings(bindings, Self::ret_node(ret_var));
 
-        self.scope = saved_env;
+        self.scope = saved_scope;
 
         RcFunc {
             name: func_ref,
