@@ -370,3 +370,27 @@ impl Span {
         self.start <= pos.pos && pos.pos <= self.end
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SourceFile;
+    use std::path::PathBuf;
+
+    /// The caches of the compiler are named by the hash of a source file, so two files that differ
+    /// get two names. The path and the content are hashed as one string, and a boundary between
+    /// them that can move gives one name to a pair of files: `("ab", "c")` and `("a", "bc")` are
+    /// two files, and each keeps a name of its own.
+    #[test]
+    fn test_the_hash_separates_the_path_from_the_content() {
+        let hash_of = |path: &str, content: &str| {
+            SourceFile::from_file_path_and_content(PathBuf::from(path), content.to_string())
+                .hash()
+                .unwrap_or_else(|errs| panic!("Failed to hash a source file: {}", errs))
+        };
+        assert_ne!(
+            hash_of("ab", "c"),
+            hash_of("a", "bc"),
+            "two files whose path and content run together alike keep their own hashes"
+        );
+    }
+}

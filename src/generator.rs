@@ -28,7 +28,6 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
-use crate::misc::compilation_directory;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::object::build_free_boxed;
@@ -810,7 +809,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             FlagBehavior::Warning,
             debug_metadata_version,
         );
-        let cur_dir = compilation_directory();
+        let cur_dir = self.config.compilation_directory.clone();
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
             DWARFSourceLanguage::C,

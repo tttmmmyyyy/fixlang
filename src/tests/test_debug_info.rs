@@ -6,9 +6,9 @@
 // Fix call chain. Assertions are mangle-name-independent (they check `file:line`, not the
 // mangled/closure frame names), so they stay valid across name-mangling changes.
 //
-// Four scenarios need no debugger: three check only that `-g` builds at all — one per optimization
-// level, and two over recursive types — and one reads the source file name out of the bytes of the
-// built program.
+// The scenarios that need no debugger check that `-g` builds at all — one per optimization level,
+// and two over recursive types — and read the file name and the directory the debug information
+// records out of the bytes of the built program.
 //
 // Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
 // macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
@@ -16,7 +16,7 @@
 
 #[cfg(test)]
 mod debug_info_tests {
-    use crate::tests::test_util::{fix_command, fix_command_at_opt_level};
+    use crate::tests::test_util::fix_command_at_opt_level;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -24,26 +24,35 @@ mod debug_info_tests {
     };
     use tempfile::TempDir;
 
+    // Build the Fix source `file`, named as the working directory `dir` reaches it, with `-g` at
+    // optimization level `opt_level`, passing `extra_args` to `fix build` as well, and assert the
+    // build succeeds. The program is written to `output` in that directory.
+    fn build_with_g_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
+        let build = fix_command_at_opt_level("build", opt_level)
+            .args(["-g", "-f", file, "-o", output])
+            .args(extra_args)
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g -O {} -f {} {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            opt_level,
+            file,
+            extra_args.join(" "),
+            dir.display(),
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr),
+        );
+    }
+
     // Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
     // to `fix build` as well, assert the build succeeds, and return the directory holding the built
     // `prog`.
     fn build_with_g(source: &str, opt_level: &str, extra_args: &[&str]) -> TempDir {
         let temp = TempDir::new().expect("Failed to create temp directory");
         fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
-        let build = fix_command_at_opt_level("build", opt_level)
-            .args(["-g", "-f", "main.fix", "-o", "prog"])
-            .args(extra_args)
-            .current_dir(temp.path())
-            .output()
-            .expect("Failed to execute `fix build`");
-        assert!(
-            build.status.success(),
-            "`fix build -g -O {} {}` failed:\nstdout:\n{}\nstderr:\n{}",
-            opt_level,
-            extra_args.join(" "),
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
+        build_with_g_in(temp.path(), "main.fix", "prog", opt_level, extra_args);
         temp
     }
 
@@ -245,24 +254,6 @@ mod debug_info_tests {
         main = println("hello");
     "#;
 
-    // Build the Fix source `file`, named as the working directory `dir` reaches it, with debug
-    // information, writing the program to `output` in that directory.
-    fn build_g_in(dir: &Path, file: &str, output: &str) {
-        let build = fix_command()
-            .args(["build", "-g", "-f", file, "-o", output])
-            .current_dir(dir)
-            .output()
-            .expect("Failed to execute `fix build`");
-        assert!(
-            build.status.success(),
-            "`fix build -g -f {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
-            file,
-            dir.display(),
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-    }
-
     // Whether the program built at `path` carries `text`. A file name and a directory of the debug
     // information reach the program as strings of its own, so its bytes carry them.
     fn program_carries(path: &Path, text: &str) -> bool {
@@ -283,11 +274,11 @@ mod debug_info_tests {
         let dir = temp.path();
 
         fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
-        build_g_in(dir, "main.fix", "before_move");
+        build_with_g_in(dir, "main.fix", "before_move", "none", &[]);
 
         fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
         fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
-        build_g_in(dir, "src/app.fix", "after_move");
+        build_with_g_in(dir, "src/app.fix", "after_move", "none", &[]);
 
         let program = dir.join("after_move");
         assert!(
@@ -307,17 +298,21 @@ mod debug_info_tests {
     #[test]
     fn test_debug_info_names_the_directory_after_the_project_moved() {
         let temp = TempDir::new().expect("Failed to create temp directory");
-        let before_move = temp.path().join("before_move");
-        let after_move = temp.path().join("after_move");
+        // The directory a build records is the one it reads back from the operating system, which
+        // has the symbolic links on the way resolved. A temporary directory is reached through one
+        // on macOS, so the root is resolved here and both paths are built from it.
+        let root = fs::canonicalize(temp.path()).expect("Failed to resolve the temp directory");
+        let before_move = root.join("before_move");
+        let after_move = root.join("after_move");
 
         fs::create_dir(&before_move).expect("Failed to create the project directory");
         fs::write(before_move.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
-        build_g_in(&before_move, "main.fix", "prog");
+        build_with_g_in(&before_move, "main.fix", "prog", "none", &[]);
 
         // The build's own directory moves with the project, so the objects it cached are there to
         // be taken.
         fs::rename(&before_move, &after_move).expect("Failed to move the project directory");
-        build_g_in(&after_move, "main.fix", "prog");
+        build_with_g_in(&after_move, "main.fix", "prog", "none", &[]);
 
         let program = after_move.join("prog");
         assert!(
@@ -327,6 +322,45 @@ mod debug_info_tests {
         assert!(
             !program_carries(&program, before_move.to_str().unwrap()),
             "the program built after the move names the directory the project has left"
+        );
+    }
+
+    // The directory the build runs in reaches the generated code through the debug information and
+    // nowhere else, which is what lets a build without debug information take the object files
+    // generated in another directory. One source built in one directory, with `-g` and without it,
+    // answers both halves.
+    #[test]
+    fn test_the_build_directory_reaches_the_program_only_through_debug_information() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        // The directory a build records is the one it reads back from the operating system, which
+        // has the symbolic links on the way resolved. A temporary directory is reached through one
+        // on macOS.
+        let dir = fs::canonicalize(temp.path()).expect("Failed to resolve the temp directory");
+        fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+
+        build_with_g_in(&dir, "main.fix", "with_g", "none", &[]);
+        let build = fix_command_at_opt_level("build", "none")
+            .args(["-f", "main.fix", "-o", "without_g"])
+            .current_dir(&dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -O none -f main.fix` failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            dir.display(),
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr),
+        );
+
+        let directory = dir.to_str().expect("The temporary directory is not UTF-8");
+        assert!(
+            program_carries(&dir.join("with_g"), directory),
+            "the program built with debug information does not name the directory it was built in"
+        );
+        assert!(
+            !program_carries(&dir.join("without_g"), directory),
+            "the program built without debug information names the directory it was built in, so \
+             that directory has to take part in naming the object files of such a build as well"
         );
     }
 

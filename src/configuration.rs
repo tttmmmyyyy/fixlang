@@ -11,8 +11,7 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
-    compilation_directory, platform_thread_sanitizer_supported, platform_valgrind_supported,
-    warn_msg, Finally, Map,
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -380,6 +379,11 @@ pub struct Configuration {
     pub ld_flags: Vec<String>,
     // Create debug info.
     pub debug_info: bool,
+    /// The directory the build runs in, read once when the configuration is created. A build with
+    /// debug information writes it into the generated code as the directory of its compilation
+    /// unit, and the file names the debug information carries beside it are relative, so a debugger
+    /// resolves them against it.
+    pub compilation_directory: PathBuf,
     // Whether to emit LLVM IR.
     pub emit_llvm: bool,
     // Output file name.
@@ -514,6 +518,9 @@ impl Configuration {
             linked_libraries: vec![],
             ld_flags: vec![],
             debug_info: false,
+            compilation_directory: env::current_dir().map_err(|e| {
+                Errors::from_msg(format!("Failed to get the current directory: {}", e))
+            })?,
             emit_llvm: false,
             out_file_path: None,
             output_file_type: OutputFileType::Executable,
@@ -865,12 +872,11 @@ impl Configuration {
         let mut hash_source = String::new();
         hash_source.push_str(&self.fix_opt_level.to_string());
         hash_source.push_str(&self.debug_info.to_string());
-        // The directory the build runs in is written into the debug information as the directory of
-        // the compilation unit, which is what a debugger resolves the file names beside it against.
-        // That is the one way the directory reaches the generated code, so a build without debug
-        // information takes objects generated in another directory.
+        // The compilation directory is written into the debug information, which is the one way it
+        // reaches the generated code, so a build without debug information takes objects generated
+        // in another directory.
         if self.debug_info {
-            hash_source.push_str(&compilation_directory().to_string_lossy());
+            hash_source.push_str(&self.compilation_directory.to_string_lossy());
         }
         hash_source.push_str(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
@@ -1306,6 +1312,15 @@ mod tests {
             (
                 "debug_info",
                 Box::new(|config: &mut Configuration| config.debug_info = true),
+            ),
+            (
+                "compilation_directory",
+                Box::new(|config: &mut Configuration| {
+                    // The directory reaches the generated code as the directory the debug
+                    // information records, so the two are one setting here.
+                    config.debug_info = true;
+                    config.compilation_directory = config.compilation_directory.join("elsewhere");
+                }),
             ),
             (
                 "threaded",

@@ -1,7 +1,7 @@
 use crate::{
     ast::name::Name,
     constants::{COMPILER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
-    error::{panic_with_msg, Errors},
+    error::Errors,
     parse::sourcefile::SourceFile,
 };
 use colored::{control, ColoredString, Colorize};
@@ -252,16 +252,6 @@ pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name
         }
     }
     result
-}
-
-/// The directory the build runs in, which a build with debug information records in the generated
-/// code as the directory of its compilation unit. The file names the debug information carries
-/// beside it are relative, and a debugger resolves them against this directory.
-pub fn compilation_directory() -> PathBuf {
-    match env::current_dir() {
-        Ok(dir) => dir,
-        Err(e) => panic_with_msg(&format!("Failed to get the current directory: {}", e)),
-    }
 }
 
 // Converts a path to an absolute path.
