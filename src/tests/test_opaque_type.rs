@@ -1597,7 +1597,10 @@ pub fn test_opaque_regression_unknown_name_undefined_internal() {
         f = |n| Iterator::range(0, n);
 
         main : IO ();
-        main = pure();
+        main = (
+            eval f(3);
+            pure()
+        );
     "#;
     test_source(&source, Configuration::develop_mode());
 }
