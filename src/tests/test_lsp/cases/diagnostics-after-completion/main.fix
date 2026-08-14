@@ -1,0 +1,12 @@
+module Main;
+
+import Lib;
+
+type MainType = unbox struct { y : I64 };
+
+impl MainType : MyShow {
+    show = |v| v.@y.to_string;
+}
+
+main : IO ();
+main = println(MainType { y : 1 }.show);

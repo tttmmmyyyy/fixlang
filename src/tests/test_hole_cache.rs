@@ -18,6 +18,7 @@ mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process;
     use tempfile::TempDir;
 
     /// Absolute path to the `cases/` directory shipped alongside this
@@ -41,7 +42,7 @@ mod integration_tests {
 
     /// Run `fix check` in `project_dir` and return the full process
     /// output.
-    fn run_check(project_dir: &Path) -> std::process::Output {
+    fn run_check(project_dir: &Path) -> process::Output {
         fix_command()
             .arg("check")
             .current_dir(project_dir)
@@ -62,15 +63,17 @@ mod integration_tests {
             .collect()
     }
 
-    /// `cache_file_name` (in `typecheckcache.rs`) replaces non-alphanumeric
-    /// characters of the value name with `_`, so `Main::hole_val` becomes
-    /// `Main__hole_val`. The full file name is
-    /// `Main__hole_val_<scheme_md5>_<version_hash>`. We just match by
-    /// prefix.
-    fn has_cache_entry_for(project_dir: &Path, value_prefix: &str) -> bool {
+    /// Reports whether the cache directory holds an entry for a value whose file
+    /// name begins with the given prefix.
+    ///
+    /// # Arguments
+    /// * `file_name_prefix` — the head of a cache file name, which holds the
+    ///   value's full name with each non-alphanumeric character replaced by `_`:
+    ///   `Main::hole_val` is written `Main__hole_val`.
+    fn has_cache_entry_for(project_dir: &Path, file_name_prefix: &str) -> bool {
         list_cache_files(project_dir)
             .iter()
-            .any(|name| name.starts_with(value_prefix))
+            .any(|file_name| file_name.starts_with(file_name_prefix))
     }
 
     /// A hole-bearing value must not have a typecheck cache file
@@ -137,8 +140,9 @@ mod integration_tests {
     }
 
     /// Once the user fills in the hole, `fix check` succeeds and a
-    /// cache file appears for the now-clean value (i.e. the cache
-    /// suppression is gated on having errors, not permanent).
+    /// cache file appears for the now-clean value: the cache is
+    /// withheld for as long as the value reports an error, and written
+    /// again once it type-checks cleanly.
     #[test]
     fn fixed_value_is_cached_after_edit() {
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
@@ -165,6 +169,41 @@ mod integration_tests {
             has_cache_entry_for(&project_dir, "Main__hole_val_"),
             "Cache file should be created once the hole is filled.\nCache contents: {:?}",
             list_cache_files(&project_dir),
+        );
+    }
+
+    /// A test build and a plain build over one project directory share the type-check cache, and
+    /// each still produces its own program.
+    ///
+    /// The two builds see different sets of tuple sizes, so the trait implementations the compiler
+    /// generates for tuples differ between them; those generated sources reach no module's
+    /// dependency hash, which is what makes the two builds' entries meet under one key.
+    #[test]
+    fn a_test_build_and_a_plain_build_share_the_cache_without_corrupting_it() {
+        let (_temp_dir, project_dir) = setup_test_env("test_and_build");
+
+        let test_run = fix_command()
+            .arg("test")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix test");
+        assert_eq!(
+            String::from_utf8_lossy(&test_run.stdout).trim(),
+            "(1, 2, 3, 4, 5, 6, 7)",
+            "the test entry point prints the seven-tuple.\nstderr: {}",
+            String::from_utf8_lossy(&test_run.stderr),
+        );
+
+        let build_run = fix_command()
+            .arg("run")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix run");
+        assert_eq!(
+            String::from_utf8_lossy(&build_run.stdout).trim(),
+            "(1, 2)",
+            "the main entry point prints the pair.\nstderr: {}",
+            String::from_utf8_lossy(&build_run.stderr),
         );
     }
 }

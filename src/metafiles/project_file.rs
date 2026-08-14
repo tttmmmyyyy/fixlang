@@ -1,17 +1,18 @@
 use crate::{
-    configuration::BuildConfigType,
     configuration::{
-        Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer, ValgrindTool,
+        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer,
+        ValgrindTool,
     },
-    constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
-    constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
+    constants::{
+        PROJECT_FILE_PATH, SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE,
+        TRY_FIX_DEPS_UPDATE_TEST,
+    },
     dependency::lockfile::{
         clone_git_repo, get_lock_file_path, get_versions_from_repo, DependecyLockFile,
         LockFileType, ProjectSource,
     },
     error::Errors,
-    metafiles::config_file::ConfigFile,
-    metafiles::registry_file::RegistryFile,
+    metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
     misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
@@ -273,20 +274,24 @@ impl ProjectFile {
         }
     }
 
-    // Read the project file at `PROJECT_FILE_PATH` as the root project.
+    /// Reads the project file of the current directory as the root project of the build, with its
+    /// `role` and `source` populated.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
-        let mut pf = ProjectFile::read_file(&proj_file_path)?;
-        pf.role = ProjectFileRole::Root;
-        pf.source = Some(ProjectOrigin::Local(to_absolute_path(
-            pf.path
+        let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
+        proj_file.role = ProjectFileRole::Root;
+        proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
+            proj_file
+                .path
                 .parent()
                 .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
         )?));
-        Ok(pf)
+        Ok(proj_file)
     }
 
-    // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
+    /// Reads the project file at `path`, checks its fields, and checks that the project accepts the
+    /// running compiler's version. The returned file carries the default `role` and `source`, which
+    /// the loader sets to match where the file came from.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
@@ -339,25 +344,22 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    // Calculate the hash value of the `dependencies` section.
+    /// The hash that decides when the lock file has to be built again: it covers the dependency
+    /// entries this project declares, and the whole project file of each path dependency, so that a
+    /// change to what a local dependency itself depends on reaches the hash.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also covers the entries of the `test_dependencies` section.
     pub fn calculate_dependencies_hash(&self, mode: BuildConfigType) -> String {
-        // Get dependencies based on mode.
-        let mut deps = match mode {
-            BuildConfigType::Test => {
-                // Merge dependencies and test_dependencies
-                let mut all_deps = self.dependencies.clone();
-                all_deps.extend(self.test_dependencies.clone());
-                all_deps
-            }
-            BuildConfigType::Build => self.dependencies.clone(),
-        };
+        let mut deps = self.get_dependencies(mode);
 
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut data = String::new();
+        let mut hash_source = String::new();
         for dep in &deps {
-            data += serde_json::to_string(&dep).unwrap().as_str();
+            hash_source += serde_json::to_string(&dep).unwrap().as_str();
         }
 
         // Also include the content of path-based dependencies' project files in the hash.
@@ -367,15 +369,20 @@ impl ProjectFile {
             if let Some(path) = &dep.path {
                 let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
                 if let Ok(content) = fs::read_to_string(&proj_file_path) {
-                    data += &content;
+                    hash_source += &content;
                 }
             }
         }
 
         // Calculate the hash value.
-        format!("{:x}", md5::compute(data))
+        format!("{:x}", md5::compute(hash_source))
     }
 
+    /// Checks that `name` is a non-empty string of alphanumeric characters and hyphens.
+    ///
+    /// # Arguments
+    ///
+    /// * `span` - The place in the project file the error points at, if the name was read from one.
     pub fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
         // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
         if name.is_empty() {
@@ -577,6 +584,32 @@ impl ProjectFile {
         }
     }
 
+    /// The optimization level an `opt_level` field of this project file names, or an error pointing
+    /// at the project file when it names no level the compiler has.
+    fn read_opt_level(&self, opt_level: &str) -> Result<FixOptimizationLevel, Errors> {
+        FixOptimizationLevel::from_str(opt_level).ok_or_else(|| {
+            Errors::from_msg_srcs(
+                format!("Unknown optimization level: \"{}\"", opt_level),
+                &[&Some(self.project_file_span(0, 0))],
+            )
+        })
+    }
+
+    /// Links the libraries a `static_links` or `dynamic_links` field names, each bound to the
+    /// program in the way `link_type` describes.
+    fn link_libraries(
+        config: &mut Configuration,
+        libraries: Option<&[String]>,
+        link_type: LinkType,
+    ) {
+        let Some(libraries) = libraries else {
+            return;
+        };
+        config
+            .linked_libraries
+            .extend(libraries.iter().map(|name| (name.clone(), link_type)));
+    }
+
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
@@ -638,53 +671,33 @@ impl ProjectFile {
         }
 
         // Append static libraries.
-        if let Some(static_libs) = self.build.static_links.as_ref() {
-            config.linked_libraries.append(
-                &mut static_libs
-                    .iter()
-                    .map(|lib_name| (lib_name.clone(), LinkType::Static))
-                    .collect(),
-            );
-        }
+        Self::link_libraries(config, self.build.static_links.as_deref(), LinkType::Static);
         if mode == BuildConfigType::Test {
-            if let Some(static_libs) = self
-                .build
-                .test
-                .as_ref()
-                .and_then(|test| test.static_links.as_ref())
-            {
-                config.linked_libraries.append(
-                    &mut static_libs
-                        .iter()
-                        .map(|lib_name| (lib_name.clone(), LinkType::Static))
-                        .collect(),
-                );
-            }
+            Self::link_libraries(
+                config,
+                self.build
+                    .test
+                    .as_ref()
+                    .and_then(|test| test.static_links.as_deref()),
+                LinkType::Static,
+            );
         }
 
         // Append dynamic libraries.
-        if let Some(dynamic_libs) = self.build.dynamic_links.as_ref() {
-            config.linked_libraries.append(
-                &mut dynamic_libs
-                    .iter()
-                    .map(|lib_name| (lib_name.clone(), LinkType::Dynamic))
-                    .collect(),
-            );
-        }
+        Self::link_libraries(
+            config,
+            self.build.dynamic_links.as_deref(),
+            LinkType::Dynamic,
+        );
         if mode == BuildConfigType::Test {
-            if let Some(dynamic_libs) = self
-                .build
-                .test
-                .as_ref()
-                .and_then(|test| test.dynamic_links.as_ref())
-            {
-                config.linked_libraries.append(
-                    &mut dynamic_libs
-                        .iter()
-                        .map(|lib_name| (lib_name.clone(), LinkType::Dynamic))
-                        .collect(),
-                );
-            }
+            Self::link_libraries(
+                config,
+                self.build
+                    .test
+                    .as_ref()
+                    .and_then(|test| test.dynamic_links.as_deref()),
+                LinkType::Dynamic,
+            );
         }
 
         // Append library search paths.
@@ -816,14 +829,7 @@ impl ProjectFile {
 
         // Set optimization level.
         if let Some(opt_level) = self.build.opt_level.as_ref() {
-            if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                config.set_fix_opt_level(opt_level);
-            } else {
-                return Err(Errors::from_msg_srcs(
-                    format!("Unknown optimization level: \"{}\"", opt_level),
-                    &[&Some(self.project_file_span(0, 0))],
-                ));
-            }
+            config.set_fix_opt_level(self.read_opt_level(opt_level)?);
         }
         if mode == BuildConfigType::Test {
             if let Some(opt_level) = self
@@ -832,25 +838,30 @@ impl ProjectFile {
                 .as_ref()
                 .and_then(|test| test.opt_level.as_ref())
             {
-                if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                    config.set_fix_opt_level(opt_level);
-                } else {
-                    return Err(Errors::from_msg_srcs(
-                        format!("Unknown optimization level: \"{}\"", opt_level),
-                        &[&Some(self.project_file_span(0, 0))],
-                    ));
-                }
+                config.set_fix_opt_level(self.read_opt_level(opt_level)?);
             }
         }
 
-        // Set output file.
-        if let Some(output) = self.build.output.as_ref() {
-            config.out_file_path = Some(PathBuf::from(output));
-        }
+        // The kind of file a build produces is read whatever the invocation is, so that a project
+        // file naming a kind that does not exist is reported by every command that reads it.
+        let output_file_type = self
+            .build
+            .output_type
+            .as_ref()
+            .map(|output_type| OutputFileType::from_str(output_type))
+            .transpose()?;
 
-        // Set the output file type.
-        if let Some(output_file_type) = self.build.output_type.as_ref() {
-            config.output_file_type = OutputFileType::from_str(output_file_type)?;
+        // Set the output file and its kind. The two describe what `fix build` produces; `fix run`
+        // and `fix test` build an executable in a temporary place, run it, and remove it, so a
+        // project file asking a build for a dynamic library still gets a program it can run, and a
+        // test run leaves the output file of a build where it is.
+        if config.subcommand.produces_output_file() {
+            if let Some(output) = self.build.output.as_ref() {
+                config.out_file_path = Some(PathBuf::from(output));
+            }
+            if let Some(output_file_type) = output_file_type {
+                config.output_file_type = output_file_type;
+            }
         }
 
         // Set backtrace mode.
@@ -1167,8 +1178,8 @@ impl ProjectFile {
 
         // Check if the project file already has the dependencies.
         let existing_deps = self.get_dependencies(mode);
-        for prj_ver in &projs {
-            let proj_name = &prj_ver.0;
+        for proj in &projs {
+            let proj_name = &proj.0;
             if existing_deps.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
                     "The project file already has a dependency on \"{}\".",
@@ -1183,12 +1194,12 @@ impl ProjectFile {
 
             // For each project to be added, search it in the registry file.
             let mut added_indices = Set::default();
-            for (i, proj_var) in projs.iter().enumerate() {
-                let (proj_name, version) = proj_var;
+            for (i, proj) in projs.iter().enumerate() {
+                let (proj_name, version) = proj;
                 if let Some(proj_info) = reg_file
                     .projects
                     .iter()
-                    .find(|prj_info| &prj_info.name == proj_name)
+                    .find(|proj_info| &proj_info.name == proj_name)
                 {
                     // If the project is found in the registry, add it to the project file.
                     info_msg(&format!(
@@ -1262,10 +1273,10 @@ impl ProjectFile {
         }
 
         // Check if all the projects have been added.
-        for proj_var in projs {
+        for proj in projs {
             return Err(Errors::from_msg(format!(
                 "The project \"{}\" is not found in the registries.",
-                proj_var.0
+                proj.0
             )));
         }
 
@@ -1290,19 +1301,22 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Retrieve the registry file at the specified location.
-    //
-    // - `loc`: The location of the registry file, which is a url or a file path.
+    /// Retrieves the registry file at `loc` and parses it.
+    ///
+    /// # Arguments
+    ///
+    /// * `loc` - A URL the file is fetched over HTTP from, or a path it is read from. A location
+    ///   that parses as a URL is treated as one.
     pub fn retrieve_registry_file(loc: &str) -> Result<RegistryFile, Errors> {
         let reg_file_content = if Url::parse(loc).is_ok() {
             // The location is a URL.
-            let reg_res = reqwest::blocking::get(loc).map_err(|e| {
+            let response = reqwest::blocking::get(loc).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",
                     loc, e
                 ))
             })?;
-            reg_res.text().map_err(|e| {
+            response.text().map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",
                     loc, e

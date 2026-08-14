@@ -1130,6 +1130,21 @@ impl TypeCheckContext {
     /// variant, returning the expression annotated with its inferred type.
     /// Each arm tolerates what it can in `error_tolerant` mode; what it
     /// cannot is raised as an error.
+    ///
+    /// **An arm elaborates its sub-expressions in the order the source
+    /// writes them.** Elaborating one sub-expression leaves the type
+    /// checker changed — a type variable bound, a predicate or an
+    /// equality added to the pending ones, an overloaded name settled on
+    /// one candidate — so the order the arm walks in decides what is
+    /// known when each of the remaining sub-expressions is checked. It
+    /// therefore decides which of several errors is the one reported, and
+    /// it decides which candidate an overloaded name resolves to, so a
+    /// program can be accepted under one order and rejected under
+    /// another. Source order is the one the programmer can predict, and
+    /// an arm that holds its sub-expressions in another order for a later
+    /// stage — as the `Expr::MakeStruct` arm holds them in the struct's
+    /// declaration order for code generation — reorders them after the
+    /// walk rather than before it.
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1468,22 +1483,20 @@ impl TypeCheckContext {
                 let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?.cloned();
 
                 // 2. Strict-only: pair each field with the declared
-                // field it names — reporting a repeat, an omission
-                // and an unknown name — and take the list in
-                // declaration order, which is the order code
-                // generation reads the values in. Tolerant keeps the
-                // list as written so the user can keep typing inside
-                // a partially written struct literal; the resulting
-                // typed tree may be structurally ill-formed for
-                // codegen, but tolerant elaborates aren't fed to it.
-                let mut typed_fields = if strict {
+                // field it names, reporting a repeat, an omission and
+                // an unknown name. The answer is the list in
+                // declaration order, which step 5 takes; this call
+                // takes only the errors, so that a field list the
+                // struct cannot accept is reported before any field
+                // expression is elaborated. Tolerant mode skips the
+                // check so the user can keep typing inside a partially
+                // written struct literal.
+                if strict {
                     let ti = tycon_info
                         .as_ref()
                         .expect("strict mode resolves the head to a struct or reports an error");
-                    make_struct_fields_in_declaration_order(ti, tc, fields, &ei.source)?
-                } else {
-                    fields.clone()
-                };
+                    make_struct_fields_in_declaration_order(ti, tc, fields, &ei.source)?;
+                }
 
                 // 3. Compute the `name -> expected field type` map
                 // (after unifying the outer expected type with the
@@ -1493,7 +1506,12 @@ impl TypeCheckContext {
                 let known_field_tys =
                     self.compute_make_struct_field_tys(tc, tycon_info.as_ref(), &ty, &ei.source)?;
 
-                // 4. Type each field expression.
+                // 4. Type each field expression, in the order the
+                // literal writes them — see this function's own comment
+                // for why the order is the source's. The expected type
+                // comes from the field's name, so this walk needs no
+                // help from the declaration's order.
+                let mut typed_fields = fields.clone();
                 for (name, _, field_expr) in typed_fields.iter_mut() {
                     let field_ty = match known_field_tys.get(name) {
                         Some(field_ty) => field_ty.clone(),
@@ -1512,6 +1530,22 @@ impl TypeCheckContext {
                         }
                     };
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
+                }
+
+                // 5. Strict-only: put the typed fields in declaration
+                // order, which is the order code generation reads the
+                // values in. This is the walk step 2 ran, on the same
+                // names, so it answers the same way; running it again
+                // here is what lets step 4 walk the source's order.
+                // Tolerant mode keeps the list as written — the
+                // resulting typed tree may be structurally ill-formed
+                // for codegen, but tolerant elaborates aren't fed to it.
+                if strict {
+                    let ti = tycon_info
+                        .as_ref()
+                        .expect("strict mode resolves the head to a struct or reports an error");
+                    typed_fields =
+                        make_struct_fields_in_declaration_order(ti, tc, &typed_fields, &ei.source)?;
                 }
 
                 Ok(ei.set_make_struct_fields(typed_fields))

@@ -48,14 +48,8 @@ mod tests;
 mod tool;
 mod type_size;
 
-use crate::error::Errors;
-use crate::misc::{disable_colored_no_tty, spawn_compiler_thread};
-use clap::ArgAction;
-use clap::ArgMatches;
-use clap::PossibleValue;
-use clap::{value_parser, App, AppSettings, Arg};
-use commands::lsp::server::launch_language_server;
-use commands::{check, clean, deps, docs, run};
+use clap::{value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue};
+use commands::{check, clean, deps, docs, lsp::server::launch_language_server, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
     OutputFileType, Sanitizer, SubCommand,
@@ -66,16 +60,17 @@ use constants::{
     PROJECT_FILE_PATH,
 };
 use edit::edit_explict_import;
-use error::panic_if_err;
+use error::{panic_if_err, Errors};
 use git_version::git_version;
-use metafiles::config_file::ConfigFile;
-use metafiles::project_file::ProjectFile;
+use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
 use mimalloc::MiMalloc;
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
-use std::process;
-use std::vec::Vec;
+use misc::{disable_colored_no_tty, spawn_compiler_thread};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process,
+    vec::Vec,
+};
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
 /// through the Fix runtime instead.
@@ -213,7 +208,9 @@ fn run_cli() {
         .takes_value(true)
         .possible_value(PossibleValue::new("exe").help("Builds an executable file."))
         .possible_value(PossibleValue::new("dylib").help("Builds a dynamic library."))
-        .default_value("exe");
+        // The option carries no default value, so that an invocation that gives it explicitly is
+        // told apart from one that leaves the kind to the project file.
+        .help("The kind of file the build produces. An executable file, unless this option or the project file asks for a dynamic library.");
     let verbose = Arg::new("verbose")
         .long("verbose")
         .short('v')
@@ -670,9 +667,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
 
-        // Set `output_file_type`. The `--output-type` argument exists only on
-        // the `build` subcommand; `run` and `test` always build an executable.
-        if matches!(config.subcommand, SubCommand::Build) {
+        // Set `output_file_type`. The `--output-type` argument is declared on the subcommand that
+        // produces the output file alone, and reading an argument a subcommand does not declare
+        // panics in a debug build, so the guard also keeps the read where the argument is.
+        if config.subcommand.produces_output_file() {
             if let Some(output_file_type) = read_output_file_type_option(args)? {
                 config.output_file_type = output_file_type;
             }

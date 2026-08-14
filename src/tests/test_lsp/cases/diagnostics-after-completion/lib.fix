@@ -1,0 +1,13 @@
+module Lib;
+
+trait a : MyShow {
+    show : a -> String;
+}
+
+type LibType = unbox struct { x : I64 };
+
+// The body has the type `I64` where the declaration promises `String`, so the
+// project has one error, and it is in this file.
+impl LibType : MyShow {
+    show = |v| v.@x;
+}
