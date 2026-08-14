@@ -1793,18 +1793,6 @@ choose_iter = |flag| (
 
 In such cases, you need to use `DynIterator` (dynamic iterators) for dynamic dispatch.
 
-The concrete type an opaque type resolves to is a type of its own, so a definition cannot give its opaque return type back as its result.
-
-```
-// This causes a compile error
-f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
-f = |n| f(n + 1);                        // the result is `?it` itself
-```
-
-The same holds along a chain of definitions: where `f` returns what `g` returns and `g` returns what `f` returns, neither opaque type has a concrete type, and the error names both.
-
-An implementation of a trait member may return what another implementation of that member returns, so `impl Wrap : ToIter` may return what `impl Array a : ToIter` returns. Where the two are one implementation — `impl [a : ToIter] Wrap a : ToIter` returning what the member returns for `a` — the concrete type is that opaque type again, and it is reported.
-
 ## Monads
 
 ### What is monad?
