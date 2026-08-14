@@ -185,24 +185,9 @@ impl PatternNode {
                         );
                         continue;
                     };
-                    let unify_res = UnifOrOtherErr::extract_others(
-                        typechecker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
-                    )?;
-                    if unify_res.is_err() && !typechecker.error_tolerant {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
-                                pat.pattern.to_string(),
-                                field_name,
-                                tc.to_string(),
-                            ),
-                            &[&pat.info.source],
-                        ));
-                    }
-                    // In error_tolerant mode the unify mismatch is
-                    // swallowed; the sub-pattern keeps its inferred
-                    // type so the body that references its bindings
-                    // can still be elaborated.
+                    pat.unify_with_expected_type(typechecker, field_ty, || {
+                        format!("field `{}` of struct `{}`", field_name, tc.to_string())
+                    })?;
                 }
                 Ok((
                     self.set_type(ty).set_struct_field_to_pat(field_to_pat),
@@ -242,30 +227,48 @@ impl PatternNode {
 
                 // Unify the type of the subpattern with the type of the variant.
                 if let Some((tc, variant_ty)) = union_tc_and_variant_ty {
-                    let unify_res = UnifOrOtherErr::extract_others(
-                        typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
-                    )?;
-                    if unify_res.is_err() && !typechecker.error_tolerant {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
-                                subpat.pattern.to_string(),
-                                variant_name.to_string(),
-                                tc.to_string(),
-                            ),
-                            &[&subpat.info.source],
-                        ));
-                    }
-                    // In error_tolerant mode the unify mismatch is
-                    // swallowed; the sub-pattern keeps its inferred type
-                    // so the body that references its bindings can still
-                    // be elaborated.
+                    subpat.unify_with_expected_type(typechecker, &variant_ty, || {
+                        format!(
+                            "variant `{}` of union `{}`",
+                            variant_name.to_string(),
+                            tc.to_string()
+                        )
+                    })?;
                 }
 
                 // Return the typed pattern.
                 Ok((self.set_type(ty).set_union_pat(subpat), var_ty))
             }
         }
+    }
+
+    /// Unify the type inferred for this sub-pattern with `expected_ty`, the type of the value it is
+    /// matched against.
+    ///
+    /// On a mismatch, strict mode reports the sub-pattern as inappropriate for the place it sits in,
+    /// which `position` names as ``field `x` of struct `S` `` or ``variant `v` of union `U` ``. In
+    /// `error_tolerant` mode the mismatch is swallowed and the sub-pattern keeps its inferred type,
+    /// so the body that references its bindings can still be elaborated.
+    fn unify_with_expected_type(
+        &self,
+        typechecker: &mut TypeCheckContext,
+        expected_ty: &Arc<TypeNode>,
+        position: impl FnOnce() -> String,
+    ) -> Result<(), Errors> {
+        let unify_res = UnifOrOtherErr::extract_others(
+            typechecker.unify(self.info.type_.as_ref().unwrap(), expected_ty),
+        )?;
+        if unify_res.is_err() && !typechecker.error_tolerant {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Inappropriate pattern `{}` for a value of {}.",
+                    self.pattern.to_string(),
+                    position()
+                ),
+                &[&self.info.source],
+            ));
+        }
+        Ok(())
     }
 
     // For every `Pattern::Var` in this pattern tree, return its name and
