@@ -256,7 +256,7 @@ impl Program {
         // implementation, and which of them applies is decided by the lhs, so a chain that leaves
         // one implementation for another is a chain between two nodes of one TyCon name.
         let mut tycon_names: Vec<&FullName> = self.opaque_types.keys().collect();
-        tycon_names.sort_by_key(|tycon_name| tycon_name.to_string());
+        tycon_names.sort();
         let mut resolutions: Vec<&OpaqueTyConResolution> = vec![];
         let mut nodes_of_tycon: Map<&FullName, Vec<usize>> = Map::default();
         for tycon_name in tycon_names {
@@ -341,8 +341,9 @@ fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, members: &[usize]) 
 // An opaque TyCon as it appears in a type, applied to the arguments its resolutions take.
 struct OpaqueApplication {
     tycon_name: FullName,
-    // The TyCon applied to those arguments, and `None` where fewer of them are applied, which
-    // leaves every resolution of the TyCon as one that could resolve it.
+    // The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
+    // `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
+    // could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
     applied: Option<Arc<TypeNode>>,
 }
 
