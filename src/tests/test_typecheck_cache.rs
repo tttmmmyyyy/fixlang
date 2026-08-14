@@ -98,20 +98,31 @@ main : IO ();
 main = println((old_val + new_val).to_string);
 "#;
 
-    /// Builds `main.fix` in `dir` and returns what the compiler wrote to stderr.
-    fn build(dir: &Path) -> String {
+    /// Builds `main.fix` in `dir` and returns whether the build succeeded together with what the
+    /// compiler wrote to stderr.
+    fn run_build(dir: &Path) -> (bool, String) {
         let out = fix_command()
             .args(["build", "--file", "main.fix", "-o", "out"])
             .current_dir(dir)
             .output()
             .expect("failed to run fix build");
-        assert!(
+        (
             out.status.success(),
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )
+    }
+
+    /// Builds `main.fix` in `dir`, requiring the build to succeed, and returns what the compiler
+    /// wrote to stderr.
+    fn build(dir: &Path) -> String {
+        let (succeeded, stderr) = run_build(dir);
+        assert!(
+            succeeded,
             "fix build failed in {}:\n{}",
             dir.display(),
-            String::from_utf8_lossy(&out.stderr)
+            stderr
         );
-        String::from_utf8_lossy(&out.stderr).to_string()
+        stderr
     }
 
     /// One trait method implemented for two types, by a member whose declared type fixes the
@@ -147,26 +158,14 @@ main = (
         let dir = temp.path();
         fs::write(dir.join("main.fix"), A_BROKEN_IMPLEMENTATION).expect("Failed to write main.fix");
 
-        let build_and_report = || {
-            let out = fix_command()
-                .args(["build", "--file", "main.fix", "-o", "out"])
-                .current_dir(dir)
-                .output()
-                .expect("failed to run fix build");
-            (
-                out.status.success(),
-                String::from_utf8_lossy(&out.stderr).to_string(),
-            )
-        };
-
-        let (cold_succeeded, cold) = build_and_report();
+        let (cold_succeeded, cold) = run_build(dir);
         assert!(
             !cold_succeeded && cold.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the first build must reject the implementation whose body is not an iterator.\nstderr: {}",
             cold
         );
 
-        let (warm_succeeded, warm) = build_and_report();
+        let (warm_succeeded, warm) = run_build(dir);
         assert!(
             !warm_succeeded && warm.contains("`Std::I64 : Std::Iterator` cannot be deduced"),
             "the second build read the cache and accepted the program the first build rejected.\nstderr: {}",
