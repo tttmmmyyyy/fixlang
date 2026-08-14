@@ -1,10 +1,9 @@
 //! Code generation from the RC IR to LLVM.
 //!
-//! The LLVM back end consumes the RC IR (with its explicit `Retain`/`Release` nodes). Reference
-//! counting is driven entirely by the RC nodes: variable reads are plain and the read-getters do not
-//! release their container — the explicit `Release` nodes dispose it. Non-reference-counting work
-//! (closure layout, FFI, struct/array construction, the inline-LLVM builtins) reuses the existing
-//! `Generator` helpers unchanged.
+//! Every retain and release the generated code performs comes from a `Retain` or `Release` node of
+//! the RC IR: a variable read yields the value alone, and a read-getter leaves its container to the
+//! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
+//! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
@@ -595,7 +594,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
-        let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+        let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -606,7 +605,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
             let flag = self
                 .builder()
-                .build_load(flag_ty, init_flag, "load_init_flag")
+                .build_load(flag_ty, init_flag_ptr, "load_init_flag")
                 .unwrap()
                 .into_int_value();
             let is_zero = self
@@ -634,7 +633,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
-                    init_flag.into(),
+                    init_flag_ptr.into(),
                     init_fn.as_global_value().as_pointer_value().into(),
                 ],
             );
@@ -659,7 +658,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         if !self.config.threaded {
             self.builder()
-                .build_store(init_flag, self.context.i8_type().const_int(1, false))
+                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
                 .unwrap();
             self.builder().build_unconditional_branch(end_bb).unwrap();
         } else {

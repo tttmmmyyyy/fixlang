@@ -74,6 +74,8 @@ pub const ARRAY_CHECK_SIZE: &str = "_check_size";
 pub const ARRAY_UNSAFE_EMPTY_NAME: &str = "_unsafe_empty_capacity_unchecked";
 
 // Structure methods.
+/// The head of the name of a struct field's getter, which reads the field out of a value: the
+/// getter of the field `x` is named `@x`, in the namespace of the struct the field belongs to.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";

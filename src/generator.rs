@@ -2482,22 +2482,22 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let func = self.module.add_function(
+        let acc_fn = self.module.add_function(
             &acc_fn_name,
             acc_fn_ty,
             Some(self.config.external_if_separated()),
         );
-        self.add_global_object(name.clone(), func, ty);
-        Some(func)
+        self.add_global_object(name.clone(), acc_fn, ty);
+        Some(acc_fn)
     }
 
-    // Give `func`, whose body is about to be emitted, its debug-info subprogram and open that
-    // subprogram as the debug scope the body is generated under. The returned guard closes the scope
-    // when it is dropped; it is `None` when the build carries no debug info.
-    //
-    // Attaching the subprogram here, where the body is created, is what keeps it off a function that
-    // has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a module
-    // declares every global it refers to but defines only its own.
+    /// Give `func`, whose body is about to be emitted, its debug-info subprogram and open that
+    /// subprogram as the debug scope the body is generated under. The returned guard closes the
+    /// scope when it is dropped; it is `None` when the build carries no debug info.
+    ///
+    /// Attaching the subprogram here, where the body is created, is what keeps it off a function
+    /// that has none: LLVM's verifier rejects a `!dbg` attachment on a bodyless declaration, and a
+    /// module declares every global it refers to but defines only its own.
     pub fn push_debug_subprogram(
         &mut self,
         func: FunctionValue<'c>,
@@ -2699,11 +2699,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // A debug-info subprogram belongs to a function this module defines. LLVM's verifier rejects one
-    // attached to a function this module only declares, reporting every offending function at once
-    // and naming no cause; this says which function took a subprogram it should not have, at the
-    // point the attachment is still attributable to the code that made it. See
-    // `push_debug_subprogram`, which is where a subprogram is attached.
+    /// A debug-info subprogram belongs to a function this module defines. LLVM's verifier rejects
+    /// one attached to a function this module only declares, reporting every offending function at
+    /// once and naming no cause; this says which function took a subprogram it should not have, at
+    /// the point the attachment is still attributable to the code that made it. See
+    /// `push_debug_subprogram`, which is where a subprogram is attached.
     fn assert_no_subprogram_on_declaration(&self) {
         for func in self.module.get_functions() {
             if func.count_basic_blocks() == 0 && func.get_subprogram().is_some() {
@@ -2744,8 +2744,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // The debug info record of the file `src` lives in. A source that is unknown is recorded as the
-    // file `<unknown source>`, so every debug entity has a file to point at.
+    /// The debug info record of the file `src` lives in. A source that is unknown is recorded as
+    /// the file `<unknown source>`, so every debug entity has a file to point at.
     pub fn create_di_file(&self, src: Option<SourceFile>) -> DIFile<'c> {
         if let Some(src) = src {
             self.get_di_builder()
@@ -2903,8 +2903,8 @@ pub(crate) fn enum_attribute_kind_id(name: &str) -> u32 {
     kind_id
 }
 
-// Whether `v` is the constant integer 1. Used where a retain-by-`amount` reproduces the ordinary
-// single retain when the amount is exactly 1, so that path stays byte-identical.
+/// Whether `v` is the integer constant 1. An integer the program computes at run time answers
+/// `false`, whatever it turns out to hold.
 pub(crate) fn is_const_one(v: IntValue) -> bool {
     v.get_zero_extended_constant() == Some(1)
 }
@@ -2936,9 +2936,9 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     )
 }
 
-// The name of the LLVM function through which the global `name`, of a type other than funptr, is
-// obtained. It is the name every module — the one defining the global and the ones calling into it —
-// declares and looks the accessor up under.
+/// The name of the LLVM function through which the global `name`, of a type other than funptr, is
+/// obtained. It is the name every module — the one defining the global and the ones calling into
+/// it — declares and looks the accessor up under.
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }
