@@ -12,9 +12,9 @@ use crate::ast::{
     traits::{TraitId, TraitImpl},
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
-        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun, type_tyapp,
-        type_tycon, type_tyvar, type_tyvar_star, Kind, Scheme, TyCon, TyConInfo, TyConVariant,
-        TypeNode,
+        apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun,
+        type_tyapp, type_tycon, type_tyvar, type_tyvar_star, Kind, Scheme, TyCon, TyConInfo,
+        TyConVariant, TypeNode,
     },
 };
 use crate::constants::{
@@ -607,11 +607,7 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 
 // Get tuple type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    let mut ty = type_tycon(&tycon(make_tuple_name_abs(tys.len() as u32)));
-    for field_ty in tys {
-        ty = type_tyapp(ty, field_ty);
-    }
-    ty
+    apply_type_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)
 }
 
 // Make tuple name
