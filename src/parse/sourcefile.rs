@@ -202,26 +202,28 @@ impl Span {
     //
     // Returns character indices (not byte indices) starting from 1.
     pub fn start_line_col(&self) -> (usize, usize) {
-        let source_string = self.input.string();
-        if let Err(_e) = source_string {
-            return (0, 0);
-        }
-        let source_string = source_string.ok().unwrap();
-        let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
-        span.start_pos().line_col()
+        self.line_col(|span| span.start_pos().line_col())
     }
 
     // Get line and column number of end.
     //
     // Returns character indices (not byte indices) starting from 1.
     pub fn end_line_col(&self) -> (usize, usize) {
+        self.line_col(|span| span.end_pos().line_col())
+    }
+
+    // The line and column number `of_position` reads off this span, taken over the content of the
+    // file the span points into.
+    //
+    // Returns `(0, 0)` when that file cannot be read.
+    fn line_col(&self, of_position: impl FnOnce(&pest::Span) -> (usize, usize)) -> (usize, usize) {
         let source_string = self.input.string();
         if let Err(_e) = source_string {
             return (0, 0);
         }
         let source_string = source_string.ok().unwrap();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
-        span.end_pos().line_col()
+        of_position(&span)
     }
 
     // Show source codes around this span. The `underline_color` controls

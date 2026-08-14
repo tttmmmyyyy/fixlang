@@ -877,6 +877,10 @@ impl Configuration {
     /// The fields are listed by hand, so every field of `Configuration` that changes the generated
     /// code has to be hashed here: one left out makes a build reuse the object files of a build that
     /// generated different code.
+    ///
+    /// `test_object_generation_hash_separates_code_generation_settings` gives each setting read here
+    /// a value of its own and checks that the hash follows, so its list must stay in sync with this
+    /// one.
     pub fn object_generation_hash(&self) -> String {
         let mut hash_source = String::new();
         hash_source.push_str(&self.fix_opt_level.to_string());
@@ -1292,7 +1296,8 @@ mod tests {
     /// Two builds reuse each other's object files exactly when they agree on this hash, so each
     /// setting that reaches code generation gives the hash a value of its own.
     ///
-    /// Each setting is written to its field, so that the list names what the hash reads.
+    /// Each setting is written to its field, so that the list names what the hash reads, and the
+    /// list must stay in sync with `object_generation_hash`.
     #[test]
     fn test_object_generation_hash_separates_code_generation_settings() {
         let baseline = hash_after(|_| {});

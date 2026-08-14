@@ -395,6 +395,15 @@ mod debug_info_tests {
                 Debugger::Lldb => "stop reason = breakpoint",
             }
         }
+
+        // How the debugger writes the string `text` that `x/s` reads out of memory: gdb surrounds it
+        // with quotes, lldb prints the bytes alone.
+        fn printed_string(self, text: &str) -> String {
+            match self {
+                Debugger::Gdb => format!("\"{}\"", text),
+                Debugger::Lldb => text.to_string(),
+            }
+        }
     }
 
     // Build the Fix source file `sample` with debug information into a fresh temp directory and
@@ -407,6 +416,11 @@ mod debug_info_tests {
             "output binary `prog` was not produced by `fix build -g`"
         );
         temp
+    }
+
+    // The debugger commands `drive` takes, as one owned string per command.
+    fn to_commands(commands: &[&str]) -> Vec<String> {
+        commands.iter().map(|c| c.to_string()).collect()
     }
 
     // Drive `debugger` over `./prog` in `dir`, issuing the given native `commands` in order, and
@@ -450,6 +464,31 @@ mod debug_info_tests {
         );
     }
 
+    // Assert that `out` shows `debugger` stopped at the breakpoint set on `main.fix:<line>`.
+    fn assert_stopped_at_line(out: &str, debugger: Debugger, line: u32) {
+        assert!(
+            out.contains(debugger.stopped_marker())
+                && out.contains(&format!("main.fix:{}", line)),
+            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
+            line,
+            out
+        );
+    }
+
+    // Run `scenario` under `debugger`, or report that the test named `test_name` is skipped where
+    // that debugger is absent.
+    fn run_under_debugger(debugger: Debugger, test_name: &str, scenario: fn(Debugger)) {
+        if !debugger.is_available() {
+            eprintln!(
+                "skipping {}: {} is not available",
+                test_name,
+                debugger.program()
+            );
+            return;
+        }
+        scenario(debugger);
+    }
+
     // The `main.fix` of the sample program `cases/<case>/`.
     fn case_main_fix(case: &str) -> PathBuf {
         let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -468,31 +507,26 @@ mod debug_info_tests {
     fn baseline_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_baseline"));
         let commands = match debugger {
-            Debugger::Gdb => vec![
-                format!("break main.fix:{}", LINE_COMPUTE_BODY),
-                "run".to_string(),
-                "backtrace".to_string(),
-                "continue".to_string(),
-            ],
-            Debugger::Lldb => vec![
+            Debugger::Gdb => to_commands(&[
+                format!("break main.fix:{}", LINE_COMPUTE_BODY).as_str(),
+                "run",
+                "backtrace",
+                "continue",
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!(
                     "breakpoint set --file main.fix --line {}",
                     LINE_COMPUTE_BODY
-                ),
-                "run".to_string(),
-                "thread backtrace".to_string(),
-                "continue".to_string(),
-            ],
+                )
+                .as_str(),
+                "run",
+                "thread backtrace",
+                "continue",
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        assert!(
-            out.contains(debugger.stopped_marker())
-                && out.contains(&format!("main.fix:{}", LINE_COMPUTE_BODY)),
-            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
-            LINE_COMPUTE_BODY,
-            out
-        );
+        assert_stopped_at_line(&out, debugger, LINE_COMPUTE_BODY);
         for line in [LINE_WRAP_DEF, LINE_MAIN_CALL] {
             assert!(
                 out.contains(&format!("main.fix:{}", line)),
@@ -506,22 +540,22 @@ mod debug_info_tests {
     // A source breakpoint resolves and the backtrace carries per-frame line info, as gdb reads them.
     #[test]
     fn test_debug_info_baseline_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_baseline_gdb: gdb is not available");
-            return;
-        }
-        baseline_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_baseline_gdb",
+            baseline_impl,
+        );
     }
 
     // A source breakpoint resolves and the backtrace carries per-frame line info, as lldb reads
     // them. lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_baseline_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_baseline_lldb: lldb is not available");
-            return;
-        }
-        baseline_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_baseline_lldb",
+            baseline_impl,
+        );
     }
 
     // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
@@ -533,8 +567,8 @@ mod debug_info_tests {
     // (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
     fn variable_values_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_vars"));
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 format!("break main.fix:{}", LINE_VARS_BREAK).as_str(),
                 "run",
                 "print i",
@@ -549,11 +583,8 @@ mod debug_info_tests {
                 // C string from that offset.
                 "x/s (char*)s._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!("breakpoint set --file main.fix --line {}", LINE_VARS_BREAK).as_str(),
                 "run",
                 "frame variable i",
@@ -563,19 +594,11 @@ mod debug_info_tests {
                 "frame variable s",
                 "x/s (char *)s._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        // gdb prints the string read by `x/s` quoted; lldb's format differs, so match the bytes
-        // without the surrounding quotes.
-        let hello = match debugger {
-            Debugger::Gdb => "\"hello\"",
-            Debugger::Lldb => "hello",
-        };
+        let hello = debugger.printed_string("hello");
         for (needle, what) in [
             ("= 42", "I64 value"),
             ("= true", "Bool `true`"),
@@ -583,7 +606,7 @@ mod debug_info_tests {
             ("Std::Array Std::I64", "Array type"),
             ("<array size> = 3", "Array size"),
             ("Std::String", "String type"),
-            (hello, "String contents (raw bytes)"),
+            (hello.as_str(), "String contents (raw bytes)"),
         ] {
             assert_contains(&out, needle, what);
         }
@@ -591,20 +614,20 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_variable_values_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_variable_values_gdb: gdb is not available");
-            return;
-        }
-        variable_values_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_variable_values_gdb",
+            variable_values_impl,
+        );
     }
 
     #[test]
     fn test_debug_info_variable_values_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_variable_values_lldb: lldb is not available");
-            return;
-        }
-        variable_values_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_variable_values_lldb",
+            variable_values_impl,
+        );
     }
 
     // Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
@@ -616,8 +639,8 @@ mod debug_info_tests {
     // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
     fn destructure_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_destructure"));
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 format!("break main.fix:{}", LINE_DESTRUCTURE_BREAK).as_str(),
                 "run",
                 "print a",
@@ -627,11 +650,8 @@ mod debug_info_tests {
                 "whatis str",
                 "x/s (char*)str._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!(
                     "breakpoint set --file main.fix --line {}",
                     LINE_DESTRUCTURE_BREAK
@@ -644,24 +664,21 @@ mod debug_info_tests {
                 "frame variable str",
                 "x/s (char *)str._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        let hello = match debugger {
-            Debugger::Gdb => "\"hello\"",
-            Debugger::Lldb => "hello",
-        };
+        let hello = debugger.printed_string("hello");
         for (needle, what) in [
             ("= 7", "destructured I64 field `a`"),
             ("= 5", "destructured I64 field `n`"),
             ("Std::Array Std::I64", "destructured Array field `arr` type"),
             ("<array size> = 3", "destructured Array field `arr` size"),
             ("Std::String", "destructured String field `str` type"),
-            (hello, "destructured String field `str` contents"),
+            (
+                hello.as_str(),
+                "destructured String field `str` contents",
+            ),
         ] {
             assert_contains(&out, needle, what);
         }
@@ -669,20 +686,20 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_destructure_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_destructure_gdb: gdb is not available");
-            return;
-        }
-        destructure_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_destructure_gdb",
+            destructure_impl,
+        );
     }
 
     #[test]
     fn test_debug_info_destructure_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_destructure_lldb: lldb is not available");
-            return;
-        }
-        destructure_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_destructure_lldb",
+            destructure_impl,
+        );
     }
 
     // Line number in cases/debug_array/main.fix. If that file changes, update this.
@@ -698,8 +715,8 @@ mod debug_info_tests {
         // releases locals at their last use), then print them. An `Array` value prints its size
         // directly, but its elements live in the `#ArrayStorage` behind `_storage`, so the size and
         // the elements come from two separate prints.
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 "set print elements unlimited",
                 format!("break main.fix:{}", LINE_ARRAY_BREAK).as_str(),
                 "run",
@@ -709,11 +726,8 @@ mod debug_info_tests {
                 "print *arr150._storage",
                 "print *msg._data._storage",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 "settings set target.max-children-count 10000",
                 format!("breakpoint set --file main.fix --line {}", LINE_ARRAY_BREAK).as_str(),
                 "run",
@@ -723,21 +737,11 @@ mod debug_info_tests {
                 "print *arr150._storage",
                 "print *msg._data._storage",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        // Execution stopped at the breakpoint.
-        assert!(
-            out.contains(debugger.stopped_marker())
-                && out.contains(&format!("main.fix:{}", LINE_ARRAY_BREAK)),
-            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
-            LINE_ARRAY_BREAK,
-            out
-        );
+        assert_stopped_at_line(&out, debugger, LINE_ARRAY_BREAK);
         // A 3-element array prints its size and its valid elements first, and a 150-element array
         // its size and the first 100 elements (the 100th displayed value is 1000). Elements past
         // the valid ones are unspecified memory, so only the prefix is asserted. gdb renders the
@@ -787,19 +791,19 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_array_elements_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_array_elements_gdb: gdb is not available");
-            return;
-        }
-        array_elements_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_array_elements_gdb",
+            array_elements_impl,
+        );
     }
 
     #[test]
     fn test_debug_info_array_elements_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_array_elements_lldb: lldb is not available");
-            return;
-        }
-        array_elements_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_array_elements_lldb",
+            array_elements_impl,
+        );
     }
 }
