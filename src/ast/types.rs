@@ -263,12 +263,7 @@ impl TyCon {
             new_tyvars.push(type_from_tyvar(tv));
         }
 
-        // Make type.
-        let mut ty = type_tycon(&Arc::new(self.clone()));
-        for tv in new_tyvars {
-            ty = type_tyapp(ty, tv);
-        }
-        ty
+        apply_type_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
     // Whether this is the unit type `()`, i.e. the tuple of no element.
@@ -2022,6 +2017,18 @@ pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
 
 pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
+}
+
+/// The TyCon applied to the given type arguments, in order.
+///
+/// # Examples
+/// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
+pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
+    let mut applied = type_tycon(tycon);
+    for arg in args {
+        applied = type_tyapp(applied, arg.clone());
+    }
+    applied
 }
 
 /// What a type node carries beside the type itself.

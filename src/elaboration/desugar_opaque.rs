@@ -54,9 +54,9 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{GlobalValue, Program, SymbolExpr, TypedExpr};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
-    collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_from_tyvar, type_fun,
-    type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant,
-    TyVar, Type, TypeNode,
+    apply_type_args, collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon,
+    type_from_tyvar, type_fun, type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon,
+    TyConInfo, TyConVariant, TyVar, Type, TypeNode,
 };
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -428,15 +428,6 @@ fn collect_opaque_applications_inner(
 /// resolutions, which all apply it to the same number of arguments.
 fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
     resolutions[0].lhs.collect_type_arguments().len()
-}
-
-/// The TyCon applied to the given type arguments, in order.
-fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
-    let mut applied = type_tycon(tycon);
-    for arg in args {
-        applied = type_tyapp(applied, arg.clone());
-    }
-    applied
 }
 
 /// Collect OpaqueInfo for each opaque type variable in the scheme.
