@@ -310,10 +310,11 @@ impl SubCommand {
     }
 }
 
-// Configuration for diagnostics subcommand.
+/// What the `diagnostics` subcommand reports on, and how far the compiler goes to report it.
 #[derive(Clone, Default)]
 pub struct DiagnosticsConfig {
-    // Target source files.
+    /// The source files the diagnostics are asked about. A diagnostic anchored in another file is
+    /// left out of the report.
     pub files: Vec<PathBuf>,
     /// In-memory overrides for source-file contents used during the LSP
     /// completion flow: when `parse_file_path` is invoked for a path
@@ -339,18 +340,20 @@ pub struct DiagnosticsConfig {
     pub error_tolerant: bool,
 }
 
-// Configuration for docs subcommand.
+/// What the `docs` subcommand documents, and where it writes the documentation.
 #[derive(Clone, Default)]
 pub struct DocsConfig {
-    // Modules to be documented.
+    /// The modules to document, by name.
     pub modules: Vec<String>,
-    // Include compiler-defined methods in the documentation.
+    /// Whether the documentation also covers the methods the compiler defines, such as a struct's
+    /// field accessors.
     pub include_compiler_defined_methods: bool,
-    // Include private items in the documentation.
+    /// Whether the documentation also covers the private items, those whose names begin with `_`.
     pub include_private: bool,
-    // Output directory.
+    /// The directory the documentation is written into, as one `<module>.md` file per module.
     pub out_dir: PathBuf,
-    // Dependency mode (Build or Test).
+    /// Which section of the project file the settings for assembling the documented program are
+    /// taken from.
     pub mode: BuildConfigType,
 }
 
@@ -362,7 +365,8 @@ pub struct DocsConfig {
 /// which decides when a cached object file may be reused.
 #[derive(Clone)]
 pub struct Configuration {
-    // Source files.
+    /// Every source file the program is compiled from, the root project's own files and those of
+    /// its dependencies alike.
     pub source_files: Vec<PathBuf>,
     /// The subset of `source_files` that is user-authored: the root
     /// project's own files, files passed via `--file`, and files pushed
@@ -374,17 +378,20 @@ pub struct Configuration {
     /// Maintain this in lockstep with `source_files` via
     /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
-    // Object files to be linked.
+    /// Object files given to the build, linked into the program beside the ones compiled from the
+    /// sources.
     pub object_files: Vec<PathBuf>,
-    // Fix's optimization level.
+    /// How hard the compiler works to make the program fast. An optimization asks for it through
+    /// the `enable_*` method that names the level it runs from, and `set_fix_opt_level` holds it
+    /// to the maximum the environment allows.
     fix_opt_level: FixOptimizationLevel,
-    // Linked libraries
+    /// The libraries the program is linked against, each with the way it is linked.
     pub linked_libraries: Vec<(String, LinkType)>,
-    // Library search paths.
+    /// The directories the linker searches for the linked libraries.
     pub library_search_paths: Vec<PathBuf>,
-    // Other linker flags
+    /// Flags passed to the linker as they are written, beside the ones the build itself forms.
     pub ld_flags: Vec<String>,
-    // Create debug info.
+    /// Whether the generated program carries debug information, which `-g` turns on.
     pub debug_info: bool,
     /// The directory the build runs in, read once when the configuration is created.
     ///
@@ -393,58 +400,68 @@ pub struct Configuration {
     /// so a debugger resolves them against it. That is its one reader, which is what lets
     /// `object_generation_hash` cover it for a build with debug information alone.
     pub compilation_directory: PathBuf,
-    // Whether to emit LLVM IR.
+    /// Whether the build also writes the LLVM IR of each module it generates.
     pub emit_llvm: bool,
-    // Output file name.
+    /// Where the build writes what it produces. `None` leaves the name to the build, which forms
+    /// it from the kind of file it produces.
     pub out_file_path: Option<PathBuf>,
-    // Output file type.
+    /// The kind of file the build produces, an executable or a dynamic library. It reaches the
+    /// generated code as well: a dynamic library is compiled with position-independent
+    /// relocations, and an executable is the kind that carries the entry point.
     pub output_file_type: OutputFileType,
-    // Use threads.
-    // To turn on this true and link pthread library, use `set_threaded` function.
+    /// Whether the program is built to run several threads, which makes its reference counting
+    /// safe to share between them at the cost of speed. Turn it on through `set_threaded`, which
+    /// also links the pthread library.
     pub threaded: bool,
-    // Macros defined in runtime.c.
+    /// The macros the runtime `runtime.c` is compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
-    // Show times for each build steps.
+    /// Whether the build reports how long each of its steps took.
     pub show_build_times: bool,
-    // Verbose mode.
+    /// Whether the build reports what it is doing as it goes.
     pub verbose: bool,
-    // Maximum size of compilation unit.
+    /// The most symbols separate compilation puts into one compilation unit. Lowering it compiles
+    /// more units in parallel and gives the linker more to do.
     pub max_cu_size: usize,
-    // The most scalars a value is split into and carried as separate LLVM values; a type holding
-    // more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
-    // under the same treatment.
+    /// The most scalars a value is split into and carried as separate LLVM values; a type holding
+    /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
+    /// under the same treatment.
     pub max_split_scalars: usize,
-    // Run program with valgrind. Effective only in `run` mode.
+    /// The valgrind tool the built program is run under in `run` mode.
     pub valgrind_tool: ValgrindTool,
     /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
     /// program that is built, so the project being built decides it, as it does the optimization
     /// level.
     pub sanitizer: Sanitizer,
-    // Sizes of C types.
+    /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
+    /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
-    // Regex patterns of disabled CPU features.
+    /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
+    /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
-    // Subcommand of the `fix` command.
+    /// The subcommand of the `fix` command this configuration was assembled for, which decides
+    /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
-    // Preliminary commands declared in fixproj.toml (root and dependencies).
+    /// The commands `fixproj.toml` asks to be run before the build, those of the root project and
+    /// of every dependency.
     pub preliminary_commands: Vec<PreliminaryCommand>,
-    // If true, bypass the trust-store approval prompt and treat all pending
-    // preliminary_commands as one-shot approvals. Set by `--allow-preliminary-commands`.
+    /// Whether every pending preliminary command is approved for this run alone, bypassing the
+    /// trust-store approval prompt. Set by `--allow-preliminary-commands`.
     pub allow_preliminary_commands: bool,
-    // Typecheck cache.
+    /// Where the type checker reads and writes the result of checking each symbol, so that a
+    /// symbol whose sources are unchanged is served rather than checked again.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
-    // Number of worker threads.
+    /// How many threads the compiler itself runs its work over.
     pub num_worker_thread: usize,
-    // The arguments which are passed to the program in `run` mode.
+    /// The arguments the built program is given in `run` mode.
     pub run_program_args: Vec<String>,
-    // LLVM passes to run in place of the ones the optimization level implies.
-    // Used only for compiler development.
+    /// LLVM passes to run in place of the ones the optimization level implies.
+    /// Used only for compiler development.
     pub llvm_passes_override: Option<Vec<String>>,
-    // Emit symbols at each step of optimization.
-    // Used only for compiler development.
+    /// Emit symbols at each step of optimization.
+    /// Used only for compiler development.
     pub emit_symbols: bool,
-    // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
-    // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
+    /// Dump the RC IR of the named module's symbols (`all` = every module) to a file under
+    /// `.fixlang/`. `None` dumps nothing. Used only for compiler development.
     pub emit_rc_ir: Option<String>,
     /// Run the compiler's own consistency checks — the RC IR validator and the assertions in the
     /// code generator — and turn an internal error into a panic.
@@ -684,6 +701,8 @@ impl Configuration {
         }
     }
 
+    /// Where the build writes what it produces: the path the settings name, or the default name of
+    /// the kind of file being produced.
     pub fn get_output_file_path(&self) -> PathBuf {
         match &self.out_file_path {
             None => PathBuf::from(self.output_file_type.default_file_name()),
@@ -691,7 +710,8 @@ impl Configuration {
         }
     }
 
-    // Set threaded = true, and add ptherad library to linked_libraries.
+    /// Builds the program to run several threads, and links the pthread library its runtime then
+    /// calls into.
     pub fn set_threaded(&mut self) {
         self.threaded = true;
         self.add_dynamic_library("pthread");
