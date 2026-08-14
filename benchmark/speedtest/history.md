@@ -14,6 +14,15 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 941fe0af8c4c72e86472b736724159352e2a954f
+
+Asking the back end to inline every global whose body is small enough to stand where it is called
+(#221), measured against `b90ec410`. `fannkuch` -40.1% and `fannkuch_scratch` -38.0%, where a
+`Std::loop` copy is called once per permutation and runs 124 instructions per call, so what the
+inline removes is the work around the call rather than the loop; `cp_lib_bipartite` -8.8%,
+`cp_lib_lsegtree` -8.7%, `cp_lib_scc` -2.4%, `cp_lib_unionfind` -0.7%, all in the library code
+these cases call. No case moved the other way.
+
 ## b90ec410b0466aa3463fdcbcebeeb1b76e863d56
 
 Unwrapping a newtype where a field type is read instead of specializing the declaration in advance

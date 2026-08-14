@@ -398,6 +398,7 @@ fn clone_func(
             body,
             source: func.source.clone(),
             borrowed_units: Set::default(),
+            inline_into_callers: func.inline_into_callers,
         },
         rename,
     )

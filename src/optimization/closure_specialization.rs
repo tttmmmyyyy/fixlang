@@ -710,6 +710,7 @@ fn realize_all(
                 generic_name: original.generic_name.clone(),
                 ty,
                 expr: Some(trav_res.expr),
+                inline_into_callers: false,
             },
         );
         global_names.insert(name);
@@ -1394,6 +1395,7 @@ impl ClosureSpecializationVisitor {
             generic_name: lambda_func_name.clone(),
             ty: func_ty.clone(),
             expr: Some(func),
+            inline_into_callers: false,
         });
         self.lifted
             .borrow_mut()

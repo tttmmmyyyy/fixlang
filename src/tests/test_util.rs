@@ -3,7 +3,7 @@ use crate::{
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     error::{panic_if_err, panic_with_msg, Errors},
-    misc::save_temporary_source,
+    misc::{save_temporary_source, Set},
     parse::parser::check_grammar_accepts,
 };
 use std::{
@@ -210,6 +210,95 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
         .map(|path| fs::read_to_string(path).expect("Failed to read an emitted LLVM IR file"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// The functions `ir` defines, each paired with whether it carries the function attribute
+/// `attribute`.
+///
+/// LLVM writes the attributes of a function as a reference to a group listed at the end of the
+/// module — `define ... @f(...) #2 {` against `attributes #2 = { alwaysinline }` — so each `define`
+/// line is read here against those listings. A module numbers its groups on its own, so `ir`
+/// holding several of them is read one module at a time.
+pub fn llvm_function_attribute_flags(ir: &str, attribute: &str) -> Vec<(String, bool)> {
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut module_starts: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.starts_with(LLVM_MODULE_HEADER))
+        .map(|(index, _)| index)
+        .collect();
+    if module_starts.first() != Some(&0) {
+        module_starts.insert(0, 0);
+    }
+    module_starts.push(lines.len());
+
+    let mut functions = vec![];
+    for module in module_starts.windows(2) {
+        functions.extend(module_function_attribute_flags(
+            &lines[module[0]..module[1]],
+            attribute,
+        ));
+    }
+    functions
+}
+
+/// The line LLVM writes at the head of a module, which is where one module's text ends and the
+/// next one's begins.
+const LLVM_MODULE_HEADER: &str = "; ModuleID =";
+
+/// The functions one module defines, each paired with whether it carries `attribute`.
+fn module_function_attribute_flags(lines: &[&str], attribute: &str) -> Vec<(String, bool)> {
+    // The groups holding `attribute`, by the number a `define` line names them with.
+    let mut groups: Set<&str> = Set::default();
+    for line in lines {
+        let Some(listing) = line.strip_prefix("attributes ") else {
+            continue;
+        };
+        let (group, attributes) = listing
+            .split_once('=')
+            .unwrap_or_else(|| panic!("this listing gives no attributes: {}", line));
+        let holds = attributes
+            .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+            .any(|word| word == attribute);
+        if holds {
+            groups.insert(group.trim());
+        }
+    }
+
+    let mut functions = vec![];
+    for line in lines {
+        if !line.starts_with("define ") {
+            continue;
+        }
+        // The groups a function carries stand between its parameter list and its body.
+        let (_, after_parameters) = line
+            .rsplit_once(')')
+            .unwrap_or_else(|| panic!("this definition closes no parameter list: {}", line));
+        let carries = after_parameters
+            .split_whitespace()
+            .any(|token| groups.contains(token));
+        functions.push((llvm_function_name(line).to_string(), carries));
+    }
+    functions
+}
+
+/// The name of the function a `define` line defines. LLVM writes a name in quotes wherever it holds
+/// anything outside a bare identifier, as every name the compiler mints for a Fix value does.
+fn llvm_function_name(define_line: &str) -> &str {
+    let (_, after_sigil) = define_line
+        .split_once('@')
+        .unwrap_or_else(|| panic!("this definition names no function: {}", define_line));
+    let (name_onwards, terminator) = match after_sigil.strip_prefix('"') {
+        Some(quoted) => (quoted, '"'),
+        None => (after_sigil, '('),
+    };
+    let (name, _) = name_onwards.split_once(terminator).unwrap_or_else(|| {
+        panic!(
+            "the name this definition gives is unterminated: {}",
+            define_line
+        )
+    });
+    name
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
