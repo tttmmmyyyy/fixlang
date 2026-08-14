@@ -1283,7 +1283,8 @@ int main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
+    use crate::misc::Map;
 
     /// The object generation hash of a build configuration to which `edit` has been applied.
     fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
