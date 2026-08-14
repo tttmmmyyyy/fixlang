@@ -826,16 +826,16 @@ mod tests {
     /// receiver further down the same body still earns its `Array I64`
     /// type, which puts `Std::Array::push_back` in Tier 0.
     ///
-    /// The project's `main.fix` puts the six shapes that reach this
+    /// The project's `main.fix` puts the seven shapes that reach this
     /// state in one body, each above the `match` that writes it.
     #[test]
     fn test_completion_dot_sort_past_unresolved_union_pattern() {
         let mut ctx = LspCompletionCtx::setup("completion-union-pattern-unresolved", &["main.fix"]);
 
         // The cursor sits just after the dot of `    let _ = arr.`,
-        // the 21st line of main.fix (line 20 counting from 0) and its
+        // the 23rd line of main.fix (line 22 counting from 0) and its
         // column 16.
-        let items = ctx.complete("main.fix", 20, 16);
+        let items = ctx.complete("main.fix", 22, 16);
 
         let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
             .expect("Std::Array::push_back should be a candidate");
@@ -844,6 +844,36 @@ mod tests {
             "Std::Array::push_back should land in Tier 0 for an Array I64 \
              receiver even though every `match` earlier in the same body \
              names a variant that cannot be resolved; got {:?}",
+            sort_push_back,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// The variable a union pattern binds is in scope in the arm's
+    /// body even when the variant name resolves to nothing: the
+    /// sub-pattern is typed all the same, so `arr : Array I64` keeps
+    /// both its name and its annotated type, and a dot completion on
+    /// it inside the arm's body puts `Std::Array::push_back` in
+    /// Tier 0.
+    #[test]
+    fn test_completion_dot_sort_on_binder_of_unresolved_union_pattern() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-union-pattern-unresolved-binder", &["main.fix"]);
+
+        // The cursor sits just after the dot of `            let _ = arr.`,
+        // the 8th line of main.fix (line 7 counting from 0) and its
+        // column 24.
+        let items = ctx.complete("main.fix", 7, 24);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with('0'),
+            "Std::Array::push_back should land in Tier 0 for the `arr` the \
+             union pattern binds, whose annotation types it `Array I64`, \
+             even though the pattern's variant name cannot be resolved; \
+             got {:?}",
             sort_push_back,
         );
 

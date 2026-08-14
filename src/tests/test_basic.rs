@@ -10076,6 +10076,29 @@ pub fn test_match_on_variant_for_nonunion() {
 }
 
 #[test]
+pub fn test_match_on_variant_for_value_of_unknown_type() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let unwrap = |o| match o {
+            some(v) => v,
+            none(_) => 0
+        };
+        assert_eq(|_|"", unwrap(Option::some(42)), 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "The type of the matched value must be known at this point.",
+    );
+}
+
+#[test]
 pub fn test_match_omit_parentheses() {
     let source = r##"
     module Main;
