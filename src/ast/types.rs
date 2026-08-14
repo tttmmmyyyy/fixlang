@@ -2783,11 +2783,11 @@ pub fn collect_free_vars(
 //   rhs = `ArrayIterator a`
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OpaqueTyConResolution {
-    // Opaque TyCon applied to type arguments.
-    // E.g., `?it a` for a simple value, `?it (Array a)` for a trait impl.
+    /// Opaque TyCon applied to type arguments.
+    /// E.g., `?it a` for a simple value, `?it (Array a)` for a trait impl.
     pub lhs: Arc<TypeNode>,
-    // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
-    // None until type-checking resolves it.
+    /// The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
+    /// None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
     /// The source of the definition whose type-checking fills in `rhs`: the declaration of a
     /// simple value, and the member's name in the implementation for a trait member.
