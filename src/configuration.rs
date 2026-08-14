@@ -48,8 +48,8 @@ const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", 
 
 /// Appends a hash of `text` to `hash_source`, a hash source that concatenates several values.
 ///
-/// The hash is as long whatever the text is, so the value cannot run into the one appended next and
-/// `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
+/// The hash has the same length whatever the text is, so the value cannot run into the one appended
+/// next and `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
 fn push_text_hash(hash_source: &mut String, text: &str) {
     hash_source.push_str(&format!("{:x}", md5::compute(text)));
 }

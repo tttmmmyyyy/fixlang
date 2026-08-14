@@ -46,7 +46,9 @@ mod debug_info_tests {
         );
     }
 
-    // Build the Fix source `file` as `build_in` does, with debug information.
+    // Build the Fix source `file`, named as the working directory `dir` reaches it, at optimization
+    // level `opt_level` with debug information, passing `extra_args` to `fix build` as well, and
+    // assert the build succeeds. The program is written to `output` in that directory.
     fn build_with_g_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
         let mut args = vec!["-g"];
         args.extend_from_slice(extra_args);
@@ -253,7 +255,7 @@ mod debug_info_tests {
         );
     }
 
-    // A program whose debug information the two tests below read.
+    // A minimal program, for a scenario whose subject is the debug information a build records.
     const HELLO_SOURCE: &str = r#"
         module Main;
 
