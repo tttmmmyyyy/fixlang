@@ -31,19 +31,24 @@ use crate::{
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
-use std::mem::{replace, swap};
+use serde_json::{json, Value};
+use std::mem;
 use std::sync::Arc;
 
+/// The names a value of type `T` can be written under: the local names bound around the expression
+/// being checked, and the global names of the whole program.
 #[derive(Clone)]
 pub struct Scope<T> {
-    // Map from variable name to its value stacks.
+    /// The values bound to each local name, innermost last, so that a binding made inside another
+    /// hides it until it is popped.
     local: Map<Name, Vec<T>>,
-    // List of pairs of global names and its values.
-    // Arc for sharing the list among multiple scopes.
+    /// Every global name with the value it stands for, shared by all the scopes cloned from this
+    /// one.
     global: Arc<Vec<(FullName, T)>>,
 }
 
 impl<T> Default for Scope<T> {
+    /// A scope in which no name is bound.
     fn default() -> Self {
         Self {
             local: Default::default(),
@@ -56,22 +61,23 @@ impl<T> Scope<T>
 where
     T: Clone,
 {
-    // Push a local value.
+    /// Binds `name` locally to `v`, hiding what `name` was bound to until the binding is popped.
     pub fn push(&mut self, name: &Name, v: T) {
         insert_to_map_vec(&mut self.local, name, v);
     }
 
-    // Pop a local value.
+    /// Removes the innermost local binding of `name`, uncovering the one it hid. Panics unless
+    /// `name` has been bound.
     pub fn pop(self: &mut Self, name: &Name) {
         self.local.get_mut(name).unwrap().pop();
     }
 
-    // Check if a local value exists.
+    /// Whether `name` is bound locally.
     pub fn has_value(&self, name: &Name) -> bool {
         self.local.contains_key(name) && !self.local[name].is_empty()
     }
 
-    // Get a local value.
+    /// The value `name` is bound to by its innermost local binding.
     pub fn get_local(&self, name: &Name) -> Option<T> {
         if self.local.contains_key(name) && !self.local[name].is_empty() {
             Some(self.local[name].last().unwrap().clone())
@@ -80,7 +86,7 @@ where
         }
     }
 
-    // Get a set of local names.
+    /// The names bound locally.
     #[allow(dead_code)]
     pub fn local_names(&self) -> Set<Name> {
         let mut res: Set<Name> = Default::default();
@@ -92,14 +98,23 @@ where
         res
     }
 
-    // Set global values.
+    /// Replaces the global names and their values, which every scope later cloned from this one
+    /// shares.
     pub fn set_globals(&mut self, globals: Vec<(FullName, T)>) {
         self.global = Arc::new(globals);
     }
 
-    // Get candidates list for overload resolution.
-    //
-    // If `name` is an absolute name, the returned (at most one) candidates will also be set as absolute names.
+    /// The values `name` can stand for, each with the namespace of the name it was found under, for
+    /// an overload resolution to choose between.
+    ///
+    /// A local `name` that is bound stands for its innermost binding alone. Otherwise every global
+    /// name that `name` is a suffix of and that the imports make accessible is a candidate; a name
+    /// written absolutely reaches the one global it spells out, and the namespace answered for it
+    /// is absolute as well.
+    ///
+    /// # Arguments
+    /// * `import_stmts` — the import statements in force where the name is written, which decide
+    ///   which global names are accessible from there.
     fn overloaded_candidates(
         &self,
         name: &FullName,
@@ -132,15 +147,18 @@ where
     }
 }
 
-// Type substitution. Name of type variable -> type.
-// Managed so that the value (a type) of this HashMap doesn't contain a type variable that appears in keys. i.e.,
-// when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
+/// What each of a set of type variables is replaced by.
+///
+/// No type on the right hand side names a type variable the substitution replaces, so replacing
+/// every such variable of a type takes one walk over that type.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
+    /// The type replacing each type variable, by the variable's name.
     pub data: Map<Name, Arc<TypeNode>>,
 }
 
 impl Default for Substitution {
+    /// A substitution that replaces no type variable.
     fn default() -> Self {
         Self {
             data: Default::default(),
@@ -149,18 +167,23 @@ impl Default for Substitution {
 }
 
 impl Substitution {
+    /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
-    // Make single substitution.
+    /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
         Self { data }
     }
 
-    // Compose substitution.
+    /// Extends this substitution to the one that applies `following` after it: every type it
+    /// replaces a variable by has `following` applied to it, and the replacements of `following`
+    /// are added.
+    ///
+    /// Panics where `following` replaces a variable this substitution already replaces.
     pub fn compose(&mut self, following: &Self) {
         for (_var, ty) in self.data.iter_mut() {
             let new_ty = following.substitute_type(&ty);
@@ -172,8 +195,12 @@ impl Substitution {
         }
     }
 
-    // Merge substitution.
-    // Returns true when merge succeeds.
+    /// Adds to this substitution the replacements of `other`, which have to agree with it wherever
+    /// both replace one type variable.
+    ///
+    /// # Returns
+    /// Whether the two agreed. Where they disagree, the replacements taken from `other` before the
+    /// disagreement stay, so a caller that carries on has to drop this substitution.
     pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
@@ -247,6 +274,11 @@ impl Substitution {
         }
     }
 
+    /// Replaces the type variables this substitution replaces throughout `scm`: in its type, its
+    /// predicates and its equalities.
+    ///
+    /// Panics where this substitution replaces a variable the scheme generalizes, since such a
+    /// variable stands for every type and no substitution may fix it to one.
     pub fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
         // Generalized variables cannot be replaced.
         for v in &scm.gen_vars {
@@ -269,7 +301,8 @@ impl Substitution {
         )
     }
 
-    // Apply substitution to qualified type.
+    /// Replaces the type variables this substitution replaces throughout `qual_type`: in its type
+    /// and in the predicates and equalities qualifying it.
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);
@@ -280,7 +313,8 @@ impl Substitution {
         qual_type.ty = self.substitute_type(&qual_type.ty);
     }
 
-    // Apply substitution to equality.
+    /// Replaces the type variables this substitution replaces in the arguments of the associated
+    /// type `eq` speaks about and in the type it is equated to.
     pub fn substitute_equality(&self, eq: &mut Equality) {
         for arg in &mut eq.args {
             *arg = self.substitute_type(arg);
@@ -288,6 +322,8 @@ impl Substitution {
         eq.value = self.substitute_type(&eq.value);
     }
 
+    /// Replaces the type variables this substitution replaces throughout `qual_pred`: in the
+    /// predicate it states and in the constraints that predicate is qualified by.
     pub fn substitute_qualpred(&self, qual_pred: &mut QualPred) {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
@@ -298,9 +334,17 @@ impl Substitution {
         self.substitute_predicate(&mut qual_pred.predicate);
     }
 
-    // Calculate minimum substitution s such that `s(ty1) = ty2`.
-    // Returns None if such substitution does not exist.
-    // NOTE: This function only searches for syntactical substitution, i.e., does not resolve associated type.
+    /// The smallest substitution `s` with `s(ty1) = ty2`, and `None` where no substitution sends
+    /// `ty1` to `ty2`.
+    ///
+    /// The two types are compared as they are written, so an associated type matches an associated
+    /// type of the same name and is never reduced to the type it stands for.
+    ///
+    /// # Arguments
+    /// * `fixed_tyvars` — the type variables that stand for themselves; one of them matches a type
+    ///   written the same way and nothing else.
+    /// * `kind_env` — the kinds by which a type variable and the type it would take are compared,
+    ///   so that a match giving a variable a type of another kind is refused.
     pub fn matching(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -310,6 +354,16 @@ impl Substitution {
         Self::matching_internal(ty1, ty2, fixed_tyvars, Some(kind_env))
     }
 
+    /// The smallest substitution `s` with `s(ty1) = ty2`, and `None` where no substitution sends
+    /// `ty1` to `ty2`, decided by the shape of the two types alone.
+    ///
+    /// A type variable may take a type of another kind here, so this answers a substitution where a
+    /// match that compares kinds answers `None`. Use it where the kinds of the program are out of
+    /// reach.
+    ///
+    /// # Arguments
+    /// * `fixed_tyvars` — the type variables that stand for themselves; one of them matches a type
+    ///   written the same way and nothing else.
     pub fn matching_no_kind_check(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -322,6 +376,14 @@ impl Substitution {
         }
     }
 
+    /// The smallest substitution `s` with `s(ty1) = ty2`, and `None` where no substitution sends
+    /// `ty1` to `ty2`.
+    ///
+    /// # Arguments
+    /// * `fixed_tyvars` — the type variables that stand for themselves; one of them matches a type
+    ///   written the same way and nothing else.
+    /// * `kind_env` — the kinds by which a type variable and the type it would take are compared.
+    ///   Where it is absent the kinds go uncompared, and the answer is then always `Ok`.
     fn matching_internal(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
@@ -411,65 +473,73 @@ impl Substitution {
     }
 }
 
-// In TypeCheckContext::instantiate_scheme, how constraints of type scheme should be handled?
+/// What becomes of the constraints of a type scheme when the scheme is instantiated.
 pub enum ConstraintInstantiationMode {
-    // Require the constraints to be satisfied.
+    /// Each constraint becomes one the type checking has to deduce.
     Require,
-    // Assume that the constraints are satisfied.
+    /// Each constraint becomes one that later deductions may use.
     Assume,
 }
 
-// Context under type-checking.
-// Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
+/// The state of type checking an expression: the assumptions it is checked under, what the
+/// inference has settled so far, and the environment of the program it belongs to.
+///
+/// Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
 #[derive(Clone)]
 pub struct TypeCheckContext {
-    // The identifier of type variables.
+    /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    // The map from type variables to the source location of an expression whose type is the type variable.
-    // This is used for generating error messages.
+    /// The source location of the expression whose type each type variable is, by the variable's
+    /// name, so that a diagnostic naming a type variable can point at where it arose.
     pub tyvar_expr: Map<String, Span>,
-    // Scoped map of variable name -> scheme. (Assamptions of type inference.)
+    /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
-    // Substitution.
+    /// What the inference has settled about the type variables so far.
     pub substitution: Substitution,
-    // Pending equalities.
+    /// The equalities on associated types the inference has still to settle.
     pub equalities: Vec<Equality>,
-    // Collected predicates.
+    /// The trait constraints the inference requires and has still to deduce.
     pub predicates: Vec<Predicate>,
-    // Trait environment.
+    /// The traits of the program, their aliases and their instances.
     pub trait_env: Arc<TraitEnv>,
-    // List of type constructors.
+    /// The type constructors of the program and what each declares.
     pub type_env: TypeEnv,
-    // Kind environment.
+    /// The kind of each type constructor, associated type and trait of the program.
     pub kind_env: Arc<KindEnv>,
-    // A map from a module to the import statements.
-    // To decrease clone-cost, wrap it in reference counter.
+    /// The import statements of each module, by module name. Shared, so that cloning a context
+    /// copies no statement.
     pub import_statements: Arc<Map<Name, Vec<ImportStatement>>>,
-    // In which module is the current expression defined?
-    // This is used as a state variable for typechecking.
+    /// The module the expression being checked is defined in, which decides the names accessible
+    /// to it.
     pub current_module: Option<ModuleInfo>,
-    // Names that should be imported in the current module.
+    /// The global names the expression reached without writing them absolutely, which the module
+    /// it belongs to therefore has to import.
     pub import_required: Vec<FullName>,
-    // Equalities assumed.
-    // Arc for sharing them among the contexts cloned for speculative type checking.
+    /// The equalities on associated types that may be used without deducing them, by the
+    /// associated type each speaks about. Shared, so that a context cloned for a speculative check
+    /// copies none of them.
     pub assumed_eqs: Arc<Map<AssocType, Vec<EqualityScheme>>>,
-    // Predicates assumed.
-    // Arc for sharing them among the contexts cloned for speculative type checking.
+    /// The trait constraints that may be used without deducing them, by the trait each speaks
+    /// about: the program's instances, and the constraints the checked value's own signature
+    /// states. Shared, so that a context cloned for a speculative check copies none of them.
     pub assumed_preds: Arc<Map<TraitId, Vec<QualPredScheme>>>,
-    // Fixed type variables.
-    // In unification, these type variables are not allowed to be replaced to another type.
-    // NOTE: We use `Vec` instead of `Set` because the expected size is small.
+    /// The type variables that stand for themselves, which unification may not replace by another
+    /// type: the ones generalized by the type the expression is checked against.
+    ///
+    /// Their number is small, so a lookup searches the whole list.
     pub fixed_tyvars: Vec<Arc<TyVar>>,
-    // Locally assumed equalities.
-    // For example, when type checking `extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2`, we assume `Elem c1 = e` and `Elem c2 = e` locally.
+    /// The equalities the checked value's own signature states, such as `Elem c1 = e` and
+    /// `Elem c2 = e` while checking
+    /// `extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2`.
     pub local_assumed_eqs: Vec<Equality>,
-    // Type check cache.
+    /// Where the type inferred for a global value is looked up and stored, so that a value whose
+    /// source is unchanged is not checked again.
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
-    // Number of worker threads.
+    /// How many threads check the program's global values at once.
     pub num_worker_threads: usize,
-    // Records which fresh type variables were assigned to opaque-type gen_vars when instantiating #wrap_opaque functions.
-    // Key: the gen_var name (e.g., "#Std::repeat::?it"), Value: the fresh TyVar generated for it.
-    // After type-checking, these are resolved via substitution to find the concrete types.
+    /// The type variable created for each generalized variable that stands for an opaque type,
+    /// such as `#Std::repeat::?it`, by that variable's name. Substituting them once the inference
+    /// is done gives the types the opaque ones stand for.
     pub opaque_instantiations: Map<Name, Arc<TyVar>>,
     /// When true, errors raised from elaborating a sub-expression are
     /// swallowed: that sub-expression keeps the expected type at its
@@ -532,7 +602,9 @@ impl TypeCheckContext {
         }
     }
 
-    // Register the source location of an expression whose type is a type variable.
+    /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
+    /// so that a diagnostic naming that variable can point at the expression. An expression with no
+    /// source location leaves the record as it stands.
     pub fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
         if let Some(source) = source {
             self.tyvar_expr.insert(tyvar_name, source);
@@ -790,7 +862,8 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    // Set the source locations of two unified type variables to the same one.
+    /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
+    /// them points at. Where both already carry one, `tv2`'s is the one kept.
     pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let mut src = None;
         if let Some(tv1_src) = self.tyvar_expr.get(&tv1) {
@@ -803,42 +876,45 @@ impl TypeCheckContext {
         self.add_tyvar_source(tv2, src);
     }
 
-    // Get modules imported by current module.
+    /// The import statements of the module the expression being checked belongs to.
     pub fn imported_statements(&self) -> &Vec<ImportStatement> {
         self.import_statements
             .get(&self.current_module.as_ref().unwrap().name)
             .unwrap()
     }
 
-    // Create a new type variable.
+    /// A name no type variable of this context has taken, such as `#a3`. The `#` keeps it apart
+    /// from every name a program can write.
     pub fn new_tyvar_name(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
         "#a".to_string() + &id.to_string()
     }
 
-    // Create a new type variable.
+    /// A type variable of the given kind that no type of this context names yet.
     pub fn new_tyvar(&mut self, kind: Arc<Kind>) -> Arc<TyVar> {
         let name = self.new_tyvar_name();
         make_tyvar(&name, &kind)
     }
 
-    // Create a new type variable of kind `*`.
+    /// A type variable of kind `*` that no type of this context names yet.
     pub fn new_tyvar_star(&mut self) -> Arc<TyVar> {
         self.new_tyvar(kind_star())
     }
 
-    // Create a new type variable by copying information from another type variable.
+    /// A type variable of the same kind as `tv`, under a name that no type of this context names
+    /// yet.
     pub fn new_tyvar_by(&mut self, tv: &Arc<TyVar>) -> Arc<TyVar> {
         tv.set_name(self.new_tyvar_name())
     }
 
-    // Apply substitution to type.
+    /// Replaces each type variable of `ty` that the inference has settled by what it settled on.
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         self.substitution.substitute_type(ty)
     }
 
-    // Apply substitution and then reduce associated types by equalities.
+    /// Replaces each type variable of `ty` that the inference has settled, and then replaces each
+    /// associated type in the result that the equalities in force decide the value of.
     pub fn substitute_and_reduce_type(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -847,21 +923,21 @@ impl TypeCheckContext {
         self.reduce_type_by_equality(ty)
     }
 
-    // Apply substitution to a predicate.
+    /// Replaces the type variables the inference has settled in the type `p` constrains.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         self.substitution.substitute_predicate(p)
     }
 
-    // Apply substitution to an equality.
+    /// Replaces the type variables the inference has settled throughout `eq`.
     pub fn substitute_equality(&self, eq: &mut Equality) {
         self.substitution.substitute_equality(eq)
     }
 
-    // Fill in the concrete rhs for opaque type resolutions from the current substitution.
-    //
-    // Example: if `#Std::repeat::?it` was instantiated to a fresh TyVar that unified to
-    // `MapIterator (RangeIterator I64) a`, fills `rhs = Some(MapIterator (RangeIterator I64) a)`
-    // into the corresponding `OpaqueTyConResolution` entries.
+    /// Writes into each resolution of an opaque type the type the inference found for it.
+    ///
+    /// Where `#Std::repeat::?it` was instantiated to a type variable that unification sent to
+    /// `MapIterator (RangeIterator I64) a`, every resolution recorded for `Std::repeat`'s opaque
+    /// type constructor comes out holding that type.
     pub fn fill_opaque_concrete_types(
         &mut self,
         opaque_types: &mut Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -899,7 +975,13 @@ impl TypeCheckContext {
         sub.substitute_type(ty)
     }
 
-    // Instantiate a scheme.
+    /// The type of `scheme`, with the constraints it is qualified by recorded in this context.
+    ///
+    /// # Arguments
+    /// * `constraint_mode` — `Require` replaces each variable the scheme generalizes by a fresh
+    ///   type variable and leaves the constraints for the inference to deduce; `Assume` keeps the
+    ///   generalized variables as the scheme writes them, fixes them against replacement, and
+    ///   grants the constraints to later deductions.
     pub fn instantiate_scheme(
         &mut self,
         scheme: &Arc<Scheme>,
@@ -982,6 +1064,12 @@ impl TypeCheckContext {
         }
     }
 
+    /// The type an annotation written in the source stands for: every `_` wildcard replaced by a
+    /// fresh type variable for the inference to settle, and every named type variable by the
+    /// generalized variable of that name, which carries the kind its signature gives it.
+    ///
+    /// A named type variable has to be one the value being checked generalizes; any other name is
+    /// an error.
     pub fn validate_type_annotation(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -989,9 +1077,9 @@ impl TypeCheckContext {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
             let target = if is_type_wildcard_tyvar(&tv.name) {
-                // A `_` type wildcard is a request to infer this type: replace it
-                // with a fresh inference variable (keeping the wildcard's kind)
-                // so it unifies freely, rather than naming a variable in scope.
+                // A `_` type wildcard asks for this type to be inferred: replace it
+                // with a fresh inference variable, keeping the wildcard's kind, so
+                // that it unifies freely.
                 self.new_tyvar_by(&tv)
             } else if let Some(fixed_tv) = self
                 .fixed_tyvars
@@ -1099,7 +1187,7 @@ impl TypeCheckContext {
                         &[&src],
                     );
                     err.code = Some(ERR_UNKNOWN_NAME);
-                    err.data = Some(serde_json::Value::String(var.name.to_string()));
+                    err.data = Some(Value::String(var.name.to_string()));
                     return Err(Errors::from_err(err));
                 }
                 let mut candidates_check_res: Vec<
@@ -1200,7 +1288,7 @@ impl TypeCheckContext {
                     };
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
                     error.code = Some(ERR_NO_VALUE_MATCH);
-                    error.data = Some(serde_json::Value::String(var.name.to_string()));
+                    error.data = Some(Value::String(var.name.to_string()));
                     error.add_srcs(extra_srcs);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
@@ -1217,10 +1305,10 @@ impl TypeCheckContext {
                     );
                     let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
                     err.code = Some(ERR_AMBIGUOUS_NAME);
-                    err.data = Some(serde_json::Value::Array(
+                    err.data = Some(Value::Array(
                         candidates
                             .iter()
-                            .map(|name| serde_json::Value::String(name.to_string()))
+                            .map(|name| Value::String(name.to_string()))
                             .collect(),
                     ));
                     return Err(Errors::from_err(err));
@@ -1689,7 +1777,8 @@ impl TypeCheckContext {
         err
     }
 
-    // Check that the `TypeCheckContext` is "fresh", i.e., it state variables are default.
+    /// Panics unless no inference has run in this context yet: no type variable issued, an empty
+    /// substitution, and no pending predicate, equality, fixed type variable or required import.
     pub fn assert_freshness(&self) {
         assert!(self.tyvar_id == 0);
         assert!(self.substitution.is_empty());
@@ -1700,6 +1789,10 @@ impl TypeCheckContext {
         assert!(self.import_required.is_empty());
     }
 
+    /// Checks that `lhs` and `rhs` describe the same values: each of the two, instantiated under
+    /// the constraints it states, has the type of the other and meets what the other requires.
+    ///
+    /// The context has to be one in which no inference has run.
     pub fn check_scheme_equivalent(
         self: &TypeCheckContext,
         lhs: &Arc<Scheme>,
@@ -1718,6 +1811,11 @@ impl TypeCheckContext {
         Ok(())
     }
 
+    /// Checks that `rhs` is at least as general as `lhs`: assuming what `lhs` states, the type of
+    /// `rhs` unifies with the type of `lhs`, and every constraint `rhs` requires is deduced.
+    ///
+    /// The inference this performs stays in the context, so the caller gives it a context it uses
+    /// for this check alone.
     fn check_scheme_equivalent_one(
         self: &mut TypeCheckContext,
         lhs: &Arc<Scheme>,
@@ -1891,13 +1989,16 @@ impl TypeCheckContext {
     /// pending equalities, which the new bindings may let unify or reduce.
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
         self.substitution.compose(subst);
-        let eqs = replace(&mut self.equalities, vec![]);
+        let eqs = mem::replace(&mut self.equalities, vec![]);
         for eq in eqs {
             self.add_equality(eq)?;
         }
         Ok(())
     }
 
+    /// Records `eq` among the pending equalities, once neither of its sides can be simplified any
+    /// further. Where the accumulated substitution or the known equalities do simplify a side, the
+    /// two sides are unified instead, and an equality whose sides came out equal is dropped.
     fn add_equality(&mut self, mut eq: Equality) -> Result<(), UnifOrOtherErr> {
         // We add only equalities that are not trivial, and cannot be simplified further.
         // If the equation can be simplified in some way, then unify lhs and rhs of the equation, instead of adding it to `equalities`.
@@ -1942,7 +2043,11 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce a type by replacing associated type to its value.
+    /// Replaces each use of an associated type in `ty` by the value an assumed equality gives it,
+    /// as deep as the assumed equalities reach, and leaves the rest of the type as it stands.
+    ///
+    /// An associated type met on the way also requires the trait that declares it of its first
+    /// argument, so that predicate joins the pending ones.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
         match &ty.ty {
             Type::TyVar(_) => Ok(ty),
@@ -1997,7 +2102,14 @@ impl TypeCheckContext {
         }
     }
 
-    // Unify two types.
+    /// Makes `ty1` and `ty2` one type, extending the accumulated substitution with the bindings
+    /// that takes.
+    ///
+    /// A type variable free to be bound takes the other type as its value. A type variable held
+    /// fixed stands for a type the caller may not choose, so it agrees with itself alone. A use of
+    /// an associated type on either side becomes a pending equality, to be settled once enough is
+    /// known about its arguments. Two types no substitution can make equal give
+    /// `UnificationErr::Disjoint`.
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,
@@ -2027,7 +2139,7 @@ impl TypeCheckContext {
                 }
                 _ => {}
             }
-            swap(&mut ty1, &mut ty2);
+            mem::swap(&mut ty1, &mut ty2);
         }
 
         // Case: Either is usage of associated type.
@@ -2042,7 +2154,7 @@ impl TypeCheckContext {
                 self.add_equality(eq)?;
                 return Ok(());
             }
-            swap(&mut ty1, &mut ty2);
+            mem::swap(&mut ty1, &mut ty2);
         }
 
         // Other case.
@@ -2171,7 +2283,14 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce a predicate and add reduced predicates to `irreducible_preds`.
+    /// Deduces `pred`, a constraint by a trait or by a trait alias, from the instances and the
+    /// constraints assumed, collecting into `irreducible_preds` each constraint the deduction ends
+    /// at: one on a type the inference has yet to settle, which no instance decides yet.
+    ///
+    /// # Arguments
+    /// * `deduction` — the deductions this one is inside and the ones already ended, which tell a
+    ///   deduction needing itself from one that holds, and keep a constraint several instances ask
+    ///   for from being deduced once for each of them.
     fn reduce_predicate(
         &mut self,
         pred: Predicate,
@@ -2184,8 +2303,10 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Add a predicate after reducing it.
-    // Trait in `pred` should not be a trait alias.
+    /// Deduces `pred`, whose trait has to be one the program declares, every alias having been
+    /// resolved, from the instances and the constraints assumed. Collects into `irreducible_preds`
+    /// each constraint the deduction ends at: one on a type the inference has yet to settle, which
+    /// no instance decides yet.
     fn reduce_predicate_noalias(
         &mut self,
         mut pred: Predicate,
@@ -2318,6 +2439,12 @@ impl TypeCheckContext {
         })
     }
 
+    /// The error reported where `ty` still names a type variable that neither the inference has
+    /// settled nor the checked value generalizes, so that the source at `src` has no one type.
+    ///
+    /// # Arguments
+    /// * `src_type` — what the source at `src` is, as the message names it: "expression",
+    ///   "pattern", and so on. The message asks for a type annotation on it.
     fn check_is_type_fixed(
         &self,
         src_type: &str,
@@ -2619,7 +2746,8 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    /// Pattern-tree counterpart of `check_all_typed`.
+    /// Verifies that `pat` and each of its sub-patterns carries an inferred type, reporting the
+    /// innermost one that carries none.
     fn check_all_pattern_typed(&self, pat: &Arc<PatternNode>) -> Result<(), Errors> {
         if pat.info.type_.is_none() {
             return Err(Errors::from_msg_srcs(
@@ -2690,7 +2818,7 @@ fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>
     };
     let mut err = Error::from_msg_srcs(msg, &[source]);
     err.code = Some(ERR_MISSING_STRUCT_FIELD);
-    err.data = Some(serde_json::json!(missing));
+    err.data = Some(json!(missing));
     err
 }
 
@@ -2785,6 +2913,8 @@ fn make_struct_fields_in_declaration_order(
 
 /// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.
 fn short_span_snippet(span: &Span) -> Option<String> {
+    /// The longest snippet a message quotes. Long enough for a field name or a small expression,
+    /// short enough to leave the message readable.
     const MAX_CHARS: usize = 30;
     let source = span.input.string().ok()?;
     let snippet = source.get(span.start..span.end)?;
@@ -2998,6 +3128,9 @@ pub enum UnifOrOtherErr {
 }
 
 impl UnifOrOtherErr {
+    /// Splits the two failures `res` can carry, so that the caller propagates the errors raised for
+    /// other reasons with `?` and is left holding the constraint that could not be settled, which
+    /// it can answer for itself.
     pub fn extract_others<T>(
         res: Result<T, UnifOrOtherErr>,
     ) -> Result<Result<T, UnificationErr>, Errors> {
@@ -3010,12 +3143,16 @@ impl UnifOrOtherErr {
 }
 
 impl From<Errors> for UnifOrOtherErr {
+    /// Carries errors raised for a reason other than an unsettled constraint, so that a step
+    /// reporting them fits where a failure of type checking is expected.
     fn from(e: Errors) -> Self {
         UnifOrOtherErr::Others(e)
     }
 }
 
 impl From<UnificationErr> for UnifOrOtherErr {
+    /// Carries a constraint that could not be settled, so that a step raising one fits where a
+    /// failure of type checking is expected.
     fn from(e: UnificationErr) -> Self {
         UnifOrOtherErr::UnifErr(e)
     }
