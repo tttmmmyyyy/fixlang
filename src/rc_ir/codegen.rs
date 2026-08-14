@@ -1,10 +1,9 @@
 //! Code generation from the RC IR to LLVM.
 //!
-//! The LLVM back end consumes the RC IR (with its explicit `Retain`/`Release` nodes). Reference
-//! counting is driven entirely by the RC nodes: variable reads are plain and the read-getters do not
-//! release their container — the explicit `Release` nodes dispose it. Non-reference-counting work
-//! (closure layout, FFI, struct/array construction, the inline-LLVM builtins) reuses the existing
-//! `Generator` helpers unchanged.
+//! Every retain and release the generated code performs comes from a `Retain` or `Release` node of
+//! the RC IR: a variable read yields the value alone, and a read-getter leaves its container to the
+//! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
+//! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
@@ -14,7 +13,7 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, Generator, Object};
+use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -34,7 +33,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
-            let fn_val = match self.module.get_function(&func.name.name.to_string()) {
+            let fn_val = match self
+                .module
+                .get_function(&object_file_symbol_name(&func.name.name))
+            {
                 Some(fn_val) => fn_val,
                 // A function of the program is declared from the program's global types, so that this
                 // module and every module calling into it build the same signature. A version the
@@ -576,7 +578,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let global_var = self.module.add_global(
             obj_embed_ty,
             None,
-            &format!("GlobalVar#{}", global_init.symbol.to_string()),
+            &format!("GlobalVar#{}", object_file_symbol_name(&global_init.symbol)),
         );
         global_var.set_initializer(&obj_embed_ty.const_zero());
         global_var.set_linkage(Linkage::Internal);
@@ -594,11 +596,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         let init_flag = self.module.add_global(
             flag_ty,
             None,
-            &format!("InitFlag#{}", global_init.symbol.to_string()),
+            &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
         );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
-        let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
+        let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -609,7 +611,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
             let flag = self
                 .builder()
-                .build_load(flag_ty, init_flag, "load_init_flag")
+                .build_load(flag_ty, init_flag_ptr, "load_init_flag")
                 .unwrap()
                 .into_int_value();
             let is_zero = self
@@ -628,7 +630,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .unwrap();
             (init_bb, end_bb, None)
         } else {
-            let init_fn_name = format!("InitOnce#{}", global_init.symbol.to_string());
+            let init_fn_name = format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol));
             let init_fn = self.module.add_function(
                 &init_fn_name,
                 self.context.void_type().fn_type(&[], false),
@@ -637,7 +639,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
-                    init_flag.into(),
+                    init_flag_ptr.into(),
                     init_fn.as_global_value().as_pointer_value().into(),
                 ],
             );
@@ -662,7 +664,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         if !self.config.threaded {
             self.builder()
-                .build_store(init_flag, self.context.i8_type().const_int(1, false))
+                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
                 .unwrap();
             self.builder().build_unconditional_branch(end_bb).unwrap();
         } else {

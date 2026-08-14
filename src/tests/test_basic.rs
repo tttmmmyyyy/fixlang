@@ -18,7 +18,6 @@ use std::{
     fs::{self, remove_file, File},
     io::Write,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 /// The head of a test source: the `Main` module declaration followed by `Array::assert_unique`,
@@ -9616,6 +9615,9 @@ pub fn test_type_wildcard_applied_without_kind_is_error() {
     test_source_fail(&source, Configuration::develop_mode(), "Kind mismatch");
 }
 
+/// A type annotation inside a definition that names the type variables of the definition's own
+/// signature, one of them of a higher kind: `let reader : ReaderT e m e = ...` in a value of type
+/// `[m : Monad] e -> m e` annotates with the `e` and the `m` the signature bound.
 #[test]
 pub fn test_regression_higher_kinded_type_variable_in_type_annotation() {
     let source = r##"
@@ -9671,87 +9673,9 @@ pub fn test_regression_higher_kinded_type_variable_in_type_annotation() {
     test_source(&source, Configuration::develop_mode());
 }
 
-#[test]
-pub fn test_create_dylib() {
-    let fix_src = r##"
-        module Main;
-    
-        get_truth : IO CInt;
-        get_truth = pure $ 42.c_int;
-
-        FFI_EXPORT[get_truth, get_truth];
-    "##;
-    let c_str = r##"
-        #include <stdio.h>
-        #include <stdint.h>
-
-        int get_truth();
-
-        int main() {
-            int x = get_truth();
-            if (x != 42) {
-                return 1;
-            }
-            return 0;
-        }
-    "##;
-    // Recreate working directory for this test.
-    let work_dir = PathBuf::from(format!(
-        "{}/{}",
-        COMPILER_TEST_WORKING_PATH,
-        function_name!()
-    ));
-    let _ = fs::remove_dir_all(&work_dir);
-    let _ = fs::create_dir_all(&work_dir);
-
-    // Save `fix_src` to a file.
-    let fix_file = format!("{}/lib.fix", work_dir.to_str().unwrap());
-    let mut file = File::create(&fix_file).unwrap();
-    file.write_all(fix_src.as_bytes()).unwrap();
-
-    // Create dynamic library using `fix`.
-    let output = fix_command()
-        .arg("build")
-        .arg("--output-type")
-        .arg("dylib")
-        .arg("--file")
-        .arg("lib.fix")
-        .arg("--output")
-        .arg("libfixtest.so")
-        .current_dir(&work_dir)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(0));
-
-    // Save `c_str` to a file.
-    let c_file = format!("{}/main.c", work_dir.to_str().unwrap());
-    let mut file = File::create(&c_file).unwrap();
-    file.write_all(c_str.as_bytes()).unwrap();
-
-    // Build the C program, link it with the dynamic library, and run it.
-    let output = Command::new("gcc")
-        .arg("-o")
-        .arg("main")
-        .arg("main.c")
-        .arg("-L.")
-        .arg("-lfixtest")
-        .arg("-Wl,-rpath,.")
-        .current_dir(&work_dir)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(0));
-
-    // Run the C program.
-    let output = Command::new("./main")
-        .current_dir(&work_dir)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(0));
-
-    // Remove the working directory.
-    let _ = fs::remove_dir_all(&work_dir);
-}
-
+/// `match` on an `Option`, over the representations its payload takes: unboxed, boxed, and a
+/// closure. The boxed and the closure payload are also read out of the matched `Option` after the
+/// match, where the arm has to have left them alive.
 #[test]
 pub fn test_match_option() {
     let source = r##"

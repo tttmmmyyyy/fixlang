@@ -16,7 +16,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -38,14 +38,12 @@ mod integration_tests {
     }
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
-    /// module. The build is pinned to the `max` optimization level, the only one the locality pass
-    /// runs at, so the dump is the same whatever ambient `FIX_MAX_OPT_LEVEL` the suite runs under.
+    /// module. The build works at the `max` optimization level, the only one the locality pass runs
+    /// at.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
-        let output = fix_command()
-            .arg("build")
+        let output = fix_command_at_opt_level("build", "max")
             .arg("--emit-rc-ir")
             .arg("Main")
-            .env("FIX_MAX_OPT_LEVEL", "max")
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute fix build --emit-rc-ir");

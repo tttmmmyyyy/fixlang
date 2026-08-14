@@ -87,6 +87,7 @@
 - #270, #293: `fix test` no longer writes the test binary over the program, in a project whose `[build] output` names where `fix build` writes it. Give `fix test` a `-o` to keep a test binary.
 - #253, #293: Building a dynamic library and an executable in one directory now works in either order. The second build reused the object files of the first and failed to link them, reporting `relocation R_X86_64_32S ... recompile with -fPIC` or `undefined reference to 'main'`; deleting the `.fixlang` directory was the way out.
 - #283, #297, #316: Two global values of one namespace whose names differ only in characters that are not letters or digits are no longer compiled from one another's body. A struct's field `b` comes with an accessor named `@b`, so a program that also defines `_b` beside it read one of the two where it wrote the other, and a type error in the body that was dropped went unreported.
+- #152, #284, #325: Building a dynamic library now works at `-O none` and `-O basic`. A library of a program that reads a struct field failed to link with `version node not found for symbol Get#Main::Point::@x#...`, because a field getter's name carries `@`, which the linker reads as the separator of `symbol@version`. A field getter now enters the symbol table with `@` written as `$`, which is also how a debugger and `nm` spell it.
 
 ## [1.4.0] - 2026-06-22
 
