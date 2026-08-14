@@ -1008,7 +1008,15 @@ impl Program {
         self.add_global_value_common(name, (expr, scm), None, None, document, true)
     }
 
-    // Add a global value.
+    /// Registers a global value whose body is `expr` and whose type is `scm`.
+    ///
+    /// # Arguments
+    /// * `decl_src` — where the value's type signature is written.
+    /// * `defn_src` — where the left hand side of the value's definition is written.
+    /// * `document` — the documentation of the value, for a value whose `decl_src` is
+    ///   unavailable; otherwise the documentation is read from the source code.
+    /// * `compiler_defined_method` — marks a method the compiler generates for a type, such as
+    ///   `@{field}` or `set_{field}`, which `fix docs` leaves out.
     fn add_global_value_common(
         &mut self,
         name: FullName,
@@ -1031,7 +1039,8 @@ impl Program {
         self.add_global_value_gv(name, gv)
     }
 
-    // Add a global value.
+    /// Registers an already-built global value under `name`, reporting an error that points at
+    /// both declarations when the name is taken.
     pub fn add_global_value_gv(&mut self, name: FullName, gv: GlobalValue) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.global_values.contains_key(&name) {
@@ -1055,7 +1064,9 @@ impl Program {
         Ok(())
     }
 
-    // Add global values.
+    /// Pairs each definition with the type signature carrying the same name and registers the
+    /// pairs as global values. A name that carries two definitions, two signatures, a definition
+    /// without a signature, or a signature without a definition is reported as an error.
     pub fn add_global_values(
         &mut self,
         defns: Vec<GlobalValueDefn>,
@@ -1063,8 +1074,12 @@ impl Program {
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
+        /// The two halves of one global value, collected while pairing them up by name. A half
+        /// stays `None` until it is met.
         struct GlobalValue {
+            /// The definition, e.g. `main = println("Hello World");`.
             defn: Option<GlobalValueDefn>,
+            /// The type signature, e.g. `main : IO ();`.
             decl: Option<GlobalValueDecl>,
         }
         let mut global_values: Map<FullName, GlobalValue> = Default::default();
@@ -1186,8 +1201,8 @@ impl Program {
     ///   carry tolerated diagnostics from `check_type` (holes,
     ///   cannot-infer, unsatisfied predicates, disjoint equalities).
     ///   The caller should always save `te` (so the LSP can hover on
-    ///   it) and propagate `errors`. The cache is only written when
-    ///   `errors` is empty.
+    ///   it) and propagate `errors`. The cache is written only for a
+    ///   strict check that produced no `errors`.
     /// * `Err(errs)` — a hard failure happened before substitution
     ///   completed (e.g. resolve_namespace, resolve_type_aliases, or
     ///   the substitution itself blew up). No useful typed expression
@@ -1202,10 +1217,10 @@ impl Program {
         mut tc: TypeCheckContext,
     ) -> Result<(TypedExpr, Errors), Errors> {
         // Load type-checking cache file.
-        let cache = tc.cache.load_cache(val_name, req_scm, ver_hash);
-        if cache.is_some() {
+        let cached_te = tc.cache.load_cache(val_name, req_scm, ver_hash);
+        if cached_te.is_some() {
             // If cache is available,
-            te = cache.unwrap();
+            te = cached_te.unwrap();
             return Ok((te, Errors::empty()));
         }
 
@@ -1223,11 +1238,13 @@ impl Program {
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
-        // Save the result to cache file only when there are no
-        // tolerated errors. Otherwise the cached typed expression
-        // would mask the diagnostics on the next run (cache load
-        // bypasses check_type entirely).
-        if !check_errors.has_diagnostics() {
+        // A run whose `load_cache` finds the expression returns it without checking it, so the
+        // cache may hold only what a strict check accepted. Two things disqualify a result:
+        //
+        // - a tolerated diagnostic, which the next run owes the user and would not produce again;
+        // - an `error_tolerant` check, which swallows every type error and reports none, so its
+        //   result would enter as a clean entry and the value would be published as type-correct.
+        if !tc.error_tolerant && !check_errors.has_diagnostics() {
             tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
         }
 
@@ -1237,7 +1254,10 @@ impl Program {
         Ok((te, check_errors))
     }
 
-    // Create NameResolutionEnv used for symbols defined in the specified module.
+    /// Builds the program-wide table that name resolution reads: every type constructor, trait
+    /// and associated type a capitalized name can resolve to, plus each module's import
+    /// statements. A `NameResolutionContext` fixes the module a name is written in and shares
+    /// this table.
     pub fn create_name_resolution_env(&self) -> Arc<NameResolutionEnv> {
         Arc::new(NameResolutionEnv::new(
             &self.tycon_names_with_aliases(),
@@ -1266,7 +1286,7 @@ impl Program {
         let target_set: Option<Set<&FullName>> = target_symbols.map(|s| s.iter().collect());
 
         // Names of global values to be checked.
-        let mut checked_names: Vec<FullName> = vec![];
+        let mut names_to_check: Vec<FullName> = vec![];
         for (name, gv) in self.global_values.iter() {
             if let Some(set) = target_set.as_ref() {
                 if !set.contains(name) {
@@ -1277,12 +1297,12 @@ impl Program {
                 SymbolExpr::Simple(_) => {
                     // Check simple values only if they are in `modules`.
                     if modules.contains(&name.module()) {
-                        checked_names.push(name.clone());
+                        names_to_check.push(name.clone());
                     }
                 }
                 SymbolExpr::Method(_) => {
                     // We filter methods by `method_impl_filter`.
-                    checked_names.push(name.clone());
+                    names_to_check.push(name.clone());
                 }
             }
         }
@@ -1294,7 +1314,7 @@ impl Program {
 
         errors.eat_err(self.resolve_namespace_and_check_type(
             tc,
-            &checked_names,
+            &names_to_check,
             method_impl_filter,
         ));
         errors.to_result()
@@ -1388,7 +1408,7 @@ impl Program {
                         let scm = member.scm.clone();
                         let scm_via_defn = member.scm_via_defn.clone();
                         let impl_src = member.expr.expr.source.clone();
-                        let def_src = gv.decl_src.clone();
+                        let decl_src = gv.decl_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
@@ -1409,7 +1429,7 @@ impl Program {
                                         &impl_src
                                             .as_ref()
                                             .map(|s| s.to_head_character()),
-                                        &def_src
+                                        &decl_src
                                             .as_ref()
                                             .map(|s| s.to_head_character()),
                                     ],

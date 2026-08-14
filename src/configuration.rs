@@ -76,6 +76,7 @@ pub enum OutputFileType {
 }
 
 impl OutputFileType {
+    /// Reads the kind an `output_type` setting or an `--output-type` option names.
     pub fn from_str(file_type: &str) -> Result<Self, Errors> {
         match file_type {
             "exe" => Ok(OutputFileType::Executable),
@@ -87,10 +88,34 @@ impl OutputFileType {
         }
     }
 
+    /// The name this kind is written under in a project file and on the command line.
     pub fn to_str(&self) -> &str {
         match self {
             OutputFileType::Executable => "exe",
             OutputFileType::DynamicLibrary => "dylib",
+        }
+    }
+
+    /// What a build of this kind calls its output file when the settings name no path for it. The
+    /// name follows what the platform's linker and loader expect of the kind.
+    pub fn default_file_name(&self) -> &'static str {
+        match self {
+            OutputFileType::Executable => {
+                if env::consts::OS == "windows" {
+                    "a.exe"
+                } else {
+                    "a.out"
+                }
+            }
+            OutputFileType::DynamicLibrary => {
+                if env::consts::OS == "windows" {
+                    "lib.dll"
+                } else if env::consts::OS == "macos" {
+                    "lib.dylib"
+                } else {
+                    "lib.so"
+                }
+            }
         }
     }
 }
@@ -105,7 +130,6 @@ pub enum ValgrindTool {
     // Currently, we cannot use DRD or helgrind because valgrind does not understand atomic operations.
     // In C/C++ program, we can use `ANNOTATE_HAPPENS_BEFORE` and `ANNOTATE_HAPPENS_AFTER` to tell helgrind happens-before relations,
     // but how can we do similar things in Fix?
-    // DataRaceDetection,
 }
 
 impl fmt::Display for ValgrindTool {
@@ -173,31 +197,42 @@ impl Sanitizer {
     }
 }
 
-// Subcommands of the `fix` command.
+/// The subcommand of the `fix` command that the invocation selected, carrying the settings that
+/// belong to that subcommand alone.
 #[derive(Clone)]
 pub enum SubCommand {
+    /// Build the program and write it to the output file.
     Build,
+    /// Build the program and run it.
     Run,
+    /// Build the test program and run it.
     Test,
+    /// Elaborate the source files and report the errors and warnings found in them, for the
+    /// language server.
     Diagnostics(DiagnosticsConfig),
+    /// Generate documentation for the modules.
     Docs(DocsConfig),
 }
 
+/// Which section of the project file a build reads its settings from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildConfigType {
+    /// The `build` section.
     Build,
+    /// The `build.test` sub-section, whose settings a test build uses in place of the ones the
+    /// `build` section gives.
     Test,
-    // Lsp,
 }
 
 impl Default for BuildConfigType {
+    /// The settings of the `build` section.
     fn default() -> Self {
         BuildConfigType::Build
     }
 }
 
 impl SubCommand {
-    // Should we run preliminary commands before building the program?
+    /// Whether the `preliminary_commands` the project files list are run before the build.
     pub fn run_preliminary_commands(&self) -> bool {
         match self {
             SubCommand::Build => true,
@@ -208,12 +243,26 @@ impl SubCommand {
         }
     }
 
-    // Should we build program binary?
+    /// Whether the build goes on to generate code and link a binary. Reporting diagnostics and
+    /// generating documentation stop with the elaborated program in hand.
     pub fn build_binary(&self) -> bool {
         match self {
             SubCommand::Build => true,
             SubCommand::Run => true,
             SubCommand::Test => true,
+            SubCommand::Diagnostics(_) => false,
+            SubCommand::Docs(_) => false,
+        }
+    }
+
+    /// Whether this subcommand produces the output file that the project file's `output` and
+    /// `output_type` describe. `fix build` does; `fix run` and `fix test` build an executable in a
+    /// temporary place and run it, and a `-o` given to them names where that executable is kept.
+    pub fn produces_output_file(&self) -> bool {
+        match self {
+            SubCommand::Build => true,
+            SubCommand::Run => false,
+            SubCommand::Test => false,
             SubCommand::Diagnostics(_) => false,
             SubCommand::Docs(_) => false,
         }
@@ -230,7 +279,8 @@ impl SubCommand {
         }
     }
 
-    // Should we typecheck the program?
+    /// Whether the source files are type-checked. Generating documentation reads the declarations
+    /// alone, so it leaves the bodies unchecked.
     pub fn typecheck(&self) -> bool {
         match self {
             SubCommand::Build => true,
@@ -241,6 +291,7 @@ impl SubCommand {
         }
     }
 
+    /// The name this subcommand is typed under on the command line.
     pub fn command_type_string(&self) -> &str {
         match self {
             SubCommand::Build => "build",
@@ -618,27 +669,7 @@ impl Configuration {
 
     pub fn get_output_file_path(&self) -> PathBuf {
         match &self.out_file_path {
-            None => {
-                let path = match self.output_file_type {
-                    OutputFileType::Executable => {
-                        if env::consts::OS == "windows" {
-                            "a.exe"
-                        } else {
-                            "a.out"
-                        }
-                    }
-                    OutputFileType::DynamicLibrary => {
-                        if env::consts::OS == "windows" {
-                            "lib.dll"
-                        } else if env::consts::OS == "macos" {
-                            "lib.dylib"
-                        } else {
-                            "lib.so"
-                        }
-                    }
-                };
-                PathBuf::from(path)
-            }
+            None => PathBuf::from(self.output_file_type.default_file_name()),
             Some(out_file_path) => out_file_path.clone(),
         }
     }
@@ -827,6 +858,11 @@ impl Configuration {
         hash_source.push_str(&self.skip_eval.to_string());
         hash_source.push_str(&self.c_type_sizes.to_string());
         hash_source.push_str(&self.max_split_scalars.to_string());
+        // The kind of the output file reaches the code in two ways: a dynamic library is generated
+        // with position-independent relocations (`get_target_machine`), and an executable is the
+        // only kind that carries the entry point (`elaborate_via_config`). An object built for one
+        // kind therefore fails to link into the other.
+        hash_source.push_str(self.output_file_type.to_str());
         push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
@@ -1117,14 +1153,16 @@ int main() {
         }
         let output = String::from_utf8_lossy(&output.stdout);
         let mut lines = output.lines();
-        let char = lines.next().unwrap().parse().unwrap();
-        let short = lines.next().unwrap().parse().unwrap();
-        let int = lines.next().unwrap().parse().unwrap();
-        let long = lines.next().unwrap().parse().unwrap();
-        let long_long = lines.next().unwrap().parse().unwrap();
-        let size_t = lines.next().unwrap().parse().unwrap();
-        let float = lines.next().unwrap().parse().unwrap();
-        let double = lines.next().unwrap().parse().unwrap();
+        // The program prints one size per line, in the order the fields are read here.
+        let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
+        let char = next_size();
+        let short = next_size();
+        let int = next_size();
+        let long = next_size();
+        let long_long = next_size();
+        let size_t = next_size();
+        let float = next_size();
+        let double = next_size();
         let sizes = CTypeSizes {
             char,
             short,
@@ -1191,6 +1229,116 @@ int main() {
                 let sizes = Self::from_gcc()?;
                 sizes.save_to_file()?;
                 Ok(sizes)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The object generation hash of a build configuration to which `edit` has been applied.
+    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
+        let mut config = Configuration::release_mode(SubCommand::Build)
+            .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
+        edit(&mut config);
+        config.object_generation_hash()
+    }
+
+    /// Two builds reuse each other's object files exactly when they agree on this hash, so each
+    /// setting that reaches code generation gives the hash a value of its own.
+    ///
+    /// Each setting is written to its field, so that the list names what the hash reads.
+    #[test]
+    fn test_object_generation_hash_separates_code_generation_settings() {
+        let baseline = hash_after(|_| {});
+
+        let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![
+            (
+                "output_file_type",
+                Box::new(|config: &mut Configuration| {
+                    config.output_file_type = OutputFileType::DynamicLibrary
+                }),
+            ),
+            (
+                "fix_opt_level",
+                Box::new(|config: &mut Configuration| {
+                    // `FIX_MAX_OPT_LEVEL` decides the level the configuration starts at, so the
+                    // level here is chosen to differ from the one that is there.
+                    config.fix_opt_level = if config.fix_opt_level == FixOptimizationLevel::None {
+                        FixOptimizationLevel::Max
+                    } else {
+                        FixOptimizationLevel::None
+                    }
+                }),
+            ),
+            (
+                "llvm_passes_override",
+                Box::new(|config: &mut Configuration| {
+                    config.llvm_passes_override = Some(vec!["default<O0>".to_string()])
+                }),
+            ),
+            (
+                "debug_info",
+                Box::new(|config: &mut Configuration| config.debug_info = true),
+            ),
+            (
+                "threaded",
+                Box::new(|config: &mut Configuration| config.threaded = true),
+            ),
+            (
+                "sanitizer",
+                Box::new(|config: &mut Configuration| config.sanitizer = Sanitizer::Thread),
+            ),
+            (
+                "backtrace",
+                Box::new(|config: &mut Configuration| config.backtrace = true),
+            ),
+            (
+                "no_runtime_check",
+                Box::new(|config: &mut Configuration| config.no_runtime_check = true),
+            ),
+            (
+                "skip_eval",
+                Box::new(|config: &mut Configuration| config.skip_eval = true),
+            ),
+            (
+                "max_split_scalars",
+                Box::new(|config: &mut Configuration| config.max_split_scalars += 1),
+            ),
+            (
+                "c_type_sizes",
+                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+            ),
+            (
+                "disable_cpu_features_regex",
+                Box::new(|config: &mut Configuration| {
+                    config.disable_cpu_features_regex.push("avx.*".to_string())
+                }),
+            ),
+            (
+                "subcommand",
+                Box::new(|config: &mut Configuration| config.subcommand = SubCommand::Run),
+            ),
+        ];
+
+        let mut settings_by_hash: Map<String, &str> = Map::default();
+        for (name, edit) in settings {
+            let hash = hash_after(edit);
+            assert_ne!(
+                baseline, hash,
+                "`{}` reaches code generation, so it belongs in the object generation hash.",
+                name
+            );
+            // Two settings landing on one hash would share each other's object files, so the hash
+            // separates the settings from one another as well as from the baseline.
+            if let Some(other_setting) = settings_by_hash.insert(hash, name) {
+                panic!(
+                    "`{}` and `{}` generate different code, so the object generation hash has to \
+                     tell them apart.",
+                    name, other_setting
+                );
             }
         }
     }

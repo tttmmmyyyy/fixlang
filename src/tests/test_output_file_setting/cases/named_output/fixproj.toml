@@ -1,0 +1,11 @@
+[general]
+name = "named-output"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+output = "myprogram"
+
+[build.test]
+files = ["test.fix"]

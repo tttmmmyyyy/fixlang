@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::LspClient;
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::Value;
@@ -17,9 +18,9 @@ mod tests {
     /// path inside it.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_lsp/cases");
+        let cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_lsp/cases");
         let project_dir = temp_dir.path().join(project_name);
-        copy_dir_recursive(&cases.join(project_name), &project_dir)
+        copy_dir_recursive(&cases_dir.join(project_name), &project_dir)
             .expect("Failed to copy test case");
         (temp_dir, project_dir)
     }
@@ -203,5 +204,53 @@ mod tests {
             "at the literal's field name, but the report is {:?}",
             literal_report
         );
+    }
+
+    /// A completion request leaves the error of another file reported.
+    ///
+    /// A completion re-checks the program in error-tolerant mode, which reports no diagnostic
+    /// whatever it finds. Should such a run reach an entity of a file the user is not editing and
+    /// its result be kept, the next strict run would answer from it and publish that file as
+    /// clean — the project would not compile while the editor showed nothing.
+    #[test]
+    fn test_a_completion_leaves_the_error_of_another_file_reported() {
+        let mut ctx =
+            LspCompletionCtx::setup("diagnostics-after-completion", &["lib.fix", "main.fix"]);
+        let lib_file = Path::new("lib.fix");
+
+        let diagnostics_before = ctx.client.get_diagnostics(lib_file);
+        assert_eq!(
+            diagnostics_before.len(),
+            1,
+            "`lib.fix` is expected to be reported before any completion, but its diagnostics are {:?}",
+            diagnostics_before
+        );
+
+        // The dot of `v.@y.to_string`. The cursor sits in the body of a trait-implementation
+        // member, whose symbol the completion cannot narrow its check to — the symbol is built
+        // during elaboration, later than the narrowing reads the parsed buffer — so the tolerant
+        // run covers every value of the project, the broken implementation in `lib.fix` among
+        // them.
+        let items = ctx.complete_with_timeout("main.fix", 7, 20, Duration::from_secs(60));
+
+        // A dot completion ranks its candidates, and the tolerant re-check is what ranks them: a
+        // reply whose candidates carry no sort key was answered without that run, and says
+        // nothing about what such a run leaves behind.
+        assert!(
+            items.iter().any(|item| item.get("sortText").is_some()),
+            "the completion after the dot is expected to rank its candidates, but none of its {} items carries a sort key",
+            items.len()
+        );
+
+        ctx.client
+            .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+        let diagnostics_after = ctx.client.get_diagnostics(lib_file);
+        assert_eq!(
+            diagnostics_after, diagnostics_before,
+            "the same report on `lib.fix` is still expected, but its diagnostics are {:?}",
+            diagnostics_after
+        );
+
+        ctx.shutdown();
     }
 }

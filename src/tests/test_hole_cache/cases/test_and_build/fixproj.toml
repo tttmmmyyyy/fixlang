@@ -1,0 +1,9 @@
+[general]
+name = "test-and-build"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["main.fix", "test.fix"]

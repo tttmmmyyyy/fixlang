@@ -1,0 +1,7 @@
+[general]
+name = "plain-program"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
