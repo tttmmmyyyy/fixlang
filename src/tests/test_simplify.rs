@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -30,11 +30,9 @@ mod integration_tests {
     // the dumped RC IR of every module. The `range.fold` driver is a specialized `Std::Iterator`
     // symbol, so the whole-program dump is needed to see it. Also leaves a runnable executable.
     fn emit_all_rc_ir(project_dir: &Path) -> String {
-        let output = fix_command()
-            .arg("build")
+        let output = fix_command_at_opt_level("build", "max")
             .arg("--emit-rc-ir")
             .arg("all")
-            .env("FIX_MAX_OPT_LEVEL", "max")
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute fix build --emit-rc-ir");

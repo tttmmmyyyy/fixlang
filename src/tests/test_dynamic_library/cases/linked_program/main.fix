@@ -1,0 +1,6 @@
+module Main;
+
+get_truth : IO CInt;
+get_truth = pure $ 42.c_int;
+
+FFI_EXPORT[get_truth, get_truth];

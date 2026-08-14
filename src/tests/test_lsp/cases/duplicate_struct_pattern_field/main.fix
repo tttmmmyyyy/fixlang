@@ -1,0 +1,15 @@
+module Main;
+
+type Vector2 = unbox struct { x: F64, y: F64 };
+
+sum_x : Vector2 -> F64;
+sum_x = |v| (
+    let Vector2 { x: a, x: b, y: _ } = v;
+    a + b
+);
+
+main : IO ();
+main = (
+    eval sum_x(Vector2 { x: 1.0, y: 2.0 });
+    pure()
+);

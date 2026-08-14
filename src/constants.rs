@@ -74,10 +74,23 @@ pub const ARRAY_CHECK_SIZE: &str = "_check_size";
 pub const ARRAY_UNSAFE_EMPTY_NAME: &str = "_unsafe_empty_capacity_unchecked";
 
 // Structure methods.
+/// The head of the name of a struct field's getter, which reads the field out of a value: the
+/// getter of the field `x` is named `@x`, in the namespace of the struct the field belongs to.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";
 pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";
 pub const STRUCT_ACT_SYMBOL: &str = "act_";
+
+// The spelling of a Fix name in an object file's symbol table.
+/// The character an object file's symbol table cannot hold. ELF reads it in a symbol name as the
+/// separator of `symbol@version`, so GNU ld refuses a symbol carrying one while it builds the
+/// dynamic symbol table of a shared library. A Fix name carries one wherever it names a field
+/// getter (`STRUCT_GETTER_SYMBOL`).
+pub const SYMBOL_VERSION_SEPARATOR: &str = "@";
+
+/// What `SYMBOL_VERSION_SEPARATOR` is written as in a symbol table. `$` is legal there, and no Fix
+/// name contains it, so the two spellings stand for the same set of names.
+pub const SYMBOL_VERSION_SEPARATOR_SUBSTITUTE: &str = "$";
 
 // Union methods.
 pub const UNION_AS_SYMBOL: &str = "as_";

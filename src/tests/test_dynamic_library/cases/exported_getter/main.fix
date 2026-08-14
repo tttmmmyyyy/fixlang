@@ -1,0 +1,13 @@
+module Main;
+
+type Point = struct { x : I64, y : I64 };
+
+// Reads both fields of a point, so that the getters the compiler generates for `Point` are part of
+// the library.
+sum_point : I64 -> I64;
+sum_point = |v| (
+    let p = Point { x : v, y : v + 1 };
+    p.@x + p.@y
+);
+
+FFI_EXPORT[sum_point, fix_sum_point];
