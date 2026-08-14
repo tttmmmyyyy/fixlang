@@ -131,6 +131,26 @@ pub fn test_opaque_higher_kinded() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The kind of an opaque type is taken from the trait it is constrained by, so a higher-kinded
+/// opaque type needs no kind signature of its own.
+#[test]
+pub fn test_opaque_higher_kinded_without_a_kind_signature() {
+    let source = r#"
+        module Main;
+
+        safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
+        safe_div = |x, y| if y == 0 { none() } else { some(x / y) };
+
+        main : IO ();
+        main = (
+            let result = safe_div(100, 10).bind(|x| safe_div(x, 2));
+            let _ = result;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_opaque_zip_with_index() {
     // Use case 5: Opaque type with normal type variable mixed in signature
