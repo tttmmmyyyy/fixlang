@@ -3,7 +3,7 @@ use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
-use crate::ast::kind_scope::KindEnv;
+use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
@@ -24,7 +24,7 @@ use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
-use crate::elaboration::typecheck::TypeCheckContext;
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -362,10 +362,7 @@ impl GlobalValue {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
-                    m.scm = m.scm.set_kinds(kind_env)?;
-                    m.scm.check_kinds(kind_env)?;
-                    m.scm_via_defn = m.scm_via_defn.set_kinds(kind_env)?;
-                    m.scm_via_defn.check_kinds(kind_env)?;
+                    m.set_kinds(kind_env)?;
                 }
             }
         }
@@ -570,12 +567,42 @@ pub struct TraitMemberImpl {
     // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
     // this contains spans of both `to_string` occurrences (type signature and definition).
     pub lhs_srcs: Vec<Span>,
+    /// The trait's type variable, sent to the type this implementation is for: `c` to `Array a` for
+    /// `impl [a : ToString] Array a : ToIter` of `trait c : ToIter`.
+    ///
+    /// A member's declared type need not name the trait's type variable — `make : [?it : Iterator,
+    /// Item ?it = c] I64 -> ?it` fixes it by a constraint alone — and no matching of that type
+    /// against this implementation's recovers it there. Opaque-type desugaring reads it from here,
+    /// so that each implementation gets the opaque type constructor applied to its own type.
+    pub trait_tyvar_to_impl_type: Substitution,
 }
 
 impl TraitMemberImpl {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.scm = self.scm.resolve_type_aliases(type_env)?;
         self.scm_via_defn = self.scm_via_defn.resolve_type_aliases(type_env)?;
+        Ok(())
+    }
+
+    /// Sets the kinds of the type variables of this implementation's schemes, and of the type it is
+    /// for, and reports a scheme whose kinds do not fit together.
+    pub fn set_kinds(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
+        self.scm = self.scm.set_kinds(kind_env)?;
+        self.scm.check_kinds(kind_env)?;
+        self.scm_via_defn = self.scm_via_defn.set_kinds(kind_env)?;
+        self.scm_via_defn.check_kinds(kind_env)?;
+
+        // The type this implementation is for stands in `scm_via_defn` wherever the member's
+        // declaration names the trait's type variable, so the kinds just set answer for it too.
+        let mut kind_scope = KindScope::new();
+        for tyvar in &self.scm_via_defn.gen_vars {
+            // The generalized variables of one scheme have distinct names, so no two of them meet
+            // here with different kinds.
+            kind_scope
+                .insert(tyvar.name.clone(), tyvar.kind.clone())
+                .unwrap();
+        }
+        self.trait_tyvar_to_impl_type.set_kinds(&kind_scope);
         Ok(())
     }
 
@@ -1915,6 +1942,10 @@ impl Program {
                             expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
                             lhs_srcs,
+                            trait_tyvar_to_impl_type: Substitution::single(
+                                &trait_.type_var.name,
+                                trait_impl.impl_type(),
+                            ),
                         });
                     }
                 }

@@ -38,7 +38,9 @@
 //   Each impl wraps its definition independently:
 //     impl Array a : ToIter { to_iter = #wrap_opaque(|arr| ArrayIterator { ... }); }
 //   The OpaqueTyConResolution lhs is specialized per impl (e.g., `?it (Array a)`),
-//   using a defn_to_impl substitution that maps `c -> Array a`.
+//   using a defn_to_impl substitution that maps `c -> Array a`
+//   (see `defn_to_impl_substitution`). Two impls therefore hold two resolutions of one TyCon,
+//   told apart by the type each is for.
 //
 // After type-checking, the concrete type behind `#wrap_opaque`'s domain variable is extracted
 // (see `fill_opaque_concrete_types` in typecheck.rs). During instantiation, `#wrap_opaque`
@@ -139,20 +141,28 @@ impl Program {
                 }
                 SymbolExpr::Method(impls) => {
                     for impl_ in impls.iter_mut() {
-                        // Compute defn_to_impl by matching the trait defn scheme type
-                        // (e.g., `c -> ?it`) against the impl scheme type (e.g., `Array a -> ?it`).
-                        // We must use impl_.scm (not scm_via_defn) because the lhs of OpaqueTyConResolution
-                        // must use the same variable names as the rhs, which is filled during type-checking
-                        // against impl_.scm. When a user provides a type annotation on the impl method,
-                        // impl_.scm.ty may use different variable names than scm_via_defn.ty; the lhs must
-                        // match the type-checking context to ensure resolve_opaque_type_in_type works correctly.
-                        let defn_to_impl =
-                            Substitution::matching_no_kind_check(&scm.ty, &impl_.scm.ty, &[])
-                                .expect("defn scheme type should match impl scm type");
+                        // The lhs of an OpaqueTyConResolution has to name its type variables as the
+                        // rhs does, and the rhs is filled during type-checking against `impl_.scm`,
+                        // which a type annotation the implementor writes can name differently from
+                        // `impl_.scm_via_defn`. So each of the two schemes is rewritten under the
+                        // substitution that reaches it, and the resolutions take the one of `scm`.
+                        let defn_to_impl = defn_to_impl_substitution(
+                            &scm,
+                            &impl_.scm,
+                            &impl_.trait_tyvar_to_impl_type,
+                        );
+                        let defn_to_impl_via_defn = defn_to_impl_substitution(
+                            &scm,
+                            &impl_.scm_via_defn,
+                            &impl_.trait_tyvar_to_impl_type,
+                        );
 
-                        impl_.scm = rewrite_impl_scheme(&impl_.scm, &scm, opaque_infos);
-                        impl_.scm_via_defn =
-                            rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
+                        impl_.scm = rewrite_impl_scheme(&impl_.scm, opaque_infos, &defn_to_impl);
+                        impl_.scm_via_defn = rewrite_impl_scheme(
+                            &impl_.scm_via_defn,
+                            opaque_infos,
+                            &defn_to_impl_via_defn,
+                        );
                         impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
                         impl_.expr.opaque_types =
                             build_opaque_resolutions(opaque_infos, &defn_to_impl);
@@ -356,20 +366,39 @@ fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme>
     apply_opaque_substitution(scm, &sub)
 }
 
-// Rewrite a trait impl's scheme. The impl may use different names for opaque type variables
-// than the trait definition (e.g., `?iter` vs `?it`), so we compute the name correspondence
-// by matching the trait defn scheme type (which uses defn names like `c -> ?it`) against
-// `impl_scm.ty` (which uses impl names like `Array a -> ?iter`).
+// The substitution taking each type variable of a trait member's declared scheme `defn_scm` to what
+// the implementation whose scheme is `impl_scm` puts in its place. For `trait c : ToIter` with
+// `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it` and an implementation for `Array a`
+// annotated `[?iter : Iterator, Item ?iter = a] Array a -> ?iter`, it takes `c` to `Array a` and
+// `?it` to `?iter`.
+//
+// Matching the two declared types answers for every type variable that type names. The trait's own
+// type variable need not be among them — a member can fix it by a constraint alone, as
+// `make : [?it : Iterator, Item ?it = c] I64 -> ?it` does — and `trait_tyvar_to_impl_type` is what
+// it stands for. The two are read as one substitution, so a type variable of the implementation
+// that carries the trait's name for its own stays the implementation's.
+fn defn_to_impl_substitution(
+    defn_scm: &Arc<Scheme>,
+    impl_scm: &Arc<Scheme>,
+    trait_tyvar_to_impl_type: &Substitution,
+) -> Substitution {
+    let mut defn_to_impl = Substitution::matching_no_kind_check(&defn_scm.ty, &impl_scm.ty, &[])
+        .expect("defn scheme type should match impl scheme type");
+    defn_to_impl.fill_unbound(trait_tyvar_to_impl_type);
+    defn_to_impl
+}
+
+// Rewrite a trait impl's scheme: replace each opaque type variable by the generated TyCon applied
+// to the types this implementation gives the member's type arguments, and drop the constraints on
+// that variable, which `add_opaque_constraints` has moved onto the TyCon.
+//
+// `defn_to_impl` gives both the implementation's name for each opaque type variable (`?iter` for
+// `?it`) and the type arguments the TyCon takes (`Array a` for `c`).
 fn rewrite_impl_scheme(
     impl_scm: &Arc<Scheme>,
-    defn_scm: &Arc<Scheme>,
     opaque_infos: &[OpaqueInfo],
+    defn_to_impl: &Substitution,
 ) -> Arc<Scheme> {
-    // Match trait defn scheme type against impl scheme type to find the defn→impl name mapping.
-    // E.g., defn `c -> ?it` against impl `Array a -> ?iter` gives {c → Array a, ?it → ?iter}.
-    let defn_to_impl = Substitution::matching_no_kind_check(&defn_scm.ty, &impl_scm.ty, &[])
-        .expect("defn scheme type should match impl scheme type");
-
     // Build substitution: impl's opaque tyvar → TyCon applied to impl's type arguments.
     let mut sub = Substitution::default();
     for info in opaque_infos {

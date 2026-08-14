@@ -227,6 +227,99 @@ pub fn test_opaque_higher_arity_associated_type() {
 }
 
 // ============================================================
+// A trait member whose declared type does not name the trait's type variable
+// ============================================================
+
+#[test]
+pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone() {
+    // The declared type of `make` is `I64 -> ?it`, which does not name the trait's type variable
+    // `c`; the equality `Item ?it = c` is what fixes it. Each implementation still hides its own
+    // concrete iterator behind `?it`, and the caller reaches the one it asks for.
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |n| Iterator::range(0, n);
+        }
+
+        impl Bool : Make {
+            make = |n| Iterator::range(0, n).map(|x| x % 2 == 0);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(3).to_array;
+            assert_eq(|_|"make for I64", is, [0, 1, 2]);;
+            let bs : Array Bool = Make::make(3).to_array;
+            assert_eq(|_|"make for Bool", bs, [true, false, true]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_implementation_of_a_member_fixing_the_trait_variable_by_a_constraint() {
+    // `impl Bool : Make` owes an iterator of `Bool`, since `Item ?it = c` holds `c` to the type the
+    // implementation is for. The iterator this one returns has `I64` elements, and the constraint
+    // it breaks is the implementation's own.
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl Bool : Make {
+            make = |n| Iterator::range(0, n);
+        }
+
+        main : IO ();
+        main = (
+            let bs : Array Bool = Make::make(3).to_array;
+            println(bs.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::I64 = Std::Bool` cannot be deduced",
+    );
+}
+
+#[test]
+pub fn test_opaque_trait_variable_fixed_by_a_constraint_alone_for_a_higher_kinded_type() {
+    // The type `Wrap f` this implementation is for takes a type variable of kind `* -> *`. That
+    // kind reaches the opaque type constructor's argument through the trait's type variable, which
+    // the declared type of `make` does not name.
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        type [f : *->*] Wrap f = box struct { x : f I64 };
+
+        impl [f : *->*, f : Monad] Wrap f : Make {
+            make = |n| Iterator::range(0, n).map(|i| Wrap { x : pure(i) });
+        }
+
+        main : IO ();
+        main = (
+            let ws : Array (Wrap Option) = Make::make(3).to_array;
+            assert_eq(|_|"make for Wrap Option", ws.map(|w| w.@x.as_some), [0, 1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
 

@@ -7,7 +7,7 @@ use crate::{
         equality::{Equality, EqualityScheme},
         expr::{AppSourceCodeOrderType, Expr, ExprNode},
         import::ImportStatement,
-        kind_scope::KindEnv,
+        kind_scope::{KindEnv, KindScope},
         name::{FullName, Name, NameSpace},
         pattern::{Pattern, PatternNode},
         predicate::Predicate,
@@ -212,6 +212,22 @@ impl Substitution {
             }
         }
         return true;
+    }
+
+    /// Adds to this substitution the replacements `other` makes for the type variables this one
+    /// leaves in place. A type variable both replace keeps the replacement this substitution makes.
+    pub fn fill_unbound(&mut self, other: &Self) {
+        for (var, ty) in &other.data {
+            self.data.entry(var.clone()).or_insert(ty.clone());
+        }
+    }
+
+    /// Sets the kind of every type variable of the types this substitution replaces by, to the kind
+    /// `kind_scope` gives that variable.
+    pub fn set_kinds(&mut self, kind_scope: &KindScope) {
+        for (_var, ty) in self.data.iter_mut() {
+            *ty = ty.set_kinds(kind_scope);
+        }
     }
 
     /// Replaces the type variables this substitution binds in the type `p` constrains.
