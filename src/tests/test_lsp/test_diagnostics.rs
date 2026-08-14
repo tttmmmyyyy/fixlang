@@ -85,6 +85,33 @@ mod tests {
         );
     }
 
+    /// Two values whose opaque return types are written in terms of each other are reported in the
+    /// editor, on the first declaration, with the second named as a related location.
+    ///
+    /// Determining the concrete type behind an opaque type is the work of type-checking, so this
+    /// report is made where a run for the editor and a run for `fix build` part company; and a
+    /// program the editor leaves unreported here is one whose build does not terminate.
+    #[test]
+    fn test_opaque_types_written_in_terms_of_each_other_are_reported_on_both_declarations() {
+        let (_temp_dir, project_dir) = setup_test_env("opaque_type_cycle");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(&diagnostics, "written in terms of each other");
+
+        // `main.fix` declares `f` on the 3rd line and `g` on the 6th, which the protocol counts
+        // from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 2,
+            "at the declaration of `f`"
+        );
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["line"], 5,
+            "naming the declaration of `g`, but the report is {:?}",
+            diag
+        );
+    }
+
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
     /// field, at `line` and `repeat_character`, naming the first occurrence of the name at
     /// `first_occurrence_character` of the same line as a related location. The protocol counts
