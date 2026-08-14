@@ -1011,6 +1011,15 @@ The test: could a user of the latest release hit this bug? A bug whose cause is 
 
 **Remove** the entry when the cause traces to unreleased work. **Flag** it when you cannot tell how far back the bug reaches — the author knows that history.
 
+#### Open the entry with the numbers behind it — [Changelog]
+
+An entry states the change in a sentence or two; the numbers are what take a reader from there to where it is written down in full. So the entry opens with the issues the change closes and the pull request that carries it, in ascending order, then a colon.
+
+- *Before*: ``- `fix build` now exits with a failure status when linking fails. …``
+- *After*: ``- #151, #184: `fix build` now exits with a failure status when linking fails. …``
+
+**Rewrite**: prepend the numbers the change has. A review runs before the pull request is open, so it covers the issue numbers, and the author adds the pull request's number when the pull request exists. An entry whose change has neither number stays as it is.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
