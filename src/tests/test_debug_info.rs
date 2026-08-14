@@ -24,19 +24,19 @@ mod debug_info_tests {
     };
     use tempfile::TempDir;
 
-    // Build the Fix source `file`, named as the working directory `dir` reaches it, with `-g` at
-    // optimization level `opt_level`, passing `extra_args` to `fix build` as well, and assert the
-    // build succeeds. The program is written to `output` in that directory.
-    fn build_with_g_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
+    // Build the Fix source `file`, named as the working directory `dir` reaches it, at optimization
+    // level `opt_level`, passing `extra_args` to `fix build` as well, and assert the build
+    // succeeds. The program is written to `output` in that directory.
+    fn build_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
         let build = fix_command_at_opt_level("build", opt_level)
-            .args(["-g", "-f", file, "-o", output])
+            .args(["-f", file, "-o", output])
             .args(extra_args)
             .current_dir(dir)
             .output()
             .expect("Failed to execute `fix build`");
         assert!(
             build.status.success(),
-            "`fix build -g -O {} -f {} {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
+            "`fix build -O {} -f {} {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
             opt_level,
             file,
             extra_args.join(" "),
@@ -44,6 +44,13 @@ mod debug_info_tests {
             String::from_utf8_lossy(&build.stdout),
             String::from_utf8_lossy(&build.stderr),
         );
+    }
+
+    // Build the Fix source `file` as `build_in` does, with debug information.
+    fn build_with_g_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
+        let mut args = vec!["-g"];
+        args.extend_from_slice(extra_args);
+        build_in(dir, file, output, opt_level, &args);
     }
 
     // Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
@@ -339,18 +346,7 @@ mod debug_info_tests {
         fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
 
         build_with_g_in(&dir, "main.fix", "with_g", "none", &[]);
-        let build = fix_command_at_opt_level("build", "none")
-            .args(["-f", "main.fix", "-o", "without_g"])
-            .current_dir(&dir)
-            .output()
-            .expect("Failed to execute `fix build`");
-        assert!(
-            build.status.success(),
-            "`fix build -O none -f main.fix` failed in {}:\nstdout:\n{}\nstderr:\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
+        build_in(&dir, "main.fix", "without_g", "none", &[]);
 
         let directory = dir.to_str().expect("The temporary directory is not UTF-8");
         assert!(

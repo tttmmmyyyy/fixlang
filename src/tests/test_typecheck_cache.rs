@@ -107,6 +107,18 @@ main : IO ();
 main = println("s");
 "#;
 
+    /// A temporary directory holding `a/main.fix` and `b/main.fix`, two files whose content is
+    /// `DEPRECATED_USE`. Built from that directory, the two share the cache it holds.
+    fn two_files_of_equal_content() -> TempDir {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        for sub_dir in ["a", "b"] {
+            let sub_dir = temp.path().join(sub_dir);
+            fs::create_dir(&sub_dir).expect("Failed to create the directory of a file");
+            fs::write(sub_dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
+        }
+        temp
+    }
+
     /// Builds the Fix source `file`, named as the working directory `dir` reaches it, passing
     /// `extra_args` to `fix build` as well, and returns what the compiler wrote to stderr. The
     /// program is written to `out` in that directory.
@@ -169,13 +181,8 @@ main = println("s");
     /// never read.
     #[test]
     fn two_files_of_equal_content_are_each_reported_in_their_own_file() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
+        let temp = two_files_of_equal_content();
         let dir = temp.path();
-        for sub_dir in ["a", "b"] {
-            fs::create_dir(dir.join(sub_dir)).expect("Failed to create the directory of a file");
-            fs::write(dir.join(sub_dir).join("main.fix"), DEPRECATED_USE)
-                .expect("Failed to write main.fix");
-        }
 
         for sub_dir in ["a", "b"] {
             let file = format!("{}/main.fix", sub_dir);
@@ -205,13 +212,8 @@ main = println("s");
     /// files and has to generate code — which is where the spans are read.
     #[test]
     fn a_build_with_debug_information_reads_the_spans_out_of_its_own_file() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
+        let temp = two_files_of_equal_content();
         let dir = temp.path();
-        for sub_dir in ["a", "b"] {
-            fs::create_dir(dir.join(sub_dir)).expect("Failed to create the directory of a file");
-            fs::write(dir.join(sub_dir).join("main.fix"), DEPRECATED_USE)
-                .expect("Failed to write main.fix");
-        }
 
         build(dir, "a/main.fix", &[]);
         fs::write(dir.join("a").join("main.fix"), SHORTER_SOURCE)
