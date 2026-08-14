@@ -24,7 +24,8 @@
 //   `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it`
 //
 // Step 1: Generate TyCon `ToIter::to_iter::?it` with kind `* -> *`, type args `[c]`.
-//   (The TyCon's type args are the trait's type variables, not the method's own gen_vars.)
+//   (The TyCon's type args are the variables the member's scheme generalizes, the trait's type
+//   variable `c` among them.)
 //
 // Step 2: Add global constraints:
 //   QualPredScheme { gen_vars: [c], pred_constraints: [], pred: ?it c : Iterator }
@@ -76,13 +77,15 @@ use std::sync::Arc;
 ///   tycon_vars = [a]
 ///   tycon_kind = * -> *
 struct OpaqueInfo {
-    // The opaque type variable.
+    /// The opaque type variable, as the scheme writes it.
     tyvar: Arc<TyVar>,
-    // The generated TyCon (e.g., `Std::repeat::?it`).
+    /// The generated TyCon (e.g., `Std::repeat::?it`) that stands in the opaque type variable's
+    /// place.
     tycon: Arc<TyCon>,
-    // Non-opaque gen_vars from the scheme; become the TyCon's type arguments.
+    /// The variables the scheme generalizes, which become the TyCon's type arguments in the order
+    /// they stand here.
     tycon_vars: Vec<Arc<TyVar>>,
-    // Kind of the TyCon (e.g., `* -> *` when there is one type argument of kind `*`).
+    /// Kind of the TyCon (e.g., `* -> *` when there is one type argument of kind `*`).
     tycon_kind: Arc<Kind>,
 }
 
@@ -181,6 +184,10 @@ impl Program {
         }
     }
 
+    /// Declares the generated TyCon of an opaque type variable in the type environment, as a type
+    /// constructor of the opaque variant, taking the type arguments `info` records and holding no
+    /// field. What the TyCon stands for is settled by type-checking, and until then a type written
+    /// in terms of it is a type like any other.
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
             punched_from: None,
@@ -197,6 +204,13 @@ impl Program {
         self.type_env.add_tycons(new_tycons);
     }
 
+    /// Grants to the generated TyCon of each opaque type variable the constraints `scm` writes on
+    /// that variable, so that a caller who receives the opaque type has what the signature promises
+    /// about it: `[?it : Iterator, Item ?it = a] a -> I64 -> ?it` grants `?it a : Iterator` and
+    /// `Item (?it a) = a`, each generalized over the TyCon's type arguments.
+    ///
+    /// A trait alias in a constraint is resolved first, so that each trait it stands for is granted
+    /// on its own.
     fn add_opaque_constraints(&mut self, scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) {
         // Build a combined substitution mapping ALL opaque tyvars to their TyCons.
         // This is needed for equalities that reference multiple opaque types,
@@ -458,7 +472,7 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
         }
     }
 
-    // Non-opaque gen_vars become the TyCon's type arguments.
+    // The variables the scheme generalizes become the TyCon's type arguments.
     let gen_vars = scm.gen_vars.clone();
 
     opaque_vars

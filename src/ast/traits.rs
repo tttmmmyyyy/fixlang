@@ -453,31 +453,36 @@ impl TraitDefn {
     }
 }
 
-// Trait implementation
+/// An implementation of a trait for one type: the head it is written for, and the body it gives
+/// each member of the trait.
 #[derive(Clone)]
 pub struct TraitImpl {
-    // Statement such as "[a: Show, b: Show] (a, b): Show".
+    /// The head of this implementation, with the constraints it assumes, such as
+    /// `[a : Show, b : Show] (a, b) : Show`.
     pub qual_pred: QualPred,
-    // Member implementation.
+    /// The expression implementing each member, by the member's name.
     pub members: Map<Name, Arc<ExprNode>>,
-    // Source spans of the left-hand side names in member implementations.
-    // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
-    // this stores the spans of both occurrences of `to_string`.
+    /// Source spans of the left-hand side names in member implementations.
+    /// For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
+    /// this stores the spans of both occurrences of `to_string`.
     pub member_lhs_srcs: Map<Name, Vec<Span>>,
-    // Type signatures of members, if provided by user.
+    /// The type signature written for a member in this implementation, by the member's name. A
+    /// member whose implementation carries no signature is absent.
     pub member_sigs: Map<Name, QualType>,
-    // Associated type synonym implementation.
+    /// The type given to each associated type of the trait, by the associated type's name.
     pub assoc_types: Map<Name, AssocTypeImpl>,
-    // Module where this instance is defined.
+    /// Module where this instance is defined.
     pub define_module: Name,
-    // Source location where this instance is defined.
+    /// Source location where this instance is defined.
     pub source: Option<Span>,
-    // Is this instance implememted by user? (not by compiler)
+    /// Whether this instance is written in a Fix program. The compiler generates instances of its
+    /// own, such as the ones for tuples.
     pub is_user_defined: bool,
 }
 
 impl TraitImpl {
-    // Find the minimum node which includes the specified source code position.
+    /// The innermost node of this implementation that includes the source code position `pos`:
+    /// a node of its head, of an associated type it gives, or of a member's type signature.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let trait_id = self.trait_id();
         let node = self.qual_pred.find_node_at(pos);
@@ -499,6 +504,9 @@ impl TraitImpl {
         None
     }
 
+    /// Sets the kinds of the type variables of this implementation's head and of the type
+    /// signatures written for its members, taking each kind from the constraints in force where the
+    /// variable stands, and reports a set of constraints whose kinds do not fit together.
     pub fn set_kinds_in_qual_pred_and_member_sigs(
         &mut self,
         kind_env: &KindEnv,
@@ -546,6 +554,10 @@ impl TraitImpl {
         Ok(())
     }
 
+    /// Replaces every name written in the declarations of this implementation — its head, the types
+    /// it gives the associated types, and the type signatures of its members — by the full name it
+    /// stands for. The expressions implementing the members are name-resolved with the rest of the
+    /// program's expressions.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.qual_pred.resolve_namespace(ctx)?;
 
@@ -558,10 +570,10 @@ impl TraitImpl {
         }
 
         errors.to_result()
-
-        // This function is called only by resolve_namespace_in_declaration, so we don't need to see into expression.
     }
 
+    /// Replaces every type alias written in this implementation's head, in the types it gives the
+    /// associated types, and in the type signatures of its members, by the type it stands for.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         errors.eat_err(self.qual_pred.resolve_type_aliases(type_env));
@@ -574,22 +586,24 @@ impl TraitImpl {
         errors.to_result()
     }
 
-    // Get trait id.
+    /// The trait this implements.
     fn trait_id(&self) -> TraitId {
         self.qual_pred.predicate.trait_id.clone()
     }
 
-    // Get mutable trait id.
+    /// The trait this implements, as the head of this implementation holds it, so that its name can
+    /// be replaced.
     fn trait_id_mut(&mut self) -> &mut TraitId {
         &mut self.qual_pred.predicate.trait_id
     }
 
-    // Get type-scheme of a member implementation.
-    // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
-    // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
-    //
-    // Users can also write type annotations in trait implementations.
-    // This function trusts and returns the type annotation if the user has written one.
+    /// The type-scheme of a member implementation.
+    /// Here, for example, in case `impl [a : ToString, b : ToString] (a, b) : ToString`,
+    /// this function returns `[a : ToString, b : ToString] (a, b) -> String` as the type of
+    /// `to_string`.
+    ///
+    /// A type signature written for the member in this implementation is trusted and returned as
+    /// the member's type, qualified by the constraints of this implementation's head.
     pub fn member_scheme(&self, member: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         if let Some(qual_ty) = self.member_sigs.get(member) {
             // If type annotation is provided by user, use it.

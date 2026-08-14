@@ -337,17 +337,21 @@ pub struct GlobalValue {
 }
 
 impl GlobalValue {
+    /// Replaces every name written in this value's declared type by the full name it stands for.
+    ///
+    /// Asked of a simple value: the declaration of a trait method is name-resolved on `TraitEnv`,
+    /// and the global value of the method is built from the resolved one.
     pub fn resolve_namespace_in_declaration(
         &mut self,
         ctx: &mut NameResolutionContext,
     ) -> Result<(), Errors> {
-        // Currently, global values generated from member implementations do not come here.
-        // This is because name resolution is performed on TraitEnv, and then global values are generated from trait member implementations.
         assert!(matches!(self.expr, SymbolExpr::Simple(_)));
         self.scm = self.scm.resolve_namespace(ctx)?;
         Ok(())
     }
 
+    /// Replaces every type alias written in this value's type, and in the types of its trait member
+    /// implementations, by the type it stands for. The type as written is kept in `syn_scm`.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.syn_scm = Some(self.scm.clone());
         self.scm = self.scm.resolve_type_aliases(type_env)?;
@@ -355,6 +359,8 @@ impl GlobalValue {
         Ok(())
     }
 
+    /// Sets the kinds of the type variables of this value's scheme, and of the schemes of its trait
+    /// member implementations, and reports a scheme whose kinds do not fit together.
     pub fn set_kinds(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
         self.scm = self.scm.set_kinds(kind_env)?;
         self.scm.check_kinds(kind_env)?;
@@ -369,12 +375,15 @@ impl GlobalValue {
         Ok(())
     }
 
-    // Check if this value is a simple value, not a trait method.
+    /// Whether this value is defined by one expression. A trait method is defined by one
+    /// implementation per type the trait is implemented for.
     pub fn is_simple_value(&self) -> bool {
         matches!(self.expr, SymbolExpr::Simple(_))
     }
 
-    // Get the document of this value.
+    /// The documentation comment written above this value's declaration, and the `document` field
+    /// where the source code of the declaration is unavailable. Documentation that is empty is
+    /// answered as `None`.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self
@@ -401,16 +410,20 @@ impl GlobalValue {
         }
     }
 
-    // Find the minimum node which includes the specified source code position.
-    // - `name`: the name of this global value (i.e., the key in `Program::global_values`).
+    /// The innermost node of this value that includes the source code position `pos`: a node of its
+    /// expression, a node of its type signature, or the value itself where `pos` is on the name it
+    /// is declared or defined under.
+    ///
+    /// # Arguments
+    /// * `name` — the name this value is known by, the key it is held under in
+    ///   `Program::global_values`, which the answer carries where `pos` is on the name.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(name, pos);
         if node.is_some() {
             return node;
         }
-        // Walk the syntactic scheme if available so that type aliases written
-        // in source resolve back to the alias name (rather than the expanded
-        // type, which is what `scm` carries).
+        // Walk the syntactic scheme where there is one, so that a type alias written in the source
+        // resolves to the alias name; `scm` carries the type the alias expands to.
         let scm_for_lookup = self.syn_scm.as_ref().unwrap_or(&self.scm);
         let node = scm_for_lookup.find_node_at(pos);
         if node.is_some() {
@@ -430,14 +443,18 @@ impl GlobalValue {
     }
 }
 
-// Expression of global symbol.
+/// What a global value is defined by.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(TypedExpr),            // Definition such as "id : a -> a; id = \x -> x".
-    Method(Vec<TraitMemberImpl>), // Trait member implementations.
+    /// The one expression a value is defined by, as `id = |x| x` defines `id : a -> a`.
+    Simple(TypedExpr),
+    /// The implementations of a trait member, one per type the trait is implemented for.
+    Method(Vec<TraitMemberImpl>),
 }
 
 impl SymbolExpr {
+    /// Replaces every type alias written in the type of each trait member implementation by the
+    /// type it stands for. A simple value's type is held by the `GlobalValue` itself.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         match self {
             SymbolExpr::Simple(_) => Ok(()),
@@ -451,6 +468,8 @@ impl SymbolExpr {
         }
     }
 
+    /// The source code of the expression this value is defined by, and of the first implementation
+    /// for a trait member.
     #[allow(dead_code)]
     pub fn source(&self) -> Option<Span> {
         match self {
@@ -462,9 +481,13 @@ impl SymbolExpr {
         }
     }
 
-    // Find the minimum expression node which includes the specified source code position.
-    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return `EndNode::ValueDecl` when
-    //   the cursor is on the LHS of a trait member implementation.
+    /// The innermost expression node that includes the source code position `pos`, searching the
+    /// implementations of a trait member in turn.
+    ///
+    /// # Arguments
+    /// * `name` — the name of the global value this expression defines (e.g.
+    ///   `Std::ToString::to_string`), which the answer carries where `pos` is on the left hand side
+    ///   of a trait member implementation.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         match self {
             SymbolExpr::Simple(e) => e.find_node_at(pos),
@@ -502,33 +525,38 @@ impl SymbolExpr {
     }
 }
 
-// The expression with all sub-expressions typed.
+/// The expression with all sub-expressions typed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
-    // The expression.
-    //
-    // It and its all subexpressions has their types resolved, and these types contains only ones that appear in the context (type signature) of this expression.
+    /// The expression.
+    ///
+    /// It and all its subexpressions have their types resolved, and these types contain only the
+    /// type variables that appear in the context (type signature) of this expression.
     pub expr: Arc<ExprNode>,
-    // Equalities to be assumed in the context of this expression.
-    //
-    // For example, consider the following expression:
-    // ```
-    // extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
-    // extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
-    // ```
-    // In this case, the `equalities` field consists of two equalities: `Elem c1 = e` and `Elem c2 = e`.
-    //
-    // In fact, this information is neccesary to instantiate the typed expression to a concrete type:
-    // In the above case, the sub-expression `x` has type `e` (not `Elem c1` or `Elem c2`).
-    // When instantiating this typed expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`,
-    // we need to use the equality `Elem c1 = e` to prove that `x` has type `I64`.
+    /// Equalities to be assumed in the context of this expression.
+    ///
+    /// For example, consider the following expression:
+    /// ```text
+    /// extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
+    /// extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
+    /// ```
+    /// In this case, the `equalities` field consists of two equalities: `Elem c1 = e` and
+    /// `Elem c2 = e`.
+    ///
+    /// This information is necessary to instantiate the typed expression to a concrete type:
+    /// in the above case, the sub-expression `x` has type `e`. When instantiating this typed
+    /// expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`, the
+    /// equality `Elem c1 = e` is what proves that `x` has type `I64`.
     pub equalities: Vec<Equality>,
-    // Concrete types for opaque type constructors in this expression.
+    /// The concrete type behind each opaque type constructor this expression determines, by the
+    /// constructor's name. Type-checking this expression fills in the concrete types.
     #[serde(default)]
     pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
 }
 
 impl TypedExpr {
+    /// The expression carrying no context of its own: neither an equality to assume nor a concrete
+    /// type for an opaque type constructor, which type-checking fills in.
     pub fn from_expr(expr: Arc<ExprNode>) -> Self {
         TypedExpr {
             expr,
@@ -537,7 +565,7 @@ impl TypedExpr {
         }
     }
 
-    // Find the minimum expression node which includes the specified source code position.
+    /// The innermost node of this expression that includes the source code position `pos`.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
         if node.is_none() {
@@ -548,30 +576,33 @@ impl TypedExpr {
     }
 }
 
-// Trait member implementation
+/// One implementation of a trait member: the body a trait method takes for one of the types the
+/// trait is implemented for.
 #[derive(Clone)]
 pub struct TraitMemberImpl {
-    // Type of this member.
-    //
-    // For example, in case "impl [a: ToString, b: ToString] (a, b): ToString {...}",
-    // the type of member "to_string" is "[a: ToString, b: ToString] (a, b) -> String",
-    //
-    // Users can give type signatures in each trait member implementation.
-    // In this case, the `scm` field contains the type signature given by users.
+    /// Type of this member.
+    ///
+    /// For example, in case `impl [a : ToString, b : ToString] (a, b) : ToString {...}`, the type
+    /// of member `to_string` is `[a : ToString, b : ToString] (a, b) -> String`.
+    ///
+    /// A type signature written in the trait member implementation is what this field holds.
     pub scm: Arc<Scheme>,
-    // This field holds the type scheme obtained from the trait member definition.
+    /// The type of this member as the trait member declaration gives it, with the trait's type
+    /// variable sent to the type this implementation is for. A type signature written in the
+    /// implementation is left out, so this field and `scm` can name the type variables differently.
     pub scm_via_defn: Arc<Scheme>,
-    // Expression of this implementation
+    /// Expression of this implementation.
     pub expr: TypedExpr,
-    // Module where this implmentation is given.
-    // NOTE:
-    // For trait member, `define_module` may differ to the first component of namespace of the function.
-    // For example, if `Main` module implements `SomeType : Eq`, then implementation of `eq` for `SomeType` is defined in `Main` module,
-    // but its name as a function is still `Std::Eq::eq`.
+    /// Module where this implementation is given.
+    ///
+    /// For a trait member, `define_module` may differ from the first component of the namespace of
+    /// the function. For example, if the `Main` module implements `SomeType : Eq`, then the
+    /// implementation of `eq` for `SomeType` is defined in the `Main` module, while its name as a
+    /// function is still `Std::Eq::eq`.
     pub define_module: Name,
-    // The source spans of the left-hand side names in the trait member implementation.
-    // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
-    // this contains spans of both `to_string` occurrences (type signature and definition).
+    /// The source spans of the left-hand side names in the trait member implementation.
+    /// For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
+    /// this contains spans of both `to_string` occurrences (type signature and definition).
     pub lhs_srcs: Vec<Span>,
     /// The trait's type variable, sent to the type this implementation is for: `c` to `Array a` for
     /// `impl [a : ToString] Array a : ToIter` of `trait c : ToIter`.
@@ -584,6 +615,8 @@ pub struct TraitMemberImpl {
 }
 
 impl TraitMemberImpl {
+    /// Replaces every type alias written in the two schemes of this implementation by the type it
+    /// stands for.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.scm = self.scm.resolve_type_aliases(type_env)?;
         self.scm_via_defn = self.scm_via_defn.resolve_type_aliases(type_env)?;
@@ -627,9 +660,13 @@ impl TraitMemberImpl {
         Ok(())
     }
 
-    // Find the minimum expression node which includes the specified source code position.
-    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return
-    //   `EndNode::ValueDecl` when the cursor is on the LHS of this trait member implementation.
+    /// The innermost node of this implementation that includes the source code position `pos`: a
+    /// node of its expression, or the member itself where `pos` is on one of the left hand side
+    /// names the implementation writes.
+    ///
+    /// # Arguments
+    /// * `name` — the name of the global value this implements (e.g. `Std::ToString::to_string`),
+    ///   which the answer carries where `pos` is on a left hand side name.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
         if node.is_some() {
@@ -684,7 +721,9 @@ pub struct Program {
     pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
     /* Instantiated symbols */
-    // Opaque types instantiated in this program, keyed by opaque TyCon name.
+    /// The concrete type behind each opaque type constructor of this program, by the constructor's
+    /// name. The opaque type constructor of a trait member has one resolution per implementation,
+    /// told apart by the type each is for.
     pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
     // Instantiated symbols.
     pub symbols: Map<FullName, Symbol>,
@@ -1947,7 +1986,8 @@ impl Program {
         Ok(name)
     }
 
-    // Create symbols of trait members from TraitEnv.
+    /// Adds a global value for every member of every trait, holding the implementations of that
+    /// member — one per type the trait is implemented for — as its expression.
     pub fn create_trait_member_symbols(&mut self) {
         for (trait_id, trait_) in &self.trait_env.traits {
             for member in &trait_.members {
