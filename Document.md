@@ -2270,19 +2270,7 @@ Any other type is rejected when the program is compiled.
 
 The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
 
-Two groups of names are the compiler's own, and an export of one of them is rejected:
-
-* `main`, which is the entry point the compiler generates for an executable. A dynamic library carries no entry point, so a library may export `main`.
-* any name beginning with `fixruntime_`, which belongs to the Fix runtime
-
-`main` is rejected in `FFI_CALL` as well, since the compiler writes that function and a program naming it takes it away. A `fixruntime_` name is available to `FFI_CALL`, where it reaches the same function the compiler calls.
-
-Every other name is the program's to take, including the C library functions the compiled program itself calls: `malloc`, `realloc`, `free`, `memcpy`, `memmove`, `sprintf` and `pthread_once`. Exporting one of these replaces it **for the whole process**, the C library's own uses of it included — the same thing linking an object file that defines it does. Two consequences are worth knowing before doing it:
-
-* The exported value is a Fix value, so it allocates. A `free` written in Fix therefore calls `free` while releasing what it allocated, and the program runs until the stack ends.
-* The C library calls these functions for its own bookkeeping, so a definition that does not honour the contract breaks code that has nothing to do with the program's own allocation.
-
-To watch or replace an allocator without taking the name, pass the linker's own mechanism instead: `--ld-flags=-Wl,--wrap=malloc`.
+`main` and the names beginning with `fixruntime_` are functions the compiler implements, so exporting one of them is rejected. `main` is available to a dynamic library, which carries no entry point.
 
 One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
 
