@@ -67,7 +67,7 @@ pub enum LinkType {
 }
 
 /// What a build produces.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum OutputFileType {
     /// A program that can be run on its own.
     Executable,

@@ -298,15 +298,16 @@ pub fn test_export_non_ascii_first_character_fails() {
     );
 }
 
-/// A module holds one function under a name, so an export of a name the compiler puts there is a
-/// second definition of one symbol and one of the two loses the name. Each kind of name the compiler
-/// owns: the entry point, a name of the Fix runtime, and a C library function the runtime calls.
+/// A module holds one function under a name, so an export of a name the compiler writes a body under
+/// is a second definition of one symbol and one of the two loses the name. Both kinds: the entry
+/// point, and a name of the Fix runtime, whether the compiler writes its body into the module or
+/// `runtime.c` carries it.
 #[test]
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
         ("main", "it is the entry point of the program"),
         ("fixruntime_abort", "belongs to the Fix runtime"),
-        ("malloc", "it is a C library function the Fix runtime calls"),
+        ("fixruntime_ptr_add_offset", "belongs to the Fix runtime"),
     ] {
         let source = format!(
             r##"
@@ -349,27 +350,51 @@ pub fn test_export_and_ffi_call_of_one_c_name() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// An `FFI_CALL` of the entry point's name is rejected: the call declares the name and the
-/// compiler's entry point, written afterwards, is renamed away from the C runtime that starts the
-/// program.
+/// A program may call its own entry point, which re-runs it: the body the compiler writes goes onto
+/// the declaration the call left, so the name is not taken from the C runtime that starts the
+/// program. The re-entered run is given no arguments, which is what ends the recursion here.
 #[test]
-pub fn test_ffi_call_of_the_entry_point_name_fails() {
+pub fn test_ffi_call_of_the_entry_point_re_runs_the_program() {
     let source = r##"
         module Main;
 
-        call_entry : IO CInt;
-        call_entry = FFI_CALL_IO[CInt main(CInt, Ptr), 0.c_int, nullptr];
+        reenter : CInt -> Ptr -> IO CInt;
+        reenter = |argc, argv| FFI_CALL_IO[CInt main(CInt, Ptr), argc, argv];
 
         main : IO ();
         main = (
-            let status = *call_entry;
-            println(status.to_string)
+            let args = *get_args;
+            if args.get_size == 0 {
+                println("re-entered")
+            };
+            let status = *reenter(0.c_int, nullptr);
+            assert_eq(|_|"the re-entered run failed", status.i64, 0);;
+            println("first run")
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The entry point has a signature, so a call that writes another one is reported like any other
+/// disagreement over one C name.
+#[test]
+pub fn test_ffi_call_of_the_entry_point_at_another_signature_fails() {
+    let source = r##"
+        module Main;
+
+        reenter : IO ();
+        reenter = FFI_CALL_IO[() main()];
+
+        main : IO ();
+        main = (
+            reenter;;
+            println("done")
         );
     "##;
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "cannot be the name of a C function called from Fix",
+        "One C function has one signature",
     );
 }
 

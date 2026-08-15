@@ -1,51 +1,50 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_function_name];`
 
 use crate::ast::expr::ExprNode;
-use crate::ast::name::{FullName, Name};
+use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
-use crate::ast::types::{tycon, TyCon, Type, TypeNode};
-use crate::constants::{PTR_NAME, STD_NAME};
+use crate::ast::types::{Type, TypeNode};
+use crate::configuration::OutputFileType;
 use crate::error::Errors;
+use crate::ffi::{assert_crosses_as_c_type, c_boundary_tycon, CSignature};
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
-use crate::fixstd::runtime::compiler_use_of_c_function_name;
+use crate::fixstd::runtime::compiler_defined_c_function_reason;
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::RcState;
-use inkwell::attributes::AttributeLoc;
-use inkwell::types::{BasicMetadataTypeEnum, BasicType};
-use inkwell::values::FunctionValue;
 use std::sync::Arc;
 
-/// A statement exporting a Fix value as a C function.
+// The export statement.
 #[derive(Clone)]
 pub struct ExportStatement {
-    /// The name of the exported Fix value, as the source writes it. `value_expr` holds the symbol
-    /// that name is instantiated to.
+    // The name of the Fix value to be exported.
+    // This is the name of the Fix value in the source code, and not the name of the symbol.
+    // To get the name of the instantiated Fix value, use `self.instantiated_value_expr`.
     pub value_name: FullName,
     /// Span of the value-name token inside `FFI_EXPORT[<here>, c_name];`.
     /// Used for LSP rename / find-references; `None` for export statements
     /// synthesized internally without a corresponding source token.
     pub value_name_src: Option<Span>,
-    /// The expression (symbol) to be exported.
-    /// `None` at first, and set after the fix value is instantiated to a symbol.
+    // The expression (symbol) to be exported.
+    // `None` at first, and set after the fix value is instantiated to a symbol.
     pub value_expr: Option<Arc<ExprNode>>,
-    /// The name of the exported function.
+    // The name of the exported function.
     pub function_name: String,
-    /// The type of the exported function.
-    /// `None` at first, and set by `ExportedFunctionType::validate`.
+    // The type of the exported function.
+    // `None` at first, and set by `ExportedFunctionType::validate`.
     pub function_type: Option<ExportedFunctionType>,
-    /// The source of the export statement.
+    // The source of the export statement.
     pub src: Option<Span>,
 }
 
 impl ExportStatement {
-    /// Create an export statement carrying what the source gives.
-    /// `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
-    /// exported value fills in `value_expr`.
+    // Create an export statement carrying what the source gives.
+    // `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
+    // exported value fills in `value_expr`.
     pub fn new(
         fix_value_name: FullName,
         c_function_name: String,
@@ -66,7 +65,8 @@ impl ExportStatement {
     ///
     /// # Arguments
     /// * `src` — where to place the error message.
-    pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
+    /// * `output` — what is being built, which decides the names the compiler writes itself.
+    pub fn validate_names(&self, src: &Option<Span>, output: OutputFileType) -> Result<(), Errors> {
         // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
         // underscores.
         let first = self
@@ -90,21 +90,19 @@ impl ExportStatement {
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
         }
-        // An export defines the function, so every name the compiler has a use for is out: it either
-        // defines that name itself, or calls something outside the program under it.
-        if let Some(compiler_use) = compiler_use_of_c_function_name(&self.function_name) {
+        // An export writes the function's body, so a name the compiler writes a body under is out.
+        if let Some(reason) = compiler_defined_c_function_reason(&self.function_name, output) {
             let msg = format!(
                 "`{}` cannot be the name of an exported function: {}.",
-                &self.function_name,
-                compiler_use.reason()
+                &self.function_name, reason
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
         Ok(())
     }
 
-    /// Implement the exported C function.
-    /// Requires `self.function_type` and `self.value_expr` to already be set.
+    // Implement the exported C function.
+    // Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {
@@ -190,54 +188,6 @@ impl ExportStatement {
     }
 }
 
-/// Assert that a value of Fix type `ty` travels as the one scalar the C type `c_ty` names, which is
-/// what lets the generated function hand it to C as it stands.
-///
-/// Counting the parts alone would let an aggregate through, since a value too wide to split is
-/// carried as one part holding the whole of it, and C would then be handed a structure whose layout
-/// it classifies by its own rules. `c_boundary_tycon` admits nothing with either shape.
-fn assert_crosses_as_c_type<'c, 'm>(
-    c_ty: &Arc<TyCon>,
-    ty: &Arc<TypeNode>,
-    gc: &mut Generator<'c, 'm>,
-) {
-    let embedded_ty = ty.get_embedded_type(gc);
-    let parts = gc.type_parts(embedded_ty);
-    assert_eq!(
-        parts.len(),
-        1,
-        "`{}` reached an exported signature, where a value has to be one scalar",
-        ty.to_string()
-    );
-    assert_eq!(
-        parts[0],
-        c_ty.get_c_type(gc.context).unwrap(),
-        "`{}` crosses as the C type `{}`, so the two lay it down alike",
-        ty.to_string(),
-        c_ty.to_string()
-    );
-}
-
-/// The C type a value of `ty` crosses the FFI boundary as, and `None` for a value the C ABI cannot
-/// carry the way Fix lays it down.
-///
-/// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
-/// identically by Fix and by C, and a boxed value is a pointer. An aggregate is laid down
-/// differently: the C ABI classifies a structure by its size and by the class of each of its
-/// eightbytes (System V AMD64), or by whether it is a homogeneous floating-point aggregate
-/// (AAPCS64), and the shapes on which that agrees with Fix's element-wise layout differ from target
-/// to target.
-fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
-    let head = ty.toplevel_tycon()?;
-    if ty.is_box(type_env) {
-        return Some(tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)));
-    }
-    if !head.is_c_scalar() {
-        return None;
-    }
-    Some(head)
-}
-
 /// The error message for a type the C ABI cannot carry appearing in an exported function's
 /// signature.
 ///
@@ -256,151 +206,34 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
 }
 
-/// The type of a C function, as the Fix type constructors standing for the C types it exchanges.
-///
-/// A program describes a C function in two ways: an `FFI_CALL` declares one it calls, and an
-/// `FFI_EXPORT` defines one it offers. Both descriptions of one name reach the module as a single
-/// function, through which every call in the program goes, so they have to give one signature.
-pub struct CSignature {
-    /// The type of each parameter, in the order the C function takes them.
-    pub param_tys: Vec<Arc<TyCon>>,
-    /// The type of the result, the unit type where the C function returns nothing.
-    pub ret_tycon: Arc<TyCon>,
-    /// Whether the signature ends in `...`.
-    pub is_var_args: bool,
-}
-
-impl CSignature {
-    /// The signature an `FFI_CALL` writes for the function it calls.
-    pub fn of_ffi_call(
-        ret_tycon: &Arc<TyCon>,
-        param_tys: &Vec<Arc<TyCon>>,
-        is_var_args: bool,
-    ) -> CSignature {
-        CSignature {
-            param_tys: param_tys.clone(),
-            ret_tycon: ret_tycon.clone(),
-            is_var_args,
-        }
-    }
-
-    /// The signature of the C function generated for a value exported at `exported_ty`, whose every
-    /// position `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
-    pub fn of_ffi_export(exported_ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
-        let boundary_tycon = |ty: &Arc<TypeNode>| {
-            c_boundary_tycon(ty, type_env)
-                .unwrap_or_else(|| panic!("`{}` reached an exported signature", ty.to_string()))
-        };
-        CSignature {
-            param_tys: exported_ty.doms.iter().map(boundary_tycon).collect(),
-            ret_tycon: if exported_ty.codom.is_unit() {
-                exported_ty.codom.toplevel_tycon().unwrap()
-            } else {
-                boundary_tycon(&exported_ty.codom)
-            },
-            is_var_args: false,
-        }
-    }
-
-    /// Whether this signature and `other` declare the same C function: the two describe every
-    /// position the same way, down to what a declaration of it carries — `CTypeShape` holds which
-    /// differences between two Fix types that is, and which it is not.
-    pub fn agrees_with(&self, other: &CSignature) -> bool {
-        self.is_var_args == other.is_var_args
-            && self.param_tys.len() == other.param_tys.len()
-            && self.ret_tycon.c_type_shape() == other.ret_tycon.c_type_shape()
-            && (self.param_tys.iter())
-                .zip(other.param_tys.iter())
-                .all(|(a, b)| a.c_type_shape() == b.c_type_shape())
-    }
-
-    /// The function `name` of this signature in the module, declaring it where nothing declares it
-    /// yet. Every description of one C name goes through here, which is what puts the calls a
-    /// program makes and the definition it exports on one function.
-    pub fn get_or_declare_in_module<'c, 'm>(
-        &self,
-        name: &Name,
-        gc: &Generator<'c, 'm>,
-    ) -> FunctionValue<'c> {
-        if let Some(declared) = gc.module.get_function(name) {
-            return declared;
-        }
-        let param_c_tys = self
-            .param_tys
-            .iter()
-            .map(|param_ty| {
-                // A parameter of type `()` is rejected where the signature is written: `void` is a
-                // result alone.
-                param_ty.get_c_type(gc.context).unwrap().into()
-            })
-            .collect::<Vec<BasicMetadataTypeEnum>>();
-        let fn_ty = match self.ret_tycon.get_c_type(gc.context) {
-            None => gc
-                .context
-                .void_type()
-                .fn_type(&param_c_tys, self.is_var_args),
-            Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, self.is_var_args),
-        };
-        let func = gc.module.add_function(name, fn_ty, None);
-        assert_eq!(
-            func.get_name().to_str().unwrap(),
-            name,
-            "the C function enters the module under the name it was given"
-        );
-        gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &self.ret_tycon);
-        for (i, param_ty) in self.param_tys.iter().enumerate() {
-            gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), param_ty);
-        }
-        func
-    }
-
-    /// The signature as a C declaration of a nameless function reads, with each C type written as
-    /// the Fix type constructor standing for it.
-    pub fn to_string(&self) -> String {
-        let mut params = self
-            .param_tys
-            .iter()
-            .map(|param_ty| param_ty.to_string())
-            .collect::<Vec<_>>();
-        if self.is_var_args {
-            params.push("...".to_string());
-        }
-        format!("{} ({})", self.ret_tycon.to_string(), params.join(", "))
-    }
-}
-
-/// The type of an exported Fix value, split into the parts the generated C function is built from.
-/// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
-/// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
+// The type of an exported Fix value, split into the parts the generated C function is built from.
+// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
+// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
 #[derive(Clone)]
 pub struct ExportedFunctionType {
-    /// The types of the arguments, in the order the C function takes them.
+    // The types of the arguments, in the order the C function takes them.
     pub doms: Vec<Arc<TypeNode>>,
-    /// The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
+    // The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
     pub codom: Arc<TypeNode>,
-    /// How the value produces a result of type `codom`.
+    // How the value produces a result of type `codom`.
     pub io_type: IOType,
 }
 
-/// How an exported Fix value produces its result.
+// How an exported Fix value produces its result.
 #[derive(Clone)]
 pub enum IOType {
-    /// The value is the result itself.
+    // The value is the result itself.
     Pure,
-    /// The value is an `IO` action, which the generated C function runs.
+    // The value is an `IO` action, which the generated C function runs.
     IO,
-    /// The value takes an `IOState` token and returns it alongside the result. An exported value is
-    /// written as `IO {codom}`; an optimization may rewrite it into this form.
+    // The value takes an `IOState` token and returns it alongside the result. An exported value is
+    // written as `IO {codom}`; an optimization may rewrite it into this form.
     IOState,
 }
 
 impl ExportedFunctionType {
-    /// Split the type of an exported value into the parts the generated C function is built from,
-    /// admitting only a type the C ABI can carry at every position.
-    ///
-    /// # Arguments
-    /// * `err_msg_prefix` — text put in front of every error message, naming the value at fault.
-    /// * `src` — where to place the error message.
+    // Check if a type is valid for a value which is exported.
+    // - src: Used for error messages.
     pub fn validate(
         scm: Arc<Scheme>,
         type_env: &TypeEnv,

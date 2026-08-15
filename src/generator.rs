@@ -2,7 +2,6 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use crate::ast::export_statement::CSignature;
 use crate::ast::name::FullName;
 use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
@@ -25,6 +24,7 @@ use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
+use crate::ffi::CSignature;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;

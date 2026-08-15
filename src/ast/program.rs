@@ -1,6 +1,6 @@
 use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
 use crate::ast::equality::Equality;
-use crate::ast::export_statement::{CSignature, ExportStatement, ExportedFunctionType, IOType};
+use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
@@ -12,13 +12,14 @@ use crate::ast::types::{
     is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TypeNode,
 };
-use crate::configuration::{Configuration, DeprecationMode, SubCommand};
+use crate::configuration::{Configuration, DeprecationMode, OutputFileType, SubCommand};
 use crate::constants::{
-    DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME,
-    MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
-    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
-    TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
+    MAIN_MODULE_NAME, MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
+    STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
+    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL,
+    TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
+    UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -26,13 +27,13 @@ use crate::elaboration::desugar_opaque::{
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
+use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
 };
-use crate::fixstd::runtime::{compiler_use_of_c_function_name, CompilerNameUse};
 use crate::graph::Graph;
 use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
@@ -2034,7 +2035,7 @@ impl Program {
     /// Report every `FFI_EXPORT` statement that names its value by an absolute path, that gives a
     /// C function name C cannot spell or the compiler owns, or that takes a C function name another
     /// statement took.
-    pub fn validate_export_statements(&self) -> Result<(), Errors> {
+    pub fn validate_export_statements(&self, output: OutputFileType) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Reject absolute-path forms (`FFI_EXPORT[::Foo::bar, c];`) and
@@ -2046,7 +2047,7 @@ impl Program {
                     &[&stmt.src],
                 ));
             }
-            errors.eat_err(stmt.validate_names(&stmt.src));
+            errors.eat_err(stmt.validate_names(&stmt.src, output));
         }
 
         // Throw errors if any.
@@ -2095,10 +2096,19 @@ impl Program {
         let type_env = self.type_env();
         let mut errors = Errors::empty();
 
-        // How each C function name has been described so far, and where. The exported functions
-        // enter first, so that a call disagreeing with a definition is reported against the
-        // definition.
+        // How each C function name has been described so far, and where. The functions the compiler
+        // itself writes enter first, then the exported ones, so that a call disagreeing with a
+        // definition is reported against the definition.
         let mut descriptions: Map<Name, (CSignature, Option<Span>)> = Default::default();
+        // The entry point, which a program reaches by calling `main` — that re-runs the program. It
+        // carries no source location: the compiler writes it, so a disagreement is reported at the
+        // call alone.
+        if self.entry_io_value.is_some() {
+            descriptions.insert(
+                C_ENTRY_POINT_NAME.to_string(),
+                (c_entry_point_signature(), None),
+            );
+        }
         for stmt in &self.export_statements {
             let exported_ty = stmt
                 .function_type
@@ -2131,24 +2141,6 @@ impl Program {
                 if reported.contains(fun_name) {
                     return;
                 }
-                // A name the compiler defines is one the program cannot reach: the call declares it
-                // and the definition, arriving second, is renamed away from every use of it.
-                match compiler_use_of_c_function_name(fun_name) {
-                    Some(CompilerNameUse::Defines(reason)) => {
-                        reported.insert(fun_name.clone());
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "`{}` cannot be the name of a C function called from Fix: {}.",
-                                fun_name, reason
-                            ),
-                            &[&node.source],
-                        ));
-                        return;
-                    }
-                    // A name the compiler calls is defined outside the program, and a call from Fix
-                    // reaches the same function.
-                    Some(CompilerNameUse::Calls(_)) | None => {}
-                }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
                 let Some((known, known_src)) = descriptions.get(fun_name) else {
                     descriptions.insert(fun_name.clone(), (called, node.source.clone()));
@@ -2162,8 +2154,8 @@ impl Program {
                     format!(
                         "The C function `{}` is described as `{}` here and as `{}` elsewhere. One C function has one signature.",
                         fun_name,
-                        called.to_string(),
-                        known.to_string(),
+                        called.declaration_of(fun_name),
+                        known.declaration_of(fun_name),
                     ),
                     &[&node.source, known_src],
                 ));

@@ -1,5 +1,6 @@
+use crate::configuration::OutputFileType;
 use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
-use crate::generator::{module_functions, Generator};
+use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
@@ -49,64 +50,36 @@ pub const RUNTIME_REALLOC: &str = "realloc";
 /// `argc` and `argv`.
 pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 
-/// The C library functions the runtime declares in the module it builds, and calls.
-const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
-    RUNTIME_SPRINTF,
-    RUNTIME_PTHREAD_ONCE,
-    RUNTIME_MALLOC,
-    RUNTIME_REALLOC,
-];
-
-/// What the compiler does with the C function name `name`, and `None` where the name is free for a
-/// program to use as it likes.
+/// Why the C function name `name` is one the compiler writes the body of when it builds an `output`
+/// artifact, phrased to follow "cannot be the name of ...: "; `None` where the program is free to
+/// define the function itself.
 ///
-/// A module holds one function under a name, so what the compiler does with a name decides what a
-/// program may do with it: LLVM renames whichever of two definitions of one symbol arrives second,
-/// and the program that comes out calls something other than what it names.
+/// A module holds one function under a name, and LLVM renames whichever of two definitions arrives
+/// second rather than reporting them. So where the compiler writes a body, a program that writes
+/// one too gets a silently renamed function and a program that does not do what it says.
 ///
-/// The answer is the same however the program is built. `pthread_once` reaches the module only in a
-/// multi-threaded program and the entry point only in an executable, and the compiler's claim on
-/// both holds everywhere, so turning multi-threading on or building the same source as a dynamic
-/// library leaves the set of programs that compile as it was.
-pub fn compiler_use_of_c_function_name(name: &str) -> Option<CompilerNameUse> {
-    if name == C_ENTRY_POINT_NAME {
-        return Some(CompilerNameUse::Defines(
+/// A C function the compiler only *calls* is not here. Supplying that definition is what linking an
+/// object file of one's own does, and it reaches the same place: the compiler emits a call to an
+/// undefined symbol either way, and the linker binds it to whatever definition the program brings.
+/// Interposing on the C library is therefore the program's to do, and `Document.md` says what it
+/// costs.
+///
+/// # Arguments
+/// * `output` — what is being built. The entry point is written into an executable alone, so a
+///   dynamic library is free to carry a `main` of its own.
+pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) -> Option<String> {
+    if name == C_ENTRY_POINT_NAME && output == OutputFileType::Executable {
+        return Some(
             "it is the entry point of the program, which the compiler defines".to_string(),
-        ));
+        );
     }
     if name.starts_with(RUNTIME_NAME_PREFIX) {
-        return Some(CompilerNameUse::Calls(format!(
+        return Some(format!(
             "a name beginning with `{}` belongs to the Fix runtime",
             RUNTIME_NAME_PREFIX
-        )));
-    }
-    if RUNTIME_C_LIBRARY_FUNCTIONS.contains(&name) {
-        return Some(CompilerNameUse::Calls(
-            "it is a C library function the Fix runtime calls".to_string(),
         ));
     }
     None
-}
-
-/// What the compiler does with a C function name, which is what decides what a program may do with
-/// it. Each carries the reason, phrased to follow "cannot be the name of ...: ".
-pub enum CompilerNameUse {
-    /// The compiler writes this function's body, so the name is its own: a program that names it at
-    /// all takes it away, whether to define it or to call it.
-    Defines(String),
-    /// The compiler calls this function, which something outside the program defines. A program may
-    /// call it too — that reaches the same function — and may not define it over the top.
-    Calls(String),
-}
-
-impl CompilerNameUse {
-    /// Why the compiler holds the name.
-    pub fn reason(&self) -> &str {
-        match self {
-            CompilerNameUse::Defines(reason) => reason,
-            CompilerNameUse::Calls(reason) => reason,
-        }
-    }
 }
 
 /// Emits the runtime support functions into the module: their declarations when
@@ -133,21 +106,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
     build_realloc_function(gc, mode);
-
-    // Every name the calls above put in the module is one an `FFI_EXPORT` of it would take away, so
-    // each has to be one `compiler_use_of_c_function_name` answers for. It answers by prefix for the
-    // runtime's own functions and by name for the C library ones, so `RUNTIME_C_LIBRARY_FUNCTIONS`
-    // is what a runtime function calling a new C library function would leave behind.
-    if mode == BuildMode::Declare {
-        for function in module_functions(gc.module) {
-            let name = function.get_name().to_str().unwrap();
-            assert!(
-                compiler_use_of_c_function_name(name).is_some(),
-                "the runtime declares `{}`, which a program is free to export",
-                name
-            );
-        }
-    }
 }
 
 /// Which part of a runtime function a call in `build_runtime` emits.
@@ -498,4 +456,32 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
+    /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being
+    /// built and the C library functions it merely calls are the program's either way.
+    #[test]
+    fn test_which_c_names_the_compiler_writes_the_body_of() {
+        assert!(
+            compiler_defined_c_function_reason(C_ENTRY_POINT_NAME, OutputFileType::Executable)
+                .is_some()
+        );
+        assert!(compiler_defined_c_function_reason(
+            C_ENTRY_POINT_NAME,
+            OutputFileType::DynamicLibrary
+        )
+        .is_none());
+        for output in [OutputFileType::Executable, OutputFileType::DynamicLibrary] {
+            assert!(compiler_defined_c_function_reason(RUNTIME_ABORT, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_GET_ARGC, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_MALLOC, output).is_none());
+            assert!(compiler_defined_c_function_reason("free", output).is_none());
+            assert!(compiler_defined_c_function_reason("c_of_my_own", output).is_none());
+        }
+    }
 }

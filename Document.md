@@ -2270,17 +2270,11 @@ Any other type is rejected when the program is compiled.
 
 The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
 
-Three groups of names the compiler has a use for are rejected as export names:
-
-* `main`, which is the entry point the compiler generates
-* any name beginning with `fixruntime_`, which belongs to the Fix runtime
-* `malloc`, `realloc`, `sprintf` and `pthread_once`, which the Fix runtime calls
-
-`main` is rejected in `FFI_CALL` as well, since the compiler writes that function and a program naming it takes it away. The `fixruntime_` names and the C library functions are available to `FFI_CALL`, where they reach the same function the compiler calls.
+`main` and the names beginning with `fixruntime_` are functions the compiler implements, so exporting one of them is rejected. `main` is available to a dynamic library, which carries no entry point.
 
 One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
 
-Two types a C declaration writes identically describe the same position, so one C function's `unsigned long` result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign says which side extends it, so `I8` and `U8` describe different positions. To read a narrow result at the other sign, write the sign the C function has and convert on the Fix side.
+Whether two signatures are the same is decided by whether C writes them the same way. `U64` and `I64` are one declaration in C, so one C function's result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign decides which side fills the bits above it, so `I8` and `U8` are different declarations. To read a narrow value at the other sign, take the sign the C function has and convert on the Fix side.
 
 #### Returning more than one value
 

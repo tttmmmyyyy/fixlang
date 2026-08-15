@@ -26,9 +26,7 @@ use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::rc_ir::ast::RcState;
 use core::panic;
-use inkwell::context::Context;
-use inkwell::types::{BasicType, BasicTypeEnum, StructType};
-use inkwell::AddressSpace;
+use inkwell::types::{BasicTypeEnum, StructType};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
@@ -206,69 +204,18 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
-/// How C carries a value: everything the declaration of a C function exchanging it says about it.
-///
-/// Two types of one shape are one C type, so a signature written with either declares the same
-/// function. `I64` and `U64` share a shape: a value that fills its register travels the same way
-/// whichever sign the reader gives the bits. `I8` and `U8` do not, since the ABI carries a narrow
-/// integer in the low bits of a register and the sign is what says which side extends it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CTypeShape {
-    /// An integer of this width in bits, carrying the extension its width earns it.
-    Integer {
-        /// The width of the C integer type: 8, 16, 32 or 64.
-        bits: u32,
-        /// The extension the ABI asks of a value of this width, and `None` at a width that fills
-        /// the unit a C signature carries an integer in.
-        extension: Option<CIntegerExtension>,
-    },
-    /// C's `float`.
-    Float32,
-    /// C's `double`.
-    Float64,
-    /// A pointer, which C carries as one address whatever it points at.
-    Pointer,
-}
-
-/// How the bits above an integer narrower than the 32-bit unit the ABI carries it in are filled.
-///
-/// Apple's AArch64 has the caller fill them for an argument and the callee for a result, and lets
-/// the other side read the whole register on that promise, while AAPCS64 and System V leave them
-/// unspecified and have the reader narrow the value itself. Naming the fill is how a signature says
-/// which of the two it follows, and a C compiler puts one on every such parameter and result.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CIntegerExtension {
-    /// Copies of the value's sign bit fill the bits above it.
-    Sign,
-    /// Zeroes fill the bits above the value.
-    Zero,
-}
-
-impl CIntegerExtension {
-    /// The name of the LLVM attribute carrying this extension.
-    pub fn attribute_name(self) -> &'static str {
-        match self {
-            CIntegerExtension::Sign => "signext",
-            CIntegerExtension::Zero => "zeroext",
-        }
-    }
-}
-
-/// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
-/// it. A type constructor is determined by its name.
+// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
+// it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
-    /// The name the type is declared under, which is what two type constructors are compared by.
     pub name: FullName,
 }
 
 impl TyCon {
-    /// The type constructor declared under `fullname`.
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }
 
-    /// This type constructor as a source file writes it, with the tuple of no element written `()`.
     pub fn to_string(&self) -> String {
         if let Some(n) = get_tuple_n(&self.name) {
             if n == 0 {
@@ -278,11 +225,6 @@ impl TyCon {
         self.name.to_string()
     }
 
-    /// Replaces the name of this type constructor with the full name of the type or associated type
-    /// it refers to.
-    ///
-    /// # Arguments
-    /// * `span` — where the name was written, for the error message.
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -296,15 +238,15 @@ impl TyCon {
         Ok(())
     }
 
-    /// This type constructor with its name written as an absolute path.
+    // Convert all global FullNames to absolute paths.
     pub fn global_to_absolute(&self) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name.global_to_absolute();
         Arc::new(ret)
     }
 
-    /// The type of the values of this struct or union declaration, with a fresh type variable put
-    /// in for each parameter the declaration takes.
+    // Get the type of struct / union value.
+    // If struct / union have type parameter, introduces new type arguments.
     pub fn get_struct_union_value_type(
         self: &TyCon,
         typechecker: &mut TypeCheckContext,
@@ -322,87 +264,21 @@ impl TyCon {
         apply_type_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
-    /// Whether this is the unit type `()`, i.e. the tuple of no element.
+    // Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(self: &TyCon) -> bool {
         self.name == make_tuple_name_abs(0)
     }
 
-    /// Whether a value of this type crosses to C as one scalar: an integer, a floating point
-    /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
-    /// function signature can name, and the types an exported Fix function can exchange.
+    // Whether a value of this type crosses to C as one scalar: an integer, a floating point
+    // number, or a pointer, which C and Fix lay down the same way. These are the types a C
+    // function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::new_str(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
-    /// The shape of the C type this type constructor stands for.
-    /// `()` is C's `void`, which carries no value, so it has no shape.
-    ///
-    /// An integer narrower than 32 bits travels in the low bits of a register and carries the
-    /// extension its sign asks for; one that fills the register carries none, which is what lets a
-    /// program read the same C function's result as `I64` in one place and as `U64` in another.
-    pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
-        if self.is_unit() {
-            return None;
-        }
-        assert!(
-            self.is_c_scalar(),
-            "call c_type_shape for {}",
-            self.to_string()
-        );
-        // The unit a C signature carries an integer in. The threshold holds for the targets Fix
-        // builds for; an ABI that extends a 32-bit integer to the width of a register — RISC-V 64
-        // does — raises it.
-        const C_INTEGER_UNIT_BITS: u32 = 32;
-        let integer = |bits| CTypeShape::Integer {
-            bits,
-            extension: if bits < C_INTEGER_UNIT_BITS {
-                Some(if self.is_signed_integer() {
-                    CIntegerExtension::Sign
-                } else {
-                    CIntegerExtension::Zero
-                })
-            } else {
-                None
-            },
-        };
-        Some(match self.name.name.as_str() {
-            I8_NAME | U8_NAME => integer(8),
-            I16_NAME | U16_NAME => integer(16),
-            I32_NAME | U32_NAME => integer(32),
-            I64_NAME | U64_NAME => integer(64),
-            F32_NAME => CTypeShape::Float32,
-            F64_NAME => CTypeShape::Float64,
-            PTR_NAME => CTypeShape::Pointer,
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
-            name => unreachable!("no C type for `{}`", name),
-        })
-    }
-
-    /// The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
-    /// needs none: a wide integer, a floating point number, a pointer, and `()`.
-    pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
-        match self.c_type_shape()? {
-            CTypeShape::Integer { extension, .. } => extension,
-            _ => None,
-        }
-    }
-
-    /// Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
-    /// `()` is C's `void`, which carries no value, so it maps to `None`.
-    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
-        Some(match self.c_type_shape()? {
-            CTypeShape::Integer { bits, .. } => {
-                ctx.custom_width_int_type(bits).as_basic_type_enum()
-            }
-            CTypeShape::Float32 => ctx.f32_type().as_basic_type_enum(),
-            CTypeShape::Float64 => ctx.f64_type().as_basic_type_enum(),
-            CTypeShape::Pointer => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
-        })
-    }
-
-    /// Whether this is an integer type that carries a sign. Panics for a type that is not an
-    /// integer type of `Std`.
+    // Whether this is an integer type that carries a sign. Panics for a type that is not an
+    // integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
@@ -420,7 +296,7 @@ impl TyCon {
         }
     }
 
-    /// Whether this is the type `Bool` of `Std`.
+    // Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
@@ -459,28 +335,19 @@ impl TyCon {
     }
 }
 
-/// A declaration of a type constructor: what its values are made of, and what it takes to name one.
-/// A type alias is declared by `TyAliasInfo`.
+// Information of type constructor.
+// For type alias, this struct is not used; use TyAliasInfo instead.
 #[derive(Clone)]
 pub struct TyConInfo {
-    /// The kind of the type constructor: `*` for a type that has values of its own, and an arrow
-    /// for one that takes parameters.
     pub kind: Arc<Kind>,
-    /// What kind of declaration this is, which settles how the values are laid out and what
-    /// `fields` means.
     pub variant: TyConVariant,
-    /// Whether a value is laid down where it stands, rather than behind a pointer to a reference
-    /// counted object.
     pub is_unbox: bool,
-    /// The parameters the declaration takes, in the order they are written.
     pub tyvars: Vec<Arc<TyVar>>,
-    /// The fields declared, in the order they are written; for a union these are its variants, and
-    /// for an array type this is `vec![{element_type}]`.
-    pub fields: Vec<Field>,
-    /// Where the declaration is written.
+    pub fields: Vec<Field>, // For an array type, this is `vec![{element_type}]`.
     pub source: Option<Span>,
-    /// The documentation of a type the compiler declares itself, such as a built-in type.
-    /// `get_document` reads the documentation comment above `source` first, and falls back to this.
+    // The document of this type.
+    // If `def_src` is available, we can also get document from the source code.
+    // We use this field only when document is not available in the source code.
     pub document: Option<String>,
     /// The struct this declaration punches a field out of, for a declaration that has one.
     ///
@@ -492,8 +359,6 @@ pub struct TyConInfo {
 }
 
 impl TyConInfo {
-    /// Resolves the namespaces of the type names written in the declared fields, collecting the
-    /// error of every field that names a type nothing declares.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -502,8 +367,6 @@ impl TyConInfo {
         errors.to_result()
     }
 
-    /// Replaces each type alias written in the declared fields with the type it stands for,
-    /// collecting the error of every field whose aliases cannot be resolved.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -512,8 +375,7 @@ impl TyConInfo {
         errors.to_result()
     }
 
-    /// The documentation of this type: the comment written above the declaration, and the
-    /// `document` field where the source carries no comment. Empty documentation is `None`.
+    // Get the document of this type.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
