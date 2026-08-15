@@ -9,12 +9,12 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - **RC unit** = `(変数名, Path)`（`VarPath`）。`rc_units` が列挙し、`is_rc_unit_root`（boxed / union / punched array）で降下を止める。
   punched フィールドはスキップする。
 - **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched
-  フィールドは `rc_units` と同じくスキップする（穴の開いたフィールドは参照を持たない）。
+  フィールドは `rc_units` と同じくスキップする（参照を持たないため）。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
-- 参照数を数える鍵 `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、
-  根の型の `rc_units` の要素である。切り詰めは下向きにしか効かないので、identity の path が unit root より
-  上で止まるとどの unit も指さない鍵ができる。`unit_of` の assertion がこれを検査する。
+- `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、根の型の
+  `rc_units` の要素である。切り詰めは下向きにしか効かないので、identity の path が unit root より上で
+  止まると、どの unit も指さない `unit_key` ができる。`unit_of` の assertion がこれを検査する。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は根、その leaf は
   各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
   無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
@@ -96,8 +96,8 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   現れない。
 - **unbox union が参照を数えるキー**: union の参照は生きている variant の参照で、どのオブジェクトに属するかは
   タグで決まる。`origin` は union の根に対して payload の unit 群を候補に持つ `Join` を答え、variant の中の
-  leaf に対してはその payload の unit を答える。union の根の鍵と、その下の leaf が解決する鍵の両方を検査
-  対象外にする。
+  leaf に対してはその payload の unit を答える。union の根の `unit_key` と、その下の leaf が解決する
+  `unit_key` の両方を検査対象外にする。
 - **fully-unboxed 値**（`needs_rc` が偽）には RC ノードが無い。funptr 型もここに入る。
 - **1 変数が複数 unit を持ち、unit ごとに所有権が違う**（`split_rc_units` 以降）。
 - **他コンパイル単位のシンボル**: `prog.funcs` に無い callee は全 `Own` とみなす（borrow 最適化が走るのは

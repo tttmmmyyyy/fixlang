@@ -1,6 +1,6 @@
 // Reference counting around unions that the RC IR rewrites: an operand a rewrite substitutes and
 // then nobody reads, an unboxed union nested inside unboxed aggregates, and a union built out of a
-// payload whose root is not one reference-counting unit.
+// payload that holds its reference-counting units below its own root.
 
 #[cfg(test)]
 mod union_rc_shapes_tests {
@@ -134,20 +134,20 @@ mod union_rc_shapes_tests {
     }
 
     // An unboxed union is one reference-counting unit, kept at its root, and building one lays the
-    // payload it is given in place. Where that payload's own root is not a single unit — a pair of
-    // boxed values, or an unboxed struct whose one boxed field sits a level down — the union's root
-    // and the payload's units are different objects, and the count of each has to be kept where its
-    // own object is.
+    // payload it is given in place. Where the payload holds its units below its own root — a pair
+    // of boxed values, or an unboxed struct whose one boxed field sits a level down — the union's
+    // root and the payload's units are different objects, and the count of each has to be kept
+    // where its own object is.
     //
     // Each union below is read through a call that stays out of line, and read once more after that
     // call returns, so that it reaches reference counting instead of being folded into the
     // constructor that built it. The payload it was built from stays live beside it and is read
-    // back at the end. Freeing that payload early changes the answer for the shapes whose payload
-    // holds two units; for the shape whose unit lies below its root the answer stays right either
-    // way, and what catches a key made for it is the assertion in `unit_of`. That payload arrives as
-    // a parameter, so that the union's root is resolved from a value whose own root is not a unit,
-    // and it carries a second field, so that the struct around the boxed value survives to the RC
-    // IR.
+    // back at the end. For the shapes whose payload holds two units, freeing that payload early
+    // changes the answer. For the shape whose unit lies below its root the answer stays right
+    // either way, and the assertion in `unit_of` catches a key made for it. That payload
+    // arrives as a parameter, so the union's root resolves from a value that holds its unit below
+    // its root; it carries a second field so that the struct around the boxed value survives to
+    // the RC IR.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
