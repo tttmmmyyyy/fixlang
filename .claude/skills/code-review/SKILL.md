@@ -926,7 +926,8 @@ Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait
 
 The test for what a comment should contain, in one line: **leave out what the name and signature already make obvious, and put in the meaning they leave unsaid that a reader of this item would want to know.** Each rule below is that one test applied to a specific part of the comment.
 
-Function comment shape:
+Function comment shape. Aim the comment so that the name, the signature and the example carry the behavior between them: a reader who stops after those three has what the function does. What follows is for the reader who wants more than that — the meaning a name leaves unsaid, the case that would surprise — so keep each section to that, and stopping early stays the normal way to read it.
+
 - The first line describes what the function does. Don't restate the name (e.g., don't write `/// Adds two numbers.` for `fn add`).
 - Add a `# Arguments` section *only* for arguments whose role isn't self-evident from the function's purpose — those that prompt the reader to ask "why is this argument needed?" Skip arguments whose role is obvious from name and type. When you do add an entry, state the argument's *meaning* — the part its name and type leave unsaid, such as units, indexing base and bounds, frame of reference, or which of two same-typed values (`from` / `to`) this is — not a restatement of the name. Format:
   ```rust
@@ -937,22 +938,25 @@ Function comment shape:
   ```
   A bare restatement adds nothing: `the position` for `pos` says only what the name already says, where `0-indexed byte offset into the source string` states the meaning.
 - Add a `# Returns` section only when the return value needs explanation beyond the type — and then say what the value *means*, such as what a `None`, an empty collection, or a particular variant signifies here. Keep this to the surprising cases; the *Don't enumerate None / error cases* convention still suppresses routine failures.
-- Add an `# Examples` section when the description alone would leave the reader unable to say what the function returns for an input they have in mind. One input and the output it produces settles that in a line, and settles it more exactly than a second sentence would. The gap it closes is usually one of these:
+- Add an `# Examples` section when one input and the output it produces would carry the reader to the behavior faster than the description does. The description does not have to be incomplete for that to hold: a concrete pair is read at a glance, where a rule has to be applied before it answers anything. So the question is which one the reader gets there on, not whether the prose is sufficient. The gap it closes is usually one of these:
   - a **transformation** leaves open what the output is made of: which parts of the input survive, in what order, and what an empty or repeated part becomes;
   - a **predicate** leaves open where the line falls: the reflexive case, the empty case, and — when two arguments share a type — which of the two the question is about;
-  - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function.
+  - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function;
+  - **several rules the reader has to add up**: each is stated on its own, and the answer is what they come to together.
 
-  So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips.
+  Choose the input a reader would meet first — the ordinary call rather than a boundary. The example is what carries the behavior for the reader who skips the prose, so it has to show the function doing its usual work. Add a second only where the ordinary one leaves a boundary open: what an empty or repeated part becomes, which side of the line an endpoint falls on.
+
+  Keep it to what a glance holds — a line or two. An example needing a paragraph of setup says the description should carry the behavior instead.
   ```rust
   /// Splits the text at each occurrence of the separator.
   ///
   /// # Examples
-  /// `split_all(",", "a,,b")` yields `["a", "", "b"]`, and `split_all(",", "")` yields `[""]`.
+  /// `split_all(",", "a,b")` yields `["a", "b"]`, and `split_all(",", "a,,b")` yields `["a", "", "b"]`.
 
   /// Reports whether the range covers the position.
   ///
   /// # Examples
-  /// `covers(0..3, 3)` is `false`, and `covers(0..0, 0)` is `false`.
+  /// `covers(0..3, 1)` is `true`, and `covers(0..3, 3)` is `false`.
   ```
   Where the name and the signature already carry the behavior, state the meaning they leave unsaid and stop there: reading or replacing a field, constructing a value, an operation whose content is the effect it performs.
 

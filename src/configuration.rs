@@ -10,6 +10,7 @@ use crate::constants::{
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
+use crate::hash::HashSource;
 use crate::misc::{
     platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
 };
@@ -45,17 +46,6 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
-
-/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
-///
-/// The count comes first so that a list's items cannot be read as the next list's, and each item is
-/// hashed before concatenation so that `["xy", "x"]` and `["x", "xy"]` differ.
-fn push_list_hash(hash_source: &mut String, items: &[String]) {
-    hash_source.push_str(&items.len().to_string());
-    for item in items {
-        hash_source.push_str(&format!("{:x}", md5::compute(item)));
-    }
-}
 
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
@@ -133,6 +123,7 @@ pub enum ValgrindTool {
 }
 
 impl fmt::Display for ValgrindTool {
+    /// Writes the name the settings spell this tool with.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValgrindTool::None => write!(f, "none"),
@@ -154,6 +145,8 @@ pub enum Sanitizer {
 }
 
 impl fmt::Display for Sanitizer {
+    /// Writes the name a `sanitize` setting spells this sanitizer with, which `Sanitizer::from_str`
+    /// reads back.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Sanitizer::None => write!(f, "none"),
@@ -303,10 +296,11 @@ impl SubCommand {
     }
 }
 
-// Configuration for diagnostics subcommand.
+/// What the `diagnostics` subcommand reports on, and how far the compiler goes to report it.
 #[derive(Clone, Default)]
 pub struct DiagnosticsConfig {
-    // Target source files.
+    /// The source files the diagnostics are asked about. A diagnostic anchored in another file is
+    /// left out of the report.
     pub files: Vec<PathBuf>,
     /// In-memory overrides for source-file contents used during the LSP
     /// completion flow: when `parse_file_path` is invoked for a path
@@ -332,18 +326,20 @@ pub struct DiagnosticsConfig {
     pub error_tolerant: bool,
 }
 
-// Configuration for docs subcommand.
+/// What the `docs` subcommand documents, and where it writes the documentation.
 #[derive(Clone, Default)]
 pub struct DocsConfig {
-    // Modules to be documented.
+    /// The modules to document, by name.
     pub modules: Vec<String>,
-    // Include compiler-defined methods in the documentation.
+    /// Whether the documentation also covers the methods the compiler defines, such as a struct's
+    /// field accessors.
     pub include_compiler_defined_methods: bool,
-    // Include private items in the documentation.
+    /// Whether the documentation also covers the private items, those whose names begin with `_`.
     pub include_private: bool,
-    // Output directory.
+    /// The directory the documentation is written into, as one `<module>.md` file per module.
     pub out_dir: PathBuf,
-    // Dependency mode (Build or Test).
+    /// Which section of the project file the settings for assembling the documented program are
+    /// taken from.
     pub mode: BuildConfigType,
 }
 
@@ -353,9 +349,14 @@ pub struct DocsConfig {
 ///
 /// A field whose value changes the generated code has to be added to `object_generation_hash`,
 /// which decides when a cached object file may be reused.
+///
+/// A field whose value changes what the elaborated program is — the definitions the compiler
+/// supplies itself, or the types the parser gives to what it reads — has to be added to
+/// `Program::module_dependency_hash`, which decides when a cached type-check result may be reused.
 #[derive(Clone)]
 pub struct Configuration {
-    // Source files.
+    /// Every source file the program is compiled from, the root project's own files and those of
+    /// its dependencies alike.
     pub source_files: Vec<PathBuf>,
     /// The subset of `source_files` that is user-authored: the root
     /// project's own files, files passed via `--file`, and files pushed
@@ -367,70 +368,90 @@ pub struct Configuration {
     /// Maintain this in lockstep with `source_files` via
     /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
-    // Object files to be linked.
+    /// Object files given to the build, linked into the program beside the ones compiled from the
+    /// sources.
     pub object_files: Vec<PathBuf>,
-    // Fix's optimization level.
+    /// How hard the compiler works to make the program fast. An optimization asks for it through
+    /// the `enable_*` method that names the level it runs from, and `set_fix_opt_level` holds it
+    /// to the maximum the environment allows.
     fix_opt_level: FixOptimizationLevel,
-    // Linked libraries
+    /// The libraries the program is linked against, each with the way it is linked.
     pub linked_libraries: Vec<(String, LinkType)>,
-    // Library search paths.
+    /// The directories the linker searches for the linked libraries.
     pub library_search_paths: Vec<PathBuf>,
-    // Other linker flags
+    /// Flags passed to the linker as they are written, beside the ones the build itself forms.
     pub ld_flags: Vec<String>,
-    // Create debug info.
+    /// Whether the generated program carries debug information, which `-g` turns on.
     pub debug_info: bool,
-    // Whether to emit LLVM IR.
+    /// The directory the build runs in, read once when the configuration is created.
+    ///
+    /// `Generator::create_debug_info` writes it into the generated code as the directory of the
+    /// compilation unit, and the file names the debug information carries beside it are relative,
+    /// so a debugger resolves them against it. That is its one reader, which is what lets
+    /// `object_generation_hash` cover it for a build with debug information alone.
+    pub compilation_directory: PathBuf,
+    /// Whether the build also writes the LLVM IR of each module it generates.
     pub emit_llvm: bool,
-    // Output file name.
+    /// Where the build writes what it produces. `None` leaves the name to the build, which forms
+    /// it from the kind of file it produces.
     pub out_file_path: Option<PathBuf>,
-    // Output file type.
+    /// The kind of file the build produces, an executable or a dynamic library. It reaches the
+    /// generated code as well: a dynamic library is compiled with position-independent
+    /// relocations, and an executable is the kind that carries the entry point.
     pub output_file_type: OutputFileType,
-    // Use threads.
-    // To turn on this true and link pthread library, use `set_threaded` function.
+    /// Whether the program is built to run several threads, which makes its reference counting
+    /// safe to share between them at the cost of speed. Turn it on through `set_threaded`, which
+    /// also links the pthread library.
     pub threaded: bool,
-    // Macros defined in runtime.c.
+    /// The macros the runtime `runtime.c` is compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
-    // Show times for each build steps.
+    /// Whether the build reports how long each of its steps took.
     pub show_build_times: bool,
-    // Verbose mode.
+    /// Whether the build reports what it is doing as it goes.
     pub verbose: bool,
-    // Maximum size of compilation unit.
+    /// The most symbols separate compilation puts into one compilation unit. Lowering it compiles
+    /// more units in parallel and gives the linker more to do.
     pub max_cu_size: usize,
-    // The most scalars a value is split into and carried as separate LLVM values; a type holding
-    // more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
-    // under the same treatment.
+    /// The most scalars a value is split into and carried as separate LLVM values; a type holding
+    /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
+    /// under the same treatment.
     pub max_split_scalars: usize,
-    // Run program with valgrind. Effective only in `run` mode.
+    /// The valgrind tool the built program is run under in `run` mode.
     pub valgrind_tool: ValgrindTool,
     /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
     /// program that is built, so the project being built decides it, as it does the optimization
     /// level.
     pub sanitizer: Sanitizer,
-    // Sizes of C types.
+    /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
+    /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
-    // Regex patterns of disabled CPU features.
+    /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
+    /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
-    // Subcommand of the `fix` command.
+    /// The subcommand of the `fix` command this configuration was assembled for, which decides
+    /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
-    // Preliminary commands declared in fixproj.toml (root and dependencies).
+    /// The commands `fixproj.toml` asks to be run before the build, those of the root project and
+    /// of every dependency.
     pub preliminary_commands: Vec<PreliminaryCommand>,
-    // If true, bypass the trust-store approval prompt and treat all pending
-    // preliminary_commands as one-shot approvals. Set by `--allow-preliminary-commands`.
+    /// Whether every pending preliminary command is approved for this run alone, bypassing the
+    /// trust-store approval prompt. Set by `--allow-preliminary-commands`.
     pub allow_preliminary_commands: bool,
-    // Typecheck cache.
+    /// Where the type checker reads and writes the result of checking each symbol, so that a
+    /// symbol whose sources are unchanged is served rather than checked again.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
-    // Number of worker threads.
+    /// How many threads the compiler itself runs its work over.
     pub num_worker_thread: usize,
-    // The arguments which are passed to the program in `run` mode.
+    /// The arguments the built program is given in `run` mode.
     pub run_program_args: Vec<String>,
-    // LLVM passes to run in place of the ones the optimization level implies.
-    // Used only for compiler development.
+    /// LLVM passes to run in place of the ones the optimization level implies.
+    /// Used only for compiler development.
     pub llvm_passes_override: Option<Vec<String>>,
-    // Emit symbols at each step of optimization.
-    // Used only for compiler development.
+    /// Emit symbols at each step of optimization.
+    /// Used only for compiler development.
     pub emit_symbols: bool,
-    // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
-    // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
+    /// Dump the RC IR of the named module's symbols (`all` = every module) to a file under
+    /// `.fixlang/`. `None` dumps nothing. Used only for compiler development.
     pub emit_rc_ir: Option<String>,
     /// Run the compiler's own consistency checks — the RC IR validator and the assertions in the
     /// code generator — and turn an internal error into a panic.
@@ -513,6 +534,9 @@ impl Configuration {
             linked_libraries: vec![],
             ld_flags: vec![],
             debug_info: false,
+            compilation_directory: env::current_dir().map_err(|e| {
+                Errors::from_msg(format!("Failed to get the current directory: {}", e))
+            })?,
             emit_llvm: false,
             out_file_path: None,
             output_file_type: OutputFileType::Executable,
@@ -545,14 +569,17 @@ impl Configuration {
 }
 
 impl Configuration {
-    // Configuration for release build.
+    /// The configuration `subcommand` runs under as a user of the compiler invokes it, working on
+    /// as many threads as the machine has processors.
     pub fn release_mode(subcommand: SubCommand) -> Result<Configuration, Errors> {
         let mut config = Self::new(subcommand)?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
 
-    // Configuration for compiler development
+    /// The configuration for working on the compiler itself: a `run` that works on the calling
+    /// thread alone, under memcheck, at the experimental optimization level, writing out the LLVM IR
+    /// and the symbols.
     #[allow(dead_code)]
     pub fn develop_mode() -> Configuration {
         #[allow(unused_mut)]
@@ -566,14 +593,16 @@ impl Configuration {
         config
     }
 
-    // Create configuration for document generation.
+    /// The configuration for generating the documentation of a project, working on as many threads
+    /// as the machine has processors.
     pub fn docs_mode() -> Result<Configuration, Errors> {
         let mut config = Self::new(SubCommand::Docs(DocsConfig::default()))?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
 
-    // Create configuration for diagnostics subcommand.
+    /// The configuration for collecting diagnostics under `diagnostics_config`, working on as many
+    /// threads as the machine has processors.
     pub fn diagnostics_mode(
         diagnostics_config: DiagnosticsConfig,
     ) -> Result<Configuration, Errors> {
@@ -609,8 +638,8 @@ impl Configuration {
         self
     }
 
-    // Add dynamically linked library.
-    // To link libabc.so, provide library name "abc".
+    /// Links the program against a dynamic library, named as the linker's `-l` takes it: `abc` for
+    /// `libabc.so`.
     pub fn add_dynamic_library(&mut self, name: &str) {
         self.linked_libraries
             .push((name.to_string(), LinkType::Dynamic));
@@ -655,18 +684,20 @@ impl Configuration {
                     ))
                 } else {
                     let file_name = file_name.unwrap().to_str().unwrap();
-                    let file_name = file_name.to_string()
+                    let ir_file_name = file_name.to_string()
                         + "_"
                         + unit_name
                         + if optimized { "_optimized.ll" } else { ".ll" };
-                    let mut out_file_path = out_file_path.clone();
-                    out_file_path.set_file_name(file_name);
-                    out_file_path
+                    let mut ir_path = out_file_path.clone();
+                    ir_path.set_file_name(ir_file_name);
+                    ir_path
                 }
             }
         }
     }
 
+    /// Where the build writes what it produces: the path the settings name, or the default name of
+    /// the kind of file being produced.
     pub fn get_output_file_path(&self) -> PathBuf {
         match &self.out_file_path {
             None => PathBuf::from(self.output_file_type.default_file_name()),
@@ -674,21 +705,29 @@ impl Configuration {
         }
     }
 
-    // Set threaded = true, and add ptherad library to linked_libraries.
+    /// Builds the program to run several threads, and links the pthread library its runtime then
+    /// calls into.
     pub fn set_threaded(&mut self) {
         self.threaded = true;
         self.add_dynamic_library("pthread");
     }
 
+    /// Generates the debug information a debugger reads, and takes the optimization level down to
+    /// none, so that the code stepped through is the code the source describes. A level set after
+    /// this call raises it again.
     pub fn set_debug_info(&mut self) {
         self.debug_info = true;
         self.set_fix_opt_level(FixOptimizationLevel::None);
     }
 
+    /// Works at optimization level `level`, or at the highest level the environment allows where
+    /// that is lower.
     pub fn set_fix_opt_level(&mut self, level: FixOptimizationLevel) {
         self.fix_opt_level = level.min(env_vars::get_max_opt_level());
     }
 
+    /// The optimization level the build works at, held to what the environment allows as
+    /// `set_fix_opt_level` describes.
     pub fn fix_opt_level(&self) -> FixOptimizationLevel {
         self.fix_opt_level
     }
@@ -848,46 +887,80 @@ impl Configuration {
         }
     }
 
+    /// A hash of the settings that decide what the elaborated program is.
+    ///
+    /// The fields are listed by hand, so every field of `Configuration` that changes the program
+    /// elaboration produces has to be hashed here: one left out makes a build reuse the type-check
+    /// results of a build that elaborated a different program.
+    ///
+    /// `Program::module_dependency_hash` folds this beside the sources the program is written in,
+    /// which is where the type-check cache reads it. A setting belongs here when it reaches the
+    /// elaborated program without passing through any source, as the sizes of the C types do: they
+    /// decide the Fix type the parser gives a `CInt` in an `FFI_CALL` signature, and the compiler
+    /// builds the trait implementations converting to a C type from them as data.
+    ///
+    /// `test_elaboration_hash_separates_elaboration_settings` gives each setting read here a value
+    /// of its own and checks that the hash follows, so its list must stay in sync with this one.
+    pub fn elaboration_hash(&self) -> String {
+        let mut hash_source = HashSource::default();
+        hash_source.push_text(&self.c_type_sizes.to_string());
+        hash_source.finish()
+    }
+
     /// Get hash value of the configurations that affect the object file generation.
     ///
     /// The fields are listed by hand, so every field of `Configuration` that changes the generated
     /// code has to be hashed here: one left out makes a build reuse the object files of a build that
     /// generated different code.
+    ///
+    /// `test_object_generation_hash_separates_code_generation_settings` gives each setting read here
+    /// a value of its own and checks that the hash follows, so its list must stay in sync with this
+    /// one.
+    ///
+    /// Every value goes in through `HashSource`, which gives it a length of its own, so where one
+    /// value ends and the next begins never depends on what the values are.
     pub fn object_generation_hash(&self) -> String {
-        let mut hash_source = String::new();
-        hash_source.push_str(&self.fix_opt_level.to_string());
-        hash_source.push_str(&self.debug_info.to_string());
-        hash_source.push_str(&self.threaded.to_string());
+        let mut hash_source = HashSource::default();
+        hash_source.push_text(&self.fix_opt_level.to_string());
+        hash_source.push_text(&self.debug_info.to_string());
+        // `Generator::create_debug_info` writes the compilation directory into the debug
+        // information, which is the one way it reaches the generated code, so a build without debug
+        // information takes objects generated in another directory. A second reader of the field
+        // would make this condition wrong.
+        if self.debug_info {
+            hash_source.push_text(&self.compilation_directory.to_string_lossy());
+        }
+        hash_source.push_text(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
-        hash_source.push_str(&self.sanitizer.to_string());
-        hash_source.push_str(&self.backtrace.to_string());
-        hash_source.push_str(&self.no_runtime_check.to_string());
-        hash_source.push_str(&self.skip_eval.to_string());
-        hash_source.push_str(&self.c_type_sizes.to_string());
-        hash_source.push_str(&self.max_split_scalars.to_string());
+        hash_source.push_text(&self.sanitizer.to_string());
+        hash_source.push_text(&self.backtrace.to_string());
+        hash_source.push_text(&self.no_runtime_check.to_string());
+        hash_source.push_text(&self.skip_eval.to_string());
+        hash_source.push_text(&self.c_type_sizes.to_string());
+        hash_source.push_text(&self.max_split_scalars.to_string());
         // The kind of the output file reaches the code in two ways: a dynamic library is generated
         // with position-independent relocations (`get_target_machine`), and an executable is the
         // only kind that carries the entry point (`elaborate_via_config`). An object built for one
         // kind therefore fails to link into the other.
-        hash_source.push_str(self.output_file_type.to_str());
-        push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
+        hash_source.push_text(self.output_file_type.to_str());
+        hash_source.push_list(&self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        push_list_hash(&mut hash_source, &self.llvm_passes());
+        hash_source.push_list(&self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        hash_source.push_str(self.subcommand.command_type_string());
+        hash_source.push_text(self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        hash_source.push_str(build_time_utc!());
+        hash_source.push_text(build_time_utc!());
 
-        format!("{:x}", md5::compute(hash_source))
+        hash_source.finish()
     }
 
     /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
@@ -1005,6 +1078,8 @@ impl Configuration {
         Ok(Command::new(exec_path))
     }
 
+    /// Runs the preliminary commands the project files list, in the order they were registered,
+    /// asking the user to approve the ones the trust store holds no approval for.
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
         approve_and_run(self)
     }
@@ -1016,22 +1091,35 @@ impl Configuration {
     }
 }
 
+/// The width of each C numeric type, in bits, on the machine the compiler runs on.
+///
+/// A width decides which Fix type the C type is an alias of, so it reaches the elaborated program
+/// without passing through any source; `Configuration::elaboration_hash` carries it for that reason.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CTypeSizes {
+    /// The width of `char` and of `unsigned char`, which is also the unit C measures a type's size
+    /// in.
     pub char: usize,
+    /// The width of `short` and of `unsigned short`.
     pub short: usize,
+    /// The width of `int` and of `unsigned int`.
     pub int: usize,
+    /// The width of `long` and of `unsigned long`.
     pub long: usize,
+    /// The width of `long long` and of `unsigned long long`.
     pub long_long: usize,
+    /// The width of `size_t`, which is unsigned.
     pub size_t: usize,
+    /// The width of `float`.
     pub float: usize,
+    /// The width of `double`.
     pub double: usize,
 }
 
 impl CTypeSizes {
-    // The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    // alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
-    // `TyCon::get_c_type` can map.
+    /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
+    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
+    /// `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
             (C_CHAR_NAME, "I", self.char),
@@ -1050,6 +1138,8 @@ impl CTypeSizes {
         ]
     }
 
+    /// The size of each C type, named and written out, so that sizes differing anywhere produce
+    /// different text.
     fn to_string(&self) -> String {
         vec![
             format!("char: {}", self.char),
@@ -1064,7 +1154,9 @@ impl CTypeSizes {
         .join(", ")
     }
 
-    // Get the size of each C types by compiling and running a C program.
+    /// The widths of this machine's C types, measured by building a C program that prints each of
+    /// them with `gcc` and running it. The source and the executable are removed once the program
+    /// has run.
     fn from_gcc() -> Result<Self, Errors> {
         // First, create a C source file to check the size of each C types.
         let c_source = r#"
@@ -1124,44 +1216,44 @@ int main() {
             let _ = fs::remove_file(&check_c_types_exec_path_clone);
         });
 
-        let output = Command::new("gcc")
+        let compile_output = Command::new("gcc")
             .arg(check_c_types_path.clone())
             .arg("-o")
             .arg(check_c_types_exec_path.clone())
             .output();
-        if let Err(e) = output {
+        if let Err(e) = compile_output {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": {}.",
                 check_c_types_path, e
             )));
         }
-        let output = output.unwrap();
+        let compile_output = compile_output.unwrap();
 
         // Run the program and parse the result to create CTypeSizes.
-        if !output.status.success() {
+        if !compile_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": \"{}\".",
                 check_c_types_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&compile_output.stderr)
             )));
         }
-        let output = Command::new(check_c_types_exec_path.clone()).output();
-        if let Err(e) = output {
+        let run_output = Command::new(check_c_types_exec_path.clone()).output();
+        if let Err(e) = run_output {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": {}.",
                 check_c_types_exec_path, e
             )));
         }
-        let output = output.unwrap();
-        if !output.status.success() {
+        let run_output = run_output.unwrap();
+        if !run_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": \"{}\".",
                 check_c_types_exec_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&run_output.stderr)
             )));
         }
-        let output = String::from_utf8_lossy(&output.stdout);
-        let mut lines = output.lines();
+        let stdout = String::from_utf8_lossy(&run_output.stdout);
+        let mut lines = stdout.lines();
         // The program prints one size per line, in the order the fields are read here.
         let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
         let char = next_size();
@@ -1209,6 +1301,8 @@ int main() {
         Ok(())
     }
 
+    /// The widths saved at `C_TYPES_JSON_PATH`. A file that cannot be opened or parsed is reported
+    /// as a warning and answered as `None`, so a caller can measure the widths afresh.
     fn load_file() -> Option<Self> {
         let path = PathBuf::from(C_TYPES_JSON_PATH);
         if !path.exists() {
@@ -1231,6 +1325,8 @@ int main() {
         Some(sizes.unwrap())
     }
 
+    /// The widths of this machine's C types: the ones saved at `C_TYPES_JSON_PATH`, or, where none
+    /// are saved there, the ones measured and then saved for a later run.
     fn load_or_check() -> Result<Self, Errors> {
         match Self::load_file() {
             Some(sizes) => Ok(sizes),
@@ -1245,24 +1341,75 @@ int main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
+    use crate::misc::Map;
 
-    /// The object generation hash of a build configuration to which `edit` has been applied.
-    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
+    /// The hash `hash` gives a build configuration to which `edit` has been applied.
+    fn hash_after(
+        hash: &impl Fn(&Configuration) -> String,
+        edit: Box<dyn FnOnce(&mut Configuration)>,
+    ) -> String {
         let mut config = Configuration::release_mode(SubCommand::Build)
             .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
         edit(&mut config);
-        config.object_generation_hash()
+        hash(&config)
+    }
+
+    /// Asserts that each setting in `settings` gives `hash` a value of its own: one of its own
+    /// against a configuration where nothing was edited, and one of its own against each of the
+    /// other settings.
+    ///
+    /// `what_settings_reach` names, for the report, what the hash exists to separate — what a
+    /// setting listed here reaches.
+    fn assert_each_setting_moves_the_hash(
+        hash: impl Fn(&Configuration) -> String,
+        what_settings_reach: &str,
+        settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)>,
+    ) {
+        let baseline = hash_after(&hash, Box::new(|_| {}));
+        let mut settings_by_hash: Map<String, &str> = Map::default();
+        for (name, edit) in settings {
+            let edited_hash = hash_after(&hash, edit);
+            assert_ne!(
+                baseline, edited_hash,
+                "`{}` reaches {}, so it belongs in the hash.",
+                name, what_settings_reach
+            );
+            // Two settings landing on one hash would share each other's cached results, so the hash
+            // separates the settings from one another as well as from the baseline.
+            if let Some(other_setting) = settings_by_hash.insert(edited_hash, name) {
+                panic!(
+                    "`{}` and `{}` reach {} differently, so the hash has to tell them apart.",
+                    name, other_setting, what_settings_reach
+                );
+            }
+        }
+    }
+
+    /// Two builds reuse each other's type-check results exactly when they agree on this hash, so
+    /// each setting that reaches the elaborated program gives the hash a value of its own.
+    ///
+    /// Each setting is written to its field, so that the list names what the hash reads, and the
+    /// list must stay in sync with `elaboration_hash`.
+    #[test]
+    fn test_elaboration_hash_separates_elaboration_settings() {
+        assert_each_setting_moves_the_hash(
+            |config| config.elaboration_hash(),
+            "the elaborated program",
+            vec![(
+                "c_type_sizes",
+                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+            )],
+        );
     }
 
     /// Two builds reuse each other's object files exactly when they agree on this hash, so each
     /// setting that reaches code generation gives the hash a value of its own.
     ///
-    /// Each setting is written to its field, so that the list names what the hash reads.
+    /// Each setting is written to its field, so that the list names what the hash reads, and the
+    /// list must stay in sync with `object_generation_hash`.
     #[test]
     fn test_object_generation_hash_separates_code_generation_settings() {
-        let baseline = hash_after(|_| {});
-
         let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![
             (
                 "output_file_type",
@@ -1291,6 +1438,15 @@ mod tests {
             (
                 "debug_info",
                 Box::new(|config: &mut Configuration| config.debug_info = true),
+            ),
+            (
+                "compilation_directory",
+                Box::new(|config: &mut Configuration| {
+                    // The directory reaches the generated code as the directory the debug
+                    // information records, so the two are one setting here.
+                    config.debug_info = true;
+                    config.compilation_directory = config.compilation_directory.join("elsewhere");
+                }),
             ),
             (
                 "threaded",
@@ -1332,23 +1488,10 @@ mod tests {
             ),
         ];
 
-        let mut settings_by_hash: Map<String, &str> = Map::default();
-        for (name, edit) in settings {
-            let hash = hash_after(edit);
-            assert_ne!(
-                baseline, hash,
-                "`{}` reaches code generation, so it belongs in the object generation hash.",
-                name
-            );
-            // Two settings landing on one hash would share each other's object files, so the hash
-            // separates the settings from one another as well as from the baseline.
-            if let Some(other_setting) = settings_by_hash.insert(hash, name) {
-                panic!(
-                    "`{}` and `{}` generate different code, so the object generation hash has to \
-                     tell them apart.",
-                    name, other_setting
-                );
-            }
-        }
+        assert_each_setting_moves_the_hash(
+            |config| config.object_generation_hash(),
+            "code generation",
+            settings,
+        );
     }
 }

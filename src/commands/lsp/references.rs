@@ -914,20 +914,14 @@ fn collect_pattern_bare_field_occs(
             }
         }
         Pattern::Union(variant, variant_src, sub) => {
-            // The variant FullName has the namespace `tc.name::*`.
-            // Compare via the TyCon constructed from the variant's namespace.
-            // After elaboration the namespace is populated (validate_variant_name
-            // sets it from the matched union); guard against the unresolved
-            // pre-elaboration shape just in case.
-            if !variant.namespace.names.is_empty() {
-                let variant_tc = TyCon::new(variant.namespace.clone().to_fullname());
-                if &variant_tc == tc && &variant.name == name {
-                    if let Some(span) = variant_src {
-                        occs.push(FieldOccurrence {
-                            span: span.clone(),
-                            prefix: "",
-                        });
-                    }
+            // The variant name carries the union it belongs to, which a pattern the type checker
+            // has yet to accept leaves unresolved.
+            if Pattern::variant_union_tycon(variant).as_ref() == Some(tc) && &variant.name == name {
+                if let Some(span) = variant_src {
+                    occs.push(FieldOccurrence {
+                        span: span.clone(),
+                        prefix: "",
+                    });
                 }
             }
             collect_pattern_bare_field_occs(sub, tc, name, occs);

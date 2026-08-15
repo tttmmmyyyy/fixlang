@@ -1,0 +1,15 @@
+module Main;
+
+main : IO () = (
+    let opt : Option I64 = Option::some(42);
+    // A name the matched union does not have, binding an annotated variable.
+    let n = match opt {
+        som(arr : Array I64) => (
+            let _ = arr.
+            arr.get_size
+        ),
+        none(_) => 0
+    };
+    let _ = n;
+    pure()
+);

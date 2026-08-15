@@ -74,6 +74,37 @@ pub fn test_loop_m_array_state_no_leak() {
 }
 
 #[test]
+pub fn test_loop_two_array_state_stays_alive() {
+    // A loop whose state is a tuple of two arrays wraps a value holding two reference-counting units
+    // in a `LoopState` union, which is one unboxed union and so one unit of its own. The state's
+    // arrays must survive every turn of the loop and read back afterwards as they were written. Run
+    // under memcheck.
+    let source = r#"
+            module Main;
+
+            walk : (Array I64, Array I64) -> Array I64 -> I64;
+            walk = |start, extra| (
+                let (a, b) = loop((0, start), |(i, (a, b))|
+                    if i == 4 { break $ (a, b) };
+                    continue $ (i + 1, (a.set(i, i * extra.@size), b.set(i, i * 2)))
+                );
+                let s = a.to_iter.fold(0, |x, acc| acc + x);
+                let t = b.to_iter.fold(0, |x, acc| acc + x);
+                s * 1000 + t
+            );
+
+            main : IO ();
+            main = (
+                let start = (Array::fill(4, 0), Array::fill(4, 0));
+                let extra = Array::fill(3, 1);
+                assert_eq(|_|"walk", walk(start, extra), 18 * 1000 + 12);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unboxed_destructure_field_borrow() {
     // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
     // it again. Cancellation lets the field's move through the destructure keep its retain pending
@@ -6449,6 +6480,31 @@ pub fn test_duplicated_symbols() {
     );
 }
 
+/// A value written under a namespace named after a struct carries the name of a method the
+/// compiler generates for that struct, and the two are reported as one name defined twice, in the
+/// sentence the compiler uses for a name defined twice anywhere.
+#[test]
+pub fn test_value_of_a_types_namespace_collides_with_a_compiler_defined_method() {
+    let source = r##"
+    module Main;
+
+    type S = unbox struct { x : I64 };
+
+    namespace S {
+        set_x : I64 -> S -> S;
+        set_x = |v, _| S { x : v };
+    }
+
+    main : IO ();
+    main = println(S { x : 1 }.set_x(2).@x.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Duplicate definition for global value: `Main::S::set_x`.",
+    );
+}
+
 #[test]
 pub fn test_duplicated_trait_member() {
     let source = r##"
@@ -8243,6 +8299,67 @@ pub fn test_tuple_functor() {
         main = (
             assert_eq(|_|"", (1,).map(|x| x + 1), (2,));;
             assert_eq(|_|"", (1, 2).map(|x| x + 1), (1, 3));;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq` and `Functor` instances of
+/// a tuple for each size the program uses, so a size far above the ones the other tests reach
+/// carries the same behavior as a small one.
+#[test]
+pub fn test_instances_of_a_tuple_of_many_components() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let a = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+            let b = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13);
+            assert_eq(|_|"", a.to_string, "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)");;
+            assert_eq(|_|"", a == a, true);;
+            assert_eq(|_|"", a == b, false);;
+            assert_eq(|_|"", a < b, true);;
+            assert_eq(|_|"", b < a, false);;
+            assert_eq(|_|"", a <= a, true);;
+            assert_eq(|_|"", b <= a, false);;
+            assert_eq(|_|"", a.map(|x| x + 1), b);;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `Tuple{N}` is the textual name of the type an `N`-component tuple has, so writing it names the
+/// same type the parenthesized form does. The compiler declares the type of a tuple of each size
+/// the program uses, and of the sizes up to `TUPLE_SIZE_BASE` whether the program uses them or not,
+/// which is the range this test writes.
+#[test]
+pub fn test_textual_name_of_a_tuple_type() {
+    let source = r##"
+        module Main;
+
+        unit : Tuple0;
+        unit = ();
+
+        single : Tuple1 I64;
+        single = (1,);
+
+        pair : Tuple2 I64 Bool -> I64;
+        pair = |t| if t.@1 { t.@0 } else { 0 };
+
+        triple : Tuple3 I64 I64 I64;
+        triple = (1, 2, 3);
+
+        main: IO ();
+        main = (
+            assert_eq(|_|"", unit, ());;
+            assert_eq(|_|"", single.@0, 1);;
+            assert_eq(|_|"", pair((7, true)), 7);;
+            assert_eq(|_|"", triple.@2, 3);;
 
             pure()
         );
@@ -10119,6 +10236,32 @@ pub fn test_match_on_variant_for_nonunion() {
     );
     "##;
     test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array a`, but it is matched on a variant pattern `foo(_)`.");
+}
+
+/// Verifies that a variant pattern on a value whose type is still unknown at the `match` is
+/// reported as an error: the matched value is a lambda parameter whose type only the call site
+/// below fixes, so no union is known to resolve the variant names against.
+#[test]
+pub fn test_match_on_variant_for_value_of_unknown_type() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let unwrap = |o| match o {
+            some(v) => v,
+            none(_) => 0
+        };
+        assert_eq(|_|"", unwrap(Option::some(42)), 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "The type of the matched value must be known at this point.",
+    );
 }
 
 #[test]

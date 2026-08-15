@@ -122,6 +122,12 @@ impl<'a> Lowerer<'a> {
 
     // --- fresh names ---
 
+    /// A variable named `<hint>#<n>` with an `n` no other minted name carries, so the name alone
+    /// identifies the binding wherever the program reads it.
+    ///
+    /// # Arguments
+    /// * `hint` — the readable part of the name, shown in an RC IR dump.
+    /// * `source` — where the value the variable holds is written, for diagnostics and debug info.
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.fresh_counter += 1;
         let name = FullName::local(&format!("{}#{}", hint, self.fresh_counter));
@@ -151,6 +157,8 @@ impl<'a> Lowerer<'a> {
 
     // --- environment ---
 
+    /// Make `var` what `ast_name` resolves to, over whatever it resolved to before; the covered
+    /// binding comes back when `unbind` closes this one.
     fn bind(&mut self, ast_name: &FullName, var: RcVar) {
         self.scope
             .entry(ast_name.clone())
@@ -158,6 +166,7 @@ impl<'a> Lowerer<'a> {
             .push(var);
     }
 
+    /// Close the innermost binding of `ast_name`, uncovering the binding it shadowed.
     fn unbind(&mut self, ast_name: &FullName) {
         // Every `unbind` closes a `bind`, so both the name and a binding for it are there. An unbind
         // with nothing to undo means the two have gone out of step, and every later `resolve` in the
@@ -176,6 +185,10 @@ impl<'a> Lowerer<'a> {
         });
     }
 
+    /// The RC IR variable `ast_name` is currently bound to.
+    ///
+    /// # Returns
+    /// `None` for a name the scope holds no binding for; such a name is a top-level symbol.
     fn resolve(&self, ast_name: &FullName) -> Option<RcVar> {
         self.scope
             .get(ast_name)
@@ -279,7 +292,7 @@ impl<'a> Lowerer<'a> {
         let src_tys = lam_ty.get_lambda_srcs();
         assert_eq!(params.len(), src_tys.len());
 
-        let saved_env = mem::take(&mut self.scope);
+        let saved_scope = mem::take(&mut self.scope);
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
@@ -328,7 +341,7 @@ impl<'a> Lowerer<'a> {
         let ret_var = self.lower_to_var(&body, &mut bindings);
         let body_expr = Self::fold_bindings(bindings, Self::ret_node(ret_var));
 
-        self.scope = saved_env;
+        self.scope = saved_scope;
 
         RcFunc {
             name: func_ref,
@@ -354,6 +367,7 @@ impl<'a> Lowerer<'a> {
         grow_stack(|| self.lower_to_var_inner(expr, bindings))
     }
 
+    /// Lower `expr` by its form, with the stack already grown for the recursion this enters.
     fn lower_to_var_inner(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         let ty = expr.type_.clone().unwrap();
         let source = expr.source.clone();
@@ -375,6 +389,9 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
+    /// currently bound to it, and a global is an atom carrying the symbol's name, which code
+    /// generation materializes.
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -399,6 +416,8 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
+    /// the generator reads them, and the appended binding holds the value the operation produces.
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,
@@ -455,6 +474,8 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower a function application: the callee and then the arguments become variables, and the
+    /// appended binding calls the one on the others.
     fn lower_app(
         &mut self,
         fun: &ExprNode,
@@ -525,6 +546,9 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower a `let`: the bound expression becomes a variable, the pattern binds that value (a
+    /// struct or tuple pattern destructuring it), and the body is lowered under those bindings,
+    /// which are closed once it is lowered. The result variable is the body's.
     fn lower_let(
         &mut self,
         pat: &PatternNode,
@@ -541,6 +565,8 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower an `if` to a match on the two variants of the `Bool` union, the branches becoming its
+    /// arms. Each arm's payload holds the variant's unit contents.
     fn lower_if(
         &mut self,
         cond: &ExprNode,
@@ -574,6 +600,9 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower a `match`: the matched value becomes a variable, each arm is lowered against it, and
+    /// the appended binding selects one arm on that value. The result variable holds the value of
+    /// whichever arm is taken.
     fn lower_match(
         &mut self,
         cond: &ExprNode,
@@ -596,6 +625,11 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower one arm of a match on `scrutinee`. A union pattern gives an arm the variant's tag
+    /// selects, whose payload variable holds that variant's contents; a variable or struct pattern
+    /// gives the default arm, taken for every value the tagged arms leave, and its payload is the
+    /// whole scrutinee. The pattern's variables are bound while the arm's body is lowered and
+    /// closed after it, so each body is lowered under its own pattern's bindings alone.
     fn lower_match_arm(
         &mut self,
         scrutinee: &RcVar,
@@ -604,7 +638,17 @@ impl<'a> Lowerer<'a> {
     ) -> MatchArm {
         match &pat.pattern {
             Pattern::Union(variant_name, _, subpat) => {
-                let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env);
+                let variant_idx = scrutinee
+                    .ty
+                    .field_index(self.type_env, &variant_name.name)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "union `{}` has no variant `{}`, and lowering runs on a program the \
+                             type checker has accepted.",
+                            scrutinee.ty.to_string(),
+                            variant_name.name
+                        )
+                    });
                 let payload_ty = scrutinee.ty.field_types(self.type_env)[variant_idx].clone();
                 let mut payload = self.fresh_var("payload", payload_ty, pat.info.source.clone());
                 // When the payload is bound whole to a source variable (e.g. `Some(x)`), that name is
@@ -662,6 +706,9 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    /// Lower a struct or tuple literal: the field expressions are lowered in declaration order,
+    /// which is the order they are evaluated in, and the appended binding builds the value from
+    /// them.
     fn lower_make_struct(
         &mut self,
         fields: &[(Name, Option<Span>, Arc<ExprNode>)],
@@ -686,6 +733,8 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower an array literal: the elements are lowered left to right, and the appended binding
+    /// builds an array holding them in that order.
     fn lower_array_lit(
         &mut self,
         elems: &[Arc<ExprNode>],
@@ -709,6 +758,16 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower a call to a foreign function: the arguments are lowered left to right, and the
+    /// appended binding calls `fun_name` on them.
+    ///
+    /// # Arguments
+    /// * `ret_tycon`, `param_tycons` — the C types the call is made under, which decide how the
+    ///   result and the arguments cross the boundary.
+    /// * `is_var_args` — the C function is declared variadic, so it accepts arguments past
+    ///   `param_tycons`.
+    /// * `is_io` — the last of `args` is the IOState token, which orders this call against the
+    ///   other effects and is not passed to C.
     fn lower_ffi_call(
         &mut self,
         fun_name: &Name,
@@ -744,6 +803,8 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Lower `eval side; main`: `side` is evaluated for its effect and discarded, then `main` is
+    /// lowered, and the result variable is `main`'s.
     fn lower_eval(
         &mut self,
         side: &ExprNode,

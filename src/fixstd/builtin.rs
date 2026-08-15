@@ -43,7 +43,7 @@ use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
-use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
@@ -4301,7 +4301,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
             Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![field];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(LeafOrigin::Arg(0, p))
+                sole_origin(LeafOrigin::Arg(0, p))
             })
         }
     }
@@ -4419,8 +4419,8 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         // unboxed struct lays out its fields, so field `i`'s boxed leaves carry constructor operand
         // `i` (the path's head is the field index, its tail the position within that field).
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(LeafOrigin::Fresh),
-            Some((i, rest)) => Provenance::leaf(LeafOrigin::Arg(*i, rest.to_vec())),
+            None => sole_origin(LeafOrigin::Fresh),
+            Some((i, rest)) => sole_origin(LeafOrigin::Arg(*i, rest.to_vec())),
         })
     }
 
@@ -4798,7 +4798,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
         }
         Provenance::build_shape(result_ty, type_env, &|path| {
-            Provenance::leaf(LeafOrigin::Arg(0, self.arg_leaf_path(path)))
+            sole_origin(LeafOrigin::Arg(0, self.arg_leaf_path(path)))
         })
     }
 
@@ -5029,9 +5029,9 @@ fn replaced_field_prov(
             .split_first()
             .expect("a boxed leaf of an unboxed struct has a non-empty path");
         if *field == field_idx {
-            Provenance::leaf(LeafOrigin::Arg(value_arg, rest.to_vec()))
+            sole_origin(LeafOrigin::Arg(value_arg, rest.to_vec()))
         } else {
-            Provenance::leaf(LeafOrigin::Arg(struct_arg, path.clone()))
+            sole_origin(LeafOrigin::Arg(struct_arg, path.clone()))
         }
     })
 }
@@ -6111,8 +6111,8 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         // its tail the position within that variant's payload.
         let active = self.variant_index();
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(LeafOrigin::Fresh),
-            Some((k, rest)) if *k == active => Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec())),
+            None => sole_origin(LeafOrigin::Fresh),
+            Some((k, rest)) if *k == active => sole_origin(LeafOrigin::Arg(0, rest.to_vec())),
             Some(_) => Set::default(),
         })
     }
@@ -6304,7 +6304,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
             Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![variant];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(LeafOrigin::Arg(0, p))
+                sole_origin(LeafOrigin::Arg(0, p))
             })
         }
     }

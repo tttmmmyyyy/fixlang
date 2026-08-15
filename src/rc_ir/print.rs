@@ -81,7 +81,7 @@ fn var_to_string(var: &RcVar, ann: Annotations) -> String {
             let prov = provs.get(&var.name).unwrap_or_else(|| {
                 unreachable!("no provenance recorded for `{}`", var.name.to_string())
             });
-            format!(" [{}]", prov.to_string())
+            format!(" [{}]", prov)
         }
         None => String::new(),
     };

@@ -156,6 +156,10 @@ Write dozens of broken inputs — one per way the normal mode can reject somethi
 
 Two things make the reading honest. Confirm each input **reaches** the code under test: an input rejected earlier — a parse error, a missing file — never arrives, and a corpus of those looks exactly like a clean sweep. And run the same inputs through the strict mode as the control, so a crash that belongs to both modes is not filed against the degraded one.
 
+**The crash oracle is only half the specification, and the quiet half is where the bugs are.** A degraded mode that survives an input can still answer nothing, or answer something no consumer can use, and the sweep reads that as a pass. So record what each input *produced* — the list, the ranking, the resolved target, the count — and diff it against the same input with the breakage removed. An input the mode survives while returning an empty answer is the finding the crash count cannot see, and it is common: the degraded value flows to a consumer that quietly declines it.
+
+**A fix that replaces an abort with a fallback makes every consumer downstream newly reachable.** Before it, the broken input died at the producer and the readers were never handed a degraded value; after it, they are, and they were all written against the values a *successful* run produces. So when the target is such a fix, hunt the readers rather than the producer: what does each do with a value carrying a fresh type variable, an unresolved name, an empty binding set? The producer is the part that was just tested; the readers are the part that just acquired a new input class.
+
 ### Detectors
 
 #### Show the detector fires before trusting its silence

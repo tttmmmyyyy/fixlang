@@ -196,10 +196,12 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-// Given source code, save it to temporary file (with the given file name and hash value) and the parse the program.
-// This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
-// Saving a source code to a file is necessary for:
-// - Generate debug information, which requires source locations.
+/// Saves `source` in the temporary directory under `file_name`, with a digest of the content in the
+/// name, and parses it into the program of the module it declares.
+///
+/// The debug information of a value names the file its source is written in, so a source the
+/// compiler holds as a string — the standard library it carries, or a test program — is given a file
+/// of its own here.
 pub fn parse_and_save_to_temporary_file(
     source: &str,
     file_name: &str,
@@ -209,6 +211,8 @@ pub fn parse_and_save_to_temporary_file(
     parse_source_file(src, config)
 }
 
+/// Parses the source at `file_path` into the program of the module it declares, reading the content
+/// from the file, or from the buffer the diagnostics settings hold for that path.
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     // If the LSP completion flow has stashed a repaired live-buffer for
     // this path in the diagnostics configuration, parse that string
@@ -238,37 +242,38 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
     parse_source_file(source, config)
 }
 
-// Identifier categories that can be passed to `validate_token_str`.
-//
-// These map onto pest grammar rules whose shape is exactly "an identifier
-// in the corresponding category" (with `!keywords` and the right
-// uppercase/lowercase head), so a string can be checked against the same
-// tokenisation rules the parser applies to source code.
+/// An identifier category `validate_token_str` checks a string against.
+///
+/// Each category maps onto a pest grammar rule whose shape is exactly "an identifier in the
+/// corresponding category" — with `!keywords` and the right uppercase or lowercase head — so a
+/// string is checked against the same tokenisation rules the parser applies to source code.
 #[derive(Clone, Copy)]
 pub enum TokenCategory {
-    // Lowercase-headed value names: locals, global values, lambda params.
-    // Allows a leading `@` as well.
+    /// Lowercase-headed value names: locals, global values, lambda parameters. A leading `@` is
+    /// allowed as well.
     Name,
-    // Lowercase-headed names that disallow a leading `@`: struct field
-    // names and union variant names.
+    /// Lowercase-headed names written without a leading `@`: struct field names and union variant
+    /// names.
     TypeFieldName,
-    // Uppercase-headed names: types, type aliases, traits, trait aliases,
-    // associated types, modules, namespaces.
+    /// Uppercase-headed names: types, type aliases, traits, trait aliases, associated types,
+    /// modules, namespaces.
     CapitalName,
 }
 
-// A namespace_item parsed from a fullname, with its byte-offset range
-// within the input that was parsed.
+/// One `namespace_item` of a parsed fullname, with where it is written in the text it was parsed
+/// from.
 pub struct NamespaceItemSpan {
+    /// The name of the item.
     pub name: Name,
+    /// The byte offset the item starts at.
     pub start: usize,
+    /// The byte offset one past the item's last byte.
     pub end: usize,
 }
 
-// Re-parse `text` as a `fullname` (e.g. `"Foo::Point::act_x"`) and return
-// each `namespace_item` with its byte-offset range within `text`. Useful
-// for locating the sub-span of an individual namespace component (e.g.
-// the `Point` in `Point::@x`) within a larger source span.
+/// Parses `text` as a fullname, e.g. `"Foo::Point::act_x"`, and answers with each `namespace_item`
+/// in it and the byte offsets it spans in `text`. This is what locates one component of a namespace,
+/// the `Point` of `Point::@x` among others, inside a larger source span.
 pub fn parse_namespace_items_in_fullname(text: &str) -> Option<Vec<NamespaceItemSpan>> {
     let mut pairs = FixParser::parse(Rule::fullname, text).ok()?;
     let outer = pairs.next()?;
@@ -348,8 +353,7 @@ pub enum RepairHintKind {
     /// Pest expected an expression-like construct — somewhere a
     /// hole `?` belongs.
     Expression,
-    /// None of our recipes match; the caller should give up rather
-    /// than insert something arbitrary.
+    /// The expected set matches none of the repairs, so the repair loop stops here.
     Unknown,
 }
 
@@ -443,6 +447,8 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
     RepairHintKind::Unknown
 }
 
+/// Parses `source` into the program of the one module it declares, with every span pointing into
+/// `source`.
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;
@@ -455,6 +461,8 @@ pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<P
     parse_file(file, source_cloned, config)
 }
 
+/// The program the parsed file `file` declares, which is the one module it is made of. `src` is the
+/// source it was parsed from, which its spans point into.
 fn parse_file(
     mut file: Pairs<Rule>,
     src: SourceFile,
@@ -467,6 +475,8 @@ fn parse_file(
     }
 }
 
+/// The import statements written in `src`, read from those statements alone so that the rest of the
+/// source is left unparsed. Their spans point into `file_path`.
 pub fn parse_str_import_statements(
     file_path: PathBuf,
     src: &str,
@@ -479,6 +489,8 @@ pub fn parse_str_import_statements(
     )
 }
 
+/// The module `src` declares, read from its `module` declaration alone so that the rest of the
+/// source is left unparsed. Its span points into `file_path`.
 pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo, Errors> {
     parse_str_as_rule(file_path, src, Rule::file_only_module_defn, |rule, ctx| {
         let rule = rule.into_inner().next().unwrap();
@@ -486,6 +498,8 @@ pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo
     })
 }
 
+/// Parses the whole of `src` as `rule` and reads the result with `parser`, giving the spans it
+/// builds `file_path` as the file they point into.
 fn parse_str_as_rule<T>(
     file_path: PathBuf,
     src: &str,
@@ -507,6 +521,8 @@ fn parse_str_as_rule<T>(
     parser(file.next().unwrap(), &mut ctx)
 }
 
+/// The program of the one module `pair` declares: its declaration, its import statements, and
+/// everything defined in it. `src` is the source it was parsed from, which its spans point into.
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
@@ -763,7 +779,7 @@ fn parse_trait_defn(
         .namespace
         .append(NameSpace::new(vec![trait_name.clone()]));
     let mut methods: Vec<TraitMember> = vec![];
-    let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
+    let mut assoc_types: Map<Name, AssocTypeDefn> = Map::default();
     let mut body_errors = Errors::empty();
     for pair in pairs {
         match parse_trait_member_defn(pair, &impl_type, ctx, deprecation_statements) {
@@ -779,7 +795,7 @@ fn parse_trait_defn(
                 }
             }
             Ok(Some(Either::Right(assoc_type))) => {
-                if type_syns.contains_key(&assoc_type.name.to_string()) {
+                if assoc_types.contains_key(&assoc_type.name.to_string()) {
                     body_errors.append(Errors::from_msg_srcs(
                         format!(
                             "Duplicate definitions of associated type `{}`.",
@@ -788,7 +804,7 @@ fn parse_trait_defn(
                         &[&Some(span.clone())],
                     ));
                 } else {
-                    type_syns.insert(assoc_type.name.to_string(), assoc_type);
+                    assoc_types.insert(assoc_type.name.to_string(), assoc_type);
                 }
             }
             Err(errs) => body_errors.append(errs),
@@ -800,7 +816,7 @@ fn parse_trait_defn(
         trait_: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: make_tyvar(&trait_tyvar, &kind_star()),
         members: methods,
-        assoc_types: type_syns,
+        assoc_types,
         kind_signs: kinds,
         source: Some(span),
         name_src: Some(trait_name_span),
@@ -1173,11 +1189,11 @@ fn parse_global_value_decl(
 
     // Parse type.
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
-    let kind_sings = qual_type.kind_signs.clone();
+    let kind_signs = qual_type.kind_signs.clone();
     let preds = qual_type.preds.clone();
     let eqs = qual_type.eqs.clone();
     let ty = qual_type.ty.clone();
-    let ty = Scheme::generalize(&kind_sings, preds, eqs, ty);
+    let ty = Scheme::generalize(&kind_signs, preds, eqs, ty);
 
     // Parse expression (if exists).
     let mut gvd = None;
@@ -1244,21 +1260,21 @@ fn parse_constraints(
 ) -> Result<(Vec<Predicate>, Vec<Equality>, Vec<KindSignature>), Errors> {
     assert_eq!(pair.as_rule(), Rule::constraints);
     let pairs = pair.into_inner();
-    let mut ps: Vec<Predicate> = Default::default();
-    let mut ks: Vec<KindSignature> = Default::default();
-    let mut es: Vec<Equality> = Default::default();
+    let mut preds: Vec<Predicate> = Default::default();
+    let mut kind_signs: Vec<KindSignature> = Default::default();
+    let mut eqs: Vec<Equality> = Default::default();
     for pair in pairs {
         if pair.as_rule() == Rule::predicate {
-            ps.push(parse_predicate(pair, ctx));
+            preds.push(parse_predicate(pair, ctx));
         } else if pair.as_rule() == Rule::kind_signature {
-            ks.push(parse_kind_signature(pair, ctx));
+            kind_signs.push(parse_kind_signature(pair, ctx));
         } else if pair.as_rule() == Rule::equality {
-            es.push(parse_equality(pair, ctx)?);
+            eqs.push(parse_equality(pair, ctx)?);
         } else {
             unreachable!()
         }
     }
-    Ok((ps, es, ks))
+    Ok((preds, eqs, kind_signs))
 }
 
 fn parse_kind_signature(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindSignature {
@@ -1328,8 +1344,8 @@ fn parse_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
         .collect::<Vec<_>>();
     let mut res: Arc<Kind> = kinds.pop().unwrap();
     while kinds.len() > 0 {
-        let pair = kinds.pop().unwrap();
-        res = kind_arrow(pair, res);
+        let kind = kinds.pop().unwrap();
+        res = kind_arrow(kind, res);
     }
     res
 }
@@ -1359,6 +1375,8 @@ fn parse_kind_braced(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
     parse_kind(pair, ctx)
 }
 
+/// The module a `module` declaration declares. It is made of the source the declaration is written
+/// in; the sources that extend it are the ones linked into it later.
 fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     assert_eq!(pair.as_rule(), Rule::module_defn);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -1991,11 +2009,11 @@ fn parse_expr_dot_sequence_of_index(
     for pair in pair.into_inner() {
         let expr_index_src = Span::from_pair(&ctx.source, &pair);
         // Parse one component of dot sequence, e.g., `a`, `b[c]`, `d[e][^f]`
-        let (x, is) = parse_expr_index(pair, ctx)?;
-        // Example1: `expr` = `Some(obj)`, `x` = `arr`, `is` = `vec![ [i], [^field] ]`
+        let (x, indices) = parse_expr_index(pair, ctx)?;
+        // Example1: `expr` = `Some(obj)`, `x` = `arr`, `indices` = `vec![ [i], [^field] ]`
         // In this case, we need to create expression like `(obj.arr)([i]<<[^field])` where `<<` represents lens composition.
         //
-        // Example2: `expr` = `None`, `x` = `arr`, `is` = `vec![ [i], [^field] ]`
+        // Example2: `expr` = `None`, `x` = `arr`, `indices` = `vec![ [i], [^field] ]`
         // In this case, we need to create expression like `arr([i]<<[^field])
         //
         // Set `x` = `obj.x` in case of Example1.
@@ -2007,8 +2025,8 @@ fn parse_expr_dot_sequence_of_index(
             None => x,
         };
 
-        // Then, construct index syntax `x([i]<<[^field])` from `x` and `is`.
-        expr = Some(construct_expr_index(x, is, Some(expr_index_src))?);
+        // Then, construct index syntax `x([i]<<[^field])` from `x` and `indices`.
+        expr = Some(construct_expr_index(x, indices, Some(expr_index_src))?);
     }
 
     Ok(expr.unwrap())
@@ -2215,11 +2233,9 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     expr_var(name, Some(span))
 }
 
-/// Parse a `fullname` rule, returning both the resolved `FullName` and the
-/// span of just the trailing `name` token (not the namespace prefix). The
-/// trailing-token span lets callers target the bare name independently —
-/// e.g., for LSP rename / find-references on a pragma argument. Callers
-/// that don't need the span can simply discard it.
+/// Parses a `fullname` rule into the full name it writes, together with the span of its trailing
+/// `name` token alone, which covers the bare name and leaves the namespace prefix outside it. That
+/// span is what a rename or a find-references over such a name works with.
 fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Option<Span>) {
     assert_eq!(pair.as_rule(), Rule::fullname);
     let name_span = pair
@@ -2305,8 +2321,8 @@ fn parse_namespace(pair: Pair<Rule>, _ctx: &mut ParseContext) -> NameSpace {
     NameSpace::new(ret)
 }
 
-fn parse_expr_lit(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    let pair = expr.into_inner().next().unwrap();
+fn parse_expr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
         Rule::expr_number_lit => parse_expr_number_lit(pair, ctx)?,
         Rule::expr_bool_lit => parse_expr_bool_lit(pair, ctx),
@@ -2319,8 +2335,8 @@ fn parse_expr_lit(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
 }
 
 // Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
-fn parse_expr_let(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    let pairs = expr.into_inner();
+fn parse_expr_let(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    let pairs = pair.into_inner();
     parse_expr_let_recursively(pairs, ctx)
 }
 
@@ -2373,9 +2389,9 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr_eval(sub, main, Some(span)))
 }
 
-fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    let span = Span::from_pair(&ctx.source, &expr);
-    let mut pairs = expr.into_inner();
+fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
     let mut pats = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::pattern_nounion {
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
@@ -2401,10 +2417,10 @@ fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     Ok(expr.set_source(Some(span)))
 }
 
-fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    assert_eq!(expr.as_rule(), Rule::expr_if);
-    let span = Span::from_pair(&ctx.source, &expr);
-    let mut pairs = expr.into_inner();
+fn parse_expr_if(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_if);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
     let cond = pairs.next().unwrap();
     let then_val = pairs.next().unwrap();
     pairs.next().unwrap().as_rule(); // Skip `Rule::else_of_if` or `Rule::else_of_if_with_space`.
@@ -2417,10 +2433,10 @@ fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNod
     ))
 }
 
-fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    assert_eq!(expr.as_rule(), Rule::expr_match);
-    let span = Span::from_pair(&ctx.source, &expr);
-    let mut pairs = expr.into_inner();
+fn parse_expr_match(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_match);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
     let cond = pairs.next().unwrap();
     let cond = parse_expr(cond, ctx)?;
     let mut cases = vec![];
@@ -2543,9 +2559,9 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 
     // Validate number of arguments.
     let required_arg_num = param_tys.len() + if is_ios { 1 } else { 0 };
-    let wrong_arg_num = (!is_var_args && args.len() != required_arg_num)
+    let has_wrong_arg_num = (!is_var_args && args.len() != required_arg_num)
         || (is_var_args && args.len() < required_arg_num);
-    if wrong_arg_num {
+    if has_wrong_arg_num {
         return Err(Errors::from_msg_srcs(
             format!(
                 "Wrong number of arguments in FFI_CALL{} expression.",
@@ -2887,10 +2903,10 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     let span = Span::from_pair(&ctx.source, &pair);
     let string = pair.into_inner().next().unwrap().as_str().to_string();
     // Resolve escape sequences.
-    let mut string = string.chars();
+    let mut chars = string.chars();
     let byte: u8;
     loop {
-        match string.next() {
+        match chars.next() {
             None => {
                 unreachable!()
             }
@@ -2900,7 +2916,7 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
                     c.encode_utf8(&mut buf);
                     byte = buf[0];
                 } else {
-                    let c = string.next().unwrap();
+                    let c = chars.next().unwrap();
                     if c == '\'' {
                         byte = 39;
                     } else if c == '\\' {
@@ -2916,8 +2932,8 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
                     } else if c == 'x' {
                         let mut code: u8 = 0;
                         for i in 0..2 {
-                            let c = string.next().unwrap().to_digit(16).unwrap() as u8;
-                            code += c << 4 * (1 - i);
+                            let d = chars.next().unwrap().to_digit(16).unwrap() as u8;
+                            code += d << 4 * (1 - i);
                         }
                         byte = code;
                     } else {
