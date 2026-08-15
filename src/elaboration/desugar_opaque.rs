@@ -74,13 +74,13 @@ use std::sync::Arc;
 ///   tycon_vars = [a]
 ///   tycon_kind = * -> *
 struct OpaqueInfo {
-    // The opaque type variable.
+    /// The opaque type variable.
     tyvar: Arc<TyVar>,
-    // The generated TyCon (e.g., `Std::repeat::?it`).
+    /// The generated TyCon (e.g., `Std::repeat::?it`).
     tycon: Arc<TyCon>,
-    // Non-opaque gen_vars from the scheme; become the TyCon's type arguments.
+    /// Non-opaque gen_vars from the scheme; become the TyCon's type arguments.
     tycon_vars: Vec<Arc<TyVar>>,
-    // Kind of the TyCon (e.g., `* -> *` when there is one type argument of kind `*`).
+    /// Kind of the TyCon (e.g., `* -> *` when there is one type argument of kind `*`).
     tycon_kind: Arc<Kind>,
 }
 
@@ -146,11 +146,13 @@ impl Program {
                     for impl_ in impls.iter_mut() {
                         // Compute defn_to_impl by matching the trait defn scheme type
                         // (e.g., `c -> ?it`) against the impl scheme type (e.g., `Array a -> ?it`).
-                        // We must use impl_.scm (not scm_via_defn) because the lhs of OpaqueTyConResolution
-                        // must use the same variable names as the rhs, which is filled during type-checking
-                        // against impl_.scm. When a user provides a type annotation on the impl method,
-                        // impl_.scm.ty may use different variable names than scm_via_defn.ty; the lhs must
-                        // match the type-checking context to ensure resolve_opaque_type_in_type works correctly.
+                        //
+                        // The impl side of the match is `impl_.scm`, the scheme this implementation
+                        // is type-checked against. It supplies the variable names the rhs of an
+                        // OpaqueTyConResolution is filled in with, and the lhs is written in those
+                        // same names, so that `resolve_opaque_type_in_type` finds the resolution a
+                        // type belongs to. A type annotation the user writes on the impl member is
+                        // what names those variables.
                         //
                         // The match binds the trait's type variable, because a member's type has to
                         // name it (see `TraitEnv::validate_structure`). One resolution per
@@ -175,6 +177,8 @@ impl Program {
         }
     }
 
+    /// Add the TyCon that stands for an opaque type variable to the type environment, taking the
+    /// scheme's other generalized variables as its type arguments.
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
             punched_from: None,
@@ -191,6 +195,12 @@ impl Program {
         self.type_env.add_tycons(new_tycons);
     }
 
+    /// Give the trait environment the constraints the opaque type variables of `scm` carry, written
+    /// in terms of the TyCons that stand for them: `?it : Iterator` becomes `?it a : Iterator`, and
+    /// `Item ?it = a` becomes `Item (?it a) = a`.
+    ///
+    /// The type checker proves a constraint on an opaque type from these, at a use site where the
+    /// concrete type behind it stays hidden.
     fn add_opaque_constraints(&mut self, scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) {
         // Build a combined substitution mapping ALL opaque tyvars to their TyCons.
         // This is needed for equalities that reference multiple opaque types,
@@ -207,6 +217,9 @@ impl Program {
             // Extract opaque-related predicates.
             // Resolve trait aliases (e.g., `Additive` -> `Add` + `Zero`) so that
             // each constituent trait is stored separately in `opaque_preds`.
+            // The resolution succeeds here: a predicate naming an unknown trait is reported by
+            // `TraitEnv::validate_structure`, and a circular alias by
+            // `TraitAliasEnv::resolve_alias`, both of which run before this.
             for pred in &scm.predicates {
                 if !pred.on_tyvar(&info.tyvar.name) {
                     continue;
@@ -929,6 +942,8 @@ pub fn resolve_opaque_tycon_in_expr(
                 .collect();
             expr.set_ffi_call_args(new_args)
         }
-        _ => expr,
+        // A variable holds no subexpression. An LLVM expression holds `generic_ty`, which stays
+        // written in the type variables of the builtin that carries it, instantiation included.
+        Expr::Var(_) | Expr::LLVM(_) => expr,
     }
 }
