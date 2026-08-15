@@ -101,6 +101,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
             &typechecker,
             &modules,
             diag_config.target_symbols.as_deref(),
+            config,
         ));
         program.deferred_errors.append(errors);
         program
@@ -114,7 +115,12 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
         let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
-        program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules, None)?;
+        program.resolve_namespace_and_check_type_in_modules(
+            &typechecker,
+            &all_modules,
+            None,
+            config,
+        )?;
     }
 
     // Collect deprecation diagnostics from all type-checked expressions and
@@ -155,8 +161,8 @@ pub fn read_file(path: &Path) -> Result<String, String> {
         }
         Ok(file) => file,
     };
-    let mut s = String::new();
-    match file.read_to_string(&mut s) {
+    let mut content = String::new();
+    match file.read_to_string(&mut content) {
         Err(why) => {
             return Err(format!(
                 "Couldn't read \"{}\": {}",
@@ -166,7 +172,7 @@ pub fn read_file(path: &Path) -> Result<String, String> {
         }
         Ok(_) => (),
     }
-    Ok(s)
+    Ok(content)
 }
 
 /// Create the directory at `rel_path`, together with its missing ancestors, and return its path.
@@ -175,16 +181,16 @@ pub fn touch_directory<P>(rel_path: P) -> PathBuf
 where
     P: AsRef<Path>,
 {
-    let res = PathBuf::new().join(rel_path);
-    match create_dir_all(&res) {
+    let dir_path = PathBuf::new().join(rel_path);
+    match create_dir_all(&dir_path) {
         Err(why) => panic!(
             "Failed to create directory \"{}\": {}",
-            res.to_string_lossy().to_string(),
+            dir_path.to_string_lossy().to_string(),
             why
         ),
         Ok(_) => {}
     };
-    res
+    dir_path
 }
 
 /// Load all source files specified in the configuration, link them, and return the resulting `Program`.
@@ -206,14 +212,14 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         // In other words, in the following diagnostic process, only the dependent projects are targeted.
         // This allows us to give the language server the information it needs for code completion, even if there is a parse error in the root project.
         if errors.has_error() {
-            let mut dependent_projects = vec![];
+            let mut dependency_modules = vec![];
             for mod_ in modules {
                 let mods = mod_.modules_from_files(&diag_config.files)?;
                 if mods.is_empty() {
-                    dependent_projects.push(mod_);
+                    dependency_modules.push(mod_);
                 }
             }
-            modules = dependent_projects;
+            modules = dependency_modules;
         }
         program.deferred_errors.append(errors);
     } else {

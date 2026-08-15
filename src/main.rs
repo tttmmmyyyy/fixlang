@@ -34,6 +34,7 @@ mod error;
 mod fixstd;
 mod generator;
 mod graph;
+mod hash;
 mod metafiles;
 mod misc;
 mod object;

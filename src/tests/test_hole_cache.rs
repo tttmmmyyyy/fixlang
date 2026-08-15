@@ -172,12 +172,13 @@ mod integration_tests {
         );
     }
 
-    /// A test build and a plain build over one project directory share the type-check cache, and
-    /// each still produces its own program.
+    /// A test build and a plain build over one project directory each produce their own program,
+    /// out of one type-check cache.
     ///
     /// The two builds see different sets of tuple sizes, so the trait implementations the compiler
-    /// generates for tuples differ between them; those generated sources reach no module's
-    /// dependency hash, which is what makes the two builds' entries meet under one key.
+    /// generates for tuples differ between them, and each build's entries name the sources that
+    /// build is made of. Both builds read and write one directory of entries, and what each entry
+    /// is filed under is what keeps the second build from taking the first one's answers.
     #[test]
     fn a_test_build_and_a_plain_build_share_the_cache_without_corrupting_it() {
         let (_temp_dir, project_dir) = setup_test_env("test_and_build");

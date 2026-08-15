@@ -15,6 +15,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
+    hash::HashSource,
     misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
@@ -178,7 +179,7 @@ fn dump_rc_ir(
     let file_name = if filter == "all" {
         format!("rc_ir.{}.txt", stage)
     } else {
-        let module: String = filter
+        let mod_name: String = filter
             .chars()
             .map(|c| {
                 if c.is_alphanumeric() || matches!(c, '.' | '-' | '_') {
@@ -188,7 +189,7 @@ fn dump_rc_ir(
                 }
             })
             .collect();
-        format!("rc_ir.{}.{}.txt", module, stage)
+        format!("rc_ir.{}.{}.txt", mod_name, stage)
     };
     let path = PathBuf::from(DOT_FIXLANG).join(file_name);
     if let Err(e) = fs::write(&path, program_to_string_annotated(&selected, ann)) {
@@ -255,7 +256,7 @@ pub fn build_object_files<'c>(
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
     {
-        let module_dependency_hash = program.module_dependency_hash_map();
+        let module_dependency_hash = program.module_dependency_hash_map(&config);
         let module_dependency_map = program.module_dependency_map();
         let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
         if config.enable_separated_compilation() {
@@ -403,7 +404,7 @@ fn load_build_object_files_cache(
     config: &Configuration,
 ) -> Option<BuildObjFilesResult> {
     let hash = build_object_files_cache_hash_or_warn(program, config)?;
-    let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
+    let cache_path = build_object_files_cache_path(&hash);
     if !Path::new(&cache_path).exists() {
         return None;
     }
@@ -440,7 +441,7 @@ fn save_build_object_files_cache(
     ) else {
         return;
     };
-    let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
+    let cache_path = build_object_files_cache_path(&hash);
     let Some(file) = cache_step_or_warn(
         File::create(&cache_path),
         &format!("Failed to create object files cache \"{}\"", cache_path),
@@ -466,23 +467,25 @@ fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) ->
     }
 }
 
+/// The file the object files a build produced are recorded in, named by the hash of the build. The
+/// reader and the writer of the cache take the path from here, so they name one file.
+fn build_object_files_cache_path(hash: &str) -> String {
+    format!("{}/{}.json", UNITS_CACHE_PATH, hash)
+}
+
 /// The hash that names the object files cache of a build: it covers the configuration options that
-/// bear on code generation together with every module's source, so two builds share a hash exactly
-/// when they would produce the same object files.
+/// bear on code generation together with every source every module is made of, so two builds share
+/// a hash exactly when they would produce the same object files.
 fn build_object_files_cache_hash(
     program: &Program,
     config: &Configuration,
 ) -> Result<String, Errors> {
-    let mut hash_source = "".to_string();
-    hash_source += "<configuration>";
-    hash_source += &config.object_generation_hash();
-
-    hash_source += "<sources>";
+    let mut hash_source = HashSource::default();
+    hash_source.push_text(&config.object_generation_hash());
     for mi in &program.modules {
-        hash_source += &mi.source.input.hash()?;
+        hash_source.push_text(&mi.source.input.hash()?);
     }
-
-    Ok(format!("{:x}", md5::compute(hash_source)))
+    Ok(hash_source.finish())
 }
 
 /// The hash naming a build's object files cache, or `None` after warning that it could not be
