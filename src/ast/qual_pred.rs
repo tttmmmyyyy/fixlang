@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::ast::equality::Equality;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
@@ -7,6 +6,7 @@ use crate::ast::types::TyVar;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::parse::sourcefile::SourcePos;
+use std::sync::Arc;
 
 /// A predicate together with the constraints under which it holds, as `[a : Eq] Array a : Eq` says
 /// that `Array a` implements `Eq` whenever `a` does.
