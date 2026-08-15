@@ -49,8 +49,8 @@ const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
 /// program may do with it: LLVM renames whichever of two definitions of one symbol arrives second,
 /// and the program that comes out calls something other than what it names.
 ///
-/// The answer does not depend on how the program is built. `pthread_once` reaches the module only in
-/// a multi-threaded program and the entry point only in an executable, and the compiler's claim on
+/// The answer is the same however the program is built. `pthread_once` reaches the module only in a
+/// multi-threaded program and the entry point only in an executable, and the compiler's claim on
 /// both holds everywhere, so turning multi-threading on or building the same source as a dynamic
 /// library leaves the set of programs that compile as it was.
 pub fn compiler_use_of_c_function_name(name: &str) -> Option<CompilerNameUse> {
@@ -121,8 +121,8 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
 
     // Every name the calls above put in the module is one an `FFI_EXPORT` of it would take away, so
     // each has to be one `compiler_use_of_c_function_name` answers for. It answers by prefix for the
-    // runtime's own functions and by name for the C library ones, and the latter list is what a
-    // runtime function calling a new C library function would leave behind.
+    // runtime's own functions and by name for the C library ones, so `RUNTIME_C_LIBRARY_FUNCTIONS`
+    // is what a runtime function calling a new C library function would leave behind.
     if mode == BuildMode::Declare {
         for function in module_functions(gc.module) {
             let name = function.get_name().to_str().unwrap();

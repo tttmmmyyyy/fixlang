@@ -216,23 +216,31 @@ const C_SCALAR_NAMES: &[&str] = &[
 pub enum CTypeShape {
     /// An integer of this width in bits, carrying the extension its width earns it.
     Integer {
+        /// The width of the C integer type: 8, 16, 32 or 64.
         bits: u32,
+        /// The extension the ABI asks of a value of this width, and `None` at a width that fills
+        /// the unit a C signature carries an integer in.
         extension: Option<CIntegerExtension>,
     },
+    /// C's `float`.
     Float32,
+    /// C's `double`.
     Float64,
+    /// A pointer, which C carries as one address whatever it points at.
     Pointer,
 }
 
-/// Which side of a call extends an integer narrower than the 32-bit unit the ABI carries it in.
+/// How the bits above an integer narrower than the 32-bit unit the ABI carries it in are filled.
 ///
-/// Apple's AArch64 has the caller extend an argument and the callee extend a result, and lets the
-/// other side read the whole register on that promise, while AAPCS64 and System V leave those bits
-/// unspecified and have the reader narrow the value itself. These are how a signature says which of
-/// the two it follows, and a C compiler puts one on every such parameter and result.
+/// Apple's AArch64 has the caller fill them for an argument and the callee for a result, and lets
+/// the other side read the whole register on that promise, while AAPCS64 and System V leave them
+/// unspecified and have the reader narrow the value itself. Naming the fill is how a signature says
+/// which of the two it follows, and a C compiler puts one on every such parameter and result.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CIntegerExtension {
+    /// Copies of the value's sign bit fill the bits above it.
     Sign,
+    /// Zeroes fill the bits above the value.
     Zero,
 }
 
@@ -319,12 +327,12 @@ impl TyCon {
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
-    // The shape of the C type this type constructor stands for.
-    // `()` is C's `void`, which carries no value, so it has no shape.
-    //
-    // An integer narrower than 32 bits travels in the low bits of a register and carries the
-    // extension its sign asks for; one that fills the register carries none, which is what lets a
-    // program read the same C function's result as `I64` in one place and as `U64` in another.
+    /// The shape of the C type this type constructor stands for.
+    /// `()` is C's `void`, which carries no value, so it has no shape.
+    ///
+    /// An integer narrower than 32 bits travels in the low bits of a register and carries the
+    /// extension its sign asks for; one that fills the register carries none, which is what lets a
+    /// program read the same C function's result as `I64` in one place and as `U64` in another.
     pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
         if self.is_unit() {
             return None;
@@ -363,8 +371,8 @@ impl TyCon {
         })
     }
 
-    // The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
-    // needs none: a wide integer, a floating point number, a pointer, and `()`.
+    /// The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
+    /// needs none: a wide integer, a floating point number, a pointer, and `()`.
     pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
         match self.c_type_shape()? {
             CTypeShape::Integer { extension, .. } => extension,
@@ -372,8 +380,8 @@ impl TyCon {
         }
     }
 
-    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
-    // `()` is C's `void`, which carries no value, so it maps to `None`.
+    /// Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
+    /// `()` is C's `void`, which carries no value, so it maps to `None`.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
         Some(match self.c_type_shape()? {
             CTypeShape::Integer { bits, .. } => {

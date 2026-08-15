@@ -295,12 +295,11 @@ pub fn test_export_non_ascii_first_character_fails() {
     );
 }
 
+/// A module holds one function under a name, so an export of a name the compiler puts there is a
+/// second definition of one symbol and one of the two loses the name. Each kind of name the compiler
+/// owns: the entry point, a name of the Fix runtime, and a C library function the runtime calls.
 #[test]
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
-    // A module holds one function under a name, so an export of a name the compiler puts there is a
-    // second definition of one symbol and one of the two loses the name. Each kind of name the
-    // compiler owns: the entry point, a name of the Fix runtime, and a C library function the
-    // runtime calls.
     for (c_function_name, reason) in [
         ("main", "it is the entry point of the program"),
         ("fixruntime_abort", "belongs to the Fix runtime"),
@@ -323,11 +322,11 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     }
 }
 
+/// A program may call the C function it exports. The declaration the call writes and the definition
+/// the export builds describe one function, and the module holds it once, so the call reaches the
+/// exported value.
 #[test]
 pub fn test_export_and_ffi_call_of_one_c_name() {
-    // A program may call the C function it exports. The declaration the call writes and the
-    // definition the export builds describe one function, and the module holds it once, so the call
-    // reaches the exported value.
     let source = r##"
         module Main;
 
@@ -347,10 +346,11 @@ pub fn test_export_and_ffi_call_of_one_c_name() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An `FFI_CALL` of the entry point's name is rejected: the call declares the name and the
+/// compiler's entry point, written afterwards, is renamed away from the C runtime that starts the
+/// program.
 #[test]
 pub fn test_ffi_call_of_the_entry_point_name_fails() {
-    // The call declares the name and the compiler's entry point, written afterwards, is renamed away
-    // from the C runtime that starts the program.
     let source = r##"
         module Main;
 
@@ -370,10 +370,10 @@ pub fn test_ffi_call_of_the_entry_point_name_fails() {
     );
 }
 
+/// The export defines the C function and the call goes through that one definition, so a call
+/// written at another arity asks the exported function for an argument it does not take.
 #[test]
 pub fn test_export_and_ffi_call_of_one_c_name_at_two_signatures_fails() {
-    // The export defines the C function and the call goes through that one definition, so a call
-    // written at another arity asks the exported function for an argument it does not take.
     let source = r##"
         module Main;
 
@@ -394,11 +394,11 @@ pub fn test_export_and_ffi_call_of_one_c_name_at_two_signatures_fails() {
     );
 }
 
+/// The two calls write the same result type and the same fixed parameter, and differ only in
+/// whether the C function ends in `...`. A variadic function is called differently from a
+/// fixed-arity one, so the one declaration the module holds cannot serve both.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_with_and_without_var_args_fails() {
-    // The two calls write the same result type and the same fixed parameter, and differ only in
-    // whether the C function ends in `...`. A variadic function is called differently from one that
-    // is not, so the one declaration the module holds cannot serve both.
     let source = r##"
         module Main;
 
@@ -418,11 +418,11 @@ pub fn test_ffi_calls_of_one_c_name_with_and_without_var_args_fails() {
     );
 }
 
+/// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
+/// register and the sign says which side extends it, so the two calls ask the one declaration for
+/// opposite promises about the bits above the value.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails() {
-    // A parameter is a position like the result: the ABI carries a narrow integer in the low bits of
-    // a register and the sign says which side extends it, so the two calls ask the one declaration
-    // for opposite promises about the bits above the value.
     let source = r##"
         module Main;
 
@@ -446,10 +446,10 @@ pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails(
     );
 }
 
+/// Both calls go through the one function the module holds under the name, so the arity the second
+/// one writes is an arity the C function does not have.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_at_two_signatures_fails() {
-    // Both calls go through the one function the module holds under the name, so the arity the
-    // second one writes is an arity the C function does not have.
     let source = r##"
         module Main;
 
@@ -469,11 +469,11 @@ pub fn test_ffi_calls_of_one_c_name_at_two_signatures_fails() {
     );
 }
 
+/// A value that fills its register travels the same way whichever sign the reader gives the bits,
+/// so a declaration writes `I64` and `U64` identically and a program may read one C function's
+/// result as either.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
-    // A value that fills its register travels the same way whichever sign the reader gives the
-    // bits, so a declaration writes `I64` and `U64` identically and a program may read one C
-    // function's result as either.
     let source = r##"
         module Main;
 
@@ -496,11 +496,11 @@ pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign is
+/// what says which side extends it. So the two descriptions ask the one declaration for opposite
+/// promises about the bits above the value.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails() {
-    // The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign
-    // is what says which side extends it. So the two descriptions ask the one declaration for
-    // opposite promises about the bits above the value.
     let source = r##"
         module Main;
 

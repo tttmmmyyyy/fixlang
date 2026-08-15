@@ -2077,8 +2077,8 @@ impl Program {
     ///
     /// A name reaches the module as one function, and every call the program makes goes through it.
     /// So a call naming a function the compiler defines takes that definition away, and a second
-    /// description is not a second function: it is the first one called or defined at a signature
-    /// the program says it does not have. A parameter too many or too few, or one that travels
+    /// description of one name reaches that same function, called or defined at a signature the
+    /// program says it does not have. A parameter too many or too few, or one that travels
     /// differently, then crosses between two sides that lay it down differently.
     ///
     /// Two Fix types that a C declaration writes identically describe the same position, so a
@@ -2093,7 +2093,7 @@ impl Program {
 
         // How each C function name has been described so far, and where. The exported functions
         // enter first, so that a call disagreeing with a definition is reported against the
-        // definition rather than against whichever call the walk happens to reach first.
+        // definition.
         let mut descriptions: Map<Name, (CSignature, Option<Span>)> = Default::default();
         for stmt in &self.export_statements {
             let exported_ty = stmt
