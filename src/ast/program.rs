@@ -2931,7 +2931,8 @@ impl Program {
         Ok(hash_source.finish())
     }
 
-    // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.
+    /// For each module linked into the program, a hash naming everything a value defined in that
+    /// module is type-checked from.
     pub fn module_dependency_hash_map(&self, config: &Configuration) -> Map<Name, String> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();

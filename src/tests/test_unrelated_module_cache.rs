@@ -74,6 +74,8 @@ intruder_tuple : (I64, I64, I64, I64);
 intruder_tuple = (1, 2, 3, 4);
 "#;
 
+    /// Writes the project into `dir`: `fixproj.toml` holding `fixproj`, `main.fix`, and — when
+    /// `intruder` is given — `intruder.fix` holding it.
     fn write_project(dir: &Path, fixproj: &str, intruder: Option<&str>) {
         fs::write(dir.join("fixproj.toml"), fixproj).unwrap();
         fs::write(dir.join("main.fix"), MAIN_FIX).unwrap();

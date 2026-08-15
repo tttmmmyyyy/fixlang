@@ -1108,7 +1108,8 @@ impl CTypeSizes {
         ]
     }
 
-    /// The size of each C type, named and written out. Both caches of the compiler are keyed by it.
+    /// The size of each C type, named and written out, so that sizes differing anywhere produce
+    /// different text.
     fn to_string(&self) -> String {
         vec![
             format!("char: {}", self.char),
