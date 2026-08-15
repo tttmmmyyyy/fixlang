@@ -181,14 +181,14 @@ type Guard = box struct { allowed : Array U8 };
 type Pair = unbox struct { first : Guard, second : Guard };
 
 // One variant holds a boxed value, one a pair of them, and one only a number, so that the union's
-// root is resolved where a single leaf lies beneath it, where several do, and where none does.
+// root is resolved with one leaf beneath it, with several, and with none.
 type Action = unbox union { wait : Guard, pair : Pair, mark : I64 };
 
 type Node = unbox struct { action : Action, n : I64 };
 
-// Reads the union out of a node it is handed and lets it die without consuming it. The node is only
-// read here, so the reading version borrows it and takes no reference of its own; the union has to
-// be recognized as the caller's rather than as a value produced here.
+// Reads the union out of a node it is handed and drops it without consuming it. This function only
+// reads the node, so it is given the node borrowed, and the union read out of it has to be
+// recognized as the caller's.
 glance : I64 -> Node -> I64;
 glance = |k, node| (
     let action = node.@action;
@@ -197,7 +197,7 @@ glance = |k, node| (
     node.@n + glance(k - 1, node)
 );
 
-// The same, with the union asked about by a borrowing getter before it is dropped.
+// The same, with the borrowing getter `is_mark` reading the union before it is dropped.
 sniff : I64 -> Node -> I64;
 sniff = |k, node| (
     let action = node.@action;
@@ -223,8 +223,9 @@ main = (
 "#;
 
     /// The boxed values a borrowed node carries survive a reader that reads the union out of it and
-    /// drops it without consuming it, and none of them leaks. Checked under Valgrind MemCheck: the
-    /// release that falls twice frees a value nothing reads afterwards, so the answers stay right.
+    /// drops it without consuming it, and none of them leaks. This runs under Valgrind MemCheck
+    /// because a double release here frees a value nothing reads afterwards, so the assertions on
+    /// their own still pass.
     #[test]
     pub fn test_dropped_union_field_memory_safety() {
         if !platform_valgrind_supported() {
