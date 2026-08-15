@@ -1,0 +1,25 @@
+module Main;
+
+type MyUnion = union { a : I64, b : Bool };
+
+main : IO () = (
+    let opt : Option I64 = Option::some(42);
+    let num : I64 = 42;
+    // A name the matched union does not have.
+    let a = match opt { som(v) => v, none(_) => 0 };
+    // A variant pattern on a value of non-union type.
+    let b = match num { some(v) => v, none(_) => 0 };
+    // A variant of another union, named without its module.
+    let c = match opt { MyUnion::a(v) => v, none(_) => 0 };
+    // A variant of another union, named in full.
+    let d = match opt { Main::MyUnion::a(v) => v, none(_) => 0 };
+    // A namespace that names no type.
+    let e = match opt { Nosuch::some(v) => v, none(_) => 0 };
+    // The matched union's own namespace, and a name it does not have.
+    let f = match opt { Std::Option::nosuch(v) => v, none(_) => 0 };
+    // A matched value whose type is not known.
+    let g = match ?h { some(v) => v, none(_) => 0 };
+    let arr = [1, 2, 3];
+    let _ = arr.
+    pure()
+);

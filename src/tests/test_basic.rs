@@ -10075,6 +10075,32 @@ pub fn test_match_on_variant_for_nonunion() {
     test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array a`, but it is matched on a variant pattern `foo(_)`.");
 }
 
+/// Verifies that a variant pattern on a value whose type is still unknown at the `match` is
+/// reported as an error: the matched value is a lambda parameter whose type only the call site
+/// below fixes, so no union is known to resolve the variant names against.
+#[test]
+pub fn test_match_on_variant_for_value_of_unknown_type() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let unwrap = |o| match o {
+            some(v) => v,
+            none(_) => 0
+        };
+        assert_eq(|_|"", unwrap(Option::some(42)), 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "The type of the matched value must be known at this point.",
+    );
+}
+
 #[test]
 pub fn test_match_omit_parentheses() {
     let source = r##"
