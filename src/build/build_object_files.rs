@@ -8,8 +8,12 @@ use crate::{
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, OutputFileType},
-    constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
+    constants::{
+        C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
+        UNITS_CACHE_PATH,
+    },
     error::{panic_with_msg, Errors},
+    ffi::c_entry_point_signature,
     fixstd::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},
@@ -38,7 +42,7 @@ use inkwell::{
     passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     values::BasicValue,
-    AddressSpace, OptimizationLevel,
+    OptimizationLevel,
 };
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -675,15 +679,18 @@ fn build_exported_c_functions<'c, 'm>(
 /// Implement the C `main` function of the program: store `argc` and `argv` into the global
 /// variables the runtime reads them from, run the `IO ()` action `main_expr` refers to, and return
 /// 0.
+///
+/// The body goes onto the declaration an `FFI_CALL` of `main` has left, where a program calls its
+/// own entry point. `Program::validate_c_function_calls` has held that call to
+/// `c_entry_point_signature`, so the declaration found here is the one this function builds.
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
-    let main_fn_type = gc.context.i32_type().fn_type(
-        &[
-            gc.context.i32_type().into(),                      // argc
-            gc.context.ptr_type(AddressSpace::from(0)).into(), // argv
-        ],
-        false,
+    let main_function =
+        c_entry_point_signature().get_or_declare_in_module(&C_ENTRY_POINT_NAME.to_string(), gc);
+    assert_eq!(
+        main_function.count_basic_blocks(),
+        0,
+        "the entry point has one definition"
     );
-    let main_function = gc.module.add_function("main", main_fn_type, None);
     let entry_bb = gc.context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 

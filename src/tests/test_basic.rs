@@ -4955,6 +4955,8 @@ pub fn test_trait_impl_defines_undeclared_member() {
     );
 }
 
+/// `to_bytes` and `from_bytes` carry a value of each numeric type through the byte array and back,
+/// and `from_bytes` answers an error for a byte array that is not the type's width.
 #[test]
 pub fn test129() {
     let source = r#"
@@ -4983,16 +4985,16 @@ pub fn test129() {
             let n = 2;
             let x = 65535_U16;
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // I16
-            // let case = "I16";
-            // let n = 2;
-            // let x = -32768_I16;
-            // assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let case = "I16";
+            let n = 2;
+            let x = -32768_I16;
+            assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
+            let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // U32
             let case = "U32";
@@ -5041,6 +5043,50 @@ pub fn test129() {
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
             let y : Result ErrMsg F64 = Array::fill(n-1, 127_U8).from_bytes;
             assert(|_|case + " 2", y.is_err);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
+/// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
+/// representation; and `from_bytes` answers an error for a byte array that is not the type's width.
+#[test]
+pub fn test_narrow_signed_integer_bytes_round_trip() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let case = "I8";
+            assert_eq(|_|case + " negative one", (-1_I8).to_bytes.from_bytes.as_ok, -1_I8);;
+            assert_eq(|_|case + " minimum", I8::minimum.to_bytes.from_bytes.as_ok, I8::minimum);;
+            assert_eq(|_|case + " maximum", I8::maximum.to_bytes.from_bytes.as_ok, I8::maximum);;
+            assert_eq(|_|case + " width", (-1_I8).to_bytes.get_size, 1);;
+            let short : Result ErrMsg I8 = Array::fill(0, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            let case = "I16";
+            assert_eq(|_|case + " negative one", (-1_I16).to_bytes.from_bytes.as_ok, -1_I16);;
+            assert_eq(|_|case + " minimum", I16::minimum.to_bytes.from_bytes.as_ok, I16::minimum);;
+            assert_eq(|_|case + " maximum", I16::maximum.to_bytes.from_bytes.as_ok, I16::maximum);;
+            assert_eq(|_|case + " width", (-1_I16).to_bytes.get_size, 2);;
+            let short : Result ErrMsg I16 = Array::fill(1, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            // The bytes themselves. A round trip alone passes for any conversion that preserves the
+            // value, so it says nothing about the two's-complement bytes a C caller reads.
+            let case = "representation";
+            assert_eq(|_|case + " I8 negative one", (-1_I8).to_bytes, [255_U8]);;
+            assert_eq(|_|case + " I8 minimum", I8::minimum.to_bytes, [128_U8]);;
+            assert_eq(|_|case + " I16 negative one", (-1_I16).to_bytes, [255_U8, 255_U8]);;
+            assert_eq(|_|case + " I16 minimum", I16::minimum.to_bytes, [0_U8, 128_U8]);;
+            let from_all_ones : Result ErrMsg I8 = [255_U8].from_bytes;
+            assert_eq(|_|case + " I8 from 0xff", from_all_ones.as_ok, -1_I8);;
+            let from_min : Result ErrMsg I16 = [0_U8, 128_U8].from_bytes;
+            assert_eq(|_|case + " I16 from 0x8000", from_min.as_ok, I16::minimum);;
 
             pure()
         );

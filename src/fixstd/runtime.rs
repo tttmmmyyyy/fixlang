@@ -1,4 +1,5 @@
-use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
+use crate::configuration::OutputFileType;
+use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
@@ -6,16 +7,31 @@ use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
 use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::AddressSpace;
 
+/// The runtime function that ends the program where a check has failed. It returns to no one.
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
+/// The runtime function that reports an array index outside the array and ends the program. It
+/// takes the index and the size, and returns to no one.
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
+/// The runtime function that reports a negative array size or capacity and ends the program. It
+/// takes the size, and returns to no one.
 pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
+/// The runtime function that reports an array capacity beyond what an element buffer can hold and
+/// ends the program. It takes the capacity, and returns to no one.
 pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
+/// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
+/// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
+/// The runtime function giving the distance in bytes from its second pointer to its first.
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
+/// The runtime function giving the address a signed number of bytes past the pointer it is given.
 pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
+/// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
+/// other thread wait for that run to finish.
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
+/// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
+/// The runtime function giving the command line argument at an index, as a C string.
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 /// libc `malloc`, declared with a 64-bit size parameter.
 ///
@@ -29,6 +45,42 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// `RUNTIME_MALLOC`: it resizes a single malloc block in place when it can, so
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
+
+/// The prefix under which the compiler names the runtime's own functions, and the globals holding
+/// `argc` and `argv`.
+pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
+
+/// Why the C function name `name` is one the compiler writes the body of when it builds an `output`
+/// artifact, phrased to follow "cannot be the name of ...: "; `None` where the program is free to
+/// define the function itself.
+///
+/// A module holds one function under a name, and LLVM renames whichever of two definitions arrives
+/// second rather than reporting them. So where the compiler writes a body, a program that writes
+/// one too gets a silently renamed function and a program that does not do what it says.
+///
+/// A C function the compiler only *calls* is not here. Supplying that definition is what linking an
+/// object file of one's own does, and it reaches the same place: the compiler emits a call to an
+/// undefined symbol either way, and the linker binds it to whatever definition the program brings.
+/// Interposing on the C library is therefore the program's to do, and `Document.md` says what it
+/// costs.
+///
+/// # Arguments
+/// * `output` — what is being built. The entry point is written into an executable alone, so a
+///   dynamic library is free to carry a `main` of its own.
+pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) -> Option<String> {
+    if name == C_ENTRY_POINT_NAME && output == OutputFileType::Executable {
+        return Some(
+            "it is the entry point of the program, which the compiler defines".to_string(),
+        );
+    }
+    if name.starts_with(RUNTIME_NAME_PREFIX) {
+        return Some(format!(
+            "a name beginning with `{}` belongs to the Fix runtime",
+            RUNTIME_NAME_PREFIX
+        ));
+    }
+    None
+}
 
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
@@ -143,6 +195,8 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     return;
 }
 
+/// Declare `sprintf`, which takes the output buffer and the format string and goes on to take the
+/// values the format names.
 fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -236,6 +290,8 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
     return;
 }
 
+/// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
+/// initializer itself. A multi-threaded program initializes each global through it.
 pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -384,6 +440,8 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
 }
 
+/// Declares `realloc` in the module with signature `ptr (ptr, i64)`, plus the LLVM attribute that
+/// keeps code generation around allocator calls correct.
 fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -398,4 +456,32 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
+    /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being
+    /// built and the C library functions it merely calls are the program's either way.
+    #[test]
+    fn test_which_c_names_the_compiler_writes_the_body_of() {
+        assert!(
+            compiler_defined_c_function_reason(C_ENTRY_POINT_NAME, OutputFileType::Executable)
+                .is_some()
+        );
+        assert!(compiler_defined_c_function_reason(
+            C_ENTRY_POINT_NAME,
+            OutputFileType::DynamicLibrary
+        )
+        .is_none());
+        for output in [OutputFileType::Executable, OutputFileType::DynamicLibrary] {
+            assert!(compiler_defined_c_function_reason(RUNTIME_ABORT, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_GET_ARGC, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_MALLOC, output).is_none());
+            assert!(compiler_defined_c_function_reason("free", output).is_none());
+            assert!(compiler_defined_c_function_reason("c_of_my_own", output).is_none());
+        }
+    }
 }
