@@ -273,11 +273,10 @@ impl PatternNode {
             }
             Pattern::Union(variant, variant_src, subpat) => {
                 if let Some(variant_name_span) = variant_src {
-                    if variant_name_span.includes_pos_lsp(pos)
-                        && !variant.namespace.names.is_empty()
-                    {
-                        let tc = TyCon::new(variant.namespace.clone().to_fullname());
-                        return Some(EndNode::Variant(tc, variant.name.clone()));
+                    if variant_name_span.includes_pos_lsp(pos) {
+                        if let Some(tc) = Pattern::variant_union_tycon(variant) {
+                            return Some(EndNode::Variant(tc, variant.name.clone()));
+                        }
                     }
                 }
                 let node = subpat.find_node_at_pos(pos);
@@ -729,6 +728,23 @@ impl Pattern {
         }
     }
 
+    /// The union a variant name belongs to, which is the type constructor its namespace names.
+    ///
+    /// `validate_variant_name` gives the variant name of a union pattern that namespace, and every
+    /// reader of the name gets the union back through here. Until validation has accepted the
+    /// name, it carries whatever namespace the source wrote before it, which is `None` here when
+    /// the source wrote none at all.
+    ///
+    /// # Examples
+    /// The variant name `Std::Option::some` belongs to `Std::Option`, and the bare `some` to no
+    /// union.
+    pub fn variant_union_tycon(variant_name: &FullName) -> Option<TyCon> {
+        if variant_name.namespace.is_local() {
+            return None;
+        }
+        Some(TyCon::new(variant_name.namespace.clone().to_fullname()))
+    }
+
     /// From a variant name, gets the variant index and the type constructor of the union.
     ///
     /// The name's namespace is the union's, as `validate_variant_name` leaves it, and this reads
@@ -737,10 +753,7 @@ impl Pattern {
         variant_name: &FullName,
         type_env: &TypeEnv,
     ) -> Option<(usize, TyCon)> {
-        if variant_name.namespace.is_local() {
-            return None;
-        }
-        let tc: TyCon = TyCon::new(variant_name.namespace.clone().to_fullname());
+        let tc = Pattern::variant_union_tycon(variant_name)?;
         let ti = type_env.tycons().get(&tc)?;
         let variant_idx = ti
             .fields
