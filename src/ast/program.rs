@@ -1072,7 +1072,7 @@ impl Program {
                 .map(|s| s.to_head_character());
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "Duplicated definition for global value: `{}`",
+                    "Duplicate definition for global value: `{}`.",
                     name.to_string()
                 ),
                 &[&this, &other],
@@ -1895,16 +1895,31 @@ impl Program {
         Ok(name)
     }
 
-    // Create symbols of trait members from TraitEnv.
-    pub fn create_trait_member_symbols(&mut self) {
+    /// Registers the global value of each trait member, holding every implementation of that
+    /// member as its body.
+    ///
+    /// A member's name is a global value's name like any other — `bar` of `trait c : Foo` is
+    /// `Foo::bar` — so a value the program writes under a namespace named after the trait carries
+    /// that name too, and the two are reported as one name defined twice.
+    pub fn create_trait_member_symbols(&mut self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        for (member_name, member_symbol) in self.trait_member_symbols() {
+            errors.eat_err(self.add_global_value_gv(member_name, member_symbol));
+        }
+        errors.to_result()
+    }
+
+    /// The global value of each trait member, paired with the name it is registered under, built
+    /// from the trait environment alone.
+    fn trait_member_symbols(&self) -> Vec<(FullName, GlobalValue)> {
+        let mut member_symbols: Vec<(FullName, GlobalValue)> = vec![];
         for (trait_id, trait_) in &self.trait_env.traits {
             for member in &trait_.members {
                 let member_scm = trait_.member_scheme(&member.name, false);
                 let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
-                let instances = self.trait_env.impls.get(trait_id);
-                if let Some(insntances) = instances {
-                    for trait_impl in insntances {
+                if let Some(instances) = self.trait_env.impls.get(trait_id) {
+                    for trait_impl in instances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
@@ -1923,7 +1938,7 @@ impl Program {
                     }
                 }
                 let member_name = FullName::new(&trait_id.name.to_namespace(), &member.name);
-                self.global_values.insert(
+                member_symbols.push((
                     member_name,
                     GlobalValue {
                         scm: member_scm,
@@ -1935,9 +1950,10 @@ impl Program {
                         compiler_defined_method: false,
                         deprecation: member.deprecation.clone(),
                     },
-                );
+                ));
             }
         }
+        member_symbols
     }
 
     /// Report every constraint written in a global value's type signature, and in the signature of
