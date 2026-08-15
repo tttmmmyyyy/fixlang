@@ -945,6 +945,29 @@ impl TraitEnv {
                 // mentions it only as an argument of an associated type
                 // application.
 
+                // A use site picks the implementation from the type it writes, so the member's
+                // type has to determine the trait's type variable on its own: it must appear
+                // there, outside of any associated type application.
+                //
+                // `Scheme::validate_constraints` asks the same of every generalized variable
+                // through the Fixv condition, but it counts a variable on the right-hand side of
+                // an equality as determined — and an equality on an opaque type variable
+                // (`make : [?it : Iterator, Item ?it = c] I64 -> ?it`) determines nothing at a use
+                // site, because what stands behind `?it` is the implementation's choice.
+                let mut fixed_vars = Set::default();
+                member.qual_ty.ty.fixed_vars_to_set(&mut fixed_vars);
+                if !fixed_vars.contains(&trait_defn.type_var.name) {
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
+                             NOTE: `{}` must appear in the type of the member, outside of any associated \
+                             type application. A constraint does not fix it.",
+                            trait_defn.type_var.name, trait_defn.type_var.name,
+                        ),
+                        &[&member.decl_src.as_ref().map(|s| s.to_head_character())],
+                    ));
+                }
+
                 // The "impl type" cannot be constrained.
                 //
                 // This is a restriction mentioned in section 5.1 (Well-formed programs) of the paper "Associated Type Synonyms":
