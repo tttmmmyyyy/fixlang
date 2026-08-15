@@ -1243,8 +1243,7 @@ impl TraitEnv {
 
                 errors.eat_err(impl_.resolve_namespace(ctx));
 
-                let trait_id = impl_.trait_id();
-                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
+                Self::insert_impl(&mut new_impls, impl_);
             }
         }
 
@@ -1315,10 +1314,15 @@ impl TraitEnv {
         Ok(())
     }
 
+    /// Files `inst` in `impls` under the trait it implements.
+    fn insert_impl(impls: &mut Map<TraitId, Vec<TraitImpl>>, inst: TraitImpl) {
+        let trait_id = inst.trait_id();
+        insert_to_map_vec(impls, &trait_id, inst);
+    }
+
     /// Appends `inst` to the implementations recorded for the trait it implements.
     pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
-        let trait_id = inst.trait_id();
-        insert_to_map_vec(&mut self.impls, &trait_id, inst);
+        Self::insert_impl(&mut self.impls, inst);
         Ok(())
     }
 
