@@ -33,9 +33,10 @@ use crate::fixstd::builtin::{
     union_new,
 };
 use crate::graph::Graph;
+use crate::hash::HashSource;
 use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
-    to_absolute_path, HashSource, Map, Set,
+    to_absolute_path, Map, Set,
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;

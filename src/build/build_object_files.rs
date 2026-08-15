@@ -15,9 +15,8 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
-    misc::{
-        info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, HashSource, Map, Set,
-    },
+    hash::HashSource,
+    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,

@@ -14,6 +14,7 @@ pub mod error;
 pub mod fixstd;
 pub mod generator;
 pub mod graph;
+pub mod hash;
 pub mod metafiles;
 pub mod misc;
 pub mod object;
