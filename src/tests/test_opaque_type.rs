@@ -341,6 +341,68 @@ pub fn test_the_trait_variable_in_the_result_fixes_it() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Each member that leaves the trait's type variable out is reported, in every trait the program
+/// declares, in one compilation.
+#[test]
+pub fn test_every_member_leaving_the_trait_variable_out_is_reported() {
+    let source = r##"
+        module Main;
+
+        trait c : ZapA {
+            zap_a : I64 -> I64;
+        }
+
+        trait c : ZapB {
+            zap_b : I64 -> I64;
+        }
+
+        impl I64 : ZapA { zap_a = |x| x; }
+        impl I64 : ZapB { zap_b = |x| x; }
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert_eq!(
+        errmsg
+            .matches("Type variable `c` is not fixed by this type signature")
+            .count(),
+        2,
+        "both members are expected to be reported.\nActual message:\n{}",
+        errmsg
+    );
+}
+
+/// Two implementations of a trait whose member names the trait's type variable in an argument and
+/// constrains the opaque result by that same variable. Each implementation stands for a concrete
+/// type of its own, so one program reaches both.
+#[test]
+pub fn test_opaque_constraint_naming_the_trait_variable_directly() {
+    let source = r##"
+        module Main;
+
+        trait c : ToI {
+            to_i : [?it : Iterator, Item ?it = c] Array c -> ?it;
+        }
+
+        impl I64 : ToI {
+            to_i = |arr| arr.to_iter;
+        }
+
+        impl Bool : ToI {
+            to_i = |arr| arr.to_iter;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"i64", [1, 2, 3].to_i.to_array, [1, 2, 3]);;
+            assert_eq(|_|"bool", [true, false].to_i.to_array, [true, false]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 // ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
