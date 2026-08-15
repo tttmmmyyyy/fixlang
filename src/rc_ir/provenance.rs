@@ -91,6 +91,11 @@ impl Provenance {
         Provenance(LeafMap::uniform(ty, type_env, Provenance::leaf(src)))
     }
 
+    /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
+    pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
+        Provenance::build_shape(ty, type_env, &|_| Set::default())
+    }
+
     /// The provenance of the result of an operation that produces one uniquely owned value among
     /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Unknown`.
     pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
@@ -250,13 +255,6 @@ fn leaf_source_to_string(origins: &LeafOrigins) -> String {
         .collect();
     parts.sort();
     parts.join(" | ")
-}
-
-impl Provenance {
-    /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
-    pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
-        Provenance::build_shape(ty, type_env, &|_| Set::default())
-    }
 }
 
 /// The compile-time reference-count verdict for one boxed leaf, obtained by resolving its provenance
