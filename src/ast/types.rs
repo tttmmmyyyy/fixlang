@@ -2462,13 +2462,10 @@ impl Scheme {
                 // nothing at a use site, so there is no ambiguity to report.
                 continue;
             };
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
-                     NOTE: `{}` must appear outside of any associated type application.",
-                    gen_var.name, gen_var.name,
-                ),
-                &[span],
+            return Err(unfixed_type_variable_error(
+                &gen_var.name,
+                "outside of any associated type application",
+                span,
             ));
         }
 
@@ -2748,6 +2745,31 @@ impl Scheme {
             ty: self.ty.global_to_absolute(),
         })
     }
+}
+
+/// The report that a type signature leaves `tyvar_name` undetermined, so that a use site cannot
+/// tell which types the signature is instantiated at.
+///
+/// # Arguments
+/// * `where_it_must_appear` — the places the variable may stand in for that signature to determine
+///   it, as a phrase completing "`x` must appear ...". The Fixv condition allows any position
+///   outside an associated type application; a trait member has to name the trait's type variable
+///   in its type, since a constraint on an opaque type variable is answered by an implementation
+///   rather than by the use site.
+/// * `src` — where to draw the report; the variable's own occurrence where the signature has one.
+pub fn unfixed_type_variable_error(
+    tyvar_name: &Name,
+    where_it_must_appear: &str,
+    src: &Option<Span>,
+) -> Errors {
+    Errors::from_msg_srcs(
+        format!(
+            "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
+             NOTE: `{}` must appear {}.",
+            tyvar_name, tyvar_name, where_it_must_appear,
+        ),
+        &[src],
+    )
 }
 
 // Check if a type variable name represents an opaque type variable (starts with '?').

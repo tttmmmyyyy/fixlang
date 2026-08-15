@@ -9,7 +9,8 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::types::{
-    is_opaque_tyvar, type_from_tyvar, type_tyvar, AssocType, Kind, Scheme, TyVar, TypeNode,
+    is_opaque_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
+    Scheme, TyVar, TypeNode,
 };
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -938,33 +939,23 @@ impl TraitEnv {
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
-                // That a use site determines the trait type variable from the
-                // member's type is checked by the Fixv well-formedness
-                // condition in `Scheme::validate_constraints`: it rejects a
-                // member whose type leaves the variable out, and one that
-                // mentions it only as an argument of an associated type
-                // application.
-
                 // A use site picks the implementation from the type it writes, so the member's
-                // type has to determine the trait's type variable on its own: it must appear
-                // there, outside of any associated type application.
+                // type has to determine the trait's type variable on its own.
                 //
-                // `Scheme::validate_constraints` asks the same of every generalized variable
-                // through the Fixv condition, but it counts a variable on the right-hand side of
-                // an equality as determined — and an equality on an opaque type variable
-                // (`make : [?it : Iterator, Item ?it = c] I64 -> ?it`) determines nothing at a use
-                // site, because what stands behind `?it` is the implementation's choice.
-                let mut fixed_vars = Set::default();
-                member.qual_ty.ty.fixed_vars_to_set(&mut fixed_vars);
-                if !fixed_vars.contains(&trait_defn.type_var.name) {
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
-                             NOTE: `{}` must appear in the type of the member, outside of any associated \
-                             type application. A constraint does not fix it.",
-                            trait_defn.type_var.name, trait_defn.type_var.name,
-                        ),
-                        &[&member.decl_src.as_ref().map(|s| s.to_head_character())],
+                // The Fixv condition in `Scheme::validate_constraints` asks that of every
+                // generalized variable, and it accepts a variable on the right-hand side of an
+                // equality — which is right for an ordinary value, whose caller determines the
+                // equality's left side too. A trait member has a second reader: an equality on an
+                // opaque type variable (`make : [?it : Iterator, Item ?it = c] I64 -> ?it`) is
+                // answered by whichever implementation is chosen, so it leaves a use site with
+                // nothing to choose by. Hence the stronger rule here, which is why the Fixv
+                // condition can no longer report the trait's type variable.
+                if !member.qual_ty.ty_fixes_var(&trait_defn.type_var.name) {
+                    errors.append(unfixed_type_variable_error(
+                        &trait_defn.type_var.name,
+                        "in the type of the member, outside of any associated type application; \
+                         a constraint does not fix it",
+                        &member.decl_src.as_ref().map(|s| s.to_head_character()),
                     ));
                 }
 

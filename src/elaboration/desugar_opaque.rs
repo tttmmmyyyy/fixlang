@@ -151,6 +151,11 @@ impl Program {
                         // against impl_.scm. When a user provides a type annotation on the impl method,
                         // impl_.scm.ty may use different variable names than scm_via_defn.ty; the lhs must
                         // match the type-checking context to ensure resolve_opaque_type_in_type works correctly.
+                        //
+                        // The match binds the trait's type variable, because a member's type has to
+                        // name it (see `TraitEnv::validate_structure`). One resolution per
+                        // implementation follows from that: the lhs each gets is the opaque type
+                        // constructor applied to the type that implementation is for.
                         let defn_to_impl =
                             Substitution::matching_no_kind_check(&scm.ty, &impl_.scm.ty, &[])
                                 .expect("defn scheme type should match impl scm type");

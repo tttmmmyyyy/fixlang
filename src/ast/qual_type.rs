@@ -8,6 +8,7 @@ use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
+use crate::misc::Set;
 use crate::parse::sourcefile::{SourcePos, Span};
 
 #[derive(Clone)]
@@ -96,6 +97,18 @@ impl QualType {
                 }
             }
         }
+    }
+
+    /// Whether the type itself determines `var_name`, so that a use site writing that type says
+    /// which type the variable stands for.
+    ///
+    /// The constraints say nothing here, which is what tells this apart from `Scheme::fixed_vars`:
+    /// a constraint on an opaque type variable (`Item ?it = c`) is answered by whichever
+    /// implementation is chosen, so it leaves a use site with nothing to choose by.
+    pub fn ty_fixes_var(&self, var_name: &Name) -> bool {
+        let mut fixed_vars = Set::default();
+        self.ty.fixed_vars_to_set(&mut fixed_vars);
+        fixed_vars.contains(var_name)
     }
 
     pub fn find_var_in_constraint(&self, var_name: &Name) -> Option<Span> {
