@@ -62,13 +62,13 @@ Type and trait definitions pack much of the information about a computation, and
 
 ## An example of input and output
 
-A declaration says what a function accepts and returns; what it computes is left to the prose. Write that sentence, then read it as the reader will — taking an input they have in mind, can they say what comes back? Where the sentence leaves them guessing, one input and the output it produces settles it in a line, and settles it more exactly than a second sentence would. Head the line with **Examples**, so the reader sees at a glance that what follows is a case rather than the rule:
+A declaration says what a function accepts and returns; what it computes is left to the prose. Add one input and the output it produces when the pair would carry the reader to the behavior faster than that prose does. The prose does not have to be incomplete for that to hold: a concrete pair is read at a glance, where a rule has to be applied before it answers anything. So the question is which one the reader gets there on, not whether the prose is sufficient. Head the line with **Examples**, so the reader sees at a glance that what follows is a case rather than the rule:
 
 **Examples**
 
 ```
-split(",", "a,,b")    ->  ["a", "", "b"]
-is_prefix("", "abc")  ->  true
+split(",", "a,b")   ->  ["a", "b"]
+split(",", "a,,b")  ->  ["a", "", "b"]
 ```
 
 The gap an example closes is usually one of these:
@@ -76,7 +76,10 @@ The gap an example closes is usually one of these:
 - **A transformation** leaves open what the output is made of: which parts of the input survive, in what order, and what an empty or repeated part becomes.
 - **A predicate** leaves open where the line falls: the reflexive case, the empty case, and — when two arguments share a type — which of the two the question is about.
 - **An encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function.
+- **Several rules the reader has to add up**: each is stated on its own, and the answer is what they come to together.
 
-So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips.
+Choose the input a reader would meet first — the ordinary call rather than a boundary. The example is what the reader carries away from the paragraph, so it has to show the function doing its usual work. Add a second only where the ordinary one leaves a boundary open: what an empty or repeated part becomes, which side of the line an endpoint falls on.
+
+Keep it to what a glance holds — a line or two. An example needing a paragraph of setup says the prose should carry the behavior instead.
 
 Where the name and the type already carry the behavior — reading a field, replacing a field, constructing a value, performing an effect — state the meaning they leave unsaid and stop there.
