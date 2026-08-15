@@ -215,7 +215,7 @@ pub fn test_trait_member_and_value_of_the_traits_namespace_collide() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Duplicated definition for global value: `Main::Foo::bar`",
+        "Duplicate definition for global value: `Main::Foo::bar`.",
     );
 }
 

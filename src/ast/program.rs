@@ -1072,7 +1072,7 @@ impl Program {
                 .map(|s| s.to_head_character());
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "Duplicated definition for global value: `{}`",
+                    "Duplicate definition for global value: `{}`.",
                     name.to_string()
                 ),
                 &[&this, &other],
