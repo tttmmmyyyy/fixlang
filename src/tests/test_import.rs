@@ -243,12 +243,15 @@ pub fn test_every_trait_member_colliding_with_a_value_is_reported_in_one_compila
     main = println(Foo::bar(1) + Foo::baz(2));
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
-    for name in ["Main::Foo::bar", "Main::Foo::baz"] {
-        let expected = format!("Duplicate definition for global value: `{}`.", name);
+    for colliding_name in ["Main::Foo::bar", "Main::Foo::baz"] {
+        let expected_report = format!(
+            "Duplicate definition for global value: `{}`.",
+            colliding_name
+        );
         assert!(
-            errmsg.contains(&expected),
+            errmsg.contains(&expected_report),
             "`{}` is expected to be reported, but the message is:\n{}",
-            name,
+            colliding_name,
             errmsg
         );
     }
