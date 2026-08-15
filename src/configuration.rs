@@ -123,6 +123,7 @@ pub enum ValgrindTool {
 }
 
 impl fmt::Display for ValgrindTool {
+    /// Writes the name the settings spell this tool with.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValgrindTool::None => write!(f, "none"),
@@ -144,6 +145,8 @@ pub enum Sanitizer {
 }
 
 impl fmt::Display for Sanitizer {
+    /// Writes the name a `sanitize` setting spells this sanitizer with, which `Sanitizer::from_str`
+    /// reads back.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Sanitizer::None => write!(f, "none"),
@@ -566,14 +569,17 @@ impl Configuration {
 }
 
 impl Configuration {
-    // Configuration for release build.
+    /// The configuration `subcommand` runs under as a user of the compiler invokes it, working on
+    /// as many threads as the machine has processors.
     pub fn release_mode(subcommand: SubCommand) -> Result<Configuration, Errors> {
         let mut config = Self::new(subcommand)?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
 
-    // Configuration for compiler development
+    /// The configuration for working on the compiler itself: a `run` that works on the calling
+    /// thread alone, under memcheck, at the experimental optimization level, writing out the LLVM IR
+    /// and the symbols.
     #[allow(dead_code)]
     pub fn develop_mode() -> Configuration {
         #[allow(unused_mut)]
@@ -587,14 +593,16 @@ impl Configuration {
         config
     }
 
-    // Create configuration for document generation.
+    /// The configuration for generating the documentation of a project, working on as many threads
+    /// as the machine has processors.
     pub fn docs_mode() -> Result<Configuration, Errors> {
         let mut config = Self::new(SubCommand::Docs(DocsConfig::default()))?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }
 
-    // Create configuration for diagnostics subcommand.
+    /// The configuration for collecting diagnostics under `diagnostics_config`, working on as many
+    /// threads as the machine has processors.
     pub fn diagnostics_mode(
         diagnostics_config: DiagnosticsConfig,
     ) -> Result<Configuration, Errors> {
@@ -630,8 +638,8 @@ impl Configuration {
         self
     }
 
-    // Add dynamically linked library.
-    // To link libabc.so, provide library name "abc".
+    /// Links the program against a dynamic library, named as the linker's `-l` takes it: `abc` for
+    /// `libabc.so`.
     pub fn add_dynamic_library(&mut self, name: &str) {
         self.linked_libraries
             .push((name.to_string(), LinkType::Dynamic));
@@ -676,13 +684,13 @@ impl Configuration {
                     ))
                 } else {
                     let file_name = file_name.unwrap().to_str().unwrap();
-                    let file_name = file_name.to_string()
+                    let ir_file_name = file_name.to_string()
                         + "_"
                         + unit_name
                         + if optimized { "_optimized.ll" } else { ".ll" };
-                    let mut out_file_path = out_file_path.clone();
-                    out_file_path.set_file_name(file_name);
-                    out_file_path
+                    let mut ir_path = out_file_path.clone();
+                    ir_path.set_file_name(ir_file_name);
+                    ir_path
                 }
             }
         }
@@ -704,15 +712,22 @@ impl Configuration {
         self.add_dynamic_library("pthread");
     }
 
+    /// Generates the debug information a debugger reads, and takes the optimization level down to
+    /// none, so that the code stepped through is the code the source describes. A level set after
+    /// this call raises it again.
     pub fn set_debug_info(&mut self) {
         self.debug_info = true;
         self.set_fix_opt_level(FixOptimizationLevel::None);
     }
 
+    /// Works at optimization level `level`, or at the highest level the environment allows where
+    /// that is lower.
     pub fn set_fix_opt_level(&mut self, level: FixOptimizationLevel) {
         self.fix_opt_level = level.min(env_vars::get_max_opt_level());
     }
 
+    /// The optimization level the build works at, held to what the environment allows as
+    /// `set_fix_opt_level` describes.
     pub fn fix_opt_level(&self) -> FixOptimizationLevel {
         self.fix_opt_level
     }
@@ -1063,6 +1078,8 @@ impl Configuration {
         Ok(Command::new(exec_path))
     }
 
+    /// Runs the preliminary commands the project files list, in the order they were registered,
+    /// asking the user to approve the ones the trust store holds no approval for.
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
         approve_and_run(self)
     }
@@ -1074,22 +1091,35 @@ impl Configuration {
     }
 }
 
+/// The width of each C numeric type, in bits, on the machine the compiler runs on.
+///
+/// A width decides which Fix type the C type is an alias of, so it reaches the elaborated program
+/// without passing through any source; `Configuration::elaboration_hash` carries it for that reason.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CTypeSizes {
+    /// The width of `char` and of `unsigned char`, which is also the unit C measures a type's size
+    /// in.
     pub char: usize,
+    /// The width of `short` and of `unsigned short`.
     pub short: usize,
+    /// The width of `int` and of `unsigned int`.
     pub int: usize,
+    /// The width of `long` and of `unsigned long`.
     pub long: usize,
+    /// The width of `long long` and of `unsigned long long`.
     pub long_long: usize,
+    /// The width of `size_t`, which is unsigned.
     pub size_t: usize,
+    /// The width of `float`.
     pub float: usize,
+    /// The width of `double`.
     pub double: usize,
 }
 
 impl CTypeSizes {
-    // The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    // alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
-    // `TyCon::get_c_type` can map.
+    /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
+    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
+    /// `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
             (C_CHAR_NAME, "I", self.char),
@@ -1124,7 +1154,9 @@ impl CTypeSizes {
         .join(", ")
     }
 
-    // Get the size of each C types by compiling and running a C program.
+    /// The widths of this machine's C types, measured by building a C program that prints each of
+    /// them with `gcc` and running it. The source and the executable are removed once the program
+    /// has run.
     fn from_gcc() -> Result<Self, Errors> {
         // First, create a C source file to check the size of each C types.
         let c_source = r#"
@@ -1184,44 +1216,44 @@ int main() {
             let _ = fs::remove_file(&check_c_types_exec_path_clone);
         });
 
-        let output = Command::new("gcc")
+        let compile_output = Command::new("gcc")
             .arg(check_c_types_path.clone())
             .arg("-o")
             .arg(check_c_types_exec_path.clone())
             .output();
-        if let Err(e) = output {
+        if let Err(e) = compile_output {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": {}.",
                 check_c_types_path, e
             )));
         }
-        let output = output.unwrap();
+        let compile_output = compile_output.unwrap();
 
         // Run the program and parse the result to create CTypeSizes.
-        if !output.status.success() {
+        if !compile_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": \"{}\".",
                 check_c_types_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&compile_output.stderr)
             )));
         }
-        let output = Command::new(check_c_types_exec_path.clone()).output();
-        if let Err(e) = output {
+        let run_output = Command::new(check_c_types_exec_path.clone()).output();
+        if let Err(e) = run_output {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": {}.",
                 check_c_types_exec_path, e
             )));
         }
-        let output = output.unwrap();
-        if !output.status.success() {
+        let run_output = run_output.unwrap();
+        if !run_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": \"{}\".",
                 check_c_types_exec_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&run_output.stderr)
             )));
         }
-        let output = String::from_utf8_lossy(&output.stdout);
-        let mut lines = output.lines();
+        let stdout = String::from_utf8_lossy(&run_output.stdout);
+        let mut lines = stdout.lines();
         // The program prints one size per line, in the order the fields are read here.
         let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
         let char = next_size();
@@ -1269,6 +1301,8 @@ int main() {
         Ok(())
     }
 
+    /// The widths saved at `C_TYPES_JSON_PATH`. A file that cannot be opened or parsed is reported
+    /// as a warning and answered as `None`, so a caller can measure the widths afresh.
     fn load_file() -> Option<Self> {
         let path = PathBuf::from(C_TYPES_JSON_PATH);
         if !path.exists() {
@@ -1291,6 +1325,8 @@ int main() {
         Some(sizes.unwrap())
     }
 
+    /// The widths of this machine's C types: the ones saved at `C_TYPES_JSON_PATH`, or, where none
+    /// are saved there, the ones measured and then saved for a later run.
     fn load_or_check() -> Result<Self, Errors> {
         match Self::load_file() {
             Some(sizes) => Ok(sizes),

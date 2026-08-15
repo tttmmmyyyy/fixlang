@@ -1,6 +1,11 @@
 //! The hashes the compiler names things by: the caches it may reuse an entry from, and the
 //! temporary files it saves a generated source under.
 
+/// The MD5 digest of `text`, in hexadecimal.
+pub fn md5_hex(text: &str) -> String {
+    format!("{:x}", md5::compute(text))
+}
+
 /// The values a hash is taken over, appended one at a time.
 ///
 /// Each value goes in as a hash of its own, of a length the value does not change, so the value
@@ -13,7 +18,7 @@ pub struct HashSource(String);
 impl HashSource {
     /// Appends `text`.
     pub fn push_text(&mut self, text: &str) {
-        self.0.push_str(&format!("{:x}", md5::compute(text)));
+        self.0.push_str(&md5_hex(text));
     }
 
     /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's.
@@ -26,7 +31,7 @@ impl HashSource {
 
     /// The hash of everything appended.
     pub fn finish(&self) -> String {
-        format!("{:x}", md5::compute(&self.0))
+        md5_hex(&self.0)
     }
 }
 

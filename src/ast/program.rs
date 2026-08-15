@@ -338,6 +338,11 @@ pub struct GlobalValue {
 }
 
 impl GlobalValue {
+    /// Resolves the namespaces written in this value's declared type scheme, so that every name in
+    /// it becomes a full name.
+    ///
+    /// The value has to be a simple one: the schemes of a trait member are resolved on the trait
+    /// environment, and the global value of a member is built from that environment afterwards.
     pub fn resolve_namespace_in_declaration(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -349,6 +354,9 @@ impl GlobalValue {
         Ok(())
     }
 
+    /// Replaces every type alias written in this value's scheme, and in the schemes of its
+    /// definition, by the type it stands for. The scheme as the user wrote it is kept in `syn_scm`,
+    /// so that a report can name the alias.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.syn_scm = Some(self.scm.clone());
         self.scm = self.scm.resolve_type_aliases(type_env)?;
@@ -356,6 +364,8 @@ impl GlobalValue {
         Ok(())
     }
 
+    /// Gives each type variable of this value's schemes the kind `kind_env` implies for it, and
+    /// checks that the schemes are well-kinded.
     pub fn set_kinds(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
         self.scm = self.scm.set_kinds(kind_env)?;
         self.scm.check_kinds(kind_env)?;
@@ -373,12 +383,14 @@ impl GlobalValue {
         Ok(())
     }
 
-    // Check if this value is a simple value, not a trait method.
+    /// Whether this value is defined by a single expression.
     pub fn is_simple_value(&self) -> bool {
         matches!(self.expr, SymbolExpr::Simple(_))
     }
 
-    // Get the document of this value.
+    /// The documentation written for this value: the comment above the declaration in the source,
+    /// where the declaration was written in one, and the `document` field otherwise. Documentation
+    /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self
@@ -405,8 +417,13 @@ impl GlobalValue {
         }
     }
 
-    // Find the minimum node which includes the specified source code position.
-    // - `name`: the name of this global value (i.e., the key in `Program::global_values`).
+    /// The smallest node of this value covering `pos`: a node of the defining expression, a node of
+    /// the type scheme as it was written, or the name on the left-hand side of the declaration or
+    /// of the definition.
+    ///
+    /// # Arguments
+    /// * `name` — the name of this global value, the key it is held under in
+    ///   `Program::global_values`.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(name, pos);
         if node.is_some() {
@@ -434,14 +451,19 @@ impl GlobalValue {
     }
 }
 
-// Expression of global symbol.
+/// What a global value is defined by.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(TypedExpr),            // Definition such as "id : a -> a; id = \x -> x".
-    Method(Vec<TraitMemberImpl>), // Trait member implementations.
+    /// The expression the name is bound to, as in `id : a -> a; id = |x| x`.
+    Simple(TypedExpr),
+    /// The implementations of a trait member, one for each `impl` giving the member a definition.
+    Method(Vec<TraitMemberImpl>),
 }
 
 impl SymbolExpr {
+    /// Replaces every type alias written in the type schemes of the trait member implementations
+    /// here by the type it stands for. The scheme of a simple value is held by the `GlobalValue`
+    /// this definition belongs to.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         match self {
             SymbolExpr::Simple(_) => Ok(()),
@@ -455,6 +477,8 @@ impl SymbolExpr {
         }
     }
 
+    /// Where the defining expression is written: for a trait member, where the expression of the
+    /// first of its implementations is written.
     #[allow(dead_code)]
     pub fn source(&self) -> Option<Span> {
         match self {
@@ -463,9 +487,11 @@ impl SymbolExpr {
         }
     }
 
-    // Find the minimum expression node which includes the specified source code position.
-    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return `EndNode::ValueDecl` when
-    //   the cursor is on the LHS of a trait member implementation.
+    /// The smallest node of this definition covering `pos`.
+    ///
+    /// # Arguments
+    /// * `name` — the name of the global value, e.g. `Std::ToString::to_string`, answered as
+    ///   `EndNode::ValueDecl` where `pos` is on the left-hand side of a trait member implementation.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         match self {
             SymbolExpr::Simple(e) => e.find_node_at(pos),
@@ -500,33 +526,38 @@ impl SymbolExpr {
     }
 }
 
-// The expression with all sub-expressions typed.
+/// An expression with all of its subexpressions typed, which is what a type check produces and what
+/// the type-check cache holds.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
-    // The expression.
-    //
-    // It and its all subexpressions has their types resolved, and these types contains only ones that appear in the context (type signature) of this expression.
+    /// The expression.
+    ///
+    /// It and all of its subexpressions have their types resolved, and those types hold only the
+    /// type variables that appear in the type signature of this expression.
     pub expr: Arc<ExprNode>,
-    // Equalities to be assumed in the context of this expression.
-    //
-    // For example, consider the following expression:
-    // ```
-    // extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
-    // extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
-    // ```
-    // In this case, the `equalities` field consists of two equalities: `Elem c1 = e` and `Elem c2 = e`.
-    //
-    // In fact, this information is neccesary to instantiate the typed expression to a concrete type:
-    // In the above case, the sub-expression `x` has type `e` (not `Elem c1` or `Elem c2`).
-    // When instantiating this typed expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`,
-    // we need to use the equality `Elem c1 = e` to prove that `x` has type `I64`.
+    /// Equalities to be assumed in the context of this expression.
+    ///
+    /// For example, consider the following expression:
+    /// ```text
+    /// extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
+    /// extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
+    /// ```
+    /// In this case, the `equalities` field consists of two equalities: `Elem c1 = e` and
+    /// `Elem c2 = e`.
+    ///
+    /// This information is what instantiating the typed expression at a concrete type takes: above,
+    /// the subexpression `x` has type `e`, so instantiating at
+    /// `extend : Array I64 -> Array I64 -> Array I64` proves `x` to have type `I64` through the
+    /// equality `Elem c1 = e`.
     pub equalities: Vec<Equality>,
-    // Concrete types for opaque type constructors in this expression.
+    /// The concrete type each opaque type constructor written in this expression stands for.
     #[serde(default)]
     pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
 }
 
 impl TypedExpr {
+    /// `expr` with no equality assumed and no opaque type resolved, as an expression stands before
+    /// it is checked.
     pub fn from_expr(expr: Arc<ExprNode>) -> Self {
         TypedExpr {
             expr,
@@ -535,7 +566,7 @@ impl TypedExpr {
         }
     }
 
-    // Find the minimum expression node which includes the specified source code position.
+    /// The smallest node of the expression covering `pos`.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
         if node.is_none() {
@@ -546,43 +577,48 @@ impl TypedExpr {
     }
 }
 
-// Trait member implementation
+/// One `impl`'s definition of one trait member.
 #[derive(Clone)]
 pub struct TraitMemberImpl {
-    // Type of this member.
-    //
-    // For example, in case "impl [a: ToString, b: ToString] (a, b): ToString {...}",
-    // the type of member "to_string" is "[a: ToString, b: ToString] (a, b) -> String",
-    //
-    // Users can give type signatures in each trait member implementation.
-    // In this case, the `scm` field contains the type signature given by users.
+    /// The type of this member at the type the trait is implemented for.
+    ///
+    /// For example, given `impl [a : ToString, b : ToString] (a, b) : ToString {...}`, the type of
+    /// the member `to_string` is `[a : ToString, b : ToString] (a, b) -> String`.
+    ///
+    /// A user may write a type signature in the member implementation, and that signature is what
+    /// this field then holds.
     pub scm: Arc<Scheme>,
-    // This field holds the type scheme obtained from the trait member definition.
+    /// The type of this member as the trait definition gives it, which is what the signature the
+    /// user wrote has to be equivalent to.
     pub scm_via_defn: Arc<Scheme>,
-    // Expression of this implementation
+    /// The expression this implementation defines the member as.
     pub expr: TypedExpr,
-    // Module where this implmentation is given.
-    // NOTE:
-    // For trait member, `define_module` may differ to the first component of namespace of the function.
-    // For example, if `Main` module implements `SomeType : Eq`, then implementation of `eq` for `SomeType` is defined in `Main` module,
-    // but its name as a function is still `Std::Eq::eq`.
+    /// The module the `impl` is written in.
+    ///
+    /// This may differ from the first component of the member's namespace: where the `Main` module
+    /// implements `SomeType : Eq`, the implementation of `eq` for `SomeType` is defined in `Main`,
+    /// while its name as a function is `Std::Eq::eq`.
     pub define_module: Name,
-    // The source spans of the left-hand side names in the trait member implementation.
-    // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
-    // this contains spans of both `to_string` occurrences (type signature and definition).
+    /// Where each left-hand side name of the member implementation is written. In
+    /// `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }` these are the two
+    /// occurrences of `to_string`, in the type signature and in the definition.
     pub lhs_srcs: Vec<Span>,
 }
 
 impl TraitMemberImpl {
+    /// Replaces every type alias written in this implementation's type schemes by the type it
+    /// stands for.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.scm = self.scm.resolve_type_aliases(type_env)?;
         self.scm_via_defn = self.scm_via_defn.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
-    // Find the minimum expression node which includes the specified source code position.
-    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return
-    //   `EndNode::ValueDecl` when the cursor is on the LHS of this trait member implementation.
+    /// The smallest node of this implementation covering `pos`.
+    ///
+    /// # Arguments
+    /// * `name` — the name of the global value, e.g. `Std::ToString::to_string`, answered as
+    ///   `EndNode::ValueDecl` where `pos` is on a left-hand side name of this implementation.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
         if node.is_some() {
@@ -606,62 +642,73 @@ pub struct ModuleInfo {
     pub source: Span,
 }
 
-// Program of fix a collection of modules.
-// A program can link another program which consists of a single module.
+/// A Fix program: the modules linked into it, everything they declare, and the symbols the linked
+/// whole is instantiated into.
+///
+/// A program of a single module is what parsing one source produces, and `link` joins such a program
+/// into the one being built.
 pub struct Program {
     /* AST */
-    // Global values.
+    /// Every global value the program declares, by its full name. A value is defined either by one
+    /// expression or by the implementations of a trait member (`SymbolExpr`).
     pub global_values: Map<FullName, GlobalValue>,
-    // Type definitions.
+    /// The type definitions the program declares, those written in the sources and those the
+    /// compiler adds itself.
     pub type_defns: Vec<TypeDefn>,
-    // Type environment, which is calculated from `type_defns` once and cached.
+    /// What the program declares about its types, computed from `type_defns` by
+    /// `calculate_type_env` and held from then on.
     pub type_env: TypeEnv,
-    // Trait environment.
+    /// The traits the program declares, with their aliases and their implementations.
     pub trait_env: TraitEnv,
-    // Entry point value of the program.
-    // - Instantiation of `Main::main` when run or build mode.
-    // - Instantiation of `Main::test` when test mode.
-    // - None when library mode.
+    /// The value the built program runs:
+    /// - the instantiation of `Main::main` in run or build mode,
+    /// - the instantiation of `Main::test` in test mode,
+    /// - `None` in library mode.
     pub entry_io_value: Option<Arc<ExprNode>>,
-    // Export statements.
+    /// The `FFI_EXPORT` statements, each naming a Fix value to publish under a C symbol.
     pub export_statements: Vec<ExportStatement>,
     /// `DEPRECATED[...]` pragmas, accumulated at parse time and consumed in
     /// elaboration to set per-symbol `deprecation` fields.
     pub deprecation_statements: Vec<DeprecationStatement>,
-    // List of tuple sizes used in this program.
+    /// The sizes of the tuples the program uses. The type `Std::Tuple{n}` and the trait
+    /// implementations a tuple carries are generated for each size here, so two programs using
+    /// different sets of sizes are elaborated with different sources of `Std`.
     pub used_tuple_sizes: Vec<u32>,
-    // Import statements.
-    // Key is the name of the importer module.
-    // Each module implicitly imports itself.
-    // This is used to namespace resolution and overloading resolution.
+    /// The import statements of each module, keyed by the importing module. Every module imports
+    /// itself, so its own definitions are in scope in it, and a module is linked into the program
+    /// exactly when it has an entry here (`is_linked`).
     pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
     /* Instantiated symbols */
-    // Opaque types instantiated in this program, keyed by opaque TyCon name.
+    /// The concrete types each opaque type constructor of the program stands for, by the name of
+    /// that constructor.
     pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
-    // Instantiated symbols.
+    /// Every global value at every type it is used at, by the name that instantiation is known
+    /// under. This is what code generation reads.
     pub symbols: Map<FullName, Symbol>,
-    // Deferred instantiations.
-    // This is a state variable for the instantiation process.
+    /// The instantiations required so far whose expression is yet to be built, which is where
+    /// instantiation keeps the work it has left.
     pub deferred_instantiation: Vec<Symbol>,
 
     /* Dependency information */
+    /// Every module linked into the program, each with the sources it is made of.
     pub modules: Vec<ModuleInfo>,
 
     /* Diagnostic */
-    // Deferred errors.
-    // Errors that should be displayed in the diagnostic information.
+    /// The errors the compiler carries on past, to report as diagnostics once the work that can
+    /// still be done is done.
     pub deferred_errors: Errors,
-    // Names required to be imported in each module.
+    /// The names each module refers to and therefore has to import, keyed by that module.
     pub import_required: Map<Name, Set<FullName>>,
 
     /* Optimization */
-    // Number of optimization steps.
-    // This is used to name the symbol files when outputting them at each optimization step.
+    /// How many optimization steps have run, which numbers the symbol files each step writes.
     pub optimization_step: usize,
 }
 
 impl Program {
+    /// Adds each name of `other` to the names its module has to import, keeping the ones already
+    /// recorded there.
     pub fn merge_import_required(&mut self, other: Map<Name, Vec<FullName>>) {
         for (mod_name, names) in other {
             let entry = self
@@ -674,6 +721,7 @@ impl Program {
         }
     }
 
+    /// The module named `mod_name`, with the sources it is made of.
     pub fn find_mod(&self, mod_name: &Name) -> Option<ModuleInfo> {
         for mod_info in &self.modules {
             if &mod_info.name == mod_name {
@@ -712,7 +760,8 @@ impl Program {
             .collect()
     }
 
-    // Get the list of module names from a list of files.
+    /// The names of the modules declared in `files`, compared by absolute path. A file that
+    /// declares no module of this program contributes no name.
     pub fn modules_from_files(&self, files: &[PathBuf]) -> Result<Vec<Name>, Errors> {
         let mut abs_files = vec![];
         for f in files {
@@ -728,7 +777,8 @@ impl Program {
         Ok(mod_names)
     }
 
-    // Create a program consists of single module.
+    /// A program made of the one module `mod_info`, which declares nothing yet and imports itself
+    /// and `Std`.
     pub fn single_module(mod_info: ModuleInfo) -> Program {
         let mut fix_mod = Program {
             mod_to_import_stmts: Default::default(),
@@ -758,12 +808,12 @@ impl Program {
         fix_mod
     }
 
-    // Add `Std::TupleN` type
+    /// Declares the type `Std::Tuple{tuple_size}`.
     fn add_tuple_defn(&mut self, tuple_size: u32) {
         self.type_defns.push(tuple_defn(tuple_size));
     }
 
-    // Add `Std::TupleN` type for each `n` in `used_tuple_sizes`.
+    /// Declares the tuple type of each size the program uses, once per size.
     pub fn add_tuple_defns(&mut self) {
         // Make elements of used_tuple_sizes unique.
         self.used_tuple_sizes.sort();
@@ -775,7 +825,8 @@ impl Program {
         self.used_tuple_sizes = used_tuple_sizes;
     }
 
-    // If this program consists of single module, returns its name.
+    /// The name of the module this program is made of. A program of any other number of modules
+    /// panics here.
     pub fn get_name_if_single_module(&self) -> Name {
         let linked_mods = self.linked_mods();
         if linked_mods.len() == 1 {
@@ -784,6 +835,7 @@ impl Program {
         panic!("")
     }
 
+    /// Whether the module named `mod_name` is linked into the program.
     pub fn is_linked(&self, mod_name: &Name) -> bool {
         self.mod_to_import_stmts.contains_key(mod_name)
     }
@@ -1211,7 +1263,7 @@ impl Program {
     ///   trait method implementation this may differ from `val_name.module()`.
     /// * `nrctx` — the name resolution context. Pass one created by
     ///   `program.create_name_resolution_context(define_module)`.
-    /// * `ver_hash` — hash of the source code `te` depends on, used
+    /// * `version_hash` — hash of everything `te` is type-checked from, used
     ///   to detect or invalidate the cache file. Pass one created by
     ///   `program.module_dependency_hash(define_module, config)`.
     ///
@@ -1233,11 +1285,11 @@ impl Program {
         val_name: &FullName,
         def_mod: &ModuleInfo,
         nrctx: &mut NameResolutionContext,
-        ver_hash: &str,
+        version_hash: &str,
         mut tc: TypeCheckContext,
     ) -> Result<(TypedExpr, Errors), Errors> {
         // Load type-checking cache file.
-        let cached_te = tc.cache.load_cache(val_name, req_scm, ver_hash);
+        let cached_te = tc.cache.load_cache(val_name, req_scm, version_hash);
         if cached_te.is_some() {
             // If cache is available,
             te = cached_te.unwrap();
@@ -1265,7 +1317,7 @@ impl Program {
         // - an `error_tolerant` check, which swallows every type error and reports none, so its
         //   result would enter as a clean entry and the value would be published as type-correct.
         if !tc.error_tolerant && !check_errors.has_diagnostics() {
-            tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
+            tc.cache.save_cache(&te, val_name, req_scm, version_hash);
         }
 
         // Add names required to be imported found in type-checking to NameResolutionContext's import_required.
@@ -1397,7 +1449,7 @@ impl Program {
                     let val_name_clone = val_name.clone(); // For move into closure.
                     let def_mod = self.find_mod(&val_name.module()).unwrap().clone();
                     let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                    let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
+                    let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                         // Perform type-checking.
@@ -1407,7 +1459,7 @@ impl Program {
                             &val_name_clone,
                             &def_mod,
                             &mut nrctx,
-                            &ver_hash,
+                            &version_hash,
                             tc,
                         )?;
                         let output = CheckTaskOutput {
@@ -1441,7 +1493,7 @@ impl Program {
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                        let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
+                        let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
@@ -1470,7 +1522,7 @@ impl Program {
                                 &val_name_clone,
                                 &def_mod,
                                 &mut nrctx,
-                                &ver_hash,
+                                &version_hash,
                                 tc,
                             )?;
                             let output = CheckTaskOutput {
@@ -1603,8 +1655,8 @@ impl Program {
         };
 
         // Select the typed expression to specialize.
-        let global_sym = self.global_values.get(&sym.generic_name).unwrap();
-        let te = match &global_sym.expr {
+        let gv = self.global_values.get(&sym.generic_name).unwrap();
+        let te = match &gv.expr {
             SymbolExpr::Simple(e) => e,
             SymbolExpr::Method(impls) => {
                 let method = impls
@@ -1908,8 +1960,8 @@ impl Program {
                 let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
                 let instances = self.trait_env.impls.get(trait_id);
-                if let Some(insntances) = instances {
-                    for trait_impl in insntances {
+                if let Some(instances) = instances {
+                    for trait_impl in instances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
@@ -2301,8 +2353,8 @@ impl Program {
         let kind_env = self.kind_env();
         self.trait_env.set_kinds_in_trait_instances(&kind_env)?;
         let mut errors = Errors::empty();
-        for (_name, sym) in &mut self.global_values {
-            errors.eat_err(sym.set_kinds(&kind_env));
+        for (_name, gv) in &mut self.global_values {
+            errors.eat_err(gv.set_kinds(&kind_env));
         }
         errors.to_result()
     }
@@ -2350,9 +2402,9 @@ impl Program {
             decl.resolve_namespace(&mut ctx)?;
         }
 
-        for (name, sym) in &mut self.global_values {
+        for (name, gv) in &mut self.global_values {
             ctx.set_current_module(name.module());
-            sym.resolve_namespace_in_declaration(&mut ctx)?;
+            gv.resolve_namespace_in_declaration(&mut ctx)?;
         }
 
         self.merge_import_required(ctx.import_required);
@@ -2379,8 +2431,8 @@ impl Program {
         }
 
         // Resolve aliases in type signatures of global values.
-        for (_, sym) in &mut self.global_values {
-            errors.eat_err(sym.resolve_type_aliases(&type_env));
+        for (_, gv) in &mut self.global_values {
+            errors.eat_err(gv.resolve_type_aliases(&type_env));
         }
 
         errors.to_result()
@@ -2720,20 +2772,27 @@ impl Program {
         Ok(())
     }
 
+    /// The name of every module linked into the program.
     pub fn linked_mods(&self) -> Set<Name> {
         self.mod_to_import_stmts.keys().cloned().collect()
     }
 
-    // Link an module.
-    // * extend - If true, the module defined in `other` allowed to conflict with a module already in `self`.
-    //            This is used for extending implementation of a module already linked to `self`.
+    /// Joins `other` into this program: its modules, its import statements, and everything it
+    /// declares — types, traits, global values, export and deprecation statements, and the tuple
+    /// sizes it uses.
+    ///
+    /// # Arguments
+    /// * `extend` — when true, a module of `other` that this program already holds extends that
+    ///   module: its declarations join the module's, and the module goes on being the one it was
+    ///   declared as. When false, a module of one name declared in two files is an error, and a
+    ///   module already linked is left as it stands.
     pub fn link(&mut self, mut other: Program, extend: bool) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Merge `module_to_files`.
         // Also, check if there is a module defined in multiple files.
         for mod_info in &other.modules {
-            let file = mod_info.source.input.file_path.clone();
+            let joining_file = mod_info.source.input.file_path.clone();
             if let Some(linked_idx) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
@@ -2741,7 +2800,7 @@ impl Program {
                     continue;
                 }
                 let linked_file = self.modules[linked_idx].source.input.file_path.clone();
-                if to_absolute_path(&linked_file)? == to_absolute_path(&file)? {
+                if to_absolute_path(&linked_file)? == to_absolute_path(&joining_file)? {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }
@@ -2749,7 +2808,7 @@ impl Program {
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_info.name,
                     linked_file.to_string_lossy().to_string(),
-                    file.to_string_lossy().to_string()
+                    joining_file.to_string_lossy().to_string()
                 );
                 errors.append(Errors::from_msg(msg));
                 continue;
@@ -2832,7 +2891,8 @@ impl Program {
         }
     }
 
-    // Create a graph of modules. If module A imports module B, an edge from A to B is added.
+    /// The graph of the program's modules, carrying an edge from each module to every module it
+    /// imports, together with the index each module has in that graph.
     pub fn importing_module_graph(&self) -> (Graph<Name>, Map<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (importer, stmts) in &self.mod_to_import_stmts {
@@ -2844,7 +2904,8 @@ impl Program {
         (graph, elem_to_idx)
     }
 
-    // Calculate a set of modules on which a module depends.
+    /// Every module a value defined in `module` can refer to: the modules `module` imports, the
+    /// modules those import, and `module` itself.
     pub fn dependent_modules(&self, module: &Name) -> Set<Name> {
         let (importing_graph, mod_to_node) = self.importing_module_graph();
         importing_graph
@@ -2854,7 +2915,7 @@ impl Program {
             .collect()
     }
 
-    // Calculate a map from a module to a set of modules on which the module depends.
+    /// For each module linked into the program, every module a value defined in it can refer to.
     pub fn module_dependency_map(&self) -> Map<Name, Set<Name>> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();
@@ -2973,7 +3034,9 @@ impl Program {
         errors.to_result()
     }
 
-    // Find the minimum node which includes the specified source code position.
+    /// The smallest node of the program covering `pos`, searched over the global values, the type
+    /// definitions, the traits, the names written in the `FFI_EXPORT` and `DEPRECATED` pragmas, and
+    /// the import statements of the module the position's file declares.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (name, gv) in &self.global_values {
             let node = gv.find_node_at(name, pos);
@@ -3026,6 +3089,9 @@ impl Program {
         None
     }
 
+    /// Every instantiated symbol written out as Fix source — a type signature and a definition
+    /// apiece — ordered by that signature, so that the text two compilations produce can be
+    /// compared.
     pub fn stringify_symbols(&self) -> Text {
         let mut sym_texts: Vec<(String, Text)> = vec![];
         for sym in self.symbols.values() {
@@ -3060,6 +3126,8 @@ impl Program {
         text
     }
 
+    /// Writes the instantiated symbols to `.fixlang/{step_name}.symbols.fix`, naming the file after
+    /// the step of the pipeline the program stands at.
     pub fn emit_symbols(&self, step_name: &str) {
         let file_name = format!("{}/{}.symbols.fix", DOT_FIXLANG, step_name);
         let file_path = PathBuf::from(file_name);
@@ -3069,9 +3137,14 @@ impl Program {
         file.write_all(text.as_bytes()).unwrap();
     }
 
+    /// A type checker for this program: the trait, type and kind environments it declares, the
+    /// modules each module imports, the cache the settings name, and the declared type of every
+    /// global value.
+    ///
+    /// The checker tolerates a type error where the `diagnostics` subcommand asks it to, so that an
+    /// editor is given a typed expression for a file that does not check; every other subcommand
+    /// checks strictly.
     pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
-        // Error tolerance is opt-in via the diagnostics-mode config;
-        // every other subcommand stays strict.
         let error_tolerant = matches!(
             &config.subcommand,
             SubCommand::Diagnostics(d) if d.error_tolerant
@@ -3090,7 +3163,7 @@ impl Program {
         let globals = self
             .global_values
             .iter()
-            .map(|(name, defn)| (name.clone(), defn.scm.clone()))
+            .map(|(name, gv)| (name.clone(), gv.scm.clone()))
             .collect::<Vec<_>>();
         typechecker.scope.set_globals(globals);
 
