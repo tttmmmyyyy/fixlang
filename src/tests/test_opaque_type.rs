@@ -247,6 +247,191 @@ pub fn test_opaque_higher_arity_associated_type() {
 }
 
 // ============================================================
+// A trait member's type has to fix the trait's type variable
+// ============================================================
+
+/// A member whose declared type leaves the trait's type variable to a constraint on an opaque type
+/// variable. What stands behind the opaque type is the implementation's choice, so a use site has
+/// nothing to pick the implementation by.
+#[test]
+pub fn test_opaque_constraint_alone_does_not_fix_the_trait_variable() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+        }
+
+        impl I64 : Make {
+            make = |n| Iterator::range(0, n);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(3).to_array;
+            println(is.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `c` is not fixed by this type signature",
+    );
+}
+
+/// The trait's type variable stands in an argument of the member's type, and an opaque constraint
+/// names it as well. The argument is what a use site picks the implementation by, so the member is
+/// accepted and each implementation hides a concrete type of its own.
+#[test]
+pub fn test_opaque_constraint_beside_the_trait_variable_in_the_type() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter = Array::to_iter;
+        }
+
+        type MyRange = box struct { start : I64, end_ : I64 };
+
+        impl MyRange : ToIter {
+            type Elem MyRange = I64;
+            to_iter = |r| Iterator::range(r.@start, r.@end_);
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"array", [10, 20].ToIter::to_iter.to_array, [10, 20]);;
+            assert_eq(|_|"range", (MyRange { start : 0, end_ : 3 }).ToIter::to_iter.to_array, [0, 1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A member that returns the type the trait is implemented for. The trait's type variable stands in
+/// the result, which is what a use site picks the implementation by.
+#[test]
+pub fn test_the_trait_variable_in_the_result_fixes_it() {
+    let source = r##"
+        module Main;
+
+        trait c : FromCount {
+            from_count : I64 -> c;
+        }
+
+        impl Array I64 : FromCount {
+            from_count = |n| Iterator::range(0, n).to_array;
+        }
+
+        main : IO ();
+        main = (
+            let xs : Array I64 = FromCount::from_count(3);
+            assert_eq(|_|"from_count", xs, [0, 1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A member whose type names the trait's type variable only as an argument of an associated type
+/// application. `Ele c` at a use site does not say which type `c` stands for, so the member's type
+/// does not fix it, although the equality's right side names it as well.
+#[test]
+pub fn test_associated_type_application_does_not_fix_the_trait_variable() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            type Ele c;
+            make : [?it : Iterator, Item ?it = c] Ele c -> ?it;
+        }
+
+        impl I64 : Make {
+            type Ele I64 = I64;
+            make = |_| Iterator::range(0, 1);
+        }
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `c` is not fixed by this type signature",
+    );
+}
+
+/// Each member that leaves the trait's type variable out is reported, in every trait the program
+/// declares, in one compilation.
+#[test]
+pub fn test_every_member_leaving_the_trait_variable_out_is_reported() {
+    let source = r##"
+        module Main;
+
+        trait c : ZapA {
+            zap_a : I64 -> I64;
+        }
+
+        trait c : ZapB {
+            zap_b : I64 -> I64;
+        }
+
+        impl I64 : ZapA { zap_a = |x| x; }
+        impl I64 : ZapB { zap_b = |x| x; }
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert_eq!(
+        errmsg
+            .matches("Type variable `c` is not fixed by this type signature")
+            .count(),
+        2,
+        "both members are expected to be reported.\nActual message:\n{}",
+        errmsg
+    );
+}
+
+/// Two implementations of a trait whose member names the trait's type variable in an argument and
+/// constrains the opaque result by that same variable. Each implementation stands for a concrete
+/// type of its own, so one program reaches both.
+#[test]
+pub fn test_opaque_constraint_naming_the_trait_variable_directly() {
+    let source = r##"
+        module Main;
+
+        trait c : ToI {
+            to_i : [?it : Iterator, Item ?it = c] Array c -> ?it;
+        }
+
+        impl I64 : ToI {
+            to_i = |arr| arr.to_iter;
+        }
+
+        impl Bool : ToI {
+            to_i = |arr| arr.to_iter;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"i64", [1, 2, 3].to_i.to_array, [1, 2, 3]);;
+            assert_eq(|_|"bool", [true, false].to_i.to_array, [true, false]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// ============================================================
 // 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
 

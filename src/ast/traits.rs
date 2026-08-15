@@ -9,7 +9,8 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::types::{
-    is_opaque_tyvar, type_from_tyvar, type_tyvar, AssocType, Kind, Scheme, TyVar, TypeNode,
+    is_opaque_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
+    Scheme, TyVar, TypeNode,
 };
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -32,28 +33,34 @@ pub struct MissingTraitImplInfo {
     pub impl_type: Arc<TypeNode>,
 }
 
+/// An item the trait declares and the implementation leaves out, carrying what the quick fix needs
+/// to write it.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum MissingTraitImplItem {
     Member(MissingMember),
     AssocType(MissingAssocType),
 }
 
+/// A trait member the implementation leaves out.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MissingMember {
+    /// The member's name in the trait's namespace.
     pub name: FullName,
-    // The type of the member with the trait type variable substituted by the impl type.
+    /// The type of the member with the trait type variable substituted by the impl type.
     pub ty: Arc<TypeNode>,
 }
 
+/// An associated type the implementation leaves out.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MissingAssocType {
+    /// The associated type's name in the trait's namespace.
     pub name: FullName,
-    // Number of type parameters beyond the impl type parameter.
+    /// Number of type parameters beyond the impl type parameter.
     pub num_extra_params: usize,
 }
 
 impl MissingTraitImplInfo {
-    // Build the error message for missing items.
+    /// The message reported at the implementation, naming each item it leaves out.
     pub fn error_message(&self) -> String {
         let names: Vec<String> = self
             .items
@@ -68,12 +75,16 @@ impl MissingTraitImplInfo {
         format!("Missing implementation of {}.", names.join(", "))
     }
 
-    // Serialize to a serde_json::Value for use as diagnostic data.
+    /// This information as the data carried alongside the diagnostic, for the editor to hand back
+    /// when the user asks for the quick fix.
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }
 
-    // Deserialize from a serde_json::Value.
+    /// Read the information back out of the data of a diagnostic.
+    ///
+    /// The value comes back from the editor, so one of another shape reads as `None` and the quick
+    /// fix is left unoffered.
     pub fn from_json(value: &serde_json::Value) -> Option<Self> {
         serde_json::from_value(value.clone()).ok()
     }
@@ -273,22 +284,22 @@ pub struct AssocTypeKindInfo {
     pub value_kind: Arc<Kind>,
 }
 
-// Trait member.
+/// A member declared in a trait definition.
 #[derive(Clone)]
 pub struct TraitMember {
+    /// The member's name, without the trait's namespace.
     pub name: Name,
-    // The type of the member.
-    // Here, for example, in case "trait a : Show { show : a -> String }",
-    // the type of method "show" is "a -> String",
-    // and not "[a : Show] a -> String".
+    /// The type of the member as the declaration writes it: in
+    /// `trait a : Show { show : a -> String }`, the type of `show` is `a -> String`, the trait's
+    /// own constraint `a : Show` staying implicit.
     pub qual_ty: QualType,
-    // The type of the member, but with aliases retained.
+    /// The type of the member, but with aliases retained.
     pub syn_qual_ty: Option<QualType>,
-    // Source location of this member declaration.
-    // The left hand side of the member declaration: e.g., `to_string` for "to_string : a -> String".
+    /// Source location of this member declaration.
+    /// The left hand side of the member declaration: e.g., `to_string` for "to_string : a -> String".
     pub decl_src: Option<Span>,
-    // Document of this member.
-    // This field is used only If document from `decl_src` is not available.
+    /// Document of this member.
+    /// This field is used only If document from `decl_src` is not available.
     pub document: Option<String>,
     /// Deprecation metadata, set during elaboration when a matching
     /// `DEPRECATED[...]` pragma exists.
@@ -296,49 +307,51 @@ pub struct TraitMember {
 }
 
 impl TraitMember {
-    // Find the minimum node which includes the specified source code position.
+    /// Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         self.qual_ty.find_node_at(pos)
     }
 
+    /// Give every name in the member's type its full name.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.qual_ty.resolve_namespace(ctx)
     }
 
+    /// Expand the type aliases in the member's type, keeping the type as written in
+    /// `syn_qual_ty`.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.syn_qual_ty = Some(self.qual_ty.clone());
         self.qual_ty.resolve_type_aliases(type_env)
     }
 }
 
-/// The declaration of a trait, i.e. `trait a : Functor { ... }` and what it writes between the
-/// braces.
+/// The definition of a trait: the type variable it is about, and what it demands of a type.
 #[derive(Clone)]
 pub struct TraitDefn {
-    /// The name this trait is declared under.
+    /// Identifier of this trait (i.e. the name).
     pub trait_: TraitId,
-    /// The type variable the declaration writes to the left of the trait's name, which the members'
-    /// types are written in terms of: `a` in `trait a : Functor`.
+    /// The type variable the definition writes its members and associated types in terms of; an
+    /// implementation gives it the type it implements the trait for.
     pub type_var: Arc<TyVar>,
-    /// The members the trait declares, in the order the declaration writes them.
+    /// Members of this trait.
     pub members: Vec<TraitMember>,
-    /// The associated types the trait declares, by their local names.
+    /// Associated types.
     pub assoc_types: Map<Name, AssocTypeDefn>,
-    /// The kind signatures written as the assumption of the declaration, e.g. `f : *->*` in
-    /// `trait [f : *->*] f : Functor {}`.
+    /// Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_signs: Vec<KindSignature>,
-    /// The source span of the whole declaration, from the `trait` keyword to the closing `}`.
+    /// The source span of the entire trait definition, from the `trait` keyword to the closing `}`.
+    /// Used for error messages, documentation extraction (`get_document()`), and go-to-definition.
     pub source: Option<Span>,
-    /// The source span of the trait's name alone, e.g. `Functor` in `trait a : Functor { ... }`.
+    /// The source span of the trait name only (e.g., `Functor` in `trait a : Functor { ... }`).
+    /// Used for "Find All References" to highlight just the name, not the whole definition.
     pub name_src: Option<Span>,
-    /// The trait's document, carried here for a trait whose `source` is unavailable; otherwise the
-    /// document is read from the source code.
+    /// Document of this trait.
+    /// This field is used only If document from `source` is not available.
     pub document: Option<String>,
 }
 
 impl TraitDefn {
-    /// The innermost node covering `pos` among the trait's name, its associated type declarations
-    /// and its members.
+    /// Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         // Check if cursor is on the trait name itself (LHS of the trait definition).
         if let Some(ns) = &self.name_src {
@@ -367,8 +380,8 @@ impl TraitDefn {
         None
     }
 
-    /// The trait's document: the doc comment written above the declaration, and the `document`
-    /// field where the source carries none.
+    /// The document of this trait, taken from the source where the definition has one written
+    /// above it.
     pub fn get_document(&self) -> Option<String> {
         /// `docs` with an empty document read as absent.
         fn nonempty(docs: Option<String>) -> Option<String> {
@@ -380,8 +393,7 @@ impl TraitDefn {
         nonempty(from_source.or_else(|| self.document.clone()))
     }
 
-    /// Gives the names in the members' type signatures the full names `ctx` resolves them to,
-    /// reporting every name whose resolution fails.
+    /// Give every name in the members' types its full name.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for member in &mut self.members {
@@ -390,8 +402,7 @@ impl TraitDefn {
         errors.to_result()
     }
 
-    /// Replaces the type aliases in the members' type signatures with the types they stand for,
-    /// keeping each signature as written in the member's `syn_qual_ty`.
+    /// Expand the type aliases in the members' types.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for member in &mut self.members {
@@ -400,14 +411,11 @@ impl TraitDefn {
         errors.to_result()
     }
 
-    /// The type scheme of the member `name`, constrained by the trait itself:
-    /// `[a : ToString] a -> String` for `to_string` of
-    /// `trait a : ToString { to_string : a -> String }`. Panics when the trait declares no member
-    /// of that name.
+    /// The type scheme of a member, the trait's own constraint included: in
+    /// `trait a : ToString { to_string : a -> String }`, the scheme of `to_string` is
+    /// `[a : ToString] a -> String`.
     ///
-    /// # Arguments
-    /// * `syntactic` — when true, the member's type is the one written in source, with the type
-    ///   aliases in it left unexpanded.
+    /// `syntactic` asks for the type as written, with its type aliases still standing.
     pub fn member_scheme(&self, name: &Name, syntactic: bool) -> Arc<Scheme> {
         let member = self
             .members
@@ -429,10 +437,8 @@ impl TraitDefn {
         Scheme::generalize(&qual_ty.kind_signs, preds, qual_ty.eqs, qual_ty.ty)
     }
 
-    /// The type of the member `name` as the declaration writes it, carrying no constraint from the
-    /// trait itself: `a -> String` for `to_string` of
-    /// `trait a : ToString { to_string : a -> String }`. Panics when the trait declares no member
-    /// of that name.
+    /// The type of a member as the declaration writes it: in
+    /// `trait a : ToString { to_string : a -> String }`, the type of `to_string` is `a -> String`.
     pub fn member_ty(&self, name: &Name) -> QualType {
         self.members
             .iter()
@@ -442,10 +448,10 @@ impl TraitDefn {
             .clone()
     }
 
-    /// Gives the trait's type variable the kind the declaration's assumption states, and gives the
-    /// parameters of the associated type declarations the kinds that follow from it. Reports an
-    /// assumption holding more than one kind signature, and one naming a type variable other than
-    /// the trait's own.
+    /// Give the trait's type variable the kind its declaration annotates, and give the parameters
+    /// of each associated type definition their kinds in turn.
+    ///
+    /// A declaration may annotate one kind, and it has to be on the trait's own type variable.
     pub fn set_trait_kind(&mut self) -> Result<(), Errors> {
         if self.kind_signs.len() >= 2 {
             let span = Span::unite_opt(&self.kind_signs[0].source, &self.kind_signs[1].source);
@@ -845,20 +851,19 @@ impl TraitAliasEnv {
     }
 }
 
-/// The traits, the trait implementations and the trait aliases a program declares.
+/// Every trait, trait implementation and trait alias of a program, and the constraints its opaque
+/// types carry.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    /// Every declared trait, by the name it is declared under.
+    /// The definition of each trait, under the trait's own name.
     pub traits: Map<TraitId, TraitDefn>,
-    /// The implementations of each trait, filed under the trait their head names.
+    /// The implementations of each trait, under the name of the trait they implement.
     pub impls: Map<TraitId, Vec<TraitImpl>>,
-    /// Every declared trait alias, and the traits each of them stands for.
+    /// The trait aliases, and the traits each one stands for.
     pub aliases: TraitAliasEnv,
-    /// The trait constraints an opaque type variable carries, such as `?it : Iterator` of
-    /// `[?it : Iterator] I64 -> ?it`, by the trait constraining it.
+    /// Opaque type assumptions: predicates derived from opaque type variables.
     pub opaque_preds: Map<TraitId, Vec<QualPredScheme>>,
-    /// The associated type equalities an opaque type variable carries, such as `Item ?it = I64` of
-    /// `[?it : Iterator, Item ?it = I64] I64 -> ?it`, by the associated type they fix.
+    /// Opaque type assumptions: equalities derived from opaque type variables.
     pub opaque_eqs: Map<AssocType, Vec<EqualityScheme>>,
 }
 
@@ -889,7 +894,7 @@ impl TraitEnv {
         None
     }
 
-    /// The full name of every declared trait and of every declared trait alias.
+    /// The names of every trait and every trait alias.
     pub fn trait_names(&self) -> Set<FullName> {
         self.traits_with_aliases()
             .into_iter()
@@ -897,7 +902,7 @@ impl TraitEnv {
             .collect()
     }
 
-    /// The identifier of every declared trait and of every declared trait alias.
+    /// The identifier of every trait and every trait alias.
     pub fn traits_with_aliases(&self) -> Vec<TraitId> {
         let mut res = vec![];
         for (k, _v) in &self.traits {
@@ -971,12 +976,27 @@ impl TraitEnv {
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
-                // That a use site determines the trait type variable from the
-                // member's type is checked by the Fixv well-formedness
-                // condition in `Scheme::validate_constraints`: it rejects a
-                // member whose type leaves the variable out, and one that
-                // mentions it only as an argument of an associated type
-                // application.
+                // A use site picks the implementation from the type it writes, so the member's
+                // type has to determine the trait's type variable on its own.
+                //
+                // The Fixv condition in `Scheme::validate_constraints` asks that of every
+                // generalized variable, and it accepts a variable on the right-hand side of an
+                // equality. That is right for an ordinary value, whose caller determines the
+                // equality's left side too. For a trait member the left side can be an opaque type
+                // — `make : [?it : Iterator, Item ?it = c] I64 -> ?it` — which stands for whatever
+                // the chosen implementation returns, so a call reaches `c` only by pinning what the
+                // equality reads off that type rather than the type itself. Whether a set of
+                // constraints determines a variable is the question Haskell's coverage conditions
+                // answer for functional dependencies; Fix asks the simpler one, and reads the
+                // trait's type variable off the member's type alone.
+                if !member.qual_ty.ty_fixes_var(&trait_defn.type_var.name) {
+                    errors.append(unfixed_type_variable_error(
+                        &trait_defn.type_var.name,
+                        "in the type of the member, outside of any associated type application. \
+                         Fix does not read it off a constraint",
+                        &member.decl_src.as_ref().map(|s| s.to_head_character()),
+                    ));
+                }
 
                 // The "impl type" cannot be constrained.
                 //
@@ -1070,14 +1090,13 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    /// Reports what the implementation `impl_` of the trait `defn` gets wrong: a head no trait may
-    /// be implemented for, a member or an associated type the trait leaves undeclared, one the
-    /// trait declares and the implementation leaves out, an associated type line writing another
-    /// type than the head, a type variable bound nowhere, an implementation of a trait and a type
-    /// both foreign to the module writing it, and `Std::Boxed` written by hand.
+    /// Validates one implementation against the trait it implements: that it gives exactly the
+    /// members and associated types the trait declares, that its associated types are written for
+    /// the type it implements the trait for and in the variables that type offers, and that the
+    /// orphan rule allows it.
     ///
-    /// The report of the members and associated types left out carries their names and types as
-    /// data, from which the editor offers to write them.
+    /// The report for missing items carries `MissingTraitImplInfo`, from which the editor writes
+    /// them out as a quick fix.
     fn validate_trait_impl(impl_: &TraitImpl, defn: &TraitDefn) -> Result<(), Errors> {
         let trait_id = &defn.trait_;
 
@@ -1253,9 +1272,8 @@ impl TraitEnv {
         Ok(())
     }
 
-    /// Gives the names in the trait aliases, in the trait declarations and in the trait
-    /// implementations the full names `ctx` resolves them to, and files each implementation under
-    /// the trait its resolved head names.
+    /// Give every name in the trait aliases, the trait definitions and the trait implementations
+    /// its full name, each read in the module it is written in.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1301,8 +1319,7 @@ impl TraitEnv {
         Ok(())
     }
 
-    /// Replaces the type aliases in the trait declarations and in the trait implementations with
-    /// the types they stand for.
+    /// Expand every type alias standing in the trait definitions and in the trait implementations.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1326,8 +1343,8 @@ impl TraitEnv {
         Ok(())
     }
 
-    /// Records the given trait declarations, trait implementations and trait aliases, reporting
-    /// every name that is declared twice.
+    /// Take in the traits, the implementations and the aliases of one module, reporting every
+    /// duplicate definition among them.
     pub fn add(
         &mut self,
         trait_infos: Vec<TraitDefn>,
@@ -1347,8 +1364,7 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    /// Records the trait declaration `info`, reporting a trait already declared under that name,
-    /// at both declarations.
+    /// Record a trait definition, reporting a second definition of a name already taken.
     pub fn add_trait(&mut self, info: TraitDefn) -> Result<(), Errors> {
         // Check Duplicate definition.
         if self.traits.contains_key(&info.trait_) {
@@ -1377,8 +1393,7 @@ impl TraitEnv {
         Ok(())
     }
 
-    /// Records the trait alias declaration `alias`, reporting an alias already declared under that
-    /// name, at both declarations.
+    /// Record a trait alias, reporting a second definition of a name already taken.
     fn add_alias(&mut self, alias: TraitAlias) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.aliases.data.contains_key(&alias.id) {
