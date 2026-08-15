@@ -1204,3 +1204,23 @@ main = (
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// An equality constraint whose right side names an associated type. Reducing such a type would
+/// ask for a reduction again, so the reduction is not known to end and the constraint is rejected.
+#[test]
+pub fn test_equality_right_side_naming_an_associated_type_is_rejected() {
+    let source = r##"
+        module Main;
+
+        f : [c : Iterator, d : Iterator, Item c = Item d] c -> d -> I64;
+        f = |_, _| 0;
+
+        main : IO ();
+        main = println(f(Iterator::range(0, 1), Iterator::range(0, 1)).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Right side of an equality constraint cannot contain an associated type.",
+    );
+}

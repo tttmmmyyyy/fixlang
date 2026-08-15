@@ -180,6 +180,32 @@ mod tests {
         }
     }
 
+    /// A trait member whose type leaves the trait's type variable to a constraint is reported in
+    /// the editor, on the member's declaration.
+    ///
+    /// The member's declaration is the line the programmer has to change, so the report has to
+    /// reach the editor anchored there.
+    #[test]
+    fn test_trait_member_not_fixing_the_trait_variable_is_reported_on_its_declaration() {
+        let (_temp_dir, project_dir) = setup_test_env("trait_member_unfixed_variable");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(
+            &diagnostics,
+            "Type variable `c` is not fixed by this type signature",
+        );
+
+        // `main.fix` declares the member on the 4th line, at the 5th column, which the protocol
+        // counts from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 3,
+            "at the member's declaration, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["range"]["start"]["character"], 4);
+        assert_eq!(diag["severity"], 1, "as an error");
+    }
+
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
     /// field, at `line` and `repeat_character`, naming the first occurrence of the name at
     /// `first_occurrence_character` of the same line as a related location. The protocol counts
