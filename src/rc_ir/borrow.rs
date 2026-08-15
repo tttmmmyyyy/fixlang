@@ -124,11 +124,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
-        for p in func.params.iter().chain(func.capture.iter()) {
-            for unit in rc_units(&p.ty, type_env) {
-                owned_units.insert((p.name.clone(), unit));
-            }
-        }
+        owned_units.extend(param_capture_units(func, type_env));
         // `f_borrow`: a fresh clone whose owned units are the inferred ones, clamped to units.
         if let Some(bref) = borrow_versions.get(&func.name) {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
@@ -207,16 +203,10 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
     // Annotate every version with the parameter/capture units it borrows (those not in `owned_units`).
     for func in funcs.values_mut() {
-        let mut borrowed = Set::default();
-        for p in func.params.iter().chain(func.capture.iter()) {
-            for unit in rc_units(&p.ty, type_env) {
-                let unit_path = (p.name.clone(), unit);
-                if !owned_units.contains(&unit_path) {
-                    borrowed.insert(unit_path);
-                }
-            }
-        }
-        func.borrowed_units = borrowed;
+        func.borrowed_units = param_capture_units(func, type_env)
+            .into_iter()
+            .filter(|unit_path| !owned_units.contains(unit_path))
+            .collect();
     }
 
     RcProgram {
@@ -269,6 +259,20 @@ fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
         .iter()
         .chain(func.capture.iter())
         .map(|p| (p.name.clone(), p.ty.clone()))
+        .collect()
+}
+
+/// Every reference-counting unit of a function's parameters and capture, each as the
+/// `(variable, unit path)` pair the owned and borrowed unit sets are keyed by.
+fn param_capture_units(func: &RcFunc, type_env: &TypeEnv) -> Vec<VarPath> {
+    func.params
+        .iter()
+        .chain(func.capture.iter())
+        .flat_map(|p| {
+            rc_units(&p.ty, type_env)
+                .into_iter()
+                .map(|unit| (p.name.clone(), unit))
+        })
         .collect()
 }
 
