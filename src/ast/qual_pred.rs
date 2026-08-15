@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::equality::Equality;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
