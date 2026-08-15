@@ -23,92 +23,6 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
-    /// Assign `type_` to this pattern and, to each sub-pattern, the type of the field or variant
-    /// payload it matches.
-    ///
-    /// All types must have their type aliases resolved and associated types expanded.
-    ///
-    /// A type annotation the user wrote is overwritten: given the pattern `v : A` and the type `B`,
-    /// `v` is typed `B` even where `A != B`. This must therefore not be used for type checking; it
-    /// runs once type checking has succeeded.
-    ///
-    /// # Returns
-    /// `None` where the pattern and `type_` disagree — the head of a struct or union pattern names
-    /// another type constructor than `type_`'s, or names a field or variant that type does not
-    /// declare.
-    #[allow(dead_code)]
-    pub fn get_typed_matching(
-        &self,
-        type_: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-    ) -> Option<Arc<PatternNode>> {
-        match &self.pattern {
-            Pattern::Var(_v, _ty) => {
-                // IGNORES user-provided type annotation!
-                let pat = self.set_type(type_.clone());
-                Some(pat)
-            }
-            Pattern::Struct(tc, field_to_pat) => {
-                let type_tc = type_.toplevel_tycon();
-                if type_tc.is_none() {
-                    return None;
-                }
-                let type_tc = type_tc.unwrap();
-                if type_tc.as_ref() != tc.as_ref() {
-                    return None;
-                }
-
-                let type_ti = type_env.tycons().get(&type_tc)?;
-                let mut field_name_to_idx = Map::default();
-                for (i, field) in type_ti.fields.iter().enumerate() {
-                    field_name_to_idx.insert(field.name.clone(), i);
-                }
-
-                // Recursively match each field pattern with its expected type
-                let field_types = type_.field_types(type_env);
-                let mut field_to_pat = field_to_pat.clone();
-                for (field_name, _, pat) in field_to_pat.iter_mut() {
-                    let field_idx = *field_name_to_idx.get(field_name)?;
-                    let field_ty = &field_types[field_idx];
-                    let matched_pat = pat.get_typed_matching(field_ty, type_env)?;
-                    *pat = matched_pat;
-                }
-
-                Some(
-                    self.set_type(type_.clone())
-                        .set_struct_field_to_pat(field_to_pat),
-                )
-            }
-            Pattern::Union(variant_name, _, subpat) => {
-                let tc = TyCon::new(variant_name.namespace.clone().to_fullname());
-                let variant_name = &variant_name.name;
-
-                let type_tc = type_.toplevel_tycon();
-                if type_tc.is_none() {
-                    return None;
-                }
-                let type_tc = type_tc.unwrap();
-                if type_tc.as_ref() != &tc {
-                    return None;
-                }
-
-                let type_ti = type_env.tycons().get(&type_tc)?;
-                let mut variant_name_to_idx = Map::default();
-                for (i, field) in type_ti.fields.iter().enumerate() {
-                    variant_name_to_idx.insert(field.name.clone(), i);
-                }
-
-                // Recursively match each field pattern with its expected type
-                let variant_types = type_.field_types(type_env);
-                let variant_idx = *variant_name_to_idx.get(variant_name)?;
-                let variant_ty = &variant_types[variant_idx];
-                let subpat = subpat.get_typed_matching(variant_ty, type_env)?;
-
-                Some(self.set_type(type_.clone()).set_union_pat(subpat))
-            }
-        }
-    }
-
     /// Assign a type to the pattern and to each of its sub-patterns, taking a
     /// fresh type variable wherever the source leaves the type open.
     ///
@@ -703,37 +617,9 @@ impl PatternNode {
         Arc::new(node)
     }
 
-    /// Render this pattern as source text. With `with_type`, every node of the tree is followed by
-    /// the type assigned to it in angle brackets, `na` where no type has been assigned yet.
-    ///
-    /// # Examples
-    /// A variable pattern `x` typed `I64` renders as `x`, and as `x<I64>` with `with_type`.
-    fn to_string_internal(&self, with_type: bool) -> String {
-        let pat_str = self.pattern.to_string_internal(with_type);
-        if with_type {
-            format!(
-                "{}<{}>",
-                pat_str,
-                self.info
-                    .type_
-                    .as_ref()
-                    .map_or("na".to_string(), |t| t.to_string())
-            )
-        } else {
-            pat_str
-        }
-    }
-
     /// This pattern as it is written in the source.
     pub fn to_string(&self) -> String {
-        self.to_string_internal(false)
-    }
-
-    /// This pattern as it is written in the source, each node followed by the type assigned to it,
-    /// for inspecting the result of type assignment.
-    #[allow(dead_code)]
-    pub fn to_string_with_type(&self) -> String {
-        self.to_string_internal(true)
+        self.pattern.to_string()
     }
 }
 
@@ -763,12 +649,6 @@ pub enum Pattern {
 }
 
 impl Pattern {
-    /// A pattern binding the matched value to `var`, with no type written for it.
-    #[allow(dead_code)]
-    pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
-        Arc::new(Pattern::Var(var, None))
-    }
-
     /// Whether one name is bound twice in this pattern, which makes the pattern invalid.
     ///
     /// # Examples
@@ -808,15 +688,9 @@ impl Pattern {
     }
 
     /// This pattern as it is written in the source, its variant and field names carrying the
-    /// namespaces they have been resolved to.
+    /// namespaces they have been resolved to. A tuple type at the head prints as `(a, b)`, and any
+    /// other struct as `S {f: p}`.
     pub fn to_string(&self) -> String {
-        self.to_string_internal(false)
-    }
-
-    /// Render this pattern as source text, a tuple type at the head printing as `(a, b)` and any
-    /// other struct as `S {f: p}`. With `with_type`, each sub-pattern is followed by the type
-    /// assigned to it.
-    fn to_string_internal(&self, with_type: bool) -> String {
         let mut ret = "".to_string();
         match self {
             Pattern::Var(v, t) => {
@@ -834,7 +708,7 @@ impl Pattern {
                 if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
-                        .map(|(_, _, pat)| pat.to_string_internal(with_type))
+                        .map(|(_, _, pat)| pat.to_string())
                         .collect::<Vec<_>>();
                     if n == 1 {
                         format!("({},)", pats[0])
@@ -844,19 +718,13 @@ impl Pattern {
                 } else {
                     let pats = fields
                         .iter()
-                        .map(|(name, _, pat)| {
-                            format!("{}: {}", name, pat.to_string_internal(with_type))
-                        })
+                        .map(|(name, _, pat)| format!("{}: {}", name, pat.to_string()))
                         .collect::<Vec<_>>();
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }
             Pattern::Union(variant, _, pat) => {
-                format!(
-                    "{}({})",
-                    variant.to_string(),
-                    pat.to_string_internal(with_type)
-                )
+                format!("{}({})", variant.to_string(), pat.to_string())
             }
         }
     }
