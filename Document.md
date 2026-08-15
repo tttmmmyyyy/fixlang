@@ -2274,7 +2274,7 @@ The exported function takes the C name written in the statement, and a program m
 
 One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
 
-Two types a C declaration writes identically describe the same position, so one C function's `unsigned long` result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign says which side extends it, so `I8` and `U8` describe different positions. To read a narrow result at the other sign, write the sign the C function has and convert on the Fix side.
+Whether two signatures are the same is decided by whether C writes them the same way. `U64` and `I64` are one declaration in C, so one C function's result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign decides which side fills the bits above it, so `I8` and `U8` are different declarations. To read a narrow value at the other sign, take the sign the C function has and convert on the Fix side.
 
 #### Returning more than one value
 
