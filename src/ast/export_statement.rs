@@ -93,11 +93,11 @@ impl ExportStatement {
         }
         // An export defines the function, so every name the compiler has a use for is out: it either
         // defines that name itself, or calls something outside the program under it.
-        if let Some(use_) = compiler_use_of_c_function_name(&self.function_name) {
+        if let Some(compiler_use) = compiler_use_of_c_function_name(&self.function_name) {
             let msg = format!(
                 "`{}` cannot be the name of an exported function: {}.",
                 &self.function_name,
-                use_.reason()
+                compiler_use.reason()
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
@@ -117,8 +117,8 @@ impl ExportStatement {
         // Take the name. An `FFI_CALL` of this C function has declared it by now — code generation
         // implements the program's symbols before it reaches here — and a declaration and this
         // definition describe one C function, so the body goes onto that declaration.
-        let signature = CSignature::of_exported(function_type, gc.type_env());
-        let func = signature.declare_in_module(&self.function_name, gc);
+        let signature = CSignature::of_ffi_export(function_type, gc.type_env());
+        let func = signature.get_or_declare_in_module(&self.function_name, gc);
         assert_eq!(
             func.count_basic_blocks(),
             0,
@@ -128,11 +128,11 @@ impl ExportStatement {
 
         // Each value the function exchanges travels in its Fix representation, and the C type the
         // signature gave it names that same representation.
-        for (param, dom) in signature.params.iter().zip(doms.iter()) {
-            assert_c_scalar_of(param, dom, gc);
+        for (param_ty, dom) in signature.param_tys.iter().zip(doms.iter()) {
+            assert_crosses_as_c_type(param_ty, dom, gc);
         }
-        if signature.ret.get_c_type(gc.context).is_some() {
-            assert_c_scalar_of(&signature.ret, &codom, gc);
+        if signature.ret_tycon.get_c_type(gc.context).is_some() {
+            assert_crosses_as_c_type(&signature.ret_tycon, &codom, gc);
         }
 
         // Implement the function.
@@ -140,8 +140,8 @@ impl ExportStatement {
         gc.builder().position_at_end(bb);
 
         // Create Fix values from arguments. Each parameter is the value's one scalar.
-        let params = func.get_params();
-        let mut args = params
+        let param_vals = func.get_params();
+        let mut args = param_vals
             .iter()
             .enumerate()
             .map(|(i, arg)| Object::from_parts(vec![*arg], doms[i].clone(), gc))
@@ -197,7 +197,11 @@ impl ExportStatement {
 /// Counting the parts alone would let an aggregate through, since a value too wide to split is
 /// carried as one part holding the whole of it, and C would then be handed a structure whose layout
 /// it classifies by its own rules. `c_boundary_tycon` admits nothing with either shape.
-fn assert_c_scalar_of<'c, 'm>(c_ty: &Arc<TyCon>, ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) {
+fn assert_crosses_as_c_type<'c, 'm>(
+    c_ty: &Arc<TyCon>,
+    ty: &Arc<TypeNode>,
+    gc: &mut Generator<'c, 'm>,
+) {
     let embedded_ty = ty.get_embedded_type(gc);
     let parts = gc.type_parts(embedded_ty);
     assert_eq!(
@@ -260,9 +264,9 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
 /// function, through which every call in the program goes, so they have to give one signature.
 pub struct CSignature {
     /// The type of each parameter, in the order the C function takes them.
-    pub params: Vec<Arc<TyCon>>,
+    pub param_tys: Vec<Arc<TyCon>>,
     /// The type of the result, the unit type where the C function returns nothing.
-    pub ret: Arc<TyCon>,
+    pub ret_tycon: Arc<TyCon>,
     /// Whether the signature ends in `...`.
     pub is_var_args: bool,
 }
@@ -270,30 +274,30 @@ pub struct CSignature {
 impl CSignature {
     /// The signature an `FFI_CALL` writes for the function it calls.
     pub fn of_ffi_call(
-        ret: &Arc<TyCon>,
-        params: &Vec<Arc<TyCon>>,
+        ret_tycon: &Arc<TyCon>,
+        param_tys: &Vec<Arc<TyCon>>,
         is_var_args: bool,
     ) -> CSignature {
         CSignature {
-            params: params.clone(),
-            ret: ret.clone(),
+            param_tys: param_tys.clone(),
+            ret_tycon: ret_tycon.clone(),
             is_var_args,
         }
     }
 
-    /// The signature of the C function generated for a value exported at `ty`, whose every position
-    /// `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
-    pub fn of_exported(ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
-        let admitted = |ty: &Arc<TypeNode>| {
+    /// The signature of the C function generated for a value exported at `exported_ty`, whose every
+    /// position `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
+    pub fn of_ffi_export(exported_ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
+        let boundary_tycon = |ty: &Arc<TypeNode>| {
             c_boundary_tycon(ty, type_env)
                 .unwrap_or_else(|| panic!("`{}` reached an exported signature", ty.to_string()))
         };
         CSignature {
-            params: ty.doms.iter().map(admitted).collect(),
-            ret: if ty.codom.is_unit() {
-                ty.codom.toplevel_tycon().unwrap()
+            param_tys: exported_ty.doms.iter().map(boundary_tycon).collect(),
+            ret_tycon: if exported_ty.codom.is_unit() {
+                exported_ty.codom.toplevel_tycon().unwrap()
             } else {
-                admitted(&ty.codom)
+                boundary_tycon(&exported_ty.codom)
             },
             is_var_args: false,
         }
@@ -304,17 +308,17 @@ impl CSignature {
     /// differences between two Fix types that is, and which it is not.
     pub fn agrees_with(&self, other: &CSignature) -> bool {
         self.is_var_args == other.is_var_args
-            && self.params.len() == other.params.len()
-            && self.ret.c_type_shape() == other.ret.c_type_shape()
-            && (self.params.iter())
-                .zip(other.params.iter())
+            && self.param_tys.len() == other.param_tys.len()
+            && self.ret_tycon.c_type_shape() == other.ret_tycon.c_type_shape()
+            && (self.param_tys.iter())
+                .zip(other.param_tys.iter())
                 .all(|(a, b)| a.c_type_shape() == b.c_type_shape())
     }
 
     /// The function `name` of this signature in the module, declaring it where nothing declares it
     /// yet. Every description of one C name goes through here, which is what puts the calls a
     /// program makes and the definition it exports on one function.
-    pub fn declare_in_module<'c, 'm>(
+    pub fn get_or_declare_in_module<'c, 'm>(
         &self,
         name: &Name,
         gc: &Generator<'c, 'm>,
@@ -323,15 +327,15 @@ impl CSignature {
             return declared;
         }
         let param_c_tys = self
-            .params
+            .param_tys
             .iter()
-            .map(|param| {
+            .map(|param_ty| {
                 // A parameter of type `()` is rejected where the signature is written: `void` is a
                 // result alone.
-                param.get_c_type(gc.context).unwrap().into()
+                param_ty.get_c_type(gc.context).unwrap().into()
             })
             .collect::<Vec<BasicMetadataTypeEnum>>();
-        let fn_ty = match self.ret.get_c_type(gc.context) {
+        let fn_ty = match self.ret_tycon.get_c_type(gc.context) {
             None => gc
                 .context
                 .void_type()
@@ -344,9 +348,9 @@ impl CSignature {
             name,
             "the C function enters the module under the name it was given"
         );
-        gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &self.ret);
-        for (i, param) in self.params.iter().enumerate() {
-            gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), param);
+        gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &self.ret_tycon);
+        for (i, param_ty) in self.param_tys.iter().enumerate() {
+            gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), param_ty);
         }
         func
     }
@@ -355,14 +359,14 @@ impl CSignature {
     /// the Fix type constructor standing for it.
     pub fn to_string(&self) -> String {
         let mut params = self
-            .params
+            .param_tys
             .iter()
-            .map(|param| param.to_string())
+            .map(|param_ty| param_ty.to_string())
             .collect::<Vec<_>>();
         if self.is_var_args {
             params.push("...".to_string());
         }
-        format!("{} ({})", self.ret.to_string(), params.join(", "))
+        format!("{} ({})", self.ret_tycon.to_string(), params.join(", "))
     }
 }
 

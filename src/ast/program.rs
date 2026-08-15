@@ -2094,16 +2094,16 @@ impl Program {
         // How each C function name has been described so far, and where. The exported functions
         // enter first, so that a call disagreeing with a definition is reported against the
         // definition rather than against whichever call the walk happens to reach first.
-        let mut described: Map<Name, (CSignature, Option<Span>)> = Default::default();
+        let mut descriptions: Map<Name, (CSignature, Option<Span>)> = Default::default();
         for stmt in &self.export_statements {
             let exported_ty = stmt
                 .function_type
                 .as_ref()
                 .expect("an export statement carries its function type once it is instantiated");
-            described.insert(
+            descriptions.insert(
                 stmt.function_name.clone(),
                 (
-                    CSignature::of_exported(exported_ty, &type_env),
+                    CSignature::of_ffi_export(exported_ty, &type_env),
                     stmt.src.clone(),
                 ),
             );
@@ -2146,8 +2146,8 @@ impl Program {
                     Some(CompilerNameUse::Calls(_)) | None => {}
                 }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
-                let Some((known, known_src)) = described.get(fun_name) else {
-                    described.insert(fun_name.clone(), (called, node.source.clone()));
+                let Some((known, known_src)) = descriptions.get(fun_name) else {
+                    descriptions.insert(fun_name.clone(), (called, node.source.clone()));
                     return;
                 };
                 if known.agrees_with(&called) {

@@ -2591,7 +2591,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         // Get c function
         let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
-            .declare_in_module(fun_name, self);
+            .get_or_declare_in_module(fun_name, self);
 
         // Get argment values
         let args_vals = arg_objs
