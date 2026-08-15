@@ -189,6 +189,29 @@ impl Origin {
         }
     }
 
+    /// The origin a set of candidate objects amounts to: exactly the object they agree on, and a
+    /// join under `identity` where they name several. `identity` is the one name every alias chain
+    /// through the value agrees on.
+    fn of_candidates(candidates: Set<VarPath>, identity: &VarPath) -> Origin {
+        assert!(
+            !candidates.is_empty(),
+            "the origin of `{}` reaches no object",
+            identity.0.to_string()
+        );
+        match candidates.len() {
+            1 => Origin::Exactly(
+                candidates
+                    .into_iter()
+                    .next()
+                    .expect("a one-element set has an element"),
+            ),
+            _ => Origin::Join {
+                identity: identity.clone(),
+                candidates,
+            },
+        }
+    }
+
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
@@ -326,36 +349,35 @@ fn operand_unit_origin(
     path: &[usize],
     here: &VarPath,
 ) -> Option<Origin> {
-    let mut candidates: Set<VarPath> = Set::default();
+    // The leaves of one unit root usually project out of one operand unit, so the operands are
+    // gathered before any of them is followed back: resolving each distinct one once keeps a chain
+    // of aliases from being walked once per leaf.
+    let mut operands: Set<(usize, FieldPath)> = Set::default();
+    let mut produced_here = false;
     for sources in decl.leaf_origins_under(path) {
         if sources.is_empty() {
             continue;
         }
         match as_arg_projection(sources) {
             Some((j, leaf)) => {
-                let unit = truncate_to_unit(&args[j].ty, &leaf, type_env);
-                for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
-                    candidates.insert(p.clone());
-                }
+                operands.insert((j, truncate_to_unit(&args[j].ty, &leaf, type_env)));
             }
-            None => {
-                candidates.insert(here.clone());
-            }
+            None => produced_here = true,
         }
     }
-    match candidates.len() {
-        0 => None,
-        1 => Some(Origin::Exactly(
-            candidates
-                .into_iter()
-                .next()
-                .expect("a one-element set has an element"),
-        )),
-        _ => Some(Origin::Join {
-            identity: here.clone(),
-            candidates,
-        }),
+    let mut candidates: Set<VarPath> = Set::default();
+    if produced_here {
+        candidates.insert(here.clone());
     }
+    for (j, unit) in operands {
+        for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
+            candidates.insert(p.clone());
+        }
+    }
+    if candidates.is_empty() {
+        return None;
+    }
+    Some(Origin::of_candidates(candidates, here))
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.

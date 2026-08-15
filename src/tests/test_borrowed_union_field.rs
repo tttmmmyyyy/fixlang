@@ -60,8 +60,8 @@ namespace Seen {
 
 namespace Walk {
     // Adds a thread unless the node it stands at is already held by another.
-    _offer : State -> Gathered -> Array Node -> Gathered;
-    _offer = |state, (threads, seen, pending), nodes| (
+    _offer : State -> Gathered -> Gathered;
+    _offer = |state, (threads, seen, pending)| (
         if state.@at < 0 { (threads, seen, pending) };
         let (fresh, seen) = seen.take(state);
         if !fresh { (threads, seen, pending) };
@@ -75,13 +75,13 @@ namespace Walk {
         let action = node.@action;
         if action.is_wait || action.is_pair { gathered };
         let next = state.set_at(node.@next);
-        nodes._offer(next.mod_marks(mod(0, |_| action.as_mark + at)), gathered)
+        _offer(next.mod_marks(mod(0, |_| action.as_mark + at)), gathered)
     );
 
     // Adds a thread and every thread it leads to without reading input.
     _close : I64 -> State -> (Array State, Seen) -> Array Node -> (Array State, Seen);
     _close = |at, state, (threads, seen), nodes| (
-        let gathered = nodes._offer(state, (threads, seen, Array::empty(4)));
+        let gathered = _offer(state, (threads, seen, Array::empty(4)));
         let (threads, seen, _) = loop(gathered, |(threads, seen, pending)|
             if pending.@size == 0 { break $ (threads, seen, pending) };
             let state = pending.@(pending.@size - 1);
