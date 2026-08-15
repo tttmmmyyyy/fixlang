@@ -37,14 +37,13 @@ use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
     to_absolute_path, HashSource, Map, Set,
 };
-use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
-use std::iter::once;
 use std::mem::replace;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -604,31 +603,6 @@ pub struct ModuleInfo {
     pub name: Name,
     /// The `module` declaration the module is defined by.
     pub source: Span,
-    /// The sources that extend the module beyond the one it is declared in, in the order they were
-    /// linked. Shared, so that cloning a module — which `TypeCheckContext` does for every
-    /// speculative check — copies none of them.
-    ///
-    /// A source reaches this list by being linked with `Program::link`'s `extend` set, which is how
-    /// the compiler adds the definitions it writes itself to `Std`: the trait implementations for
-    /// the tuple sizes the program uses (`make_tuple_traits_mod`) and the traits that convert
-    /// between numeric types (`make_numeric_cast_traits_mod`). `module_dependency_hash` folds them
-    /// beside the module's own source, because a value defined in one of them is as much a function
-    /// of that source as a value defined in the file the module is declared in.
-    pub extending_sources: Arc<Vec<SourceFile>>,
-}
-
-impl ModuleInfo {
-    /// Every source the module is made of: the one it is declared in, then the ones that extend it.
-    pub fn sources(&self) -> impl Iterator<Item = &SourceFile> {
-        once(&self.source.input).chain(self.extending_sources.iter())
-    }
-
-    /// A hash of each source the module is made of, in the order `sources` gives them. A hash naming
-    /// what a module is made of is a list of these, so that a source belongs to the module it
-    /// extends.
-    pub fn source_hashes(&self) -> Result<Vec<String>, Errors> {
-        collect_results(self.sources().map(|source| source.hash()))
-    }
 }
 
 // Program of fix a collection of modules.
@@ -2762,12 +2736,7 @@ impl Program {
             if let Some(linked_idx) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
-                    // If extending mode, this is not a problem: every source the module here is
-                    // made of joins the ones the module is made of already, and
-                    // `module_dependency_hash` reads them all.
-                    let joining_sources = mod_info.sources().cloned().collect::<Vec<_>>();
-                    Arc::make_mut(&mut self.modules[linked_idx].extending_sources)
-                        .extend(joining_sources);
+                    // If extending mode, this is not a problem.
                     continue;
                 }
                 let linked_file = self.modules[linked_idx].source.input.file_path.clone();
@@ -2900,9 +2869,7 @@ impl Program {
     /// It keys the type-checking cache, of the batch compiler and of the LSP alike, so it covers
     /// every input that decides what the check produces:
     ///
-    /// - **Every source each module `module` depends on is made of.** A module is made of the file
-    ///   it is declared in, and of the sources linked to extend it — the definitions the compiler
-    ///   writes itself, which vary with the program (see `ModuleInfo::extending_sources`).
+    /// - **The source of each module `module` depends on.**
     /// - **The settings that decide what the elaborated program is**, which reach it without
     ///   passing through any source (`Configuration::elaboration_hash`).
     /// - **The build of the compiler.** A cached typed expression is serialized in a format the
@@ -2924,7 +2891,7 @@ impl Program {
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
         let mut hash_source = HashSource::default();
         for mod_name in &dependent_module_names {
-            hash_source.push_list(&self.find_mod(mod_name).unwrap().source_hashes()?);
+            hash_source.push_text(&self.find_mod(mod_name).unwrap().source.input.hash()?);
         }
         hash_source.push_text(&config.elaboration_hash());
         hash_source.push_text(build_time_utc!());

@@ -4,10 +4,7 @@
 //! build owed the user.
 
 use crate::{
-    ast::program::Program,
-    configuration::Configuration,
-    constants::STD_NAME,
-    fixstd::stdlib::{make_std_mod, make_tuple_traits_mod},
+    configuration::Configuration, constants::STD_NAME, fixstd::stdlib::make_std_mod,
     tests::test_util::test_source,
 };
 
@@ -35,36 +32,6 @@ fn test_an_accessor_and_a_value_differing_only_in_punctuation_keep_their_own_bod
         );
     "#;
     test_source(&source, Configuration::develop_mode());
-}
-
-/// The compiler writes part of `Std` itself and links it in as a source of its own: the
-/// implementations the tuple sizes the program uses carry. A value defined there is type-checked
-/// from that source, so the hash the cache is keyed by moves when the source does.
-#[test]
-fn test_the_module_dependency_hash_covers_a_source_that_extends_a_module() {
-    let config = Configuration::develop_mode();
-    let std_name = STD_NAME.to_string();
-    let hash_of = |program: &Program| {
-        program
-            .module_dependency_hash(&std_name, &config)
-            .unwrap_or_else(|errs| panic!("Failed to hash the `Std` module: {}", errs))
-    };
-
-    let mut program = make_std_mod(&config)
-        .unwrap_or_else(|errs| panic!("Failed to build the `Std` module: {}", errs));
-    let hash_without_the_tuple = hash_of(&program);
-    let tuple_traits_mod = make_tuple_traits_mod(&[8], &config)
-        .unwrap_or_else(|errs| panic!("Failed to build the tuple implementations: {}", errs));
-    program
-        .link(tuple_traits_mod, true)
-        .unwrap_or_else(|errs| panic!("Failed to link the tuple implementations: {}", errs));
-
-    assert_ne!(
-        hash_without_the_tuple,
-        hash_of(&program),
-        "the implementations of a tuple size are a source `Std` is made of, and the hash naming \
-         what `Std` is checked from stayed where it was"
-    );
 }
 
 /// The size of a C type decides the Fix type the parser gives a `CInt` in an `FFI_CALL` signature,

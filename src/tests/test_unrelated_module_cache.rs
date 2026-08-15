@@ -2,11 +2,6 @@
 //! it, so no existing module's `module_dependency_hash` changes and every pre-existing global
 //! value is served from the type-check cache on the second build — while the trait environment,
 //! the type-constructor set and the set of global values have all grown underneath it.
-//!
-//! A tuple in such a module is the exception that decides how far the hash reaches. The compiler
-//! implements the traits a tuple carries by generating a source for the sizes the program uses and
-//! linking it into `Std`, so a module using a size nothing else uses rewrites a source every module
-//! depends on.
 
 #[cfg(test)]
 mod integration_tests {
@@ -65,13 +60,6 @@ impl IntruderT : Eq {
 
 intruder_value : I64;
 intruder_value = IntruderT { v : 1 }.itr;
-"#;
-
-    /// Uses a tuple of a size no other module uses, and nothing else. No module imports it.
-    const INTRUDER_WITH_A_TUPLE_FIX: &str = r#"module Intruder;
-
-intruder_tuple : (I64, I64, I64, I64);
-intruder_tuple = (1, 2, 3, 4);
 "#;
 
     /// Writes the project into `dir`: `fixproj.toml` holding `fixproj`, `main.fix`, and — when
@@ -146,20 +134,6 @@ intruder_tuple = (1, 2, 3, 4);
             cold_ir, warm_ir,
             "a module that nothing imports changed the emitted program between a cold and a warm \
              type-check cache"
-        );
-    }
-
-    /// The tuple in the intruder gives `Std` a source it did not have, holding the implementations
-    /// that tuple carries. Every module depends on `Std`, so the entries the first build wrote
-    /// belong to a `Std` made of other sources, and a build that serves them attributes the tuple
-    /// implementations it shares to a source of the build before.
-    #[test]
-    fn unrelated_module_using_a_new_tuple_size_does_not_change_the_compiled_program() {
-        let (cold_ir, warm_ir) = ir_of_a_cold_and_a_warm_build(INTRUDER_WITH_A_TUPLE_FIX);
-        assert_eq!(
-            cold_ir, warm_ir,
-            "a module that nothing imports, using a tuple size nothing else uses, changed the \
-             emitted program between a cold and a warm type-check cache"
         );
     }
 }

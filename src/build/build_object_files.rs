@@ -478,7 +478,7 @@ fn build_object_files_cache_hash(
     let mut hash_source = HashSource::default();
     hash_source.push_text(&config.object_generation_hash());
     for mi in &program.modules {
-        hash_source.push_list(&mi.source_hashes()?);
+        hash_source.push_text(&mi.source.input.hash()?);
     }
     Ok(hash_source.finish())
 }
