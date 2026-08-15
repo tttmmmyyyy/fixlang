@@ -1895,8 +1895,16 @@ impl Program {
         Ok(name)
     }
 
-    // Create symbols of trait members from TraitEnv.
-    pub fn create_trait_member_symbols(&mut self) {
+    /// Creates the global value of each trait member from the trait environment, holding every
+    /// implementation of that member as its body.
+    ///
+    /// A member's name is a global value's name like any other — `bar` of `trait c : Foo` is
+    /// `Foo::bar` — so a value the program writes under a namespace named after the trait carries
+    /// that name too, and the two are reported as one name defined twice.
+    pub fn create_trait_member_symbols(&mut self) -> Result<(), Errors> {
+        // The symbols are built first and registered after, because building them reads the trait
+        // environment while registering them writes to the whole program.
+        let mut member_symbols: Vec<(FullName, GlobalValue)> = vec![];
         for (trait_id, trait_) in &self.trait_env.traits {
             for member in &trait_.members {
                 let member_scm = trait_.member_scheme(&member.name, false);
@@ -1923,7 +1931,7 @@ impl Program {
                     }
                 }
                 let member_name = FullName::new(&trait_id.name.to_namespace(), &member.name);
-                self.global_values.insert(
+                member_symbols.push((
                     member_name,
                     GlobalValue {
                         scm: member_scm,
@@ -1935,9 +1943,15 @@ impl Program {
                         compiler_defined_method: false,
                         deprecation: member.deprecation.clone(),
                     },
-                );
+                ));
             }
         }
+
+        let mut errors = Errors::empty();
+        for (member_name, member_symbol) in member_symbols {
+            errors.eat_err(self.add_global_value_gv(member_name, member_symbol));
+        }
+        errors.to_result()
     }
 
     /// Report every constraint written in a global value's type signature, and in the signature of

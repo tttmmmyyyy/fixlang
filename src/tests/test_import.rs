@@ -187,6 +187,38 @@ pub fn test_type_and_trait_name_collision() {
     );
 }
 
+/// A value written under a namespace named after a trait carries the name of that trait's member,
+/// and one name defines one value, so the two are reported. Both bodies are wrong for the other's
+/// type signature, so accepting either one silently would run a body against a signature it does
+/// not have.
+#[test]
+pub fn test_trait_member_and_value_of_the_traits_namespace_collide() {
+    let source = r##"
+    module Main;
+
+    trait c : Foo {
+        bar : c -> I64;
+    }
+
+    impl I64 : Foo {
+        bar = |x| x;
+    }
+
+    namespace Foo {
+        bar : I64 -> String;
+        bar = |_| "a value of the trait's namespace";
+    }
+
+    main : IO ();
+    main = println(Foo::bar(1).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Duplicated definition for global value: `Main::Foo::bar`",
+    );
+}
+
 #[test]
 pub fn test_import_unknown_module() {
     let source = r##"
