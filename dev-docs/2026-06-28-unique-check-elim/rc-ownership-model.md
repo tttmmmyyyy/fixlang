@@ -12,6 +12,9 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   スキップしない。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
+- 参照数を数える鍵 `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、
+  根の型の `rc_units` の要素である。切り詰めは下向きにしか効かないので、identity の path が unit root より
+  上で止まるとどの unit も指さない鍵ができる。`unit_of` の assertion がこれを検査する。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は根、その leaf は
   各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
   無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
@@ -60,8 +63,8 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   **boxed union の variant** は producer。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
   その下の leaf 群から決める（`origin_from_leaves_under`）。unbox union の構築
-  （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名で、payload が複数の unit にまたがる
-  ときはこちらだけが payload 自身の path を答えられる。
+  （`InlineLLVMMakeUnionBody`）もこの規則で解ける。whole-union path の下の leaf は、構築された variant
+  では payload の leaf、他の variant では ⊥ なので、答えは payload の unit 群になる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。
 
 ## 4. ステージごとの不変条件
