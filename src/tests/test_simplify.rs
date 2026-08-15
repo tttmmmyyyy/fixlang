@@ -1,8 +1,12 @@
-// Integration tests for the RC IR term simplifier, checked through the `--emit-rc-ir` dump.
+// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+// the simplified program computes.
+//
 // A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
 // is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
 // cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
-// `RangeIterator` two-scalar state and no union construction — the property these tests assert.
+// `RangeIterator` two-scalar state and no union construction — the property the integration tests
+// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
+// what each one computes.
 
 #[cfg(test)]
 mod integration_tests {
@@ -104,5 +108,48 @@ mod integration_tests {
             "the built executable did not run cleanly"
         );
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4950");
+    }
+}
+
+#[cfg(test)]
+mod value_tests {
+    use crate::{configuration::Configuration, tests::test_util::test_source};
+
+    /// Checks the values a nest of matches computes when every inner arm builds the same variant.
+    /// That is the shape case-of-case floats the outer match into, and the rewrite has to leave
+    /// every value as the source computes it.
+    #[test]
+    pub fn test_nested_matches_over_one_variant() {
+        let source = r#"
+            module Main;
+
+            f : I64 -> I64;
+            f = |n| (
+                match (if n % 5 == 0 { Option::some(n) } else { Option::some(n + 3) }) {
+                    some(v1) => (
+                        match (if v1 % 4 == 0 { Option::some(v1) } else { Option::some(v1 + 2) }) {
+                            some(v2) => (
+                                match (if v2 % 3 == 0 { Option::some(v2) } else { Option::some(v2 + 1) }) {
+                                    some(v3) => v3 * 3 + n,
+                                    none() => 0
+                                }
+                            ),
+                            none() => 0
+                        }
+                    ),
+                    none() => 0
+                }
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"nested matches over one variant",
+                    Iterator::range(0, 5).map(f).to_array, [0, 16, 26, 30, 31]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
     }
 }

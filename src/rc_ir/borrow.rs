@@ -584,8 +584,8 @@ impl<'a> RewriteCtx<'a> {
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
             // The value is owned only when every reference-counting unit the path covers is owned.
-            // Each covered path is clamped to its unit key, so a path that descends into a union
-            // variant keys to the union root the owned set records.
+            // Each covered path is truncated to its unit, so a path that descends into a union
+            // variant keys to the union root that `owned_units` records.
             Some(root_ty) => units_under(root_ty, path, self.type_env)
                 .iter()
                 .all(|unit| {

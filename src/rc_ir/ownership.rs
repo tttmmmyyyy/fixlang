@@ -683,7 +683,7 @@ pub(crate) fn acted_unit_keys(
 }
 
 /// The unit key of an object identity: the root it names, with its path truncated to the
-/// reference-counting unit that holds it. The path it answers with is one of that root's units.
+/// reference-counting unit that holds it. The returned path is always one of that root's units.
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
     let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.
@@ -698,9 +698,9 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
     };
     let truncated = truncate_to_unit(ty, path, type_env);
     // Truncation only descends, so an identity whose path stops above every unit root of its type
-    // comes out naming no unit at all. A key like that puts a retain in a bucket no release of the
-    // object can reach, which leaves the retain to be cancelled and the object freed while it is
-    // still held, so the key is checked here, where it is made.
+    // comes out naming no unit at all. A retain under such a key pairs with no release of the
+    // object, so cancellation drops it and the object is freed while it is still held. The check
+    // sits here, where every key is made.
     let units = rc_units(ty, type_env);
     assert!(
         units.contains(&truncated),
