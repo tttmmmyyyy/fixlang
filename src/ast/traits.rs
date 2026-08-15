@@ -944,17 +944,19 @@ impl TraitEnv {
                 //
                 // The Fixv condition in `Scheme::validate_constraints` asks that of every
                 // generalized variable, and it accepts a variable on the right-hand side of an
-                // equality — which is right for an ordinary value, whose caller determines the
-                // equality's left side too. A trait member has a second reader: an equality on an
-                // opaque type variable (`make : [?it : Iterator, Item ?it = c] I64 -> ?it`) is
-                // answered by whichever implementation is chosen, so it leaves a use site with
-                // nothing to choose by. Hence the stronger rule here: the trait's type variable
-                // has to stand in the member's type itself.
+                // equality. That is right for an ordinary value, whose caller determines the
+                // equality's left side too. For a trait member the left side can be an opaque type
+                // — `make : [?it : Iterator, Item ?it = c] I64 -> ?it` — which stands for whatever
+                // the chosen implementation returns, so a call reaches `c` only by pinning what the
+                // equality reads off that type rather than the type itself. Whether a set of
+                // constraints determines a variable is the question Haskell's coverage conditions
+                // answer for functional dependencies; Fix asks the simpler one, and reads the
+                // trait's type variable off the member's type alone.
                 if !member.qual_ty.ty_fixes_var(&trait_defn.type_var.name) {
                     errors.append(unfixed_type_variable_error(
                         &trait_defn.type_var.name,
-                        "in the type of the member, outside of any associated type application; \
-                         a constraint does not fix it",
+                        "in the type of the member, outside of any associated type application. \
+                         Fix does not read it off a constraint",
                         &member.decl_src.as_ref().map(|s| s.to_head_character()),
                     ));
                 }
