@@ -13240,3 +13240,85 @@ pub fn test_higher_kinded_instance_selected_by_annotation() {
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Verifies that a type alias declaring one type variable twice is reported at its own definition
+/// even where the alias is applied, since expanding an alias at its use runs before the check that
+/// rejects the definition.
+#[test]
+pub fn test_duplicated_type_var_in_used_type_alias() {
+    let source = r#"
+module Main;
+
+type Al a a = a;
+
+type S = unbox struct { x : Al I64 I64 };
+
+main : IO ();
+main = (
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type variable `a` is duplicated in the definition of type `Main::Al`.",
+    );
+}
+
+/// Verifies that the type an associated type is implemented for may be written as a type alias
+/// standing for the implementation's head: the two are compared after both have been expanded.
+#[test]
+pub fn test_assoc_type_impl_head_written_as_type_alias() {
+    let source = r#"
+module Main;
+
+trait a : Cont {
+    type Itm a;
+    get : a -> Itm a;
+}
+
+type T = unbox struct { x : I64 };
+type Al = T;
+
+impl T : Cont {
+    type Itm Al = I64;
+    get = |t| t.@x;
+}
+
+main : IO ();
+main = (
+    assert_eq(|_|"", T { x : 3 }.get, 3);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies the other direction: a trait implemented for a type written as a type alias, whose
+/// associated type line names the type the alias stands for.
+#[test]
+pub fn test_trait_impl_head_written_as_type_alias() {
+    let source = r#"
+module Main;
+
+trait a : Cont {
+    type Itm a;
+    get : a -> Itm a;
+}
+
+type T = unbox struct { x : I64 };
+type Al = T;
+
+impl Al : Cont {
+    type Itm T = I64;
+    get = |t| t.@x;
+}
+
+main : IO ();
+main = (
+    assert_eq(|_|"", T { x : 5 }.get, 5);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
