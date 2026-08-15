@@ -94,7 +94,7 @@ fn test_the_module_dependency_hash_covers_the_c_type_sizes() {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::C_TYPES_JSON_PATH;
+    use crate::constants::{C_TYPES_JSON_PATH, TYPE_CHECK_CACHE_PATH};
     use crate::tests::test_util::fix_command;
     use std::fs;
     use std::path::Path;
@@ -306,6 +306,53 @@ main = println $ 4294967296.c_int.i64.to_string;
             run(),
             "4294967296",
             "the run under a 64-bit C `int` was served a body checked against the 32-bit one"
+        );
+    }
+
+    /// A cache entry is filed under a hash of everything the value is checked from, so a build that
+    /// changed nothing finds every entry the build before it wrote. An input to that hash which
+    /// varies from one run to the next — a path carrying a random component, a clock reading, the
+    /// order a container is walked in — has each build file entries of its own and check the whole
+    /// program again, while every test of what a build produces still passes.
+    ///
+    /// The program uses a tuple, whose implementations the compiler generates into a source of its
+    /// own, and a value whose type the C type sizes decide, so the entries cover what the key reads
+    /// beyond the program's own source.
+    #[test]
+    fn a_second_build_of_an_unedited_program_finds_the_entries_of_the_first() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+main : IO ();
+main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
+"#,
+        )
+        .expect("Failed to write main.fix");
+        let cache_entries = || {
+            let mut names = fs::read_dir(dir.join(TYPE_CHECK_CACHE_PATH))
+                .expect("Failed to read the type-check cache directory")
+                .map(|entry| entry.expect("Failed to read a cache entry").file_name())
+                .collect::<Vec<_>>();
+            names.sort();
+            names
+        };
+
+        build(dir, "main.fix", &[]);
+        let after_the_first = cache_entries();
+        assert!(
+            !after_the_first.is_empty(),
+            "the first build fills the type-check cache"
+        );
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(
+            after_the_first,
+            cache_entries(),
+            "the second build filed entries of its own, so the hash naming what a value is checked \
+             from does not name the same thing twice"
         );
     }
 

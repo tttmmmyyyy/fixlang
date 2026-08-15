@@ -442,7 +442,44 @@ mod tests {
     use super::{
         char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread, split_by_max_size,
         split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+        HashSource,
     };
+
+    /// A hash source tells apart what was appended to it: two values cannot be read as one, and one
+    /// cannot be read as two, whatever the values are. Everything keyed by a hash source — the
+    /// object files of a build, the type-check result of a value — leans on this.
+    #[test]
+    fn test_a_hash_source_separates_the_values_appended_to_it() {
+        let source_of = |append: fn(&mut HashSource)| {
+            let mut hash_source = HashSource::default();
+            append(&mut hash_source);
+            hash_source.finish()
+        };
+
+        assert_ne!(
+            source_of(|source| {
+                source.push_text("xy");
+                source.push_text("z");
+            }),
+            source_of(|source| {
+                source.push_text("x");
+                source.push_text("yz");
+            }),
+            "two texts appended one after the other are the pair of them, not the text they \
+             concatenate to"
+        );
+        assert_ne!(
+            source_of(|source| {
+                source.push_list(&["a".to_string(), "b".to_string()]);
+                source.push_list(&[]);
+            }),
+            source_of(|source| {
+                source.push_list(&["a".to_string()]);
+                source.push_list(&["b".to_string()]);
+            }),
+            "an item belongs to the list it was appended with"
+        );
+    }
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicUsize, Ordering};
