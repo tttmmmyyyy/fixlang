@@ -988,13 +988,15 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
 
-#### Name a thing the way the code names it — [Rust + Markdown]
+#### Name a thing the way the reader's own code names it — [Rust + Markdown]
 
-An identifier the code carries — a type, a field, a function, a variant — is vocabulary the reader already shares with the text, and it is a word they can search for. Write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the reader's way back to the code, and a paraphrase translated into another language cuts it twice.
+An identifier the reader's code carries is vocabulary they already share with the text, and a word they can search for. In a Rust comment that is the compiler's: write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the way back to the code, and a translated paraphrase cuts it twice.
 
-Where the code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+**Which code that is follows from who reads the text.** A Fix programmer reading the manual or `CHANGELOG.md` shares Fix's names — `FFI_EXPORT`, `I8`, `Std::Array::get_size` — and shares nothing with the compiler's source, so a compiler identifier there names something they cannot reach. Say what they can see instead. (`Write changelog entries for the user` says the same of the changelog, from the other side.)
 
-**Rewrite**: put the identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
+Where the reader's code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+
+**Rewrite**: put the reader's identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
 
 #### Reference by name, not by line or section number — [Rust + Markdown]
 
