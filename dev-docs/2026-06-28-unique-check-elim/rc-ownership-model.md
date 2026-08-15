@@ -59,7 +59,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
   **boxed union の variant** は producer。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
-  その下の leaf 群から決める（§1 の `origin_from_leaves_under`）。unbox union の構築
+  その下の leaf 群から決める（`origin_from_leaves_under`）。unbox union の構築
   （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名で、payload が複数の unit にまたがる
   ときはこちらだけが payload 自身の path を答えられる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。
