@@ -603,7 +603,8 @@ pub struct ModuleInfo {
     /// The `module` declaration the module is defined by.
     pub source: Span,
     /// The sources that extend the module beyond the one it is declared in, in the order they were
-    /// linked.
+    /// linked. Shared, so that cloning a module — which `TypeCheckContext` does for every
+    /// speculative check — copies none of them.
     ///
     /// A source reaches this list by being linked with `Program::link`'s `extend` set, which is how
     /// the compiler adds the definitions it writes itself to `Std`: the trait implementations for
@@ -611,7 +612,7 @@ pub struct ModuleInfo {
     /// between numeric types (`make_numeric_cast_traits_mod`). `module_dependency_hash` folds them
     /// beside the module's own source, because a value defined in one of them is as much a function
     /// of that source as a value defined in the file the module is declared in.
-    pub extending_sources: Vec<SourceFile>,
+    pub extending_sources: Arc<Vec<SourceFile>>,
 }
 
 // Program of fix a collection of modules.
@@ -2745,12 +2746,13 @@ impl Program {
             if let Some(defined_at) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
-                    // If extending mode, this is not a problem: the module is made of the source it
-                    // is declared in and of this one from here on, and `module_dependency_hash`
-                    // reads both.
-                    let extending_sources = &mut self.modules[defined_at].extending_sources;
-                    extending_sources.push(mod_info.source.input.clone());
-                    extending_sources.extend(mod_info.extending_sources.iter().cloned());
+                    // If extending mode, this is not a problem: every source the module here is
+                    // made of joins the ones the module is made of already, and
+                    // `module_dependency_hash` reads them all.
+                    let joining = std::iter::once(&mod_info.source.input)
+                        .chain(mod_info.extending_sources.iter());
+                    Arc::make_mut(&mut self.modules[defined_at].extending_sources)
+                        .extend(joining.cloned());
                     continue;
                 }
                 let other_file = self.modules[defined_at].source.input.file_path.clone();
@@ -2911,7 +2913,7 @@ impl Program {
         for mod_name in &dependent_module_names {
             let mod_info = self.find_mod(mod_name).unwrap();
             let mut source_hashes = vec![mod_info.source.input.hash()?];
-            for source in &mod_info.extending_sources {
+            for source in mod_info.extending_sources.iter() {
                 source_hashes.push(source.hash()?);
             }
             push_list_hash(&mut hash_source, &source_hashes);
