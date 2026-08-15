@@ -85,6 +85,24 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values
 }
 
+/// Appends a hash of `text` to `hash_source`, a hash source that concatenates several values.
+///
+/// The hash has the same length whatever the text is, so the value cannot run into the one appended
+/// next and `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
+pub fn push_text_hash(hash_source: &mut String, text: &str) {
+    hash_source.push_str(&format!("{:x}", md5::compute(text)));
+}
+
+/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
+///
+/// The count comes first so that a list's items cannot be read as the next list's.
+pub fn push_list_hash(hash_source: &mut String, items: &[String]) {
+    hash_source.push_str(&items.len().to_string());
+    for item in items {
+        push_text_hash(hash_source, item);
+    }
+}
+
 /// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
 /// of the source's content — inserted before the `.fix` extension, so that two sources of the same
 /// name and different content are saved side by side.

@@ -1366,6 +1366,7 @@ fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     ModuleInfo {
         name: mod_name,
         source: span,
+        extending_sources: vec![],
     }
 }
 

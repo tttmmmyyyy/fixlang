@@ -255,7 +255,7 @@ pub fn build_object_files<'c>(
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
     {
-        let module_dependency_hash = program.module_dependency_hash_map();
+        let module_dependency_hash = program.module_dependency_hash_map(&config);
         let module_dependency_map = program.module_dependency_map();
         let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
         if config.enable_separated_compilation() {

@@ -34,10 +34,10 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
-    to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, join_compiler_threads, push_list_hash, push_text_hash,
+    spawn_compiler_thread, to_absolute_path, Map, Set,
 };
-use crate::parse::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use serde::{Deserialize, Serialize};
@@ -595,13 +595,23 @@ impl TraitMemberImpl {
     }
 }
 
-// Module information.
+/// A module of the program, and the sources it is made of.
 #[derive(Clone)]
 pub struct ModuleInfo {
-    // Module name.
+    /// The name of the module.
     pub name: Name,
-    // Source code location where this module is defined.
+    /// The `module` declaration the module is defined by.
     pub source: Span,
+    /// The sources that extend the module beyond the one it is declared in, in the order they were
+    /// linked.
+    ///
+    /// A source reaches this list by being linked with `Program::link`'s `extend` set, which is how
+    /// the compiler adds the definitions it writes itself to `Std`: the trait implementations for
+    /// the tuple sizes the program uses (`make_tuple_traits_mod`) and the traits that convert
+    /// between numeric types (`make_numeric_cast_traits_mod`). `module_dependency_hash` folds them
+    /// beside the module's own source, because a value defined in one of them is as much a function
+    /// of that source as a value defined in the file the module is declared in.
+    pub extending_sources: Vec<SourceFile>,
 }
 
 // Program of fix a collection of modules.
@@ -1211,7 +1221,7 @@ impl Program {
     ///   `program.create_name_resolution_context(define_module)`.
     /// * `ver_hash` — hash of the source code `te` depends on, used
     ///   to detect or invalidate the cache file. Pass one created by
-    ///   `program.module_dependency_hash(define_module)`.
+    ///   `program.module_dependency_hash(define_module, config)`.
     ///
     /// # Returns
     /// * `Ok((te, errors))` — namespace resolution and substitution
@@ -1298,6 +1308,7 @@ impl Program {
         tc: &TypeCheckContext,
         modules: &[Name],
         target_symbols: Option<&[FullName]>,
+        config: &Configuration,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1334,6 +1345,7 @@ impl Program {
             tc,
             &names_to_check,
             method_impl_filter,
+            config,
         ));
 
         // The concrete types of opaque types are known only once the values are checked, and a
@@ -1354,6 +1366,7 @@ impl Program {
         tc: &TypeCheckContext,
         val_names: &[FullName],
         method_impl_filter: impl Fn(&TraitMemberImpl) -> Result<bool, Errors>,
+        config: &Configuration,
     ) -> Result<(), Errors> {
         let nrenv = self.create_name_resolution_env();
 
@@ -1392,7 +1405,7 @@ impl Program {
                     let val_name_clone = val_name.clone(); // For move into closure.
                     let def_mod = self.find_mod(&val_name.module()).unwrap().clone();
                     let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                    let ver_hash = self.module_dependency_hash(&def_mod.name)?;
+                    let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                         // Perform type-checking.
@@ -1436,7 +1449,7 @@ impl Program {
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                        let ver_hash = self.module_dependency_hash(&def_mod.name)?;
+                        let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
@@ -2729,13 +2742,18 @@ impl Program {
         // Also, check if there is a module defined in multiple files.
         for mod_info in &other.modules {
             let file = mod_info.source.input.file_path.clone();
-            if let Some(other_mod) = self.modules.iter().find(|mi| mi.name == mod_info.name) {
+            if let Some(defined_at) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
-                    // If extending mode, this is not a problem.
+                    // If extending mode, this is not a problem: the module is made of the source it
+                    // is declared in and of this one from here on, and `module_dependency_hash`
+                    // reads both.
+                    let extending_sources = &mut self.modules[defined_at].extending_sources;
+                    extending_sources.push(mod_info.source.input.clone());
+                    extending_sources.extend(mod_info.extending_sources.iter().cloned());
                     continue;
                 }
-                let other_file = other_mod.source.input.file_path.clone();
+                let other_file = self.modules[defined_at].source.input.file_path.clone();
                 if to_absolute_path(&other_file)? == to_absolute_path(&file)? {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
@@ -2860,35 +2878,58 @@ impl Program {
         dependency
     }
 
-    // Calculate a hash value of a module, affected by the source codes of all dependent modules and
-    // by the compiler build. It keys the type-checking cache (both the batch compiler and the LSP), so
-    // the compiler build must be included: a cached typed expression is serialized in a format the
-    // compiler defines, and a differently-built compiler may define it differently — reading such a
-    // cache back would misinterpret it. `build_time_utc!()` changes with every compiler build.
-    pub fn module_dependency_hash(&self, module: &Name) -> Result<String, Errors> {
+    /// A hash naming everything a value defined in `module` is type-checked from.
+    ///
+    /// It keys the type-checking cache, of the batch compiler and of the LSP alike, so it covers
+    /// every input that decides what the check produces:
+    ///
+    /// - **Every source each module `module` depends on is made of.** A module is made of the file
+    ///   it is declared in, and of the sources linked to extend it — the definitions the compiler
+    ///   writes itself, which vary with the program (see `ModuleInfo::extending_sources`).
+    /// - **The sizes of the C types**, which decide the types the parser gives to the signatures in
+    ///   `FFI_CALL` expressions, and which the compiler builds the trait implementations converting
+    ///   between numeric types from. Those implementations are built as data rather than emitted as
+    ///   source, so no source of `Std` moves when a size changes.
+    /// - **The build of the compiler.** A cached typed expression is serialized in a format the
+    ///   compiler defines, and a differently-built compiler may define it differently — reading such
+    ///   a cache back would misinterpret it. `build_time_utc!()` changes with every compiler build.
+    ///
+    /// Every value goes in through `push_text_hash` or `push_list_hash`, which give it a length of
+    /// its own, so where one value ends and the next begins never depends on what the values are.
+    pub fn module_dependency_hash(
+        &self,
+        module: &Name,
+        config: &Configuration,
+    ) -> Result<String, Errors> {
         let mut dependent_module_names = self
             .dependent_modules(module)
             .iter()
             .cloned()
             .collect::<Vec<_>>();
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
-        let mut concatenated_source_hashes = String::default();
+        let mut hash_source = String::default();
         for mod_name in &dependent_module_names {
-            concatenated_source_hashes += &self.find_mod(mod_name).unwrap().source.input.hash()?;
+            let mod_info = self.find_mod(mod_name).unwrap();
+            let mut source_hashes = vec![mod_info.source.input.hash()?];
+            for source in &mod_info.extending_sources {
+                source_hashes.push(source.hash()?);
+            }
+            push_list_hash(&mut hash_source, &source_hashes);
         }
-        concatenated_source_hashes += build_time::build_time_utc!();
-        Ok(format!("{:x}", md5::compute(concatenated_source_hashes)))
+        push_text_hash(&mut hash_source, &config.c_type_sizes.to_string());
+        push_text_hash(&mut hash_source, build_time::build_time_utc!());
+        Ok(format!("{:x}", md5::compute(hash_source)))
     }
 
     // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.
-    pub fn module_dependency_hash_map(&self) -> Map<Name, String> {
+    pub fn module_dependency_hash_map(&self, config: &Configuration) -> Map<Name, String> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();
         let mut mod_to_hash = Map::default();
         for module in &mods {
             mod_to_hash.insert(
                 module.clone(),
-                panic_if_err(self.module_dependency_hash(&module)),
+                panic_if_err(self.module_dependency_hash(&module, config)),
             );
         }
         mod_to_hash

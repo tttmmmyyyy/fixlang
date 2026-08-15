@@ -11,7 +11,8 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+    platform_thread_sanitizer_supported, platform_valgrind_supported, push_list_hash,
+    push_text_hash, warn_msg, Finally, Map,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -45,24 +46,6 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there
 /// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
-
-/// Appends a hash of `text` to `hash_source`, a hash source that concatenates several values.
-///
-/// The hash has the same length whatever the text is, so the value cannot run into the one appended
-/// next and `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
-fn push_text_hash(hash_source: &mut String, text: &str) {
-    hash_source.push_str(&format!("{:x}", md5::compute(text)));
-}
-
-/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
-///
-/// The count comes first so that a list's items cannot be read as the next list's.
-fn push_list_hash(hash_source: &mut String, items: &[String]) {
-    hash_source.push_str(&items.len().to_string());
-    for item in items {
-        push_text_hash(hash_source, item);
-    }
-}
 
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
@@ -363,6 +346,10 @@ pub struct DocsConfig {
 ///
 /// A field whose value changes the generated code has to be added to `object_generation_hash`,
 /// which decides when a cached object file may be reused.
+///
+/// A field whose value changes what the elaborated program is — the definitions the compiler
+/// supplies itself, or the types the parser gives to what it reads — has to be added to
+/// `Program::module_dependency_hash`, which decides when a cached type-check result may be reused.
 #[derive(Clone)]
 pub struct Configuration {
     /// Every source file the program is compiled from, the root project's own files and those of
@@ -1104,7 +1091,8 @@ impl CTypeSizes {
         ]
     }
 
-    fn to_string(&self) -> String {
+    /// The size of each C type, named and written out. Both caches of the compiler are keyed by it.
+    pub fn to_string(&self) -> String {
         vec![
             format!("char: {}", self.char),
             format!("short: {}", self.short),
