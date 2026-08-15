@@ -877,10 +877,13 @@ impl Configuration {
     /// The fields are listed by hand, so every field of `Configuration` that changes the generated
     /// code has to be hashed here: one left out makes a build reuse the object files of a build that
     /// generated different code.
+    ///
+    /// Every value goes in through `push_text_hash` or `push_list_hash`, which give it a length of
+    /// its own, so where one value ends and the next begins never depends on what the values are.
     pub fn object_generation_hash(&self) -> String {
         let mut hash_source = String::new();
-        hash_source.push_str(&self.fix_opt_level.to_string());
-        hash_source.push_str(&self.debug_info.to_string());
+        push_text_hash(&mut hash_source, &self.fix_opt_level.to_string());
+        push_text_hash(&mut hash_source, &self.debug_info.to_string());
         // `Generator::create_debug_info` writes the compilation directory into the debug
         // information, which is the one way it reaches the generated code, so a build without debug
         // information takes objects generated in another directory. A second reader of the field
@@ -891,21 +894,21 @@ impl Configuration {
                 &self.compilation_directory.to_string_lossy(),
             );
         }
-        hash_source.push_str(&self.threaded.to_string());
+        push_text_hash(&mut hash_source, &self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
-        hash_source.push_str(&self.sanitizer.to_string());
-        hash_source.push_str(&self.backtrace.to_string());
-        hash_source.push_str(&self.no_runtime_check.to_string());
-        hash_source.push_str(&self.skip_eval.to_string());
-        hash_source.push_str(&self.c_type_sizes.to_string());
-        hash_source.push_str(&self.max_split_scalars.to_string());
+        push_text_hash(&mut hash_source, &self.sanitizer.to_string());
+        push_text_hash(&mut hash_source, &self.backtrace.to_string());
+        push_text_hash(&mut hash_source, &self.no_runtime_check.to_string());
+        push_text_hash(&mut hash_source, &self.skip_eval.to_string());
+        push_text_hash(&mut hash_source, &self.c_type_sizes.to_string());
+        push_text_hash(&mut hash_source, &self.max_split_scalars.to_string());
         // The kind of the output file reaches the code in two ways: a dynamic library is generated
         // with position-independent relocations (`get_target_machine`), and an executable is the
         // only kind that carries the entry point (`elaborate_via_config`). An object built for one
         // kind therefore fails to link into the other.
-        hash_source.push_str(self.output_file_type.to_str());
+        push_text_hash(&mut hash_source, self.output_file_type.to_str());
         push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
@@ -916,10 +919,10 @@ impl Configuration {
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        hash_source.push_str(self.subcommand.command_type_string());
+        push_text_hash(&mut hash_source, self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        hash_source.push_str(build_time_utc!());
+        push_text_hash(&mut hash_source, build_time_utc!());
 
         format!("{:x}", md5::compute(hash_source))
     }
