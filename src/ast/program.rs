@@ -620,6 +620,13 @@ impl ModuleInfo {
     pub fn sources(&self) -> impl Iterator<Item = &SourceFile> {
         std::iter::once(&self.source.input).chain(self.extending_sources.iter())
     }
+
+    /// A hash of each source the module is made of, in the order `sources` gives them. A hash naming
+    /// what a module is made of is a list of these, so that a source belongs to the module it
+    /// extends.
+    pub fn source_hashes(&self) -> Result<Vec<String>, Errors> {
+        collect_results(self.sources().map(|source| source.hash()))
+    }
 }
 
 // Program of fix a collection of modules.
@@ -2914,9 +2921,7 @@ impl Program {
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
         let mut hash_source = HashSource::default();
         for mod_name in &dependent_module_names {
-            let mod_info = self.find_mod(mod_name).unwrap();
-            let source_hashes = collect_results(mod_info.sources().map(|source| source.hash()))?;
-            hash_source.push_list(&source_hashes);
+            hash_source.push_list(&self.find_mod(mod_name).unwrap().source_hashes()?);
         }
         hash_source.push_text(&config.elaboration_hash());
         hash_source.push_text(build_time::build_time_utc!());

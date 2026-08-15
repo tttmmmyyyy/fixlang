@@ -16,8 +16,7 @@ use crate::{
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
     misc::{
-        collect_results, info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg,
-        HashSource, Map, Set,
+        info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, HashSource, Map, Set,
     },
     optimization::optimization,
     rc_ir::{
@@ -479,8 +478,7 @@ fn build_object_files_cache_hash(
     let mut hash_source = HashSource::default();
     hash_source.push_text(&config.object_generation_hash());
     for mi in &program.modules {
-        let source_hashes = collect_results(mi.sources().map(|source| source.hash()))?;
-        hash_source.push_list(&source_hashes);
+        hash_source.push_list(&mi.source_hashes()?);
     }
     Ok(hash_source.finish())
 }

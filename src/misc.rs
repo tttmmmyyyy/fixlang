@@ -102,7 +102,7 @@ impl HashSource {
 
     /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's.
     pub fn push_list(&mut self, items: &[String]) {
-        self.0.push_str(&items.len().to_string());
+        self.push_text(&items.len().to_string());
         for item in items {
             self.push_text(item);
         }
@@ -445,6 +445,13 @@ mod tests {
         HashSource,
     };
 
+    use crate::error::any_to_string;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::thread::{self, JoinHandle};
+    use std::time::Duration;
+
     /// A hash source tells apart what was appended to it: two values cannot be read as one, and one
     /// cannot be read as two, whatever the values are. Everything keyed by a hash source — the
     /// object files of a build, the type-check result of a value — leans on this.
@@ -480,12 +487,6 @@ mod tests {
             "an item belongs to the list it was appended with"
         );
     }
-    use crate::error::any_to_string;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::thread::{self, JoinHandle};
-    use std::time::Duration;
 
     /// Every thread has finished by the time a worker's panic is carried on, so unwinding never
     /// tears down state that a thread still running is working on.

@@ -94,6 +94,7 @@ fn test_the_module_dependency_hash_covers_the_c_type_sizes() {
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::configuration::CTypeSizes;
     use crate::constants::{C_TYPES_JSON_PATH, TYPE_CHECK_CACHE_PATH};
     use crate::tests::test_util::fix_command;
     use std::fs;
@@ -294,9 +295,12 @@ main = println $ 4294967296.c_int.i64.to_string;
         };
         let set_c_int_size = |bits: usize| {
             let path = dir.join(C_TYPES_JSON_PATH);
-            let sizes = fs::read_to_string(&path).expect("Failed to read the C type sizes");
-            let sizes = sizes.replace("\"int\": 32", &format!("\"int\": {}", bits));
-            fs::write(&path, sizes).expect("Failed to write the C type sizes");
+            let file = fs::File::open(&path).expect("Failed to open the C type sizes");
+            let mut sizes: CTypeSizes =
+                serde_json::from_reader(file).expect("Failed to read the C type sizes");
+            sizes.int = bits;
+            let file = fs::File::create(&path).expect("Failed to create the C type sizes");
+            serde_json::to_writer_pretty(file, &sizes).expect("Failed to write the C type sizes");
         };
 
         assert_eq!(run(), "0", "a 32-bit C `int` holds none of 2^32");
