@@ -99,7 +99,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
         RcExpr::Let(x, rhs, k) => {
-            let def = match rhs {
+            let binding = match rhs {
                 RcRhs::Var(y) => Binding::Move(y.clone()),
                 RcRhs::Llvm(llvm_gen, args) => {
                     Binding::Llvm(llvm_gen.clone(), args.clone(), x.ty.clone())
@@ -124,7 +124,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                     Binding::Join(arm_results)
                 }
             };
-            vars.bindings.insert(x.name.clone(), def);
+            vars.bindings.insert(x.name.clone(), binding);
             vars.var_tys.insert(x.name.clone(), x.ty.clone());
             collect_bindings(k, vars);
         }
@@ -252,23 +252,12 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // The arms bind their values to one variable, so a path into it is a path into each of
             // them. Arms that all reach the same object leave the value exact.
             let mut candidates = Set::default();
-            for r in arm_results {
-                for p in origin(vars, type_env, &r.name, path).candidates() {
+            for arm_result in arm_results {
+                for p in origin(vars, type_env, &arm_result.name, path).candidates() {
                     candidates.insert(p.clone());
                 }
             }
-            match candidates.len() {
-                1 => Origin::Exactly(
-                    candidates
-                        .into_iter()
-                        .next()
-                        .expect("a one-element set has an element"),
-                ),
-                _ => Origin::Join {
-                    identity: (var.clone(), path.to_vec()),
-                    candidates,
-                },
-            }
+            Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))
         }
         Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
             // Constructing an unboxed union lays its payload in place, so the whole union's root is
@@ -399,9 +388,13 @@ fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
     }
-    match sources.iter().next() {
-        Some(LeafOrigin::Arg(j, p)) => Some((*j, p.clone())),
-        _ => None,
+    match sources
+        .iter()
+        .next()
+        .expect("a one-element set has an element")
+    {
+        LeafOrigin::Arg(j, p) => Some((*j, p.clone())),
+        LeafOrigin::Fresh | LeafOrigin::Unknown => None,
     }
 }
 
@@ -466,11 +459,11 @@ pub(crate) fn destructure_consumes(
     fields: &[(usize, RcVar)],
     type_env: &TypeEnv,
 ) -> Vec<FieldPath> {
-    let leaves = boxed_leaves(&container.ty, type_env);
+    let leaves = boxed_leaf_paths(&container.ty, type_env);
     if container.ty.is_box(type_env) {
         return leaves;
     }
-    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
+    let named_fields: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
     leaves
         .into_iter()
         .filter(|leaf| {
@@ -478,7 +471,7 @@ pub(crate) fn destructure_consumes(
             let field = leaf
                 .first()
                 .expect("a boxed leaf of an unboxed container has a non-empty path");
-            !named.contains(field)
+            !named_fields.contains(field)
         })
         .collect()
 }
@@ -510,14 +503,14 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
             // callee owns every position.
             let callee_params = resolve_callee_params(callee, vars, prog);
             for (i, a) in args.iter().enumerate() {
-                for leaf in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
-                    let owns_pos = match &callee_params {
+                    let is_owning_position = match &callee_params {
                         Some(params) => owns(&params[i], &leaf),
                         None => true,
                     };
-                    if owns_pos {
+                    if is_owning_position {
                         out.push((a.name.clone(), leaf));
                     }
                 }
@@ -530,7 +523,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
-                for leaf in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // An argument leaf that the op passes through to its result is not consumed;
                     // anything else at an owning position is moved into the op.
                     if !passthrough.contains(&(i, leaf.clone())) {
@@ -595,22 +588,16 @@ fn push_boxed_leaves(
     type_env: &TypeEnv,
     out: &mut Vec<VarPath>,
 ) {
-    for p in boxed_leaves(ty, type_env) {
+    for p in boxed_leaf_paths(ty, type_env) {
         out.push((var.clone(), p));
     }
-}
-
-/// The paths of every boxed leaf of a type: the whole value if boxed, the capture of a closure, or
-/// each boxed leaf of an unboxed aggregate.
-pub(crate) fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
-    boxed_leaf_paths(ty, type_env)
 }
 
 // --- reference-counting units ---
 
 /// The reference-counting units of a value's type: the capture of a closure, or each unit root
 /// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
-/// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
+/// its unboxed structs/tuples. Unlike `boxed_leaf_paths`, it stops at a unit root rather than expanding it
 /// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
 /// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
@@ -797,7 +784,7 @@ mod tests {
     use crate::fixstd::builtin::make_i64_ty;
     use crate::misc::Set;
     use crate::rc_ir::ast::{RcVar, VarPath};
-    use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+    use crate::rc_ir::provenance::{sole_origin, LeafOrigin};
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
@@ -808,8 +795,8 @@ mod tests {
     /// the argument's index and path.
     #[test]
     fn a_lone_arg_is_a_projection() {
-        let ls = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
-        assert_eq!(as_arg_projection(&ls), Some((1, vec![0])));
+        let leaf_srcs = sole_origin(LeafOrigin::Arg(1, vec![0]));
+        assert_eq!(as_arg_projection(&leaf_srcs), Some((1, vec![0])));
     }
 
     /// A result leaf that is the argument on one path and a new value on another aliases neither:
@@ -817,30 +804,24 @@ mod tests {
     /// projection would drop the consume without the alias, releasing one object twice.
     #[test]
     fn an_arg_joined_with_another_source_is_not_a_projection() {
-        let ls = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
-        assert_eq!(as_arg_projection(&ls), None);
+        let leaf_srcs = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_srcs), None);
     }
 
     /// A result leaf that may come from either of two arguments aliases neither: a projection names
     /// one argument, and here the choice would fall to whichever of the two the set yields first.
     #[test]
     fn one_of_two_args_is_not_a_projection() {
-        let ls = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
-        assert_eq!(as_arg_projection(&ls), None);
+        let leaf_srcs = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_srcs), None);
     }
 
     /// A leaf the op itself produced — a fresh object, or one of unknown origin — aliases no
     /// argument.
     #[test]
     fn a_produced_leaf_is_not_a_projection() {
-        assert_eq!(
-            as_arg_projection(&Provenance::leaf(LeafOrigin::Fresh)),
-            None
-        );
-        assert_eq!(
-            as_arg_projection(&Provenance::leaf(LeafOrigin::Unknown)),
-            None
-        );
+        assert_eq!(as_arg_projection(&sole_origin(LeafOrigin::Fresh)), None);
+        assert_eq!(as_arg_projection(&sole_origin(LeafOrigin::Unknown)), None);
     }
 
     /// A leaf with no source at all — the result of `_undefined_internal`, which aborts — aliases no
@@ -864,9 +845,9 @@ mod tests {
     /// A table of the given bindings, with every named variable also a known local.
     fn table(bindings: Vec<(&str, Binding)>) -> VarTable {
         let mut vars = VarTable::empty();
-        for (name, b) in bindings {
+        for (name, binding) in bindings {
             let v = var(name);
-            vars.bindings.insert(v.name.clone(), b);
+            vars.bindings.insert(v.name.clone(), binding);
             vars.var_tys.insert(v.name, v.ty);
         }
         vars
