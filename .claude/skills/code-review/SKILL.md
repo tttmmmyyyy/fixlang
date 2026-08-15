@@ -988,15 +988,13 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
 
-#### Don't coin a term for one document — [Rust + Markdown]
+#### Name a thing the way the code names it — [Rust + Markdown]
 
-A word invented to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has no definition to go to. In a document that is translated, it survives as a word that means nothing in the other language either.
+An identifier the code carries — a type, a field, a function, a variant — is vocabulary the reader already shares with the text, and it is a word they can search for. Write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the reader's way back to the code, and a paraphrase translated into another language cuts it twice.
 
-The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+Where the code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
 
-**Keep** a term the code itself names — a type, a field, a variant — since the reader can go and read what it is.
-
-**Rewrite**: replace the coined word with what it stands for.
+**Rewrite**: put the identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
 
 #### Reference by name, not by line or section number — [Rust + Markdown]
 
