@@ -1,9 +1,14 @@
 // Reference counting around unions that the RC IR rewrites: an operand a rewrite substitutes and
-// then nobody reads, and an unboxed union nested inside unboxed aggregates.
+// then nobody reads, an unboxed union nested inside unboxed aggregates, and a union built out of a
+// payload whose root is not one reference-counting unit.
 
 #[cfg(test)]
 mod union_rc_shapes_tests {
-    use crate::{configuration::Configuration, tests::test_util::test_source};
+    use crate::{
+        configuration::{Configuration, ValgrindTool},
+        misc::{function_name, platform_valgrind_supported},
+        tests::test_util::test_source,
+    };
 
     #[test]
     pub fn test_discarded_operand_released_once() {
@@ -126,5 +131,79 @@ mod union_rc_shapes_tests {
             );
         "#;
         test_source(&source, Configuration::develop_mode());
+    }
+
+    // An unboxed union is one reference-counting unit, kept at its root, and building one lays the
+    // payload it is given in place. Where that payload's own root is not a single unit — a pair of
+    // boxed values, or an unboxed struct whose one boxed field sits a level down — the union's root
+    // and the payload's units are different objects, and the count of each has to be kept where its
+    // own object is. The union below is built out of both shapes, each beside the payload it was
+    // built from, so that a reference of the payload lives on after the union is made and is read
+    // through both names.
+    const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
+module Main;
+
+// A boxed value a payload carries, so that the payload holds a reference count.
+type Guard = box struct { allowed : Array I64 };
+
+// A payload whose reference-counting unit lies below its root.
+type One = unbox struct { only : Guard };
+
+// The `pair` payload holds two units, the `one` payload holds a unit below its root, and `mark`
+// holds none.
+type Action = unbox union { pair : (Array I64, Array I64), one : One, mark : I64 };
+
+// Builds the union out of a pair that stays live beside it, then reads both back.
+via_pair : (Array I64, Array I64) -> I64;
+via_pair = |both| (
+    let action = Action::pair(both);
+    let tagged = if action.is_pair { 1 } else { 0 };
+    let (first, second) = both;
+    tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+);
+
+// The same for a payload whose unit lies below its root.
+via_one : Guard -> I64;
+via_one = |guard| (
+    let action = Action::one(One { only : guard });
+    let tagged = if action.is_one { 1 } else { 0 };
+    tagged + guard.@allowed.@size * 10 + guard.@allowed.@(0)
+);
+
+main : IO ();
+main = (
+    assert_eq(
+        |_|"the pair is read back as it was built",
+        via_pair((Array::fill(3, 7), Array::fill(4, 9))), 717
+    );;
+    assert_eq(
+        |_|"the boxed value is read back as it was built",
+        via_one(Guard { allowed : [5, 6] }), 26
+    );;
+    pure()
+);
+"#;
+
+    /// Both payloads are read back as they were built, which a payload freed while the union still
+    /// holds it fails without Valgrind.
+    #[test]
+    pub fn test_union_payload_units_correctness() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(UNION_PAYLOAD_UNITS_SOURCE, config);
+    }
+
+    /// The boxed values the payloads carry are freed exactly once and none of them leaks, checked
+    /// under Valgrind MemCheck.
+    #[test]
+    pub fn test_union_payload_units_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(UNION_PAYLOAD_UNITS_SOURCE, Configuration::develop_mode());
     }
 }

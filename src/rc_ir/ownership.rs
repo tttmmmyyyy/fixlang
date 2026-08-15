@@ -18,7 +18,6 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::CLOSURE_CAPTURE_IDX;
-use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar, VarPath,
@@ -260,17 +259,6 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))
         }
         Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
-            // Constructing an unboxed union lays its payload in place, so the whole union's root is
-            // the payload's root — the construction alias edge, dual to reading a payload out with
-            // `match`. The whole-union path is where this matters: a leaf path descends into the
-            // active variant, which the projection rule below already aliases through `result_prov`.
-            if path.is_empty()
-                && !args.is_empty()
-                && llvm_gen.as_any().is::<InlineLLVMMakeUnionBody>()
-                && !result_ty.is_box(type_env)
-            {
-                return origin(vars, type_env, &args[0].name, &[]);
-            }
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
@@ -695,7 +683,7 @@ pub(crate) fn acted_unit_keys(
 }
 
 /// The unit key of an object identity: the root it names, with its path truncated to the
-/// reference-counting unit that holds it.
+/// reference-counting unit that holds it. The path it answers with is one of that root's units.
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
     let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.
@@ -708,7 +696,22 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
         );
         return (root.clone(), path.clone());
     };
-    (root.clone(), truncate_to_unit(ty, path, type_env))
+    let truncated = truncate_to_unit(ty, path, type_env);
+    // Truncation only descends, so an identity whose path stops above every unit root of its type
+    // comes out naming no unit at all. A key like that puts a retain in a bucket no release of the
+    // object can reach, which leaves the retain to be cancelled and the object freed while it is
+    // still held, so it is caught here, where the key is made, rather than where a program built
+    // with it goes wrong.
+    let units = rc_units(ty, type_env);
+    assert!(
+        units.contains(&truncated),
+        "the key `{}{:?}` names no reference-counting unit of `{}`, whose units are {:?}",
+        root.to_string(),
+        truncated,
+        ty.to_string(),
+        units,
+    );
+    (root.clone(), truncated)
 }
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
