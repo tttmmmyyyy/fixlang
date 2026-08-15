@@ -1759,7 +1759,10 @@ impl Program {
         Ok((expr, eft))
     }
 
-    // Instantiate expression.
+    /// `expr` with every reference to a global value replaced by a reference to the symbol that
+    /// value is instantiated at for the type the reference has, queueing each such instantiation.
+    /// An expression whose type still holds a type variable is reported as one whose type cannot be
+    /// inferred.
     fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
@@ -1896,7 +1899,8 @@ impl Program {
         Ok(name)
     }
 
-    // Create symbols of trait members from TraitEnv.
+    /// Enters each trait method into the global values, under the name of the trait's namespace and
+    /// carrying the implementation every instance of the trait gives it.
     pub fn create_trait_member_symbols(&mut self) {
         for (trait_id, trait_) in &self.trait_env.traits {
             for member in &trait_.members {

@@ -6,16 +6,31 @@ use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
 use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::AddressSpace;
 
+/// The runtime function that ends the program where a check has failed. It returns to no one.
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
+/// The runtime function that reports an array index outside the array and ends the program. It
+/// takes the index and the size, and returns to no one.
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
+/// The runtime function that reports a negative array size or capacity and ends the program. It
+/// takes the size, and returns to no one.
 pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
+/// The runtime function that reports an array capacity beyond what an element buffer can hold and
+/// ends the program. It takes the capacity, and returns to no one.
 pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
+/// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
+/// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
+/// The runtime function giving the distance in bytes from its second pointer to its first.
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
+/// The runtime function giving the address a signed number of bytes past the pointer it is given.
 pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
+/// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
+/// other thread wait for that run to finish.
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
+/// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
+/// The runtime function giving the command line argument at an index, as a C string.
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 /// libc `malloc`, declared with a 64-bit size parameter.
 ///
@@ -222,6 +237,8 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     return;
 }
 
+/// Declare `sprintf`, which takes the output buffer and the format string and goes on to take the
+/// values the format names.
 fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -315,6 +332,8 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
     return;
 }
 
+/// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
+/// initializer itself. A multi-threaded program initializes each global through it.
 pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
@@ -463,6 +482,8 @@ fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
 }
 
+/// Declares `realloc` in the module with signature `ptr (ptr, i64)`, plus the LLVM attribute that
+/// keeps code generation around allocator calls correct.
 fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;

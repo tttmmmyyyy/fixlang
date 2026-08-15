@@ -254,18 +254,21 @@ impl CIntegerExtension {
     }
 }
 
-// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
-// it. A type constructor is determined by its name.
+/// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
+/// it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
+    /// The name the type is declared under, which is what two type constructors are compared by.
     pub name: FullName,
 }
 
 impl TyCon {
+    /// The type constructor declared under `fullname`.
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }
 
+    /// This type constructor as a source file writes it, with the tuple of no element written `()`.
     pub fn to_string(&self) -> String {
         if let Some(n) = get_tuple_n(&self.name) {
             if n == 0 {
@@ -275,6 +278,11 @@ impl TyCon {
         self.name.to_string()
     }
 
+    /// Replaces the name of this type constructor with the full name of the type or associated type
+    /// it refers to.
+    ///
+    /// # Arguments
+    /// * `span` — where the name was written, for the error message.
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -288,15 +296,15 @@ impl TyCon {
         Ok(())
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This type constructor with its name written as an absolute path.
     pub fn global_to_absolute(&self) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name.global_to_absolute();
         Arc::new(ret)
     }
 
-    // Get the type of struct / union value.
-    // If struct / union have type parameter, introduces new type arguments.
+    /// The type of the values of this struct or union declaration, with a fresh type variable put
+    /// in for each parameter the declaration takes.
     pub fn get_struct_union_value_type(
         self: &TyCon,
         typechecker: &mut TypeCheckContext,
@@ -314,14 +322,14 @@ impl TyCon {
         apply_type_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
-    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    /// Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(self: &TyCon) -> bool {
         self.name == make_tuple_name_abs(0)
     }
 
-    // Whether a value of this type crosses to C as one scalar: an integer, a floating point
-    // number, or a pointer, which C and Fix lay down the same way. These are the types a C
-    // function signature can name, and the types an exported Fix function can exchange.
+    /// Whether a value of this type crosses to C as one scalar: an integer, a floating point
+    /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
+    /// function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::new_str(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
@@ -393,8 +401,8 @@ impl TyCon {
         })
     }
 
-    // Whether this is an integer type that carries a sign. Panics for a type that is not an
-    // integer type of `Std`.
+    /// Whether this is an integer type that carries a sign. Panics for a type that is not an
+    /// integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
@@ -412,7 +420,7 @@ impl TyCon {
         }
     }
 
-    // Whether this is the type `Bool` of `Std`.
+    /// Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
@@ -451,19 +459,28 @@ impl TyCon {
     }
 }
 
-// Information of type constructor.
-// For type alias, this struct is not used; use TyAliasInfo instead.
+/// A declaration of a type constructor: what its values are made of, and what it takes to name one.
+/// A type alias is declared by `TyAliasInfo`.
 #[derive(Clone)]
 pub struct TyConInfo {
+    /// The kind of the type constructor: `*` for a type that has values of its own, and an arrow
+    /// for one that takes parameters.
     pub kind: Arc<Kind>,
+    /// What kind of declaration this is, which settles how the values are laid out and what
+    /// `fields` means.
     pub variant: TyConVariant,
+    /// Whether a value is laid down where it stands, rather than behind a pointer to a reference
+    /// counted object.
     pub is_unbox: bool,
+    /// The parameters the declaration takes, in the order they are written.
     pub tyvars: Vec<Arc<TyVar>>,
-    pub fields: Vec<Field>, // For an array type, this is `vec![{element_type}]`.
+    /// The fields declared, in the order they are written; for a union these are its variants, and
+    /// for an array type this is `vec![{element_type}]`.
+    pub fields: Vec<Field>,
+    /// Where the declaration is written.
     pub source: Option<Span>,
-    // The document of this type.
-    // If `def_src` is available, we can also get document from the source code.
-    // We use this field only when document is not available in the source code.
+    /// The documentation of a type the compiler declares itself, such as a built-in type.
+    /// `get_document` reads the documentation comment above `source` first, and falls back to this.
     pub document: Option<String>,
     /// The struct this declaration punches a field out of, for a declaration that has one.
     ///
@@ -475,6 +492,8 @@ pub struct TyConInfo {
 }
 
 impl TyConInfo {
+    /// Resolves the namespaces of the type names written in the declared fields, collecting the
+    /// error of every field that names a type nothing declares.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -483,6 +502,8 @@ impl TyConInfo {
         errors.to_result()
     }
 
+    /// Replaces each type alias written in the declared fields with the type it stands for,
+    /// collecting the error of every field whose aliases cannot be resolved.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -491,7 +512,8 @@ impl TyConInfo {
         errors.to_result()
     }
 
-    // Get the document of this type.
+    /// The documentation of this type: the comment written above the declaration, and the
+    /// `document` field where the source carries no comment. Empty documentation is `None`.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self.source.as_ref().and_then(|src| src.get_document().ok());

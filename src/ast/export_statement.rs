@@ -20,33 +20,32 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 use inkwell::values::FunctionValue;
 use std::sync::Arc;
 
-// The export statement.
+/// A statement exporting a Fix value as a C function.
 #[derive(Clone)]
 pub struct ExportStatement {
-    // The name of the Fix value to be exported.
-    // This is the name of the Fix value in the source code, and not the name of the symbol.
-    // To get the name of the instantiated Fix value, use `self.instantiated_value_expr`.
+    /// The name of the exported Fix value, as the source writes it. `value_expr` holds the symbol
+    /// that name is instantiated to.
     pub value_name: FullName,
     /// Span of the value-name token inside `FFI_EXPORT[<here>, c_name];`.
     /// Used for LSP rename / find-references; `None` for export statements
     /// synthesized internally without a corresponding source token.
     pub value_name_src: Option<Span>,
-    // The expression (symbol) to be exported.
-    // `None` at first, and set after the fix value is instantiated to a symbol.
+    /// The expression (symbol) to be exported.
+    /// `None` at first, and set after the fix value is instantiated to a symbol.
     pub value_expr: Option<Arc<ExprNode>>,
-    // The name of the exported function.
+    /// The name of the exported function.
     pub function_name: String,
-    // The type of the exported function.
-    // `None` at first, and set by `ExportedFunctionType::validate`.
+    /// The type of the exported function.
+    /// `None` at first, and set by `ExportedFunctionType::validate`.
     pub function_type: Option<ExportedFunctionType>,
-    // The source of the export statement.
+    /// The source of the export statement.
     pub src: Option<Span>,
 }
 
 impl ExportStatement {
-    // Create an export statement carrying what the source gives.
-    // `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
-    // exported value fills in `value_expr`.
+    /// Create an export statement carrying what the source gives.
+    /// `ExportedFunctionType::validate` fills in `function_type` later, and instantiation of the
+    /// exported value fills in `value_expr`.
     pub fn new(
         fix_value_name: FullName,
         c_function_name: String,
@@ -104,8 +103,8 @@ impl ExportStatement {
         Ok(())
     }
 
-    // Implement the exported C function.
-    // Requires `self.function_type` and `self.value_expr` to already be set.
+    /// Implement the exported C function.
+    /// Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {
@@ -370,34 +369,38 @@ impl CSignature {
     }
 }
 
-// The type of an exported Fix value, split into the parts the generated C function is built from.
-// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
-// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
+/// The type of an exported Fix value, split into the parts the generated C function is built from.
+/// The value has type `{doms} -> {codom}` when `io_type` is `Pure`, `{doms} -> IO {codom}` when it
+/// is `IO`, and `{doms} -> IOState -> (IOState, {codom})` when it is `IOState`.
 #[derive(Clone)]
 pub struct ExportedFunctionType {
-    // The types of the arguments, in the order the C function takes them.
+    /// The types of the arguments, in the order the C function takes them.
     pub doms: Vec<Arc<TypeNode>>,
-    // The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
+    /// The type of the result, with the `IO` wrapper or the `IOState` threading taken off.
     pub codom: Arc<TypeNode>,
-    // How the value produces a result of type `codom`.
+    /// How the value produces a result of type `codom`.
     pub io_type: IOType,
 }
 
-// How an exported Fix value produces its result.
+/// How an exported Fix value produces its result.
 #[derive(Clone)]
 pub enum IOType {
-    // The value is the result itself.
+    /// The value is the result itself.
     Pure,
-    // The value is an `IO` action, which the generated C function runs.
+    /// The value is an `IO` action, which the generated C function runs.
     IO,
-    // The value takes an `IOState` token and returns it alongside the result. An exported value is
-    // written as `IO {codom}`; an optimization may rewrite it into this form.
+    /// The value takes an `IOState` token and returns it alongside the result. An exported value is
+    /// written as `IO {codom}`; an optimization may rewrite it into this form.
     IOState,
 }
 
 impl ExportedFunctionType {
-    // Check if a type is valid for a value which is exported.
-    // - src: Used for error messages.
+    /// Split the type of an exported value into the parts the generated C function is built from,
+    /// admitting only a type the C ABI can carry at every position.
+    ///
+    /// # Arguments
+    /// * `err_msg_prefix` — text put in front of every error message, naming the value at fault.
+    /// * `src` — where to place the error message.
     pub fn validate(
         scm: Arc<Scheme>,
         type_env: &TypeEnv,
