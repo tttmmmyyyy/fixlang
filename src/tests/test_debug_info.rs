@@ -7,8 +7,9 @@
 // mangled/closure frame names), so they stay valid across name-mangling changes.
 //
 // The scenarios that need no debugger check that `-g` builds at all — one per optimization level,
-// and two over recursive types — and read the file name and the directory the debug information
-// records out of the bytes of the built program.
+// and two over recursive types — and read what the debug information records out of the bytes of
+// the artifact that holds it: the file a function was compiled from out of the object files, and
+// the directory the build ran in out of the program.
 //
 // Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
 // macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
@@ -16,6 +17,8 @@
 
 #[cfg(test)]
 mod debug_info_tests {
+    use crate::constants::COMPILATION_UNITS_PATH;
+    use crate::misc::Set;
     use crate::tests::test_util::fix_command_at_opt_level;
     use std::{
         fs,
@@ -263,20 +266,38 @@ mod debug_info_tests {
         main = println("hello");
     "#;
 
-    // Whether the program built at `path` carries `text`. A file name and a directory of the debug
-    // information reach the program as strings of its own, so its bytes carry them.
-    fn program_carries(path: &Path, text: &str) -> bool {
-        let program = fs::read(path).expect("Failed to read the built program");
-        program
+    // Whether the file at `path` carries `text`. A file name and a directory of the debug
+    // information reach the artifact as strings of its own, so its bytes carry them.
+    fn file_carries(path: &Path, text: &str) -> bool {
+        let content = fs::read(path).expect("Failed to read the built artifact");
+        content
             .windows(text.len())
             .any(|bytes| bytes == text.as_bytes())
     }
 
-    // Debug information names the file the code was compiled from, so a program built after its
-    // source moved must name the source where it is now. Nothing but the path differs between the
-    // two builds here, and the second one reuses the object files the first one cached unless the
-    // path takes part in naming them — sending a debugger to a path that holds no such file, or
-    // holds another one.
+    // The object files a build in `dir` has compiled so far.
+    fn object_files(dir: &Path) -> Set<PathBuf> {
+        let units = dir.join(COMPILATION_UNITS_PATH);
+        fs::read_dir(&units)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", units.display(), e))
+            .filter_map(|entry| {
+                let path = entry.expect("Failed to read a directory entry").path();
+                path.extension()
+                    .is_some_and(|extension| extension == "o")
+                    .then_some(path)
+            })
+            .collect()
+    }
+
+    // Debug information names the file the code was compiled from, so a build made after its source
+    // moved must name the source where it is now. Nothing but the path differs between the two
+    // builds here, and the second one takes the object files of the first unless the path takes
+    // part in naming them — sending a debugger to a path that holds no such file, or holds another
+    // one.
+    //
+    // The name of the file a function was compiled from lives in the object file on every platform,
+    // and a linked program carries it only where the platform's linker copies the debug information
+    // into the program, so the object files the second build compiled are what is read here.
     #[test]
     fn test_debug_info_names_the_source_after_it_moved() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -284,20 +305,35 @@ mod debug_info_tests {
 
         fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
         build_with_g_in(dir, "main.fix", "before_move", "none", &[]);
+        let before_move = object_files(dir);
 
         fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
         fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
         build_with_g_in(dir, "src/app.fix", "after_move", "none", &[]);
+        let compiled_after_the_move = object_files(dir)
+            .difference(&before_move)
+            .cloned()
+            .collect::<Vec<_>>();
 
-        let program = dir.join("after_move");
         assert!(
-            program_carries(&program, "app.fix"),
-            "the program built after the move does not name \"app.fix\", the file it was built from"
+            !compiled_after_the_move.is_empty(),
+            "the build after the move compiled nothing of its own, so it took the object files \
+             compiled for the file where it no longer is"
         );
         assert!(
-            !program_carries(&program, "main.fix"),
-            "the program built after the move names \"main.fix\", where its source no longer is"
+            compiled_after_the_move
+                .iter()
+                .any(|object| file_carries(object, "app.fix")),
+            "the object files compiled after the move do not name \"app.fix\", the file they were \
+             compiled from"
         );
+        for object in &compiled_after_the_move {
+            assert!(
+                !file_carries(object, "main.fix"),
+                "{} names \"main.fix\", where its source no longer is",
+                object.display()
+            );
+        }
     }
 
     // The file names debug information carries are relative, and a debugger resolves them against
@@ -325,11 +361,11 @@ mod debug_info_tests {
 
         let program = after_move.join("prog");
         assert!(
-            program_carries(&program, after_move.to_str().unwrap()),
+            file_carries(&program, after_move.to_str().unwrap()),
             "the program built after the move does not name the directory it was built in"
         );
         assert!(
-            !program_carries(&program, before_move.to_str().unwrap()),
+            !file_carries(&program, before_move.to_str().unwrap()),
             "the program built after the move names the directory the project has left"
         );
     }
@@ -352,11 +388,11 @@ mod debug_info_tests {
 
         let dir_str = dir.to_str().expect("The temporary directory is not UTF-8");
         assert!(
-            program_carries(&dir.join("with_g"), dir_str),
+            file_carries(&dir.join("with_g"), dir_str),
             "the program built with debug information does not name the directory it was built in"
         );
         assert!(
-            !program_carries(&dir.join("without_g"), dir_str),
+            !file_carries(&dir.join("without_g"), dir_str),
             "the program built without debug information names the directory it was built in, so \
              that directory has to take part in naming the object files of such a build as well"
         );
