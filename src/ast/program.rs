@@ -2129,18 +2129,21 @@ impl Program {
                 }
                 // A name the compiler defines is one the program cannot reach: the call declares it
                 // and the definition, arriving second, is renamed away from every use of it.
-                if let Some(CompilerNameUse::Defines(reason)) =
-                    compiler_use_of_c_function_name(fun_name)
-                {
-                    reported.insert(fun_name.clone());
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "`{}` cannot be the name of a C function called from Fix: {}.",
-                            fun_name, reason
-                        ),
-                        &[&node.source],
-                    ));
-                    return;
+                match compiler_use_of_c_function_name(fun_name) {
+                    Some(CompilerNameUse::Defines(reason)) => {
+                        reported.insert(fun_name.clone());
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
+                                "`{}` cannot be the name of a C function called from Fix: {}.",
+                                fun_name, reason
+                            ),
+                            &[&node.source],
+                        ));
+                        return;
+                    }
+                    // A name the compiler calls is defined outside the program, and a call from Fix
+                    // reaches the same function.
+                    Some(CompilerNameUse::Calls(_)) | None => {}
                 }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
                 let Some((known, known_src)) = described.get(fun_name) else {

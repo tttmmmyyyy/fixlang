@@ -2821,9 +2821,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     // reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
     // whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
     //
-    // Every description of one C function agrees on the extension at each position — that is what
-    // `Program::validate_c_function_calls` decides — so a position written twice is written
-    // with the same attribute both times.
+    // Two descriptions a program writes of one C function agree on the extension at each position —
+    // that is what `Program::validate_c_function_calls` decides — so a position written twice in
+    // Fix source is written with the same attribute both times.
     pub fn add_c_integer_extension_attribute(
         &self,
         func: FunctionValue<'c>,

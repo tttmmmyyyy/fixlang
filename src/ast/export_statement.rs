@@ -107,17 +107,17 @@ impl ExportStatement {
     // Implement the exported C function.
     // Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
+        let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {
             doms,
             codom,
             io_type,
-        } = self.function_type.clone().unwrap();
+        } = function_type.clone();
 
         // Take the name. An `FFI_CALL` of this C function has declared it by now — code generation
         // implements the program's symbols before it reaches here — and a declaration and this
         // definition describe one C function, so the body goes onto that declaration.
-        let signature =
-            CSignature::of_exported(self.function_type.as_ref().unwrap(), gc.type_env());
+        let signature = CSignature::of_exported(function_type, gc.type_env());
         let func = signature.declare_in_module(&self.function_name, gc);
         assert_eq!(
             func.count_basic_blocks(),
@@ -196,7 +196,7 @@ impl ExportStatement {
 ///
 /// Counting the parts alone would let an aggregate through, since a value too wide to split is
 /// carried as one part holding the whole of it, and C would then be handed a structure whose layout
-/// it classifies by its own rules. `has_c_abi` admits nothing with either shape.
+/// it classifies by its own rules. `c_boundary_tycon` admits nothing with either shape.
 fn assert_c_scalar_of<'c, 'm>(c_ty: &Arc<TyCon>, ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) {
     let embedded_ty = ty.get_embedded_type(gc);
     let parts = gc.type_parts(embedded_ty);
