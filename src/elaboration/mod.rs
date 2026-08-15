@@ -63,13 +63,13 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program.validate_trait_env_structure()?;
 
     // Create symbols.
-    program.create_trait_member_symbols();
+    program.create_trait_member_symbols()?;
 
     // Validate constraints of global value type.
     program.validate_global_value_type_constraints()?;
 
     // Check if all items referred in import statements are defined.
-    // This check should be done after `add_methods` and `create_trait_method_symbols`.
+    // This check should be done after `add_methods` and `create_trait_member_symbols`.
     program.validate_import_statements()?;
 
     // Set and check kinds that appear in type signatures.

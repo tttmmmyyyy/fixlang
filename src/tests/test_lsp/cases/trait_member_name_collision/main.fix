@@ -1,0 +1,17 @@
+module Main;
+
+trait c : Foo {
+    bar : c -> I64;
+}
+
+impl I64 : Foo {
+    bar = |x| x;
+}
+
+namespace Foo {
+    bar : I64 -> String;
+    bar = |_| "a value of the trait's namespace";
+}
+
+main : IO ();
+main = println(Foo::bar(1).to_string);

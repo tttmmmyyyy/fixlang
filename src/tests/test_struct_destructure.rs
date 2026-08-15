@@ -134,6 +134,79 @@ main : IO () = (
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(DESTRUCTURED_PARAMETER_SOURCE, config);
     }
+
+    /// Struct patterns that name a strict subset of the fields, and patterns that name every field
+    /// in an order other than the declared one, over a boxed and an unboxed container whose
+    /// unnamed fields are boxed.
+    ///
+    /// A partial pattern is what splits the two halves of `get_struct_fields`: an unboxed
+    /// container hands out the named fields and releases the ones left behind, while a boxed one
+    /// retains the named fields and releases itself, letting its own drop reach the rest. A
+    /// reordered pattern is what makes the extraction read the field index recorded per field
+    /// rather than the position the field is written at.
+    const PARTIAL_DESTRUCTURE_SOURCE: &str = r#"
+module Main;
+
+type UnboxTriple = unbox struct { a : Array I64, b : Array I64, c : I64 };
+type BoxTriple = box struct { a : Array I64, b : Array I64, c : I64 };
+
+main : IO () = (
+    // unboxed container, one boxed field named: the two left behind are released here
+    let u1 = UnboxTriple { a: [1, 2], b: [3, 4], c: 5 };
+    let UnboxTriple { a: ua } = u1;
+    assert_eq(|_|"unbox partial", ua.@(1), 2);;
+
+    // unboxed container used after a partial destructure
+    let u2 = UnboxTriple { a: [6], b: [7, 8], c: 9 };
+    let UnboxTriple { b: ub } = u2;
+    assert_eq(|_|"unbox partial kept", ub.@(1) + u2.@a.@(0) + u2.@c, 23);;
+
+    // boxed container, one boxed field named: the container's own drop reaches the rest
+    let b1 = BoxTriple { a: [10, 11], b: [12], c: 13 };
+    let BoxTriple { b: bb } = b1;
+    assert_eq(|_|"box partial", bb.@(0), 12);;
+
+    // boxed container used after a partial destructure
+    let b2 = BoxTriple { a: [14], b: [15, 16], c: 17 };
+    let BoxTriple { a: ba } = b2;
+    assert_eq(|_|"box partial kept", ba.@(0) + b2.@b.@(1) + b2.@c, 47);;
+
+    // every field named, written in an order other than the declared one
+    let u3 = UnboxTriple { a: [18], b: [19, 20], c: 21 };
+    let UnboxTriple { c: uc3, b: ub3, a: ua3 } = u3;
+    assert_eq(|_|"unbox reordered", ua3.@(0) + ub3.@(1) + uc3, 59);;
+
+    let b3 = BoxTriple { a: [22], b: [23, 24], c: 25 };
+    let BoxTriple { c: bc3, b: bb3, a: ba3 } = b3;
+    assert_eq(|_|"box reordered", ba3.@(0) + bb3.@(1) + bc3, 71);;
+
+    pure()
+);
+"#;
+
+    /// A pattern naming a strict subset of the fields binds those fields to their values, and a
+    /// pattern naming the fields out of declaration order binds each name to the field it names.
+    #[test]
+    pub fn test_partial_and_reordered_destructure_correctness() {
+        test_source(PARTIAL_DESTRUCTURE_SOURCE, Configuration::develop_mode());
+    }
+
+    /// The destructures of `PARTIAL_DESTRUCTURE_SOURCE` leave every value released exactly once,
+    /// checked under valgrind. A field a pattern leaves unnamed is where a release too few (a leak)
+    /// or one too many (a double free) shows itself.
+    #[test]
+    pub fn test_partial_and_reordered_destructure_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::MemCheck);
+        test_source(PARTIAL_DESTRUCTURE_SOURCE, config);
+    }
 }
 
 // A struct pattern names the fields of one struct type, so a name the type does not declare and a
