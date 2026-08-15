@@ -142,18 +142,21 @@ mod union_rc_shapes_tests {
     // Each union below is read through a call that stays out of line, and read once more after that
     // call returns, so that it reaches reference counting instead of being folded into the
     // constructor that built it. The payload it was built from stays live beside it and is read
-    // back at the end. Freeing that payload early changes the answer for the pair; for the shape
-    // whose unit lies below its root the answer stays right either way, and what catches a key made
-    // for it is the assertion in `unit_of`, which the development-mode build these tests run under
-    // has in place.
+    // back at the end. Freeing that payload early changes the answer for the shapes whose payload
+    // holds two units; for the shape whose unit lies below its root the answer stays right either
+    // way, and what catches a key made for it is the assertion in `unit_of`. That payload arrives as
+    // a parameter, so that the union's root is resolved from a value whose own root is not a unit,
+    // and it carries a second field, so that the struct around the boxed value survives to the RC
+    // IR.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
 // A boxed value a payload carries, so that the payload holds a reference count.
 type Guard = box struct { allowed : Array I64 };
 
-// A payload whose reference-counting unit lies below its root.
-type One = unbox struct { only : Guard };
+// A payload whose one reference-counting unit lies below its root. The second field keeps the
+// struct from being unwrapped down to the boxed value it holds.
+type One = unbox struct { only : Guard, tag : I64 };
 
 // The `pair` payload holds two units, the `one` payload holds a unit below its root, and `mark`
 // holds none.
@@ -178,13 +181,47 @@ via_pair = |both, n| (
 );
 
 // The same for a payload whose unit lies below its root.
-via_one : Guard -> I64 -> I64;
-via_one = |guard, n| (
+via_one : One -> I64 -> I64;
+via_one = |one, n| (
     if n == 0 { 0 };
-    let action = Action::one(One { only : guard });
+    let action = Action::one(one);
     let seen = peek(action, 2);
     let tagged = if action.is_one { 1 } else { 0 };
-    seen + tagged + guard.@allowed.@size * 10 + guard.@allowed.@(0)
+    seen + tagged + one.@tag + one.@only.@allowed.@size * 10 + one.@only.@allowed.@(0)
+);
+
+// `Std::Option` is an unboxed union too, and a pair payload gives it the same shape.
+seen_option : Option (Array I64, Array I64) -> I64 -> I64;
+seen_option = |opt, n| (
+    if n == 0 { if opt.is_some { 1 } else { 0 } };
+    seen_option(opt, n - 1)
+);
+
+via_option : (Array I64, Array I64) -> I64 -> I64;
+via_option = |both, n| (
+    if n == 0 { 0 };
+    let opt = Option::some(both);
+    let seen = seen_option(opt, 2);
+    let tagged = if opt.is_some { 1 } else { 0 };
+    let (first, second) = both;
+    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+);
+
+// `Std::Result` likewise.
+seen_result : Result String (Array I64, Array I64) -> I64 -> I64;
+seen_result = |res, n| (
+    if n == 0 { if res.is_ok { 1 } else { 0 } };
+    seen_result(res, n - 1)
+);
+
+via_result : (Array I64, Array I64) -> I64 -> I64;
+via_result = |both, n| (
+    if n == 0 { 0 };
+    let res : Result String (Array I64, Array I64) = ok(both);
+    let seen = seen_result(res, 2);
+    let tagged = if res.is_ok { 1 } else { 0 };
+    let (first, second) = both;
+    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
 );
 
 main : IO ();
@@ -194,8 +231,16 @@ main = (
         via_pair((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
     );;
     assert_eq(
-        |_|"the boxed value is read back as it was built",
-        via_one(Guard { allowed : [5, 6] }, 1), 26
+        |_|"the boxed value below the payload's root is read back as it was built",
+        via_one(One { only : Guard { allowed : [5, 6] }, tag : 3 }, 1), 29
+    );;
+    assert_eq(
+        |_|"the pair an option holds is read back as it was built",
+        via_option((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
+    );;
+    assert_eq(
+        |_|"the pair a result holds is read back as it was built",
+        via_result((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
     );;
     pure()
 );
