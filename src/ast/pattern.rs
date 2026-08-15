@@ -793,7 +793,11 @@ impl Pattern {
                     }
                     uncovered_variants.remove(&variant.name);
                 }
-                _ => {
+                // A variable binds the matched value whatever it is, and a struct pattern
+                // destructures every value of its type, so either covers the variants the arms
+                // above leave. Naming both forms is what makes the compiler ask this question
+                // again of a pattern that can fail to match.
+                Pattern::Var(_, _) | Pattern::Struct(_, _) => {
                     found_otherwise = true;
                 }
             }
