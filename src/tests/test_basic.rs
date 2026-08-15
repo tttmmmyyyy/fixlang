@@ -8204,6 +8204,67 @@ pub fn test_tuple_functor() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq` and `Functor` instances of
+/// a tuple for each size the program uses, so a size far above the ones the other tests reach
+/// carries the same behavior as a small one.
+#[test]
+pub fn test_instances_of_a_tuple_of_many_components() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let a = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+            let b = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13);
+            assert_eq(|_|"", a.to_string, "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)");;
+            assert_eq(|_|"", a == a, true);;
+            assert_eq(|_|"", a == b, false);;
+            assert_eq(|_|"", a < b, true);;
+            assert_eq(|_|"", b < a, false);;
+            assert_eq(|_|"", a <= a, true);;
+            assert_eq(|_|"", b <= a, false);;
+            assert_eq(|_|"", a.map(|x| x + 1), b);;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `Tuple{N}` is the textual name of the type an `N`-component tuple has, so writing it names the
+/// same type the parenthesized form does. The compiler declares the type of a tuple of each size
+/// the program uses, and of the sizes up to `TUPLE_SIZE_BASE` whether the program uses them or not,
+/// which is the range this test writes.
+#[test]
+pub fn test_textual_name_of_a_tuple_type() {
+    let source = r##"
+        module Main;
+
+        unit : Tuple0;
+        unit = ();
+
+        single : Tuple1 I64;
+        single = (1,);
+
+        pair : Tuple2 I64 Bool -> I64;
+        pair = |t| if t.@1 { t.@0 } else { 0 };
+
+        triple : Tuple3 I64 I64 I64;
+        triple = (1, 2, 3);
+
+        main: IO ();
+        main = (
+            assert_eq(|_|"", unit, ());;
+            assert_eq(|_|"", single.@0, 1);;
+            assert_eq(|_|"", pair((7, true)), 7);;
+            assert_eq(|_|"", triple.@2, 3);;
+
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Verifies that a struct declared with no fields can be constructed as
 /// `Empty {}` and given a trait implementation, in each of the plain, `box`
 /// and `unbox` forms.

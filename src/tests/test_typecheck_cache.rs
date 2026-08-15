@@ -4,10 +4,7 @@
 //! build owed the user.
 
 use crate::{
-    ast::program::Program,
-    configuration::Configuration,
-    constants::STD_NAME,
-    fixstd::stdlib::{make_std_mod, make_tuple_traits_mod},
+    configuration::Configuration, constants::STD_NAME, fixstd::stdlib::make_std_mod,
     tests::test_util::test_source,
 };
 
@@ -35,36 +32,6 @@ fn test_an_accessor_and_a_value_differing_only_in_punctuation_keep_their_own_bod
         );
     "#;
     test_source(&source, Configuration::develop_mode());
-}
-
-/// The compiler writes part of `Std` itself and links it in as a source of its own: the
-/// implementations the tuple sizes the program uses carry. A value defined there is type-checked
-/// from that source, so the hash the cache is keyed by moves when the source does.
-#[test]
-fn test_the_module_dependency_hash_covers_a_source_that_extends_a_module() {
-    let config = Configuration::develop_mode();
-    let std_name = STD_NAME.to_string();
-    let hash_of = |program: &Program| {
-        program
-            .module_dependency_hash(&std_name, &config)
-            .unwrap_or_else(|errs| panic!("Failed to hash the `Std` module: {}", errs))
-    };
-
-    let mut program = make_std_mod(&config)
-        .unwrap_or_else(|errs| panic!("Failed to build the `Std` module: {}", errs));
-    let hash_without_the_tuple = hash_of(&program);
-    let tuple_traits_mod = make_tuple_traits_mod(&[8], &config)
-        .unwrap_or_else(|errs| panic!("Failed to build the tuple implementations: {}", errs));
-    program
-        .link(tuple_traits_mod, true)
-        .unwrap_or_else(|errs| panic!("Failed to link the tuple implementations: {}", errs));
-
-    assert_ne!(
-        hash_without_the_tuple,
-        hash_of(&program),
-        "the implementations of a tuple size are a source `Std` is made of, and the hash naming \
-         what `Std` is checked from stayed where it was"
-    );
 }
 
 /// The size of a C type decides the Fix type the parser gives a `CInt` in an `FFI_CALL` signature,
@@ -96,7 +63,7 @@ fn test_the_module_dependency_hash_covers_the_c_type_sizes() {
 #[cfg(test)]
 mod integration_tests {
     use crate::configuration::CTypeSizes;
-    use crate::constants::{C_TYPES_JSON_PATH, TYPE_CHECK_CACHE_PATH};
+    use crate::constants::{C_TYPES_JSON_PATH, DOT_FIXLANG, TYPE_CHECK_CACHE_PATH};
     use crate::tests::test_util::fix_command;
     use std::fs;
     use std::path::Path;
@@ -312,6 +279,82 @@ main = println $ 4294967296.c_int.i64.to_string;
             "4294967296",
             "the run under a 64-bit C `int` was served a body checked against the 32-bit one"
         );
+    }
+
+    /// Programs written one after another to a single file, each one a way a check can end: a
+    /// program that passes, one the type checker rejects, one that leaves a hole, one that uses a
+    /// deprecated value, and one that names a value nothing defines. Each uses a tuple of a size of
+    /// its own, so each also asks `Std` for implementations the ones before it never asked for.
+    const PROGRAMS_CHECKED_IN_TURN: [&str; 5] = [
+        r#"module Main;
+main : IO ();
+main = println((1, 2).to_string);
+"#,
+        r#"module Main;
+main : IO ();
+main = println((1, 2, 3, 4).to_string + true);
+"#,
+        r#"module Main;
+main : IO ();
+main = println((1, 2, 3, 4, 5).to_string + _.to_string);
+"#,
+        r#"module Main;
+DEPRECATED[old_val, "use `new_val` instead"];
+old_val : I64;
+old_val = 1;
+new_val : I64;
+new_val = 2;
+main : IO ();
+main = println((1, 2, 3, 4, 5, 6).to_string + (old_val + new_val).to_string);
+"#,
+        r#"module Main;
+main : IO ();
+main = println((1, 2, 3, 4, 5, 6, 7).to_string + no_such_value);
+"#,
+    ];
+
+    /// Runs `fix check` in `dir` and returns everything it told the user.
+    fn check(dir: &Path) -> String {
+        let output = fix_command()
+            .arg("check")
+            .current_dir(dir)
+            .output()
+            .expect("failed to run fix check");
+        String::from_utf8_lossy(&output.stdout).to_string()
+            + &String::from_utf8_lossy(&output.stderr)
+    }
+
+    /// The cache belongs to the working directory and a file is named by its path, so programs
+    /// written one after another to a single file file their entries side by side. What the user is
+    /// told about one of them must be what they are told when that program is the only one the
+    /// directory has ever held.
+    #[test]
+    fn a_cache_filled_by_other_programs_at_one_path_keeps_every_report() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("fixproj.toml"),
+            "[general]\nname = \"checked-in-turn\"\nversion = \"0.1.0\"\n[build]\nfiles = [\"main.fix\"]\n",
+        )
+        .expect("Failed to write fixproj.toml");
+
+        let mut warm_reports = vec![];
+        for program in PROGRAMS_CHECKED_IN_TURN {
+            fs::write(dir.join("main.fix"), program).expect("Failed to write main.fix");
+            warm_reports.push(check(dir));
+        }
+
+        for (program, warm) in PROGRAMS_CHECKED_IN_TURN.iter().zip(warm_reports) {
+            fs::write(dir.join("main.fix"), program).expect("Failed to write main.fix");
+            fs::remove_dir_all(dir.join(DOT_FIXLANG)).expect("Failed to empty the caches");
+            assert_eq!(
+                check(dir),
+                warm,
+                "checking this program told the user something else once the directory held the \
+                 entries of the programs checked before it:\n{}",
+                program
+            );
+        }
     }
 
     /// A cache entry is filed under a hash of everything the value is checked from, so a build that
