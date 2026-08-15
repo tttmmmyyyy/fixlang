@@ -14,7 +14,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は根、その leaf は
   各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
-  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`operand_unit_origin`）。
+  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
   下の leaf が 1 つのオペランド unit に揃えば `Exactly`、複数に分かれるか射影でない leaf を含むなら、その値が
   取りうるオブジェクトを全部並べた `Join`。⊥（不在 variant）の leaf は参照を持たないので読み飛ばす。
 
@@ -59,7 +59,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
   **boxed union の variant** は producer。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
-  その下の leaf 群から決める（§1 の `operand_unit_origin`）。unbox union の構築
+  その下の leaf 群から決める（§1 の `origin_from_leaves_under`）。unbox union の構築
   （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名で、payload が複数の unit にまたがる
   ときはこちらだけが payload 自身の path を答えられる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。

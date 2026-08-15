@@ -49,8 +49,8 @@ type Seen = unbox struct { at_step : Array I64, step : I64 };
 type Gathered = (Array State, Seen, Array State);
 
 namespace Seen {
-    take : State -> Seen -> (Bool, Seen);
-    take = |state, seen| (
+    claim : State -> Seen -> (Bool, Seen);
+    claim = |state, seen| (
         let node = state.@at;
         let step = seen.@step;
         if seen.@at_step.@(node) == step { (false, seen) };
@@ -63,13 +63,14 @@ namespace Walk {
     _offer : State -> Gathered -> Gathered;
     _offer = |state, (threads, seen, pending)| (
         if state.@at < 0 { (threads, seen, pending) };
-        let (fresh, seen) = seen.take(state);
+        let (fresh, seen) = seen.claim(state);
         if !fresh { (threads, seen, pending) };
         (threads.push_back(state), seen, pending.push_back(state))
     );
 
     // Reads the union out of the node and follows it, unless it is a variant that waits. The node
-    // is only read here, so this function is given it borrowed.
+    // and the array it came out of are only read here, so this function is given both borrowed,
+    // which is the shape the reference counting has to get right.
     _act : I64 -> Node -> State -> Gathered -> Array Node -> Gathered;
     _act = |at, node, state, gathered, nodes| (
         let action = node.@action;

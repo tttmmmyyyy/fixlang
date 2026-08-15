@@ -288,14 +288,14 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
             // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
-            // A path with no declared leaf of its own is handled by `operand_unit_origin`: a
-            // reference-counting unit path may name the root of an unboxed union, which is a
-            // subtree whose provenance is declared on the leaves beneath it.
+            // A path whose own record does not name an object is handled by
+            // `origin_from_leaves_under`: a reference-counting unit path may name the root of an
+            // unboxed union, which is a subtree whose provenance is declared on the leaves beneath.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => {
-                    let here_path = (var.clone(), path.to_vec());
-                    operand_unit_origin(vars, type_env, &decl, args, path, &here_path)
+                    let here_identity = (var.clone(), path.to_vec());
+                    origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
                         .unwrap_or_else(here)
                 }
             }
@@ -325,14 +325,15 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
     }
 }
 
-/// The object a value denotes at a path that declares no leaf of its own: the operand
-/// reference-counting units the leaves beneath the path project out of.
+/// The object a value denotes at a path whose own record does not name one: the objects the leaves
+/// beneath that path reach.
 ///
-/// A unit path may name the root of an unboxed union, whose provenance is declared one level down,
-/// on the leaves of its variants, so a reader that stops at the root finds nothing recorded and
-/// takes the value for one produced on the spot — its own to release, when it may be an operand's.
-/// The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the value does
-/// not have and holds no reference, so it names no object and is passed over.
+/// A reference-counting unit path may name the root of an unboxed union, whose provenance is
+/// declared one level down, on the leaves of its variants, so a reader that stops at the root finds
+/// nothing recorded and takes the value for one produced on the spot — its own to release, when it
+/// may be an operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
+/// variant the value does not have and holds no reference, so it names no object and is passed
+/// over; a leaf produced here rather than projected names this value itself.
 ///
 /// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
 /// of them is a value produced here rather than a projection, every object the root may denote is
@@ -341,7 +342,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
-fn operand_unit_origin(
+fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
     decl: &Provenance,
@@ -349,10 +350,10 @@ fn operand_unit_origin(
     path: &[usize],
     here: &VarPath,
 ) -> Option<Origin> {
-    // The leaves of one unit root usually project out of one operand unit, so the operands are
+    // The leaves of one unit root usually project out of one operand unit, so the operand units are
     // gathered before any of them is followed back: resolving each distinct one once keeps a chain
     // of aliases from being walked once per leaf.
-    let mut operands: Set<(usize, FieldPath)> = Set::default();
+    let mut operand_units: Set<(usize, FieldPath)> = Set::default();
     let mut produced_here = false;
     for sources in decl.leaf_origins_under(path) {
         if sources.is_empty() {
@@ -360,7 +361,7 @@ fn operand_unit_origin(
         }
         match as_arg_projection(sources) {
             Some((j, leaf)) => {
-                operands.insert((j, truncate_to_unit(&args[j].ty, &leaf, type_env)));
+                operand_units.insert((j, truncate_to_unit(&args[j].ty, &leaf, type_env)));
             }
             None => produced_here = true,
         }
@@ -369,7 +370,7 @@ fn operand_unit_origin(
     if produced_here {
         candidates.insert(here.clone());
     }
-    for (j, unit) in operands {
+    for (j, unit) in operand_units {
         for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
             candidates.insert(p.clone());
         }
