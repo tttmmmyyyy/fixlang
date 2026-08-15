@@ -5018,8 +5018,8 @@ pub fn test129() {
 }
 
 /// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
-/// byte array and back, at both ends of the type's range, and `from_bytes` answers an error for a
-/// byte array that is not the type's width.
+/// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
+/// representation; and `from_bytes` answers an error for a byte array that is not the type's width.
 #[test]
 pub fn test_narrow_signed_integer_bytes_round_trip() {
     let source = r#"
@@ -5042,6 +5042,18 @@ pub fn test_narrow_signed_integer_bytes_round_trip() {
             assert_eq(|_|case + " width", (-1_I16).to_bytes.get_size, 2);;
             let short : Result ErrMsg I16 = Array::fill(1, 0_U8).from_bytes;
             assert(|_|case + " short", short.is_err);;
+
+            // The bytes themselves. A round trip alone passes for any conversion that preserves the
+            // value, so it says nothing about the two's-complement bytes a C caller reads.
+            let case = "representation";
+            assert_eq(|_|case + " I8 negative one", (-1_I8).to_bytes, [255_U8]);;
+            assert_eq(|_|case + " I8 minimum", I8::minimum.to_bytes, [128_U8]);;
+            assert_eq(|_|case + " I16 negative one", (-1_I16).to_bytes, [255_U8, 255_U8]);;
+            assert_eq(|_|case + " I16 minimum", I16::minimum.to_bytes, [0_U8, 128_U8]);;
+            let from_all_ones : Result ErrMsg I8 = [255_U8].from_bytes;
+            assert_eq(|_|case + " I8 from 0xff", from_all_ones.as_ok, -1_I8);;
+            let from_min : Result ErrMsg I16 = [0_U8, 128_U8].from_bytes;
+            assert_eq(|_|case + " I16 from 0x8000", from_min.as_ok, I16::minimum);;
 
             pure()
         );
