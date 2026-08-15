@@ -37,12 +37,17 @@ mod tests {
         client.get_diagnostics(file)
     }
 
-    /// The diagnostic whose message contains `text`, of which the test expects exactly one.
-    fn sole_diagnostic_containing<'a>(diagnostics: &'a [Value], text: &str) -> &'a Value {
-        let matching: Vec<&Value> = diagnostics
+    /// The diagnostics whose message contains `text`.
+    fn diagnostics_containing<'a>(diagnostics: &'a [Value], text: &str) -> Vec<&'a Value> {
+        diagnostics
             .iter()
             .filter(|diag| diag["message"].as_str().map_or(false, |m| m.contains(text)))
-            .collect();
+            .collect()
+    }
+
+    /// The diagnostic whose message contains `text`, of which the test expects exactly one.
+    fn sole_diagnostic_containing<'a>(diagnostics: &'a [Value], text: &str) -> &'a Value {
+        let matching = diagnostics_containing(diagnostics, text);
         assert_eq!(
             matching.len(),
             1,
@@ -249,14 +254,7 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("unknown_struct_field");
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
-        let unknown: Vec<&Value> = diagnostics
-            .iter()
-            .filter(|diag| {
-                diag["message"]
-                    .as_str()
-                    .map_or(false, |m| m.contains("Unknown field"))
-            })
-            .collect();
+        let unknown = diagnostics_containing(&diagnostics, "Unknown field");
         assert_eq!(
             unknown.len(),
             2,

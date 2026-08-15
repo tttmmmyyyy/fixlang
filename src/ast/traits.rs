@@ -1263,13 +1263,11 @@ impl TraitEnv {
         // Resolve aliases in trait implementations.
         let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, trait_impls) in old_impls {
+        for (_trait_id, trait_impls) in old_impls {
             for mut impl_ in trait_impls {
-                // Resolve names in TraitImpls.
                 errors.eat_err(impl_.resolve_type_aliases(type_env));
 
-                // Insert to new_impls
-                insert_to_map_vec(&mut new_impls, &trait_id, impl_);
+                Self::add_instance_to(&mut new_impls, impl_);
             }
         }
         errors.to_result()?; // Throw errors if any.
