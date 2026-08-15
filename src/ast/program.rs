@@ -1,8 +1,6 @@
 use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
 use crate::ast::equality::Equality;
-use crate::ast::export_statement::{
-    c_entry_point_signature, CSignature, ExportStatement, ExportedFunctionType, IOType,
-};
+use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
@@ -29,6 +27,7 @@ use crate::elaboration::desugar_opaque::{
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
+use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,

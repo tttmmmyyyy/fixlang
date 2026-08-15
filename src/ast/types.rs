@@ -26,9 +26,7 @@ use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::rc_ir::ast::RcState;
 use core::panic;
-use inkwell::context::Context;
-use inkwell::types::{BasicType, BasicTypeEnum, StructType};
-use inkwell::AddressSpace;
+use inkwell::types::{BasicTypeEnum, StructType};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
@@ -206,54 +204,6 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
-/// How C carries a value: everything the declaration of a C function exchanging it says about it.
-///
-/// Two types of one shape are one C type, so a signature written with either declares the same
-/// function. `I64` and `U64` share a shape: a value that fills its register travels the same way
-/// whichever sign the reader gives the bits. `I8` and `U8` do not, since the ABI carries a narrow
-/// integer in the low bits of a register and the sign is what says which side extends it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CTypeShape {
-    /// An integer of this width in bits, carrying the extension its width earns it.
-    Integer {
-        /// The width of the C integer type: 8, 16, 32 or 64.
-        bits: u32,
-        /// The extension the ABI asks of a value of this width, and `None` at a width that fills
-        /// the unit a C signature carries an integer in.
-        extension: Option<CIntegerExtension>,
-    },
-    /// C's `float`.
-    Float32,
-    /// C's `double`.
-    Float64,
-    /// A pointer, which C carries as one address whatever it points at.
-    Pointer,
-}
-
-/// How the bits above an integer narrower than the 32-bit unit the ABI carries it in are filled.
-///
-/// Apple's AArch64 has the caller fill them for an argument and the callee for a result, and lets
-/// the other side read the whole register on that promise, while AAPCS64 and System V leave them
-/// unspecified and have the reader narrow the value itself. Naming the fill is how a signature says
-/// which of the two it follows, and a C compiler puts one on every such parameter and result.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CIntegerExtension {
-    /// Copies of the value's sign bit fill the bits above it.
-    Sign,
-    /// Zeroes fill the bits above the value.
-    Zero,
-}
-
-impl CIntegerExtension {
-    /// The name of the LLVM attribute carrying this extension.
-    pub fn attribute_name(self) -> &'static str {
-        match self {
-            CIntegerExtension::Sign => "signext",
-            CIntegerExtension::Zero => "zeroext",
-        }
-    }
-}
-
 // A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 // it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
@@ -325,107 +275,6 @@ impl TyCon {
     pub fn is_c_scalar(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::new_str(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
-    }
-
-    /// The shape of the C type this type constructor stands for.
-    /// `()` is C's `void`, which carries no value, so it has no shape.
-    ///
-    /// An integer narrower than 32 bits travels in the low bits of a register and carries the
-    /// extension its sign asks for; one that fills the register carries none, which is what lets a
-    /// program read the same C function's result as `I64` in one place and as `U64` in another.
-    pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
-        if self.is_unit() {
-            return None;
-        }
-        assert!(
-            self.is_c_scalar(),
-            "call c_type_shape for {}",
-            self.to_string()
-        );
-        // The unit a C signature carries an integer in. The threshold holds for the targets Fix
-        // builds for; an ABI that extends a 32-bit integer to the width of a register — RISC-V 64
-        // does — raises it.
-        const C_INTEGER_UNIT_BITS: u32 = 32;
-        let integer = |bits| CTypeShape::Integer {
-            bits,
-            extension: if bits < C_INTEGER_UNIT_BITS {
-                Some(if self.is_signed_integer() {
-                    CIntegerExtension::Sign
-                } else {
-                    CIntegerExtension::Zero
-                })
-            } else {
-                None
-            },
-        };
-        Some(match self.name.name.as_str() {
-            I8_NAME | U8_NAME => integer(8),
-            I16_NAME | U16_NAME => integer(16),
-            I32_NAME | U32_NAME => integer(32),
-            I64_NAME | U64_NAME => integer(64),
-            F32_NAME => CTypeShape::Float32,
-            F64_NAME => CTypeShape::Float64,
-            PTR_NAME => CTypeShape::Pointer,
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
-            name => unreachable!("no C type for `{}`", name),
-        })
-    }
-
-    /// The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
-    /// needs none: a wide integer, a floating point number, a pointer, and `()`.
-    pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
-        match self.c_type_shape()? {
-            CTypeShape::Integer { extension, .. } => extension,
-            _ => None,
-        }
-    }
-
-    /// How a C declaration spells the type this type constructor stands for.
-    ///
-    /// An integer is written in the fixed-width name `<stdint.h>` gives it, since the width is what
-    /// the Fix type fixes and the spelling C would otherwise use — `int`, `long` — is a different
-    /// width on a different target.
-    ///
-    /// # Examples
-    /// `I32` is written `int32_t`, `U8` is `uint8_t`, `Ptr` is `void *`, and `()` is `void`.
-    pub fn c_type_name(self: &TyCon) -> String {
-        if self.is_unit() {
-            return "void".to_string();
-        }
-        assert!(
-            self.is_c_scalar(),
-            "call c_type_name for {}",
-            self.to_string()
-        );
-        match self.name.name.as_str() {
-            I8_NAME => "int8_t",
-            U8_NAME => "uint8_t",
-            I16_NAME => "int16_t",
-            U16_NAME => "uint16_t",
-            I32_NAME => "int32_t",
-            U32_NAME => "uint32_t",
-            I64_NAME => "int64_t",
-            U64_NAME => "uint64_t",
-            F32_NAME => "float",
-            F64_NAME => "double",
-            PTR_NAME => "void *",
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
-            name => unreachable!("no C spelling for `{}`", name),
-        }
-        .to_string()
-    }
-
-    /// Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
-    /// `()` is C's `void`, which carries no value, so it maps to `None`.
-    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
-        Some(match self.c_type_shape()? {
-            CTypeShape::Integer { bits, .. } => {
-                ctx.custom_width_int_type(bits).as_basic_type_enum()
-            }
-            CTypeShape::Float32 => ctx.f32_type().as_basic_type_enum(),
-            CTypeShape::Float64 => ctx.f64_type().as_basic_type_enum(),
-            CTypeShape::Pointer => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
-        })
     }
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an

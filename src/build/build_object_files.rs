@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        export_statement::{c_entry_point_signature, ExportStatement},
+        export_statement::ExportStatement,
         expr::ExprNode,
         name::FullName,
         program::{Program, Symbol, TypeEnv},
@@ -13,6 +13,7 @@ use crate::{
         UNITS_CACHE_PATH,
     },
     error::{panic_with_msg, Errors},
+    ffi::c_entry_point_signature,
     fixstd::{
         builtin::run_io_or_ios_runner,
         runtime::{self, BuildMode},

@@ -11,6 +11,7 @@ pub mod edit;
 pub mod elaboration;
 pub mod env_vars;
 pub mod error;
+pub mod ffi;
 pub mod fixstd;
 pub mod generator;
 pub mod graph;
