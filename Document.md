@@ -76,6 +76,7 @@
         - [Calling External Functions from Fix](#calling-external-functions-from-fix)
         - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
             - [Types an exported function can exchange](#types-an-exported-function-can-exchange)
+            - [Names an exported function can take](#names-an-exported-function-can-take)
             - [Returning more than one value](#returning-more-than-one-value)
         - [Managing External Resources in Fix](#managing-external-resources-in-fix)
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
@@ -2264,6 +2265,18 @@ Any other type is rejected when the program is compiled.
 * To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value).
 * For a truth value, take a `U8` or a `CInt` and convert it on the Fix side.
 * `String` and `Array` are structs. Wrap one in a boxed struct such as `Std::Box` to hand it over as an opaque pointer, or copy its bytes through a pointer.
+
+#### Names an exported function can take
+
+The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
+
+Three groups of names belong to the compiler, and an export of one of them is rejected:
+
+* `main`, which is the entry point the compiler generates
+* any name beginning with `fixruntime_`, which belongs to the Fix runtime
+* `malloc`, `realloc`, `sprintf` and `pthread_once`, which the Fix runtime calls
+
+One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
 
 #### Returning more than one value
 

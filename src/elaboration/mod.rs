@@ -135,6 +135,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
+    // Reject a C function the program describes two ways, now that every exported value carries the
+    // type it is exported at, and before code generation puts one function under the name.
+    program.validate_c_function_signatures()?;
+
     // Reject a value whose type has no layout, now that the program's types are instantiated and
     // before code generation walks the fields of any of them.
     program.validate_layouts()?;

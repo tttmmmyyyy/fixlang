@@ -2608,9 +2608,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                     Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
                 };
                 let func = self.module.add_function(&fun_name, fn_ty, None);
-                self.add_c_integer_extension_attribute(func, AttributeLoc::Return, ret_tycon);
+                self.set_c_integer_extension_attribute(func, AttributeLoc::Return, ret_tycon);
                 for (i, param_ty) in param_tys.iter().enumerate() {
-                    self.add_c_integer_extension_attribute(
+                    self.set_c_integer_extension_attribute(
                         func,
                         AttributeLoc::Param(i as u32),
                         param_ty,
@@ -2851,7 +2851,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // and `zeroext` are how the signature says which of the two it follows, and a C compiler puts
     // them on every such parameter and result. A Fix function reaching C carries them for the same
     // reason: without them the reader of a promise-based ABI sees whatever the bits happen to hold.
-    pub fn add_c_integer_extension_attribute(
+    pub fn set_c_integer_extension_attribute(
         &self,
         func: FunctionValue<'c>,
         loc: AttributeLoc,
@@ -2859,6 +2859,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) {
         if !tycon.is_narrow_c_integer() {
             return;
+        }
+        // A declaration written elsewhere in the program may have put the other one here, so take
+        // it off: the value's own type says which of the two the ABI follows.
+        for name in ["signext", "zeroext"] {
+            func.remove_enum_attribute(loc, enum_attribute_kind_id(name));
         }
         let name = if tycon.is_signed_integer() {
             "signext"

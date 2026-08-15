@@ -57,6 +57,9 @@ pub const MONAD_BIND_NAME: &str = "bind";
 pub const COMPOSE_FUNCTION_NAME: &str = "compose";
 pub const MAIN_FUNCTION_NAME: &str = "main";
 pub const MAIN_MODULE_NAME: &str = "Main";
+/// The name of the entry point in the object file: the function the C runtime calls once it has set
+/// the process up, which the compiler generates to run the program's `IO` action.
+pub const C_ENTRY_POINT_NAME: &str = "main";
 pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";

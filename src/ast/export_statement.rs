@@ -4,9 +4,11 @@ use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
-use crate::ast::types::{Type, TypeNode};
+use crate::ast::types::{tycon, TyCon, Type, TypeNode};
+use crate::constants::{PTR_NAME, STD_NAME};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
+use crate::fixstd::runtime::reserved_c_function_name_reason;
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
@@ -59,8 +61,11 @@ impl ExportStatement {
         }
     }
 
-    // Validate the names in the export statement.
-    // - src: The source of the export statement. Used for error messages.
+    /// Check that the C function name this statement gives is one C can spell and one the compiler
+    /// leaves to the program.
+    ///
+    /// # Arguments
+    /// * `src` — where to place the error message.
     pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
         // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
         // underscores.
@@ -84,6 +89,13 @@ impl ExportStatement {
                 );
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
+        }
+        if let Some(reason) = reserved_c_function_name_reason(&self.function_name) {
+            let msg = format!(
+                "`{}` cannot be the name of an exported function: {}.",
+                &self.function_name, reason
+            );
+            return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
         Ok(())
     }
@@ -110,14 +122,40 @@ impl ExportStatement {
             c_scalar_type(&codom, gc).fn_type(&dom_llvm_tys, false)
         };
 
-        // Declare the function.
-        let func = gc.module.add_function(&self.function_name, func_ty, None);
+        // Take the name. An `FFI_CALL` of this C function has declared it by now — code generation
+        // implements the program's symbols before it reaches here — and a declaration and this
+        // definition describe one C function, so the body goes onto that declaration. Anything else
+        // found under the name is a name the compiler owns, which `validate_names` rejects, and a
+        // declaration of another signature, which `validate_c_function_signatures` rejects.
+        let func = match gc.module.get_function(&self.function_name) {
+            Some(declared) => {
+                assert_eq!(
+                    declared.get_type(),
+                    func_ty,
+                    "every description of the C function `{}` gives one signature",
+                    self.function_name
+                );
+                assert_eq!(
+                    declared.count_basic_blocks(),
+                    0,
+                    "the C function `{}` has one definition",
+                    self.function_name
+                );
+                declared
+            }
+            None => gc.module.add_function(&self.function_name, func_ty, None),
+        };
+        assert_eq!(
+            func.get_name().to_str().unwrap(),
+            self.function_name,
+            "the exported function enters the module under the C name it was given"
+        );
         if let Some(tycon) = codom.toplevel_tycon() {
-            gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
+            gc.set_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
         }
         for (i, dom) in doms.iter().enumerate() {
             if let Some(tycon) = dom.toplevel_tycon() {
-                gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
+                gc.set_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
             }
         }
 
@@ -236,6 +274,82 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
         return head + ". Use `U8` or `CInt`, and convert it on the Fix side.";
     }
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
+}
+
+/// The type of a C function, as the Fix type constructors standing for the C types it exchanges.
+///
+/// A program describes a C function in two ways: an `FFI_CALL` declares one it calls, and an
+/// `FFI_EXPORT` defines one it offers. Both descriptions of one name reach the module as a single
+/// function, through which every call in the program goes, so they have to give one signature.
+pub struct CSignature {
+    /// The type of each parameter, in the order the C function takes them.
+    pub params: Vec<Arc<TyCon>>,
+    /// The type of the result, the unit type where the C function returns nothing.
+    pub ret: Arc<TyCon>,
+    /// Whether the signature ends in `...`.
+    pub is_var_args: bool,
+}
+
+impl CSignature {
+    /// The signature an `FFI_CALL` writes for the function it calls.
+    pub fn of_ffi_call(
+        ret: &Arc<TyCon>,
+        params: &Vec<Arc<TyCon>>,
+        is_var_args: bool,
+    ) -> CSignature {
+        CSignature {
+            params: params.clone(),
+            ret: ret.clone(),
+            is_var_args,
+        }
+    }
+
+    /// The signature of the C function generated for a value exported at `ty`.
+    pub fn of_exported(ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
+        CSignature {
+            params: ty
+                .doms
+                .iter()
+                .map(|dom| c_boundary_tycon(dom, type_env))
+                .collect(),
+            ret: c_boundary_tycon(&ty.codom, type_env),
+            is_var_args: false,
+        }
+    }
+
+    /// Whether this signature and `other` declare the same C function.
+    pub fn agrees_with(&self, other: &CSignature) -> bool {
+        self.is_var_args == other.is_var_args
+            && self.params.len() == other.params.len()
+            && self.ret.c_type_shape() == other.ret.c_type_shape()
+            && (self.params.iter())
+                .zip(other.params.iter())
+                .all(|(a, b)| a.c_type_shape() == b.c_type_shape())
+    }
+
+    /// The signature as a C declaration of a nameless function reads, with each C type written as
+    /// the Fix type constructor standing for it.
+    pub fn to_string(&self) -> String {
+        let mut params = self
+            .params
+            .iter()
+            .map(|param| param.to_string())
+            .collect::<Vec<_>>();
+        if self.is_var_args {
+            params.push("...".to_string());
+        }
+        format!("{} ({})", self.ret.to_string(), params.join(", "))
+    }
+}
+
+/// The Fix type constructor standing for the C type a value of `ty` crosses the FFI boundary as: a
+/// boxed value crosses as a pointer, and every other exportable value as its own type constructor.
+fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TyCon> {
+    if ty.is_box(type_env) {
+        return tycon(FullName::from_strs(&[STD_NAME], PTR_NAME));
+    }
+    ty.toplevel_tycon()
+        .expect("`has_c_abi` admits only a type with a type constructor at its head")
 }
 
 // The type of an exported Fix value, split into the parts the generated C function is built from.

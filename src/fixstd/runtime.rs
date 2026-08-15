@@ -1,4 +1,4 @@
-use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
+use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
@@ -29,6 +29,48 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// `RUNTIME_MALLOC`: it resizes a single malloc block in place when it can, so
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
+
+/// The prefix of every name the compiler mints for the runtime's own use: the runtime functions
+/// named above, the globals holding `argc` and `argv`, and the traversers code generation shares
+/// between the objects of one type.
+pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
+
+/// The C library functions the runtime declares in the module it builds, and calls.
+const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
+    RUNTIME_SPRINTF,
+    RUNTIME_PTHREAD_ONCE,
+    RUNTIME_MALLOC,
+    RUNTIME_REALLOC,
+];
+
+/// Why the compiler owns the C function name `name`, phrased to follow "cannot be the name of an
+/// exported function: "; `None` where the name is free for a program to take.
+///
+/// A module holds one function under a name, so a name the compiler puts there and an `FFI_EXPORT`
+/// of that name are two definitions of one symbol: LLVM renames whichever of the two arrives
+/// second, and the program that comes out calls something other than what it names.
+///
+/// The answer does not depend on how the program is built. `pthread_once` reaches the module only
+/// in a multi-threaded program and the entry point only in an executable, and both are owned
+/// everywhere, so turning multi-threading on or building the same source as a dynamic library
+/// leaves the set of programs that compile as it was.
+pub fn reserved_c_function_name_reason(name: &str) -> Option<String> {
+    if name == C_ENTRY_POINT_NAME {
+        return Some(
+            "it is the entry point of the program, which the compiler defines".to_string(),
+        );
+    }
+    if name.starts_with(RUNTIME_NAME_PREFIX) {
+        return Some(format!(
+            "a name beginning with `{}` belongs to the Fix runtime",
+            RUNTIME_NAME_PREFIX
+        ));
+    }
+    if RUNTIME_C_LIBRARY_FUNCTIONS.contains(&name) {
+        return Some("it is a C library function the Fix runtime calls".to_string());
+    }
+    None
+}
 
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.

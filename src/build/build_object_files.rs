@@ -8,7 +8,10 @@ use crate::{
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, OutputFileType},
-    constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
+    constants::{
+        C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
+        UNITS_CACHE_PATH,
+    },
     error::{panic_with_msg, Errors},
     fixstd::{
         builtin::run_io_or_ios_runner,
@@ -680,7 +683,9 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
         ],
         false,
     );
-    let main_function = gc.module.add_function("main", main_fn_type, None);
+    let main_function = gc
+        .module
+        .add_function(C_ENTRY_POINT_NAME, main_fn_type, None);
     let entry_bb = gc.context.append_basic_block(main_function, "entry");
     gc.builder().position_at_end(entry_bb);
 

@@ -296,6 +296,107 @@ pub fn test_export_non_ascii_first_character_fails() {
 }
 
 #[test]
+pub fn test_export_taking_a_name_the_compiler_owns_fails() {
+    // A module holds one function under a name, so an export of a name the compiler puts there is a
+    // second definition of one symbol and one of the two loses the name. Each kind of name the
+    // compiler owns: the entry point, a name of the Fix runtime, and a C library function the
+    // runtime calls.
+    for (c_function_name, reason) in [
+        ("main", "it is the entry point of the program"),
+        ("fixruntime_abort", "belongs to the Fix runtime"),
+        ("malloc", "it is a C library function the Fix runtime calls"),
+    ] {
+        let source = format!(
+            r##"
+                module Main;
+
+                value : CInt;
+                value = 42.c_int;
+                FFI_EXPORT[value, {}];
+
+                main : IO ();
+                main = println("the entry point ran");
+            "##,
+            c_function_name
+        );
+        test_source_fail(&source, Configuration::develop_mode(), reason);
+    }
+}
+
+#[test]
+pub fn test_export_and_ffi_call_of_one_c_name() {
+    // A program may call the C function it exports. The declaration the call writes and the
+    // definition the export builds describe one function, and the module holds it once, so the call
+    // reaches the exported value.
+    let source = r##"
+        module Main;
+
+        twice_it : CInt -> CInt;
+        twice_it = |x| x + x;
+        FFI_EXPORT[twice_it, c_twice_it];
+
+        call_back : CInt -> CInt;
+        call_back = |x| FFI_CALL[CInt c_twice_it(CInt), x];
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"call back", call_back(21.c_int).i64, 42);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_ffi_calls_of_one_c_name_at_two_signatures_fails() {
+    // Both calls go through the one function the module holds under the name, so the arity the
+    // second one writes is an arity the C function does not have.
+    let source = r##"
+        module Main;
+
+        one_argument : CInt -> CInt;
+        one_argument = |x| FFI_CALL[CInt c_pick(CInt), x];
+
+        two_arguments : CInt -> CInt -> CInt;
+        two_arguments = |x, y| FFI_CALL[CInt c_pick(CInt, CInt), x, y];
+
+        main : IO ();
+        main = println((one_argument(1.c_int).i64 + two_arguments(2.c_int, 3.c_int).i64).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "One C function has one signature",
+    );
+}
+
+#[test]
+pub fn test_ffi_calls_of_one_c_name_reading_a_result_as_both_signs() {
+    // Two integer types of one width are one C type: a signature says how wide a value is and how
+    // it travels, and the sign is how the side reading the bits interprets them. The `FromBytes`
+    // implementations of the standard library read one runtime function's result as both.
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let bytes = [255_U8];
+            let unsigned = bytes.borrow_elements(|ptr| FFI_CALL[U8 c_read_byte(Ptr), ptr]);
+            let signed = bytes.borrow_elements(|ptr| FFI_CALL[I8 c_read_byte(Ptr), ptr]);
+            assert_eq(|_|"read as unsigned", unsigned.i64, 255);;
+            assert_eq(|_|"read as signed", signed.i64, -1);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        unsigned char c_read_byte(unsigned char* p) {
+            return *p;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
 pub fn test_ffi_call_unit_parameter_fails() {
     // `()` stands for `void`, which a C function takes as a return type alone.
     let source = r##"

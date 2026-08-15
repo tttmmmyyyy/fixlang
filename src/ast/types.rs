@@ -206,6 +206,19 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
+/// How C carries a value: as an integer or a floating point number of a width in bits, or as a
+/// pointer.
+///
+/// Two types of one shape are one C type, so a signature written with either declares the same
+/// function. `I8` and `U8` share a shape: a C signature says how wide a value is and how it
+/// travels, and the sign is how the side reading the bits interprets them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CTypeShape {
+    Integer(u32),
+    Float(u32),
+    Pointer,
+}
+
 // A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 // it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
@@ -279,27 +292,39 @@ impl TyCon {
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
-    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
-    // `()` is C's `void`, which carries no value, so it maps to `None`.
-    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
+    // The shape of the C type this type constructor stands for.
+    // `()` is C's `void`, which carries no value, so it has no shape.
+    pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
         if self.is_unit() {
             return None;
         }
         assert!(
             self.is_c_scalar(),
-            "call get_c_type for {}",
+            "call c_type_shape for {}",
             self.to_string()
         );
         Some(match self.name.name.as_str() {
-            I8_NAME | U8_NAME => ctx.i8_type().as_basic_type_enum(),
-            I16_NAME | U16_NAME => ctx.i16_type().as_basic_type_enum(),
-            I32_NAME | U32_NAME => ctx.i32_type().as_basic_type_enum(),
-            I64_NAME | U64_NAME => ctx.i64_type().as_basic_type_enum(),
-            F32_NAME => ctx.f32_type().as_basic_type_enum(),
-            F64_NAME => ctx.f64_type().as_basic_type_enum(),
-            PTR_NAME => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
+            I8_NAME | U8_NAME => CTypeShape::Integer(8),
+            I16_NAME | U16_NAME => CTypeShape::Integer(16),
+            I32_NAME | U32_NAME => CTypeShape::Integer(32),
+            I64_NAME | U64_NAME => CTypeShape::Integer(64),
+            F32_NAME => CTypeShape::Float(32),
+            F64_NAME => CTypeShape::Float(64),
+            PTR_NAME => CTypeShape::Pointer,
             // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
             name => unreachable!("no C type for `{}`", name),
+        })
+    }
+
+    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
+    // `()` is C's `void`, which carries no value, so it maps to `None`.
+    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
+        Some(match self.c_type_shape()? {
+            CTypeShape::Integer(bits) => ctx.custom_width_int_type(bits).as_basic_type_enum(),
+            CTypeShape::Float(32) => ctx.f32_type().as_basic_type_enum(),
+            CTypeShape::Float(64) => ctx.f64_type().as_basic_type_enum(),
+            CTypeShape::Float(bits) => unreachable!("no C floating point type of {} bits", bits),
+            CTypeShape::Pointer => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
         })
     }
 
@@ -310,11 +335,10 @@ impl TyCon {
     // The 32-bit threshold holds for the targets Fix builds for. An ABI that extends a 32-bit
     // integer to the width of a register — RISC-V 64 does — widens this set.
     pub fn is_narrow_c_integer(self: &TyCon) -> bool {
-        self.name.namespace == NameSpace::new_str(&[STD_NAME])
-            && matches!(
-                self.name.name.as_str(),
-                I8_NAME | U8_NAME | I16_NAME | U16_NAME
-            )
+        if !self.is_c_scalar() {
+            return false;
+        }
+        matches!(self.c_type_shape(), Some(CTypeShape::Integer(bits)) if bits < 32)
     }
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an
