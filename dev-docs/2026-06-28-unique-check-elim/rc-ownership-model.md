@@ -8,8 +8,8 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 - **RC unit** = `(変数名, Path)`（`VarPath`）。`rc_units` が列挙し、`is_rc_unit_root`（boxed / union / punched array）で降下を止める。
   punched フィールドはスキップする。
-- **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched フィールドも
-  スキップしない。
+- **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched
+  フィールドは `rc_units` と同じくスキップする（穴の開いたフィールドは参照を持たない）。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
 - 参照数を数える鍵 `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、
@@ -92,8 +92,8 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 - **root がグローバル名の unit**: グローバルは線形規律の外（読むたびに新しい参照が生まれ、refcount 操作は
   no-op）。丸ごとスキップする。
-- **punched フィールドの下の leaf**: `rc_units` はスキップするが `boxed_leaf_paths` はしない。leaf 側でも
-  ミラーして除外する。
+- **punched フィールドの下の leaf**: `rc_units` も `boxed_leaf_paths` も降りないので、どちらの空間にも
+  現れない。
 - **unbox union が参照を数えるキー**: union の参照は生きている variant の参照で、どのオブジェクトに属するかは
   タグで決まる。`origin` は union の根に対して payload の unit 群を候補に持つ `Join` を答え、variant の中の
   leaf に対してはその payload の unit を答える。union の根の鍵と、その下の leaf が解決する鍵の両方を検査
