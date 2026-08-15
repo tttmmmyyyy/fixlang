@@ -45,9 +45,10 @@ use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
     RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
+use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_unit_keys, all_owned_units, boxed_leaves, collect_consumes, destructure_consumes, origin,
-    rc_units, rhs_consumes, truncate_to_unit, unit_key, units_under, VarTable,
+    acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
+    rhs_consumes, truncate_to_unit, unit_key, units_under, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
@@ -132,7 +133,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         if let Some(bref) = borrow_versions.get(&func.name) {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
-                for leaf in boxed_leaves(&p.ty, type_env) {
+                for leaf in boxed_leaf_paths(&p.ty, type_env) {
                     if ownerships.own.contains(&(p.name.clone(), leaf.clone())) {
                         let unit = truncate_to_unit(&p.ty, &leaf, type_env);
                         owned_units.insert((rename[&p.name].clone(), unit));
@@ -256,7 +257,7 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
 /// Whether any of a function's parameter leaves is borrowable (not in the inferred owned set).
 fn func_has_borrowable_param(func: &RcFunc, ownerships: &Ownerships, type_env: &TypeEnv) -> bool {
     func.params.iter().any(|p| {
-        boxed_leaves(&p.ty, type_env)
+        boxed_leaf_paths(&p.ty, type_env)
             .iter()
             .any(|leaf| !ownerships.own.contains(&(p.name.clone(), leaf.clone())))
     })

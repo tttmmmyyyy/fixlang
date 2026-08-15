@@ -204,7 +204,6 @@ impl Provenance {
     fn demote(&self, path: &[usize]) -> Provenance {
         self.set_leaves_under(path, LeafOrigin::Unknown)
     }
-
 }
 
 impl std::fmt::Display for Provenance {

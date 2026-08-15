@@ -455,7 +455,7 @@ pub(crate) fn destructure_consumes(
     fields: &[(usize, RcVar)],
     type_env: &TypeEnv,
 ) -> Vec<FieldPath> {
-    let leaves = boxed_leaves(&container.ty, type_env);
+    let leaves = boxed_leaf_paths(&container.ty, type_env);
     if container.ty.is_box(type_env) {
         return leaves;
     }
@@ -499,7 +499,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
             // callee owns every position.
             let callee_params = resolve_callee_params(callee, vars, prog);
             for (i, a) in args.iter().enumerate() {
-                for leaf in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
                     let is_owning_position = match &callee_params {
@@ -519,7 +519,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
-                for leaf in boxed_leaves(&a.ty, type_env) {
+                for leaf in boxed_leaf_paths(&a.ty, type_env) {
                     // An argument leaf that the op passes through to its result is not consumed;
                     // anything else at an owning position is moved into the op.
                     if !passthrough.contains(&(i, leaf.clone())) {
@@ -584,22 +584,16 @@ fn push_boxed_leaves(
     type_env: &TypeEnv,
     out: &mut Vec<VarPath>,
 ) {
-    for p in boxed_leaves(ty, type_env) {
+    for p in boxed_leaf_paths(ty, type_env) {
         out.push((var.clone(), p));
     }
-}
-
-/// The paths of every boxed leaf of a type: the whole value if boxed, the capture of a closure, or
-/// each boxed leaf of an unboxed aggregate.
-pub(crate) fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
-    boxed_leaf_paths(ty, type_env)
 }
 
 // --- reference-counting units ---
 
 /// The reference-counting units of a value's type: the capture of a closure, or each unit root
 /// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
-/// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
+/// its unboxed structs/tuples. Unlike `boxed_leaf_paths`, it stops at a unit root rather than expanding it
 /// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
 /// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
