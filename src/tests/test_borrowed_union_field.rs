@@ -170,4 +170,71 @@ main = (
         let config = Configuration::develop_mode();
         test_source(BORROWED_UNION_FIELD_SOURCE, config);
     }
+
+    const DROPPED_UNION_FIELD_SOURCE: &str = r#"
+module Main;
+
+// A boxed value a variant of the union carries, so that the union holds a reference count.
+type Guard = box struct { allowed : Array U8 };
+
+// Two boxed values in one variant, so that the union's root has several leaves beneath it.
+type Pair = unbox struct { first : Guard, second : Guard };
+
+// One variant holds a boxed value, one a pair of them, and one only a number, so that the union's
+// root is resolved where a single leaf lies beneath it, where several do, and where none does.
+type Action = unbox union { wait : Guard, pair : Pair, mark : I64 };
+
+type Node = unbox struct { action : Action, n : I64 };
+
+// Reads the union out of a node it is handed and lets it die without consuming it. The node is only
+// read here, so the reading version borrows it and takes no reference of its own; the union has to
+// be recognized as the caller's rather than as a value produced here.
+glance : I64 -> Node -> I64;
+glance = |k, node| (
+    let action = node.@action;
+    eval action;
+    if k <= 0 { node.@n };
+    node.@n + glance(k - 1, node)
+);
+
+// The same, with the union asked about by a borrowing getter before it is dropped.
+sniff : I64 -> Node -> I64;
+sniff = |k, node| (
+    let action = node.@action;
+    if action.is_mark { node.@n };
+    if k <= 0 { 100 };
+    1 + sniff(k - 1, node)
+);
+
+main : IO ();
+main = (
+    let single = Node { action : Action::wait(Guard { allowed : ['a'] }), n : 5 };
+    let several = Node { action : Action::pair(Pair {
+        first : Guard { allowed : ['b'] }, second : Guard { allowed : ['c'] }
+    }), n : 2 };
+    let scalar = Node { action : Action::mark(9), n : 1 };
+    assert_eq(|_|"one leaf beneath the union's root", glance(3, single), 20);;
+    assert_eq(|_|"several leaves beneath the union's root", glance(3, several), 8);;
+    assert_eq(|_|"no leaf beneath the union's root", glance(3, scalar), 4);;
+    assert_eq(|_|"dropped after a borrowing getter", sniff(3, several), 103);;
+    assert_eq(|_|"dropped by the getter's own arm", sniff(3, scalar), 1);;
+    pure()
+);
+"#;
+
+    /// The boxed values a borrowed node carries survive a reader that reads the union out of it and
+    /// drops it without consuming it, and none of them leaks. Checked under Valgrind MemCheck: the
+    /// release that falls twice frees a value nothing reads afterwards, so the answers stay right.
+    #[test]
+    pub fn test_dropped_union_field_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        let config = Configuration::develop_mode();
+        test_source(DROPPED_UNION_FIELD_SOURCE, config);
+    }
 }
