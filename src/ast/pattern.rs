@@ -12,94 +12,17 @@ use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// One node of a pattern tree: the pattern written at this position, together with what
+/// elaboration has learned about it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PatternNode {
+    /// The form this pattern takes, holding its sub-patterns.
     pub pattern: Pattern,
+    /// The type of the value this pattern matches, and where the pattern is written.
     pub info: PatternInfo,
 }
 
 impl PatternNode {
-    // Assign types to the pattern so that it has the given type.
-    //
-    // All types must have their type aliases resolved and associated types expanded.
-    //
-    // Note:
-    // This function ignores user-provided type annotations.
-    // Specifically, if the pattern is `v : A` and the type `B` is given, then type `B` is assigned to `v` even if `A != B`.
-    // Therefore, this function must not be used for type checking. It is used in a process after type checking has succeeded.
-    #[allow(dead_code)]
-    pub fn get_typed_matching(
-        &self,
-        type_: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-    ) -> Option<Arc<PatternNode>> {
-        match &self.pattern {
-            Pattern::Var(_v, _ty) => {
-                // IGNORES user-provided type annotation!
-                let pat = self.set_type(type_.clone());
-                Some(pat)
-            }
-            Pattern::Struct(tc, field_to_pat) => {
-                let type_tc = type_.toplevel_tycon();
-                if type_tc.is_none() {
-                    return None;
-                }
-                let type_tc = type_tc.unwrap();
-                if type_tc.as_ref() != tc.as_ref() {
-                    return None;
-                }
-
-                let type_ti = type_env.tycons().get(&type_tc)?;
-                let mut field_name_to_idx = Map::default();
-                for (i, field) in type_ti.fields.iter().enumerate() {
-                    field_name_to_idx.insert(field.name.clone(), i);
-                }
-
-                // Recursively match each field pattern with its expected type
-                let field_types = type_.field_types(type_env);
-                let mut field_to_pat = field_to_pat.clone();
-                for (field_name, _, pat) in field_to_pat.iter_mut() {
-                    let field_idx = *field_name_to_idx.get(field_name)?;
-                    let field_ty = &field_types[field_idx];
-                    let matched_pat = pat.get_typed_matching(field_ty, type_env)?;
-                    *pat = matched_pat;
-                }
-
-                Some(
-                    self.set_type(type_.clone())
-                        .set_struct_field_to_pat(field_to_pat),
-                )
-            }
-            Pattern::Union(variant_name, _, subpat) => {
-                let tc = TyCon::new(variant_name.namespace.clone().to_fullname());
-                let variant_name = &variant_name.name;
-
-                let type_tc = type_.toplevel_tycon();
-                if type_tc.is_none() {
-                    return None;
-                }
-                let type_tc = type_tc.unwrap();
-                if type_tc.as_ref() != &tc {
-                    return None;
-                }
-
-                let type_ti = type_env.tycons().get(&type_tc)?;
-                let mut variant_name_to_idx = Map::default();
-                for (i, field) in type_ti.fields.iter().enumerate() {
-                    variant_name_to_idx.insert(field.name.clone(), i);
-                }
-
-                // Recursively match each field pattern with its expected type
-                let variant_types = type_.field_types(type_env);
-                let variant_idx = *variant_name_to_idx.get(variant_name)?;
-                let variant_ty = &variant_types[variant_idx];
-                let subpat = subpat.get_typed_matching(variant_ty, type_env)?;
-
-                Some(self.set_type(type_.clone()).set_union_pat(subpat))
-            }
-        }
-    }
-
     /// Assign a type to the pattern and to each of its sub-patterns, taking a
     /// fresh type variable wherever the source leaves the type open.
     ///
@@ -169,10 +92,11 @@ impl PatternNode {
                     // type mismatch, …) substitutes a fresh-tyvar
                     // typed sub-pattern with no bindings, so the
                     // sibling fields are still walked.
-                    let typed = pat.get_typed(typechecker);
-                    let (typed_pat, var_ty) = typechecker.tolerate_pattern_typed(typed, pat)?;
+                    let typed_res = pat.get_typed(typechecker);
+                    let (typed_pat, sub_var_to_ty) =
+                        typechecker.tolerate_pattern_typed(typed_res, pat)?;
                     *pat = typed_pat;
-                    var_to_ty.extend(var_ty);
+                    var_to_ty.extend(sub_var_to_ty);
                     // No field type to unify against: the head names no struct, or the
                     // struct has no such field. `validate_pattern` rejects both in strict
                     // mode and tolerates them in `error_tolerant` mode.
@@ -185,24 +109,9 @@ impl PatternNode {
                         );
                         continue;
                     };
-                    let unify_res = UnifOrOtherErr::extract_others(
-                        typechecker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
-                    )?;
-                    if unify_res.is_err() && !typechecker.error_tolerant {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
-                                pat.pattern.to_string(),
-                                field_name,
-                                tc.to_string(),
-                            ),
-                            &[&pat.info.source],
-                        ));
-                    }
-                    // In error_tolerant mode the unify mismatch is
-                    // swallowed; the sub-pattern keeps its inferred
-                    // type so the body that references its bindings
-                    // can still be elaborated.
+                    pat.unify_with_expected_type(typechecker, field_ty, || {
+                        format!("field `{}` of struct `{}`", field_name, tc.to_string())
+                    })?;
                 }
                 Ok((
                     self.set_type(ty).set_struct_field_to_pat(field_to_pat),
@@ -237,47 +146,66 @@ impl PatternNode {
                 // fresh-tyvar typed sub-pattern with no bindings — the
                 // surrounding union pattern still gets its type
                 // assigned, so the match arm can proceed.
-                let typed = subpat.get_typed(typechecker);
-                let (subpat, var_ty) = typechecker.tolerate_pattern_typed(typed, subpat)?;
+                let typed_res = subpat.get_typed(typechecker);
+                let (subpat, var_to_ty) = typechecker.tolerate_pattern_typed(typed_res, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
                 if let Some((tc, variant_ty)) = union_tc_and_variant_ty {
-                    let unify_res = UnifOrOtherErr::extract_others(
-                        typechecker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
-                    )?;
-                    if unify_res.is_err() && !typechecker.error_tolerant {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
-                                subpat.pattern.to_string(),
-                                variant_name.to_string(),
-                                tc.to_string(),
-                            ),
-                            &[&subpat.info.source],
-                        ));
-                    }
-                    // In error_tolerant mode the unify mismatch is
-                    // swallowed; the sub-pattern keeps its inferred type
-                    // so the body that references its bindings can still
-                    // be elaborated.
+                    subpat.unify_with_expected_type(typechecker, &variant_ty, || {
+                        format!(
+                            "variant `{}` of union `{}`",
+                            variant_name.to_string(),
+                            tc.to_string()
+                        )
+                    })?;
                 }
 
                 // Return the typed pattern.
-                Ok((self.set_type(ty).set_union_pat(subpat), var_ty))
+                Ok((self.set_type(ty).set_union_pat(subpat), var_to_ty))
             }
         }
     }
 
-    // For every `Pattern::Var` in this pattern tree, return its name and
-    // the `PatternInfo` of the `PatternNode` wrapping it — so callers get
-    // the binder's type and source span alongside the name. Sub-patterns
-    // of `Struct` / `Union` are walked left-to-right.
+    /// Unify the type inferred for this sub-pattern with `expected_ty`, the type of the value it is
+    /// matched against.
+    ///
+    /// On a mismatch, strict mode reports the sub-pattern as inappropriate for the place it sits in,
+    /// which `place_desc` names as ``field `x` of struct `S` `` or ``variant `v` of union `U` ``. In
+    /// `error_tolerant` mode the mismatch is swallowed and the sub-pattern keeps its inferred type,
+    /// so the body that references its bindings can still be elaborated.
+    fn unify_with_expected_type(
+        &self,
+        typechecker: &mut TypeCheckContext,
+        expected_ty: &Arc<TypeNode>,
+        place_desc: impl FnOnce() -> String,
+    ) -> Result<(), Errors> {
+        let unify_res = UnifOrOtherErr::extract_others(
+            typechecker.unify(self.info.type_.as_ref().unwrap(), expected_ty),
+        )?;
+        if unify_res.is_err() && !typechecker.error_tolerant {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Inappropriate pattern `{}` for a value of {}.",
+                    self.pattern.to_string(),
+                    place_desc()
+                ),
+                &[&self.info.source],
+            ));
+        }
+        Ok(())
+    }
+
+    /// The name every `Pattern::Var` in this pattern tree binds, each paired with the
+    /// `PatternInfo` of the `PatternNode` wrapping it, which carries that binder's type and source
+    /// span. Sub-patterns of `Struct` / `Union` are walked left to right, so the binders come in
+    /// the order they are written.
     pub fn var_infos(&self) -> Vec<(FullName, PatternInfo)> {
         let mut out = vec![];
         self.collect_var_infos(&mut out);
         out
     }
 
+    /// Append this pattern tree's binders to `out`, in the order they are written.
     fn collect_var_infos(&self, out: &mut Vec<(FullName, PatternInfo)>) {
         match &self.pattern {
             Pattern::Var(v, _) => out.push((v.name.clone(), self.info.clone())),
@@ -290,7 +218,13 @@ impl PatternNode {
         }
     }
 
-    // Find the node at the specified position.
+    /// The element of this pattern the cursor at `pos` is on — the variable a `Var` binds, a field
+    /// name or the head type constructor of a `Struct`, the variant name of a `Union`, or a type
+    /// written in an annotation — for an editor to answer hover and goto-definition there.
+    ///
+    /// # Arguments
+    /// * `pos` — a position as an editor sends it, so the position just past the last character of
+    ///   a name counts as being on that name.
     pub fn find_node_at_pos(self: &Arc<PatternNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {
             return None;
@@ -330,20 +264,19 @@ impl PatternNode {
                             return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }
-                    let res = pat.find_node_at_pos(pos);
-                    if res.is_some() {
-                        return res;
+                    let node = pat.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
                     }
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
             Pattern::Union(variant, variant_src, subpat) => {
                 if let Some(variant_name_span) = variant_src {
-                    if variant_name_span.includes_pos_lsp(pos)
-                        && !variant.namespace.names.is_empty()
-                    {
-                        let tc = TyCon::new(variant.namespace.clone().to_fullname());
-                        return Some(EndNode::Variant(tc, variant.name.clone()));
+                    if variant_name_span.includes_pos_lsp(pos) {
+                        if let Some(tc) = Pattern::variant_union_tycon(variant) {
+                            return Some(EndNode::Variant(tc, variant.name.clone()));
+                        }
                     }
                 }
                 let node = subpat.find_node_at_pos(pos);
@@ -355,6 +288,10 @@ impl PatternNode {
         }
     }
 
+    /// A copy of this pattern whose names are resolved against the namespaces in scope: the type
+    /// constructor at the head of a struct pattern, and the types written in a variable's
+    /// annotation. A union pattern's variant name is resolved during type checking instead, against
+    /// the union being matched (`validate_variant_name`).
     pub fn resolve_namespace(
         self: &PatternNode,
         ctx: &mut NameResolutionContext,
@@ -386,6 +323,8 @@ impl PatternNode {
         }
     }
 
+    /// A copy of this pattern with the type aliases in its type annotations expanded. The head of a
+    /// struct pattern names the struct itself, so an alias written there is reported as an error.
     pub fn resolve_type_aliases(
         self: &PatternNode,
         type_env: &TypeEnv,
@@ -417,7 +356,9 @@ impl PatternNode {
         }
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// A copy of this pattern in which every global name it writes — the types of an annotation, a
+    /// struct pattern's head, a union pattern's variant — is marked absolute, so it names the same
+    /// entity read from any namespace and prints with a leading `::`.
     pub fn global_to_absolute(&self) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -513,10 +454,12 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    /// Whether this pattern matches one variant of a union.
     pub fn is_union(&self) -> bool {
         matches!(&self.pattern, Pattern::Union(_, _, _))
     }
 
+    /// Whether this pattern binds the matched value whole to a variable, matching every value.
     pub fn is_var(&self) -> bool {
         matches!(&self.pattern, Pattern::Var(_, _))
     }
@@ -533,24 +476,30 @@ impl PatternNode {
         }
     }
 
+    /// A copy of this pattern written at `src`, the span covering the whole pattern.
     pub fn set_source(self: &PatternNode, src: Span) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.source = Some(src);
         Arc::new(node)
     }
 
+    /// A copy of this pattern carrying `src` as its auxiliary span, which covers the part of the
+    /// pattern named by `PatternInfo::aux_src`.
     pub fn set_aux_src(self: &PatternNode, src: Span) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.aux_src = Some(src);
         Arc::new(node)
     }
 
+    /// A copy of this pattern typed `ty`, the type of the value it matches.
     pub fn set_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.type_ = Some(ty);
         Arc::new(node)
     }
 
+    /// A pattern binding the matched value to `var`, with `anno_ty` as the type written for it and
+    /// no source span.
     pub fn make_var(var: Arc<Var>, anno_ty: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Var(var, anno_ty),
@@ -558,9 +507,8 @@ impl PatternNode {
         })
     }
 
-    // Construct a struct destructuring pattern from `(field name,
-    // sub-pattern)` pairs, with no per-field-name source spans (the
-    // entries get `None` spans).
+    /// A struct destructuring pattern matching each `(field name, sub-pattern)` pair of `fields`,
+    /// with no source span recorded for any of the field names.
     pub fn make_struct(
         tycon: Arc<TyCon>,
         fields: Vec<(Name, Arc<PatternNode>)>,
@@ -569,8 +517,8 @@ impl PatternNode {
         PatternNode::make_struct_with_spans(tycon, fields)
     }
 
-    // Construct a struct destructuring pattern from `(field name,
-    // optional field-name source span, sub-pattern)` triples.
+    /// A struct destructuring pattern matching each `(field name, span of that name in the source,
+    /// sub-pattern)` triple of `fields`.
     pub fn make_struct_with_spans(
         tycon: Arc<TyCon>,
         fields: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
@@ -581,7 +529,11 @@ impl PatternNode {
         })
     }
 
-    // Construct a union match pattern with the variant name's source span.
+    /// A pattern matching the `variant` of a union and its payload against `subpat`.
+    ///
+    /// # Arguments
+    /// * `variant_src` — the span of the bare variant name in the source, without any namespace
+    ///   prefix written before it.
     pub fn make_union_with_span(
         variant: FullName,
         variant_src: Option<Span>,
@@ -593,29 +545,27 @@ impl PatternNode {
         })
     }
 
-    // Validate the variant name of a `Union` pattern against the union
-    // type being matched, and return a normalized copy of the pattern.
-    //
-    // Validation: the parsed variant name's namespace must be a suffix of
-    // the union's namespace, and the bare variant name must be one of the
-    // union's variants.
-    //
-    // Normalization (the reason this returns a new pattern rather than
-    // just `Result<(), Errors>`): the user may have written the variant
-    // unqualified (e.g. `some(v)`) or partially qualified (e.g.
-    // `Maybe::some(v)`); we replace its namespace with the union's full
-    // namespace so downstream code can treat the variant as a single,
-    // fully-qualified `FullName` without re-resolving it.
+    /// Check that this union pattern names a variant of the union being matched, and give the name
+    /// that union's namespace. Panics unless this is a union pattern.
+    ///
+    /// The name is accepted when the namespace written before it is a suffix of the union's
+    /// namespace and the bare name is one of the union's variants. The variant is then written out
+    /// under the union's full namespace, whether the source wrote it unqualified (`some(v)`) or
+    /// partially qualified (`Maybe::some(v)`), so that the rest of the compiler reads one
+    /// fully-qualified `FullName` and resolves it no further.
+    ///
+    /// # Arguments
+    /// * `cond_tycon`, `cond_ti` — the union the matched value has, and its declaration.
     pub fn validate_variant_name(
         self: &PatternNode,
         cond_tycon: &TyCon,
         cond_ti: &TyConInfo,
     ) -> Result<Arc<PatternNode>, Errors> {
-        let name_space = cond_tycon.name.to_namespace();
+        let union_namespace = cond_tycon.name.to_namespace();
         match &self.pattern {
             Pattern::Union(variant, variant_src, subpat) => {
                 // Check the variant name.
-                let is_ns_ok = variant.namespace.is_suffix_of(&name_space);
+                let is_ns_ok = variant.namespace.is_suffix_of(&union_namespace);
                 let is_name_ok = cond_ti.fields.iter().any(|f| &f.name == &variant.name);
                 if !is_ns_ok || !is_name_ok {
                     return Err(Errors::from_msg_srcs(
@@ -630,7 +580,7 @@ impl PatternNode {
 
                 // Then, complete the namespace of the variant name.
                 let mut variant = variant.clone();
-                variant.namespace = name_space;
+                variant.namespace = union_namespace;
                 Ok(Arc::new(PatternNode {
                     pattern: Pattern::Union(variant, variant_src.clone(), subpat.clone()),
                     info: self.info.clone(),
@@ -643,7 +593,8 @@ impl PatternNode {
         }
     }
 
-    // Rename names in the pattern.
+    /// A copy of this pattern in which each variable whose name `rename` maps binds the mapped name
+    /// instead. A binder absent from the map keeps its name.
     pub fn rename_by_map(&self, rename: &Map<FullName, FullName>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &mut node.pattern {
@@ -665,66 +616,47 @@ impl PatternNode {
         Arc::new(node)
     }
 
-    fn to_string_internal(&self, with_type: bool) -> String {
-        let pat_str = self.pattern.to_string_internal(with_type);
-        if with_type {
-            format!(
-                "{}<{}>",
-                pat_str,
-                self.info
-                    .type_
-                    .as_ref()
-                    .map_or("na".to_string(), |t| t.to_string())
-            )
-        } else {
-            pat_str
-        }
-    }
-
+    /// This pattern as it is written in the source.
     pub fn to_string(&self) -> String {
-        self.to_string_internal(false)
-    }
-
-    #[allow(dead_code)]
-    pub fn to_string_with_type(&self) -> String {
-        self.to_string_internal(true)
+        self.pattern.to_string()
     }
 }
 
+/// What elaboration attaches to a pattern node beyond the pattern itself.
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct PatternInfo {
+    /// The type of the value the pattern matches, once type assignment has reached it.
     pub type_: Option<Arc<TypeNode>>,
+    /// The span the pattern occupies in the source.
     pub source: Option<Span>,
-    // Auxiliary source span that depends on the pattern variant.
-    // For Struct patterns: the source span of the type constructor name only.
+    /// A second span covering one part of the pattern, the part depending on the pattern's form.
+    /// For a struct pattern it covers the type constructor name alone.
     pub aux_src: Option<Span>,
 }
 
+/// The forms a pattern can take, each holding its sub-patterns.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Pattern {
+    /// Binds the matched value to a variable, under the type annotation written for it.
     Var(Arc<Var>, Option<Arc<TypeNode>>),
-    // Struct destructuring pattern. Each entry is (field name, optional
-    // source span of just the field name, sub-pattern).
+    /// Destructures a struct or tuple. Each entry is a field name, the span of just that name in
+    /// the source, and the sub-pattern its value is matched against.
     Struct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<PatternNode>)>),
-    // Union match pattern. The optional Span is the source span of just the
-    // variant name (without any namespace prefix).
+    /// Matches one variant of a union and its payload against the sub-pattern. The span covers the
+    /// bare variant name, without any namespace prefix written before it.
     Union(FullName, Option<Span>, Arc<PatternNode>),
 }
 
 impl Pattern {
-    // Make basic variable pattern.
-    #[allow(dead_code)]
-    pub fn var_pattern(var: Arc<Var>) -> Arc<Pattern> {
-        Arc::new(Pattern::Var(var, None))
-    }
-
-    // Check if variables defined in this pattern is duplicated or not.
-    // For example, pattern (x, y) is ok, but (x, x) is invalid.
+    /// Whether one name is bound twice in this pattern, which makes the pattern invalid.
+    ///
+    /// # Examples
+    /// `(x, y)` binds each of its names once, and `(x, x)` binds `x` twice.
     pub fn has_duplicate_vars(&self) -> bool {
         (self.vars().len() as u32) < self.count_vars()
     }
 
-    // Count variables defined in this pattern.
+    /// How many variables this pattern binds, counting a name written twice once per occurrence.
     fn count_vars(&self) -> u32 {
         match self {
             Pattern::Var(_, _) => 1,
@@ -739,7 +671,7 @@ impl Pattern {
         }
     }
 
-    // Calculate the set of variables that appears in this pattern.
+    /// The names this pattern binds, a name written twice appearing once.
     pub fn vars(&self) -> Set<FullName> {
         match self {
             Pattern::Var(var, _) => make_set([var.name.clone()]),
@@ -754,11 +686,10 @@ impl Pattern {
         }
     }
 
+    /// This pattern as it is written in the source, its variant and field names carrying the
+    /// namespaces they have been resolved to. A tuple type at the head prints as `(a, b)`, and any
+    /// other struct as `S {f: p}`.
     pub fn to_string(&self) -> String {
-        self.to_string_internal(false)
-    }
-
-    fn to_string_internal(&self, with_type: bool) -> String {
         let mut ret = "".to_string();
         match self {
             Pattern::Var(v, t) => {
@@ -776,7 +707,7 @@ impl Pattern {
                 if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
-                        .map(|(_, _, pat)| pat.to_string_internal(with_type))
+                        .map(|(_, _, pat)| pat.to_string())
                         .collect::<Vec<_>>();
                     if n == 1 {
                         format!("({},)", pats[0])
@@ -786,21 +717,32 @@ impl Pattern {
                 } else {
                     let pats = fields
                         .iter()
-                        .map(|(name, _, pat)| {
-                            format!("{}: {}", name, pat.to_string_internal(with_type))
-                        })
+                        .map(|(name, _, pat)| format!("{}: {}", name, pat.to_string()))
                         .collect::<Vec<_>>();
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }
             Pattern::Union(variant, _, pat) => {
-                format!(
-                    "{}({})",
-                    variant.to_string(),
-                    pat.to_string_internal(with_type)
-                )
+                format!("{}({})", variant.to_string(), pat.to_string())
             }
         }
+    }
+
+    /// The union a variant name belongs to, which is the type constructor its namespace names.
+    ///
+    /// `validate_variant_name` gives the variant name of a union pattern that namespace, and every
+    /// reader of the name gets the union back through here. Until validation has accepted the
+    /// name, it carries whatever namespace the source wrote before it, which is `None` here when
+    /// the source wrote none at all.
+    ///
+    /// # Examples
+    /// The variant name `Std::Option::some` belongs to `Std::Option`, and the bare `some` to no
+    /// union.
+    pub fn variant_union_tycon(variant_name: &FullName) -> Option<TyCon> {
+        if variant_name.namespace.is_local() {
+            return None;
+        }
+        Some(TyCon::new(variant_name.namespace.clone().to_fullname()))
     }
 
     /// From a variant name, gets the variant index and the type constructor of the union.
@@ -811,10 +753,7 @@ impl Pattern {
         variant_name: &FullName,
         type_env: &TypeEnv,
     ) -> Option<(usize, TyCon)> {
-        if variant_name.namespace.is_local() {
-            return None;
-        }
-        let tc: TyCon = TyCon::new(variant_name.namespace.clone().to_fullname());
+        let tc = Pattern::variant_union_tycon(variant_name)?;
         let ti = type_env.tycons().get(&tc)?;
         let variant_idx = ti
             .fields
@@ -823,7 +762,14 @@ impl Pattern {
         Some((variant_idx, tc))
     }
 
-    // Checks if patterns which are used in `match` syntax are exhaustive.
+    /// Check that the arms of a `match` cover every variant of the union being matched, each of
+    /// them once. A pattern that names no variant catches whatever the union patterns leave, so one
+    /// arm of that shape covers the rest.
+    ///
+    /// # Arguments
+    /// * `cond_tc`, `cond_ti` — the union the matched value has, and its declaration.
+    /// * `match_src` — the span of the whole `match`, where a report of uncovered variants points.
+    /// * `pats` — the arm patterns, in the order they are written.
     pub fn validate_match_cases_exhaustiveness(
         cond_tc: &TyCon,
         cond_ti: &TyConInfo,
@@ -847,7 +793,11 @@ impl Pattern {
                     }
                     uncovered_variants.remove(&variant.name);
                 }
-                _ => {
+                // A variable binds the matched value whatever it is, and a struct pattern
+                // destructures every value of its type, so either covers the variants the arms
+                // above leave. Naming both forms is what makes the compiler ask this question
+                // again of a pattern that can fail to match.
+                Pattern::Var(_, _) | Pattern::Struct(_, _) => {
                     found_otherwise = true;
                 }
             }
