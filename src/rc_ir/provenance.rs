@@ -200,17 +200,20 @@ impl Provenance {
         self.set_leaves_under(path, LeafOrigin::Unknown)
     }
 
+}
+
+impl std::fmt::Display for Provenance {
     /// A readable one-line rendering, for the RC IR dump: a value with no boxed leaf as `unboxed`, a
     /// boxed value (one leaf at the root) as its source, and anything else as its leaves rendered
     /// `π=source`, sorted by path, inside braces.
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.is_empty() {
-            return "unboxed".to_string();
+            return write!(f, "unboxed");
         }
         if self.0.len() == 1 {
             let (path, origins) = self.0.iter().next().unwrap();
             if path.is_empty() {
-                return leaf_source_to_string(origins);
+                return write!(f, "{}", leaf_source_to_string(origins));
             }
         }
         let mut entries: Vec<(&FieldPath, &LeafOrigins)> = self.0.iter().collect();
@@ -223,7 +226,7 @@ impl Provenance {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        format!("{{{}}}", inner)
+        write!(f, "{{{}}}", inner)
     }
 }
 
