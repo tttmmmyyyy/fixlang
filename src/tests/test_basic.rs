@@ -10384,6 +10384,74 @@ main = (
 }
 
 #[test]
+pub fn test_absolute_namespace_trait() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait a : Foo {
+        bar : a -> I64;
+    }
+}
+
+// impl I64 : Foo { ... } // ambiguous
+impl I64 : ::Main::Foo { // top-level `Foo`
+    foo = |n| n + 1;
+}
+impl I64 : Main::Main::Foo { // `Main::Foo` in `Main` namespace
+    bar = |n| n + 2;
+}
+
+double_foo : [a : ::Main::Foo] a -> I64;
+double_foo = |x| 2 * x.foo;
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 0.double_foo, 2);;
+    assert_eq(|_|"", 0.bar, 2);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_ambiguous_namespace_trait() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait a : Foo {
+        bar : a -> I64;
+    }
+}
+
+impl I64 : Main::Foo { // ambiguous
+    foo = |n| n + 1;
+}
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 0.foo, 1);;
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Name `Main::Foo` is ambiguous",
+    );
+}
+
+#[test]
 pub fn test_array_search_partition_point() {
     let source = r##"
     module Main;

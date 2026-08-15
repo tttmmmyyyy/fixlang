@@ -547,9 +547,8 @@ impl TraitImpl {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
-        self.qual_pred.resolve_namespace(ctx)?;
-
         let mut errors = Errors::empty();
+        errors.eat_err(self.qual_pred.resolve_namespace(ctx));
         for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
             errors.eat_err(assoc_ty_impl.resolve_namespace(ctx));
         }
@@ -577,11 +576,6 @@ impl TraitImpl {
     // Get trait id.
     fn trait_id(&self) -> TraitId {
         self.qual_pred.predicate.trait_id.clone()
-    }
-
-    // Get mutable trait id.
-    fn trait_id_mut(&mut self) -> &mut TraitId {
-        &mut self.qual_pred.predicate.trait_id
     }
 
     // Get type-scheme of a member implementation.
@@ -1226,19 +1220,12 @@ impl TraitEnv {
         // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
             ctx.set_current_module(trait_id.name.module());
-            // Keys in self.traits should already be resolved.
-            assert!(
-                trait_id.name
-                    == ctx
-                        .resolve(&trait_id.name, &[NameResolutionType::Trait], &None)
-                        .ok()
-                        .unwrap()
-            );
             errors.eat_err(trait_info.resolve_namespace(ctx));
         }
         errors.to_result()?; // Throw errors if any.
 
-        // Resolve names in trait implementations.
+        // Resolve names in trait implementations, and file each one under the name its head
+        // resolved to.
         let old_impls = mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id_key, trait_impls) in old_impls {
@@ -1254,17 +1241,9 @@ impl TraitEnv {
                     trait_id_key.name.to_string()
                 );
 
-                // Resolve trait_id's namespace.
-                let mut trait_id = trait_id_key.clone();
-                errors.eat_err(
-                    trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.src.clone()),
-                );
-
-                // Give the implementation the resolved name before resolving the rest of it.
-                impl_.trait_id_mut().name = trait_id.name.clone();
                 errors.eat_err(impl_.resolve_namespace(ctx));
 
-                // Insert to new_impls
+                let trait_id = impl_.trait_id();
                 insert_to_map_vec(&mut new_impls, &trait_id, impl_);
             }
         }

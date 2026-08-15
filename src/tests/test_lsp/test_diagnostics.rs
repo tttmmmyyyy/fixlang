@@ -144,6 +144,39 @@ mod tests {
         );
     }
 
+    /// Two traits, the full name of one ending with the full name of the other, are both declared,
+    /// and a reference that could mean either one is reported as ambiguous in the editor, on the
+    /// reference, naming both.
+    ///
+    /// The pair is met while the namespaces of the declarations are resolved, which every run of
+    /// the diagnostics performs; a program that stops the compiler there takes the editor's reports
+    /// on every other file down with it, for the rest of the session.
+    #[test]
+    fn test_a_reference_to_a_trait_whose_name_another_ends_with_is_reported_as_ambiguous() {
+        let (_temp_dir, project_dir) = setup_test_env("trait_name_suffix_collision");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(&diagnostics, "Name `Foo` is ambiguous");
+
+        // `main.fix` writes the implementation's head on the 8th line, whose `I64 : Foo` starts at
+        // the 6th column; the protocol counts both from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 7,
+            "at the implementation's head, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["range"]["start"]["character"], 5);
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert!(
+            diag["message"]
+                .as_str()
+                .expect("the report carries a message")
+                .contains("`Lib::Main::Foo`, `Main::Foo`"),
+            "naming both traits, but the report is {:?}",
+            diag
+        );
+    }
+
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
     /// field, at `line` and `repeat_character`, naming the first occurrence of the name at
     /// `first_occurrence_character` of the same line as a related location. The protocol counts

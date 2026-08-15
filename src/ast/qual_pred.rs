@@ -76,14 +76,15 @@ impl QualPred {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
         for p in &mut self.pred_constraints {
-            p.resolve_namespace(ctx)?;
+            errors.eat_err(p.resolve_namespace(ctx));
         }
         for eq in &mut self.eq_constraints {
-            eq.resolve_namespace(ctx)?;
+            errors.eat_err(eq.resolve_namespace(ctx));
         }
-        self.predicate.resolve_namespace(ctx)?;
-        Ok(())
+        errors.eat_err(self.predicate.resolve_namespace(ctx));
+        errors.to_result()
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
