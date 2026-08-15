@@ -43,7 +43,7 @@ Write the doc in the implementers' language. It does not have to be English.
 
 Where that language is English, write it plainly: a reader need not be a native speaker, and a long sentence or a rare word costs them more than it costs a native reader.
 
-Do not coin a word to carry a concept through a few paragraphs: a reader who meets it once has nothing to attach it to. Say what the thing is; the sentence is usually shorter for it. A term the code itself names is different, since the reader can go and read what it is.
+Name a thing the way the code names it: write `FullName`, not "the full name". An identifier is vocabulary the reader already shares and can search for, while a paraphrase — a translated one above all — makes a second name for one thing. Where the code names nothing, say what the thing is rather than coining a word for it: a word invented for a few paragraphs gives the reader nowhere to look it up.
 
 ## Audience and self-containedness
 
