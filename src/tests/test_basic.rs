@@ -4952,16 +4952,16 @@ pub fn test129() {
             let n = 2;
             let x = 65535_U16;
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // I16
-            // let case = "I16";
-            // let n = 2;
-            // let x = -32768_I16;
-            // assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let case = "I16";
+            let n = 2;
+            let x = -32768_I16;
+            assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
+            let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // U32
             let case = "U32";
