@@ -53,9 +53,10 @@ use crate::rc_ir::ownership::{
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
-/// The result of borrow inference: which parameter leaves are `Own` (all others are `Borrow`), keyed
-/// by the parameter variable's name and the leaf path.
+/// The result of borrow inference: which parameter leaves each function of the program owns.
 struct Ownerships {
+    /// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf
+    /// path. A leaf absent from it is `Borrow`.
     own: Set<VarPath>,
 }
 
@@ -101,9 +102,8 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 
 /// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
 /// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
-/// annotate every output version with the parameter/capture units it borrows (`RcFunc::borrowed_units`,
-/// whose owned complement `cancel` reads to find each call's consume sites and the RC IR dump reads
-/// for its shapes).
+/// annotate every output version with the parameter/capture units it borrows
+/// (`RcFunc::borrowed_units`).
 pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let ownerships = infer_ownership(prog, type_env);
 
@@ -883,9 +883,15 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The forward must-analysis for one function: it decides which retain and release nodes to delete.
 struct CancelAnalysis<'a> {
+    /// This function's variables: what binds each one and its type, which decide the unit key a
+    /// retain and a release pair on.
     vars: &'a VarTable,
+    /// The whole program, so a call resolves to its callee's parameters.
     prog: &'a RcProgram,
+    /// The parameter/capture units the program's functions own, which decide which argument
+    /// positions of a call consume.
     owned_units: &'a Set<VarPath>,
+    /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
