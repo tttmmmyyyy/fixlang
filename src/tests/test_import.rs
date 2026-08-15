@@ -219,6 +219,85 @@ pub fn test_trait_member_and_value_of_the_traits_namespace_collide() {
     );
 }
 
+/// A namespace named after a trait holds values of its own, as long as no member of the trait
+/// carries the name.
+#[test]
+pub fn test_value_of_a_traits_namespace_named_after_no_member_is_accepted() {
+    let source = r##"
+    module Main;
+
+    trait c : Foo {
+        bar : c -> I64;
+    }
+
+    impl I64 : Foo {
+        bar = |x| x;
+    }
+
+    namespace Foo {
+        baz : I64;
+        baz = 1;
+    }
+
+    main : IO ();
+    main = println((Foo::baz + Foo::bar(2)).to_string);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A trait member and a value of another namespace carrying the member's name are two values: a
+/// member is registered under the trait's namespace followed by the member's name, so only a value
+/// of that same namespace meets it.
+#[test]
+pub fn test_trait_member_and_value_of_another_namespace_are_two_values() {
+    let source = r##"
+    module Main;
+
+    trait c : Foo {
+        bar : c -> I64;
+    }
+
+    impl I64 : Foo {
+        bar = |x| x;
+    }
+
+    namespace Baz {
+        bar : I64 -> String;
+        bar = |_| "a value of another namespace";
+    }
+
+    main : IO ();
+    main = println(Foo::bar(1).to_string + Baz::bar(2));
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A value of a namespace under the trait's carries a name of its own: a member is registered under
+/// the trait's namespace followed by the member's name, and a deeper namespace is another one.
+#[test]
+pub fn test_value_of_a_namespace_under_the_traits_namespace_is_a_value_of_its_own() {
+    let source = r##"
+    module Main;
+
+    trait c : Foo {
+        bar : c -> I64;
+    }
+
+    impl I64 : Foo {
+        bar = |x| x;
+    }
+
+    namespace Foo::Inner {
+        bar : I64 -> String;
+        bar = |_| "a value of a namespace under the trait's";
+    }
+
+    main : IO ();
+    main = println(Foo::bar(1).to_string + Foo::Inner::bar(2));
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Every member of a trait whose name a value of the trait's namespace also carries is reported,
 /// so one compilation shows each name to change instead of one per run.
 #[test]
