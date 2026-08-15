@@ -516,6 +516,12 @@ impl<'a> Interpreter<'a> {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.prov_of(a, env)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                // `is_unique` is the one operation that answers a uniqueness question rather than
+                // acting on it, so its result is what makes a branch's condition readable as a fact
+                // about a value (`interpret_match` refines the `true` arm with it), and it is also
+                // the one whose own result is that fact rather than a value the operands compose
+                // into. The array-storage variant answers the same question for `Array`.
+                let answers_uniqueness = is_is_unique_op(llvm_gen.as_ref());
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
                 if let Some(check) = llvm_gen.unique_check_operand(&arg_tys, self.type_env) {
@@ -523,16 +529,12 @@ impl<'a> Interpreter<'a> {
                         result.name.clone(),
                         arg_provs[check.container_index].clone(),
                     );
-                    // `is_unique` is the one operation that answers a uniqueness question rather than
-                    // acting on it, so its result is what makes a branch's condition readable as a
-                    // fact about a value (`interpret_match` refines the `true` arm with it). The
-                    // array-storage variant answers the same question for `Array`.
-                    if is_is_unique_op(llvm_gen.as_ref()) {
+                    if answers_uniqueness {
                         self.is_unique_tested_paths
                             .insert(result.name.clone(), check.path.clone());
                     }
                 }
-                if is_is_unique_op(llvm_gen.as_ref()) {
+                if answers_uniqueness {
                     return is_unique_result(
                         &result.ty,
                         self.type_env,
