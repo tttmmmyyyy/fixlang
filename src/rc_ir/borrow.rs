@@ -63,7 +63,7 @@ struct Ownerships {
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
 fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
-    let vars: Map<FuncRef, VarTable> = prog
+    let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
         .values()
         .map(|f| (f.name.clone(), VarTable::of(f)))
@@ -73,7 +73,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
-            let vars = &vars[&func.name];
+            let vars = &var_tables[&func.name];
             let mut consumed = vec![];
             collect_consumes(&func.body, vars, prog, &own, type_env, &mut consumed);
             for (var, path) in consumed {
@@ -1051,20 +1051,20 @@ impl<'a> CancelAnalysis<'a> {
         pending_in: &PendingRetains,
         arm_exits: &[PendingRetains],
     ) -> PendingRetains {
-        let n = arm_exits.len();
-        let mut arms_pending: Map<NodeId, usize> = Map::default();
+        let arm_count = arm_exits.len();
+        let mut pending_arm_count: Map<NodeId, usize> = Map::default();
         for exit in arm_exits {
             let mut seen: Set<NodeId> = Set::default();
             for stack in exit.values() {
                 for &retain in stack {
                     if seen.insert(retain) {
-                        *arms_pending.entry(retain).or_default() += 1;
+                        *pending_arm_count.entry(retain).or_default() += 1;
                     }
                 }
             }
         }
-        for (&retain, &count) in &arms_pending {
-            if count != n {
+        for (&retain, &count) in &pending_arm_count {
+            if count != arm_count {
                 self.needed_retains.insert(retain);
             }
         }
@@ -1075,7 +1075,7 @@ impl<'a> CancelAnalysis<'a> {
             let kept: Vec<NodeId> = stack
                 .iter()
                 .copied()
-                .filter(|retain| arms_pending.get(retain) == Some(&n))
+                .filter(|retain| pending_arm_count.get(retain) == Some(&arm_count))
                 .collect();
             if !kept.is_empty() {
                 merged.insert(key.clone(), kept);

@@ -764,14 +764,19 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 }
 
 /// The type of field `idx` of `ty`, where the walk that reached `ty` has established it to be an
-/// unboxed struct/tuple, so that a well-formed unit/root path index is in range. `what` names the
-/// walk in the message an out-of-range index aborts with.
-fn field_type_at(ty: &Arc<TypeNode>, idx: usize, type_env: &TypeEnv, what: &str) -> Arc<TypeNode> {
+/// unboxed struct/tuple, so that a well-formed unit/root path index is in range. `walk_name` names
+/// the walk in the message an out-of-range index aborts with.
+fn field_type_at(
+    ty: &Arc<TypeNode>,
+    idx: usize,
+    type_env: &TypeEnv,
+    walk_name: &str,
+) -> Arc<TypeNode> {
     let fields = ty.field_types(type_env);
     assert!(
         idx < fields.len(),
         "{}: path index {} out of range ({} fields)",
-        what,
+        walk_name,
         idx,
         fields.len()
     );
