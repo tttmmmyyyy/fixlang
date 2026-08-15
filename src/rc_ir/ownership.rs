@@ -388,9 +388,13 @@ fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
     }
-    match sources.iter().next() {
-        Some(LeafOrigin::Arg(j, p)) => Some((*j, p.clone())),
-        _ => None,
+    match sources
+        .iter()
+        .next()
+        .expect("a one-element set has an element")
+    {
+        LeafOrigin::Arg(j, p) => Some((*j, p.clone())),
+        LeafOrigin::Fresh | LeafOrigin::Unknown => None,
     }
 }
 
