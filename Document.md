@@ -1551,6 +1551,17 @@ main = (
 );
 ```
 
+The type of each member has to name the trait's type variable, outside of any associated type
+application. A call picks the implementation by the type it writes, and that is what it has to read
+the type variable off:
+
+```
+// This causes a compile error: `a` appears in no member's type.
+trait a : Greeter {
+    greeting : String;
+}
+```
+
 ## Associated types
 
 Associated types can be thought of as type-level functions that take a trait (considered as a set of types) as their domain and return a new type.
@@ -1763,6 +1774,18 @@ Here, both the `ToIter` trait and the `Iterator` trait have an associated type n
 
 In this example, the type of the iterator returned by `to_iter` differs for each implementation.
 For `Array a`, it resolves to `ArrayIterator a`, while for other collection types, it resolves to different iterator types.
+
+The trait's type variable has to appear in the member's type, as `c` does in `c -> ?it` above.
+A call picks the implementation by the type it writes, and what stands behind an opaque type is the
+implementation's choice, so a member that names the trait's type variable only in a constraint
+leaves the call with nothing to pick by:
+
+```
+// This causes a compile error: `c` appears in a constraint alone.
+trait c : Make {
+    make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+}
+```
 
 ### Higher-Kinded Opaque Types
 

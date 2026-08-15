@@ -1,0 +1,12 @@
+module Main;
+
+trait c : Make {
+    make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+}
+
+impl I64 : Make {
+    make = |n| Iterator::range(0, n);
+}
+
+main : IO ();
+main = println("ok");

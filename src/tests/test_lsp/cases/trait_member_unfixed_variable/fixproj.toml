@@ -1,0 +1,6 @@
+[general]
+name = "trait-member-unfixed-variable"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
