@@ -6403,6 +6403,31 @@ pub fn test_duplicated_symbols() {
     );
 }
 
+/// A value written under a namespace named after a struct carries the name of a method the
+/// compiler generates for that struct, and the two are reported as one name defined twice, in the
+/// sentence the compiler uses for a name defined twice anywhere.
+#[test]
+pub fn test_value_of_a_types_namespace_collides_with_a_compiler_defined_method() {
+    let source = r##"
+    module Main;
+
+    type S = unbox struct { x : I64 };
+
+    namespace S {
+        set_x : I64 -> S -> S;
+        set_x = |v, _| S { x : v };
+    }
+
+    main : IO ();
+    main = println(S { x : 1 }.set_x(2).@x.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Duplicate definition for global value: `Main::S::set_x`.",
+    );
+}
+
 #[test]
 pub fn test_duplicated_trait_member() {
     let source = r##"

@@ -112,6 +112,38 @@ mod tests {
         );
     }
 
+    /// A trait member and a value written under a namespace named after the trait carry one name,
+    /// and the collision is reported in the editor, on the member's declaration, with the value's
+    /// declaration named as a related location.
+    ///
+    /// Either of the two names is the one to change, so the report has to reach the editor
+    /// anchored to both of them.
+    #[test]
+    fn test_trait_member_and_value_of_the_traits_namespace_are_reported_on_both_declarations() {
+        let (_temp_dir, project_dir) = setup_test_env("trait_member_name_collision");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(
+            &diagnostics,
+            "Duplicate definition for global value: `Main::Foo::bar`.",
+        );
+
+        // `main.fix` declares the member on the 4th line and the value on the 12th, each at the
+        // 5th column, which the protocol counts from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 3,
+            "at the member's declaration, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["range"]["start"]["character"], 4);
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["line"], 11,
+            "naming the value's declaration, but the report is {:?}",
+            diag
+        );
+    }
+
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
     /// field, at `line` and `repeat_character`, naming the first occurrence of the name at
     /// `first_occurrence_character` of the same line as a related location. The protocol counts

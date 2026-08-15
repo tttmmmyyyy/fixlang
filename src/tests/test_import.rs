@@ -1,5 +1,5 @@
 use crate::{
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
     Configuration,
 };
 
@@ -217,6 +217,41 @@ pub fn test_trait_member_and_value_of_the_traits_namespace_collide() {
         Configuration::develop_mode(),
         "Duplicate definition for global value: `Main::Foo::bar`.",
     );
+}
+
+/// Every member of a trait whose name a value of the trait's namespace also carries is reported,
+/// so one compilation shows each name to change instead of one per run.
+#[test]
+pub fn test_every_trait_member_colliding_with_a_value_is_reported_in_one_compilation() {
+    let source = r##"
+    module Main;
+
+    trait c : Foo {
+        bar : c -> I64;
+        baz : c -> I64;
+    }
+
+    namespace Foo {
+        bar : I64 -> String;
+        bar = |_| "a value named after the first member";
+
+        baz : I64 -> String;
+        baz = |_| "a value named after the second member";
+    }
+
+    main : IO ();
+    main = println(Foo::bar(1) + Foo::baz(2));
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    for name in ["Main::Foo::bar", "Main::Foo::baz"] {
+        let expected = format!("Duplicate definition for global value: `{}`.", name);
+        assert!(
+            errmsg.contains(&expected),
+            "`{}` is expected to be reported, but the message is:\n{}",
+            name,
+            errmsg
+        );
+    }
 }
 
 #[test]
