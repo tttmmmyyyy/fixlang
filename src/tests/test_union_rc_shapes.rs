@@ -184,8 +184,8 @@ main = (
 );
 "#;
 
-    /// Both payloads are read back as they were built, which a payload freed while the union still
-    /// holds it fails without Valgrind.
+    /// Both payloads are read back as they were built. A payload freed while the union still holds
+    /// it changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_payload_units_correctness() {
         let mut config = Configuration::develop_mode();
