@@ -125,7 +125,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
         owned_units.extend(param_capture_units(func, type_env));
-        // `f_borrow`: a fresh clone whose owned units are the inferred ones, clamped to units.
+        // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
+        // to its unit.
         if let Some(bref) = borrow_versions.get(&func.name) {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {

@@ -70,8 +70,8 @@ mod union_rc_shapes_tests {
     /// An unboxed union is one reference-counting unit whose root is where its count is kept, while
     /// the references it holds live inside its variants and differ in shape from one variant to the
     /// next. Nesting such a union inside a struct and a tuple, and then modifying an array of them
-    /// while a second binding keeps the array shared, makes the copy the modification takes reach
-    /// those units through two levels of unboxed aggregate. Run under memcheck.
+    /// while a second binding keeps the array shared, makes the modification copy an element, and
+    /// the copy reaches those units two levels of unboxed aggregate down. Run under memcheck.
     #[test]
     pub fn test_nested_unboxed_union_shared_mod() {
         let source = r#"

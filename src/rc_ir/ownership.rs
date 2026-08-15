@@ -650,9 +650,9 @@ pub(crate) fn truncate_to_unit(
 }
 
 /// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
-/// clamped to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
-/// retain and a payload consume land in the same bucket (without which a payload consume could not
-/// keep the union retain needed, and a later union release would wrongly cancel it).
+/// truncated to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
+/// retain and a consume of the payload get the same key: the consume marks that retain as needed,
+/// and cancellation keeps it together with the union release that un-bumps it.
 ///
 /// This is the key a retain and a release are paired on, and the key a reference count is kept
 /// under, so it must name one object: a leaf whose object is path-dependent keys to the match
