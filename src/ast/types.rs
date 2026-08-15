@@ -380,6 +380,41 @@ impl TyCon {
         }
     }
 
+    /// How a C declaration spells the type this type constructor stands for.
+    ///
+    /// An integer is written in the fixed-width name `<stdint.h>` gives it, since the width is what
+    /// the Fix type fixes and the spelling C would otherwise use — `int`, `long` — is a different
+    /// width on a different target.
+    ///
+    /// # Examples
+    /// `I32` is written `int32_t`, `U8` is `uint8_t`, `Ptr` is `void *`, and `()` is `void`.
+    pub fn c_type_name(self: &TyCon) -> String {
+        if self.is_unit() {
+            return "void".to_string();
+        }
+        assert!(
+            self.is_c_scalar(),
+            "call c_type_name for {}",
+            self.to_string()
+        );
+        match self.name.name.as_str() {
+            I8_NAME => "int8_t",
+            U8_NAME => "uint8_t",
+            I16_NAME => "int16_t",
+            U16_NAME => "uint16_t",
+            I32_NAME => "int32_t",
+            U32_NAME => "uint32_t",
+            I64_NAME => "int64_t",
+            U64_NAME => "uint64_t",
+            F32_NAME => "float",
+            F64_NAME => "double",
+            PTR_NAME => "void *",
+            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            name => unreachable!("no C spelling for `{}`", name),
+        }
+        .to_string()
+    }
+
     /// Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
     /// `()` is C's `void`, which carries no value, so it maps to `None`.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {

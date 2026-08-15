@@ -30,7 +30,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     )?;
 
     // Validate export statements.
-    program.validate_export_statements()?;
+    program.validate_export_statements(config.output_file_type)?;
 
     // Identify `DEPRECATED[...]` targets and attach `DeprecationInfo` to
     // matching global values / trait members. Run before

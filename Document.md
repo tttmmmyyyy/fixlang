@@ -2272,7 +2272,7 @@ The exported function takes the C name written in the statement, and a program m
 
 Two groups of names are the compiler's own, and an export of one of them is rejected:
 
-* `main`, which is the entry point the compiler generates
+* `main`, which is the entry point the compiler generates for an executable. A dynamic library carries no entry point, so a library may export `main`.
 * any name beginning with `fixruntime_`, which belongs to the Fix runtime
 
 `main` is rejected in `FFI_CALL` as well, since the compiler writes that function and a program naming it takes it away. A `fixruntime_` name is available to `FFI_CALL`, where it reaches the same function the compiler calls.

@@ -1,3 +1,4 @@
+use crate::configuration::OutputFileType;
 use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
@@ -34,8 +35,9 @@ pub const RUNTIME_REALLOC: &str = "realloc";
 /// `argc` and `argv`.
 pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 
-/// Why the C function name `name` is one the compiler writes the body of, phrased to follow
-/// "cannot be the name of ...: "; `None` where the program is free to define the function itself.
+/// Why the C function name `name` is one the compiler writes the body of when it builds an `output`
+/// artifact, phrased to follow "cannot be the name of ...: "; `None` where the program is free to
+/// define the function itself.
 ///
 /// A module holds one function under a name, and LLVM renames whichever of two definitions arrives
 /// second rather than reporting them. So where the compiler writes a body, a program that writes
@@ -46,8 +48,12 @@ pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 /// undefined symbol either way, and the linker binds it to whatever definition the program brings.
 /// Interposing on the C library is therefore the program's to do, and `Document.md` says what it
 /// costs.
-pub fn compiler_defined_c_function_reason(name: &str) -> Option<String> {
-    if name == C_ENTRY_POINT_NAME {
+///
+/// # Arguments
+/// * `output` — what is being built. The entry point is written into an executable alone, so a
+///   dynamic library is free to carry a `main` of its own.
+pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) -> Option<String> {
+    if name == C_ENTRY_POINT_NAME && output == OutputFileType::Executable {
         return Some(
             "it is the entry point of the program, which the compiler defines".to_string(),
         );
@@ -429,4 +435,32 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
+    /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being
+    /// built and the C library functions it merely calls are the program's either way.
+    #[test]
+    fn test_which_c_names_the_compiler_writes_the_body_of() {
+        assert!(
+            compiler_defined_c_function_reason(C_ENTRY_POINT_NAME, OutputFileType::Executable)
+                .is_some()
+        );
+        assert!(compiler_defined_c_function_reason(
+            C_ENTRY_POINT_NAME,
+            OutputFileType::DynamicLibrary
+        )
+        .is_none());
+        for output in [OutputFileType::Executable, OutputFileType::DynamicLibrary] {
+            assert!(compiler_defined_c_function_reason(RUNTIME_ABORT, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_GET_ARGC, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_MALLOC, output).is_none());
+            assert!(compiler_defined_c_function_reason("free", output).is_none());
+            assert!(compiler_defined_c_function_reason("c_of_my_own", output).is_none());
+        }
+    }
 }

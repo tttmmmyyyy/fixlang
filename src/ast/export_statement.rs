@@ -5,7 +5,8 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{tycon, TyCon, Type, TypeNode};
-use crate::constants::{PTR_NAME, STD_NAME};
+use crate::configuration::OutputFileType;
+use crate::constants::{I32_NAME, PTR_NAME, STD_NAME};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
 use crate::fixstd::runtime::compiler_defined_c_function_reason;
@@ -67,7 +68,8 @@ impl ExportStatement {
     ///
     /// # Arguments
     /// * `src` — where to place the error message.
-    pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
+    /// * `output` — what is being built, which decides the names the compiler writes itself.
+    pub fn validate_names(&self, src: &Option<Span>, output: OutputFileType) -> Result<(), Errors> {
         // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
         // underscores.
         let first = self
@@ -92,7 +94,7 @@ impl ExportStatement {
             }
         }
         // An export writes the function's body, so a name the compiler writes a body under is out.
-        if let Some(reason) = compiler_defined_c_function_reason(&self.function_name) {
+        if let Some(reason) = compiler_defined_c_function_reason(&self.function_name, output) {
             let msg = format!(
                 "`{}` cannot be the name of an exported function: {}.",
                 &self.function_name, reason
@@ -269,6 +271,21 @@ pub struct CSignature {
     pub is_var_args: bool,
 }
 
+/// The signature of the entry point the compiler generates: `int32_t (int32_t, void *)`, taking
+/// `argc` and `argv` as the C runtime passes them.
+///
+/// The compiler writes this function's body, so it is the one C function a program describes without
+/// naming it. A program that does name it — an `FFI_CALL` of `main`, which re-runs the program —
+/// gives this signature, and `Program::validate_c_function_calls` reports one that gives another.
+pub fn c_entry_point_signature() -> CSignature {
+    let std_tycon = |name: &str| tycon(FullName::from_strs(&[STD_NAME], name));
+    CSignature {
+        param_tys: vec![std_tycon(I32_NAME), std_tycon(PTR_NAME)],
+        ret_tycon: std_tycon(I32_NAME),
+        is_var_args: false,
+    }
+}
+
 impl CSignature {
     /// The signature an `FFI_CALL` writes for the function it calls.
     pub fn of_ffi_call(
@@ -353,18 +370,30 @@ impl CSignature {
         func
     }
 
-    /// The signature as a C declaration of a nameless function reads, with each C type written as
-    /// the Fix type constructor standing for it.
-    pub fn to_string(&self) -> String {
+    /// The signature as a C declaration of the function `name` reads.
+    ///
+    /// # Examples
+    /// A function of two arguments reads `int32_t c_pick(int32_t, int32_t)`, one of none
+    /// `void c_now(void)`, and a variadic one `int32_t c_report(void *, ...)`.
+    pub fn declaration_of(&self, name: &Name) -> String {
         let mut params = self
             .param_tys
             .iter()
-            .map(|param_ty| param_ty.to_string())
+            .map(|param_ty| param_ty.c_type_name())
             .collect::<Vec<_>>();
         if self.is_var_args {
             params.push("...".to_string());
         }
-        format!("{} ({})", self.ret_tycon.to_string(), params.join(", "))
+        // C writes the empty parameter list of a declaration as `(void)`.
+        if params.is_empty() {
+            params.push("void".to_string());
+        }
+        format!(
+            "{} {}({})",
+            self.ret_tycon.c_type_name(),
+            name,
+            params.join(", ")
+        )
     }
 }
 
