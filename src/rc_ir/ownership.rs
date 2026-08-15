@@ -283,6 +283,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => {
+                    // Taking the value for its own object where the leaves beneath name none is
+                    // safe because that happens only for a value holding no reference: either the
+                    // path covers no boxed leaf, or every leaf beneath it is `⊥`, which an operation
+                    // declares for the variants a union does not have and for the result of one that
+                    // aborts. A release is keyed to a reference, so none is keyed to this answer.
                     let here_identity = (var.clone(), path.to_vec());
                     origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
                         .unwrap_or_else(here)
@@ -322,7 +327,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// nothing recorded and takes the value for one produced on the spot — its own to release, when it
 /// may be an operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
 /// variant the value does not have and holds no reference, so it names no object and is passed
-/// over; a leaf produced here rather than projected names this value itself.
+/// over; a leaf produced here rather than projected names this value itself. A leaf that records
+/// several sources holds one per path it can be reached by, and each of them names an object.
 ///
 /// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
 /// of them is a value produced here rather than a projection, every object the root may denote is
@@ -331,6 +337,12 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
+///
+/// # Examples
+/// At the root of `unbox union { wait : Guard, pair : (Guard, Guard), mark : I64 }` read out of one
+/// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
+/// answer is `Exactly` the node's object. Give one of those two leaves a second operand and the
+/// answer becomes a `Join` naming both.
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -345,14 +357,15 @@ fn origin_from_leaves_under(
     let mut operand_units: Set<(usize, FieldPath)> = Set::default();
     let mut produced_here = false;
     for sources in decl.leaf_origins_under(path) {
-        if sources.is_empty() {
-            continue;
-        }
-        match as_arg_projection(sources) {
-            Some((j, leaf)) => {
-                operand_units.insert((j, truncate_to_unit(&args[j].ty, &leaf, type_env)));
+        // A leaf holds one source per path it can be reached by, so every one of them is an object
+        // the value may denote. A leaf recorded as `⊥` holds none and contributes nothing.
+        for src in sources {
+            match src {
+                LeafOrigin::Arg(j, leaf) => {
+                    operand_units.insert((*j, truncate_to_unit(&args[*j].ty, leaf, type_env)));
+                }
+                LeafOrigin::Fresh | LeafOrigin::Unknown => produced_here = true,
             }
-            None => produced_here = true,
         }
     }
     let mut candidates: Set<VarPath> = Set::default();
