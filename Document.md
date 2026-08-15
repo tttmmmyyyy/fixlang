@@ -1764,6 +1764,18 @@ Here, both the `ToIter` trait and the `Iterator` trait have an associated type n
 In this example, the type of the iterator returned by `to_iter` differs for each implementation.
 For `Array a`, it resolves to `ArrayIterator a`, while for other collection types, it resolves to different iterator types.
 
+The trait's type variable has to appear in the member's type, as `c` does in `c -> ?it` above.
+A call picks the implementation by the type it writes, and what stands behind an opaque type is the
+implementation's choice, so a member that names the trait's type variable only in a constraint
+leaves the call with nothing to pick by:
+
+```
+// This causes a compile error: `c` appears in a constraint alone.
+trait c : Make {
+    make : [?it : Iterator, Item ?it = c] I64 -> ?it;
+}
+```
+
 ### Higher-Kinded Opaque Types
 
 Opaque types can have not only kind `*` (ordinary types) but also higher kinds such as `* -> *`.
