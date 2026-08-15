@@ -10383,6 +10383,10 @@ main = (
     );
 }
 
+/// Verifies that two traits, the full name of one ending with the full name of the other, are both
+/// declared and both usable: `::Main::Foo` reaches the one at the module's top level and
+/// `::Main::Main::Foo` the one written under the `Main` namespace, in an implementation's head as
+/// in a constraint, and the members of both are callable.
 #[test]
 pub fn test_absolute_namespace_trait() {
     let source = r##"
@@ -10423,6 +10427,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a trait name in an implementation's head that could mean either of two traits,
+/// the full name of one ending with the full name of the other, is reported as ambiguous.
 #[test]
 pub fn test_ambiguous_namespace_trait() {
     let source = r##"
@@ -10455,6 +10461,9 @@ main = (
     );
 }
 
+/// Verifies that a trait and a trait alias, the full name of one ending with the full name of the
+/// other, are both reachable: `::Main::Foo` names the trait an implementation's head takes, and
+/// `Main::Main::Foo` names the alias a constraint takes.
 #[test]
 pub fn test_absolute_namespace_trait_alias() {
     let source = r##"
@@ -10485,6 +10494,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that one compilation reports every unresolved name of a single trait implementation —
+/// in the constraint context, in an associated type equality, in the head, and in a member's type
+/// signature — rather than stopping at the first of them.
 #[test]
 pub fn test_all_unresolved_names_of_one_trait_implementation_are_reported() {
     let source = r##"
