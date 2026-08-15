@@ -74,6 +74,37 @@ pub fn test_loop_m_array_state_no_leak() {
 }
 
 #[test]
+pub fn test_loop_two_array_state_stays_alive() {
+    // A loop whose state is a tuple of two arrays wraps a value holding two reference-counting units
+    // in a `LoopState` union, which is one unboxed union and so one unit of its own. The state's
+    // arrays must survive every turn of the loop and read back afterwards as they were written. Run
+    // under memcheck.
+    let source = r#"
+            module Main;
+
+            walk : (Array I64, Array I64) -> Array I64 -> I64;
+            walk = |start, extra| (
+                let (a, b) = loop((0, start), |(i, (a, b))|
+                    if i == 4 { break $ (a, b) };
+                    continue $ (i + 1, (a.set(i, i * extra.@size), b.set(i, i * 2)))
+                );
+                let s = a.to_iter.fold(0, |x, acc| acc + x);
+                let t = b.to_iter.fold(0, |x, acc| acc + x);
+                s * 1000 + t
+            );
+
+            main : IO ();
+            main = (
+                let start = (Array::fill(4, 0), Array::fill(4, 0));
+                let extra = Array::fill(3, 1);
+                assert_eq(|_|"walk", walk(start, extra), 18 * 1000 + 12);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unboxed_destructure_field_borrow() {
     // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
     // it again. Cancellation lets the field's move through the destructure keep its retain pending
