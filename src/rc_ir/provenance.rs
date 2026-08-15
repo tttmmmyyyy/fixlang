@@ -59,6 +59,13 @@ pub enum LeafOrigin {
 /// branch join, empty for an absent union variant (the bottom of the lattice).
 pub type LeafOrigins = Set<LeafOrigin>;
 
+/// The origins of a leaf that has just the one.
+pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
+    let mut origins = Set::default();
+    origins.insert(src);
+    origins
+}
+
 /// The provenance of a whole value: the source of each of its boxed leaves.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Provenance(LeafMap<LeafOrigins>);
@@ -67,13 +74,6 @@ impl Provenance {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
     pub fn empty() -> Provenance {
         Provenance(LeafMap::empty())
-    }
-
-    /// The singleton leaf-source `{src}`.
-    pub fn leaf(src: LeafOrigin) -> LeafOrigins {
-        let mut s = Set::default();
-        s.insert(src);
-        s
     }
 
     /// The source of each boxed leaf of a value of type `ty`, keyed by its path. `leaf` is called once
@@ -88,7 +88,7 @@ impl Provenance {
 
     /// The provenance whose every boxed leaf is `src`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
-        Provenance(LeafMap::uniform(ty, type_env, Provenance::leaf(src)))
+        Provenance(LeafMap::uniform(ty, type_env, sole_origin(src)))
     }
 
     /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
@@ -107,7 +107,7 @@ impl Provenance {
     /// input `arg_index` carried through unchanged.
     pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
         Provenance::build_shape(ty, type_env, &|path: &FieldPath| {
-            Provenance::leaf(LeafOrigin::Arg(arg_index, path.clone()))
+            sole_origin(LeafOrigin::Arg(arg_index, path.clone()))
         })
     }
 
@@ -193,10 +193,7 @@ impl Provenance {
 
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
     fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
-        Provenance(
-            self.0
-                .map_leaves_under(path, |_| Provenance::leaf(src.clone())),
-        )
+        Provenance(self.0.map_leaves_under(path, |_| sole_origin(src.clone())))
     }
 
     /// Demote every boxed leaf under `path` to `Unknown` (the effect of duplicating the reference with a
@@ -886,7 +883,7 @@ mod tests {
 
     /// A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
-        Provenance([(vec![], Provenance::leaf(src))].into_iter().collect())
+        Provenance([(vec![], sole_origin(src))].into_iter().collect())
     }
     /// A boxed value produced where it is bound, so nothing else holds a reference to it.
     fn fresh() -> Provenance {

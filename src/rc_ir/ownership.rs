@@ -780,7 +780,7 @@ mod tests {
     use crate::fixstd::builtin::make_i64_ty;
     use crate::misc::Set;
     use crate::rc_ir::ast::{RcVar, VarPath};
-    use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+    use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
@@ -791,7 +791,7 @@ mod tests {
     /// the argument's index and path.
     #[test]
     fn a_lone_arg_is_a_projection() {
-        let leaf_srcs = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
+        let leaf_srcs = sole_origin(LeafOrigin::Arg(1, vec![0]));
         assert_eq!(as_arg_projection(&leaf_srcs), Some((1, vec![0])));
     }
 
@@ -816,14 +816,8 @@ mod tests {
     /// argument.
     #[test]
     fn a_produced_leaf_is_not_a_projection() {
-        assert_eq!(
-            as_arg_projection(&Provenance::leaf(LeafOrigin::Fresh)),
-            None
-        );
-        assert_eq!(
-            as_arg_projection(&Provenance::leaf(LeafOrigin::Unknown)),
-            None
-        );
+        assert_eq!(as_arg_projection(&sole_origin(LeafOrigin::Fresh)), None);
+        assert_eq!(as_arg_projection(&sole_origin(LeafOrigin::Unknown)), None);
     }
 
     /// A leaf with no source at all — the result of `_undefined_internal`, which aborts — aliases no
