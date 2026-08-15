@@ -137,9 +137,15 @@ mod union_rc_shapes_tests {
     // payload it is given in place. Where that payload's own root is not a single unit — a pair of
     // boxed values, or an unboxed struct whose one boxed field sits a level down — the union's root
     // and the payload's units are different objects, and the count of each has to be kept where its
-    // own object is. The union below is built out of both shapes, each beside the payload it was
-    // built from, so that a reference of the payload lives on after the union is made and is read
-    // through both names.
+    // own object is.
+    //
+    // Each union below is read through a call that stays out of line, and read once more after that
+    // call returns, so that it reaches reference counting instead of being folded into the
+    // constructor that built it. The payload it was built from stays live beside it and is read
+    // back at the end. Freeing that payload early changes the answer for the pair; for the shape
+    // whose unit lies below its root the answer stays right either way, and what catches a key made
+    // for it is the assertion in `unit_of`, which the development-mode build these tests run under
+    // has in place.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
@@ -153,39 +159,50 @@ type One = unbox struct { only : Guard };
 // holds none.
 type Action = unbox union { pair : (Array I64, Array I64), one : One, mark : I64 };
 
+// Reads the union without consuming it. The recursion keeps the call out of line.
+peek : Action -> I64 -> I64;
+peek = |action, n| (
+    if n == 0 { if action.is_pair { 1 } else { 0 } };
+    peek(action, n - 1)
+);
+
 // Builds the union out of a pair that stays live beside it, then reads both back.
-via_pair : (Array I64, Array I64) -> I64;
-via_pair = |both| (
+via_pair : (Array I64, Array I64) -> I64 -> I64;
+via_pair = |both, n| (
+    if n == 0 { 0 };
     let action = Action::pair(both);
+    let seen = peek(action, 2);
     let tagged = if action.is_pair { 1 } else { 0 };
     let (first, second) = both;
-    tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
 );
 
 // The same for a payload whose unit lies below its root.
-via_one : Guard -> I64;
-via_one = |guard| (
+via_one : Guard -> I64 -> I64;
+via_one = |guard, n| (
+    if n == 0 { 0 };
     let action = Action::one(One { only : guard });
+    let seen = peek(action, 2);
     let tagged = if action.is_one { 1 } else { 0 };
-    tagged + guard.@allowed.@size * 10 + guard.@allowed.@(0)
+    seen + tagged + guard.@allowed.@size * 10 + guard.@allowed.@(0)
 );
 
 main : IO ();
 main = (
     assert_eq(
         |_|"the pair is read back as it was built",
-        via_pair((Array::fill(3, 7), Array::fill(4, 9))), 717
+        via_pair((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
     );;
     assert_eq(
         |_|"the boxed value is read back as it was built",
-        via_one(Guard { allowed : [5, 6] }), 26
+        via_one(Guard { allowed : [5, 6] }, 1), 26
     );;
     pure()
 );
 "#;
 
-    /// Both payloads are read back as they were built. A payload freed while the union still holds
-    /// it changes the answer, so this catches it without Valgrind.
+    /// Both payloads are read back as they were built. A pair freed while the union still holds it
+    /// changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_payload_units_correctness() {
         let mut config = Configuration::develop_mode();
