@@ -12,9 +12,11 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   スキップしない。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
-- `origin` は **leaf の上でしか定義されていない**。unit path は leaf とは限らない（punched array の unit は
-  `[i]`、その leaf は `[i, 0]`）ので、unit のオブジェクト identity を求めるときは必ずその unit に属する leaf を
-  `unit_key` に渡す。leaf でない path を渡すと `result_prov` に該当する leaf が無く producer と誤判定される。
+- `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は根、その leaf は
+  各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
+  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
+  下の leaf が 1 つのオペランド unit に揃えば `Exactly`、複数に分かれるか射影でない leaf を含むなら、その値が
+  取りうるオブジェクトを全部並べた `Join`。⊥（不在 variant）の leaf は参照を持たないので読み飛ばす。
 
 ## 2. 消費する構文と読むだけの構文
 
@@ -56,8 +58,10 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - `Binding::Field(container, idx)`: **unbox コンテナのときだけ**別名（boxed は retain するので producer）。
 - `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
   **boxed union の variant** は producer。
-- `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。unbox union の構築
-  （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名。
+- `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
+  その下の leaf 群から決める（`origin_from_leaves_under`）。unbox union の構築
+  （`InlineLLVMMakeUnionBody`）は whole-union path で payload の別名で、payload が複数の unit にまたがる
+  ときはこちらだけが payload 自身の path を答えられる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。
 
 ## 4. ステージごとの不変条件
