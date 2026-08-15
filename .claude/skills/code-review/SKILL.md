@@ -916,9 +916,9 @@ The Rust source comments, `std.fix`'s doc comments, and the documents the projec
 
 This convention covers the text the project ships. Writing addressed to the people working on the change — a dev doc under `dev-docs/`, a pull request body, an issue — is in the language of the people who read it, and this convention does not reach it. The `devdoc` skill governs a dev doc's writing.
 
-A document that exists as a translation is **written** in its language rather than transposed into it. A paragraph that keeps the other language's sentence structure — the em-dash aside, the stacked relative clause, the clause-per-sentence chop — reads as a translation, and the reader pays to undo it. Read each rewritten paragraph on its own and ask whether someone writing from scratch in that language would have put it that way.
+Write that English plainly. A reader of this project need not be a native speaker, and a long sentence, a rare word where a common one fits, or a clause folded inside another costs them more than it costs a native reader. Short sentences and ordinary words carry the same meaning for less, and they are also what a translator of the document has to work from.
 
-**Rewrite**: translate the comment into clear English while preserving its meaning; say a translated paragraph the way its own language says it.
+**Rewrite**: translate the comment into clear English while preserving its meaning; say a long or ornate sentence plainly.
 
 #### Every Rust item must have a doc comment — [Rust]
 
