@@ -1,5 +1,5 @@
 use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
-use crate::generator::{module_functions, Generator};
+use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
@@ -30,83 +30,35 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
 
-/// `free`, which releases the allocation a boxed object lives in.
-///
-/// We declare it ourselves rather than using inkwell's `build_free`, so that the name enters the
-/// module through `build_runtime` like every other C library function the compiler calls, where
-/// `RUNTIME_C_LIBRARY_FUNCTIONS` reserves it and the check at the end of `build_runtime` sees it.
-pub const RUNTIME_FREE: &str = "free";
-
 /// The prefix under which the compiler names the runtime's own functions, and the globals holding
 /// `argc` and `argv`.
 pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 
-/// The C library functions the compiler's output calls, which a program therefore cannot define
-/// over the top of.
+/// Why the C function name `name` is one the compiler writes the body of, phrased to follow
+/// "cannot be the name of ...: "; `None` where the program is free to define the function itself.
 ///
-/// `build_runtime` declares most of them, and the code generator emits calls to the rest: the array
-/// primitives copy element buffers through LLVM's memcpy and memmove intrinsics, which the back end
-/// lowers to the C library functions of those names.
-const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
-    RUNTIME_SPRINTF,
-    RUNTIME_PTHREAD_ONCE,
-    RUNTIME_MALLOC,
-    RUNTIME_REALLOC,
-    RUNTIME_FREE,
-    "memcpy",
-    "memmove",
-];
-
-/// What the compiler does with the C function name `name`, and `None` where the name is free for a
-/// program to use as it likes.
+/// A module holds one function under a name, and LLVM renames whichever of two definitions arrives
+/// second rather than reporting them. So where the compiler writes a body, a program that writes
+/// one too gets a silently renamed function and a program that does not do what it says.
 ///
-/// A module holds one function under a name, so what the compiler does with a name decides what a
-/// program may do with it: LLVM renames whichever of two definitions of one symbol arrives second,
-/// and the program that comes out calls something other than what it names.
-///
-/// The answer is the same however the program is built. `pthread_once` reaches the module only in a
-/// multi-threaded program and the entry point only in an executable, and the compiler's claim on
-/// both holds everywhere, so turning multi-threading on or building the same source as a dynamic
-/// library leaves the set of programs that compile as it was.
-pub fn compiler_use_of_c_function_name(name: &str) -> Option<CompilerNameUse> {
+/// A C function the compiler only *calls* is not here. Supplying that definition is what linking an
+/// object file of one's own does, and it reaches the same place: the compiler emits a call to an
+/// undefined symbol either way, and the linker binds it to whatever definition the program brings.
+/// Interposing on the C library is therefore the program's to do, and `Document.md` says what it
+/// costs.
+pub fn compiler_defined_c_function_reason(name: &str) -> Option<String> {
     if name == C_ENTRY_POINT_NAME {
-        return Some(CompilerNameUse::Defines(
+        return Some(
             "it is the entry point of the program, which the compiler defines".to_string(),
-        ));
+        );
     }
     if name.starts_with(RUNTIME_NAME_PREFIX) {
-        return Some(CompilerNameUse::Calls(format!(
+        return Some(format!(
             "a name beginning with `{}` belongs to the Fix runtime",
             RUNTIME_NAME_PREFIX
-        )));
-    }
-    if RUNTIME_C_LIBRARY_FUNCTIONS.contains(&name) {
-        return Some(CompilerNameUse::Calls(
-            "it is a C library function the Fix runtime calls".to_string(),
         ));
     }
     None
-}
-
-/// What the compiler does with a C function name, which is what decides what a program may do with
-/// it. Each carries the reason, phrased to follow "cannot be the name of ...: ".
-pub enum CompilerNameUse {
-    /// The compiler writes this function's body, so the name is its own: a program that names it at
-    /// all takes it away, whether to define it or to call it.
-    Defines(String),
-    /// The compiler calls this function, which something outside the program defines. A program may
-    /// call it too — that reaches the same function — and may not define it over the top.
-    Calls(String),
-}
-
-impl CompilerNameUse {
-    /// Why the compiler holds the name.
-    pub fn reason(&self) -> &str {
-        match self {
-            CompilerNameUse::Defines(reason) => reason,
-            CompilerNameUse::Calls(reason) => reason,
-        }
-    }
 }
 
 /// Emits the runtime support functions into the module: their declarations when
@@ -133,22 +85,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
     build_realloc_function(gc, mode);
-    build_free_function(gc, mode);
-
-    // Every name the calls above put in the module is one an `FFI_EXPORT` of it would take away, so
-    // each has to be one `compiler_use_of_c_function_name` answers for. It answers by prefix for the
-    // runtime's own functions and by name for the C library ones, so `RUNTIME_C_LIBRARY_FUNCTIONS`
-    // is what a runtime function calling a new C library function would leave behind.
-    if mode == BuildMode::Declare {
-        for function in module_functions(gc.module) {
-            let name = function.get_name().to_str().unwrap();
-            assert!(
-                compiler_use_of_c_function_name(name).is_some(),
-                "the runtime declares `{}`, which a program is free to export",
-                name
-            );
-        }
-    }
 }
 
 /// Which part of a runtime function a call in `build_runtime` emits.
@@ -490,23 +426,6 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
     let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
-    // As for `malloc`, keep LLVM from inferring the full allocator attribute set
-    // (see `build_malloc_function`).
-    gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
-}
-
-/// Declares `free` in the module with signature `void (ptr)`, plus the `nobuiltin` attribute the
-/// other allocator functions carry.
-fn build_free_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_FREE) {
-        return;
-    }
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], false);
-    let func = gc.module.add_function(RUNTIME_FREE, fn_ty, None);
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);

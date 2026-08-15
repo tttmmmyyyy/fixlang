@@ -8,7 +8,7 @@ use crate::ast::types::{tycon, TyCon, Type, TypeNode};
 use crate::constants::{PTR_NAME, STD_NAME};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
-use crate::fixstd::runtime::compiler_use_of_c_function_name;
+use crate::fixstd::runtime::compiler_defined_c_function_reason;
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
@@ -91,13 +91,11 @@ impl ExportStatement {
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
         }
-        // An export defines the function, so every name the compiler has a use for is out: it either
-        // defines that name itself, or calls something outside the program under it.
-        if let Some(compiler_use) = compiler_use_of_c_function_name(&self.function_name) {
+        // An export writes the function's body, so a name the compiler writes a body under is out.
+        if let Some(reason) = compiler_defined_c_function_reason(&self.function_name) {
             let msg = format!(
                 "`{}` cannot be the name of an exported function: {}.",
-                &self.function_name,
-                compiler_use.reason()
+                &self.function_name, reason
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }

@@ -295,25 +295,16 @@ pub fn test_export_non_ascii_first_character_fails() {
     );
 }
 
-/// A module holds one function under a name, so an export of a name the compiler puts there is a
-/// second definition of one symbol and one of the two loses the name. Each kind of name the compiler
-/// owns: the entry point, a name of the Fix runtime, and a C library function the runtime calls.
+/// A module holds one function under a name, so an export of a name the compiler writes a body under
+/// is a second definition of one symbol and one of the two loses the name. Both kinds: the entry
+/// point, and a name of the Fix runtime, whether the compiler writes its body into the module or
+/// `runtime.c` carries it.
 #[test]
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
         ("main", "it is the entry point of the program"),
         ("fixruntime_abort", "belongs to the Fix runtime"),
-        ("malloc", "it is a C library function the Fix runtime calls"),
-        // Every boxed object the program releases is handed to `free`, and the array primitives
-        // copy element buffers through the memcpy and memmove intrinsics, which the back end lowers
-        // to the C library functions. An export of one of these takes the program's own memory
-        // management onto the exported value.
-        ("free", "it is a C library function the Fix runtime calls"),
-        ("memcpy", "it is a C library function the Fix runtime calls"),
-        (
-            "memmove",
-            "it is a C library function the Fix runtime calls",
-        ),
+        ("fixruntime_ptr_add_offset", "belongs to the Fix runtime"),
     ] {
         let source = format!(
             r##"

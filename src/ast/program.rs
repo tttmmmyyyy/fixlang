@@ -14,11 +14,12 @@ use crate::ast::types::{
 };
 use crate::configuration::{Configuration, DeprecationMode, SubCommand};
 use crate::constants::{
-    DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME,
-    MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
-    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
-    TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
+    MAIN_MODULE_NAME, MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
+    STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
+    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL,
+    TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
+    UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -32,7 +33,7 @@ use crate::fixstd::builtin::{
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
 };
-use crate::fixstd::runtime::{compiler_use_of_c_function_name, CompilerNameUse};
+use crate::fixstd::runtime::compiler_defined_c_function_reason;
 use crate::graph::Graph;
 use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
@@ -2127,23 +2128,23 @@ impl Program {
                 if reported.contains(fun_name) {
                     return;
                 }
-                // A name the compiler defines is one the program cannot reach: the call declares it
-                // and the definition, arriving second, is renamed away from every use of it.
-                match compiler_use_of_c_function_name(fun_name) {
-                    Some(CompilerNameUse::Defines(reason)) => {
-                        reported.insert(fun_name.clone());
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "`{}` cannot be the name of a C function called from Fix: {}.",
-                                fun_name, reason
-                            ),
-                            &[&node.source],
-                        ));
-                        return;
-                    }
-                    // A name the compiler calls is defined outside the program, and a call from Fix
-                    // reaches the same function.
-                    Some(CompilerNameUse::Calls(_)) | None => {}
+                // The entry point is the one name a call cannot reach: the call declares it, and the
+                // definition the compiler writes afterwards is renamed away from the C runtime that
+                // starts the program. Every other name the compiler writes a body under lives in the
+                // module already, so a call to it reaches that body, which is what the standard
+                // library's calls of the `fixruntime_` functions do.
+                if fun_name == C_ENTRY_POINT_NAME {
+                    reported.insert(fun_name.clone());
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "`{}` cannot be the name of a C function called from Fix: {}.",
+                            fun_name,
+                            compiler_defined_c_function_reason(fun_name)
+                                .expect("the entry point is a name the compiler defines"),
+                        ),
+                        &[&node.source],
+                    ));
+                    return;
                 }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
                 let Some((known, known_src)) = descriptions.get(fun_name) else {
