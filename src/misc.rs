@@ -126,12 +126,18 @@ pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }
 
+/// The path a source is saved at: `TEMPORARY_SRC_PATH` joined with the name
+/// `temporary_source_name` builds from `file_name` and `hash`.
 pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
     let file_name = temporary_source_name(file_name, hash);
     PathBuf::from(TEMPORARY_SRC_PATH).join(file_name)
 }
 
-// Save a file with the specified content in a temporary directory with the specified name (with a hash value added to avoid collisions).
+/// Saves `source` in the temporary directory, under a name built from `file_name` and a digest of
+/// the content, and answers with the source file it was saved as.
+///
+/// A file already saved at that path holds this same content, since the digest is taken over it, so
+/// it is kept as it stands.
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
     let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
@@ -173,6 +179,9 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
     Ok(source)
 }
 
+/// The values of `results`, in the order they are produced, or the first error among them.
+///
+/// Iteration stops at that error, so the results behind it are never produced.
 pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Result<Vec<T>, E> {
     let mut ok_results = vec![];
     for result in results {
@@ -191,6 +200,11 @@ pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
     }
 }
 
+/// Every nonempty run of consecutive elements of `v`, ordered by where the run starts and then by
+/// where it ends.
+///
+/// # Examples
+/// `nonempty_subsequences(&vec![1, 2])` is `[[1], [1, 2], [2]]`.
 #[allow(unused)]
 pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
     let mut result = vec![];
@@ -202,8 +216,8 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
     result
 }
 
-// Given a vector, split it into subvectors, each of which has at most `max_size` elements.
-// Each subvector is nonempty.
+/// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
+/// and the pieces read in order giving back `v`.
 pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     v.reverse();
     let mut result = vec![];
@@ -216,6 +230,7 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     result
 }
 
+/// Appends `elem` to the vector `key` maps to, starting that vector when `key` maps to none.
 pub fn insert_to_map_vec<K: Clone + Eq + Hash, V>(map: &mut Map<K, Vec<V>>, key: &K, elem: V) {
     if let Some(vec) = map.get_mut(key) {
         vec.push(elem);
@@ -224,6 +239,8 @@ pub fn insert_to_map_vec<K: Clone + Eq + Hash, V>(map: &mut Map<K, Vec<V>>, key:
     }
 }
 
+/// Appends `elems`, in order, to the vector `key` maps to, starting that vector when `key` maps to
+/// none.
 pub fn insert_to_map_vec_many<K: Clone + Eq + Hash, V>(
     map: &mut Map<K, Vec<V>>,
     key: &K,
@@ -257,7 +274,12 @@ macro_rules! function_name {
 #[allow(unused_imports)]
 pub(crate) use function_name;
 
-// Creates a variable name from a number.
+/// The variable name for `n`, a letter followed by a number where the letters run out. Each `n` has
+/// a name of its own.
+///
+/// # Examples
+/// `number_to_varname(0)` is `a`, `number_to_varname(25)` is `z`, and `number_to_varname(26)` is
+/// `a1`.
 pub fn number_to_varname(n: usize) -> String {
     let mut ret = "".to_string();
     let mut n = n;
@@ -271,7 +293,7 @@ pub fn number_to_varname(n: usize) -> String {
     ret
 }
 
-// Generate `count` fresh variable names that do not conflict with `used_names`.
+/// `count` variable names, each differing from the others and from every name in `used_names`.
 pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name> {
     let mut result = Vec::with_capacity(count);
     let mut name_no = 0usize;
@@ -288,7 +310,10 @@ pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name
     result
 }
 
-// Converts a path to an absolute path.
+/// `path` taken against the current directory and canonicalized, so that two paths leading to one
+/// file become one string and can be compared.
+///
+/// Canonicalization reads the file system, so the path has to lead to a file that exists.
 pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     let abs = if path.is_absolute() {
         path.to_path_buf()

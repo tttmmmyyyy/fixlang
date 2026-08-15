@@ -100,6 +100,8 @@ intruder_tuple = (1, 2, 3, 4);
         );
     }
 
+    /// Removes the `.ll` files an earlier build wrote in `dir`, so that the IR read after the next
+    /// build is the IR that build emitted.
     fn remove_emitted_ir(dir: &Path) {
         for entry in fs::read_dir(dir).unwrap().filter_map(|e| e.ok()) {
             if entry.path().extension().is_some_and(|e| e == "ll") {
@@ -139,6 +141,9 @@ intruder_tuple = (1, 2, 3, 4);
         (cold_ir, warm_ir)
     }
 
+    /// The intruder grows the trait environment, the type constructors and the global values while
+    /// leaving every module's sources as they were, so a build serving the type-check results of a
+    /// build without it compiles the program a build with it from the start compiles.
     #[test]
     fn unrelated_module_does_not_change_the_compiled_program() {
         let (cold_ir, warm_ir) = ir_of_a_cold_and_a_warm_build(INTRUDER_FIX);

@@ -196,10 +196,12 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     }
 }
 
-// Given source code, save it to temporary file (with the given file name and hash value) and the parse the program.
-// This is used to parse the source code that is not saved to a file, e.g., source code embedded to the compiler or test code.
-// Saving a source code to a file is necessary for:
-// - Generate debug information, which requires source locations.
+/// Saves `source` in the temporary directory under `file_name`, with a digest of the content in the
+/// name, and parses it into the program of the module it declares.
+///
+/// The debug information of a value names the file its source is written in, so a source the
+/// compiler holds as a string — the standard library it carries, or a test program — is given a file
+/// of its own here.
 pub fn parse_and_save_to_temporary_file(
     source: &str,
     file_name: &str,
@@ -209,6 +211,8 @@ pub fn parse_and_save_to_temporary_file(
     parse_source_file(src, config)
 }
 
+/// Parses the source at `file_path` into the program of the module it declares, reading the content
+/// from the file, or from the buffer the diagnostics settings hold for that path.
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     // If the LSP completion flow has stashed a repaired live-buffer for
     // this path in the diagnostics configuration, parse that string
@@ -238,37 +242,38 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
     parse_source_file(source, config)
 }
 
-// Identifier categories that can be passed to `validate_token_str`.
-//
-// These map onto pest grammar rules whose shape is exactly "an identifier
-// in the corresponding category" (with `!keywords` and the right
-// uppercase/lowercase head), so a string can be checked against the same
-// tokenisation rules the parser applies to source code.
+/// An identifier category `validate_token_str` checks a string against.
+///
+/// Each category maps onto a pest grammar rule whose shape is exactly "an identifier in the
+/// corresponding category" — with `!keywords` and the right uppercase or lowercase head — so a
+/// string is checked against the same tokenisation rules the parser applies to source code.
 #[derive(Clone, Copy)]
 pub enum TokenCategory {
-    // Lowercase-headed value names: locals, global values, lambda params.
-    // Allows a leading `@` as well.
+    /// Lowercase-headed value names: locals, global values, lambda parameters. A leading `@` is
+    /// allowed as well.
     Name,
-    // Lowercase-headed names that disallow a leading `@`: struct field
-    // names and union variant names.
+    /// Lowercase-headed names written without a leading `@`: struct field names and union variant
+    /// names.
     TypeFieldName,
-    // Uppercase-headed names: types, type aliases, traits, trait aliases,
-    // associated types, modules, namespaces.
+    /// Uppercase-headed names: types, type aliases, traits, trait aliases, associated types,
+    /// modules, namespaces.
     CapitalName,
 }
 
-// A namespace_item parsed from a fullname, with its byte-offset range
-// within the input that was parsed.
+/// One `namespace_item` of a parsed fullname, with where it is written in the text it was parsed
+/// from.
 pub struct NamespaceItemSpan {
+    /// The name of the item.
     pub name: Name,
+    /// The byte offset the item starts at.
     pub start: usize,
+    /// The byte offset one past the item's last byte.
     pub end: usize,
 }
 
-// Re-parse `text` as a `fullname` (e.g. `"Foo::Point::act_x"`) and return
-// each `namespace_item` with its byte-offset range within `text`. Useful
-// for locating the sub-span of an individual namespace component (e.g.
-// the `Point` in `Point::@x`) within a larger source span.
+/// Parses `text` as a fullname, e.g. `"Foo::Point::act_x"`, and answers with each `namespace_item`
+/// in it and the byte offsets it spans in `text`. This is what locates one component of a namespace,
+/// the `Point` of `Point::@x` among others, inside a larger source span.
 pub fn parse_namespace_items_in_fullname(text: &str) -> Option<Vec<NamespaceItemSpan>> {
     let mut pairs = FixParser::parse(Rule::fullname, text).ok()?;
     let outer = pairs.next()?;
@@ -348,8 +353,7 @@ pub enum RepairHintKind {
     /// Pest expected an expression-like construct — somewhere a
     /// hole `?` belongs.
     Expression,
-    /// None of our recipes match; the caller should give up rather
-    /// than insert something arbitrary.
+    /// The expected set matches none of the repairs, so the repair loop stops here.
     Unknown,
 }
 
@@ -443,6 +447,8 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
     RepairHintKind::Unknown
 }
 
+/// Parses `source` into the program of the one module it declares, with every span pointing into
+/// `source`.
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;
@@ -455,6 +461,8 @@ pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<P
     parse_file(file, source_cloned, config)
 }
 
+/// The program the parsed file `file` declares, which is the one module it is made of. `src` is the
+/// source it was parsed from, which its spans point into.
 fn parse_file(
     mut file: Pairs<Rule>,
     src: SourceFile,
@@ -467,6 +475,8 @@ fn parse_file(
     }
 }
 
+/// The import statements written in `src`, read from those statements alone so that the rest of the
+/// source is left unparsed. Their spans point into `file_path`.
 pub fn parse_str_import_statements(
     file_path: PathBuf,
     src: &str,
@@ -479,6 +489,8 @@ pub fn parse_str_import_statements(
     )
 }
 
+/// The module `src` declares, read from its `module` declaration alone so that the rest of the
+/// source is left unparsed. Its span points into `file_path`.
 pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo, Errors> {
     parse_str_as_rule(file_path, src, Rule::file_only_module_defn, |rule, ctx| {
         let rule = rule.into_inner().next().unwrap();
@@ -486,6 +498,8 @@ pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo
     })
 }
 
+/// Parses the whole of `src` as `rule` and reads the result with `parser`, giving the spans it
+/// builds `file_path` as the file they point into.
 fn parse_str_as_rule<T>(
     file_path: PathBuf,
     src: &str,
@@ -507,6 +521,8 @@ fn parse_str_as_rule<T>(
     parser(file.next().unwrap(), &mut ctx)
 }
 
+/// The program of the one module `pair` declares: its declaration, its import statements, and
+/// everything defined in it. `src` is the source it was parsed from, which its spans point into.
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
@@ -1359,6 +1375,8 @@ fn parse_kind_braced(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
     parse_kind(pair, ctx)
 }
 
+/// The module a `module` declaration declares. It is made of the source the declaration is written
+/// in; the sources that extend it are the ones linked into it later.
 fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     assert_eq!(pair.as_rule(), Rule::module_defn);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -2216,11 +2234,9 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     expr_var(name, Some(span))
 }
 
-/// Parse a `fullname` rule, returning both the resolved `FullName` and the
-/// span of just the trailing `name` token (not the namespace prefix). The
-/// trailing-token span lets callers target the bare name independently —
-/// e.g., for LSP rename / find-references on a pragma argument. Callers
-/// that don't need the span can simply discard it.
+/// Parses a `fullname` rule into the full name it writes, together with the span of its trailing
+/// `name` token alone, which covers the bare name and leaves the namespace prefix outside it. That
+/// span is what a rename or a find-references over such a name works with.
 fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Option<Span>) {
     assert_eq!(pair.as_rule(), Rule::fullname);
     let name_span = pair
