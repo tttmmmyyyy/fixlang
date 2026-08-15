@@ -10285,6 +10285,9 @@ main = (
     test_source_fail(&source, config, "program running!");
 }
 
+/// Verifies that two global values, the full name of one ending with the full name of the other,
+/// are both reachable: `::Main::x` reads the one at the module's top level, and `Main::Main::x` and
+/// `::Main::Main::x` the one written under the `Main` namespace.
 #[test]
 pub fn test_absolute_namespace_value() {
     let source = r##"
@@ -10310,6 +10313,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a reference that could mean either of two global values, the full name of one
+/// ending with the full name of the other, is reported as ambiguous.
 #[test]
 pub fn test_ambiguous_namespace_value() {
     let source = r##"
@@ -10336,6 +10341,9 @@ main = (
     );
 }
 
+/// Verifies that two types, the full name of one ending with the full name of the other, are both
+/// reachable in a type annotation: `::Main::X` names the one at the module's top level, and
+/// `Main::Main::X` and `::Main::Main::X` the one written under the `Main` namespace.
 #[test]
 pub fn test_absolute_namespace_type() {
     let source = r##"
@@ -10359,6 +10367,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a type name that could mean either of two types, the full name of one ending with
+/// the full name of the other, is reported as ambiguous.
 #[test]
 pub fn test_ambiguous_namespace_type() {
     let source = r##"
