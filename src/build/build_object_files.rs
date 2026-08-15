@@ -405,7 +405,7 @@ fn load_build_object_files_cache(
     config: &Configuration,
 ) -> Option<BuildObjFilesResult> {
     let hash = build_object_files_cache_hash_or_warn(program, config)?;
-    let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
+    let cache_path = build_object_files_cache_path(&hash);
     if !Path::new(&cache_path).exists() {
         return None;
     }
@@ -442,7 +442,7 @@ fn save_build_object_files_cache(
     ) else {
         return;
     };
-    let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
+    let cache_path = build_object_files_cache_path(&hash);
     let Some(file) = cache_step_or_warn(
         File::create(&cache_path),
         &format!("Failed to create object files cache \"{}\"", cache_path),
@@ -466,6 +466,12 @@ fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) ->
             None
         }
     }
+}
+
+/// The file the object files a build produced are recorded in, named by the hash of the build. The
+/// reader and the writer of the cache take the path from here, so they name one file.
+fn build_object_files_cache_path(hash: &str) -> String {
+    format!("{}/{}.json", UNITS_CACHE_PATH, hash)
 }
 
 /// The hash that names the object files cache of a build: it covers the configuration options that

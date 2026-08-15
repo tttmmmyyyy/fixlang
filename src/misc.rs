@@ -85,6 +85,11 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values
 }
 
+/// The MD5 digest of `text`, in hexadecimal.
+pub fn md5_hex(text: &str) -> String {
+    format!("{:x}", md5::compute(text))
+}
+
 /// The values a hash is taken over, appended one at a time.
 ///
 /// Each value goes in as a hash of its own, of a length the value does not change, so the value
@@ -97,7 +102,7 @@ pub struct HashSource(String);
 impl HashSource {
     /// Appends `text`.
     pub fn push_text(&mut self, text: &str) {
-        self.0.push_str(&format!("{:x}", md5::compute(text)));
+        self.0.push_str(&md5_hex(text));
     }
 
     /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's.
@@ -110,7 +115,7 @@ impl HashSource {
 
     /// The hash of everything appended.
     pub fn finish(&self) -> String {
-        format!("{:x}", md5::compute(&self.0))
+        md5_hex(&self.0)
     }
 }
 
@@ -128,7 +133,7 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
 
 // Save a file with the specified content in a temporary directory with the specified name (with a hash value added to avoid collisions).
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
-    let hash = format!("{:x}", md5::compute(source));
+    let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
     let parent = path.parent().unwrap();
     fs::create_dir_all(parent).map_err(|e| {
