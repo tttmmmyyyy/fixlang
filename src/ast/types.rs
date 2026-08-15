@@ -2095,7 +2095,8 @@ impl TypeNode {
         free_vars
     }
 
-    // Append free type variables to a buffer of type Vec.
+    /// Appends to `buf` each type variable standing in this type that `buf` lacks, so that every
+    /// variable is held once, under the first occurrence met.
     pub fn free_vars_to_vec(self: &Arc<TypeNode>, buf: &mut Vec<Arc<TyVar>>) {
         match &self.ty {
             Type::TyVar(tv) => {
@@ -2117,6 +2118,8 @@ impl TypeNode {
         };
     }
 
+    /// Appends to `buf` each type variable standing in this type that `buf` lacks, together with
+    /// the source it stands at, so that a report about a variable can point at it.
     pub fn free_vars_to_vec_with_span(
         self: &Arc<TypeNode>,
         buf: &mut Vec<(Arc<TyVar>, Option<Span>)>,
@@ -2141,19 +2144,20 @@ impl TypeNode {
         };
     }
 
+    /// The type variables standing in this type, each one once.
     pub fn free_vars_vec(self: &Arc<TypeNode>) -> Vec<Arc<TyVar>> {
         let mut buf = vec![];
         self.free_vars_to_vec(&mut buf);
         buf
     }
 
-    // Collect type variables that are "fixed" in this type, in the sense of
-    // `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms"
-    // (Chakravarty, Keller, Peyton Jones, ICFP '05).
-    //
-    // A type variable is fixed if unifying the type with a ground type would
-    // determine it. Associated type applications are not injective, so their
-    // arguments are not fixed; this function stops recursing into them.
+    /// Collect into `out` the type variables that are "fixed" in this type, in the sense of `Fixv`
+    /// from the section "Well-formed programs" of "Associated Type Synonyms" (Chakravarty, Keller,
+    /// Peyton Jones, ICFP '05).
+    ///
+    /// A type variable is fixed if unifying the type with a ground type would determine it.
+    /// Associated type applications are not injective, so their arguments are not fixed; this
+    /// function stops recursing into them.
     pub fn fixed_vars_to_set(self: &Arc<TypeNode>, out: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(tv) => {
@@ -2168,7 +2172,7 @@ impl TypeNode {
         };
     }
 
-    // Collect all TyCons that appear in this type.
+    /// Collect into `tycons` all type constructors that appear in this type.
     pub fn collect_tycons(&self, tycons: &mut Set<TyCon>) {
         match &self.ty {
             Type::TyVar(_) => {
@@ -2189,6 +2193,8 @@ impl TypeNode {
         }
     }
 
+    /// Collect into `tyvar_names` the names of all type variables that appear in this type,
+    /// arguments of an associated type application included.
     pub fn collect_tyvar_names(&self, tyvar_names: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(tv) => {
@@ -2233,23 +2239,28 @@ impl TypeNode {
     }
 }
 
-// Type scheme.
+/// A type with the constraints it carries, generalized over a set of type variables: the type a
+/// global value, a trait member or a trait method implementation is checked against.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Scheme {
-    // Generalized variables.
+    /// The type variables the scheme is generalized over; a use site chooses a type for each.
     pub gen_vars: Vec<Arc<TyVar>>,
-    // Kind signatures (user-specified kind annotations).
+    /// Kind annotations on type variables, as the signature writes them, e.g. `f : *->*`.
     #[serde(default)]
     pub kind_signs: Vec<KindSignature>,
-    // Predicates
+    /// Trait constraints, e.g. `a : Show`.
     pub predicates: Vec<Predicate>,
-    // Equalities
+    /// Equality constraints on associated types, e.g. `Item c = e`.
     pub equalities: Vec<Equality>,
-    // Generalized type.
+    /// The type the constraints qualify.
     pub ty: Arc<TypeNode>,
 }
 
 impl Scheme {
+    /// Reject a scheme whose constraints are in a form the type checker cannot work with, or whose
+    /// generalized variables a use site would be left unable to determine.
+    ///
+    /// The first thing found decides the report.
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
         // Validate constraints.
         // NOTE:
@@ -2472,6 +2483,8 @@ impl Scheme {
         Ok(())
     }
 
+    /// The scheme written out with `s` applied to its constraints and its type, the constraints
+    /// standing in brackets in front of the type.
     fn to_string_substituted(&self, s: &Substitution) -> String {
         // Substitute type variables in predicates, equalities and the type to chosen names.
         let preds = self
@@ -2515,6 +2528,8 @@ impl Scheme {
         constraints_str + &ty.to_string()
     }
 
+    /// The scheme written out with its generalized variables renamed `a`, `b`, ... in the order
+    /// `gen_vars` lists them, so that the names the source happened to use stay out of the text.
     pub fn to_string_normalize(&self) -> String {
         // Change names of generalized type variables to a, b, ...
         let mut s = Substitution::default();
@@ -2531,12 +2546,14 @@ impl Scheme {
         self.to_string_substituted(&s)
     }
 
+    /// The scheme written out under the names its own variables carry.
     pub fn to_string(&self) -> String {
         let s = Substitution::default();
         self.to_string_substituted(&s)
     }
 
-    // Append free type variables to a buffer of type Vec.
+    /// Appends to `buf` the type variables standing in the constraints and in the type that the
+    /// scheme leaves free, that is, all but the generalized ones.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         let mut free_vars = vec![];
         for p in &self.predicates {
@@ -2555,13 +2572,11 @@ impl Scheme {
         }
     }
 
-    // Collect type variables that are "fixed" by this scheme's body, in the
-    // sense of `Fixv` from the section "Well-formed programs" of "Associated Type Synonyms".
-    //
-    // Contributions:
-    // - the main type `self.ty`
-    // - the right-hand side of each equality constraint
-    // Class predicates do not contribute (per `Fixv (D τ ⇒ ρ) = Fixv ρ`).
+    /// The type variables this scheme's body fixes, in the sense of `Fixv` from the section
+    /// "Well-formed programs" of "Associated Type Synonyms".
+    ///
+    /// The main type `self.ty` contributes, and so does the right-hand side of each equality
+    /// constraint; class predicates contribute nothing, per `Fixv (D τ ⇒ ρ) = Fixv ρ`.
     pub fn fixed_vars(&self) -> Set<Name> {
         let mut out = Set::default();
         self.ty.fixed_vars_to_set(&mut out);
@@ -2571,11 +2586,10 @@ impl Scheme {
         out
     }
 
-    // Collect every type variable occurrence in the scheme body together
-    // with a source span, walking predicates, equalities, and the main
-    // type. Unlike `free_vars_to_vec`, this does NOT exclude generalized
-    // variables - it is intended for diagnostics that need to locate a
-    // specific variable (including gen_vars) in the source.
+    /// Each type variable standing in the scheme body — in the predicates, in the equalities and in
+    /// the main type — with the source of its first occurrence, generalized variables included.
+    ///
+    /// A report about one variable of a signature reads the place to point at from here.
     pub fn all_tyvar_occurrences_with_span(&self) -> Vec<(Arc<TyVar>, Option<Span>)> {
         let mut out = vec![];
         for pred in &self.predicates {
@@ -2623,6 +2637,7 @@ impl Scheme {
         Ok(Arc::new(ret))
     }
 
+    /// Check that the kinds the constraints and the type demand of each type variable agree.
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         for p in &self.predicates {
             p.check_kinds(kind_env)?;
@@ -2634,7 +2649,7 @@ impl Scheme {
         Ok(())
     }
 
-    // Create new instance.
+    /// The scheme generalized over exactly `vars`.
     pub fn new_arc(
         vars: Vec<Arc<TyVar>>,
         kind_signs: Vec<KindSignature>,
@@ -2651,7 +2666,11 @@ impl Scheme {
         })
     }
 
-    // Create instance by generalizaing type.
+    /// The scheme generalized over the type variables standing in the constraints and in the type.
+    ///
+    /// An opaque type variable stays free, and so does a variable serving as a formal parameter of
+    /// an equality on one: the definition determines those, and a use site chooses nothing for
+    /// them.
     pub fn generalize(
         kind_signs: &[KindSignature],
         preds: Vec<Predicate>,
@@ -2678,11 +2697,13 @@ impl Scheme {
         Scheme::new_arc(vars, kind_signs.to_vec(), preds, eqs, ty)
     }
 
-    // Create the type scheme from a type with no generalization.
+    /// The scheme of `ty` alone, carrying no constraint and generalized over nothing.
     pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
         Scheme::new_arc(vec![], vec![], vec![], vec![], ty)
     }
 
+    /// The scheme with every trait, type and associated type named in its constraints and in its
+    /// type given its full name, read in the context the signature is written in.
     pub fn resolve_namespace(
         &self,
         ctx: &mut NameResolutionContext,
@@ -2698,6 +2719,7 @@ impl Scheme {
         Ok(Arc::new(res))
     }
 
+    /// The scheme with every type alias standing in its constraints and in its type expanded.
     pub fn resolve_type_aliases(&self, type_env: &TypeEnv) -> Result<Arc<Scheme>, Errors> {
         let mut res = self.clone();
         for p in &mut res.predicates {
@@ -2710,7 +2732,7 @@ impl Scheme {
         Ok(Arc::new(res))
     }
 
-    // Find the minimum expression node which includes the specified source code position.
+    /// Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for p in &self.predicates {
             let node = p.find_node_at(pos);
@@ -2727,7 +2749,7 @@ impl Scheme {
         self.ty.find_node_at(pos)
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// The scheme with every global name in it written as an absolute path.
     pub fn global_to_absolute(&self) -> Arc<Scheme> {
         Arc::new(Scheme {
             gen_vars: self.gen_vars.clone(),
@@ -2769,18 +2791,19 @@ pub fn unfixed_type_variable_error(
     )
 }
 
-// Check if a type variable name represents an opaque type variable (starts with '?').
+/// Whether a type variable name represents an opaque type variable, which a source line writes
+/// with a leading `?`.
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
 }
 
-// Check if a type variable name represents a `_` type wildcard (starts with
-// `TYPE_WILDCARD_VAR_PREFIX`).
+/// Whether a type variable name represents a `_` type wildcard, which carries
+/// `TYPE_WILDCARD_VAR_PREFIX` in front of it.
 pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
 }
 
-// Collect all free type variables from predicates, equalities, and a type into a Vec.
+/// The type variables standing in `preds`, `eqs` and `ty`, each one once.
 pub fn collect_free_vars(
     preds: &[Predicate],
     eqs: &[Equality],
@@ -2797,16 +2820,16 @@ pub fn collect_free_vars(
     vars
 }
 
-// Mapping from an opaque TyCon application to the concrete type inferred by type-checking.
-//
-// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`,
-// after desugaring and type-checking:
-//   lhs = `?it a`
-//   rhs = `MapIterator (RangeIterator I64) a`
-//
-// For a trait impl like `impl Array a : ToIter`:
-//   lhs = `?it (Array a)`
-//   rhs = `ArrayIterator a`
+/// Mapping from an opaque TyCon application to the concrete type inferred by type-checking.
+///
+/// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`,
+/// after desugaring and type-checking:
+///   lhs = `?it a`
+///   rhs = `MapIterator (RangeIterator I64) a`
+///
+/// For a trait impl like `impl Array a : ToIter`:
+///   lhs = `?it (Array a)`
+///   rhs = `ArrayIterator a`
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OpaqueTyConResolution {
     /// Opaque TyCon applied to type arguments.
