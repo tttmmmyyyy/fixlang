@@ -95,8 +95,9 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - **punched フィールドの下の leaf**: `rc_units` はスキップするが `boxed_leaf_paths` はしない。leaf 側でも
   ミラーして除外する。
 - **unbox union が参照を数えるキー**: union の参照は生きている variant の参照で、どのオブジェクトに属するかは
-  タグで決まるのに、`origin` は構築時に置かれたオブジェクトを答える。union の unit path と各 variant leaf が
-  解決するキーをまとめて検査対象外にする（別名の先も同じキーなので一緒に外れる）。
+  タグで決まる。`origin` は union の根に対して payload の unit 群を候補に持つ `Join` を答え、variant の中の
+  leaf に対してはその payload の unit を答える。union の根の鍵と、その下の leaf が解決する鍵の両方を検査
+  対象外にする。
 - **fully-unboxed 値**（`needs_rc` が偽）には RC ノードが無い。funptr 型もここに入る。
 - **1 変数が複数 unit を持ち、unit ごとに所有権が違う**（`split_rc_units` 以降）。
 - **他コンパイル単位のシンボル**: `prog.funcs` に無い callee は全 `Own` とみなす（borrow 最適化が走るのは

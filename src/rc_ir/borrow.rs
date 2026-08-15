@@ -579,11 +579,9 @@ impl<'a> RewriteCtx<'a> {
     /// Whether this version owns the object a leaf comes from.
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
-            // The path may name a subtree that spans several reference-counting units rather than
-            // one — a union built from an unboxed tuple roots to the tuple at the empty path, whose
-            // units are its fields. The value is owned only when every unit it covers is owned. Each
-            // covered path is clamped to its unit key, so a path that descends into a union variant
-            // keys to the union root the owned set records.
+            // The value is owned only when every reference-counting unit the path covers is owned.
+            // Each covered path is clamped to its unit key, so a path that descends into a union
+            // variant keys to the union root the owned set records.
             Some(root_ty) => units_under(root_ty, path, self.type_env)
                 .iter()
                 .all(|unit| {
