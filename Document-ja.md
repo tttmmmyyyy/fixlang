@@ -2382,7 +2382,7 @@ FFI_EXPORT[x, f]; // int f(int);
 
 - `main`。コンパイラが生成するエントリポイントです
 - `fixruntime_`で始まる名前。Fixのランタイムのものです
-- `malloc`、`realloc`、`sprintf`、`pthread_once`。Fixのランタイムが呼び出します
+- `malloc`、`realloc`、`free`、`memcpy`、`memmove`、`sprintf`、`pthread_once`。コンパイルされたプログラムが、自身のメモリ管理と値の整形のために呼び出します
 
 `main`は`FFI_CALL`でもエラーになります。この関数はコンパイラが書くので、プログラムが名乗ると奪ってしまうためです。`fixruntime_`で始まる名前とCライブラリの関数は`FFI_CALL`で使え、コンパイラが呼ぶのと同じ関数に届きます。
 

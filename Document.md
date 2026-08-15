@@ -2274,7 +2274,7 @@ Three groups of names the compiler has a use for are rejected as export names:
 
 * `main`, which is the entry point the compiler generates
 * any name beginning with `fixruntime_`, which belongs to the Fix runtime
-* `malloc`, `realloc`, `sprintf` and `pthread_once`, which the Fix runtime calls
+* `malloc`, `realloc`, `free`, `memcpy`, `memmove`, `sprintf` and `pthread_once`, which the compiled program calls to manage its own memory and to format values
 
 `main` is rejected in `FFI_CALL` as well, since the compiler writes that function and a program naming it takes it away. The `fixruntime_` names and the C library functions are available to `FFI_CALL`, where they reach the same function the compiler calls.
 

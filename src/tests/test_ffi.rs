@@ -304,6 +304,16 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
         ("main", "it is the entry point of the program"),
         ("fixruntime_abort", "belongs to the Fix runtime"),
         ("malloc", "it is a C library function the Fix runtime calls"),
+        // Every boxed object the program releases is handed to `free`, and the array primitives
+        // copy element buffers through the memcpy and memmove intrinsics, which the back end lowers
+        // to the C library functions. An export of one of these takes the program's own memory
+        // management onto the exported value.
+        ("free", "it is a C library function the Fix runtime calls"),
+        ("memcpy", "it is a C library function the Fix runtime calls"),
+        (
+            "memmove",
+            "it is a C library function the Fix runtime calls",
+        ),
     ] {
         let source = format!(
             r##"

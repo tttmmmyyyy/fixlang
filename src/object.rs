@@ -16,7 +16,7 @@ use crate::fixstd::builtin::{
     make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
+    RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_FREE, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
     RUNTIME_NEGATIVE_ARRAY_SIZE,
 };
 use crate::generator::{is_const_one, Generator, Object};
@@ -1945,7 +1945,7 @@ pub fn build_free_boxed<'c, 'm>(
     } else {
         ptr
     };
-    gc.builder().build_free(base).unwrap();
+    gc.call_runtime(RUNTIME_FREE, &[base.into()]);
 }
 
 /// A pointer to the field of the control block of `ptr` recording how far the object sits above the

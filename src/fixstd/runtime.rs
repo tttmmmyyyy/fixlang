@@ -30,16 +30,31 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
 
+/// `free`, which releases the allocation a boxed object lives in.
+///
+/// We declare it ourselves rather than using inkwell's `build_free`, so that the name enters the
+/// module through `build_runtime` like every other C library function the compiler calls, where
+/// `RUNTIME_C_LIBRARY_FUNCTIONS` reserves it and the check at the end of `build_runtime` sees it.
+pub const RUNTIME_FREE: &str = "free";
+
 /// The prefix under which the compiler names the runtime's own functions, and the globals holding
 /// `argc` and `argv`.
 pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 
-/// The C library functions the runtime declares in the module it builds, and calls.
+/// The C library functions the compiler's output calls, which a program therefore cannot define
+/// over the top of.
+///
+/// `build_runtime` declares most of them, and the code generator emits calls to the rest: the array
+/// primitives copy element buffers through LLVM's memcpy and memmove intrinsics, which the back end
+/// lowers to the C library functions of those names.
 const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
     RUNTIME_SPRINTF,
     RUNTIME_PTHREAD_ONCE,
     RUNTIME_MALLOC,
     RUNTIME_REALLOC,
+    RUNTIME_FREE,
+    "memcpy",
+    "memmove",
 ];
 
 /// What the compiler does with the C function name `name`, and `None` where the name is free for a
@@ -118,6 +133,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
     build_realloc_function(gc, mode);
+    build_free_function(gc, mode);
 
     // Every name the calls above put in the module is one an `FFI_EXPORT` of it would take away, so
     // each has to be one `compiler_use_of_c_function_name` answers for. It answers by prefix for the
@@ -474,6 +490,23 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
     let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
+    // As for `malloc`, keep LLVM from inferring the full allocator attribute set
+    // (see `build_malloc_function`).
+    gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
+}
+
+/// Declares `free` in the module with signature `void (ptr)`, plus the `nobuiltin` attribute the
+/// other allocator functions carry.
+fn build_free_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_FREE) {
+        return;
+    }
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], false);
+    let func = gc.module.add_function(RUNTIME_FREE, fn_ty, None);
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
