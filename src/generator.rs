@@ -81,7 +81,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
-use std::{cell::RefCell, env, iter::successors, sync::Arc};
+use std::{cell::RefCell, iter::successors, sync::Arc};
 
 // A value bound to a name in the current scope.
 #[derive(Clone)]
@@ -801,7 +801,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         gc
     }
 
-    // Create debug info builders and compilation units.
+    /// Opens the debug information of this module: the builder every debug entity is emitted
+    /// through, and the compilation unit they all belong to, whose directory is the one the build
+    /// runs in.
     pub fn create_debug_info(&mut self) {
         let debug_metadata_version = self.context.i32_type().const_int(3, false);
         self.module.add_basic_value_flag(
@@ -809,15 +811,15 @@ impl<'c, 'm> Generator<'c, 'm> {
             FlagBehavior::Warning,
             debug_metadata_version,
         );
-        let cur_dir = match env::current_dir() {
-            Err(why) => panic!("Failed to get current directory: {}", why),
-            Ok(dir) => dir,
-        };
+        // The compilation directory reaches the generated code here alone, which
+        // `Configuration::object_generation_hash` rests on: it covers the directory for a build
+        // with debug information and leaves it out of the key of any other build.
+        let compilation_directory = self.config.compilation_directory.clone();
         let (dib, dicu) = self.module.create_debug_info_builder(
             true,
             DWARFSourceLanguage::C,
             "NA",
-            cur_dir.to_str().unwrap(),
+            compilation_directory.to_str().unwrap(),
             "fix",
             false,
             "",
@@ -879,7 +881,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Push a new debug scope.
+    /// Enters `scope` as the debug scope the code generated from here on belongs to, carrying no
+    /// source location inside it yet. The returned guard leaves the scope when it is dropped.
     pub fn push_debug_scope(&mut self, scope: Option<DIScope<'c>>) -> PopDebugScopeGuard<'c> {
         self.debug_scope.borrow_mut().push(scope);
         self.push_debug_location(None);
@@ -888,7 +891,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Get a top debug scope.
+    /// The debug scope the code being generated belongs to. It is `None` where that code has no
+    /// known source, and instructions generated there carry no debug location.
     pub fn debug_scope(&self) -> Option<DIScope<'c>> {
         flatten_opt(self.debug_scope.borrow().last().cloned())
     }
@@ -2512,7 +2516,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
     }
 
-    // Create debug info subprogram.
+    /// The debug-info subprogram describing the function that carries the symbol name `fn_name`
+    /// and is defined at `span`. A function whose source is unknown is recorded at line 0 of the
+    /// file that stands for an unknown source.
     fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram<'c> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
@@ -2537,19 +2543,24 @@ impl<'c, 'm> Generator<'c, 'm> {
         )
     }
 
-    // Push debug location
+    /// Attributes the instructions generated from here on to `span`, until `pop_debug_location`
+    /// brings back the location that was current before. `None` leaves them without a line of
+    /// their own.
     pub fn push_debug_location(&mut self, span: Option<Span>) {
         self.debug_location.push(span.clone());
         self.set_debug_location(span);
     }
 
-    // Pop debug location.
+    /// Drops the location pushed last, so the instructions generated from here on carry the one
+    /// that was current before it.
     pub fn pop_debug_location(&mut self) {
         self.debug_location.pop();
         self.reset_debug_location();
     }
 
-    // Set debug location
+    /// Attributes the instructions the builder appends from now on to `span`, within the debug
+    /// scope the code being generated belongs to. Where it belongs to no debug scope, those
+    /// instructions carry no location at all.
     pub fn set_debug_location(&mut self, span: Option<Span>) {
         if let Some(debug_scope) = self.debug_scope() {
             let (line, col) = if let Some(span) = span.as_ref() {
@@ -2570,6 +2581,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    /// Attributes the instructions the builder appends from now on to the innermost span still
+    /// pushed, which is the location moving the builder within a function has to restore.
     pub fn reset_debug_location(&mut self) {
         self.set_debug_location(flatten_opt(self.debug_location.last().cloned()));
     }
@@ -2676,22 +2689,26 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Whether this module is being built with debug information.
+    /// Whether this module is being built with debug information.
     pub fn has_di(&self) -> bool {
         self.debug_info.is_some()
     }
 
-    // Get current debug info builder.
+    /// The builder every debug entity of this module is emitted through. The module is expected to
+    /// be built with debug information.
     pub fn get_di_builder(&self) -> &DebugInfoBuilder<'c> {
         &self.debug_info.as_ref().unwrap().0
     }
 
-    // Get current debug info compilation unit.
+    /// The compilation unit every debug entity of this module belongs to. The module is expected
+    /// to be built with debug information.
     pub fn get_di_compile_unit(&self) -> &DICompileUnit<'c> {
         &self.debug_info.as_ref().unwrap().1
     }
 
-    // Finalize all debug infos.
+    /// Closes the debug information of this module, resolving what was left open while it was
+    /// written, once every subprogram is checked to sit on a function the module defines. A module
+    /// built without debug information passes through.
     pub fn finalize_di(&self) {
         if self.has_di() {
             self.assert_no_subprogram_on_declaration();
@@ -2755,11 +2772,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Return the debug type identified by `key`, building it with `build` only on the first request
-    // and caching the result. A recursive type refers to itself, so `build` may ask for the same
-    // `key` again before it returns; that inner request resolves to a placeholder node which this
-    // method replaces with the finished type once `build` completes, breaking what would otherwise
-    // be unbounded recursion.
+    /// Return the debug type identified by `key`, building it with `build` only on the first
+    /// request and caching the result. A recursive type refers to itself, so `build` may ask for
+    /// the same `key` again before it returns; that inner request resolves to a placeholder node
+    /// which this method replaces with the finished type once `build` completes, breaking what
+    /// would otherwise be unbounded recursion.
     pub fn get_or_build_di_type(
         &mut self,
         key: String,
@@ -2788,6 +2805,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         real
     }
 
+    /// Records the local named `name`, holding `obj`, as a variable a debugger can inspect by that
+    /// name: the value is stored into a stack slot of its own, and the debug information declares
+    /// that slot to be the variable.
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
         // Push the value on the stack.
         let obj_val = obj.value(self);

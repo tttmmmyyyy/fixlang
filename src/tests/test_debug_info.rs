@@ -3,11 +3,12 @@
 // Most scenarios build a small Fix program with `-g` and drive a source-level debugger to confirm
 // that DWARF line information is emitted correctly: a source breakpoint resolves to
 // `main.fix:<line>`, execution stops there, and the backtrace carries per-frame line info up the
-// Fix call chain. Assertions are mangle-name-independent (they check `file:line`, not the
-// mangled/closure frame names), so they stay valid across name-mangling changes.
+// Fix call chain. Assertions read `file:line`, so they stay valid across name-mangling changes.
 //
-// Three scenarios instead check only that `-g` builds at all, needing no debugger: one per
-// optimization level, and two over recursive types.
+// The scenarios that need no debugger check that `-g` builds at all — one per optimization level,
+// and two over recursive types — and read what the debug information records out of the bytes of
+// the artifact that holds it: the file a function was compiled from out of the object files, and
+// the directory the build ran in out of the program.
 //
 // Each debugger scenario runs under whichever debugger the host provides: gdb on Linux and lldb on
 // macOS (gdb has no working Apple-Silicon support), with the lldb variants also running on a Linux
@@ -15,6 +16,8 @@
 
 #[cfg(test)]
 mod debug_info_tests {
+    use crate::constants::COMPILATION_UNITS_PATH;
+    use crate::misc::Set;
     use crate::tests::test_util::fix_command_at_opt_level;
     use std::{
         fs,
@@ -23,30 +26,48 @@ mod debug_info_tests {
     };
     use tempfile::TempDir;
 
-    // Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
-    // to `fix build` as well, assert the build succeeds, and return the directory holding the built
-    // `prog`.
-    fn build_with_g(source: &str, opt_level: &str, extra_args: &[&str]) -> TempDir {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
+    /// Build the Fix source `file`, named as the working directory `dir` reaches it, at optimization
+    /// level `opt_level`, passing `extra_args` to `fix build` as well, and assert the build
+    /// succeeds. The program is written to `output` in that directory.
+    fn build_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
         let build = fix_command_at_opt_level("build", opt_level)
-            .args(["-g", "-f", "main.fix", "-o", "prog"])
+            .args(["-f", file, "-o", output])
             .args(extra_args)
-            .current_dir(temp.path())
+            .current_dir(dir)
             .output()
             .expect("Failed to execute `fix build`");
         assert!(
             build.status.success(),
-            "`fix build -g -O {} {}` failed:\nstdout:\n{}\nstderr:\n{}",
+            "`fix build -O {} -f {} {}` failed in {}:\nstdout:\n{}\nstderr:\n{}",
             opt_level,
+            file,
             extra_args.join(" "),
+            dir.display(),
             String::from_utf8_lossy(&build.stdout),
             String::from_utf8_lossy(&build.stderr),
         );
+    }
+
+    /// Build the Fix source `file`, named as the working directory `dir` reaches it, at optimization
+    /// level `opt_level` with debug information, passing `extra_args` to `fix build` as well, and
+    /// assert the build succeeds. The program is written to `output` in that directory.
+    fn build_with_g_in(dir: &Path, file: &str, output: &str, opt_level: &str, extra_args: &[&str]) {
+        let mut args = vec!["-g"];
+        args.extend_from_slice(extra_args);
+        build_in(dir, file, output, opt_level, &args);
+    }
+
+    /// Build an inline Fix `source` with `-g` at optimization level `opt_level`, passing `extra_args`
+    /// to `fix build` as well, assert the build succeeds, and return the directory holding the built
+    /// `prog`.
+    fn build_with_g(source: &str, opt_level: &str, extra_args: &[&str]) -> TempDir {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        fs::write(temp.path().join("main.fix"), source).expect("Failed to write main.fix");
+        build_with_g_in(temp.path(), "main.fix", "prog", opt_level, extra_args);
         temp
     }
 
-    // Run the `prog` built into `dir` and return what it wrote to stdout.
+    /// Run the `prog` built into `dir` and return what it wrote to stdout.
     fn run_built_program(dir: &Path) -> String {
         let run = Command::new("./prog")
             .current_dir(dir)
@@ -62,16 +83,16 @@ mod debug_info_tests {
         String::from_utf8_lossy(&run.stdout).to_string()
     }
 
-    // Building with `-g` must succeed at every optimization level, and the program it produces must
-    // compute the right answer. A module declares every global it refers to but defines only the ones
-    // it owns, and a debug-information subprogram attached to a function the module merely declares is
-    // rejected by LLVM's verifier. Which globals become LLVM functions, how the program is split
-    // across modules, and whether a global's initializer is guarded for threads all vary with the
-    // optimization level and with `--threaded`, so one combination working says nothing about another.
-    //
-    // The answer is checked as well as the build succeeding: a declaration takes its signature from
-    // the symbol's type and the definition takes its own from the function that implements it, and
-    // the two disagreeing across modules links quietly.
+    /// Building with `-g` must succeed at every optimization level, and the program it produces must
+    /// compute the right answer. A module declares every global it refers to but defines only the ones
+    /// it owns, and a debug-information subprogram attached to a function the module merely declares is
+    /// rejected by LLVM's verifier. Which globals become LLVM functions, how the program is split
+    /// across modules, and whether a global's initializer is guarded for threads all vary with the
+    /// optimization level and with `--threaded`, so one combination working says nothing about another.
+    ///
+    /// The answer is checked as well as the build succeeding: a declaration takes its signature from
+    /// the symbol's type and the definition takes its own from the function that implements it, and
+    /// the two disagreeing across modules links quietly.
     #[test]
     fn test_build_g_succeeds_at_every_optimization_level_and_threading() {
         const SOURCE: &str = r#"
@@ -98,16 +119,16 @@ mod debug_info_tests {
         }
     }
 
-    // Splitting the program into the smallest compilation units puts a module boundary on nearly
-    // every reference a body makes: a unit defines one symbol and declares every other symbol its
-    // code reaches. Debug information is on as well, because a subprogram belongs on a function the
-    // module defines, and which functions those are is what the split decides. The levels above
-    // `basic` compile the whole program as one unit whatever the split asks for, so the two that
-    // separate compilation applies to are the ones swept here.
-    //
-    // The answer is checked as well as the build succeeding: a declaration takes its signature from
-    // the symbol's type and the definition takes its own from the function that implements it, and
-    // the two disagreeing across units links quietly.
+    /// Splitting the program into the smallest compilation units puts a module boundary on nearly
+    /// every reference a body makes: a unit defines one symbol and declares every other symbol its
+    /// code reaches. Debug information is on as well, because a subprogram belongs on a function the
+    /// module defines, and which functions those are is what the split decides. The levels above
+    /// `basic` compile the whole program as one unit whatever the split asks for, so the two that
+    /// separate compilation applies to are the ones swept here.
+    ///
+    /// The answer is checked as well as the build succeeding: a declaration takes its signature from
+    /// the symbol's type and the definition takes its own from the function that implements it, and
+    /// the two disagreeing across units links quietly.
     #[test]
     fn test_build_g_with_smallest_compilation_units() {
         const SOURCE: &str = r#"
@@ -145,12 +166,12 @@ mod debug_info_tests {
         }
     }
 
-    // A program that exports a function to C must build with `-g` at every optimization level and
-    // still compute the right answer. The wrapper an export compiles into is emitted in the main
-    // compilation unit, which under separated compilation owns no symbol of its own, so the Fix
-    // value the wrapper forwards to is a global of another unit that the main unit reaches only
-    // while generating that wrapper. The wrapper itself is a function body that carries no
-    // debug-information subprogram, unlike every other body the back end emits.
+    /// A program that exports a function to C must build with `-g` at every optimization level and
+    /// still compute the right answer. The wrapper an export compiles into is emitted in the main
+    /// compilation unit, which under separated compilation owns no symbol of its own, so the Fix
+    /// value the wrapper forwards to is a global of another unit that the main unit reaches only
+    /// while generating that wrapper. The wrapper itself is a function body that carries no
+    /// debug-information subprogram, unlike every other body the back end emits.
     #[test]
     fn test_build_g_exported_c_function_succeeds_at_every_optimization_level() {
         const SOURCE: &str = r#"
@@ -177,11 +198,11 @@ mod debug_info_tests {
         }
     }
 
-    // Building with `-g` must succeed for a recursive type. A type's debug information is emitted by
-    // following its field references, and a recursive type refers back to itself; describing it once
-    // and sharing that record keeps the emission finite, where expanding it afresh at every
-    // reference would recurse forever and overflow the compiler's stack. `-g` is required to reach
-    // the debug-information path — without it the same program builds.
+    /// Building with `-g` must succeed for a recursive type. A type's debug information is emitted by
+    /// following its field references, and a recursive type refers back to itself; describing it once
+    /// and sharing that record keeps the emission finite, where expanding it afresh at every
+    /// reference would recurse forever and overflow the compiler's stack. `-g` is what puts the
+    /// build on the debug-information path, so the scenario passes it.
     #[test]
     fn test_build_g_recursive_type_succeeds() {
         build_with_g(
@@ -204,10 +225,10 @@ mod debug_info_tests {
         );
     }
 
-    // Building with `-g` must succeed for mutually recursive types. Their debug types close the
-    // reference cycle across two distinct type keys, so several types are mid-construction at once
-    // and more than one placeholder node is live while the cycle is broken — a path a single
-    // self-recursive type does not exercise.
+    /// Building with `-g` must succeed for mutually recursive types. Their debug types close the
+    /// reference cycle across two distinct type keys, so several types are mid-construction at once
+    /// and more than one placeholder node is live while the cycle is broken — a path a single
+    /// self-recursive type does not exercise.
     #[test]
     fn test_build_g_mutually_recursive_types_succeeds() {
         build_with_g(
@@ -236,15 +257,157 @@ mod debug_info_tests {
         );
     }
 
-    // A source-level debugger a scenario can be driven under: gdb or lldb.
+    /// A minimal program, for a scenario whose subject is the debug information a build records.
+    const HELLO_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = println("hello");
+    "#;
+
+    /// Whether the file at `path` carries `text`. A file name and a directory of the debug
+    /// information reach the artifact as strings of its own, so its bytes carry them.
+    fn file_carries(path: &Path, text: &str) -> bool {
+        let content = fs::read(path).expect("Failed to read the built artifact");
+        content
+            .windows(text.len())
+            .any(|bytes| bytes == text.as_bytes())
+    }
+
+    /// The object files a build in `dir` has compiled so far.
+    fn object_files(dir: &Path) -> Set<PathBuf> {
+        let units = dir.join(COMPILATION_UNITS_PATH);
+        fs::read_dir(&units)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", units.display(), e))
+            .filter_map(|entry| {
+                let path = entry.expect("Failed to read a directory entry").path();
+                path.extension()
+                    .is_some_and(|extension| extension == "o")
+                    .then_some(path)
+            })
+            .collect()
+    }
+
+    /// Debug information names the file the code was compiled from, so a build made after its source
+    /// moved must name the source where it is now. Nothing but the path differs between the two
+    /// builds here, and the second one takes the object files of the first unless the path takes
+    /// part in naming them — sending a debugger to a path that holds no such file, or holds another
+    /// one.
+    ///
+    /// The name of the file a function was compiled from lives in the object file on every platform,
+    /// and a linked program carries it only where the platform's linker copies the debug information
+    /// into the program, so the object files the second build compiled are what is read here.
+    #[test]
+    fn test_debug_info_names_the_source_after_it_moved() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+
+        fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+        build_with_g_in(dir, "main.fix", "before_move", "none", &[]);
+        let before_move = object_files(dir);
+
+        fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
+        fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
+        build_with_g_in(dir, "src/app.fix", "after_move", "none", &[]);
+        let compiled_after_the_move = object_files(dir)
+            .difference(&before_move)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(
+            !compiled_after_the_move.is_empty(),
+            "the build after the move compiled nothing of its own, so it took the object files \
+             compiled for the file where it no longer is"
+        );
+        assert!(
+            compiled_after_the_move
+                .iter()
+                .any(|object| file_carries(object, "app.fix")),
+            "the object files compiled after the move do not name \"app.fix\", the file they were \
+             compiled from"
+        );
+        for object in &compiled_after_the_move {
+            assert!(
+                !file_carries(object, "main.fix"),
+                "{} names \"main.fix\", where its source no longer is",
+                object.display()
+            );
+        }
+    }
+
+    /// The file names debug information carries are relative, and a debugger resolves them against
+    /// the directory of the compilation unit, which is where the build ran. A project built again
+    /// after it moved must therefore record its new directory — the objects cached in it were
+    /// generated for the old one.
+    #[test]
+    fn test_debug_info_names_the_directory_after_the_project_moved() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        // The directory a build records is the one it reads back from the operating system, which
+        // has the symbolic links on the way resolved. A temporary directory is reached through one
+        // on macOS, so the root is resolved here and both paths are built from it.
+        let root = fs::canonicalize(temp.path()).expect("Failed to resolve the temp directory");
+        let before_move = root.join("before_move");
+        let after_move = root.join("after_move");
+
+        fs::create_dir(&before_move).expect("Failed to create the project directory");
+        fs::write(before_move.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+        build_with_g_in(&before_move, "main.fix", "prog", "none", &[]);
+
+        // The build's own directory moves with the project, so the objects it cached are there to
+        // be taken.
+        fs::rename(&before_move, &after_move).expect("Failed to move the project directory");
+        build_with_g_in(&after_move, "main.fix", "prog", "none", &[]);
+
+        let program = after_move.join("prog");
+        assert!(
+            file_carries(&program, after_move.to_str().unwrap()),
+            "the program built after the move does not name the directory it was built in"
+        );
+        assert!(
+            !file_carries(&program, before_move.to_str().unwrap()),
+            "the program built after the move names the directory the project has left"
+        );
+    }
+
+    /// The compilation directory reaches the generated code through the debug information and
+    /// nowhere else, which is what lets a build without debug information take the object files
+    /// generated in another directory. One source built in one directory, with `-g` and without it,
+    /// answers both halves.
+    #[test]
+    fn test_the_compilation_directory_reaches_the_program_only_through_debug_information() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        // The directory a build records is the one it reads back from the operating system, which
+        // has the symbolic links on the way resolved. A temporary directory is reached through one
+        // on macOS.
+        let dir = fs::canonicalize(temp.path()).expect("Failed to resolve the temp directory");
+        fs::write(dir.join("main.fix"), HELLO_SOURCE).expect("Failed to write main.fix");
+
+        build_with_g_in(&dir, "main.fix", "with_g", "none", &[]);
+        build_in(&dir, "main.fix", "without_g", "none", &[]);
+
+        let dir_str = dir.to_str().expect("The temporary directory is not UTF-8");
+        assert!(
+            file_carries(&dir.join("with_g"), dir_str),
+            "the program built with debug information does not name the directory it was built in"
+        );
+        assert!(
+            !file_carries(&dir.join("without_g"), dir_str),
+            "the program built without debug information names the directory it was built in, so \
+             that directory has to take part in naming the object files of such a build as well"
+        );
+    }
+
+    /// A source-level debugger a scenario can be driven under: gdb or lldb.
     #[derive(Clone, Copy)]
     enum Debugger {
+        /// The GNU debugger, which a Linux host provides.
         Gdb,
+        /// The LLVM debugger, which a macOS host provides and a Linux host may have installed.
         Lldb,
     }
 
     impl Debugger {
-        // The debugger's executable name, as passed to `Command::new`.
+        /// The debugger's executable name, as passed to `Command::new`.
         fn program(self) -> &'static str {
             match self {
                 Debugger::Gdb => "gdb",
@@ -252,9 +415,9 @@ mod debug_info_tests {
             }
         }
 
-        // Whether the debugger can be launched on this host. A scenario skips when its debugger is
-        // absent: macOS ships no working gdb, and a Linux host without lldb installed skips the lldb
-        // variants.
+        /// Whether the debugger can be launched on this host. A scenario skips when its debugger is
+        /// absent: macOS ships no working gdb, and a Linux host without lldb installed skips the lldb
+        /// variants.
         fn is_available(self) -> bool {
             Command::new(self.program())
                 .arg("--version")
@@ -262,17 +425,27 @@ mod debug_info_tests {
                 .is_ok()
         }
 
-        // The line a debugger prints when it stops at a breakpoint.
+        /// The line a debugger prints when it stops at a breakpoint.
         fn stopped_marker(self) -> &'static str {
             match self {
                 Debugger::Gdb => "Breakpoint 1, ",
                 Debugger::Lldb => "stop reason = breakpoint",
             }
         }
+
+        /// How the debugger writes the string `text` that `x/s` reads out of memory: gdb surrounds it
+        /// with quotes, lldb prints the bytes alone.
+        fn printed_string(self, text: &str) -> String {
+            match self {
+                Debugger::Gdb => format!("\"{}\"", text),
+                Debugger::Lldb => text.to_string(),
+            }
+        }
     }
 
-    // Build the Fix source file `sample` with debug information into a fresh temp directory and
-    // return it. The build is at `-O none`, so the locals are not optimized away.
+    /// Build the Fix source file `sample` with debug information into a fresh temp directory and
+    /// return it. The build is at `-O none`, so every local survives to the breakpoint a debugger
+    /// stops at.
     fn build_debuggee(sample: PathBuf) -> TempDir {
         let source = fs::read_to_string(sample).expect("Failed to read the sample main.fix");
         let temp = build_with_g(&source, "none", &[]);
@@ -283,8 +456,13 @@ mod debug_info_tests {
         temp
     }
 
-    // Drive `debugger` over `./prog` in `dir`, issuing the given native `commands` in order, and
-    // return its combined stdout+stderr.
+    /// The given debugger commands, each as an owned string.
+    fn to_commands(commands: &[&str]) -> Vec<String> {
+        commands.iter().map(|c| c.to_string()).collect()
+    }
+
+    /// Drive `debugger` over `./prog` in `dir`, issuing the given native `commands` in order, and
+    /// return its combined stdout+stderr.
     fn drive(debugger: Debugger, dir: &Path, commands: &[String]) -> String {
         let mut cmd = Command::new(debugger.program());
         match debugger {
@@ -313,7 +491,7 @@ mod debug_info_tests {
         )
     }
 
-    // Assert `out` contains `needle`; on failure, report the miss as a missing `what`.
+    /// Assert `out` contains `needle`; on failure, report the miss as a missing `what`.
     fn assert_contains(out: &str, needle: &str, what: &str) {
         assert!(
             out.contains(needle),
@@ -324,49 +502,71 @@ mod debug_info_tests {
         );
     }
 
-    // The `main.fix` of the sample program `cases/<case>/`.
+    /// Assert that `out` shows `debugger` stopped at the breakpoint set on `main.fix:<line>`.
+    fn assert_stopped_at_line(out: &str, debugger: Debugger, line: u32) {
+        assert!(
+            out.contains(debugger.stopped_marker()) && out.contains(&format!("main.fix:{}", line)),
+            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
+            line,
+            out
+        );
+    }
+
+    /// Run `scenario` under `debugger`, or report that the test named `test_name` is skipped where
+    /// that debugger is absent.
+    fn run_under_debugger(debugger: Debugger, test_name: &str, scenario: fn(Debugger)) {
+        if !debugger.is_available() {
+            eprintln!(
+                "skipping {}: {} is not available",
+                test_name,
+                debugger.program()
+            );
+            return;
+        }
+        scenario(debugger);
+    }
+
+    /// The `main.fix` of the sample program `cases/<case>/`.
     fn case_main_fix(case: &str) -> PathBuf {
         let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         p.push(format!("src/tests/test_debug_info/cases/{}/main.fix", case));
         p
     }
 
-    // Line numbers in cases/debug_baseline/main.fix. If that file changes, update these.
+    /// The line inside `compute` of cases/debug_baseline/main.fix, where the breakpoint is set.
+    /// The three `LINE_` constants follow that file, so an edit to it has to reach them.
     const LINE_COMPUTE_BODY: u32 = 5; // "    let y = x + 1;"              (inside `compute`)
+    /// The line of cases/debug_baseline/main.fix where `wrap` calls `compute`.
     const LINE_WRAP_DEF: u32 = 13; //    "    let y = compute(x + 10);"    (call site of `compute`)
+    /// The line of cases/debug_baseline/main.fix where `main` calls `wrap`.
     const LINE_MAIN_CALL: u32 = 19; //   "    let r = wrap(5);"            (call site of `wrap`)
 
-    // A source breakpoint resolves to `main.fix:<line>`, execution stops there, and the backtrace
-    // carries per-frame line info up the Fix call chain (wrap's call site and main's call site),
-    // independent of frame names.
+    /// A source breakpoint resolves to `main.fix:<line>`, execution stops there, and the backtrace
+    /// carries per-frame line info up the Fix call chain (wrap's call site and main's call site),
+    /// independent of frame names.
     fn baseline_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_baseline"));
         let commands = match debugger {
-            Debugger::Gdb => vec![
-                format!("break main.fix:{}", LINE_COMPUTE_BODY),
-                "run".to_string(),
-                "backtrace".to_string(),
-                "continue".to_string(),
-            ],
-            Debugger::Lldb => vec![
+            Debugger::Gdb => to_commands(&[
+                format!("break main.fix:{}", LINE_COMPUTE_BODY).as_str(),
+                "run",
+                "backtrace",
+                "continue",
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!(
                     "breakpoint set --file main.fix --line {}",
                     LINE_COMPUTE_BODY
-                ),
-                "run".to_string(),
-                "thread backtrace".to_string(),
-                "continue".to_string(),
-            ],
+                )
+                .as_str(),
+                "run",
+                "thread backtrace",
+                "continue",
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        assert!(
-            out.contains(debugger.stopped_marker())
-                && out.contains(&format!("main.fix:{}", LINE_COMPUTE_BODY)),
-            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
-            LINE_COMPUTE_BODY,
-            out
-        );
+        assert_stopped_at_line(&out, debugger, LINE_COMPUTE_BODY);
         for line in [LINE_WRAP_DEF, LINE_MAIN_CALL] {
             assert!(
                 out.contains(&format!("main.fix:{}", line)),
@@ -377,38 +577,34 @@ mod debug_info_tests {
         }
     }
 
-    // A source breakpoint resolves and the backtrace carries per-frame line info, as gdb reads them.
+    /// A source breakpoint resolves and the backtrace carries per-frame line info, as gdb reads them.
     #[test]
     fn test_debug_info_baseline_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_baseline_gdb: gdb is not available");
-            return;
-        }
-        baseline_impl(Debugger::Gdb);
+        run_under_debugger(Debugger::Gdb, "test_debug_info_baseline_gdb", baseline_impl);
     }
 
-    // A source breakpoint resolves and the backtrace carries per-frame line info, as lldb reads
-    // them. lldb is the debugger of a macOS host, and of a Linux host that has it installed.
+    /// A source breakpoint resolves and the backtrace carries per-frame line info, as lldb reads
+    /// them. lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_baseline_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_baseline_lldb: lldb is not available");
-            return;
-        }
-        baseline_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_baseline_lldb",
+            baseline_impl,
+        );
     }
 
-    // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
+    /// Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
     const LINE_VARS_BREAK: u32 = 10; // "    eval i;"
 
-    // Debug info drives correct variable inspection at a breakpoint. Unboxed scalars print their
-    // value — an `I64` as its number, a `Bool` as `true` / `false` (i.e. `Bool`'s debug type is
-    // `DW_ATE_boolean`, not a union struct). An `Array` / `String` local carries its Fix type name
-    // (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
+    /// Debug info drives correct variable inspection at a breakpoint. Unboxed scalars print their
+    /// value — an `I64` as its number, a `Bool` as `true` / `false`, which its debug type
+    /// `DW_ATE_boolean` gives it. An `Array` / `String` local carries its Fix type name
+    /// (`Std::Array Std::I64`, `Std::String`), and an `Array` value also exposes its size directly.
     fn variable_values_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_vars"));
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 format!("break main.fix:{}", LINE_VARS_BREAK).as_str(),
                 "run",
                 "print i",
@@ -423,11 +619,8 @@ mod debug_info_tests {
                 // C string from that offset.
                 "x/s (char*)s._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!("breakpoint set --file main.fix --line {}", LINE_VARS_BREAK).as_str(),
                 "run",
                 "frame variable i",
@@ -437,19 +630,11 @@ mod debug_info_tests {
                 "frame variable s",
                 "x/s (char *)s._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        // gdb prints the string read by `x/s` quoted; lldb's format differs, so match the bytes
-        // without the surrounding quotes.
-        let hello = match debugger {
-            Debugger::Gdb => "\"hello\"",
-            Debugger::Lldb => "hello",
-        };
+        let hello = debugger.printed_string("hello");
         for (needle, what) in [
             ("= 42", "I64 value"),
             ("= true", "Bool `true`"),
@@ -457,41 +642,44 @@ mod debug_info_tests {
             ("Std::Array Std::I64", "Array type"),
             ("<array size> = 3", "Array size"),
             ("Std::String", "String type"),
-            (hello, "String contents (raw bytes)"),
+            (hello.as_str(), "String contents (raw bytes)"),
         ] {
             assert_contains(&out, needle, what);
         }
     }
 
+    /// The locals live at a breakpoint are inspected by their source names, as gdb reads them.
     #[test]
     fn test_debug_info_variable_values_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_variable_values_gdb: gdb is not available");
-            return;
-        }
-        variable_values_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_variable_values_gdb",
+            variable_values_impl,
+        );
     }
 
+    /// The locals live at a breakpoint are inspected by their source names, as lldb reads them.
+    /// lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_variable_values_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_variable_values_lldb: lldb is not available");
-            return;
-        }
-        variable_values_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_variable_values_lldb",
+            variable_values_impl,
+        );
     }
 
-    // Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
-    // are live.
+    /// Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
+    /// are live.
     const LINE_DESTRUCTURE_BREAK: u32 = 9; // "    eval a;"
 
-    // A `let`-pattern that destructures a tuple binds each field to a source variable; debug info
-    // must let a debugger inspect every one by its source name. `a` and `n` are the unboxed `I64`
-    // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
+    /// A `let`-pattern that destructures a tuple binds each field to a source variable; debug info
+    /// must let a debugger inspect every one by its source name. `a` and `n` are the unboxed `I64`
+    /// fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
     fn destructure_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_destructure"));
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 format!("break main.fix:{}", LINE_DESTRUCTURE_BREAK).as_str(),
                 "run",
                 "print a",
@@ -501,11 +689,8 @@ mod debug_info_tests {
                 "whatis str",
                 "x/s (char*)str._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 format!(
                     "breakpoint set --file main.fix --line {}",
                     LINE_DESTRUCTURE_BREAK
@@ -518,62 +703,60 @@ mod debug_info_tests {
                 "frame variable str",
                 "x/s (char *)str._data._storage + 8",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        let hello = match debugger {
-            Debugger::Gdb => "\"hello\"",
-            Debugger::Lldb => "hello",
-        };
+        let hello = debugger.printed_string("hello");
         for (needle, what) in [
             ("= 7", "destructured I64 field `a`"),
             ("= 5", "destructured I64 field `n`"),
             ("Std::Array Std::I64", "destructured Array field `arr` type"),
             ("<array size> = 3", "destructured Array field `arr` size"),
             ("Std::String", "destructured String field `str` type"),
-            (hello, "destructured String field `str` contents"),
+            (hello.as_str(), "destructured String field `str` contents"),
         ] {
             assert_contains(&out, needle, what);
         }
     }
 
+    /// The locals a destructuring `let` binds are inspected by their source names, as gdb reads
+    /// them.
     #[test]
     fn test_debug_info_destructure_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_destructure_gdb: gdb is not available");
-            return;
-        }
-        destructure_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_destructure_gdb",
+            destructure_impl,
+        );
     }
 
+    /// The locals a destructuring `let` binds are inspected by their source names, as lldb reads
+    /// them. lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_destructure_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_destructure_lldb: lldb is not available");
-            return;
-        }
-        destructure_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_destructure_lldb",
+            destructure_impl,
+        );
     }
 
-    // Line number in cases/debug_array/main.fix. If that file changes, update this.
+    /// Line number in cases/debug_array/main.fix. If that file changes, update this.
     const LINE_ARRAY_BREAK: u32 = 8; // "    let sum = arr3.@(0) + arr150.@(0);"
 
-    // Checks that a debugger displays the elements of `Array` / `String` values. The debug info
-    // claims a fixed number of elements (`DEBUG_ARRAY_ASSUMED_LEN`, 100) with byte sizes covering
-    // all of them, so the debugger shows 100 elements whose first `<array size>` ones are the valid
-    // values, without "access outside bounds" errors.
+    /// Checks that a debugger displays the elements of `Array` / `String` values. The debug info
+    /// claims a fixed number of elements (`DEBUG_ARRAY_ASSUMED_LEN`, 100) with byte sizes covering
+    /// all of them, so the debugger shows 100 elements whose first `<array size>` ones are the valid
+    /// values, without "access outside bounds" errors.
     fn array_elements_impl(debugger: Debugger) {
         let temp = build_debuggee(case_main_fix("debug_array"));
         // Break while the arrays are still alive (they are used after the breakpoint line; Fix
         // releases locals at their last use), then print them. An `Array` value prints its size
         // directly, but its elements live in the `#ArrayStorage` behind `_storage`, so the size and
         // the elements come from two separate prints.
-        let commands: Vec<String> = match debugger {
-            Debugger::Gdb => [
+        let commands = match debugger {
+            Debugger::Gdb => to_commands(&[
                 "set print elements unlimited",
                 format!("break main.fix:{}", LINE_ARRAY_BREAK).as_str(),
                 "run",
@@ -583,11 +766,8 @@ mod debug_info_tests {
                 "print *arr150._storage",
                 "print *msg._data._storage",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-            Debugger::Lldb => [
+            ]),
+            Debugger::Lldb => to_commands(&[
                 "settings set target.max-children-count 10000",
                 format!("breakpoint set --file main.fix --line {}", LINE_ARRAY_BREAK).as_str(),
                 "run",
@@ -597,21 +777,11 @@ mod debug_info_tests {
                 "print *arr150._storage",
                 "print *msg._data._storage",
                 "continue",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+            ]),
         };
         let out = drive(debugger, temp.path(), &commands);
 
-        // Execution stopped at the breakpoint.
-        assert!(
-            out.contains(debugger.stopped_marker())
-                && out.contains(&format!("main.fix:{}", LINE_ARRAY_BREAK)),
-            "execution did not stop at main.fix:{}.\ndebugger output:\n{}",
-            LINE_ARRAY_BREAK,
-            out
-        );
+        assert_stopped_at_line(&out, debugger, LINE_ARRAY_BREAK);
         // A 3-element array prints its size and its valid elements first, and a 150-element array
         // its size and the first 100 elements (the 100th displayed value is 1000). Elements past
         // the valid ones are unspecified memory, so only the prefix is asserted. gdb renders the
@@ -659,21 +829,24 @@ mod debug_info_tests {
         }
     }
 
+    /// The elements of an `Array`, and the bytes of a `String`, are displayed as gdb reads them.
     #[test]
     fn test_debug_info_array_elements_gdb() {
-        if !Debugger::Gdb.is_available() {
-            eprintln!("skipping test_debug_info_array_elements_gdb: gdb is not available");
-            return;
-        }
-        array_elements_impl(Debugger::Gdb);
+        run_under_debugger(
+            Debugger::Gdb,
+            "test_debug_info_array_elements_gdb",
+            array_elements_impl,
+        );
     }
 
+    /// The elements of an `Array`, and the bytes of a `String`, are displayed as lldb reads them.
+    /// lldb is the debugger of a macOS host, and of a Linux host that has it installed.
     #[test]
     fn test_debug_info_array_elements_lldb() {
-        if !Debugger::Lldb.is_available() {
-            eprintln!("skipping test_debug_info_array_elements_lldb: lldb is not available");
-            return;
-        }
-        array_elements_impl(Debugger::Lldb);
+        run_under_debugger(
+            Debugger::Lldb,
+            "test_debug_info_array_elements_lldb",
+            array_elements_impl,
+        );
     }
 }

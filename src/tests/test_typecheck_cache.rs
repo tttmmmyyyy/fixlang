@@ -36,6 +36,7 @@ mod integration_tests {
     use crate::tests::test_util::fix_command;
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
     use tempfile::TempDir;
 
     /// The version hash of a cache entry comes from the sources of the module the value's name
@@ -98,20 +99,43 @@ main : IO ();
 main = println((old_val + new_val).to_string);
 "#;
 
-    /// Builds `main.fix` in `dir` and returns what the compiler wrote to stderr.
-    fn build(dir: &Path) -> String {
-        let out = fix_command()
-            .args(["build", "--file", "main.fix", "-o", "out"])
+    /// The content of a file a cache entry points into, as a later build finds it: short enough
+    /// that the spans of `DEPRECATED_USE` fall past its end.
+    const SHORTER_SOURCE: &str = r#"module Main;
+
+main : IO ();
+main = println("s");
+"#;
+
+    /// A temporary directory holding `a/main.fix` and `b/main.fix`, two files whose content is
+    /// `DEPRECATED_USE`. Built from that directory, the two share the cache it holds.
+    fn dir_of_two_files_of_equal_content() -> TempDir {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        for sub_dir in ["a", "b"] {
+            let sub_dir = temp.path().join(sub_dir);
+            fs::create_dir(&sub_dir).expect("Failed to create the directory of a file");
+            fs::write(sub_dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
+        }
+        temp
+    }
+
+    /// Builds the Fix source `file`, named as the working directory `dir` reaches it, passing
+    /// `extra_args` to `fix build` as well, and returns what the compiler wrote to stderr. The
+    /// program is written to `out` in that directory.
+    fn build(dir: &Path, file: &str, extra_args: &[&str]) -> String {
+        let build_output = fix_command()
+            .args(["build", "--file", file, "-o", "out"])
+            .args(extra_args)
             .current_dir(dir)
             .output()
             .expect("failed to run fix build");
         assert!(
-            out.status.success(),
+            build_output.status.success(),
             "fix build failed in {}:\n{}",
             dir.display(),
-            String::from_utf8_lossy(&out.stderr)
+            String::from_utf8_lossy(&build_output.stderr)
         );
-        String::from_utf8_lossy(&out.stderr).to_string()
+        String::from_utf8_lossy(&build_output.stderr).to_string()
     }
 
     /// A deprecation warning is collected after type checking, out of the typed expression and the
@@ -123,7 +147,7 @@ main = println((old_val + new_val).to_string);
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let cold = build(dir);
+        let cold = build(dir, "main.fix", &[]);
         assert!(
             cold.contains("`Main::old_val` is deprecated"),
             "the first build must report the deprecated use.\nstderr: {}",
@@ -135,7 +159,7 @@ main = println((old_val + new_val).to_string);
             cold
         );
 
-        let warm = build(dir);
+        let warm = build(dir, "main.fix", &[]);
         assert!(
             warm.contains("`Main::old_val` is deprecated"),
             "the second build serves `Main::main` from the type-check cache and lost the \
@@ -146,6 +170,63 @@ main = println((old_val + new_val).to_string);
             warm.contains("in \"main.fix\""),
             "the second build attributed the deprecated use to another file.\nstderr: {}",
             warm
+        );
+    }
+
+    /// Two files of equal content are two files still, and each build owes the user a warning
+    /// anchored in the file it was given. The cache belongs to the working directory, so building
+    /// both from one place has them share it, and the entry carries the span of the use. An entry
+    /// that a file of equal content may claim answers the second build with a span pointing into
+    /// the first build's file, and the warning is then dropped as belonging to a file this build
+    /// never read.
+    #[test]
+    fn two_files_of_equal_content_are_each_reported_in_their_own_file() {
+        let temp = dir_of_two_files_of_equal_content();
+        let dir = temp.path();
+
+        for sub_dir in ["a", "b"] {
+            let file = format!("{}/main.fix", sub_dir);
+            let stderr = build(dir, &file, &[]);
+            assert!(
+                stderr.contains("`Main::old_val` is deprecated"),
+                "building \"{}\" must report the deprecated use.\nstderr: {}",
+                file,
+                stderr
+            );
+            assert!(
+                stderr.contains(&format!("in \"{}\"", file)),
+                "building \"{}\" attributed the deprecated use to another file.\nstderr: {}",
+                file,
+                stderr
+            );
+        }
+    }
+
+    /// A build with debug information turns the span of every expression into a line and a column,
+    /// which it reads out of the file the span points into. An entry a file of equal content may
+    /// claim hands the second build spans that point into the first build's file, and that file is
+    /// free to have been edited since: the offsets fall past its end, and the compiler aborts with
+    /// `called 'Option::unwrap()' on a 'None' value`, naming no file and reporting no diagnostic.
+    ///
+    /// The first build carries no debug information, so the second one shares none of its object
+    /// files and has to generate code — which is where the spans are read.
+    #[test]
+    fn a_build_with_debug_information_reads_the_spans_out_of_its_own_file() {
+        let temp = dir_of_two_files_of_equal_content();
+        let dir = temp.path();
+
+        build(dir, "a/main.fix", &[]);
+        fs::write(dir.join("a").join("main.fix"), SHORTER_SOURCE)
+            .expect("Failed to rewrite a/main.fix");
+        build(dir, "b/main.fix", &["-g"]);
+
+        let run = Command::new(dir.join("out"))
+            .output()
+            .expect("failed to run the built program");
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout).trim(),
+            "3",
+            "the program built from \"b/main.fix\" computes what its own source says"
         );
     }
 }
