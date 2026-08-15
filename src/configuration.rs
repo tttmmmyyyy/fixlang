@@ -1109,7 +1109,7 @@ impl CTypeSizes {
     }
 
     /// The size of each C type, named and written out. Both caches of the compiler are keyed by it.
-    pub fn to_string(&self) -> String {
+    fn to_string(&self) -> String {
         vec![
             format!("char: {}", self.char),
             format!("short: {}", self.short),
@@ -1307,17 +1307,46 @@ mod tests {
     use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
     use crate::misc::Map;
 
-    /// A build configuration to which `edit` has been applied.
-    fn config_after(edit: impl FnOnce(&mut Configuration)) -> Configuration {
+    /// The hash `hash` gives a build configuration to which `edit` has been applied.
+    fn hash_after(
+        hash: &impl Fn(&Configuration) -> String,
+        edit: Box<dyn FnOnce(&mut Configuration)>,
+    ) -> String {
         let mut config = Configuration::release_mode(SubCommand::Build)
             .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
         edit(&mut config);
-        config
+        hash(&config)
     }
 
-    /// The object generation hash of a build configuration to which `edit` has been applied.
-    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
-        config_after(edit).object_generation_hash()
+    /// Asserts that each setting in `settings` gives `hash` a value of its own: one of its own
+    /// against a configuration where nothing was edited, and one of its own against each of the
+    /// other settings.
+    ///
+    /// `reaches` names, for the report, what the hash exists to separate — what a setting listed
+    /// here reaches.
+    fn assert_each_setting_moves_the_hash(
+        hash: impl Fn(&Configuration) -> String,
+        reaches: &str,
+        settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)>,
+    ) {
+        let baseline = hash_after(&hash, Box::new(|_| {}));
+        let mut settings_by_hash: Map<String, &str> = Map::default();
+        for (name, edit) in settings {
+            let edited = hash_after(&hash, edit);
+            assert_ne!(
+                baseline, edited,
+                "`{}` reaches {}, so it belongs in the hash.",
+                name, reaches
+            );
+            // Two settings landing on one hash would share each other's cached results, so the hash
+            // separates the settings from one another as well as from the baseline.
+            if let Some(other_setting) = settings_by_hash.insert(edited, name) {
+                panic!(
+                    "`{}` and `{}` reach {} differently, so the hash has to tell them apart.",
+                    name, other_setting, reaches
+                );
+            }
+        }
     }
 
     /// Two builds reuse each other's type-check results exactly when they agree on this hash, so
@@ -1327,21 +1356,14 @@ mod tests {
     /// list must stay in sync with `elaboration_hash`.
     #[test]
     fn test_elaboration_hash_separates_elaboration_settings() {
-        let baseline = config_after(|_| {}).elaboration_hash();
-
-        let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![(
-            "c_type_sizes",
-            Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
-        )];
-
-        for (name, edit) in settings {
-            assert_ne!(
-                baseline,
-                config_after(edit).elaboration_hash(),
-                "`{}` reaches the elaborated program, so it belongs in the elaboration hash.",
-                name
-            );
-        }
+        assert_each_setting_moves_the_hash(
+            |config| config.elaboration_hash(),
+            "the elaborated program",
+            vec![(
+                "c_type_sizes",
+                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+            )],
+        );
     }
 
     /// Two builds reuse each other's object files exactly when they agree on this hash, so each
@@ -1351,8 +1373,6 @@ mod tests {
     /// list must stay in sync with `object_generation_hash`.
     #[test]
     fn test_object_generation_hash_separates_code_generation_settings() {
-        let baseline = hash_after(|_| {});
-
         let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![
             (
                 "output_file_type",
@@ -1431,23 +1451,10 @@ mod tests {
             ),
         ];
 
-        let mut settings_by_hash: Map<String, &str> = Map::default();
-        for (name, edit) in settings {
-            let hash = hash_after(edit);
-            assert_ne!(
-                baseline, hash,
-                "`{}` reaches code generation, so it belongs in the object generation hash.",
-                name
-            );
-            // Two settings landing on one hash would share each other's object files, so the hash
-            // separates the settings from one another as well as from the baseline.
-            if let Some(other_setting) = settings_by_hash.insert(hash, name) {
-                panic!(
-                    "`{}` and `{}` generate different code, so the object generation hash has to \
-                     tell them apart.",
-                    name, other_setting
-                );
-            }
-        }
+        assert_each_setting_moves_the_hash(
+            |config| config.object_generation_hash(),
+            "code generation",
+            settings,
+        );
     }
 }

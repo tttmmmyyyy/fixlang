@@ -15,7 +15,10 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
-    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
+    misc::{
+        collect_results, info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg,
+        HashSource, Map, Set,
+    },
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -467,22 +470,19 @@ fn cache_step_or_warn<T, E: Display>(result: Result<T, E>, failure_msg: &str) ->
 }
 
 /// The hash that names the object files cache of a build: it covers the configuration options that
-/// bear on code generation together with every module's source, so two builds share a hash exactly
-/// when they would produce the same object files.
+/// bear on code generation together with every source every module is made of, so two builds share
+/// a hash exactly when they would produce the same object files.
 fn build_object_files_cache_hash(
     program: &Program,
     config: &Configuration,
 ) -> Result<String, Errors> {
-    let mut hash_source = "".to_string();
-    hash_source += "<configuration>";
-    hash_source += &config.object_generation_hash();
-
-    hash_source += "<sources>";
+    let mut hash_source = HashSource::default();
+    hash_source.push_text(&config.object_generation_hash());
     for mi in &program.modules {
-        hash_source += &mi.source.input.hash()?;
+        let source_hashes = collect_results(mi.sources().map(|source| source.hash()))?;
+        hash_source.push_list(&source_hashes);
     }
-
-    Ok(format!("{:x}", md5::compute(hash_source)))
+    Ok(hash_source.finish())
 }
 
 /// The hash naming a build's object files cache, or `None` after warning that it could not be
