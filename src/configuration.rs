@@ -10,9 +10,9 @@ use crate::constants::{
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
+use crate::hash::HashSource;
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally,
-    HashSource, Map,
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
