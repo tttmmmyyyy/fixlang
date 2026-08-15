@@ -4924,6 +4924,8 @@ pub fn test_trait_impl_defines_undeclared_member() {
     );
 }
 
+/// `to_bytes` and `from_bytes` carry a value of each numeric type through the byte array and back,
+/// and `from_bytes` answers an error for a byte array that is not the type's width.
 #[test]
 pub fn test129() {
     let source = r#"

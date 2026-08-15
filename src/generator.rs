@@ -2538,19 +2538,23 @@ impl<'c, 'm> Generator<'c, 'm> {
         )
     }
 
-    // Push debug location
+    /// Makes `span` the source location the instructions built from now on are attributed to,
+    /// keeping the location it replaces for the matching `pop_debug_location` to restore.
     pub fn push_debug_location(&mut self, span: Option<Span>) {
         self.debug_location.push(span.clone());
         self.set_debug_location(span);
     }
 
-    // Pop debug location.
+    /// Attributes the instructions built from now on to the location that was current before the
+    /// matching `push_debug_location`.
     pub fn pop_debug_location(&mut self) {
         self.debug_location.pop();
         self.reset_debug_location();
     }
 
-    // Set debug location
+    /// Attributes the instructions built from now on to the start of `span`, and to the start of
+    /// the file for a value that carries no span. Where no debug scope is open, they carry no
+    /// location at all.
     pub fn set_debug_location(&mut self, span: Option<Span>) {
         if let Some(debug_scope) = self.debug_scope() {
             let (line, col) = if let Some(span) = span.as_ref() {
@@ -2571,14 +2575,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    /// Attributes the instructions built from now on to the innermost location still pushed, which
+    /// is where they belong again once whatever moved the location away is finished.
     pub fn reset_debug_location(&mut self) {
         self.set_debug_location(flatten_opt(self.debug_location.last().cloned()));
     }
 
-    // Emit a call to a C function from already-evaluated argument objects and a pre-allocated return
-    // object. Each argument is marshalled to its C scalar (field 0), the function is called, and the
-    // result is written back into the return object (field 1 of the `(IOState, ret)` tuple when
-    // `is_io`, else field 0). A void return writes nothing.
+    /// Emit a call to a C function from already-evaluated argument objects and a pre-allocated
+    /// return object. Each argument is marshalled to its C scalar (field 0), the function is called,
+    /// and the result is written back into the return object (field 1 of the `(IOState, ret)` tuple
+    /// when `is_io`, else field 0). A void return writes nothing.
     pub fn build_ffi_call_core(
         &mut self,
         mut obj: Object<'c>,
@@ -2624,9 +2630,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
-    // retaining it (a retain-getter). `cap_tys` are the types of all captured values, needed to
-    // reconstruct the capture object's struct layout; `result_ty` is the projected value's type.
+    /// Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
+    /// retaining it (a retain-getter).
+    ///
+    /// # Arguments
+    /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
+    ///   layout.
+    /// * `result_ty` — the type of the projected value.
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,
@@ -2649,22 +2659,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Whether this module is being built with debug information.
+    /// Whether this module is being built with debug information.
     pub fn has_di(&self) -> bool {
         self.debug_info.is_some()
     }
 
-    // Get current debug info builder.
+    /// The builder that puts debug information into this module. Panics for a module built without
+    /// debug information, which `has_di` reports.
     pub fn get_di_builder(&self) -> &DebugInfoBuilder<'c> {
         &self.debug_info.as_ref().unwrap().0
     }
 
-    // Get current debug info compilation unit.
+    /// The compilation unit every debug entity of this module belongs to. Panics for a module built
+    /// without debug information, which `has_di` reports.
     pub fn get_di_compile_unit(&self) -> &DICompileUnit<'c> {
         &self.debug_info.as_ref().unwrap().1
     }
 
-    // Finalize all debug infos.
+    /// Resolves the debug information of this module into its final form, after which the module
+    /// takes no further debug entity.
     pub fn finalize_di(&self) {
         if self.has_di() {
             self.assert_no_subprogram_on_declaration();
@@ -2728,11 +2741,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Return the debug type identified by `key`, building it with `build` only on the first request
-    // and caching the result. A recursive type refers to itself, so `build` may ask for the same
-    // `key` again before it returns; that inner request resolves to a placeholder node which this
-    // method replaces with the finished type once `build` completes, breaking what would otherwise
-    // be unbounded recursion.
+    /// Return the debug type identified by `key`, building it with `build` only on the first request
+    /// and caching the result. A recursive type refers to itself, so `build` may ask for the same
+    /// `key` again before it returns; that inner request resolves to a placeholder node which this
+    /// method replaces with the finished type once `build` completes, breaking what would otherwise
+    /// be unbounded recursion.
     pub fn get_or_build_di_type(
         &mut self,
         key: String,
@@ -2761,6 +2774,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         real
     }
 
+    /// Records the local `name`, holding `obj`, in the debug information: the value is stored to a
+    /// stack slot and declared as an automatic variable living there, which is the form a debugger
+    /// reads a local out of.
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
         // Push the value on the stack.
         let obj_val = obj.value(self);
@@ -2788,8 +2804,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
-    // Bit cast between two types.
-    // Allows bit cast between types with different sizes.
+    /// The bits of `val` read as a value of `to_ty`. The two types may differ in size, in which case
+    /// the value travels through a stack slot wide enough for both.
     pub fn bit_cast(
         &mut self,
         val: BasicValueEnum<'c>,
@@ -2807,23 +2823,23 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
 
-    // Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
-    // must be created through their kind id; a string attribute of the same name is silently
-    // ignored by LLVM.
+    /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
+    /// must be created through their kind id; a string attribute of the same name is silently
+    /// ignored by LLVM.
     pub fn add_enum_attribute(&self, func: FunctionValue<'c>, name: &str, loc: AttributeLoc) {
         let kind = enum_attribute_kind_id(name);
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
-    // Mark a value crossing the C boundary as one the ABI extends to the unit it travels in.
-    //
-    // A C compiler puts the extension on every such parameter and result, and a Fix function
-    // reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
-    // whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
-    //
-    // Two descriptions a program writes of one C function agree on the extension at each position —
-    // that is what `Program::validate_c_function_calls` decides — so a position written twice in
-    // Fix source is written with the same attribute both times.
+    /// Mark a value crossing the C boundary as one the ABI extends to the unit it travels in.
+    ///
+    /// A C compiler puts the extension on every such parameter and result, and a Fix function
+    /// reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
+    /// whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
+    ///
+    /// Two descriptions a program writes of one C function agree on the extension at each position —
+    /// that is what `Program::validate_c_function_calls` decides — so a position written twice in
+    /// Fix source is written with the same attribute both times.
     pub fn add_c_integer_extension_attribute(
         &self,
         func: FunctionValue<'c>,
@@ -2836,8 +2852,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.add_enum_attribute(func, extension.attribute_name(), loc);
     }
 
-    // Add frame-pointer attribute to all functions in the module
-    // This is especially important on macOS where backtrace() relies on frame pointers
+    /// Have every function in the module keep its frame pointer. macOS `backtrace()` walks the
+    /// chain of frame pointers, so a frame that drops its own is a frame the backtrace stops at.
     pub fn add_frame_pointer_attribute_to_all_functions(&self) {
         for function in module_functions(self.module) {
             // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept

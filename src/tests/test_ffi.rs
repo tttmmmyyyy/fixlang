@@ -21,10 +21,10 @@ use std::{
 // types an export accepts, and the diagnostic the rest receive — and the way to exchange an
 // aggregate anyway, which is a pointer to a region the C side owns.
 
+/// Every scalar type an exported function may exchange, in both directions, checked against the
+/// C type it is documented to correspond to.
 #[test]
 pub fn test_export_scalar_types() {
-    // Every scalar type an exported function may exchange, in both directions, checked against the
-    // C type it is documented to correspond to.
     let source = r##"
         module Main;
 
@@ -124,14 +124,14 @@ pub fn test_export_scalar_types() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// An integer narrower than 32 bits travels in the low bits of a register, and `signext` /
+/// `zeroext` is how a signature says which side of the call extends it. Leaving it off costs
+/// nothing on x86-64, where whoever reads the value narrows it anyway, and yields the wrong
+/// number on AArch64, where the reader takes the whole register on the promise that the other
+/// side extended it. On an x86-64 host the attribute is therefore visible only in the emitted
+/// IR, which is what this test reads.
 #[test]
 pub fn test_narrow_integers_carry_the_c_extension_attribute() {
-    // An integer narrower than 32 bits travels in the low bits of a register, and `signext` /
-    // `zeroext` is how a signature says which side of the call extends it. Leaving it off costs
-    // nothing on x86-64, where whoever reads the value narrows it anyway, and yields the wrong
-    // number on AArch64, where the reader takes the whole register on the promise that the other
-    // side extended it. On an x86-64 host the attribute is therefore visible only in the emitted
-    // IR, which is what this test reads.
     let source = r#"
         module Main;
 
@@ -210,11 +210,11 @@ pub fn test_narrow_integers_carry_the_c_extension_attribute() {
     }
 }
 
+/// A boxed value returned to the foreign language arrives as an opaque pointer carrying one
+/// responsibility to release, and an exported function taking a boxed argument takes that
+/// responsibility over. The two together are balanced, which memcheck checks.
 #[test]
 pub fn test_export_boxed_value() {
-    // A boxed value returned to the foreign language arrives as an opaque pointer carrying one
-    // responsibility to release, and an exported function taking a boxed argument takes that
-    // responsibility over. The two together are balanced, which memcheck checks.
     let source = r##"
         module Main;
 
@@ -255,10 +255,10 @@ pub fn test_export_boxed_value() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// A C identifier is written in ASCII, so a letter outside it is refused even though it is a
+/// letter. The grammar takes any character up to the `]`, so the name reaches this check.
 #[test]
 pub fn test_export_non_ascii_c_function_name_fails() {
-    // A C identifier is written in ASCII, so a letter outside it is refused even though it is a
-    // letter. The grammar takes any character up to the `]`, so the name reaches this check.
     let source = r##"
         module Main;
 
@@ -276,6 +276,9 @@ pub fn test_export_non_ascii_c_function_name_fails() {
     );
 }
 
+/// The first character of a C identifier is admitted by a rule of its own — a digit is excluded
+/// there and allowed everywhere after it — so a name opening with a letter outside ASCII is refused
+/// by that rule rather than by the one covering the rest of the characters.
 #[test]
 pub fn test_export_non_ascii_first_character_fails() {
     let source = r##"
@@ -543,9 +546,9 @@ pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails(
     );
 }
 
+/// `()` stands for `void`, which a C function takes as a return type alone.
 #[test]
 pub fn test_ffi_call_unit_parameter_fails() {
-    // `()` stands for `void`, which a C function takes as a return type alone.
     let source = r##"
         module Main;
 
@@ -562,9 +565,9 @@ pub fn test_ffi_call_unit_parameter_fails() {
     );
 }
 
+/// A tuple is passed by value element by element, which the C ABI does not do for any target.
 #[test]
 pub fn test_export_aggregate_argument_fails() {
-    // A tuple is passed by value element by element, which the C ABI does not do for any target.
     let source = r##"
         module Main;
 
@@ -582,9 +585,9 @@ pub fn test_export_aggregate_argument_fails() {
     );
 }
 
+/// A named unbox struct is refused as the result of an exported function, as any aggregate is.
 #[test]
 pub fn test_export_unbox_struct_result_fails() {
-    // A named unbox struct is refused as the result of an exported function, as any aggregate is.
     let source = r##"
         module Main;
 
@@ -604,9 +607,9 @@ pub fn test_export_unbox_struct_result_fails() {
     );
 }
 
+/// A union is an aggregate of a tag and a payload buffer.
 #[test]
 pub fn test_export_union_argument_fails() {
-    // A union is an aggregate of a tag and a payload buffer.
     let source = r##"
         module Main;
 
@@ -624,9 +627,9 @@ pub fn test_export_union_argument_fails() {
     );
 }
 
+/// `String` is an unbox struct holding an array, so it is an aggregate like any other.
 #[test]
 pub fn test_export_string_result_fails() {
-    // `String` is an unbox struct holding an array, so it is an aggregate like any other.
     let source = r##"
         module Main;
 
@@ -644,10 +647,10 @@ pub fn test_export_string_result_fails() {
     );
 }
 
+/// `Bool` is one byte in Fix, but the width C gives `_Bool` is implementation-defined, and a
+/// caller is free to declare the function with `int` instead.
 #[test]
 pub fn test_export_bool_argument_fails() {
-    // `Bool` is one byte in Fix, but the width C gives `_Bool` is implementation-defined, and a
-    // caller is free to declare the function with `int` instead.
     let source = r##"
         module Main;
 
@@ -665,9 +668,9 @@ pub fn test_export_bool_argument_fails() {
     );
 }
 
+/// The reason `Bool` is refused does not depend on which side of the arrow it sits.
 #[test]
 pub fn test_export_bool_result_fails() {
-    // The reason `Bool` is refused does not depend on which side of the arrow it sits.
     let source = r##"
         module Main;
 
@@ -685,11 +688,11 @@ pub fn test_export_bool_result_fails() {
     );
 }
 
+/// A struct with one field is a struct. `unwrap_newtype` would later replace it with the field
+/// type, but only at `-O max` and above, so what C receives would depend on the optimization
+/// level. Unwrap it in the exported function's own signature instead.
 #[test]
 pub fn test_export_newtype_argument_fails() {
-    // A struct with one field is a struct. `unwrap_newtype` would later replace it with the field
-    // type, but only at `-O max` and above, so what C receives would depend on the optimization
-    // level. Unwrap it in the exported function's own signature instead.
     let source = r##"
         module Main;
 
@@ -709,9 +712,9 @@ pub fn test_export_newtype_argument_fails() {
     );
 }
 
+/// `()` is a struct with no field. It is allowed as the result, where it becomes `void`.
 #[test]
 pub fn test_export_unit_argument_fails() {
-    // `()` is a struct with no field. It is allowed as the result, where it becomes `void`.
     let source = r##"
         module Main;
 
@@ -729,9 +732,9 @@ pub fn test_export_unit_argument_fails() {
     );
 }
 
+/// A closure is a function pointer paired with its captured values.
 #[test]
 pub fn test_export_closure_argument_fails() {
-    // A closure is a function pointer paired with its captured values.
     let source = r##"
         module Main;
 
@@ -749,15 +752,15 @@ pub fn test_export_closure_argument_fails() {
     );
 }
 
+/// The way to exchange an aggregate with C: the C side owns the memory and passes a pointer to
+/// it, and Fix copies in or out through a boxed value. `borrow_boxed` and `mutate_boxed` hand
+/// out a pointer to the payload of a boxed value, whose fields are laid out like the fields of
+/// the corresponding C structure.
+///
+/// The Fix source is the "Returning more than one value" example of the FFI section of
+/// `Document.md` and `Document-ja.md`.
 #[test]
 pub fn test_export_aggregate_through_pointer() {
-    // The way to exchange an aggregate with C: the C side owns the memory and passes a pointer to
-    // it, and Fix copies in or out through a boxed value. `borrow_boxed` and `mutate_boxed` hand
-    // out a pointer to the payload of a boxed value, whose fields are laid out like the fields of
-    // the corresponding C structure.
-    //
-    // The Fix source is the "Returning more than one value" example of the FFI section of
-    // `Document.md` and `Document-ja.md`.
     let source = r##"
         module Main;
 
@@ -812,16 +815,16 @@ pub fn test_export_aggregate_through_pointer() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// A boxed value crosses the FFI boundary as an opaque pointer, and the C side keeps it alive
+/// through the `void (*)(void*)` functions that `get_funptr_retain` and `get_funptr_release`
+/// return. This test follows the accounting the documentation prescribes: the pointer that
+/// `boxed_to_retained_ptr` returns carries one responsibility to release, each retain adds one,
+/// and passing the pointer to an exported function takes one over.
+///
+/// The destructor of the exchanged value calls back into C, so the C side sees exactly when the
+/// value is destroyed rather than inferring it.
 #[test]
 pub fn test_export_boxed_value_and_reference_counting_funptrs() {
-    // A boxed value crosses the FFI boundary as an opaque pointer, and the C side keeps it alive
-    // through the `void (*)(void*)` functions that `get_funptr_retain` and `get_funptr_release`
-    // return. This test follows the accounting the documentation prescribes: the pointer that
-    // `boxed_to_retained_ptr` returns carries one responsibility to release, each retain adds one,
-    // and passing the pointer to an exported function takes one over.
-    //
-    // The destructor of the exchanged value calls back into C, so the C side sees exactly when the
-    // value is destroyed rather than inferring it.
     let source = r##"
         module Main;
 
@@ -904,11 +907,11 @@ pub fn test_export_boxed_value_and_reference_counting_funptrs() {
 // to copy. Running them here keeps the manual honest: a change to the language or to the standard
 // library that invalidates an example fails the suite instead of a reader's build.
 
+/// Handing an array to the foreign language as a retained pointer, and reading an element back
+/// through it. `get_fix_array_element` takes over the responsibility to release, so C calls it
+/// once for the one pointer it holds.
 #[test]
 pub fn test_document_example_boxed_array_across_ffi() {
-    // Handing an array to the foreign language as a retained pointer, and reading an element back
-    // through it. `get_fix_array_element` takes over the responsibility to release, so C calls it
-    // once for the one pointer it holds.
     let source = r##"
         module Main;
 
@@ -948,11 +951,11 @@ pub fn test_document_example_boxed_array_across_ffi() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// Reading the fields of a boxed Fix struct from C through the pointer `borrow_boxed` lends.
+/// The C side records what it saw so that Fix can check the fields arrived at the offsets a C
+/// structure with the same fields would put them at.
 #[test]
 pub fn test_document_example_borrow_boxed_struct_from_c() {
-    // Reading the fields of a boxed Fix struct from C through the pointer `borrow_boxed` lends.
-    // The C side records what it saw so that Fix can check the fields arrived at the offsets a C
-    // structure with the same fields would put them at.
     let source = r##"
         module Main;
 
@@ -986,10 +989,10 @@ pub fn test_document_example_borrow_boxed_struct_from_c() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// Passing an array's element buffer to C, for writing through `mutate_elements` and for
+/// reading through `borrow_elements`.
 #[test]
 pub fn test_document_example_array_elements_from_c() {
-    // Passing an array's element buffer to C, for writing through `mutate_elements` and for
-    // reading through `borrow_elements`.
     let source = r##"
         module Main;
 
@@ -1023,11 +1026,11 @@ pub fn test_document_example_array_elements_from_c() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Each shape an exported value's type may take — no argument, one argument, two arguments, and
+/// an `IO` action with and without a result — reaches C as a function of the matching arity and
+/// result type.
 #[test]
 pub fn test_export_signature_shapes() {
-    // Each shape an exported value's type may take — no argument, one argument, two arguments, and
-    // an `IO` action with and without a result — reaches C as a function of the matching arity and
-    // result type.
     let source = r##"
         module Main;
 
@@ -1109,10 +1112,10 @@ pub fn test_export_signature_shapes() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// `get_funptr_release` and `get_funptr_retain` take the type to act on from a `Lazy` whose body
+/// never runs, so a boxed type that has no value at hand can still be named.
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1() {
-    // `get_funptr_release` and `get_funptr_retain` take the type to act on from a `Lazy` whose body
-    // never runs, so a boxed type that has no value at hand can still be named.
     let source = r##"
         module Main;
 
@@ -1129,10 +1132,10 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The `Lazy` that names the type may fix it indirectly: through the domain or the codomain of a
+/// function in scope, or through an annotation mentioning a `Boxed` type variable.
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_2() {
-    // The `Lazy` that names the type may fix it indirectly: through the domain or the codomain of a
-    // function in scope, or through an annotation mentioning a `Boxed` type variable.
     let source = r##"
         module Main;
 
@@ -1172,10 +1175,10 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Only a boxed type has a reference counter, so `get_funptr_release` on an unboxed type such as
+/// `I64` is a compilation error.
 #[test]
 pub fn test_get_funptr_release_error() {
-    // Only a boxed type has a reference counter, so `get_funptr_release` on an unboxed type such as
-    // `I64` is a compilation error.
     let source = r##"
         module Main;
 
@@ -1188,9 +1191,9 @@ pub fn test_get_funptr_release_error() {
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
+/// `get_funptr_retain` requires a boxed type, and rejects an unboxed one such as `I64`.
 #[test]
 pub fn test_get_funptr_retain_error() {
-    // `get_funptr_retain` requires a boxed type, and rejects an unboxed one such as `I64`.
     let source = r##"
         module Main;
 
