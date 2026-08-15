@@ -23,10 +23,10 @@
 //! `result_prov` and composed with the operands, and branches join by set union. Each function's
 //! effect — its result provenance, symbolic in its parameters — is computed to a fixed point (so
 //! recursion converges) and substituted at a direct call site; an indirect call is conservatively
-//! `Unknown`. A `Retain` demotes the retained variable's own leaves. Demoting the *other* variables that
-//! alias the same object — one reached by projecting the same unboxed-aggregate leaf — needs the
-//! shared object-identity (`root`) analysis, which the borrow-inference pass introduces; the demotion
-//! becomes root-based then.
+//! `Unknown`. A `Retain` demotes the retained variable's own leaves. The *other* variables that alias
+//! the same object — one reached by projecting the same unboxed-aggregate leaf — keep their
+//! provenance, since telling those aliases apart takes the object identity `rc_ir::ownership::origin`
+//! computes, which this pass does not read.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -116,8 +116,8 @@ impl Provenance {
     }
 
     /// The origins recorded for the boxed leaf at path `π`. `None` where `π` is not a boxed leaf of
-    /// this value — a scalar, or an aggregate queried at a non-leaf path such as its root `[]` (which
-    /// `root` does to test whether the whole value is a single boxed leaf). A recorded `⊥` is the
+    /// this value — a scalar, or an aggregate queried at a non-leaf path such as its root `[]`, so a
+    /// query at the root answers whether the whole value is a single boxed leaf. A recorded `⊥` is the
     /// empty set, which is a different answer: it is the bottom of the lattice and resolves to
     /// `Unique`.
     pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
@@ -164,14 +164,14 @@ impl Provenance {
                             )
                         });
                         // A declared `Arg(j, σ)` names a boxed leaf of operand `j`.
-                        let leaf = operand.leaf_origins_at(arg_path).unwrap_or_else(|| {
+                        let operand_origins = operand.leaf_origins_at(arg_path).unwrap_or_else(|| {
                             unreachable!(
                                 "a declaration names input {} at {:?}, which is not a boxed leaf of it",
                                 j, arg_path
                             )
                         });
-                        for s in leaf {
-                            out.insert(s.clone());
+                        for operand_src in operand_origins {
+                            out.insert(operand_src.clone());
                         }
                     }
                 }
@@ -262,7 +262,9 @@ impl Provenance {
 /// leaf sourced from several places is `Unique` only when every source is.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SharingVerdict {
+    /// The leaf's reference is the only one there is, established at compile time.
     Unique,
+    /// How widely the leaf is shared is settled at run time, by reading its reference count.
     Dynamic,
 }
 
@@ -272,9 +274,9 @@ pub enum SharingVerdict {
 pub struct Uniqueness(LeafKey<SharingVerdict>);
 
 impl Uniqueness {
-    /// The `SharingVerdict` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
-    /// caller (`resolve_leaf`) resolves an `Arg`'s path, which addresses a boxed leaf of the input's
-    /// type — so a miss is a malformed provenance, not a case to default away.
+    /// The `SharingVerdict` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape:
+    /// it comes from an `Arg`, which addresses a boxed leaf of the input's type, so a miss is a
+    /// malformed provenance and aborts.
     fn verdict_at(&self, path: &[usize]) -> SharingVerdict {
         self.0.at(path)
     }
@@ -316,7 +318,7 @@ fn resolve_leaf(origins: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict 
 }
 
 /// Resolve a provenance against the uniqueness of its function's inputs, mapping each boxed leaf to
-/// its `SharingVerdict` verdict. `inputs` must give the uniqueness of every input the provenance's `Arg`
+/// its `SharingVerdict`. `inputs` must give the uniqueness of every input the provenance's `Arg`
 /// leaves name — a parameter per index, plus the capture past them (an unspecialized function's are
 /// all `Dynamic`). A provenance with no `Arg` leaf (e.g. an all-`Unknown` one) references none, so it
 /// needs no inputs.
@@ -372,6 +374,8 @@ struct Interpreter<'a> {
 }
 
 impl<'a> Interpreter<'a> {
+    /// An interpreter for one function or global initializer, with every table it records into
+    /// empty. `func_result_provs` is the whole program's effects, which a direct call composes with.
     fn new(type_env: &'a TypeEnv, func_result_provs: &'a Map<FuncRef, Provenance>) -> Self {
         Interpreter {
             type_env,
@@ -429,6 +433,9 @@ impl<'a> Interpreter<'a> {
         grow_stack(|| self.interpret_inner(node, env))
     }
 
+    /// The body of `interpret`: each construct records what it binds and hands the environment on to
+    /// its continuation, and a `Ret` ends the walk with the provenance of the value it names.
+    /// `interpret` wraps this so that a deeply nested body does not exhaust the stack.
     fn interpret_inner(
         &mut self,
         node: &RcExprNode,
@@ -871,22 +878,27 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{join_envs, resolve, LeafOrigin, Provenance, SharingVerdict, Uniqueness};
+    use crate::ast::name::FullName;
+    use crate::misc::{Map, Set};
 
-    // A single boxed value's provenance: one leaf at the root path.
+    /// A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
         Provenance([(vec![], Provenance::leaf(src))].into_iter().collect())
     }
+    /// A boxed value produced where it is bound, so nothing else holds a reference to it.
     fn fresh() -> Provenance {
         boxed(LeafOrigin::Fresh)
     }
+    /// A boxed value of unknown sharing.
     fn unknown() -> Provenance {
         boxed(LeafOrigin::Unknown)
     }
+    /// A boxed value carried through unchanged from input `i`'s leaf at `path`.
     fn arg(i: usize, path: Vec<usize>) -> Provenance {
         boxed(LeafOrigin::Arg(i, path))
     }
-    // An unboxed aggregate: each child's leaves keyed under the child's field index.
+    /// An unboxed aggregate: each child's leaves keyed under the child's field index.
     fn agg(children: Vec<Provenance>) -> Provenance {
         let mut leaves = vec![];
         for (i, child) in children.iter().enumerate() {
@@ -898,11 +910,13 @@ mod tests {
         }
         Provenance(leaves.into_iter().collect())
     }
-    // A resolved uniqueness from its `(path, verdict)` leaves.
+    /// A resolved uniqueness from its `(path, verdict)` leaves.
     fn uniq(leaves: Vec<(Vec<usize>, SharingVerdict)>) -> Uniqueness {
         Uniqueness(leaves.into_iter().collect())
     }
 
+    /// A leaf reached by two branches carries both branches' sources, so an answer read off it holds
+    /// on either path — picking one of them would claim a value is unique where one branch shares it.
     #[test]
     fn join_unions_leaf_sources() {
         let joined = fresh().join(&unknown());
@@ -912,6 +926,8 @@ mod tests {
         assert_eq!(origins.len(), 2);
     }
 
+    /// A retain names one leaf of an aggregate, so only that leaf becomes shared: a sibling boxed
+    /// value the retain never touched stays uniquely owned.
     #[test]
     fn demote_only_the_named_leaf() {
         // `(fresh, fresh)`, demoting child 0, leaves child 1 fresh.
@@ -919,18 +935,23 @@ mod tests {
         assert_eq!(a.demote(&[0]), agg(vec![unknown(), fresh()]));
     }
 
+    /// A retain of a whole value reaches every leaf beneath it, whatever each leaf's source was.
     #[test]
     fn demote_empty_path_demotes_whole_value() {
         let a = agg(vec![fresh(), arg(0, vec![])]);
         assert_eq!(a.demote(&[]), agg(vec![unknown(), unknown()]));
     }
 
+    /// An operation declared to pass an input through reports the sharing of whatever was actually
+    /// supplied there, so a freshly produced operand comes out fresh.
     #[test]
     fn compose_substitutes_arg_with_operand_leaf() {
         // A declaration `arg0` composed with operand 0 = `fresh` yields `fresh`.
         assert_eq!(arg(0, vec![]).compose(&[fresh()]), fresh());
     }
 
+    /// A declaration may name a leaf inside an operand rather than the whole of it, and composition
+    /// descends to that leaf — the case of an op that returns a field of an unboxed argument.
     #[test]
     fn compose_substitutes_arg_through_a_subpath() {
         // A declaration `arg0.1` composed with operand 0 = `(unboxed, fresh)` yields `fresh`.
@@ -938,6 +959,8 @@ mod tests {
         assert_eq!(arg(0, vec![1]).compose(&[operand]), fresh());
     }
 
+    /// Composition substitutes the `Arg` symbols of a declaration and leaves its other sources
+    /// standing, so a leaf declared to come from either an allocation or an input reports both.
     #[test]
     fn compose_keeps_fresh_and_unknown_and_unions_with_arg() {
         // `{fresh | arg1}` (a union-mod-style phi) composed with operand 1 = `dyn` yields
@@ -953,6 +976,8 @@ mod tests {
         assert_eq!(out.len(), 2);
     }
 
+    /// A leaf of an aggregate is addressed by its own path, so a reader that knows where a boxed
+    /// value sits inside an unboxed value reaches its sources directly.
     #[test]
     fn leaf_at_navigates_to_the_boxed_leaf() {
         let a = agg(vec![Provenance::empty(), arg(1, vec![0])]);
@@ -962,6 +987,8 @@ mod tests {
             .contains(&LeafOrigin::Arg(1, vec![0])));
     }
 
+    /// Reading a child out of an aggregate — a destructured field, or an unboxed union's payload —
+    /// yields that child's own provenance, keyed from the child's root.
     #[test]
     fn project_reads_an_aggregate_child() {
         let a = agg(vec![fresh(), unknown()]);
@@ -969,10 +996,11 @@ mod tests {
         assert_eq!(a.project(1), unknown());
     }
 
+    /// A scalar, an empty aggregate, and an all-unboxed aggregate share one representation — the
+    /// empty map — so no recorded aggregate structure can disagree with the type, and a join of two
+    /// such values stays that one representation.
     #[test]
     fn a_fieldless_value_is_the_empty_map() {
-        // A scalar, an empty aggregate, and an all-unboxed aggregate share one representation — the
-        // empty map — so there is no aggregate structure that could disagree with the type.
         assert_eq!(agg(vec![]), Provenance::empty());
         assert_eq!(
             agg(vec![Provenance::empty(), Provenance::empty()]),
@@ -984,10 +1012,10 @@ mod tests {
         );
     }
 
+    /// The rendering a dump reader sees tells the four shapes apart: a fieldless value as `unboxed`,
+    /// a bottom leaf as `_`, a boxed value as its source, and an aggregate as its leaves by path.
     #[test]
     fn to_string_renders_leaves() {
-        // A fieldless value is `unboxed`; a boxed value shows its source (a bottom leaf as `_`);
-        // an aggregate's leaves are keyed by path inside braces.
         assert_eq!(Provenance::empty().to_string(), "unboxed");
         let bottom = Provenance([(vec![], Set::default())].into_iter().collect());
         assert_eq!(bottom.to_string(), "_");
@@ -998,6 +1026,9 @@ mod tests {
         );
     }
 
+    /// Where a match's arms merge, a variable live on both sides takes both arms' sources, and an
+    /// arm-local binding is carried through untouched — the environment is joined variable by
+    /// variable rather than one arm's winning.
     #[test]
     fn join_envs_is_pointwise_and_keeps_one_sided_bindings() {
         let x = FullName::local("x");
@@ -1019,10 +1050,11 @@ mod tests {
         assert_eq!(joined[&z], unknown());
     }
 
+    /// A resolved uniqueness reflects the boxed leaves alone, so a specialization keyed on it treats
+    /// two values alike however their unboxed structure nests.
     #[test]
     fn resolve_keys_only_the_boxed_leaves() {
-        // A boxed-leaf-free value resolves to the empty map, so a uniqueness key reflects only the
-        // boxed leaves and same-typed values key alike whatever their unboxed structure.
+        // A boxed-leaf-free value resolves to the empty map.
         assert_eq!(resolve(&agg(vec![]), &[]), uniq(vec![]));
         assert_eq!(
             resolve(&agg(vec![Provenance::empty(), Provenance::empty()]), &[]),

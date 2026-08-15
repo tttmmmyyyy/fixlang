@@ -99,7 +99,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
         RcExpr::Let(x, rhs, k) => {
-            let def = match rhs {
+            let binding = match rhs {
                 RcRhs::Var(y) => Binding::Move(y.clone()),
                 RcRhs::Llvm(llvm_gen, args) => {
                     Binding::Llvm(llvm_gen.clone(), args.clone(), x.ty.clone())
@@ -124,7 +124,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                     Binding::Join(arm_results)
                 }
             };
-            vars.bindings.insert(x.name.clone(), def);
+            vars.bindings.insert(x.name.clone(), binding);
             vars.var_tys.insert(x.name.clone(), x.ty.clone());
             collect_bindings(k, vars);
         }
@@ -252,23 +252,12 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // The arms bind their values to one variable, so a path into it is a path into each of
             // them. Arms that all reach the same object leave the value exact.
             let mut candidates = Set::default();
-            for r in arm_results {
-                for p in origin(vars, type_env, &r.name, path).candidates() {
+            for arm_result in arm_results {
+                for p in origin(vars, type_env, &arm_result.name, path).candidates() {
                     candidates.insert(p.clone());
                 }
             }
-            match candidates.len() {
-                1 => Origin::Exactly(
-                    candidates
-                        .into_iter()
-                        .next()
-                        .expect("a one-element set has an element"),
-                ),
-                _ => Origin::Join {
-                    identity: (var.clone(), path.to_vec()),
-                    candidates,
-                },
-            }
+            Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))
         }
         Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
             // Constructing an unboxed union lays its payload in place, so the whole union's root is
@@ -457,7 +446,7 @@ pub(crate) fn destructure_consumes(
     if container.ty.is_box(type_env) {
         return leaves;
     }
-    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
+    let named_fields: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
     leaves
         .into_iter()
         .filter(|leaf| {
@@ -465,7 +454,7 @@ pub(crate) fn destructure_consumes(
             let field = leaf
                 .first()
                 .expect("a boxed leaf of an unboxed container has a non-empty path");
-            !named.contains(field)
+            !named_fields.contains(field)
         })
         .collect()
 }
@@ -500,11 +489,11 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 for leaf in boxed_leaves(&a.ty, type_env) {
                     // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
                     // application), so `params[i]` is in range.
-                    let owns_pos = match &callee_params {
+                    let is_owning_position = match &callee_params {
                         Some(params) => owns(&params[i], &leaf),
                         None => true,
                     };
-                    if owns_pos {
+                    if is_owning_position {
                         out.push((a.name.clone(), leaf));
                     }
                 }
@@ -795,8 +784,8 @@ mod tests {
     /// the argument's index and path.
     #[test]
     fn a_lone_arg_is_a_projection() {
-        let ls = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
-        assert_eq!(as_arg_projection(&ls), Some((1, vec![0])));
+        let leaf_srcs = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
+        assert_eq!(as_arg_projection(&leaf_srcs), Some((1, vec![0])));
     }
 
     /// A result leaf that is the argument on one path and a new value on another aliases neither:
@@ -804,16 +793,16 @@ mod tests {
     /// projection would drop the consume without the alias, releasing one object twice.
     #[test]
     fn an_arg_joined_with_another_source_is_not_a_projection() {
-        let ls = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
-        assert_eq!(as_arg_projection(&ls), None);
+        let leaf_srcs = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_srcs), None);
     }
 
     /// A result leaf that may come from either of two arguments aliases neither: a projection names
     /// one argument, and here the choice would fall to whichever of the two the set yields first.
     #[test]
     fn one_of_two_args_is_not_a_projection() {
-        let ls = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
-        assert_eq!(as_arg_projection(&ls), None);
+        let leaf_srcs = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_srcs), None);
     }
 
     /// A leaf the op itself produced — a fresh object, or one of unknown origin — aliases no
@@ -851,9 +840,9 @@ mod tests {
     /// A table of the given bindings, with every named variable also a known local.
     fn table(bindings: Vec<(&str, Binding)>) -> VarTable {
         let mut vars = VarTable::empty();
-        for (name, b) in bindings {
+        for (name, binding) in bindings {
             let v = var(name);
-            vars.bindings.insert(v.name.clone(), b);
+            vars.bindings.insert(v.name.clone(), binding);
             vars.var_tys.insert(v.name, v.ty);
         }
         vars
