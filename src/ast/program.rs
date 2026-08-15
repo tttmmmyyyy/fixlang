@@ -2782,10 +2782,9 @@ impl Program {
     ///
     /// # Arguments
     /// * `extend` — when true, a module of `other` that this program already holds extends that
-    ///   module: the sources it is made of join the ones the module is made of
-    ///   (`ModuleInfo::extending_sources`), and its declarations join the module's. When false, a
-    ///   module of one name declared in two files is an error, and a module already linked is left
-    ///   as it stands.
+    ///   module: its declarations join the module's, and the module goes on being the one it was
+    ///   declared as. When false, a module of one name declared in two files is an error, and a
+    ///   module already linked is left as it stands.
     pub fn link(&mut self, mut other: Program, extend: bool) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
