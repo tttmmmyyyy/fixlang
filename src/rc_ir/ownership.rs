@@ -700,8 +700,7 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
     // Truncation only descends, so an identity whose path stops above every unit root of its type
     // comes out naming no unit at all. A key like that puts a retain in a bucket no release of the
     // object can reach, which leaves the retain to be cancelled and the object freed while it is
-    // still held, so it is caught here, where the key is made, rather than where a program built
-    // with it goes wrong.
+    // still held, so the key is checked here, where it is made.
     let units = rc_units(ty, type_env);
     assert!(
         units.contains(&truncated),
