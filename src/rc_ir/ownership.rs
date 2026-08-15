@@ -24,7 +24,7 @@ use crate::rc_ir::ast::{
     FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
-use crate::rc_ir::provenance::LeafOrigin;
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
@@ -265,11 +265,16 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
             // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
-            // A path with no declared leaf is not a projection either: a reference-counting unit
-            // path may name the root of an unboxed union, which is a subtree rather than a leaf.
+            // A path with no declared leaf of its own is handled by `operand_unit_origin`: a
+            // reference-counting unit path may name the root of an unboxed union, which is a
+            // subtree whose provenance is declared on the leaves beneath it.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
-                None => here(),
+                None => {
+                    let here_path = (var.clone(), path.to_vec());
+                    operand_unit_origin(vars, type_env, &decl, args, path, &here_path)
+                        .unwrap_or_else(here)
+                }
             }
         }
         Some(Binding::Field(container, idx)) => {
@@ -294,6 +299,62 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             }
             Some(_) => here(),
         },
+    }
+}
+
+/// The object a value denotes at a path that declares no leaf of its own: the operand
+/// reference-counting units the leaves beneath the path project out of.
+///
+/// A unit path may name the root of an unboxed union, whose provenance is declared one level down,
+/// on the leaves of its variants, so a reader that stops at the root finds nothing recorded and
+/// takes the value for one produced on the spot — its own to release, when it may be an operand's.
+/// The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the value does
+/// not have and holds no reference, so it names no object and is passed over.
+///
+/// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
+/// of them is a value produced here rather than a projection, every object the root may denote is
+/// reported together, so that a reader whose answer has to hold on all paths — whether this
+/// version owns the value — sees them all. `None` where no leaf names an object.
+///
+/// # Arguments
+/// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
+fn operand_unit_origin(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    decl: &Provenance,
+    args: &[RcVar],
+    path: &[usize],
+    here: &VarPath,
+) -> Option<Origin> {
+    let mut candidates: Set<VarPath> = Set::default();
+    for sources in decl.leaf_origins_under(path) {
+        if sources.is_empty() {
+            continue;
+        }
+        match as_arg_projection(sources) {
+            Some((j, leaf)) => {
+                let unit = truncate_to_unit(&args[j].ty, &leaf, type_env);
+                for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
+                    candidates.insert(p.clone());
+                }
+            }
+            None => {
+                candidates.insert(here.clone());
+            }
+        }
+    }
+    match candidates.len() {
+        0 => None,
+        1 => Some(Origin::Exactly(
+            candidates
+                .into_iter()
+                .next()
+                .expect("a one-element set has an element"),
+        )),
+        _ => Some(Origin::Join {
+            identity: here.clone(),
+            candidates,
+        }),
     }
 }
 

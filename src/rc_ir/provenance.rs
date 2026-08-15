@@ -129,6 +129,16 @@ impl Provenance {
         self.0.leaves()
     }
 
+    /// The source of every boxed leaf under `path`, in no particular order. A path that is itself a
+    /// leaf yields that leaf; one that names an aggregate — the root of an unboxed union, say —
+    /// yields the leaves beneath it.
+    pub fn leaf_origins_under<'a>(
+        &'a self,
+        path: &'a [usize],
+    ) -> impl Iterator<Item = &'a LeafOrigins> {
+        self.0.leaves_under(path)
+    }
+
     /// Substitute the `Arg(j, σ)` symbols of a declared provenance with the operands' provenance:
     /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Unknown` stay. Used to compose a
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
