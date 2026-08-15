@@ -926,7 +926,8 @@ Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait
 
 The test for what a comment should contain, in one line: **leave out what the name and signature already make obvious, and put in the meaning they leave unsaid that a reader of this item would want to know.** Each rule below is that one test applied to a specific part of the comment.
 
-Function comment shape:
+Function comment shape. Aim the comment so that the name, the signature and the example carry the behavior between them: a reader who stops after those three has what the function does. What follows is for the reader who wants more than that — the meaning a name leaves unsaid, the case that would surprise — so keep each section to that, and stopping early stays the normal way to read it.
+
 - The first line describes what the function does. Don't restate the name (e.g., don't write `/// Adds two numbers.` for `fn add`).
 - Add a `# Arguments` section *only* for arguments whose role isn't self-evident from the function's purpose — those that prompt the reader to ask "why is this argument needed?" Skip arguments whose role is obvious from name and type. When you do add an entry, state the argument's *meaning* — the part its name and type leave unsaid, such as units, indexing base and bounds, frame of reference, or which of two same-typed values (`from` / `to`) this is — not a restatement of the name. Format:
   ```rust
@@ -943,19 +944,19 @@ Function comment shape:
   - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function;
   - **several rules the reader has to add up**: each is stated on its own, and the answer is what they come to together.
 
-  So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips. One line that carries two of those at once beats two lines that carry one each.
+  Choose the input a reader would meet first — the ordinary call rather than a boundary. The example is what carries the behavior for the reader who skips the prose, so it has to show the function doing its usual work. Add a second only where the ordinary one leaves a boundary open: what an empty or repeated part becomes, which side of the line an endpoint falls on.
 
   Keep it to what a glance holds — a line or two. An example needing a paragraph of setup says the description should carry the behavior instead.
   ```rust
   /// Splits the text at each occurrence of the separator.
   ///
   /// # Examples
-  /// `split_all(",", "a,,b")` yields `["a", "", "b"]`, and `split_all(",", "")` yields `[""]`.
+  /// `split_all(",", "a,b")` yields `["a", "b"]`, and `split_all(",", "a,,b")` yields `["a", "", "b"]`.
 
   /// Reports whether the range covers the position.
   ///
   /// # Examples
-  /// `covers(0..3, 3)` is `false`, and `covers(0..0, 0)` is `false`.
+  /// `covers(0..3, 1)` is `true`, and `covers(0..3, 3)` is `false`.
   ```
   Where the name and the signature already carry the behavior, state the meaning they leave unsaid and stop there: reading or replacing a field, constructing a value, an operation whose content is the effect it performs.
 
