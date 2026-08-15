@@ -684,13 +684,13 @@ impl Configuration {
                     ))
                 } else {
                     let file_name = file_name.unwrap().to_str().unwrap();
-                    let file_name = file_name.to_string()
+                    let ir_file_name = file_name.to_string()
                         + "_"
                         + unit_name
                         + if optimized { "_optimized.ll" } else { ".ll" };
-                    let mut out_file_path = out_file_path.clone();
-                    out_file_path.set_file_name(file_name);
-                    out_file_path
+                    let mut ir_path = out_file_path.clone();
+                    ir_path.set_file_name(ir_file_name);
+                    ir_path
                 }
             }
         }
@@ -1216,44 +1216,44 @@ int main() {
             let _ = fs::remove_file(&check_c_types_exec_path_clone);
         });
 
-        let output = Command::new("gcc")
+        let compile_output = Command::new("gcc")
             .arg(check_c_types_path.clone())
             .arg("-o")
             .arg(check_c_types_exec_path.clone())
             .output();
-        if let Err(e) = output {
+        if let Err(e) = compile_output {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": {}.",
                 check_c_types_path, e
             )));
         }
-        let output = output.unwrap();
+        let compile_output = compile_output.unwrap();
 
         // Run the program and parse the result to create CTypeSizes.
-        if !output.status.success() {
+        if !compile_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": \"{}\".",
                 check_c_types_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&compile_output.stderr)
             )));
         }
-        let output = Command::new(check_c_types_exec_path.clone()).output();
-        if let Err(e) = output {
+        let run_output = Command::new(check_c_types_exec_path.clone()).output();
+        if let Err(e) = run_output {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": {}.",
                 check_c_types_exec_path, e
             )));
         }
-        let output = output.unwrap();
-        if !output.status.success() {
+        let run_output = run_output.unwrap();
+        if !run_output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": \"{}\".",
                 check_c_types_exec_path,
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&run_output.stderr)
             )));
         }
-        let output = String::from_utf8_lossy(&output.stdout);
-        let mut lines = output.lines();
+        let stdout = String::from_utf8_lossy(&run_output.stdout);
+        let mut lines = stdout.lines();
         // The program prints one size per line, in the order the fields are read here.
         let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
         let char = next_size();

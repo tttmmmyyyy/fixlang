@@ -1288,7 +1288,7 @@ impl Program {
     ///   trait method implementation this may differ from `val_name.module()`.
     /// * `nrctx` — the name resolution context. Pass one created by
     ///   `program.create_name_resolution_context(define_module)`.
-    /// * `ver_hash` — hash of the source code `te` depends on, used
+    /// * `version_hash` — hash of everything `te` is type-checked from, used
     ///   to detect or invalidate the cache file. Pass one created by
     ///   `program.module_dependency_hash(define_module, config)`.
     ///
@@ -1310,11 +1310,11 @@ impl Program {
         val_name: &FullName,
         def_mod: &ModuleInfo,
         nrctx: &mut NameResolutionContext,
-        ver_hash: &str,
+        version_hash: &str,
         mut tc: TypeCheckContext,
     ) -> Result<(TypedExpr, Errors), Errors> {
         // Load type-checking cache file.
-        let cached_te = tc.cache.load_cache(val_name, req_scm, ver_hash);
+        let cached_te = tc.cache.load_cache(val_name, req_scm, version_hash);
         if cached_te.is_some() {
             // If cache is available,
             te = cached_te.unwrap();
@@ -1342,7 +1342,7 @@ impl Program {
         // - an `error_tolerant` check, which swallows every type error and reports none, so its
         //   result would enter as a clean entry and the value would be published as type-correct.
         if !tc.error_tolerant && !check_errors.has_diagnostics() {
-            tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
+            tc.cache.save_cache(&te, val_name, req_scm, version_hash);
         }
 
         // Add names required to be imported found in type-checking to NameResolutionContext's import_required.
@@ -1474,7 +1474,7 @@ impl Program {
                     let val_name_clone = val_name.clone(); // For move into closure.
                     let def_mod = self.find_mod(&val_name.module()).unwrap().clone();
                     let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                    let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
+                    let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                         // Perform type-checking.
@@ -1484,7 +1484,7 @@ impl Program {
                             &val_name_clone,
                             &def_mod,
                             &mut nrctx,
-                            &ver_hash,
+                            &version_hash,
                             tc,
                         )?;
                         let output = CheckTaskOutput {
@@ -1518,7 +1518,7 @@ impl Program {
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-                        let ver_hash = self.module_dependency_hash(&def_mod.name, config)?;
+                        let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
@@ -1547,7 +1547,7 @@ impl Program {
                                 &val_name_clone,
                                 &def_mod,
                                 &mut nrctx,
-                                &ver_hash,
+                                &version_hash,
                                 tc,
                             )?;
                             let output = CheckTaskOutput {
@@ -1680,8 +1680,8 @@ impl Program {
         };
 
         // Select the typed expression to specialize.
-        let global_sym = self.global_values.get(&sym.generic_name).unwrap();
-        let te = match &global_sym.expr {
+        let gv = self.global_values.get(&sym.generic_name).unwrap();
+        let te = match &gv.expr {
             SymbolExpr::Simple(e) => e,
             SymbolExpr::Method(impls) => {
                 let method = impls
@@ -1985,8 +1985,8 @@ impl Program {
                 let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
                 let instances = self.trait_env.impls.get(trait_id);
-                if let Some(insntances) = instances {
-                    for trait_impl in insntances {
+                if let Some(instances) = instances {
+                    for trait_impl in instances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
@@ -2378,8 +2378,8 @@ impl Program {
         let kind_env = self.kind_env();
         self.trait_env.set_kinds_in_trait_instances(&kind_env)?;
         let mut errors = Errors::empty();
-        for (_name, sym) in &mut self.global_values {
-            errors.eat_err(sym.set_kinds(&kind_env));
+        for (_name, gv) in &mut self.global_values {
+            errors.eat_err(gv.set_kinds(&kind_env));
         }
         errors.to_result()
     }
@@ -2427,9 +2427,9 @@ impl Program {
             decl.resolve_namespace(&mut ctx)?;
         }
 
-        for (name, sym) in &mut self.global_values {
+        for (name, gv) in &mut self.global_values {
             ctx.set_current_module(name.module());
-            sym.resolve_namespace_in_declaration(&mut ctx)?;
+            gv.resolve_namespace_in_declaration(&mut ctx)?;
         }
 
         self.merge_import_required(ctx.import_required);
@@ -2456,8 +2456,8 @@ impl Program {
         }
 
         // Resolve aliases in type signatures of global values.
-        for (_, sym) in &mut self.global_values {
-            errors.eat_err(sym.resolve_type_aliases(&type_env));
+        for (_, gv) in &mut self.global_values {
+            errors.eat_err(gv.resolve_type_aliases(&type_env));
         }
 
         errors.to_result()
@@ -2818,7 +2818,7 @@ impl Program {
         // Merge `module_to_files`.
         // Also, check if there is a module defined in multiple files.
         for mod_info in &other.modules {
-            let file = mod_info.source.input.file_path.clone();
+            let joining_file = mod_info.source.input.file_path.clone();
             if let Some(linked_idx) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
@@ -2831,7 +2831,7 @@ impl Program {
                     continue;
                 }
                 let linked_file = self.modules[linked_idx].source.input.file_path.clone();
-                if to_absolute_path(&linked_file)? == to_absolute_path(&file)? {
+                if to_absolute_path(&linked_file)? == to_absolute_path(&joining_file)? {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }
@@ -2839,7 +2839,7 @@ impl Program {
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_info.name,
                     linked_file.to_string_lossy().to_string(),
-                    file.to_string_lossy().to_string()
+                    joining_file.to_string_lossy().to_string()
                 );
                 errors.append(Errors::from_msg(msg));
                 continue;
@@ -3196,7 +3196,7 @@ impl Program {
         let globals = self
             .global_values
             .iter()
-            .map(|(name, defn)| (name.clone(), defn.scm.clone()))
+            .map(|(name, gv)| (name.clone(), gv.scm.clone()))
             .collect::<Vec<_>>();
         typechecker.scope.set_globals(globals);
 

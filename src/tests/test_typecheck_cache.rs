@@ -211,29 +211,29 @@ main = println("s");
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let cold = build(dir, "main.fix", &[]);
+        let cold_stderr = build(dir, "main.fix", &[]);
         assert!(
-            cold.contains("`Main::old_val` is deprecated"),
+            cold_stderr.contains("`Main::old_val` is deprecated"),
             "the first build must report the deprecated use.\nstderr: {}",
-            cold
+            cold_stderr
         );
         assert!(
-            cold.contains("in \"main.fix\""),
+            cold_stderr.contains("in \"main.fix\""),
             "the first build must attribute the use to the file it is written in.\nstderr: {}",
-            cold
+            cold_stderr
         );
 
-        let warm = build(dir, "main.fix", &[]);
+        let warm_stderr = build(dir, "main.fix", &[]);
         assert!(
-            warm.contains("`Main::old_val` is deprecated"),
+            warm_stderr.contains("`Main::old_val` is deprecated"),
             "the second build serves `Main::main` from the type-check cache and lost the \
              deprecation warning with it.\nstderr: {}",
-            warm
+            warm_stderr
         );
         assert!(
-            warm.contains("in \"main.fix\""),
+            warm_stderr.contains("in \"main.fix\""),
             "the second build attributed the deprecated use to another file.\nstderr: {}",
-            warm
+            warm_stderr
         );
     }
 
@@ -379,11 +379,11 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             .expect("Failed to rewrite a/main.fix");
         build(dir, "b/main.fix", &["-g"]);
 
-        let run = Command::new(dir.join("out"))
+        let program_output = Command::new(dir.join("out"))
             .output()
             .expect("failed to run the built program");
         assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
+            String::from_utf8_lossy(&program_output.stdout).trim(),
             "3",
             "the program built from \"b/main.fix\" computes what its own source says"
         );

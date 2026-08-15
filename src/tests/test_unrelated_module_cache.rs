@@ -87,16 +87,16 @@ intruder_tuple = (1, 2, 3, 4);
     /// `-g` so that source spans reach the emitted IR as debug info: a stale cached typed
     /// expression shows up there as a stale `DIFile` or line number.
     fn build(dir: &Path) {
-        let out = fix_command()
+        let build_output = fix_command()
             .args(["build", "-g", "--emit-llvm", "-o", "out"])
             .current_dir(dir)
             .output()
             .expect("failed to run fix build");
         assert!(
-            out.status.success(),
+            build_output.status.success(),
             "fix build failed in {}:\n{}",
             dir.display(),
-            String::from_utf8_lossy(&out.stderr)
+            String::from_utf8_lossy(&build_output.stderr)
         );
     }
 

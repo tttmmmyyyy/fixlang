@@ -180,7 +180,7 @@ fn dump_rc_ir(
     let file_name = if filter == "all" {
         format!("rc_ir.{}.txt", stage)
     } else {
-        let module: String = filter
+        let mod_name: String = filter
             .chars()
             .map(|c| {
                 if c.is_alphanumeric() || matches!(c, '.' | '-' | '_') {
@@ -190,7 +190,7 @@ fn dump_rc_ir(
                 }
             })
             .collect();
-        format!("rc_ir.{}.{}.txt", module, stage)
+        format!("rc_ir.{}.{}.txt", mod_name, stage)
     };
     let path = PathBuf::from(DOT_FIXLANG).join(file_name);
     if let Err(e) = fs::write(&path, program_to_string_annotated(&selected, ann)) {

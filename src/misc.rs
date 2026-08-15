@@ -175,8 +175,8 @@ pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile
         }
     }
 
-    let source = SourceFile::from_file_path_and_content(path, source.to_string());
-    Ok(source)
+    let source_file = SourceFile::from_file_path_and_content(path, source.to_string());
+    Ok(source_file)
 }
 
 /// The values of `results`, in the order they are produced, or the first error among them.
