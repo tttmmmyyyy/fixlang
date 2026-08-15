@@ -341,6 +341,34 @@ pub fn test_the_trait_variable_in_the_result_fixes_it() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A member whose type names the trait's type variable only as an argument of an associated type
+/// application. `Ele c` at a use site does not say which type `c` stands for, so the member's type
+/// does not fix it, although the equality's right side names it as well.
+#[test]
+pub fn test_associated_type_application_does_not_fix_the_trait_variable() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            type Ele c;
+            make : [?it : Iterator, Item ?it = c] Ele c -> ?it;
+        }
+
+        impl I64 : Make {
+            type Ele I64 = I64;
+            make = |_| Iterator::range(0, 1);
+        }
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `c` is not fixed by this type signature",
+    );
+}
+
 /// Each member that leaves the trait's type variable out is reported, in every trait the program
 /// declares, in one compilation.
 #[test]
