@@ -40,9 +40,11 @@ use crate::misc::{
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
+use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
+use std::iter::once;
 use std::mem::replace;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -618,7 +620,7 @@ pub struct ModuleInfo {
 impl ModuleInfo {
     /// Every source the module is made of: the one it is declared in, then the ones that extend it.
     pub fn sources(&self) -> impl Iterator<Item = &SourceFile> {
-        std::iter::once(&self.source.input).chain(self.extending_sources.iter())
+        once(&self.source.input).chain(self.extending_sources.iter())
     }
 
     /// A hash of each source the module is made of, in the order `sources` gives them. A hash naming
@@ -2925,7 +2927,7 @@ impl Program {
             hash_source.push_list(&self.find_mod(mod_name).unwrap().source_hashes()?);
         }
         hash_source.push_text(&config.elaboration_hash());
-        hash_source.push_text(build_time::build_time_utc!());
+        hash_source.push_text(build_time_utc!());
         Ok(hash_source.finish())
     }
 

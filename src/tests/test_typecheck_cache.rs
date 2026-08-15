@@ -4,6 +4,7 @@
 //! build owed the user.
 
 use crate::{
+    ast::program::Program,
     configuration::Configuration,
     constants::STD_NAME,
     fixstd::stdlib::{make_std_mod, make_tuple_traits_mod},
@@ -43,7 +44,7 @@ fn test_an_accessor_and_a_value_differing_only_in_punctuation_keep_their_own_bod
 fn test_the_module_dependency_hash_covers_a_source_that_extends_a_module() {
     let config = Configuration::develop_mode();
     let std_name = STD_NAME.to_string();
-    let hash_of = |program: &crate::ast::program::Program| {
+    let hash_of = |program: &Program| {
         program
             .module_dependency_hash(&std_name, &config)
             .unwrap_or_else(|errs| panic!("Failed to hash the `Std` module: {}", errs))

@@ -444,7 +444,6 @@ mod tests {
         split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
         HashSource,
     };
-
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicUsize, Ordering};
