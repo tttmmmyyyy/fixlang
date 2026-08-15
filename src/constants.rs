@@ -55,9 +55,17 @@ pub const IDENTITY_NAME: &str = "Identity";
 pub const CONST_NAME: &str = "Const";
 pub const MONAD_BIND_NAME: &str = "bind";
 pub const COMPOSE_FUNCTION_NAME: &str = "compose";
+/// The name of the Fix value a program starts from: `Main::main`, of type `IO ()`. It holds the
+/// same string as `C_ENTRY_POINT_NAME`, which names the C function of the object file.
 pub const MAIN_FUNCTION_NAME: &str = "main";
+/// The name of the module whose namespace holds the entry point `Main::main`.
 pub const MAIN_MODULE_NAME: &str = "Main";
+/// The name of the entry point in the object file: the function the C runtime calls once it has set
+/// the process up, which the compiler generates to run the program's `IO` action.
+pub const C_ENTRY_POINT_NAME: &str = "main";
+/// The name of the Fix value `fix test` starts from: `Test::test`, of type `IO ()`.
 pub const TEST_FUNCTION_NAME: &str = "test";
+/// The name of the module whose namespace holds the test entry point `Test::test`.
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";

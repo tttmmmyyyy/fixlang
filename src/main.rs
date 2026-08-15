@@ -31,6 +31,7 @@ mod edit;
 mod elaboration;
 mod env_vars;
 mod error;
+mod ffi;
 mod fixstd;
 mod generator;
 mod graph;

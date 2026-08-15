@@ -1,0 +1,7 @@
+module Lib;
+
+namespace Main {
+    trait a : Foo {
+        bar : a -> I64;
+    }
+}

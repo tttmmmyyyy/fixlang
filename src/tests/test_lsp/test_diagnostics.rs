@@ -37,12 +37,17 @@ mod tests {
         client.get_diagnostics(file)
     }
 
-    /// The diagnostic whose message contains `text`, of which the test expects exactly one.
-    fn sole_diagnostic_containing<'a>(diagnostics: &'a [Value], text: &str) -> &'a Value {
-        let matching: Vec<&Value> = diagnostics
+    /// The diagnostics whose message contains `text`.
+    fn diagnostics_containing<'a>(diagnostics: &'a [Value], text: &str) -> Vec<&'a Value> {
+        diagnostics
             .iter()
             .filter(|diag| diag["message"].as_str().map_or(false, |m| m.contains(text)))
-            .collect();
+            .collect()
+    }
+
+    /// The diagnostic whose message contains `text`, of which the test expects exactly one.
+    fn sole_diagnostic_containing<'a>(diagnostics: &'a [Value], text: &str) -> &'a Value {
+        let matching = diagnostics_containing(diagnostics, text);
         assert_eq!(
             matching.len(),
             1,
@@ -144,6 +149,42 @@ mod tests {
         );
     }
 
+    /// Two traits, the full name of one ending with the full name of the other, are both declared,
+    /// and a reference that could mean either one is reported as ambiguous in the editor, on the
+    /// reference, naming both.
+    ///
+    /// The pair is met while the namespaces of the declarations are resolved, which every run of
+    /// the diagnostics performs; a program that stops the compiler there takes the editor's reports
+    /// on every other file down with it, for the rest of the session.
+    #[test]
+    fn test_a_reference_to_a_trait_whose_name_another_ends_with_is_reported_as_ambiguous() {
+        let (_temp_dir, project_dir) = setup_test_env("trait_name_suffix_collision");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(&diagnostics, "Name `Foo` is ambiguous");
+
+        // `main.fix` writes the implementation's head on the 8th line, whose `I64 : Foo` starts at
+        // the 6th column; the protocol counts both from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 7,
+            "at the implementation's head, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["range"]["start"]["character"], 5);
+        assert_eq!(diag["severity"], 1, "as an error");
+        let message = diag["message"]
+            .as_str()
+            .expect("the report carries a message");
+        for trait_name in ["`Lib::Main::Foo`", "`Main::Foo`"] {
+            assert!(
+                message.contains(trait_name),
+                "naming {}, but the report is {:?}",
+                trait_name,
+                diag
+            );
+        }
+    }
+
     /// A trait member whose type leaves the trait's type variable to a constraint is reported in
     /// the editor, on the member's declaration.
     ///
@@ -239,16 +280,9 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("unknown_struct_field");
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
-        let unknown: Vec<&Value> = diagnostics
-            .iter()
-            .filter(|diag| {
-                diag["message"]
-                    .as_str()
-                    .map_or(false, |m| m.contains("Unknown field"))
-            })
-            .collect();
+        let unknown_field_reports = diagnostics_containing(&diagnostics, "Unknown field");
         assert_eq!(
-            unknown.len(),
+            unknown_field_reports.len(),
             2,
             "the pattern and the literal are both reported, but the diagnostics are {:?}",
             diagnostics
@@ -256,7 +290,7 @@ mod tests {
 
         // `main.fix` writes the pattern's `z` on the 7th line at the 19th column, and the
         // literal's `w` on the 13th line at the 28th; the protocol counts both from zero.
-        let pattern_report = unknown
+        let pattern_report = unknown_field_reports
             .iter()
             .find(|diag| diag["message"].as_str().unwrap().contains("`z`"))
             .expect("the pattern's unknown field is reported");
@@ -267,7 +301,7 @@ mod tests {
             pattern_report
         );
 
-        let literal_report = unknown
+        let literal_report = unknown_field_reports
             .iter()
             .find(|diag| diag["message"].as_str().unwrap().contains("`w`"))
             .expect("the literal's unknown field is reported");

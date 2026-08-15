@@ -41,6 +41,10 @@ Write a measurement into the body instead when the argument at that point does n
 
 Write the doc in the implementers' language. It does not have to be English.
 
+Where that language is English, write it plainly: a reader need not be a native speaker, and a long sentence or a rare word costs them more than it costs a native reader.
+
+Name a thing the way the reader's own code names it. A doc addressed to the implementers shares the compiler's names, so write `FullName`, not "the full name": an identifier is vocabulary they already have and can search for, while a paraphrase — a translated one above all — makes a second name for one thing. Where their code names nothing, say what the thing is rather than coining a word for it: a word invented for a few paragraphs gives the reader nowhere to look it up.
+
 ## Audience and self-containedness
 
 Write for a reader who knows the project thinly and broadly, but knows nothing about this change or about the code it touches. The doc must be self-contained for that reader:

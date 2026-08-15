@@ -30,7 +30,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     )?;
 
     // Validate export statements.
-    program.validate_export_statements()?;
+    program.validate_export_statements(config.output_file_type)?;
 
     // Identify `DEPRECATED[...]` targets and attach `DeprecationInfo` to
     // matching global values / trait members. Run before
@@ -140,6 +140,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
 
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
+
+    // Reject an `FFI_CALL` naming a C function it cannot name, now that every exported value carries
+    // the type it is exported at, and before code generation puts one function under the name.
+    program.validate_c_function_calls()?;
 
     // Reject a value whose type has no layout, now that the program's types are instantiated and
     // before code generation walks the fields of any of them.

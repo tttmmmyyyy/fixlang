@@ -24,6 +24,7 @@ use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
+use crate::ffi::CSignature;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
@@ -2587,10 +2588,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.set_debug_location(flatten_opt(self.debug_location.last().cloned()));
     }
 
-    // Emit a call to a C function from already-evaluated argument objects and a pre-allocated return
-    // object. Each argument is marshalled to its C scalar (field 0), the function is called, and the
-    // result is written back into the return object (field 1 of the `(IOState, ret)` tuple when
-    // `is_io`, else field 0). A void return writes nothing.
+    /// Emit a call to a C function from already-evaluated argument objects and a pre-allocated
+    /// return object. Each argument is marshalled to its C scalar (field 0), the function is called,
+    /// and the result is written back into the return object (field 1 of the `(IOState, ret)` tuple
+    /// when `is_io`, else field 0). A void return writes nothing.
     pub fn build_ffi_call_core(
         &mut self,
         mut obj: Object<'c>,
@@ -2602,36 +2603,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         is_io: bool,
     ) -> Object<'c> {
         // Get c function
-        let c_fun = match self.module.get_function(&fun_name) {
-            Some(fun) => fun,
-            None => {
-                let ret_c_ty = ret_tycon.get_c_type(self.context);
-                let param_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
-                    .iter()
-                    .map(|param_ty| {
-                        // `parse_ffi_param_tys` rejects `()`, the one type without a C type.
-                        param_ty.get_c_type(self.context).unwrap().into()
-                    })
-                    .collect::<Vec<_>>();
-                let fn_ty = match ret_c_ty {
-                    None => {
-                        // Void case.
-                        self.context.void_type().fn_type(&param_c_tys, is_var_args)
-                    }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
-                };
-                let func = self.module.add_function(&fun_name, fn_ty, None);
-                self.add_c_integer_extension_attribute(func, AttributeLoc::Return, ret_tycon);
-                for (i, param_ty) in param_tys.iter().enumerate() {
-                    self.add_c_integer_extension_attribute(
-                        func,
-                        AttributeLoc::Param(i as u32),
-                        param_ty,
-                    );
-                }
-                func
-            }
-        };
+        let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
+            .get_or_declare_in_module(fun_name, self);
 
         // Get argment values
         let args_vals = arg_objs
@@ -2664,9 +2637,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
-    // retaining it (a retain-getter). `cap_tys` are the types of all captured values, needed to
-    // reconstruct the capture object's struct layout; `result_ty` is the projected value's type.
+    /// Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
+    /// retaining it (a retain-getter).
+    ///
+    /// # Arguments
+    /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
+    ///   layout.
+    /// * `result_ty` — the type of the projected value.
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,
@@ -2835,8 +2812,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
-    // Bit cast between two types.
-    // Allows bit cast between types with different sizes.
+    /// The bits of `val` read as a value of `to_ty`. The two types may differ in size, in which case
+    /// the value travels through a stack slot wide enough for both.
     pub fn bit_cast(
         &mut self,
         val: BasicValueEnum<'c>,
@@ -2854,42 +2831,37 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
 
-    // Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
-    // must be created through their kind id; a string attribute of the same name is silently
-    // ignored by LLVM.
+    /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
+    /// must be created through their kind id; a string attribute of the same name is silently
+    /// ignored by LLVM.
     pub fn add_enum_attribute(&self, func: FunctionValue<'c>, name: &str, loc: AttributeLoc) {
         let kind = enum_attribute_kind_id(name);
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
-    // Mark a value crossing the C boundary as one the ABI extends to 32 bits.
-    //
-    // An integer narrower than 32 bits travels in the low bits of a register, and the ABIs differ
-    // over the rest: Apple's AArch64 has the caller extend an argument and the callee extend a
-    // result, and lets the other side read the whole register on that promise, while AAPCS64 and
-    // System V leave those bits unspecified and have the reader narrow the value itself. `signext`
-    // and `zeroext` are how the signature says which of the two it follows, and a C compiler puts
-    // them on every such parameter and result. A Fix function reaching C carries them for the same
-    // reason: without them the reader of a promise-based ABI sees whatever the bits happen to hold.
+    /// Mark a value crossing the C boundary as one the ABI extends to the unit it travels in.
+    ///
+    /// A C compiler puts the extension on every such parameter and result, and a Fix function
+    /// reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
+    /// whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
+    ///
+    /// Two descriptions a program writes of one C function agree on the extension at each position —
+    /// that is what `Program::validate_c_function_calls` decides — so a position written twice in
+    /// Fix source is written with the same attribute both times.
     pub fn add_c_integer_extension_attribute(
         &self,
         func: FunctionValue<'c>,
         loc: AttributeLoc,
         tycon: &TyCon,
     ) {
-        if !tycon.is_narrow_c_integer() {
+        let Some(extension) = tycon.c_integer_extension() else {
             return;
-        }
-        let name = if tycon.is_signed_integer() {
-            "signext"
-        } else {
-            "zeroext"
         };
-        self.add_enum_attribute(func, name, loc);
+        self.add_enum_attribute(func, extension.attribute_name(), loc);
     }
 
-    // Add frame-pointer attribute to all functions in the module
-    // This is especially important on macOS where backtrace() relies on frame pointers
+    /// Have every function in the module keep its frame pointer. macOS `backtrace()` walks the
+    /// chain of frame pointers, so a frame that drops its own is a frame the backtrace stops at.
     pub fn add_frame_pointer_attribute_to_all_functions(&self) {
         for function in module_functions(self.module) {
             // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept

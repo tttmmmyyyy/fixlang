@@ -5,16 +5,17 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
+use crate::configuration::OutputFileType;
 use crate::error::Errors;
+use crate::ffi::{assert_crosses_as_c_type, c_boundary_tycon, CSignature};
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
+use crate::fixstd::runtime::compiler_defined_c_function_reason;
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::RcState;
-use inkwell::attributes::AttributeLoc;
-use inkwell::types::{BasicType, BasicTypeEnum};
 use std::sync::Arc;
 
 // The export statement.
@@ -59,9 +60,13 @@ impl ExportStatement {
         }
     }
 
-    // Validate the names in the export statement.
-    // - src: The source of the export statement. Used for error messages.
-    pub fn validate_names(&self, src: &Option<Span>) -> Result<(), Errors> {
+    /// Check that the C function name this statement gives is one C can spell and one the compiler
+    /// leaves to the program.
+    ///
+    /// # Arguments
+    /// * `src` — where to place the error message.
+    /// * `output` — what is being built, which decides the names the compiler writes itself.
+    pub fn validate_names(&self, src: &Option<Span>, output: OutputFileType) -> Result<(), Errors> {
         // A C identifier is written in ASCII: a letter or an underscore, then letters, digits and
         // underscores.
         let first = self
@@ -85,40 +90,46 @@ impl ExportStatement {
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
         }
+        // An export writes the function's body, so a name the compiler writes a body under is out.
+        if let Some(reason) = compiler_defined_c_function_reason(&self.function_name, output) {
+            let msg = format!(
+                "`{}` cannot be the name of an exported function: {}.",
+                &self.function_name, reason
+            );
+            return Err(Errors::from_msg_srcs(msg, &vec![src]));
+        }
         Ok(())
     }
 
     // Implement the exported C function.
     // Requires `self.function_type` and `self.value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
+        let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {
             doms,
             codom,
             io_type,
-        } = self.function_type.clone().unwrap();
+        } = function_type.clone();
 
-        // Create the LLVM type of the exported C function. Each exchanged value is its own
-        // scalar — an integer, a floating point number or a pointer — which is the type a C
-        // declaration of the same function names. `has_c_abi` admits nothing with another shape.
-        let dom_llvm_tys = doms
-            .iter()
-            .map(|dom| c_scalar_type(dom, gc).into())
-            .collect::<Vec<_>>();
-        let func_ty = if codom.is_unit() {
-            gc.context.void_type().fn_type(&dom_llvm_tys, false)
-        } else {
-            c_scalar_type(&codom, gc).fn_type(&dom_llvm_tys, false)
-        };
+        // Take the name. An `FFI_CALL` of this C function has declared it by now — code generation
+        // implements the program's symbols before it reaches here — and a declaration and this
+        // definition describe one C function, so the body goes onto that declaration.
+        let signature = CSignature::of_ffi_export(function_type, gc.type_env());
+        let func = signature.get_or_declare_in_module(&self.function_name, gc);
+        assert_eq!(
+            func.count_basic_blocks(),
+            0,
+            "the C function `{}` has one definition",
+            self.function_name
+        );
 
-        // Declare the function.
-        let func = gc.module.add_function(&self.function_name, func_ty, None);
-        if let Some(tycon) = codom.toplevel_tycon() {
-            gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
+        // Each value the function exchanges travels in its Fix representation, and the C type the
+        // signature gave it names that same representation.
+        for (param_ty, dom) in signature.param_tys.iter().zip(doms.iter()) {
+            assert_crosses_as_c_type(param_ty, dom, gc);
         }
-        for (i, dom) in doms.iter().enumerate() {
-            if let Some(tycon) = dom.toplevel_tycon() {
-                gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
-            }
+        if signature.ret_tycon.get_c_type(gc.context).is_some() {
+            assert_crosses_as_c_type(&signature.ret_tycon, &codom, gc);
         }
 
         // Implement the function.
@@ -126,8 +137,8 @@ impl ExportStatement {
         gc.builder().position_at_end(bb);
 
         // Create Fix values from arguments. Each parameter is the value's one scalar.
-        let params = func.get_params();
-        let mut args = params
+        let param_vals = func.get_params();
+        let mut args = param_vals
             .iter()
             .enumerate()
             .map(|(i, arg)| Object::from_parts(vec![*arg], doms[i].clone(), gc))
@@ -175,49 +186,6 @@ impl ExportStatement {
             gc.builder().build_return(Some(&ret_val)).unwrap();
         }
     }
-}
-
-/// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar,
-/// which is the type a C declaration of the same function names.
-fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
-    let embedded_ty = ty.get_embedded_type(gc);
-    let parts = gc.type_parts(embedded_ty);
-    // The one part has to be the scalar itself. Counting the parts alone would let an aggregate
-    // through, since a value too wide to split is carried as one part holding the whole of it, and
-    // C would then be handed a structure whose layout it classifies by its own rules.
-    let is_scalar = parts.len() == 1
-        && !matches!(
-            parts[0],
-            BasicTypeEnum::StructType(_)
-                | BasicTypeEnum::ArrayType(_)
-                | BasicTypeEnum::VectorType(_)
-        );
-    assert!(
-        is_scalar,
-        "`{}` reached an exported signature, where a value has to be one scalar",
-        ty.to_string()
-    );
-    parts[0]
-}
-
-/// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
-/// passed.
-///
-/// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
-/// identically by Fix and by C. An aggregate is laid down differently: the C ABI classifies a
-/// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
-/// it is a homogeneous floating-point aggregate (AAPCS64), and the shapes on which that agrees with
-/// Fix's element-wise layout differ from target to target.
-fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
-    let tycon = match ty.toplevel_tycon() {
-        Some(tycon) => tycon,
-        None => return false,
-    };
-    // A boxed value is a pointer.
-    if ty.is_box(type_env) {
-        return true;
-    }
-    tycon.is_c_scalar()
 }
 
 /// The error message for a type the C ABI cannot carry appearing in an exported function's
@@ -309,16 +277,16 @@ impl ExportedFunctionType {
             _ => {}
         }
 
-        // Each argument and the result should have a C ABI.
+        // Each argument and the result should be a type C can carry.
         for dom in &doms {
-            if !has_c_abi(dom, type_env) {
+            if c_boundary_tycon(dom, type_env).is_none() {
                 return Err(Errors::from_msg_srcs(
                     err_msg_prefix + &unexportable_type_msg(dom, "an argument"),
                     &[src],
                 ));
             }
         }
-        if !codom.is_unit() && !has_c_abi(&codom, type_env) {
+        if !codom.is_unit() && c_boundary_tycon(&codom, type_env).is_none() {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
                 &[src],

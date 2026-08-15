@@ -74,6 +74,37 @@ pub fn test_loop_m_array_state_no_leak() {
 }
 
 #[test]
+pub fn test_loop_two_array_state_stays_alive() {
+    // A loop whose state is a tuple of two arrays wraps a value holding two reference-counting units
+    // in a `LoopState` union, which is one unboxed union and so one unit of its own. The state's
+    // arrays must survive every turn of the loop and read back afterwards as they were written. Run
+    // under memcheck.
+    let source = r#"
+            module Main;
+
+            walk : (Array I64, Array I64) -> Array I64 -> I64;
+            walk = |start, extra| (
+                let (a, b) = loop((0, start), |(i, (a, b))|
+                    if i == 4 { break $ (a, b) };
+                    continue $ (i + 1, (a.set(i, i * extra.@size), b.set(i, i * 2)))
+                );
+                let s = a.to_iter.fold(0, |x, acc| acc + x);
+                let t = b.to_iter.fold(0, |x, acc| acc + x);
+                s * 1000 + t
+            );
+
+            main : IO ();
+            main = (
+                let start = (Array::fill(4, 0), Array::fill(4, 0));
+                let extra = Array::fill(3, 1);
+                assert_eq(|_|"walk", walk(start, extra), 18 * 1000 + 12);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unboxed_destructure_field_borrow() {
     // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
     // it again. Cancellation lets the field's move through the destructure keep its retain pending
@@ -4924,6 +4955,8 @@ pub fn test_trait_impl_defines_undeclared_member() {
     );
 }
 
+/// `to_bytes` and `from_bytes` carry a value of each numeric type through the byte array and back,
+/// and `from_bytes` answers an error for a byte array that is not the type's width.
 #[test]
 pub fn test129() {
     let source = r#"
@@ -4952,16 +4985,16 @@ pub fn test129() {
             let n = 2;
             let x = 65535_U16;
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // I16
-            // let case = "I16";
-            // let n = 2;
-            // let x = -32768_I16;
-            // assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
-            // let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
-            // assert(|_|case + " 2", y.is_err);;
+            let case = "I16";
+            let n = 2;
+            let x = -32768_I16;
+            assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
+            let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
+            assert(|_|case + " 2", y.is_err);;
 
             // U32
             let case = "U32";
@@ -5010,6 +5043,50 @@ pub fn test129() {
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
             let y : Result ErrMsg F64 = Array::fill(n-1, 127_U8).from_bytes;
             assert(|_|case + " 2", y.is_err);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
+/// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
+/// representation; and `from_bytes` answers an error for a byte array that is not the type's width.
+#[test]
+pub fn test_narrow_signed_integer_bytes_round_trip() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let case = "I8";
+            assert_eq(|_|case + " negative one", (-1_I8).to_bytes.from_bytes.as_ok, -1_I8);;
+            assert_eq(|_|case + " minimum", I8::minimum.to_bytes.from_bytes.as_ok, I8::minimum);;
+            assert_eq(|_|case + " maximum", I8::maximum.to_bytes.from_bytes.as_ok, I8::maximum);;
+            assert_eq(|_|case + " width", (-1_I8).to_bytes.get_size, 1);;
+            let short : Result ErrMsg I8 = Array::fill(0, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            let case = "I16";
+            assert_eq(|_|case + " negative one", (-1_I16).to_bytes.from_bytes.as_ok, -1_I16);;
+            assert_eq(|_|case + " minimum", I16::minimum.to_bytes.from_bytes.as_ok, I16::minimum);;
+            assert_eq(|_|case + " maximum", I16::maximum.to_bytes.from_bytes.as_ok, I16::maximum);;
+            assert_eq(|_|case + " width", (-1_I16).to_bytes.get_size, 2);;
+            let short : Result ErrMsg I16 = Array::fill(1, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            // The bytes themselves. A round trip alone passes for any conversion that preserves the
+            // value, so it says nothing about the two's-complement bytes a C caller reads.
+            let case = "representation";
+            assert_eq(|_|case + " I8 negative one", (-1_I8).to_bytes, [255_U8]);;
+            assert_eq(|_|case + " I8 minimum", I8::minimum.to_bytes, [128_U8]);;
+            assert_eq(|_|case + " I16 negative one", (-1_I16).to_bytes, [255_U8, 255_U8]);;
+            assert_eq(|_|case + " I16 minimum", I16::minimum.to_bytes, [0_U8, 128_U8]);;
+            let from_all_ones : Result ErrMsg I8 = [255_U8].from_bytes;
+            assert_eq(|_|case + " I8 from 0xff", from_all_ones.as_ok, -1_I8);;
+            let from_min : Result ErrMsg I16 = [0_U8, 128_U8].from_bytes;
+            assert_eq(|_|case + " I16 from 0x8000", from_min.as_ok, I16::minimum);;
 
             pure()
         );
@@ -10346,6 +10423,9 @@ main = (
     test_source_fail(&source, config, "program running!");
 }
 
+/// Verifies that two global values, the full name of one ending with the full name of the other,
+/// are both reachable: `::Main::x` reads the one at the module's top level, and `Main::Main::x` and
+/// `::Main::Main::x` the one written under the `Main` namespace.
 #[test]
 pub fn test_absolute_namespace_value() {
     let source = r##"
@@ -10371,6 +10451,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a reference that could mean either of two global values, the full name of one
+/// ending with the full name of the other, is reported as ambiguous.
 #[test]
 pub fn test_ambiguous_namespace_value() {
     let source = r##"
@@ -10397,6 +10479,9 @@ main = (
     );
 }
 
+/// Verifies that two types, the full name of one ending with the full name of the other, are both
+/// reachable in a type annotation: `::Main::X` names the one at the module's top level, and
+/// `Main::Main::X` and `::Main::Main::X` the one written under the `Main` namespace.
 #[test]
 pub fn test_absolute_namespace_type() {
     let source = r##"
@@ -10420,6 +10505,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a type name that could mean either of two types, the full name of one ending with
+/// the full name of the other, is reported as ambiguous.
 #[test]
 pub fn test_ambiguous_namespace_type() {
     let source = r##"
@@ -10442,6 +10529,153 @@ main = (
         Configuration::develop_mode(),
         "Name `X` is ambiguous",
     );
+}
+
+/// Verifies that two traits, the full name of one ending with the full name of the other, are both
+/// declared and both usable: `::Main::Foo` reaches the one at the module's top level and
+/// `::Main::Main::Foo` the one written under the `Main` namespace, in an implementation's head as
+/// in a constraint, and the members of both are callable.
+#[test]
+pub fn test_absolute_namespace_trait() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait a : Foo {
+        bar : a -> I64;
+    }
+}
+
+// impl I64 : Foo { ... } // ambiguous
+impl I64 : ::Main::Foo { // top-level `Foo`
+    foo = |n| n + 1;
+}
+impl I64 : Main::Main::Foo { // `Main::Foo` in `Main` namespace
+    bar = |n| n + 2;
+}
+
+double_foo : [a : ::Main::Foo] a -> I64;
+double_foo = |x| 2 * x.foo;
+
+double_bar : [a : ::Main::Main::Foo] a -> I64;
+double_bar = |x| 2 * x.bar;
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 0.double_foo, 2);;
+    assert_eq(|_|"", 0.double_bar, 4);;
+    assert_eq(|_|"", 0.bar, 2);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that a trait name in an implementation's head that could mean either of two traits,
+/// the full name of one ending with the full name of the other, is reported as ambiguous.
+#[test]
+pub fn test_ambiguous_namespace_trait() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait a : Foo {
+        bar : a -> I64;
+    }
+}
+
+impl I64 : Main::Foo { // ambiguous
+    foo = |n| n + 1;
+}
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 0.foo, 1);;
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Name `Main::Foo` is ambiguous",
+    );
+}
+
+/// Verifies that a trait and a trait alias, the full name of one ending with the full name of the
+/// other, are both reachable: `::Main::Foo` names the trait an implementation's head takes, and
+/// `Main::Main::Foo` names the alias a constraint takes.
+#[test]
+pub fn test_absolute_namespace_trait_alias() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait Foo = Std::ToString;
+}
+
+impl I64 : ::Main::Foo { // top-level `Foo`
+    foo = |n| n + 1;
+}
+
+show : [a : Main::Main::Foo] a -> String; // the alias in the `Main` namespace
+show = |x| x.to_string;
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 3.foo, 4);;
+    assert_eq(|_|"", show(5), "5");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that one compilation reports every unresolved name of a single trait implementation —
+/// in the constraint context, in an associated type equality, in the head, and in a member's type
+/// signature — rather than stopping at the first of them.
+#[test]
+pub fn test_all_unresolved_names_of_one_trait_implementation_are_reported() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+impl [b : NoTraitInContext, NoAssocTyInEq b = I64] I64 : NoTraitInHead {
+    foo : NoTypeInMemberSig -> I64;
+    foo = |n| 0;
+}
+
+main : IO ();
+main = println(3.foo.to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    for expected in [
+        "Unknown trait name `NoTraitInContext`.",
+        "Unknown associated type name `NoAssocTyInEq`.",
+        "Unknown trait name `NoTraitInHead`.",
+        "Unknown type or associated type name `NoTypeInMemberSig`.",
+    ] {
+        assert!(
+            errmsg.contains(expected),
+            "`{}` is expected among the reports, but they are:\n{}",
+            expected,
+            errmsg
+        );
+    }
 }
 
 #[test]
@@ -13153,4 +13387,86 @@ pub fn test_higher_kinded_instance_selected_by_annotation() {
     );
     "##;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that a type alias declaring one type variable twice is reported at its own definition
+/// even where the alias is applied, since expanding an alias at its use runs before the check that
+/// rejects the definition.
+#[test]
+pub fn test_duplicated_type_var_in_used_type_alias() {
+    let source = r#"
+module Main;
+
+type Al a a = a;
+
+type S = unbox struct { x : Al I64 I64 };
+
+main : IO ();
+main = (
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type variable `a` is duplicated in the definition of type `Main::Al`.",
+    );
+}
+
+/// Verifies that the type an associated type is implemented for may be written as a type alias
+/// standing for the implementation's head: the two are compared after both have been expanded.
+#[test]
+pub fn test_assoc_type_impl_head_written_as_type_alias() {
+    let source = r#"
+module Main;
+
+trait a : Cont {
+    type Itm a;
+    get : a -> Itm a;
+}
+
+type T = unbox struct { x : I64 };
+type Al = T;
+
+impl T : Cont {
+    type Itm Al = I64;
+    get = |t| t.@x;
+}
+
+main : IO ();
+main = (
+    assert_eq(|_|"", T { x : 3 }.get, 3);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies the other direction: a trait implemented for a type written as a type alias, whose
+/// associated type line names the type the alias stands for.
+#[test]
+pub fn test_trait_impl_head_written_as_type_alias() {
+    let source = r#"
+module Main;
+
+trait a : Cont {
+    type Itm a;
+    get : a -> Itm a;
+}
+
+type T = unbox struct { x : I64 };
+type Al = T;
+
+impl Al : Cont {
+    type Itm T = I64;
+    get = |t| t.@x;
+}
+
+main : IO ();
+main = (
+    assert_eq(|_|"", T { x : 5 }.get, 5);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
 }
