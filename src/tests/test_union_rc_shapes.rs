@@ -156,11 +156,11 @@ type Guard = box struct { allowed : Array I64 };
 
 // A payload whose one reference-counting unit lies below its root. The second field keeps the
 // struct from being unwrapped down to the boxed value it holds.
-type One = unbox struct { only : Guard, tag : I64 };
+type Wrapped = unbox struct { held : Guard, tag : I64 };
 
-// The `pair` payload holds two units, the `one` payload holds a unit below its root, and `mark`
-// holds none.
-type Action = unbox union { pair : (Array I64, Array I64), one : One, mark : I64 };
+// The `pair` payload holds two units, the `wrapped` payload holds a unit below its root, and
+// `mark` holds none.
+type Action = unbox union { pair : (Array I64, Array I64), wrapped : Wrapped, mark : I64 };
 
 // Reads the union without consuming it. The recursion keeps the call out of line.
 peek : Action -> I64 -> I64;
@@ -171,57 +171,61 @@ peek = |action, n| (
 
 // Builds the union out of a pair that stays live beside it, then reads both back.
 via_pair : (Array I64, Array I64) -> I64 -> I64;
-via_pair = |both, n| (
+via_pair = |payload, n| (
     if n == 0 { 0 };
-    let action = Action::pair(both);
-    let seen = peek(action, 2);
-    let tagged = if action.is_pair { 1 } else { 0 };
-    let (first, second) = both;
-    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+    let action = Action::pair(payload);
+    let seen_in_call = peek(action, 2);
+    let seen_after_call = if action.is_pair { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
 );
 
 // The same for a payload whose unit lies below its root.
-via_one : One -> I64 -> I64;
-via_one = |one, n| (
+via_wrapped : Wrapped -> I64 -> I64;
+via_wrapped = |payload, n| (
     if n == 0 { 0 };
-    let action = Action::one(one);
-    let seen = peek(action, 2);
-    let tagged = if action.is_one { 1 } else { 0 };
-    seen + tagged + one.@tag + one.@only.@allowed.@size * 10 + one.@only.@allowed.@(0)
+    let action = Action::wrapped(payload);
+    let seen_in_call = peek(action, 2);
+    let seen_after_call = if action.is_wrapped { 1 } else { 0 };
+    seen_in_call + seen_after_call + payload.@tag
+        + payload.@held.@allowed.@size * 10 + payload.@held.@allowed.@(0)
 );
 
 // `Std::Option` is an unboxed union too, and a pair payload gives it the same shape.
-seen_option : Option (Array I64, Array I64) -> I64 -> I64;
-seen_option = |opt, n| (
+peek_option : Option (Array I64, Array I64) -> I64 -> I64;
+peek_option = |opt, n| (
     if n == 0 { if opt.is_some { 1 } else { 0 } };
-    seen_option(opt, n - 1)
+    peek_option(opt, n - 1)
 );
 
 via_option : (Array I64, Array I64) -> I64 -> I64;
-via_option = |both, n| (
+via_option = |payload, n| (
     if n == 0 { 0 };
-    let opt = Option::some(both);
-    let seen = seen_option(opt, 2);
-    let tagged = if opt.is_some { 1 } else { 0 };
-    let (first, second) = both;
-    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+    let opt = Option::some(payload);
+    let seen_in_call = peek_option(opt, 2);
+    let seen_after_call = if opt.is_some { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
 );
 
 // `Std::Result` likewise.
-seen_result : Result String (Array I64, Array I64) -> I64 -> I64;
-seen_result = |res, n| (
+peek_result : Result String (Array I64, Array I64) -> I64 -> I64;
+peek_result = |res, n| (
     if n == 0 { if res.is_ok { 1 } else { 0 } };
-    seen_result(res, n - 1)
+    peek_result(res, n - 1)
 );
 
 via_result : (Array I64, Array I64) -> I64 -> I64;
-via_result = |both, n| (
+via_result = |payload, n| (
     if n == 0 { 0 };
-    let res : Result String (Array I64, Array I64) = ok(both);
-    let seen = seen_result(res, 2);
-    let tagged = if res.is_ok { 1 } else { 0 };
-    let (first, second) = both;
-    seen + tagged + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+    let res : Result String (Array I64, Array I64) = ok(payload);
+    let seen_in_call = peek_result(res, 2);
+    let seen_after_call = if res.is_ok { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
 );
 
 main : IO ();
@@ -232,7 +236,7 @@ main = (
     );;
     assert_eq(
         |_|"the boxed value below the payload's root is read back as it was built",
-        via_one(One { only : Guard { allowed : [5, 6] }, tag : 3 }, 1), 29
+        via_wrapped(Wrapped { held : Guard { allowed : [5, 6] }, tag : 3 }, 1), 29
     );;
     assert_eq(
         |_|"the pair an option holds is read back as it was built",
@@ -246,7 +250,7 @@ main = (
 );
 "#;
 
-    /// Both payloads are read back as they were built. A pair freed while the union still holds it
+    /// Every payload is read back as it was built. A pair freed while the union still holds it
     /// changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_payload_units_correctness() {
