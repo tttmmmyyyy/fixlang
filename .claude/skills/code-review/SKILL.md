@@ -916,7 +916,9 @@ The Rust source comments, `std.fix`'s doc comments, and the documents the projec
 
 This convention covers the text the project ships. Writing addressed to the people working on the change — a dev doc under `dev-docs/`, a pull request body, an issue — is in the language of the people who read it, and this convention does not reach it. The `devdoc` skill governs a dev doc's writing.
 
-**Rewrite**: translate the comment into clear English while preserving its meaning.
+A document that exists as a translation is **written** in its language rather than transposed into it. A paragraph that keeps the other language's sentence structure — the em-dash aside, the stacked relative clause, the clause-per-sentence chop — reads as a translation, and the reader pays to undo it. Read each rewritten paragraph on its own and ask whether someone writing from scratch in that language would have put it that way.
+
+**Rewrite**: translate the comment into clear English while preserving its meaning; say a translated paragraph the way its own language says it.
 
 #### Every Rust item must have a doc comment — [Rust]
 
@@ -985,6 +987,16 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 **Keep** genuine prohibitions and deprecations — "must not be called after `close()`", "callers should not rely on the ordering here". These regulate future behavior rather than negating a phantom alternative, so they belong.
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
+
+#### Don't coin a term for one document — [Rust + Markdown]
+
+A word invented to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has no definition to go to. In a document that is translated, it survives as a word that means nothing in the other language either.
+
+The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+
+**Keep** a term the code itself names — a type, a field, a variant — since the reader can go and read what it is.
+
+**Rewrite**: replace the coined word with what it stands for.
 
 #### Reference by name, not by line or section number — [Rust + Markdown]
 

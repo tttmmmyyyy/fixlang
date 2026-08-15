@@ -41,6 +41,10 @@ Write a measurement into the body instead when the argument at that point does n
 
 Write the doc in the implementers' language. It does not have to be English.
 
+Write it *in* that language rather than translating into it. A paragraph carrying another language's sentence structure — the em-dash aside, the stacked clause — reads as a translation, and the reader pays to undo it.
+
+Do not coin a word to carry a concept through a few paragraphs: a reader who meets it once has nothing to attach it to. Say what the thing is; the sentence is usually shorter for it. A term the code itself names is different, since the reader can go and read what it is.
+
 ## Audience and self-containedness
 
 Write for a reader who knows the project thinly and broadly, but knows nothing about this change or about the code it touches. The doc must be self-contained for that reader:
