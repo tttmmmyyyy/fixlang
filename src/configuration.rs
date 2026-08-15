@@ -1322,28 +1322,28 @@ mod tests {
     /// against a configuration where nothing was edited, and one of its own against each of the
     /// other settings.
     ///
-    /// `reaches` names, for the report, what the hash exists to separate — what a setting listed
-    /// here reaches.
+    /// `what_settings_reach` names, for the report, what the hash exists to separate — what a
+    /// setting listed here reaches.
     fn assert_each_setting_moves_the_hash(
         hash: impl Fn(&Configuration) -> String,
-        reaches: &str,
+        what_settings_reach: &str,
         settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)>,
     ) {
         let baseline = hash_after(&hash, Box::new(|_| {}));
         let mut settings_by_hash: Map<String, &str> = Map::default();
         for (name, edit) in settings {
-            let edited = hash_after(&hash, edit);
+            let edited_hash = hash_after(&hash, edit);
             assert_ne!(
-                baseline, edited,
+                baseline, edited_hash,
                 "`{}` reaches {}, so it belongs in the hash.",
-                name, reaches
+                name, what_settings_reach
             );
             // Two settings landing on one hash would share each other's cached results, so the hash
             // separates the settings from one another as well as from the baseline.
-            if let Some(other_setting) = settings_by_hash.insert(edited, name) {
+            if let Some(other_setting) = settings_by_hash.insert(edited_hash, name) {
                 panic!(
                     "`{}` and `{}` reach {} differently, so the hash has to tell them apart.",
-                    name, other_setting, reaches
+                    name, other_setting, what_settings_reach
                 );
             }
         }

@@ -51,15 +51,15 @@ fn test_the_module_dependency_hash_covers_a_source_that_extends_a_module() {
 
     let mut program = make_std_mod(&config)
         .unwrap_or_else(|errs| panic!("Failed to build the `Std` module: {}", errs));
-    let without_the_tuple = hash_of(&program);
-    let tuple_traits = make_tuple_traits_mod(&[8], &config)
+    let hash_without_the_tuple = hash_of(&program);
+    let tuple_traits_mod = make_tuple_traits_mod(&[8], &config)
         .unwrap_or_else(|errs| panic!("Failed to build the tuple implementations: {}", errs));
     program
-        .link(tuple_traits, true)
+        .link(tuple_traits_mod, true)
         .unwrap_or_else(|errs| panic!("Failed to link the tuple implementations: {}", errs));
 
     assert_ne!(
-        without_the_tuple,
+        hash_without_the_tuple,
         hash_of(&program),
         "the implementations of a tuple size are a source `Std` is made of, and the hash naming \
          what `Std` is checked from stayed where it was"
@@ -345,15 +345,15 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         };
 
         build(dir, "main.fix", &[]);
-        let after_the_first = cache_entries();
+        let first_build_entries = cache_entries();
         assert!(
-            !after_the_first.is_empty(),
+            !first_build_entries.is_empty(),
             "the first build fills the type-check cache"
         );
 
         build(dir, "main.fix", &[]);
         assert_eq!(
-            after_the_first,
+            first_build_entries,
             cache_entries(),
             "the second build filed entries of its own, so the hash naming what a value is checked \
              from does not name the same thing twice"

@@ -457,32 +457,32 @@ mod tests {
     /// object files of a build, the type-check result of a value — leans on this.
     #[test]
     fn test_a_hash_source_separates_the_values_appended_to_it() {
-        let source_of = |append: fn(&mut HashSource)| {
+        let hash_of = |append: fn(&mut HashSource)| {
             let mut hash_source = HashSource::default();
             append(&mut hash_source);
             hash_source.finish()
         };
 
         assert_ne!(
-            source_of(|source| {
-                source.push_text("xy");
-                source.push_text("z");
+            hash_of(|hash_source| {
+                hash_source.push_text("xy");
+                hash_source.push_text("z");
             }),
-            source_of(|source| {
-                source.push_text("x");
-                source.push_text("yz");
+            hash_of(|hash_source| {
+                hash_source.push_text("x");
+                hash_source.push_text("yz");
             }),
             "two texts appended one after the other are the pair of them, not the text they \
              concatenate to"
         );
         assert_ne!(
-            source_of(|source| {
-                source.push_list(&["a".to_string(), "b".to_string()]);
-                source.push_list(&[]);
+            hash_of(|hash_source| {
+                hash_source.push_list(&["a".to_string(), "b".to_string()]);
+                hash_source.push_list(&[]);
             }),
-            source_of(|source| {
-                source.push_list(&["a".to_string()]);
-                source.push_list(&["b".to_string()]);
+            hash_of(|hash_source| {
+                hash_source.push_list(&["a".to_string()]);
+                hash_source.push_list(&["b".to_string()]);
             }),
             "an item belongs to the list it was appended with"
         );

@@ -2757,25 +2757,26 @@ impl Program {
         // Also, check if there is a module defined in multiple files.
         for mod_info in &other.modules {
             let file = mod_info.source.input.file_path.clone();
-            if let Some(defined_at) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
+            if let Some(linked_idx) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
                     // If extending mode, this is not a problem: every source the module here is
                     // made of joins the ones the module is made of already, and
                     // `module_dependency_hash` reads them all.
-                    let joining = mod_info.sources().cloned().collect::<Vec<_>>();
-                    Arc::make_mut(&mut self.modules[defined_at].extending_sources).extend(joining);
+                    let joining_sources = mod_info.sources().cloned().collect::<Vec<_>>();
+                    Arc::make_mut(&mut self.modules[linked_idx].extending_sources)
+                        .extend(joining_sources);
                     continue;
                 }
-                let other_file = self.modules[defined_at].source.input.file_path.clone();
-                if to_absolute_path(&other_file)? == to_absolute_path(&file)? {
+                let linked_file = self.modules[linked_idx].source.input.file_path.clone();
+                if to_absolute_path(&linked_file)? == to_absolute_path(&file)? {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }
                 let msg = format!(
                     "Module `{}` is defined in two files: \"{}\" and \"{}\".",
                     mod_info.name,
-                    other_file.to_string_lossy().to_string(),
+                    linked_file.to_string_lossy().to_string(),
                     file.to_string_lossy().to_string()
                 );
                 errors.append(Errors::from_msg(msg));
