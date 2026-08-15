@@ -11,8 +11,8 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, push_list_hash,
-    push_text_hash, warn_msg, Finally, Map,
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally,
+    HashSource, Map,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -872,6 +872,26 @@ impl Configuration {
         }
     }
 
+    /// A hash of the settings that decide what the elaborated program is.
+    ///
+    /// The fields are listed by hand, so every field of `Configuration` that changes the program
+    /// elaboration produces has to be hashed here: one left out makes a build reuse the type-check
+    /// results of a build that elaborated a different program.
+    ///
+    /// `Program::module_dependency_hash` folds this beside the sources the program is written in,
+    /// which is where the type-check cache reads it. A setting belongs here when it reaches the
+    /// elaborated program without passing through any source, as the sizes of the C types do: they
+    /// decide the Fix type the parser gives a `CInt` in an `FFI_CALL` signature, and the compiler
+    /// builds the trait implementations converting to a C type from them as data.
+    ///
+    /// `test_elaboration_hash_separates_elaboration_settings` gives each setting read here a value
+    /// of its own and checks that the hash follows, so its list must stay in sync with this one.
+    pub fn elaboration_hash(&self) -> String {
+        let mut hash_source = HashSource::default();
+        hash_source.push_text(&self.c_type_sizes.to_string());
+        hash_source.finish()
+    }
+
     /// Get hash value of the configurations that affect the object file generation.
     ///
     /// The fields are listed by hand, so every field of `Configuration` that changes the generated
@@ -882,53 +902,50 @@ impl Configuration {
     /// a value of its own and checks that the hash follows, so its list must stay in sync with this
     /// one.
     ///
-    /// Every value goes in through `push_text_hash` or `push_list_hash`, which give it a length of
-    /// its own, so where one value ends and the next begins never depends on what the values are.
+    /// Every value goes in through `HashSource`, which gives it a length of its own, so where one
+    /// value ends and the next begins never depends on what the values are.
     pub fn object_generation_hash(&self) -> String {
-        let mut hash_source = String::new();
-        push_text_hash(&mut hash_source, &self.fix_opt_level.to_string());
-        push_text_hash(&mut hash_source, &self.debug_info.to_string());
+        let mut hash_source = HashSource::default();
+        hash_source.push_text(&self.fix_opt_level.to_string());
+        hash_source.push_text(&self.debug_info.to_string());
         // `Generator::create_debug_info` writes the compilation directory into the debug
         // information, which is the one way it reaches the generated code, so a build without debug
         // information takes objects generated in another directory. A second reader of the field
         // would make this condition wrong.
         if self.debug_info {
-            push_text_hash(
-                &mut hash_source,
-                &self.compilation_directory.to_string_lossy(),
-            );
+            hash_source.push_text(&self.compilation_directory.to_string_lossy());
         }
-        push_text_hash(&mut hash_source, &self.threaded.to_string());
+        hash_source.push_text(&self.threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
-        push_text_hash(&mut hash_source, &self.sanitizer.to_string());
-        push_text_hash(&mut hash_source, &self.backtrace.to_string());
-        push_text_hash(&mut hash_source, &self.no_runtime_check.to_string());
-        push_text_hash(&mut hash_source, &self.skip_eval.to_string());
-        push_text_hash(&mut hash_source, &self.c_type_sizes.to_string());
-        push_text_hash(&mut hash_source, &self.max_split_scalars.to_string());
+        hash_source.push_text(&self.sanitizer.to_string());
+        hash_source.push_text(&self.backtrace.to_string());
+        hash_source.push_text(&self.no_runtime_check.to_string());
+        hash_source.push_text(&self.skip_eval.to_string());
+        hash_source.push_text(&self.c_type_sizes.to_string());
+        hash_source.push_text(&self.max_split_scalars.to_string());
         // The kind of the output file reaches the code in two ways: a dynamic library is generated
         // with position-independent relocations (`get_target_machine`), and an executable is the
         // only kind that carries the entry point (`elaborate_via_config`). An object built for one
         // kind therefore fails to link into the other.
-        push_text_hash(&mut hash_source, self.output_file_type.to_str());
-        push_list_hash(&mut hash_source, &self.disable_cpu_features_regex);
+        hash_source.push_text(self.output_file_type.to_str());
+        hash_source.push_list(&self.disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        push_list_hash(&mut hash_source, &self.llvm_passes());
+        hash_source.push_list(&self.llvm_passes());
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
-        push_text_hash(&mut hash_source, self.subcommand.command_type_string());
+        hash_source.push_text(self.subcommand.command_type_string());
 
         // Build time of the compiler.
-        push_text_hash(&mut hash_source, build_time_utc!());
+        hash_source.push_text(build_time_utc!());
 
-        format!("{:x}", md5::compute(hash_source))
+        hash_source.finish()
     }
 
     /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
@@ -1290,12 +1307,41 @@ mod tests {
     use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
     use crate::misc::Map;
 
-    /// The object generation hash of a build configuration to which `edit` has been applied.
-    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
+    /// A build configuration to which `edit` has been applied.
+    fn config_after(edit: impl FnOnce(&mut Configuration)) -> Configuration {
         let mut config = Configuration::release_mode(SubCommand::Build)
             .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
         edit(&mut config);
-        config.object_generation_hash()
+        config
+    }
+
+    /// The object generation hash of a build configuration to which `edit` has been applied.
+    fn hash_after(edit: impl FnOnce(&mut Configuration)) -> String {
+        config_after(edit).object_generation_hash()
+    }
+
+    /// Two builds reuse each other's type-check results exactly when they agree on this hash, so
+    /// each setting that reaches the elaborated program gives the hash a value of its own.
+    ///
+    /// Each setting is written to its field, so that the list names what the hash reads, and the
+    /// list must stay in sync with `elaboration_hash`.
+    #[test]
+    fn test_elaboration_hash_separates_elaboration_settings() {
+        let baseline = config_after(|_| {}).elaboration_hash();
+
+        let settings: Vec<(&str, Box<dyn FnOnce(&mut Configuration)>)> = vec![(
+            "c_type_sizes",
+            Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+        )];
+
+        for (name, edit) in settings {
+            assert_ne!(
+                baseline,
+                config_after(edit).elaboration_hash(),
+                "`{}` reaches the elaborated program, so it belongs in the elaboration hash.",
+                name
+            );
+        }
     }
 
     /// Two builds reuse each other's object files exactly when they agree on this hash, so each

@@ -34,8 +34,8 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, join_compiler_threads, push_list_hash, push_text_hash,
-    spawn_compiler_thread, to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
+    to_absolute_path, HashSource, Map, Set,
 };
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::printer::Text;
@@ -613,6 +613,13 @@ pub struct ModuleInfo {
     /// beside the module's own source, because a value defined in one of them is as much a function
     /// of that source as a value defined in the file the module is declared in.
     pub extending_sources: Arc<Vec<SourceFile>>,
+}
+
+impl ModuleInfo {
+    /// Every source the module is made of: the one it is declared in, then the ones that extend it.
+    pub fn sources(&self) -> impl Iterator<Item = &SourceFile> {
+        std::iter::once(&self.source.input).chain(self.extending_sources.iter())
+    }
 }
 
 // Program of fix a collection of modules.
@@ -2749,10 +2756,8 @@ impl Program {
                     // If extending mode, this is not a problem: every source the module here is
                     // made of joins the ones the module is made of already, and
                     // `module_dependency_hash` reads them all.
-                    let joining = std::iter::once(&mod_info.source.input)
-                        .chain(mod_info.extending_sources.iter());
-                    Arc::make_mut(&mut self.modules[defined_at].extending_sources)
-                        .extend(joining.cloned());
+                    let joining = mod_info.sources().cloned().collect::<Vec<_>>();
+                    Arc::make_mut(&mut self.modules[defined_at].extending_sources).extend(joining);
                     continue;
                 }
                 let other_file = self.modules[defined_at].source.input.file_path.clone();
@@ -2888,16 +2893,14 @@ impl Program {
     /// - **Every source each module `module` depends on is made of.** A module is made of the file
     ///   it is declared in, and of the sources linked to extend it — the definitions the compiler
     ///   writes itself, which vary with the program (see `ModuleInfo::extending_sources`).
-    /// - **The sizes of the C types**, which decide the types the parser gives to the signatures in
-    ///   `FFI_CALL` expressions, and which the compiler builds the trait implementations converting
-    ///   between numeric types from. Those implementations are built as data rather than emitted as
-    ///   source, so no source of `Std` moves when a size changes.
+    /// - **The settings that decide what the elaborated program is**, which reach it without
+    ///   passing through any source (`Configuration::elaboration_hash`).
     /// - **The build of the compiler.** A cached typed expression is serialized in a format the
     ///   compiler defines, and a differently-built compiler may define it differently — reading such
     ///   a cache back would misinterpret it. `build_time_utc!()` changes with every compiler build.
     ///
-    /// Every value goes in through `push_text_hash` or `push_list_hash`, which give it a length of
-    /// its own, so where one value ends and the next begins never depends on what the values are.
+    /// Every value goes in through `HashSource`, which gives it a length of its own, so where one
+    /// value ends and the next begins never depends on what the values are.
     pub fn module_dependency_hash(
         &self,
         module: &Name,
@@ -2909,18 +2912,15 @@ impl Program {
             .cloned()
             .collect::<Vec<_>>();
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
-        let mut hash_source = String::default();
+        let mut hash_source = HashSource::default();
         for mod_name in &dependent_module_names {
             let mod_info = self.find_mod(mod_name).unwrap();
-            let mut source_hashes = vec![mod_info.source.input.hash()?];
-            for source in mod_info.extending_sources.iter() {
-                source_hashes.push(source.hash()?);
-            }
-            push_list_hash(&mut hash_source, &source_hashes);
+            let source_hashes = collect_results(mod_info.sources().map(|source| source.hash()))?;
+            hash_source.push_list(&source_hashes);
         }
-        push_text_hash(&mut hash_source, &config.c_type_sizes.to_string());
-        push_text_hash(&mut hash_source, build_time::build_time_utc!());
-        Ok(format!("{:x}", md5::compute(hash_source)))
+        hash_source.push_text(&config.elaboration_hash());
+        hash_source.push_text(build_time::build_time_utc!());
+        Ok(hash_source.finish())
     }
 
     // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.

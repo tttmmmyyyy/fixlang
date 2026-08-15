@@ -85,21 +85,32 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values
 }
 
-/// Appends a hash of `text` to `hash_source`, a hash source that concatenates several values.
+/// The values a hash is taken over, appended one at a time.
 ///
-/// The hash has the same length whatever the text is, so the value cannot run into the one appended
-/// next and `"xy"` followed by `"z"` differs from `"x"` followed by `"yz"`.
-pub fn push_text_hash(hash_source: &mut String, text: &str) {
-    hash_source.push_str(&format!("{:x}", md5::compute(text)));
-}
+/// Each value goes in as a hash of its own, of a length the value does not change, so the value
+/// cannot run into the one appended next: `"xy"` followed by `"z"` gives a different source from
+/// `"x"` followed by `"yz"`. Appending through this type is what holds that, so the text it
+/// accumulates is its own.
+#[derive(Default)]
+pub struct HashSource(String);
 
-/// Appends a hash of `items` to `hash_source`, a hash source that concatenates several lists.
-///
-/// The count comes first so that a list's items cannot be read as the next list's.
-pub fn push_list_hash(hash_source: &mut String, items: &[String]) {
-    hash_source.push_str(&items.len().to_string());
-    for item in items {
-        push_text_hash(hash_source, item);
+impl HashSource {
+    /// Appends `text`.
+    pub fn push_text(&mut self, text: &str) {
+        self.0.push_str(&format!("{:x}", md5::compute(text)));
+    }
+
+    /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's.
+    pub fn push_list(&mut self, items: &[String]) {
+        self.0.push_str(&items.len().to_string());
+        for item in items {
+            self.push_text(item);
+        }
+    }
+
+    /// The hash of everything appended.
+    pub fn finish(&self) -> String {
+        format!("{:x}", md5::compute(&self.0))
     }
 }
 
