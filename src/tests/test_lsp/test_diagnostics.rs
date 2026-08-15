@@ -147,8 +147,8 @@ mod tests {
     /// A trait member whose type leaves the trait's type variable to a constraint is reported in
     /// the editor, on the member's declaration.
     ///
-    /// The member's declaration is the line to change, and the shape the report rejects is one
-    /// that used to compile, so the report has to reach the editor anchored there.
+    /// The member's declaration is the line the programmer has to change, so the report has to
+    /// reach the editor anchored there.
     #[test]
     fn test_trait_member_not_fixing_the_trait_variable_is_reported_on_its_declaration() {
         let (_temp_dir, project_dir) = setup_test_env("trait_member_unfixed_variable");

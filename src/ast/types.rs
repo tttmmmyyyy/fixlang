@@ -2752,10 +2752,7 @@ impl Scheme {
 ///
 /// # Arguments
 /// * `where_it_must_appear` — the places the variable may stand in for that signature to determine
-///   it, as a phrase completing "`x` must appear ...". The Fixv condition allows any position
-///   outside an associated type application; a trait member has to name the trait's type variable
-///   in its type, since a constraint on an opaque type variable is answered by an implementation
-///   rather than by the use site.
+///   it, as a phrase completing "`x` must appear ...".
 /// * `src` — where to draw the report; the variable's own occurrence where the signature has one.
 pub fn unfixed_type_variable_error(
     tyvar_name: &Name,

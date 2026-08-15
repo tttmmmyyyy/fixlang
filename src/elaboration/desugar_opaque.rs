@@ -154,7 +154,7 @@ impl Program {
                         //
                         // The match binds the trait's type variable, because a member's type has to
                         // name it (see `TraitEnv::validate_structure`). One resolution per
-                        // implementation follows from that: the lhs each gets is the opaque type
+                        // implementation follows from that: each lhs is the opaque type
                         // constructor applied to the type that implementation is for.
                         let defn_to_impl =
                             Substitution::matching_no_kind_check(&scm.ty, &impl_.scm.ty, &[])

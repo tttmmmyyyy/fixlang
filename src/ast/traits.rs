@@ -948,8 +948,8 @@ impl TraitEnv {
                 // equality's left side too. A trait member has a second reader: an equality on an
                 // opaque type variable (`make : [?it : Iterator, Item ?it = c] I64 -> ?it`) is
                 // answered by whichever implementation is chosen, so it leaves a use site with
-                // nothing to choose by. Hence the stronger rule here, which is why the Fixv
-                // condition can no longer report the trait's type variable.
+                // nothing to choose by. Hence the stronger rule here: the trait's type variable
+                // has to stand in the member's type itself.
                 if !member.qual_ty.ty_fixes_var(&trait_defn.type_var.name) {
                     errors.append(unfixed_type_variable_error(
                         &trait_defn.type_var.name,
