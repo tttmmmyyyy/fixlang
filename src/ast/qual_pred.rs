@@ -64,10 +64,10 @@ impl QualPred {
         if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
             s += "[";
         }
-        let mut preds = vec![];
-        preds.extend(self.kind_constraints.iter().map(|p| p.to_string()));
-        preds.extend(self.pred_constraints.iter().map(|p| p.to_string()));
-        s += &preds.join(", ");
+        let mut constraints = vec![];
+        constraints.extend(self.kind_constraints.iter().map(|c| c.to_string()));
+        constraints.extend(self.pred_constraints.iter().map(|c| c.to_string()));
+        s += &constraints.join(", ");
         if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
             s += "] ";
         }
@@ -77,8 +77,8 @@ impl QualPred {
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for p in &mut self.pred_constraints {
-            errors.eat_err(p.resolve_namespace(ctx));
+        for pred in &mut self.pred_constraints {
+            errors.eat_err(pred.resolve_namespace(ctx));
         }
         for eq in &mut self.eq_constraints {
             errors.eat_err(eq.resolve_namespace(ctx));
@@ -88,8 +88,8 @@ impl QualPred {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
-        for p in &mut self.pred_constraints {
-            p.resolve_type_aliases(type_env)?;
+        for pred in &mut self.pred_constraints {
+            pred.resolve_type_aliases(type_env)?;
         }
         for eq in &mut self.eq_constraints {
             eq.resolve_type_aliases(type_env)?;

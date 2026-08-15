@@ -254,9 +254,9 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("unknown_struct_field");
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
 
-        let unknown = diagnostics_containing(&diagnostics, "Unknown field");
+        let unknown_field_reports = diagnostics_containing(&diagnostics, "Unknown field");
         assert_eq!(
-            unknown.len(),
+            unknown_field_reports.len(),
             2,
             "the pattern and the literal are both reported, but the diagnostics are {:?}",
             diagnostics
@@ -264,7 +264,7 @@ mod tests {
 
         // `main.fix` writes the pattern's `z` on the 7th line at the 19th column, and the
         // literal's `w` on the 13th line at the 28th; the protocol counts both from zero.
-        let pattern_report = unknown
+        let pattern_report = unknown_field_reports
             .iter()
             .find(|diag| diag["message"].as_str().unwrap().contains("`z`"))
             .expect("the pattern's unknown field is reported");
@@ -275,7 +275,7 @@ mod tests {
             pattern_report
         );
 
-        let literal_report = unknown
+        let literal_report = unknown_field_reports
             .iter()
             .find(|diag| diag["message"].as_str().unwrap().contains("`w`"))
             .expect("the literal's unknown field is reported");

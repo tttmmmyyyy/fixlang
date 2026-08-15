@@ -584,8 +584,8 @@ impl TraitImpl {
     //
     // Users can also write type annotations in trait implementations.
     // This function trusts and returns the type annotation if the user has written one.
-    pub fn member_scheme(&self, member: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
-        if let Some(qual_ty) = self.member_sigs.get(member) {
+    pub fn member_scheme(&self, member_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
+        if let Some(qual_ty) = self.member_sigs.get(member_name) {
             // If type annotation is provided by user, use it.
             let mut preds = self.qual_pred.pred_constraints.clone();
             preds.extend(qual_ty.preds.clone());
@@ -599,44 +599,44 @@ impl TraitImpl {
             Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty.clone())
         } else {
             // Otherwise, construct the type from trait definition and impl declaration.
-            self.member_scheme_by_defn(member, trait_defn)
+            self.member_scheme_by_defn(member_name, trait_defn)
         }
     }
 
-    /// Get type-scheme of a method implementation.
+    /// Get type-scheme of a member implementation.
     /// Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     /// this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     ///
     /// Users can also write type annotations in trait implementations.
     /// The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
-    pub fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
+    pub fn member_scheme_by_defn(&self, member_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
         let tyvar_name = &trait_defn.type_var.name; // `a` in the above example.
-        let mut method_qualty = trait_defn.member_ty(method_name); // `a -> String` in the above example.
+        let mut member_qualty = trait_defn.member_ty(member_name); // `a -> String` in the above example.
 
         // Next, see the trait implementation to get the type for which the trait is implemented.
         let impl_type = self.impl_type(); // `(a, b)` in the above example.
 
-        // We are going to substitute `tyvar_name` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
-        // This is OK if FV(method_qualty) \ {tyvar_name} is disjoint from FV(impl_type).
-        // Otherwise, we need to rename the type variables in `method_qualty` to avoid name collision.
+        // We are going to substitute `tyvar_name` (e.g., `a`) in `member_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
+        // This is OK if FV(member_qualty) \ {tyvar_name} is disjoint from FV(impl_type).
+        // Otherwise, we need to rename the type variables in `member_qualty` to avoid name collision.
         // Example:
         // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
         // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`,
         // then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
         // So we first rename `(a -> b) -> f a -> f b` to `(c -> b) -> f c -> f b`.
-        let mut fv_method_qualty = vec![];
-        method_qualty.free_vars_vec(&mut fv_method_qualty);
+        let mut fv_member_qualty = vec![];
+        member_qualty.free_vars_vec(&mut fv_member_qualty);
         let fv_impl_type = impl_type.free_vars();
         // Collect type variables that need renaming (those that collide with fv_impl_type).
-        let vars_to_rename: Vec<_> = fv_method_qualty
+        let vars_to_rename: Vec<_> = fv_member_qualty
             .iter()
             .filter(|fv| &fv.name != tyvar_name && fv_impl_type.contains_key(&fv.name))
             .collect();
         let used_names: Set<String> = fv_impl_type
             .keys()
-            .chain(fv_method_qualty.iter().map(|fv| &fv.name))
+            .chain(fv_member_qualty.iter().map(|fv| &fv.name))
             .cloned()
             .collect();
         let new_names = generate_fresh_varnames(vars_to_rename.len(), &used_names);
@@ -646,22 +646,22 @@ impl TraitImpl {
             let merge_succ = rename_subst.merge(&Substitution::single(&fv.name, new_fv));
             assert!(merge_succ);
         }
-        // Rename type variables in `method_qualty`.
-        rename_subst.substitute_qualtype(&mut method_qualty);
+        // Rename type variables in `member_qualty`.
+        rename_subst.substitute_qualtype(&mut member_qualty);
 
         // Then substitute `tyvar_name` with `impl_type`.
         // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
         let impl_subst = Substitution::single(&tyvar_name, impl_type);
-        impl_subst.substitute_qualtype(&mut method_qualty);
+        impl_subst.substitute_qualtype(&mut member_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
-        let ty = method_qualty.ty.clone();
+        let ty = member_qualty.ty.clone();
         let mut kind_signs = self.qual_pred.kind_constraints.clone();
-        kind_signs.append(&mut method_qualty.kind_signs.clone());
+        kind_signs.append(&mut member_qualty.kind_signs.clone());
         let mut preds = self.qual_pred.pred_constraints.clone();
-        preds.append(&mut method_qualty.preds);
+        preds.append(&mut member_qualty.preds);
         let mut eqs = self.qual_pred.eq_constraints.clone();
-        eqs.append(&mut method_qualty.eqs);
+        eqs.append(&mut member_qualty.eqs);
 
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
@@ -1076,8 +1076,8 @@ impl TraitEnv {
             ))
         }
 
-        for (impl_member, impl_expr) in impl_members {
-            validate_member_is_declared(trait_members, trait_id, impl_member, &impl_expr.source)?;
+        for (member_name, member_expr) in impl_members {
+            validate_member_is_declared(trait_members, trait_id, member_name, &member_expr.source)?;
         }
 
         // Validate the set of associated types.
@@ -1150,12 +1150,12 @@ impl TraitEnv {
         // This prevents users from referencing trait-definition-derived type variables
         // (including opaque type variables like `?it`) that are not visible to the user
         // in the impl context. If the user wants to use such variables, they should
-        // provide an explicit type signature on the impl method.
-        for (method_name, method_expr) in impl_members {
-            if !member_sigs.contains_key(method_name) {
+        // provide an explicit type signature on the member of the implementation.
+        for (member_name, member_expr) in impl_members {
+            if !member_sigs.contains_key(member_name) {
                 let mut allowed_tyvars = vec![];
                 impl_.impl_type().free_vars_to_vec(&mut allowed_tyvars);
-                for (used_tv, tv_src) in collect_annotation_tyvars(&method_expr) {
+                for (used_tv, tv_src) in collect_annotation_tyvars(&member_expr) {
                     if allowed_tyvars
                         .iter()
                         .all(|allowed_tv| allowed_tv.name != used_tv.name)
@@ -1181,16 +1181,15 @@ impl TraitEnv {
 
         // Check Orphan rules.
         let instance_def_mod = &impl_.define_module;
-        let trait_def_id = trait_id.name.module();
-        let ty = &impl_.qual_pred.predicate.ty;
-        let type_def_id = ty.toplevel_tycon().unwrap().name.module();
-        if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
+        let trait_def_mod = trait_id.name.module();
+        let type_def_mod = impl_ty.toplevel_tycon().unwrap().name.module();
+        if trait_def_mod != *instance_def_mod && type_def_mod != *instance_def_mod {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Implementing trait `{}` for type `{}` in module `{}` is illegal; \
                             it is not allowed to implement an external trait for an external type.",
                     trait_id.to_string(),
-                    ty.to_string_normalize(),
+                    impl_ty.to_string_normalize(),
                     instance_def_mod.to_string(),
                 ),
                 &[&impl_.source.as_ref().map(|s| s.to_head_character())],
@@ -1299,13 +1298,13 @@ impl TraitEnv {
     pub fn add_trait(&mut self, info: TraitDefn) -> Result<(), Errors> {
         // Check Duplicate definition.
         if self.traits.contains_key(&info.trait_) {
-            let info1 = self.traits.get(&info.trait_).unwrap();
+            let declared = self.traits.get(&info.trait_).unwrap();
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Duplicate definition for trait {}.",
                     info.trait_.to_string()
                 ),
-                &[&info1.source, &info.source],
+                &[&declared.source, &info.source],
             ));
         }
         self.traits.insert(info.trait_.clone(), info);
@@ -1328,13 +1327,13 @@ impl TraitEnv {
     fn add_alias(&mut self, alias: TraitAlias) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.aliases.data.contains_key(&alias.id) {
-            let alias1 = self.aliases.data.get(&alias.id).unwrap();
+            let declared = self.aliases.data.get(&alias.id).unwrap();
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Duplicate definition for trait alias {}.",
                     alias.id.to_string()
                 ),
-                &[&alias1.source, &alias.source],
+                &[&declared.source, &alias.source],
             ));
         }
         self.aliases.data.insert(alias.id.clone(), alias);
