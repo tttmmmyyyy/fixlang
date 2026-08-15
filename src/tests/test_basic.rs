@@ -10409,9 +10409,13 @@ impl I64 : Main::Main::Foo { // `Main::Foo` in `Main` namespace
 double_foo : [a : ::Main::Foo] a -> I64;
 double_foo = |x| 2 * x.foo;
 
+double_bar : [a : ::Main::Main::Foo] a -> I64;
+double_bar = |x| 2 * x.bar;
+
 main: IO ();
 main = (
     assert_eq(|_|"", 0.double_foo, 2);;
+    assert_eq(|_|"", 0.double_bar, 4);;
     assert_eq(|_|"", 0.bar, 2);;
     pure()
 );
@@ -10449,6 +10453,69 @@ main = (
         Configuration::develop_mode(),
         "Name `Main::Foo` is ambiguous",
     );
+}
+
+#[test]
+pub fn test_absolute_namespace_trait_alias() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+namespace Main {
+    trait Foo = Std::ToString;
+}
+
+impl I64 : ::Main::Foo { // top-level `Foo`
+    foo = |n| n + 1;
+}
+
+show : [a : Main::Main::Foo] a -> String; // the alias in the `Main` namespace
+show = |x| x.to_string;
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 3.foo, 4);;
+    assert_eq(|_|"", show(5), "5");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_all_unresolved_names_of_one_trait_implementation_are_reported() {
+    let source = r##"
+module Main;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+impl [b : NoTraitInContext, NoAssocTyInEq b = I64] I64 : NoTraitInHead {
+    foo : NoTypeInMemberSig -> I64;
+    foo = |n| 0;
+}
+
+main : IO ();
+main = println(3.foo.to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    for expected in [
+        "Unknown trait name `NoTraitInContext`.",
+        "Unknown associated type name `NoAssocTyInEq`.",
+        "Unknown trait name `NoTraitInHead`.",
+        "Unknown type or associated type name `NoTypeInMemberSig`.",
+    ] {
+        assert!(
+            errmsg.contains(expected),
+            "`{}` is expected among the reports, but they are:\n{}",
+            expected,
+            errmsg
+        );
+    }
 }
 
 #[test]

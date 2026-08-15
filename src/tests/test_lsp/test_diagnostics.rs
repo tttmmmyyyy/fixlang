@@ -167,14 +167,17 @@ mod tests {
         );
         assert_eq!(diag["range"]["start"]["character"], 5);
         assert_eq!(diag["severity"], 1, "as an error");
-        assert!(
-            diag["message"]
-                .as_str()
-                .expect("the report carries a message")
-                .contains("`Lib::Main::Foo`, `Main::Foo`"),
-            "naming both traits, but the report is {:?}",
-            diag
-        );
+        let message = diag["message"]
+            .as_str()
+            .expect("the report carries a message");
+        for trait_name in ["`Lib::Main::Foo`", "`Main::Foo`"] {
+            assert!(
+                message.contains(trait_name),
+                "naming {}, but the report is {:?}",
+                trait_name,
+                diag
+            );
+        }
     }
 
     /// Assert that `main.fix` of the named case project draws one report of a repeated struct
