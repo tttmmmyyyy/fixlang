@@ -1,11 +1,12 @@
-// Tests for the RC IR term simplifier: what it removes, checked through the `--emit-rc-ir` dump, and
-// what the program it leaves behind computes.
+// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+// the simplified program computes.
 //
 // A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
 // is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
 // cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
 // `RangeIterator` two-scalar state and no union construction — the property the integration tests
-// assert. The value tests compile and run programs whose shape drives the same rewrite from source.
+// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
+// what each one computes.
 
 #[cfg(test)]
 mod integration_tests {
@@ -114,8 +115,9 @@ mod integration_tests {
 mod value_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
 
-    /// A nest of matches whose every inner arm builds the same variant — the shape case-of-case
-    /// floats the outer match into — computes what the same program computes with the rewrite off.
+    /// Checks the values a nest of matches computes when every inner arm builds the same variant.
+    /// That is the shape case-of-case floats the outer match into, and the rewrite has to leave
+    /// every value as the source computes it.
     #[test]
     pub fn test_nested_matches_over_one_variant() {
         let source = r#"
