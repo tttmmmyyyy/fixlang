@@ -937,12 +937,15 @@ Function comment shape:
   ```
   A bare restatement adds nothing: `the position` for `pos` says only what the name already says, where `0-indexed byte offset into the source string` states the meaning.
 - Add a `# Returns` section only when the return value needs explanation beyond the type — and then say what the value *means*, such as what a `None`, an empty collection, or a particular variant signifies here. Keep this to the surprising cases; the *Don't enumerate None / error cases* convention still suppresses routine failures.
-- Add an `# Examples` section when the description alone would leave the reader unable to say what the function returns for an input they have in mind. One input and the output it produces settles that in a line, and settles it more exactly than a second sentence would. The gap it closes is usually one of these:
+- Add an `# Examples` section when one input and the output it produces would carry the reader to the behavior faster than the description does. The description does not have to be incomplete for that to hold: a concrete pair is read at a glance, where a rule has to be applied before it answers anything. So the question is which one the reader gets there on, not whether the prose is sufficient. The gap it closes is usually one of these:
   - a **transformation** leaves open what the output is made of: which parts of the input survive, in what order, and what an empty or repeated part becomes;
   - a **predicate** leaves open where the line falls: the reflexive case, the empty case, and — when two arguments share a type — which of the two the question is about;
-  - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function.
+  - an **encoding, a generated name, a formatted string** leaves open the shape of the result, which is the whole content of the function;
+  - **several rules the reader has to add up**: each is stated on its own, and the answer is what they come to together.
 
-  So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips.
+  So choose the input that answers the open question rather than a typical one: an empty collection, a boundary, an element the function drops, the case where the answer flips. One line that carries two of those at once beats two lines that carry one each.
+
+  Keep it to what a glance holds — a line or two. An example needing a paragraph of setup says the description should carry the behavior instead.
   ```rust
   /// Splits the text at each occurrence of the separator.
   ///
