@@ -1,14 +1,14 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_function_name];`
 
 use crate::ast::expr::ExprNode;
-use crate::ast::name::FullName;
+use crate::ast::name::{FullName, Name};
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{tycon, TyCon, Type, TypeNode};
 use crate::constants::{PTR_NAME, STD_NAME};
 use crate::error::Errors;
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
-use crate::fixstd::runtime::reserved_c_function_name_reason;
+use crate::fixstd::runtime::compiler_use_of_c_function_name;
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
@@ -16,7 +16,8 @@ use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::RcState;
 use inkwell::attributes::AttributeLoc;
-use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType};
+use inkwell::values::FunctionValue;
 use std::sync::Arc;
 
 // The export statement.
@@ -90,10 +91,13 @@ impl ExportStatement {
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
         }
-        if let Some(reason) = reserved_c_function_name_reason(&self.function_name) {
+        // An export defines the function, so every name the compiler has a use for is out: it either
+        // defines that name itself, or calls something outside the program under it.
+        if let Some(use_) = compiler_use_of_c_function_name(&self.function_name) {
             let msg = format!(
                 "`{}` cannot be the name of an exported function: {}.",
-                &self.function_name, reason
+                &self.function_name,
+                use_.reason()
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
@@ -109,54 +113,26 @@ impl ExportStatement {
             io_type,
         } = self.function_type.clone().unwrap();
 
-        // Create the LLVM type of the exported C function. Each exchanged value is its own
-        // scalar — an integer, a floating point number or a pointer — which is the type a C
-        // declaration of the same function names. `has_c_abi` admits nothing with another shape.
-        let dom_llvm_tys = doms
-            .iter()
-            .map(|dom| c_scalar_type(dom, gc).into())
-            .collect::<Vec<_>>();
-        let func_ty = if codom.is_unit() {
-            gc.context.void_type().fn_type(&dom_llvm_tys, false)
-        } else {
-            c_scalar_type(&codom, gc).fn_type(&dom_llvm_tys, false)
-        };
-
         // Take the name. An `FFI_CALL` of this C function has declared it by now — code generation
         // implements the program's symbols before it reaches here — and a declaration and this
-        // definition describe one C function, so the body goes onto that declaration. Anything else
-        // found under the name is a name the compiler owns, which `validate_names` rejects, and a
-        // declaration of another signature, which `validate_c_function_signatures` rejects.
-        let func = match gc.module.get_function(&self.function_name) {
-            Some(declared) => {
-                assert_eq!(
-                    declared.get_type(),
-                    func_ty,
-                    "every description of the C function `{}` gives one signature",
-                    self.function_name
-                );
-                assert_eq!(
-                    declared.count_basic_blocks(),
-                    0,
-                    "the C function `{}` has one definition",
-                    self.function_name
-                );
-                declared
-            }
-            None => gc.module.add_function(&self.function_name, func_ty, None),
-        };
+        // definition describe one C function, so the body goes onto that declaration.
+        let signature =
+            CSignature::of_exported(self.function_type.as_ref().unwrap(), gc.type_env());
+        let func = signature.declare_in_module(&self.function_name, gc);
         assert_eq!(
-            func.get_name().to_str().unwrap(),
-            self.function_name,
-            "the exported function enters the module under the C name it was given"
+            func.count_basic_blocks(),
+            0,
+            "the C function `{}` has one definition",
+            self.function_name
         );
-        if let Some(tycon) = codom.toplevel_tycon() {
-            gc.set_c_integer_extension_attribute(func, AttributeLoc::Return, &tycon);
+
+        // Each value the function exchanges travels in its Fix representation, and the C type the
+        // signature gave it names that same representation.
+        for (param, dom) in signature.params.iter().zip(doms.iter()) {
+            assert_c_scalar_of(param, dom, gc);
         }
-        for (i, dom) in doms.iter().enumerate() {
-            if let Some(tycon) = dom.toplevel_tycon() {
-                gc.set_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), &tycon);
-            }
+        if signature.ret.get_c_type(gc.context).is_some() {
+            assert_c_scalar_of(&signature.ret, &codom, gc);
         }
 
         // Implement the function.
@@ -215,47 +191,48 @@ impl ExportStatement {
     }
 }
 
-/// The LLVM type an exported function exchanges a value of `ty` as: the value's one scalar,
-/// which is the type a C declaration of the same function names.
-fn c_scalar_type<'c, 'm>(ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
+/// Assert that a value of Fix type `ty` travels as the one scalar the C type `c_ty` names, which is
+/// what lets the generated function hand it to C as it stands.
+///
+/// Counting the parts alone would let an aggregate through, since a value too wide to split is
+/// carried as one part holding the whole of it, and C would then be handed a structure whose layout
+/// it classifies by its own rules. `has_c_abi` admits nothing with either shape.
+fn assert_c_scalar_of<'c, 'm>(c_ty: &Arc<TyCon>, ty: &Arc<TypeNode>, gc: &mut Generator<'c, 'm>) {
     let embedded_ty = ty.get_embedded_type(gc);
     let parts = gc.type_parts(embedded_ty);
-    // The one part has to be the scalar itself. Counting the parts alone would let an aggregate
-    // through, since a value too wide to split is carried as one part holding the whole of it, and
-    // C would then be handed a structure whose layout it classifies by its own rules.
-    let is_scalar = parts.len() == 1
-        && !matches!(
-            parts[0],
-            BasicTypeEnum::StructType(_)
-                | BasicTypeEnum::ArrayType(_)
-                | BasicTypeEnum::VectorType(_)
-        );
-    assert!(
-        is_scalar,
+    assert_eq!(
+        parts.len(),
+        1,
         "`{}` reached an exported signature, where a value has to be one scalar",
         ty.to_string()
     );
-    parts[0]
+    assert_eq!(
+        parts[0],
+        c_ty.get_c_type(gc.context).unwrap(),
+        "`{}` crosses as the C type `{}`, so the two lay it down alike",
+        ty.to_string(),
+        c_ty.to_string()
+    );
 }
 
-/// Whether a value of `ty` reaches C the way the C ABI says a value of the corresponding C type is
-/// passed.
+/// The C type a value of `ty` crosses the FFI boundary as, and `None` for a value the C ABI cannot
+/// carry the way Fix lays it down.
 ///
 /// A value with one scalar — an integer, a floating point number, or a pointer — is laid down
-/// identically by Fix and by C. An aggregate is laid down differently: the C ABI classifies a
-/// structure by its size and by the class of each of its eightbytes (System V AMD64), or by whether
-/// it is a homogeneous floating-point aggregate (AAPCS64), and the shapes on which that agrees with
-/// Fix's element-wise layout differ from target to target.
-fn has_c_abi(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
-    let tycon = match ty.toplevel_tycon() {
-        Some(tycon) => tycon,
-        None => return false,
-    };
-    // A boxed value is a pointer.
+/// identically by Fix and by C, and a boxed value is a pointer. An aggregate is laid down
+/// differently: the C ABI classifies a structure by its size and by the class of each of its
+/// eightbytes (System V AMD64), or by whether it is a homogeneous floating-point aggregate
+/// (AAPCS64), and the shapes on which that agrees with Fix's element-wise layout differ from target
+/// to target.
+fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
+    let head = ty.toplevel_tycon()?;
     if ty.is_box(type_env) {
-        return true;
+        return Some(tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)));
     }
-    tycon.is_c_scalar()
+    if !head.is_c_scalar() {
+        return None;
+    }
+    Some(head)
 }
 
 /// The error message for a type the C ABI cannot carry appearing in an exported function's
@@ -304,20 +281,27 @@ impl CSignature {
         }
     }
 
-    /// The signature of the C function generated for a value exported at `ty`.
+    /// The signature of the C function generated for a value exported at `ty`, whose every position
+    /// `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
     pub fn of_exported(ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
+        let admitted = |ty: &Arc<TypeNode>| {
+            c_boundary_tycon(ty, type_env)
+                .unwrap_or_else(|| panic!("`{}` reached an exported signature", ty.to_string()))
+        };
         CSignature {
-            params: ty
-                .doms
-                .iter()
-                .map(|dom| c_boundary_tycon(dom, type_env))
-                .collect(),
-            ret: c_boundary_tycon(&ty.codom, type_env),
+            params: ty.doms.iter().map(admitted).collect(),
+            ret: if ty.codom.is_unit() {
+                ty.codom.toplevel_tycon().unwrap()
+            } else {
+                admitted(&ty.codom)
+            },
             is_var_args: false,
         }
     }
 
-    /// Whether this signature and `other` declare the same C function.
+    /// Whether this signature and `other` declare the same C function: the two describe every
+    /// position the same way, down to what a declaration of it carries — `CTypeShape` holds which
+    /// differences between two Fix types that is, and which it is not.
     pub fn agrees_with(&self, other: &CSignature) -> bool {
         self.is_var_args == other.is_var_args
             && self.params.len() == other.params.len()
@@ -325,6 +309,46 @@ impl CSignature {
             && (self.params.iter())
                 .zip(other.params.iter())
                 .all(|(a, b)| a.c_type_shape() == b.c_type_shape())
+    }
+
+    /// The function `name` of this signature in the module, declaring it where nothing declares it
+    /// yet. Every description of one C name goes through here, which is what puts the calls a
+    /// program makes and the definition it exports on one function.
+    pub fn declare_in_module<'c, 'm>(
+        &self,
+        name: &Name,
+        gc: &Generator<'c, 'm>,
+    ) -> FunctionValue<'c> {
+        if let Some(declared) = gc.module.get_function(name) {
+            return declared;
+        }
+        let param_c_tys = self
+            .params
+            .iter()
+            .map(|param| {
+                // A parameter of type `()` is rejected where the signature is written: `void` is a
+                // result alone.
+                param.get_c_type(gc.context).unwrap().into()
+            })
+            .collect::<Vec<BasicMetadataTypeEnum>>();
+        let fn_ty = match self.ret.get_c_type(gc.context) {
+            None => gc
+                .context
+                .void_type()
+                .fn_type(&param_c_tys, self.is_var_args),
+            Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, self.is_var_args),
+        };
+        let func = gc.module.add_function(name, fn_ty, None);
+        assert_eq!(
+            func.get_name().to_str().unwrap(),
+            name,
+            "the C function enters the module under the name it was given"
+        );
+        gc.add_c_integer_extension_attribute(func, AttributeLoc::Return, &self.ret);
+        for (i, param) in self.params.iter().enumerate() {
+            gc.add_c_integer_extension_attribute(func, AttributeLoc::Param(i as u32), param);
+        }
+        func
     }
 
     /// The signature as a C declaration of a nameless function reads, with each C type written as
@@ -340,16 +364,6 @@ impl CSignature {
         }
         format!("{} ({})", self.ret.to_string(), params.join(", "))
     }
-}
-
-/// The Fix type constructor standing for the C type a value of `ty` crosses the FFI boundary as: a
-/// boxed value crosses as a pointer, and every other exportable value as its own type constructor.
-fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Arc<TyCon> {
-    if ty.is_box(type_env) {
-        return tycon(FullName::from_strs(&[STD_NAME], PTR_NAME));
-    }
-    ty.toplevel_tycon()
-        .expect("`has_c_abi` admits only a type with a type constructor at its head")
 }
 
 // The type of an exported Fix value, split into the parts the generated C function is built from.
@@ -423,16 +437,16 @@ impl ExportedFunctionType {
             _ => {}
         }
 
-        // Each argument and the result should have a C ABI.
+        // Each argument and the result should be a type C can carry.
         for dom in &doms {
-            if !has_c_abi(dom, type_env) {
+            if c_boundary_tycon(dom, type_env).is_none() {
                 return Err(Errors::from_msg_srcs(
                     err_msg_prefix + &unexportable_type_msg(dom, "an argument"),
                     &[src],
                 ));
             }
         }
-        if !codom.is_unit() && !has_c_abi(&codom, type_env) {
+        if !codom.is_unit() && c_boundary_tycon(&codom, type_env).is_none() {
             return Err(Errors::from_msg_srcs(
                 err_msg_prefix + &unexportable_type_msg(&codom, "the return value"),
                 &[src],

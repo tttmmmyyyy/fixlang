@@ -348,6 +348,105 @@ pub fn test_export_and_ffi_call_of_one_c_name() {
 }
 
 #[test]
+pub fn test_ffi_call_of_the_entry_point_name_fails() {
+    // The call declares the name and the compiler's entry point, written afterwards, is renamed away
+    // from the C runtime that starts the program.
+    let source = r##"
+        module Main;
+
+        call_entry : IO CInt;
+        call_entry = FFI_CALL_IO[CInt main(CInt, Ptr), 0.c_int, nullptr];
+
+        main : IO ();
+        main = (
+            let status = *call_entry;
+            println(status.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be the name of a C function called from Fix",
+    );
+}
+
+#[test]
+pub fn test_export_and_ffi_call_of_one_c_name_at_two_signatures_fails() {
+    // The export defines the C function and the call goes through that one definition, so a call
+    // written at another arity asks the exported function for an argument it does not take.
+    let source = r##"
+        module Main;
+
+        twice_it : CInt -> CInt;
+        twice_it = |x| x + x;
+        FFI_EXPORT[twice_it, c_twice_it];
+
+        call_back : CInt -> CInt;
+        call_back = |x| FFI_CALL[CInt c_twice_it(CInt, CInt), x, x];
+
+        main : IO ();
+        main = println(call_back(21.c_int).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "One C function has one signature",
+    );
+}
+
+#[test]
+pub fn test_ffi_calls_of_one_c_name_with_and_without_var_args_fails() {
+    // The two calls write the same result type and the same fixed parameter, and differ only in
+    // whether the C function ends in `...`. A variadic function is called differently from one that
+    // is not, so the one declaration the module holds cannot serve both.
+    let source = r##"
+        module Main;
+
+        variadic : Ptr -> CInt;
+        variadic = |p| FFI_CALL[CInt c_report(Ptr, ...), p, 42.c_int];
+
+        fixed : Ptr -> CInt;
+        fixed = |p| FFI_CALL[CInt c_report(Ptr), p];
+
+        main : IO ();
+        main = println(variadic(nullptr).to_string + " " + fixed(nullptr).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "One C function has one signature",
+    );
+}
+
+#[test]
+pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails() {
+    // A parameter is a position like the result: the ABI carries a narrow integer in the low bits of
+    // a register and the sign says which side extends it, so the two calls ask the one declaration
+    // for opposite promises about the bits above the value.
+    let source = r##"
+        module Main;
+
+        send_signed : I8 -> IO ();
+        send_signed = |v| FFI_CALL_IO[() c_take(I8), v];
+
+        send_unsigned : U8 -> IO ();
+        send_unsigned = |v| FFI_CALL_IO[() c_take(U8), v];
+
+        main : IO ();
+        main = (
+            send_signed(-1_I8);;
+            send_unsigned(255_U8);;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "One C function has one signature",
+    );
+}
+
+#[test]
 pub fn test_ffi_calls_of_one_c_name_at_two_signatures_fails() {
     // Both calls go through the one function the module holds under the name, so the arity the
     // second one writes is an arity the C function does not have.
@@ -371,29 +470,52 @@ pub fn test_ffi_calls_of_one_c_name_at_two_signatures_fails() {
 }
 
 #[test]
-pub fn test_ffi_calls_of_one_c_name_reading_a_result_as_both_signs() {
-    // Two integer types of one width are one C type: a signature says how wide a value is and how
-    // it travels, and the sign is how the side reading the bits interprets them. The `FromBytes`
-    // implementations of the standard library read one runtime function's result as both.
+pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
+    // A value that fills its register travels the same way whichever sign the reader gives the
+    // bits, so a declaration writes `I64` and `U64` identically and a program may read one C
+    // function's result as either.
     let source = r##"
         module Main;
 
         main : IO ();
         main = (
-            let bytes = [255_U8];
-            let unsigned = bytes.borrow_elements(|ptr| FFI_CALL[U8 c_read_byte(Ptr), ptr]);
-            let signed = bytes.borrow_elements(|ptr| FFI_CALL[I8 c_read_byte(Ptr), ptr]);
-            assert_eq(|_|"read as unsigned", unsigned.i64, 255);;
-            assert_eq(|_|"read as signed", signed.i64, -1);;
+            let unsigned = FFI_CALL[U64 c_all_ones()];
+            let signed = FFI_CALL[I64 c_all_ones()];
+            assert_eq(|_|"read as unsigned", unsigned, 18446744073709551615_U64);;
+            assert_eq(|_|"read as signed", signed, -1);;
             pure()
         );
     "##;
     let c_source = r##"
-        unsigned char c_read_byte(unsigned char* p) {
-            return *p;
+        #include <stdint.h>
+
+        uint64_t c_all_ones(void) {
+            return UINT64_MAX;
         }
     "##;
     test_source_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails() {
+    // The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign
+    // is what says which side extends it. So the two descriptions ask the one declaration for
+    // opposite promises about the bits above the value.
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let unsigned = FFI_CALL[U8 c_all_ones()];
+            let signed = FFI_CALL[I8 c_all_ones()];
+            println(unsigned.to_string + " " + signed.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "One C function has one signature",
+    );
 }
 
 #[test]

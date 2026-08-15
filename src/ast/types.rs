@@ -206,17 +206,44 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
-/// How C carries a value: as an integer or a floating point number of a width in bits, or as a
-/// pointer.
+/// How C carries a value: everything the declaration of a C function exchanging it says about it.
 ///
 /// Two types of one shape are one C type, so a signature written with either declares the same
-/// function. `I8` and `U8` share a shape: a C signature says how wide a value is and how it
-/// travels, and the sign is how the side reading the bits interprets them.
+/// function. `I64` and `U64` share a shape: a value that fills its register travels the same way
+/// whichever sign the reader gives the bits. `I8` and `U8` do not, since the ABI carries a narrow
+/// integer in the low bits of a register and the sign is what says which side extends it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CTypeShape {
-    Integer(u32),
-    Float(u32),
+    /// An integer of this width in bits, carrying the extension its width earns it.
+    Integer {
+        bits: u32,
+        extension: Option<CIntegerExtension>,
+    },
+    Float32,
+    Float64,
     Pointer,
+}
+
+/// Which side of a call extends an integer narrower than the 32-bit unit the ABI carries it in.
+///
+/// Apple's AArch64 has the caller extend an argument and the callee extend a result, and lets the
+/// other side read the whole register on that promise, while AAPCS64 and System V leave those bits
+/// unspecified and have the reader narrow the value itself. These are how a signature says which of
+/// the two it follows, and a C compiler puts one on every such parameter and result.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CIntegerExtension {
+    Sign,
+    Zero,
+}
+
+impl CIntegerExtension {
+    /// The name of the LLVM attribute carrying this extension.
+    pub fn attribute_name(self) -> &'static str {
+        match self {
+            CIntegerExtension::Sign => "signext",
+            CIntegerExtension::Zero => "zeroext",
+        }
+    }
 }
 
 // A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
@@ -294,6 +321,10 @@ impl TyCon {
 
     // The shape of the C type this type constructor stands for.
     // `()` is C's `void`, which carries no value, so it has no shape.
+    //
+    // An integer narrower than 32 bits travels in the low bits of a register and carries the
+    // extension its sign asks for; one that fills the register carries none, which is what lets a
+    // program read the same C function's result as `I64` in one place and as `U64` in another.
     pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
         if self.is_unit() {
             return None;
@@ -303,42 +334,55 @@ impl TyCon {
             "call c_type_shape for {}",
             self.to_string()
         );
+        // The unit a C signature carries an integer in. The threshold holds for the targets Fix
+        // builds for; an ABI that extends a 32-bit integer to the width of a register — RISC-V 64
+        // does — raises it.
+        const C_INTEGER_UNIT_BITS: u32 = 32;
+        let integer = |bits| CTypeShape::Integer {
+            bits,
+            extension: if bits < C_INTEGER_UNIT_BITS {
+                Some(if self.is_signed_integer() {
+                    CIntegerExtension::Sign
+                } else {
+                    CIntegerExtension::Zero
+                })
+            } else {
+                None
+            },
+        };
         Some(match self.name.name.as_str() {
-            I8_NAME | U8_NAME => CTypeShape::Integer(8),
-            I16_NAME | U16_NAME => CTypeShape::Integer(16),
-            I32_NAME | U32_NAME => CTypeShape::Integer(32),
-            I64_NAME | U64_NAME => CTypeShape::Integer(64),
-            F32_NAME => CTypeShape::Float(32),
-            F64_NAME => CTypeShape::Float(64),
+            I8_NAME | U8_NAME => integer(8),
+            I16_NAME | U16_NAME => integer(16),
+            I32_NAME | U32_NAME => integer(32),
+            I64_NAME | U64_NAME => integer(64),
+            F32_NAME => CTypeShape::Float32,
+            F64_NAME => CTypeShape::Float64,
             PTR_NAME => CTypeShape::Pointer,
             // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
             name => unreachable!("no C type for `{}`", name),
         })
     }
 
+    // The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
+    // needs none: a wide integer, a floating point number, a pointer, and `()`.
+    pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
+        match self.c_type_shape()? {
+            CTypeShape::Integer { extension, .. } => extension,
+            _ => None,
+        }
+    }
+
     // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
     // `()` is C's `void`, which carries no value, so it maps to `None`.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
         Some(match self.c_type_shape()? {
-            CTypeShape::Integer(bits) => ctx.custom_width_int_type(bits).as_basic_type_enum(),
-            CTypeShape::Float(32) => ctx.f32_type().as_basic_type_enum(),
-            CTypeShape::Float(64) => ctx.f64_type().as_basic_type_enum(),
-            CTypeShape::Float(bits) => unreachable!("no C floating point type of {} bits", bits),
+            CTypeShape::Integer { bits, .. } => {
+                ctx.custom_width_int_type(bits).as_basic_type_enum()
+            }
+            CTypeShape::Float32 => ctx.f32_type().as_basic_type_enum(),
+            CTypeShape::Float64 => ctx.f64_type().as_basic_type_enum(),
             CTypeShape::Pointer => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
         })
-    }
-
-    // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
-    // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
-    // which side of the call extends it; a wider type fills the register and needs no extension.
-    //
-    // The 32-bit threshold holds for the targets Fix builds for. An ABI that extends a 32-bit
-    // integer to the width of a register — RISC-V 64 does — widens this set.
-    pub fn is_narrow_c_integer(self: &TyCon) -> bool {
-        if !self.is_c_scalar() {
-            return false;
-        }
-        matches!(self.c_type_shape(), Some(CTypeShape::Integer(bits)) if bits < 32)
     }
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an

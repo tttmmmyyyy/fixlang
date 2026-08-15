@@ -1,5 +1,5 @@
 use crate::constants::{C_ENTRY_POINT_NAME, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
-use crate::generator::Generator;
+use crate::generator::{module_functions, Generator};
 use inkwell::attributes::AttributeLoc;
 use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
@@ -30,9 +30,8 @@ pub const RUNTIME_MALLOC: &str = "malloc";
 /// growing a uniquely owned array's capacity avoids copying its elements.
 pub const RUNTIME_REALLOC: &str = "realloc";
 
-/// The prefix of every name the compiler mints for the runtime's own use: the runtime functions
-/// named above, the globals holding `argc` and `argv`, and the traversers code generation shares
-/// between the objects of one type.
+/// The prefix under which the compiler names the runtime's own functions, and the globals holding
+/// `argc` and `argv`.
 pub const RUNTIME_NAME_PREFIX: &str = "fixruntime_";
 
 /// The C library functions the runtime declares in the module it builds, and calls.
@@ -43,33 +42,56 @@ const RUNTIME_C_LIBRARY_FUNCTIONS: &[&str] = &[
     RUNTIME_REALLOC,
 ];
 
-/// Why the compiler owns the C function name `name`, phrased to follow "cannot be the name of an
-/// exported function: "; `None` where the name is free for a program to take.
+/// What the compiler does with the C function name `name`, and `None` where the name is free for a
+/// program to use as it likes.
 ///
-/// A module holds one function under a name, so a name the compiler puts there and an `FFI_EXPORT`
-/// of that name are two definitions of one symbol: LLVM renames whichever of the two arrives
-/// second, and the program that comes out calls something other than what it names.
+/// A module holds one function under a name, so what the compiler does with a name decides what a
+/// program may do with it: LLVM renames whichever of two definitions of one symbol arrives second,
+/// and the program that comes out calls something other than what it names.
 ///
-/// The answer does not depend on how the program is built. `pthread_once` reaches the module only
-/// in a multi-threaded program and the entry point only in an executable, and both are owned
-/// everywhere, so turning multi-threading on or building the same source as a dynamic library
-/// leaves the set of programs that compile as it was.
-pub fn reserved_c_function_name_reason(name: &str) -> Option<String> {
+/// The answer does not depend on how the program is built. `pthread_once` reaches the module only in
+/// a multi-threaded program and the entry point only in an executable, and the compiler's claim on
+/// both holds everywhere, so turning multi-threading on or building the same source as a dynamic
+/// library leaves the set of programs that compile as it was.
+pub fn compiler_use_of_c_function_name(name: &str) -> Option<CompilerNameUse> {
     if name == C_ENTRY_POINT_NAME {
-        return Some(
+        return Some(CompilerNameUse::Defines(
             "it is the entry point of the program, which the compiler defines".to_string(),
-        );
-    }
-    if name.starts_with(RUNTIME_NAME_PREFIX) {
-        return Some(format!(
-            "a name beginning with `{}` belongs to the Fix runtime",
-            RUNTIME_NAME_PREFIX
         ));
     }
+    if name.starts_with(RUNTIME_NAME_PREFIX) {
+        return Some(CompilerNameUse::Calls(format!(
+            "a name beginning with `{}` belongs to the Fix runtime",
+            RUNTIME_NAME_PREFIX
+        )));
+    }
     if RUNTIME_C_LIBRARY_FUNCTIONS.contains(&name) {
-        return Some("it is a C library function the Fix runtime calls".to_string());
+        return Some(CompilerNameUse::Calls(
+            "it is a C library function the Fix runtime calls".to_string(),
+        ));
     }
     None
+}
+
+/// What the compiler does with a C function name, which is what decides what a program may do with
+/// it. Each carries the reason, phrased to follow "cannot be the name of ...: ".
+pub enum CompilerNameUse {
+    /// The compiler writes this function's body, so the name is its own: a program that names it at
+    /// all takes it away, whether to define it or to call it.
+    Defines(String),
+    /// The compiler calls this function, which something outside the program defines. A program may
+    /// call it too — that reaches the same function — and may not define it over the top.
+    Calls(String),
+}
+
+impl CompilerNameUse {
+    /// Why the compiler holds the name.
+    pub fn reason(&self) -> &str {
+        match self {
+            CompilerNameUse::Defines(reason) => reason,
+            CompilerNameUse::Calls(reason) => reason,
+        }
+    }
 }
 
 /// Emits the runtime support functions into the module: their declarations when
@@ -96,6 +118,21 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_get_argv_function(gc, mode);
     build_malloc_function(gc, mode);
     build_realloc_function(gc, mode);
+
+    // Every name the calls above put in the module is one an `FFI_EXPORT` of it would take away, so
+    // each has to be one `compiler_use_of_c_function_name` answers for. It answers by prefix for the
+    // runtime's own functions and by name for the C library ones, and the latter list is what a
+    // runtime function calling a new C library function would leave behind.
+    if mode == BuildMode::Declare {
+        for function in module_functions(gc.module) {
+            let name = function.get_name().to_str().unwrap();
+            assert!(
+                compiler_use_of_c_function_name(name).is_some(),
+                "the runtime declares `{}`, which a program is free to export",
+                name
+            );
+        }
+    }
 }
 
 /// Which part of a runtime function a call in `build_runtime` emits.

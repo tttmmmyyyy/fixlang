@@ -2,6 +2,7 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
+use crate::ast::export_statement::CSignature;
 use crate::ast::name::FullName;
 use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
@@ -2589,36 +2590,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         is_io: bool,
     ) -> Object<'c> {
         // Get c function
-        let c_fun = match self.module.get_function(&fun_name) {
-            Some(fun) => fun,
-            None => {
-                let ret_c_ty = ret_tycon.get_c_type(self.context);
-                let param_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
-                    .iter()
-                    .map(|param_ty| {
-                        // `parse_ffi_param_tys` rejects `()`, the one type without a C type.
-                        param_ty.get_c_type(self.context).unwrap().into()
-                    })
-                    .collect::<Vec<_>>();
-                let fn_ty = match ret_c_ty {
-                    None => {
-                        // Void case.
-                        self.context.void_type().fn_type(&param_c_tys, is_var_args)
-                    }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&param_c_tys, is_var_args),
-                };
-                let func = self.module.add_function(&fun_name, fn_ty, None);
-                self.set_c_integer_extension_attribute(func, AttributeLoc::Return, ret_tycon);
-                for (i, param_ty) in param_tys.iter().enumerate() {
-                    self.set_c_integer_extension_attribute(
-                        func,
-                        AttributeLoc::Param(i as u32),
-                        param_ty,
-                    );
-                }
-                func
-            }
-        };
+        let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
+            .declare_in_module(fun_name, self);
 
         // Get argment values
         let args_vals = arg_objs
@@ -2842,35 +2815,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
-    // Mark a value crossing the C boundary as one the ABI extends to 32 bits.
+    // Mark a value crossing the C boundary as one the ABI extends to the unit it travels in.
     //
-    // An integer narrower than 32 bits travels in the low bits of a register, and the ABIs differ
-    // over the rest: Apple's AArch64 has the caller extend an argument and the callee extend a
-    // result, and lets the other side read the whole register on that promise, while AAPCS64 and
-    // System V leave those bits unspecified and have the reader narrow the value itself. `signext`
-    // and `zeroext` are how the signature says which of the two it follows, and a C compiler puts
-    // them on every such parameter and result. A Fix function reaching C carries them for the same
-    // reason: without them the reader of a promise-based ABI sees whatever the bits happen to hold.
-    pub fn set_c_integer_extension_attribute(
+    // A C compiler puts the extension on every such parameter and result, and a Fix function
+    // reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
+    // whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
+    //
+    // Every description of one C function agrees on the extension at each position — that is what
+    // `Program::validate_c_function_calls` decides — so a position written twice is written
+    // with the same attribute both times.
+    pub fn add_c_integer_extension_attribute(
         &self,
         func: FunctionValue<'c>,
         loc: AttributeLoc,
         tycon: &TyCon,
     ) {
-        if !tycon.is_narrow_c_integer() {
+        let Some(extension) = tycon.c_integer_extension() else {
             return;
-        }
-        // A declaration written elsewhere in the program may have put the other one here, so take
-        // it off: the value's own type says which of the two the ABI follows.
-        for name in ["signext", "zeroext"] {
-            func.remove_enum_attribute(loc, enum_attribute_kind_id(name));
-        }
-        let name = if tycon.is_signed_integer() {
-            "signext"
-        } else {
-            "zeroext"
         };
-        self.add_enum_attribute(func, name, loc);
+        self.add_enum_attribute(func, extension.attribute_name(), loc);
     }
 
     // Add frame-pointer attribute to all functions in the module

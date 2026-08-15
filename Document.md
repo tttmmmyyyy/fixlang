@@ -2270,13 +2270,17 @@ Any other type is rejected when the program is compiled.
 
 The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
 
-Three groups of names belong to the compiler, and an export of one of them is rejected:
+Three groups of names the compiler has a use for are rejected as export names:
 
 * `main`, which is the entry point the compiler generates
 * any name beginning with `fixruntime_`, which belongs to the Fix runtime
 * `malloc`, `realloc`, `sprintf` and `pthread_once`, which the Fix runtime calls
 
+`main` is rejected in `FFI_CALL` as well, since the compiler writes that function and a program naming it takes it away. The other two groups are available to `FFI_CALL`, where they reach the same function the compiler calls.
+
 One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
+
+Two types a C declaration writes identically describe the same position, so one C function's `unsigned long` result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign says which side extends it, so `I8` and `U8` describe different positions. To read a narrow result at the other sign, write the sign the C function has and convert on the Fix side.
 
 #### Returning more than one value
 

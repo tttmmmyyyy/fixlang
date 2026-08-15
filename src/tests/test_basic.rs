@@ -5017,6 +5017,38 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
+/// byte array and back, at both ends of the type's range, and `from_bytes` answers an error for a
+/// byte array that is not the type's width.
+#[test]
+pub fn test_narrow_signed_integer_bytes_round_trip() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let case = "I8";
+            assert_eq(|_|case + " negative one", (-1_I8).to_bytes.from_bytes.as_ok, -1_I8);;
+            assert_eq(|_|case + " minimum", I8::minimum.to_bytes.from_bytes.as_ok, I8::minimum);;
+            assert_eq(|_|case + " maximum", I8::maximum.to_bytes.from_bytes.as_ok, I8::maximum);;
+            assert_eq(|_|case + " width", (-1_I8).to_bytes.get_size, 1);;
+            let short : Result ErrMsg I8 = Array::fill(0, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            let case = "I16";
+            assert_eq(|_|case + " negative one", (-1_I16).to_bytes.from_bytes.as_ok, -1_I16);;
+            assert_eq(|_|case + " minimum", I16::minimum.to_bytes.from_bytes.as_ok, I16::minimum);;
+            assert_eq(|_|case + " maximum", I16::maximum.to_bytes.from_bytes.as_ok, I16::maximum);;
+            assert_eq(|_|case + " width", (-1_I16).to_bytes.get_size, 2);;
+            let short : Result ErrMsg I16 = Array::fill(1, 0_U8).from_bytes;
+            assert(|_|case + " short", short.is_err);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
 /// produced along with the time it took, for a long computation and for file IO.
 #[test]

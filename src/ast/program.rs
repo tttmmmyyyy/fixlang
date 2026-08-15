@@ -32,6 +32,7 @@ use crate::fixstd::builtin::{
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
 };
+use crate::fixstd::runtime::{compiler_use_of_c_function_name, CompilerNameUse};
 use crate::graph::Graph;
 use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
@@ -2070,21 +2071,23 @@ impl Program {
         Ok(())
     }
 
-    /// Report every C function name the program describes two ways: an `FFI_CALL` that declares a
-    /// signature another `FFI_CALL` or the `FFI_EXPORT` of that name gives differently.
+    /// Report every C function an `FFI_CALL` names wrongly: one whose body the compiler writes, and
+    /// one described at a signature another `FFI_CALL` or the `FFI_EXPORT` of that name gives
+    /// differently.
     ///
-    /// A name reaches the module as one function, and every call the program makes goes through it,
-    /// so a second description is not a second function: it is the first one called or defined at a
-    /// signature the program says it does not have. A parameter too many or too few, or one of
-    /// another width, then travels between two sides that lay it down differently.
+    /// A name reaches the module as one function, and every call the program makes goes through it.
+    /// So a call naming a function the compiler defines takes that definition away, and a second
+    /// description is not a second function: it is the first one called or defined at a signature
+    /// the program says it does not have. A parameter too many or too few, or one that travels
+    /// differently, then crosses between two sides that lay it down differently.
+    ///
+    /// Two Fix types that a C declaration writes identically describe the same position, so a
+    /// program is free to read one C function's `unsigned long` result as `U64` in one place and as
+    /// `I64` in another. `CTypeShape` decides which differences those are.
     ///
     /// Run this once the exported values are instantiated, so that every statement carries the
     /// function type it exports at, and so that the calls walked are the calls compiled.
-    ///
-    /// A signature says how wide each value is and how it travels, so two integer types of one
-    /// width agree: the sign is how the side reading the bits interprets them, and the standard
-    /// library reads the same bytes as both.
-    pub fn validate_c_function_signatures(&self) -> Result<(), Errors> {
+    pub fn validate_c_function_calls(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
         let mut errors = Errors::empty();
 
@@ -2121,12 +2124,30 @@ impl Program {
                 else {
                     return;
                 };
+                if reported.contains(fun_name) {
+                    return;
+                }
+                // A name the compiler defines is one the program cannot reach: the call declares it
+                // and the definition, arriving second, is renamed away from every use of it.
+                if let Some(CompilerNameUse::Defines(reason)) =
+                    compiler_use_of_c_function_name(fun_name)
+                {
+                    reported.insert(fun_name.clone());
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "`{}` cannot be the name of a C function called from Fix: {}.",
+                            fun_name, reason
+                        ),
+                        &[&node.source],
+                    ));
+                    return;
+                }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
                 let Some((known, known_src)) = described.get(fun_name) else {
                     described.insert(fun_name.clone(), (called, node.source.clone()));
                     return;
                 };
-                if known.agrees_with(&called) || reported.contains(fun_name) {
+                if known.agrees_with(&called) {
                     return;
                 }
                 reported.insert(fun_name.clone());
