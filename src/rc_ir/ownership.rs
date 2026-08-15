@@ -784,7 +784,7 @@ mod tests {
     use crate::fixstd::builtin::make_i64_ty;
     use crate::misc::Set;
     use crate::rc_ir::ast::{RcVar, VarPath};
-    use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
+    use crate::rc_ir::provenance::{sole_origin, LeafOrigin};
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {

@@ -877,7 +877,9 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
 
 #[cfg(test)]
 mod tests {
-    use super::{join_envs, resolve, LeafOrigin, Provenance, SharingVerdict, Uniqueness};
+    use super::{
+        join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict, Uniqueness,
+    };
     use crate::ast::name::FullName;
     use crate::misc::{Map, Set};
 
