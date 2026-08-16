@@ -997,7 +997,20 @@ impl<'a> CancelAnalysis<'a> {
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
-        acted_references(self.vars, self.type_env, v, path)
+        let references = acted_references(self.vars, self.type_env, v, path);
+        // Reference counting is inserted only for a value that holds a reference, and
+        // `split_rc_units` leaves every node naming one unit of its value's type, so a node always
+        // acts on at least one reference. A node acting on none would make both sides of the pairing
+        // vacuous: such a retain would be un-bumped whole by the first release of its unit, whatever
+        // that release reaches, and such a release would count as un-bumping a retain it leaves
+        // fully bumped.
+        assert!(
+            !references.is_empty(),
+            "the reference count of `{}`{:?} acts on no reference",
+            v.name.to_string(),
+            path
+        );
+        references
     }
 
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
@@ -1026,16 +1039,6 @@ impl<'a> CancelAnalysis<'a> {
                 self.all_retains.push(retain);
                 self.unbump_releases.entry(retain).or_default();
                 let outstanding = self.acted_references(v, path);
-                // Reference counting is inserted only for a value that holds a reference, and
-                // `split_rc_units` leaves every node naming one unit of its value's type, so a node
-                // always acts on at least one reference. A retain acting on none would be un-bumped
-                // whole by the first release of its unit, whatever that release reaches.
-                assert!(
-                    !outstanding.is_empty(),
-                    "the retain of `{}`{:?} acts on no reference",
-                    v.name.to_string(),
-                    path
-                );
                 pending
                     .entry(self.unit_key(&v.name, path))
                     .or_default()
