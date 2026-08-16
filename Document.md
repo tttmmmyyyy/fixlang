@@ -2425,7 +2425,7 @@ There are also some things to note in the implementation on the Fix side.
     - To achieve this, the Fix function that is called from the foreign language and receives a pointer should be an `IO` action (like `get_fix_array_element` above). By executing the `IO` action returned by `boxed_from_retained_ptr` in it, it is guaranteed that the received pointer is converted to a Fix value only once.
     - If you don't follow the above, the optimization by the Fix compiler may cause the number of times the pointer is received from the foreign language and the number of calls to `boxed_from_retained_ptr` to not match.
 - Fix's reference counting is not thread-safe by default. Therefore, if you distribute a pointer received from Fix to multiple threads on the foreign language side, data races may occur regarding the increment and decrement of the reference counter.
-    - To avoid this, call `Std::mark_threaded : a -> a` on the boxed type value before calling `boxed_to_retained_ptr` to set the reference counting to thread-safe mode.
+    - To avoid this, call `Std::mark_threaded : a -> a` on the boxed type value immediately before calling `boxed_to_retained_ptr`, with nothing in between, to set the reference counting to thread-safe mode. See [Multithreading](#multithreading) for why the two calls belong together.
 
 ### Accessing fields of Fix's struct value from C
 
@@ -2494,9 +2494,10 @@ The project being built decides the setting, so a library that needs multi-threa
 
 A Fix value reaches another thread as a pointer to a boxed value, so wrap a value of an unboxed type in `Std::Box`. Handing a value over then goes as follows.
 
-- `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically. Call it on the value, and carry on with the value it returns.
-- Call `Std::FFI::boxed_to_retained_ptr` on the returned value to get a pointer to it, and pass the pointer to the threading library with `FFI_CALL_IO`.
+- `Std::mark_threaded` puts the reference counters of all values reachable from a value into multi-threaded mode, in which they are updated atomically.
+- Call `Std::FFI::boxed_to_retained_ptr` on the value `Std::mark_threaded` returned to get a pointer to it, and pass the pointer to the threading library with `FFI_CALL_IO`. **Hand that value straight to `Std::FFI::boxed_to_retained_ptr`, and do nothing else with it in between**: multi-threaded mode is a state stored in the object, and an operation on the value — reading it included — can return the object to single-threaded mode. `Std::mark_threaded`'s own documentation states the rule and why.
 - From the entry point of the thread, call a Fix function exported by `FFI_EXPORT` and give it the pointer. An exported function receives a boxed parameter as such a pointer, and `Std::FFI::boxed_from_retained_ptr` turns a `Ptr` back into a boxed value.
+- Sending a value on to a further thread goes through `Std::mark_threaded` again, whatever the value's history: a value that arrived from another thread is in multi-threaded mode when it arrives, and an operation this thread performs on it can return it to single-threaded mode.
 
 The pointer carries the responsibility for the reference count described in [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language).
 
