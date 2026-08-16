@@ -866,9 +866,9 @@ struct PendingRetain {
 /// What a release does to the retains pending for the unit it is counted under.
 enum UnBump {
     /// It un-bumps part or all of the innermost bracket, whose retain this is.
-    Bracket(NodeId),
+    InBracket(NodeId),
     /// It reaches references the innermost bracket did not bump.
-    OutsideTheBracket,
+    OutsideBracket,
     /// No retain is pending for the unit.
     NoBracket,
 }
@@ -888,9 +888,9 @@ fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) 
         .last_mut()
         .expect("a stack kept in `pending` is non-empty");
     if !innermost.outstanding.covers(un_bumped) {
-        return UnBump::OutsideTheBracket;
+        return UnBump::OutsideBracket;
     }
-    innermost.outstanding.remove(un_bumped);
+    innermost.outstanding.subtract(un_bumped);
     let retain = innermost.node;
     if innermost.outstanding.is_empty() {
         stack.pop();
@@ -898,7 +898,7 @@ fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) 
     if stack.is_empty() {
         pending.remove(key);
     }
-    UnBump::Bracket(retain)
+    UnBump::InBracket(retain)
 }
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
@@ -925,7 +925,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             owned_units: &owned_units,
             type_env,
             needed_retains: Set::default(),
-            unbump_releases: Map::default(),
+            un_bump_releases: Map::default(),
             all_retains: vec![],
         };
         analysis.walk(body, PendingRetains::default(), true);
@@ -976,7 +976,7 @@ struct CancelAnalysis<'a> {
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
     /// The releases each retain is un-bumped by; they are deleted together with the retain.
-    unbump_releases: Map<NodeId, Vec<NodeId>>,
+    un_bump_releases: Map<NodeId, Vec<NodeId>>,
     /// Every retain the walk saw, so the cancellable retains are those never marked needed.
     all_retains: Vec<NodeId>,
 }
@@ -1037,7 +1037,7 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Retain(v, path, _, k) => {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
-                self.unbump_releases.entry(retain).or_default();
+                self.un_bump_releases.entry(retain).or_default();
                 let outstanding = self.acted_references(v, path);
                 pending
                     .entry(self.unit_key(&v.name, path))
@@ -1060,15 +1060,15 @@ impl<'a> CancelAnalysis<'a> {
                 }
                 let un_bumped = self.acted_references(v, path);
                 match un_bump(&mut pending, &key, &un_bumped) {
-                    UnBump::Bracket(retain) => self
-                        .unbump_releases
+                    UnBump::InBracket(retain) => self
+                        .un_bump_releases
                         .entry(retain)
                         .or_default()
                         .push(node_id(node)),
                     // A release that reaches references the innermost bracket did not bump closes
                     // no bracket here, and leaves every retain pending for the unit un-bumped in
                     // part from outside its own group. None of them can be cancelled as a whole.
-                    UnBump::OutsideTheBracket => self.consume_unit(&mut pending, key),
+                    UnBump::OutsideBracket => self.consume_unit(&mut pending, key),
                     UnBump::NoBracket => {}
                 }
                 self.walk(k, pending, returns_from_func)
@@ -1180,11 +1180,11 @@ impl<'a> CancelAnalysis<'a> {
         let mut uniform: Map<NodeId, References> = Map::default();
         for states in &arm_states {
             for (&retain, &outstanding) in states {
-                let agreed = entered_with.contains(&retain)
+                let is_uniform = entered_with.contains(&retain)
                     && arm_states
                         .iter()
                         .all(|other| other.get(&retain) == Some(&outstanding));
-                if agreed {
+                if is_uniform {
                     uniform.insert(retain, outstanding.clone());
                 } else {
                     self.needed_retains.insert(retain);
@@ -1221,7 +1221,7 @@ impl<'a> CancelAnalysis<'a> {
             }
             // The walk records an entry for every retain it meets, and only retains it met are here.
             let releases = self
-                .unbump_releases
+                .un_bump_releases
                 .get(&retain)
                 .unwrap_or_else(|| unreachable!("retain {:?} was never seen by the walk", retain));
             // A retain with no un-bump release is left in place to keep the counting balanced.

@@ -292,22 +292,22 @@ module Main;
 type Action = unbox union { pair : (I64, Array I64, Array I64), mark : I64 };
 
 // Takes the payload out of one union value twice, reading its scalar each time.
-tag_twice : Action -> I64;
-tag_twice = |action| (
+take_payload_twice : Action -> I64;
+take_payload_twice = |action| (
     if action.as_pair.@0 == 0 { action.as_pair.@0 + 100 };
     -1
 );
 
 // The same, on a union built here out of a payload that holds one array in both of its fields.
-tag_twice_of_shared : Array I64 -> I64;
-tag_twice_of_shared = |arr| tag_twice(Action::pair((0, arr, arr)));
+take_payload_twice_of_shared : Array I64 -> I64;
+take_payload_twice_of_shared = |arr| take_payload_twice(Action::pair((0, arr, arr)));
 
 main : IO ();
 main = (
     let actions = Array::from_map(4, |k| Action::pair(
         (0, Array::fill(k + 1, k), Array::fill(k + 2, k))
     ));
-    assert_eq(|_|"the scalar is read twice", actions.to_iter.map(tag_twice).sum, 400);;
+    assert_eq(|_|"the scalar is read twice", actions.to_iter.map(take_payload_twice).sum, 400);;
     assert_eq(
         |_|"the arrays the payload holds are read back as they were built",
         actions.to_iter.map(|a| a.as_pair.@1.@(0) + a.as_pair.@2.@(0)).sum, 12
@@ -316,7 +316,7 @@ main = (
     let shared = Array::fill(3, 5);
     assert_eq(
         |_|"the scalar of a payload holding one array twice is read twice",
-        Iterator::range(0, 4).map(|_| tag_twice_of_shared(shared)).sum, 400
+        Iterator::range(0, 4).map(|_| take_payload_twice_of_shared(shared)).sum, 400
     );;
     assert_eq(|_|"the array both fields of that payload hold is read back", shared.@(0), 5);;
     pure()

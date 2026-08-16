@@ -806,7 +806,7 @@ impl References {
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
-    pub(crate) fn remove(&mut self, other: &References) {
+    pub(crate) fn subtract(&mut self, other: &References) {
         for (object, count) in &other.0 {
             let held = self
                 .0
@@ -1052,7 +1052,7 @@ mod tests {
                 ),
             ),
             (
-                "Holder",
+                "TwinChoice",
                 test_tycon_info(
                     TyConVariant::Union,
                     true,
@@ -1088,7 +1088,7 @@ mod tests {
             test_ty("BoxedPair"),                               // a boxed struct
             test_ty("Nested"),                                  // a struct of a union and a closure
             test_ty("Twins"),                                   // a struct of two references
-            test_ty("Holder"), // a union whose payload holds two references
+            test_ty("TwinChoice"), // a union whose payload holds two references
         ];
         for ty in cases {
             let truncated: Set<FieldPath> = boxed_leaf_paths(&ty, &type_env)
@@ -1325,7 +1325,7 @@ mod tests {
     #[test]
     fn a_union_holds_the_references_of_every_field_of_its_payload() {
         let type_env = type_env();
-        let scrutinee = typed_var("u", test_ty("Holder"));
+        let scrutinee = typed_var("u", test_ty("TwinChoice"));
         let payload = typed_var("p", test_ty("Twins"));
         let vars = table(vec![
             (scrutinee.clone(), Binding::Param),
@@ -1346,13 +1346,13 @@ mod tests {
         );
 
         let mut outstanding = whole_union;
-        outstanding.remove(&first_field);
+        outstanding.subtract(&first_field);
         assert!(
             !outstanding.is_empty(),
             "the release of one field leaves the payload's other reference bumped"
         );
         assert!(outstanding.covers(&second_field));
-        outstanding.remove(&second_field);
+        outstanding.subtract(&second_field);
         assert!(
             outstanding.is_empty(),
             "the releases of both fields un-bump the retain of the union"
