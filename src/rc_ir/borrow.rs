@@ -56,9 +56,9 @@ use std::sync::Arc;
 /// leaf path; a leaf absent from the set is `Borrow`.
 ///
 /// These are **leaves**, one per reference a parameter holds. The `owned_units` this pass carries
-/// beside them are **units**, one per reference-count operation, and `truncate_to_unit` is what turns
-/// one into the other — so the two are the same Rust type with different meanings, and this one is
-/// named to keep a set of one from being read as a set of the other.
+/// beside them are **units**, one per reference-count operation, and `truncate_to_unit` turns a leaf
+/// into the unit it keys to. Both are sets of `VarPath`, so the name is what tells one from the
+/// other.
 struct OwnedLeaves(Set<VarPath>);
 
 impl OwnedLeaves {

@@ -586,11 +586,10 @@ fn push_boxed_leaves(
 /// What a walk over reference-counting units does at one type: whether a unit sits here, whether the
 /// walk descends, and where it goes next.
 ///
-/// Which types carry a unit is one rule, and every walk over units needs it, so it is stated here
-/// alone. A walk that decided for itself would keep answering the question as it stood when the walk
-/// was written, and a walk left behind by a new kind of unit produces a path that names no unit —
-/// which reference counting then keys an operation to, and the object is freed while it is still
-/// held.
+/// Which types carry a unit is one rule, and every walk over units takes its step from here, so a
+/// new kind of unit is stated once and every walk follows it. A walk that a new kind left behind
+/// would produce a path that names no unit, which reference counting then keys an operation to,
+/// freeing the object while it is still held.
 pub(crate) enum UnitStep {
     /// The value holds no reference, so no unit sits here or below it.
     NoUnit,
@@ -603,7 +602,7 @@ pub(crate) enum UnitStep {
         field_count: usize,
     },
     /// One unit sits here and the walk stops: a boxed value, an unboxed union (only its active
-    /// variant is live, so a refcount operation dispatches on the tag rather than name a variant's
+    /// variant is live, so a refcount operation dispatches on the tag rather than naming a variant's
     /// leaf), an array (its own traverser drives its elements' lifetime through the storage), or a
     /// punched array (whose traversal skips the moved-out hole at a run-time index).
     Unit,
@@ -625,8 +624,8 @@ pub(crate) enum UnitStep {
 /// before them.
 ///
 /// # Examples
-/// `unit_step` of `(Array I64, I64)` is `Fields` of field count 2 whose held fields are both of
-/// them, of `Array I64` is `Unit`, and of `I64` is `NoUnit`.
+/// `unit_step` of `Array I64` is `Unit`, of `I64` is `NoUnit`, and of `(Array I64, I64)` is `Fields`
+/// whose two fields are both held.
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
@@ -646,9 +645,11 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     }
 }
 
-/// The type of the field `idx` names among the fields a value holds. Every path reference counting
-/// works with comes from a unit or leaf enumeration, and both leave out a punched field, so an index
-/// that names one — or that is out of range — aborts the walk `walk_name` names.
+/// The type of the field `idx` names among the fields a value holds.
+///
+/// Unit and leaf enumerations both leave a punched field out, so every path that reference counting
+/// works with names a held field. An index naming a punched field, or one out of range, aborts the
+/// walk `walk_name` names.
 pub(crate) fn held_field_type(
     held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
@@ -706,9 +707,9 @@ fn rc_units_go(
     }
 }
 
-/// Truncate a leaf path to its reference-counting unit: the path down to the first unit it reaches —
-/// an unboxed union or a punched array, whose subtree is one unit. Paths that stay within unboxed
-/// structs are unchanged.
+/// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
+/// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
+/// unchanged.
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -847,7 +848,7 @@ pub(crate) fn units_under(
 }
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
-/// reaches a value the walk does not descend — a closure, a unit, or a value holding no reference.
+/// reaches a value the walk stops at — a closure, a unit, or a value holding no reference.
 fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
@@ -988,9 +989,9 @@ mod tests {
     /// The leaf enumeration (`boxed_leaf_paths`) and the unit enumeration (`rc_units`) are two walks
     /// over one type, and `truncate_to_unit` is the bridge between them: a consume is recorded at a
     /// leaf while the retain that pays for it is keyed at a unit, so a leaf whose truncation names
-    /// no unit leaves a retain no release pairs with, and the object is freed while it is still
-    /// held. `unit_of` asserts this of each key it makes; here it is asserted of the classification
-    /// itself, over one type of every kind the walks distinguish.
+    /// no unit leaves a retain that no release pairs with, and the object is freed while it is
+    /// still held. `unit_of` asserts this of each key it makes; here it is asserted of the
+    /// classification itself, over one type of every kind the walks distinguish.
     #[test]
     fn the_leaves_of_a_type_truncate_onto_its_units() {
         let type_env = type_env();
@@ -1020,8 +1021,8 @@ mod tests {
         }
     }
 
-    /// A field is found by the index it sits at in the layout, so a punched field's slot does not
-    /// shift the fields after it.
+    /// A field is found by the index it sits at in the layout, so a field after a punched one keeps
+    /// its own index.
     ///
     /// A punched field holds nothing and is left out of the fields a walk descends, while every
     /// other field keeps the index it is addressed by. Reading the list by position instead would
@@ -1038,9 +1039,9 @@ mod tests {
     /// A path index naming a punched field aborts the walk, and the message names the walk that
     /// aborted.
     ///
-    /// Every path reference counting works with comes from a unit or a leaf enumeration, and both
-    /// leave a punched field out, so such an index means the path and the type disagree. Answering
-    /// it with a type would key a reference-count operation to a slot that holds nothing.
+    /// Every path that reference counting works with comes from a unit or a leaf enumeration, and
+    /// both leave a punched field out, so such an index means the path and the type disagree.
+    /// Answering it with a type would key a reference-count operation to a slot that holds nothing.
     #[test]
     #[should_panic(expected = "truncate_to_unit")]
     fn a_punched_field_index_aborts_the_walk() {
