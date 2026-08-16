@@ -1,17 +1,22 @@
 // Reference counting around unions that the RC IR rewrites: an operand a rewrite substitutes and
-// then nobody reads, and an unboxed union nested inside unboxed aggregates.
+// then nobody reads, an unboxed union nested inside unboxed aggregates, and a union built out of a
+// payload that holds its reference-counting units below the payload itself.
 
 #[cfg(test)]
 mod union_rc_shapes_tests {
-    use crate::{configuration::Configuration, tests::test_util::test_source};
+    use crate::{
+        configuration::{Configuration, ValgrindTool},
+        misc::{function_name, platform_valgrind_supported},
+        tests::test_util::test_source,
+    };
 
+    /// Matching a union built on the spot lets the simplifier replace the match with the arm it
+    /// knows is taken, substituting the payload the construction was given. Where the arm then
+    /// ignores that payload — an arm binding nothing, a pattern binding a field the body never
+    /// reads — the substituted operand is left with no reader, and its reference has to be released
+    /// exactly once all the same. Run under memcheck.
     #[test]
     pub fn test_discarded_operand_released_once() {
-        // Matching a union built on the spot lets the simplifier replace the match with the arm it
-        // knows is taken, substituting the payload the construction was given. Where the arm then
-        // ignores that payload — an arm binding nothing, a pattern binding a field the body never
-        // reads — the substituted operand is left with no reader, and its reference has to be
-        // released exactly once all the same. Run under memcheck.
         let source = r#"
             module Main;
 
@@ -62,14 +67,13 @@ mod union_rc_shapes_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
+    /// An unboxed union is one reference-counting unit, counted on the union itself, while the
+    /// references it holds live inside its variants and differ in shape from one variant to the
+    /// next. Nesting such a union inside a struct and a tuple, and then modifying an array of them
+    /// while a second binding keeps the array shared, makes the modification copy an element, and
+    /// the copy reaches those units two levels of unboxed aggregate down. Run under memcheck.
     #[test]
     pub fn test_nested_unboxed_union_shared_mod() {
-        // An unboxed union is one reference-counting unit whose root is where its count is kept,
-        // while the references it holds live inside its variants and differ in shape from one
-        // variant to the next. Nesting such a union inside a struct and a tuple, and then modifying
-        // an array of them while a second binding keeps the array shared, makes the copy the
-        // modification takes reach those units through two levels of unboxed aggregate. Run under
-        // memcheck.
         let source = r#"
             module Main;
 
@@ -84,8 +88,8 @@ mod union_rc_shapes_tests {
                 num(i) => i
             };
 
-            // Cycles through the three variants, so that the units beneath one union's root differ
-            // from element to element.
+            // Cycles through the three variants, so that the units beneath one union differ from
+            // element to element.
             mk : I64 -> Payload;
             mk = |k| (
                 if k % 3 == 0 { Payload::arr(Array::fill(k + 1, k)) };
@@ -126,5 +130,144 @@ mod union_rc_shapes_tests {
             );
         "#;
         test_source(&source, Configuration::develop_mode());
+    }
+
+    // An unboxed union is one reference-counting unit, counted on the union itself, and building one
+    // lays the payload it is given in place. Where the payload's units sit below the payload itself
+    // — a pair of boxed values, or an unboxed struct whose one boxed field sits a level down — the
+    // union and those units are different objects, and the count of each has to be kept where its
+    // own object is.
+    //
+    // Each union below is read through a call that stays out of line, and read once more after that
+    // call returns, so that it reaches reference counting instead of being folded into the
+    // constructor that built it. The payload it was built from stays live beside it and is read
+    // back at the end. For the shapes whose payload holds two units, freeing that payload early
+    // changes the answer. For the shape whose unit sits one level down the answer stays right
+    // either way, and the assertion in `unit_of` catches a key made for it. That payload arrives as
+    // a parameter, so the union is resolved from a value whose own unit sits a level below it; it
+    // carries a second field so that the struct around the boxed value survives to the RC IR.
+    const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
+module Main;
+
+// A boxed value a payload carries, so that the payload holds a reference count.
+type Guard = box struct { allowed : Array I64 };
+
+// A payload whose one reference-counting unit sits one level down, in `held`. The second field
+// keeps the struct from being unwrapped down to the boxed value it holds.
+type Wrapped = unbox struct { held : Guard, tag : I64 };
+
+// The `pair` payload holds two units, the `wrapped` payload holds one unit a level down, and
+// `mark` holds none.
+type Action = unbox union { pair : (Array I64, Array I64), wrapped : Wrapped, mark : I64 };
+
+// Reads the union without consuming it. The recursion keeps the call out of line.
+peek : Action -> I64 -> I64;
+peek = |action, n| (
+    if n == 0 { if action.is_pair { 1 } else { 0 } };
+    peek(action, n - 1)
+);
+
+// Builds the union out of a pair that stays live beside it, then reads both back.
+via_pair : (Array I64, Array I64) -> I64 -> I64;
+via_pair = |payload, n| (
+    if n == 0 { 0 };
+    let action = Action::pair(payload);
+    let seen_in_call = peek(action, 2);
+    let seen_after_call = if action.is_pair { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+);
+
+// The same for a payload whose unit sits one level down.
+via_wrapped : Wrapped -> I64 -> I64;
+via_wrapped = |payload, n| (
+    if n == 0 { 0 };
+    let action = Action::wrapped(payload);
+    let seen_in_call = peek(action, 2);
+    let seen_after_call = if action.is_wrapped { 1 } else { 0 };
+    seen_in_call + seen_after_call + payload.@tag
+        + payload.@held.@allowed.@size * 10 + payload.@held.@allowed.@(0)
+);
+
+// `Std::Option` is an unboxed union too, and a pair payload gives it the same shape.
+peek_option : Option (Array I64, Array I64) -> I64 -> I64;
+peek_option = |opt, n| (
+    if n == 0 { if opt.is_some { 1 } else { 0 } };
+    peek_option(opt, n - 1)
+);
+
+via_option : (Array I64, Array I64) -> I64 -> I64;
+via_option = |payload, n| (
+    if n == 0 { 0 };
+    let opt = Option::some(payload);
+    let seen_in_call = peek_option(opt, 2);
+    let seen_after_call = if opt.is_some { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+);
+
+// `Std::Result` likewise.
+peek_result : Result String (Array I64, Array I64) -> I64 -> I64;
+peek_result = |res, n| (
+    if n == 0 { if res.is_ok { 1 } else { 0 } };
+    peek_result(res, n - 1)
+);
+
+via_result : (Array I64, Array I64) -> I64 -> I64;
+via_result = |payload, n| (
+    if n == 0 { 0 };
+    let res : Result String (Array I64, Array I64) = ok(payload);
+    let seen_in_call = peek_result(res, 2);
+    let seen_after_call = if res.is_ok { 1 } else { 0 };
+    let (first, second) = payload;
+    seen_in_call + seen_after_call
+        + first.@size * 100 + first.@(0) + second.@size * 100 + second.@(0)
+);
+
+main : IO ();
+main = (
+    assert_eq(
+        |_|"the pair is read back as it was built",
+        via_pair((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
+    );;
+    assert_eq(
+        |_|"the boxed value one level below the payload is read back as it was built",
+        via_wrapped(Wrapped { held : Guard { allowed : [5, 6] }, tag : 3 }, 1), 29
+    );;
+    assert_eq(
+        |_|"the pair an option holds is read back as it was built",
+        via_option((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
+    );;
+    assert_eq(
+        |_|"the pair a result holds is read back as it was built",
+        via_result((Array::fill(3, 7), Array::fill(4, 9)), 1), 718
+    );;
+    pure()
+);
+"#;
+
+    /// Every payload is read back as it was built. A pair freed while the union still holds it
+    /// changes the answer, so this catches it without Valgrind.
+    #[test]
+    pub fn test_union_payload_units_correctness() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(UNION_PAYLOAD_UNITS_SOURCE, config);
+    }
+
+    /// The boxed values the payloads carry are freed exactly once and none of them leaks, checked
+    /// under Valgrind MemCheck.
+    #[test]
+    pub fn test_union_payload_units_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(UNION_PAYLOAD_UNITS_SOURCE, Configuration::develop_mode());
     }
 }

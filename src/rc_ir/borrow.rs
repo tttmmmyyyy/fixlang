@@ -24,8 +24,8 @@
 //! Borrow-ification and cancellation both work one reference-counting unit at a time, so
 //! `split_rc_units` first normalizes the lowered reference counting to that granularity: it
 //! decomposes a whole-value or subtree `Retain`/`Release` into one node per unit — a boxed leaf, a
-//! closure capture, or an unboxed-union root (a union is one unit, since a physical refcount
-//! operation on it must dispatch on the tag rather than name a variant).
+//! closure capture, or an unboxed union (a union is one unit, since a physical refcount operation on
+//! it must dispatch on the tag rather than name a variant).
 //!
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
@@ -53,9 +53,10 @@ use crate::rc_ir::ownership::{
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
-/// The result of borrow inference: which parameter leaves are `Own` (all others are `Borrow`), keyed
-/// by the parameter variable's name and the leaf path.
+/// The result of borrow inference: which parameter leaves each function of the program owns.
 struct Ownerships {
+    /// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf
+    /// path. A leaf absent from it is `Borrow`.
     own: Set<VarPath>,
 }
 
@@ -63,7 +64,7 @@ struct Ownerships {
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
 fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
-    let vars: Map<FuncRef, VarTable> = prog
+    let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
         .values()
         .map(|f| (f.name.clone(), VarTable::of(f)))
@@ -73,7 +74,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
-            let vars = &vars[&func.name];
+            let vars = &var_tables[&func.name];
             let mut consumed = vec![];
             collect_consumes(&func.body, vars, prog, &own, type_env, &mut consumed);
             for (var, path) in consumed {
@@ -101,9 +102,8 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 
 /// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
 /// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
-/// annotate every output version with the parameter/capture units it borrows (`RcFunc::borrowed_units`,
-/// whose owned complement `cancel` reads to find each call's consume sites and the RC IR dump reads
-/// for its shapes).
+/// annotate every output version with the parameter/capture units it borrows
+/// (`RcFunc::borrowed_units`).
 pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let ownerships = infer_ownership(prog, type_env);
 
@@ -124,12 +124,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
-        for p in func.params.iter().chain(func.capture.iter()) {
-            for unit in rc_units(&p.ty, type_env) {
-                owned_units.insert((p.name.clone(), unit));
-            }
-        }
-        // `f_borrow`: a fresh clone whose owned units are the inferred ones, clamped to units.
+        owned_units.extend(param_capture_units(func, type_env));
+        // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
+        // to its unit.
         if let Some(bref) = borrow_versions.get(&func.name) {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
@@ -207,16 +204,10 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
     // Annotate every version with the parameter/capture units it borrows (those not in `owned_units`).
     for func in funcs.values_mut() {
-        let mut borrowed = Set::default();
-        for p in func.params.iter().chain(func.capture.iter()) {
-            for unit in rc_units(&p.ty, type_env) {
-                let unit_path = (p.name.clone(), unit);
-                if !owned_units.contains(&unit_path) {
-                    borrowed.insert(unit_path);
-                }
-            }
-        }
-        func.borrowed_units = borrowed;
+        func.borrowed_units = param_capture_units(func, type_env)
+            .into_iter()
+            .filter(|unit_path| !owned_units.contains(unit_path))
+            .collect();
     }
 
     RcProgram {
@@ -269,6 +260,20 @@ fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
         .iter()
         .chain(func.capture.iter())
         .map(|p| (p.name.clone(), p.ty.clone()))
+        .collect()
+}
+
+/// Every reference-counting unit of a function's parameters and capture, each as the
+/// `(variable, unit path)` pair the owned and borrowed unit sets are keyed by.
+fn param_capture_units(func: &RcFunc, type_env: &TypeEnv) -> Vec<VarPath> {
+    func.params
+        .iter()
+        .chain(func.capture.iter())
+        .flat_map(|p| {
+            rc_units(&p.ty, type_env)
+                .into_iter()
+                .map(|unit| (p.name.clone(), unit))
+        })
         .collect()
 }
 
@@ -579,11 +584,9 @@ impl<'a> RewriteCtx<'a> {
     /// Whether this version owns the object a leaf comes from.
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
-            // The path may name a subtree that spans several reference-counting units rather than
-            // one — a union built from an unboxed tuple roots to the tuple at the empty path, whose
-            // units are its fields. The value is owned only when every unit it covers is owned. Each
-            // covered path is clamped to its unit key, so a path that descends into a union variant
-            // keys to the union root the owned set records.
+            // The value is owned only when every reference-counting unit the path covers is owned.
+            // Each covered path is truncated to its unit, so a path that descends into a union
+            // variant keys to the union itself, which is what `owned_units` records.
             Some(root_ty) => units_under(root_ty, path, self.type_env)
                 .iter()
                 .all(|unit| {
@@ -881,9 +884,15 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The forward must-analysis for one function: it decides which retain and release nodes to delete.
 struct CancelAnalysis<'a> {
+    /// This function's variables: what binds each one and its type, which decide the unit key a
+    /// retain and a release pair on.
     vars: &'a VarTable,
+    /// The whole program, so a call resolves to its callee's parameters.
     prog: &'a RcProgram,
+    /// The parameter/capture units the program's functions own, which decide which argument
+    /// positions of a call consume.
     owned_units: &'a Set<VarPath>,
+    /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
@@ -1049,20 +1058,20 @@ impl<'a> CancelAnalysis<'a> {
         pending_in: &PendingRetains,
         arm_exits: &[PendingRetains],
     ) -> PendingRetains {
-        let n = arm_exits.len();
-        let mut arms_pending: Map<NodeId, usize> = Map::default();
+        let arm_count = arm_exits.len();
+        let mut pending_arm_count: Map<NodeId, usize> = Map::default();
         for exit in arm_exits {
             let mut seen: Set<NodeId> = Set::default();
             for stack in exit.values() {
                 for &retain in stack {
                     if seen.insert(retain) {
-                        *arms_pending.entry(retain).or_default() += 1;
+                        *pending_arm_count.entry(retain).or_default() += 1;
                     }
                 }
             }
         }
-        for (&retain, &count) in &arms_pending {
-            if count != n {
+        for (&retain, &count) in &pending_arm_count {
+            if count != arm_count {
                 self.needed_retains.insert(retain);
             }
         }
@@ -1073,7 +1082,7 @@ impl<'a> CancelAnalysis<'a> {
             let kept: Vec<NodeId> = stack
                 .iter()
                 .copied()
-                .filter(|retain| arms_pending.get(retain) == Some(&n))
+                .filter(|retain| pending_arm_count.get(retain) == Some(&arm_count))
                 .collect();
             if !kept.is_empty() {
                 merged.insert(key.clone(), kept);
