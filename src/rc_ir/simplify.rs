@@ -23,13 +23,13 @@
 //! reference (which would force a copy). Every substitution renames variables only — no computation is
 //! moved — so no boxed value's lifetime is extended.
 //!
-//! The fixpoint terminates because every rewrite makes the body strictly smaller: the two
-//! case-of-known-constructor rewrites drop the construction they cancel, and case-of-case is taken
-//! only when its result is smaller than what it replaces. A body of `n` nodes therefore admits at most
-//! `n` rewrites, which is the budget it is given. `simplify_to_fixpoint` asserts both halves of that:
-//! the simplified body is never larger than the one it started from, and the budget is never spent.
+//! Every rewrite makes the body strictly smaller: the two case-of-known-constructor rewrites drop the
+//! construction they cancel, and case-of-case is taken only when its result is smaller than what it
+//! replaces. `simplify_to_fixpoint` measures each pass against that, which is what makes the fixpoint
+//! terminate — a body of `n` nodes admits at most `n` passes that change it.
 
 use crate::ast::name::FullName;
+use crate::configuration::Configuration;
 use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
@@ -40,72 +40,62 @@ use std::sync::Arc;
 /// The marker for fresh names the case-of-case move mints, keeping them distinct from other passes'.
 const MARKER: &str = "cc";
 
-/// Rewriting state threaded through a body's fixpoint: the supply of fresh-name suffixes, unique
-/// across the whole program, and the rewrites this body has left.
-struct Ctx<'a> {
-    /// The source of the number that makes each minted name unique across the whole program.
-    counter: &'a mut u64,
-    /// The rewrites left for the body; the fixpoint stops when it reaches zero.
-    budget: u64,
-}
-
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
-pub fn simplify(prog: &mut RcProgram) {
+pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
     let mut counter = 0;
     for func in prog.funcs.values_mut() {
-        func.body = simplify_to_fixpoint(&func.body, &mut counter);
+        func.body = simplify_to_fixpoint(&func.body, &mut counter, config);
     }
     for g in &mut prog.globals {
-        g.init = simplify_to_fixpoint(&g.init, &mut counter);
+        g.init = simplify_to_fixpoint(&g.init, &mut counter, config);
     }
 }
 
-/// Apply the rewrites over a body until a pass makes no change. The body's budget is its node count,
-/// the number of rewrites it admits when each makes it smaller; spending it stops the fixpoint, so a
-/// rewrite that broke that accounting halts here rather than looping forever, and the assertions below
-/// say which half of it broke.
-fn simplify_to_fixpoint(node: &RcExprNode, counter: &mut u64) -> RcExprNode {
-    let size = node_count(node);
-    let mut ctx = Ctx {
-        counter,
-        budget: size,
-    };
+/// Apply the rewrites over a body until a pass makes no change. A pass that fired a rewrite leaves
+/// fewer nodes than it found; a pass that leaves as many or more has broken that, and the body it
+/// produced is dropped in favour of the one before it, which stops the fixpoint. Development mode
+/// stops loudly instead, at the pass that broke it.
+fn simplify_to_fixpoint(
+    node: &RcExprNode,
+    counter: &mut u64,
+    config: &Configuration,
+) -> RcExprNode {
     let mut cur = node.clone();
+    let mut size = node_count(&cur);
     loop {
         let mut changed = false;
-        cur = rewrite(&cur, &mut ctx, &mut changed);
+        let next = rewrite(&cur, counter, &mut changed);
         if !changed {
-            let simplified_size = node_count(&cur);
-            assert!(
-                simplified_size <= size,
-                "the simplifier grew a body from {} nodes to {}",
-                size,
-                simplified_size
-            );
-            assert!(
-                ctx.budget > 0,
-                "the simplifier took {} rewrites on a body of {} nodes, so one of them did not make it smaller",
-                size - ctx.budget,
-                size
-            );
             return cur;
         }
+        let next_size = node_count(&next);
+        if next_size >= size {
+            if config.develop_mode {
+                panic!(
+                    "a simplifier pass left a body of {} nodes at {}, so a rewrite it fired did not make it smaller",
+                    size, next_size
+                );
+            }
+            return cur;
+        }
+        cur = next;
+        size = next_size;
     }
 }
 
 /// One rewriting pass over `node`: its sub-expressions first, then the local rewrites at `node`
 /// itself, so a rewrite at `node` sees its sub-expressions already simplified. `changed` is set when
 /// any rewrite fires, which is what tells the fixpoint another pass is due.
-fn rewrite(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
+fn rewrite(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
     grow_stack(|| {
-        let node = rewrite_children(node, ctx, changed);
-        try_local(&node, ctx, changed)
+        let node = rewrite_children(node, counter, changed);
+        try_local(&node, counter, changed)
     })
 }
 
 /// Rebuild a node with `rewrite` applied to its sub-expressions (match arms and the continuation).
-fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
+fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
@@ -115,45 +105,47 @@ fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcE
                     payload_state: arm.payload_state,
                     tag: arm.tag,
                     payload: arm.payload.clone(),
-                    body: rewrite(&arm.body, ctx, changed),
+                    body: rewrite(&arm.body, counter, changed),
                 })
                 .collect();
             RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(scrut.clone(), arms),
-                rewrite(k, ctx, changed),
+                rewrite(k, counter, changed),
             )
         }
-        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, ctx, changed)),
+        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, counter, changed)),
         RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
             container.clone(),
             fields.clone(),
             *state,
-            rewrite(k, ctx, changed),
+            rewrite(k, counter, changed),
         ),
-        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, ctx, changed)),
-        RcExpr::Retain(v, path, state, k) => {
-            RcExpr::Retain(v.clone(), path.clone(), *state, rewrite(k, ctx, changed))
-        }
-        RcExpr::Release(v, path, state, k) => {
-            RcExpr::Release(v.clone(), path.clone(), *state, rewrite(k, ctx, changed))
-        }
+        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, counter, changed)),
+        RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
+            v.clone(),
+            path.clone(),
+            *state,
+            rewrite(k, counter, changed),
+        ),
+        RcExpr::Release(v, path, state, k) => RcExpr::Release(
+            v.clone(),
+            path.clone(),
+            *state,
+            rewrite(k, counter, changed),
+        ),
     };
     node_of(expr, &node.source)
 }
 
-/// Try the local rewrites at `node`. Returns the rewritten node and sets `changed` if one fired. Once
-/// the body's budget is spent no rewrite fires, so the fixpoint reaches a no-change pass and stops.
-fn try_local(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
-    if ctx.budget == 0 {
-        return node.clone();
-    }
+/// Try the local rewrites at `node`, in order. Returns the rewritten node and sets `changed` if one
+/// fired, which is what tells the fixpoint another pass is due.
+fn try_local(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     let rewritten = case_of_known_union(node)
         .or_else(|| destructure_of_struct(node))
-        .or_else(|| case_of_case(node, ctx.counter));
+        .or_else(|| case_of_case(node, counter));
     match rewritten {
         Some(rewritten) => {
-            ctx.budget -= 1;
             *changed = true;
             rewritten
         }
