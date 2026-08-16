@@ -1,8 +1,12 @@
-// Integration tests for the RC IR term simplifier, checked through the `--emit-rc-ir` dump.
+// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+// the simplified program computes.
+//
 // A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
 // is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
 // cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
-// `RangeIterator` two-scalar state and no union construction — the property these tests assert.
+// `RangeIterator` two-scalar state and no union construction — the property the integration tests
+// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
+// what each one computes.
 
 #[cfg(test)]
 mod integration_tests {
@@ -10,14 +14,15 @@ mod integration_tests {
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
+    /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_simplify/cases");
         path
     }
 
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict, and
-    // return the directory of the named case project.
+    /// Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
+    /// and return the directory of the named case project.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dst = temp_dir.path().to_path_buf();
@@ -26,9 +31,10 @@ mod integration_tests {
         (temp_dir, project_dir)
     }
 
-    // Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`, returning
-    // the dumped RC IR of every module. The `range.fold` driver is a specialized `Std::Iterator`
-    // symbol, so the whole-program dump is needed to see it. Also leaves a runnable executable.
+    /// Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`,
+    /// returning the dumped RC IR of every module. The `range.fold` driver is a specialized
+    /// `Std::Iterator` symbol, so the whole-program dump is needed to see it. Also leaves a runnable
+    /// executable.
     fn emit_all_rc_ir(project_dir: &Path) -> String {
         let output = fix_command_at_opt_level("build", "max")
             .arg("--emit-rc-ir")
@@ -48,7 +54,8 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
-    // The body of each `fn` block in the dump whose header line contains all of `needles`.
+    /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
+    /// itself and every line up to the next `fn` header.
     fn fn_bodies_matching<'a>(dump: &'a str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
         let mut current: Option<String> = None;
@@ -72,6 +79,10 @@ mod integration_tests {
         bodies
     }
 
+    /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
+    /// `range`'s `advance` returns and `fold` immediately matches is cancelled, so the loop-carried
+    /// state is the plain `RangeIterator` alone. The built program still sums the range, so the
+    /// removal leaves what the loop computes intact.
     #[test]
     fn test_range_fold_union_removed() {
         let (_temp_dir, project_dir) = setup_test_env("read_fold");
@@ -104,5 +115,48 @@ mod integration_tests {
             "the built executable did not run cleanly"
         );
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4950");
+    }
+}
+
+#[cfg(test)]
+mod value_tests {
+    use crate::{configuration::Configuration, tests::test_util::test_source};
+
+    /// Checks the values a nest of matches computes when every inner arm builds the same variant.
+    /// That is the shape case-of-case floats the outer match into, and the rewrite has to leave
+    /// every value as the source computes it.
+    #[test]
+    pub fn test_nested_matches_over_one_variant() {
+        let source = r#"
+            module Main;
+
+            f : I64 -> I64;
+            f = |n| (
+                match (if n % 5 == 0 { Option::some(n) } else { Option::some(n + 3) }) {
+                    some(v1) => (
+                        match (if v1 % 4 == 0 { Option::some(v1) } else { Option::some(v1 + 2) }) {
+                            some(v2) => (
+                                match (if v2 % 3 == 0 { Option::some(v2) } else { Option::some(v2 + 1) }) {
+                                    some(v3) => v3 * 3 + n,
+                                    none() => 0
+                                }
+                            ),
+                            none() => 0
+                        }
+                    ),
+                    none() => 0
+                }
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"nested matches over one variant",
+                    Iterator::range(0, 5).map(f).to_array, [0, 16, 26, 30, 31]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
     }
 }
