@@ -177,8 +177,7 @@ fn node_count(node: &RcExprNode) -> u64 {
     })
 }
 
-/// The variant number and payload operand of a union construction, and `None` where `rhs` builds no
-/// union.
+/// The variant number and payload operand of the union construction `rhs` builds.
 fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
     let RcRhs::Llvm(gen, args) = rhs else {
         return None;
@@ -256,12 +255,12 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// The inner match then produces what the outer match did, so it binds the outer match's variable.
 ///
 /// It fires all-or-nothing — every inner arm must end in such a construction and a specific outer arm
-/// must match it — and only when the result is smaller than what it replaces. The result is built and
-/// then measured, so what bounds the term is the term itself rather than a rule about when it grows.
-/// It grows where two inner arms build one constructor, which puts that outer arm in both: a nest of
-/// matches doing so at every level would double the term at every level. Where the inner arms build
-/// pairwise distinct constructors, each outer arm moves to one inner arm and the result always
-/// shrinks, by the constructions and the outer match that go away.
+/// must match it — and only when the result is smaller than what it replaces: the rewrite is built,
+/// measured, and dropped where it does not shrink the term. It grows where two inner arms build one
+/// constructor, which puts that outer arm in both: a nest of matches doing so at every level would
+/// double the term at every level. Where the inner arms build pairwise distinct constructors, each
+/// outer arm moves to one inner arm and the result always shrinks, by the constructions and the outer
+/// match that go away.
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
@@ -309,8 +308,8 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
 }
 
 /// Replace the union construction at `node`'s tail — `let r = make_union(operand); ret r` — with
-/// `f(variant, operand)`, and give `None` when the tail is not such a construction or `f` declines.
-/// One walk therefore both decides whether the arm cancels and performs the cancellation.
+/// `f(variant, operand)`. `f` declining gives `None` for the whole walk, so one walk both decides
+/// whether the tail cancels and performs the cancellation.
 ///
 /// Requiring the construction to abut the `ret` makes `r` single-use — bound and immediately returned
 /// — so whatever consumed the arm's result consumed that union linearly.
