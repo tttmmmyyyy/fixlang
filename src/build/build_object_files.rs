@@ -80,7 +80,7 @@ fn lower_and_insert_rc(
     // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
     // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
     if config.enable_simplify() {
-        simplify(&mut prog);
+        simplify(&mut prog, config);
     }
     insert_rc(&mut prog, type_env);
     prog

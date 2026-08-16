@@ -1,0 +1,18 @@
+module Main;
+
+// A `match` over an `Option` that both branches of an `if` build with the same constructor. Moving
+// the outer `some` arm into the inner arms puts a copy of it in each, and the copy is smaller than
+// the construction and the match it replaces, so the RC-IR simplifier takes the move and no `Option`
+// is built.
+shift_and_triple : I64 -> I64;
+shift_and_triple = |n| (
+    match (if n % 5 == 0 { Option::some(n) } else { Option::some(n + 3) }) {
+        some(v) => v * 3,
+        none() => 0
+    }
+);
+
+main : IO ();
+main = (
+    println $ Iterator::range(0, 10).map(shift_and_triple).to_array.to_string
+);
