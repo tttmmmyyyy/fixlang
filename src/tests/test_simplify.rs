@@ -13,6 +13,7 @@
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::path::{Path, PathBuf};
+    use std::process::Command;
     use tempfile::TempDir;
 
     /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
@@ -104,7 +105,7 @@ mod integration_tests {
             );
         }
 
-        let run = std::process::Command::new(project_dir.join("a.out"))
+        let run = Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
         assert!(
