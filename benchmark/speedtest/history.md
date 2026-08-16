@@ -14,6 +14,33 @@ figure was there before any of the work.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## b08926a54a66d5cb1eb4bb0f4708196bdddb5ab4
+
+Making the RC-IR simplifier's case-of-case rewrite cancel in one step and take a move only when the
+result is smaller (#404), measured against `663cfac3`, whose row is recorded beside it. Both rows were
+measured on this machine at one path, so the path effect recorded under `342d67aa` is out of the way.
+
+**The corpus does not move.** Forty-three of the fifty-one cases are identical to the instruction and
+to the memory reference. The eight that moved are exactly the eight carrying an external dependency
+(`cp_lib_*`), and they moved in both directions by at most 168 instructions out of 249 million
+(`cp_lib_conv_zp`, 0.0001%) — the per-run wobble #291 and #342 describe, which reaches the dynamic
+loader through the names the emitted symbols carry. The `-splits` columns are identical for all fifty
+cases that have one.
+
+The RC IR agrees with the rows: built with both compilers, the forty cases with no external dependency
+give byte-identical `rc_ir.pre` and `rc_ir.post` dumps once the suffixes of the names case-of-case
+mints are stripped, which they must be — the rewrite mints a different number of them.
+
+**The cycle columns of these two rows cannot be compared with each other.** The `663cfac3` row came
+away with none of them: other work reached 11.57 cores while the counters were read, and the harness
+drops a cycle count it cannot trust. The `b08926a5` row has them for forty-two of the fifty-one cases
+(0.99 cores). The instruction and memory columns are cachegrind's and do not depend on the machine,
+which is what the paragraph above rests on.
+
+**A baseline was measured rather than taken from the log.** The newest row before these two,
+`3d128e6f`, sits eighty-one commits behind the fork point, so reading the corpus against it would have
+charged this change with everything in between.
+
 ## 941fe0af8c4c72e86472b736724159352e2a954f
 
 Asking the back end to inline every global whose body is small enough to stand where it is called
