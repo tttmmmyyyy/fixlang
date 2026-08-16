@@ -241,7 +241,7 @@ impl TypeCheckCache for MemoryCache {
 
 #[cfg(test)]
 mod tests {
-    use super::FileCache;
+    use super::{entity_identity, FileCache};
     use crate::{
         ast::name::FullName,
         ast::types::{type_tyvar_star, Scheme},
@@ -284,6 +284,24 @@ mod tests {
             cache.cache_file_name(&name, &i64_scheme, "0"),
             cache.cache_file_name(&name, &i64_scheme, "1"),
             "an entry keeps its file when the sources it depends on change",
+        );
+    }
+
+    /// The namespace a value is written under is part of the entity its entry belongs to. Two
+    /// values of one module, each under a namespace of its own, agree on their remaining name, on
+    /// their type, and on the sources they are checked from, so the namespace alone tells their
+    /// entries apart. Every cache reads the entity through `entity_identity`, so pinning it here
+    /// reaches the entries held in memory as well as those given a file.
+    #[test]
+    fn entities_of_names_differing_only_in_namespace_stay_apart() {
+        let scheme = Scheme::from_type(make_i64_ty());
+        let in_a = FullName::from_strs(&["Main", "A"], "answer");
+        let in_b = FullName::from_strs(&["Main", "B"], "answer");
+
+        assert_ne!(
+            entity_identity(&in_a, &scheme),
+            entity_identity(&in_b, &scheme),
+            "two values whose names differ in the namespace alone meet in one entry",
         );
     }
 }
