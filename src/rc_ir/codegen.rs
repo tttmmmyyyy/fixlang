@@ -611,6 +611,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         init_flag.set_linkage(Linkage::Internal);
         let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
+        // The accessor is placed wherever the global is read, however long its initializer is.
+        //
+        // What it does on the reading path is a test of the flag and a load of the storage, and a
+        // reader that has those in front of it carries them out of a loop that reads the global.
+        // Left as a call, they stay in the loop, and each read of the global costs a call as well.
+        // The size that decides an ordinary inlining is the initializer's, which the reading path
+        // never runs, so it is not the size to decide this one by.
+        self.add_enum_attribute(acc_fn, "alwaysinline", AttributeLoc::Function);
+
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
