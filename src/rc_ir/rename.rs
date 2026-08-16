@@ -77,8 +77,8 @@ fn assign_fresh_names_to_binders_inner(
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
             assign_fresh_name(&x.name, pass_tag, renaming, counter);
-            // Listed explicitly (not a catch-all) so a new `RcRhs` that binds a name fails to compile
-            // here instead of leaving that binder pointing at the original function's variable.
+            // Every `RcRhs` variant is listed, so a new one that binds a name fails to compile here
+            // instead of leaving that binder pointing at the original function's variable.
             match rhs {
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
@@ -103,8 +103,8 @@ fn assign_fresh_names_to_binders_inner(
     }
 }
 
-/// A variable with its name rewritten through `renaming` (unchanged if it names a global rather than a
-/// local binder).
+/// A variable with its name rewritten through `renaming`. A name `renaming` leaves out, such as a
+/// global's, stays as it is.
 fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = renaming.get(&var.name) {
@@ -197,18 +197,15 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
 }
 
 /// Substitute variable occurrences through `subst` in a deep clone of `node`, leaving binders and
-/// structure otherwise intact — a partial-map application of the same rewrite `rename_expr` performs.
-/// The simplifier uses it to replace a match-arm payload with the operands of the constructor it
-/// matched (case-of-known-constructor) and a match result with an inner arm's value (case-of-case);
-/// those substituends are never re-bound within the substituted expression, so a partial map suffices.
+/// structure otherwise intact. A name `subst` maps must not be re-bound within `node`, so a map
+/// covering only some of the variables suffices.
 pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>) -> RcExprNode {
     rename_expr(node, subst)
 }
 
 /// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
-/// name (like `fresh_rename_function`, but for a sub-expression rather than a whole function). Free
-/// variables — those bound outside `node` — are left unchanged. The simplifier uses it when
-/// case-of-case moves a match arm into the arms of another match, so each copy's binders stay unique.
+/// name. Free variables — those bound outside `node` — are left unchanged. `marker` distinguishes
+/// this clone's fresh names from the ones other passes mint.
 pub(crate) fn clone_fresh(node: &RcExprNode, marker: &str, counter: &mut u64) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
     assign_fresh_names_to_binders(node, marker, &mut rename, counter);

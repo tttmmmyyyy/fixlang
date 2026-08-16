@@ -93,6 +93,9 @@ fn simplify_to_fixpoint(node: &RcExprNode, counter: &mut u64) -> RcExprNode {
     }
 }
 
+/// One rewriting pass over `node`: its sub-expressions first, then the local rewrites at `node`
+/// itself, so a rewrite at `node` sees its sub-expressions already simplified. `changed` is set when
+/// any rewrite fires, which is what tells the fixpoint another pass is due.
 fn rewrite(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
     grow_stack(|| {
@@ -344,24 +347,28 @@ fn replace_tail_union(
 }
 
 /// Replace the terminal `ret r` of `node` with `f(r)`, threading through the continuation chain. A
-/// `Match` is a right-hand side, so its arms are not the expression's tail — the tail is the final
-/// `Ret` reached through the `Let`/`Destructure`/`Eval`/`Retain`/`Release` continuations.
+/// `Match` is a right-hand side, so the tail is the final `Ret` reached through the
+/// `Let`/`Destructure`/`Eval`/`Retain`/`Release` continuations, and the arms of a `Match` are left as
+/// they are.
 fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> RcExprNode {
-    let expr = match node.expr.as_ref() {
-        RcExpr::Ret(r) => return f(r),
-        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), replace_tail(k, f)),
-        RcExpr::Destructure(c, fields, state, k) => {
-            RcExpr::Destructure(c.clone(), fields.clone(), *state, replace_tail(k, f))
-        }
-        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
-        RcExpr::Retain(v, p, st, k) => {
-            RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail(k, f))
-        }
-        RcExpr::Release(v, p, st, k) => {
-            RcExpr::Release(v.clone(), p.clone(), *st, replace_tail(k, f))
-        }
-    };
-    node_of(expr, &node.source)
+    // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
+    grow_stack(|| {
+        let expr = match node.expr.as_ref() {
+            RcExpr::Ret(r) => return f(r),
+            RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), replace_tail(k, f)),
+            RcExpr::Destructure(c, fields, state, k) => {
+                RcExpr::Destructure(c.clone(), fields.clone(), *state, replace_tail(k, f))
+            }
+            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
+            RcExpr::Retain(v, p, st, k) => {
+                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail(k, f))
+            }
+            RcExpr::Release(v, p, st, k) => {
+                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail(k, f))
+            }
+        };
+        node_of(expr, &node.source)
+    })
 }
 
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
@@ -382,6 +389,8 @@ fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     })
 }
 
+/// The number of times `name` occurs as a value in `rhs`, counting the arms of a `Match` as well as
+/// its scrutinee. The arm payloads are binders, so they do not count.
 fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
     let hit = |v: &RcVar| (v.name == *name) as usize;
     match rhs {
@@ -406,6 +415,8 @@ fn single(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     m
 }
 
+/// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries
+/// the span of the node it replaces, so the simplified body still points into the source program.
 fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
         expr: Arc::new(expr),

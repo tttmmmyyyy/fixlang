@@ -151,7 +151,7 @@ mod value_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
 
     /// Checks the values a nest of matches computes when every inner arm builds the same variant.
-    /// That is the shape case-of-case floats the outer match into, and the rewrite has to leave
+    /// That is the shape case-of-case moves an outer arm into, and the rewrite has to leave
     /// every value as the source computes it.
     #[test]
     pub fn test_nested_matches_over_one_variant() {
