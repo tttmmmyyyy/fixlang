@@ -345,4 +345,57 @@ main = (
         }
         test_source(PAYLOAD_TAKEN_TWICE_SOURCE, Configuration::develop_mode());
     }
+
+    // A union built out of a payload that holds one array in both of its fields, dropped whole
+    // without its payload being taken, and the array read after that. An unboxed union is one
+    // reference-counting unit, so its release un-bumps both of the references the payload holds at
+    // once, while each retain that put the array there bumped one of them. A release reaching that
+    // far closes no bracket: the retains it reaches past stay, and the array outlives the union.
+    const UNION_DROPPED_WHOLE_SOURCE: &str = r#"
+module Main;
+
+// The `pair` payload holds two boxed values beside a scalar, and `mark` holds none.
+type Action = unbox union { pair : (I64, Array I64, Array I64), mark : I64 };
+
+// Builds a union out of a payload that holds one array in both of its fields, drops the union
+// without taking its payload, and reads the array after that.
+build_and_read : I64 -> I64;
+build_and_read = |k| (
+    let arr = Array::fill(k + 3, k);
+    eval Action::pair((0, arr, arr));
+    arr.@(0) + arr.@size
+);
+
+main : IO ();
+main = (
+    assert_eq(
+        |_|"the array outlives the union that held it twice",
+        Iterator::range(0, 4).map(build_and_read).sum, 24
+    );;
+    pure()
+);
+"#;
+
+    /// The array a union held twice is read after the union is dropped whole. An array freed with
+    /// the union changes the answer, so this catches it without Valgrind.
+    #[test]
+    pub fn test_union_dropped_whole_correctness() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(UNION_DROPPED_WHOLE_SOURCE, config);
+    }
+
+    /// The array a union held twice is freed exactly once and does not leak, checked under Valgrind
+    /// MemCheck.
+    #[test]
+    pub fn test_union_dropped_whole_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(UNION_DROPPED_WHOLE_SOURCE, Configuration::develop_mode());
+    }
 }

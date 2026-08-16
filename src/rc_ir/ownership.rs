@@ -1087,6 +1087,8 @@ mod tests {
             test_ty("Choice"),                                  // an unboxed union
             test_ty("BoxedPair"),                               // a boxed struct
             test_ty("Nested"),                                  // a struct of a union and a closure
+            test_ty("Twins"),                                   // a struct of two references
+            test_ty("Holder"), // a union whose payload holds two references
         ];
         for ty in cases {
             let truncated: Set<FieldPath> = boxed_leaf_paths(&ty, &type_env)
@@ -1225,11 +1227,14 @@ mod tests {
         typed_var(name, make_i64_ty())
     }
 
-    /// A table of the given bindings, with every named variable also a known local.
-    fn table(bindings: Vec<(&str, Binding)>) -> VarTable {
+    /// A table of the given bindings, recording each variable's type as `VarTable::of` does, and a
+    /// parameter's among the parameter types.
+    fn table(bindings: Vec<(RcVar, Binding)>) -> VarTable {
         let mut vars = VarTable::empty();
-        for (name, binding) in bindings {
-            let v = var(name);
+        for (v, binding) in bindings {
+            if matches!(binding, Binding::Param) {
+                vars.param_tys.insert(v.name.clone(), v.ty.clone());
+            }
             vars.bindings.insert(v.name.clone(), binding);
             vars.var_tys.insert(v.name, v.ty);
         }
@@ -1249,7 +1254,7 @@ mod tests {
     /// A variable bound by the op that produced the value is the origin of that value.
     #[test]
     fn a_producer_is_exactly_itself() {
-        let vars = table(vec![("p", Binding::Producer)]);
+        let vars = table(vec![(var("p"), Binding::Producer)]);
         assert_eq!(origin_of(&vars, "p"), Origin::Exactly(at("p")));
     }
 
@@ -1257,8 +1262,8 @@ mod tests {
     #[test]
     fn a_move_bind_is_the_moved_variable() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("m", Binding::Move(var("p"))),
+            (var("p"), Binding::Producer),
+            (var("m"), Binding::Move(var("p"))),
         ]);
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
@@ -1268,9 +1273,9 @@ mod tests {
     #[test]
     fn a_match_binding_may_be_any_arm_result() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("m", Binding::Join(vec![var("p"), var("q")])),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("m"), Binding::Join(vec![var("p"), var("q")])),
         ]);
         let o = origin_of(&vars, "m");
         assert_eq!(o.identity(), &at("m"));
@@ -1288,9 +1293,9 @@ mod tests {
     #[test]
     fn a_match_binding_whose_arms_agree_is_exact() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("m1", Binding::Move(var("p"))),
-            ("m", Binding::Join(vec![var("p"), var("m1")])),
+            (var("p"), Binding::Producer),
+            (var("m1"), Binding::Move(var("p"))),
+            (var("m"), Binding::Join(vec![var("p"), var("m1")])),
         ]);
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
@@ -1301,10 +1306,10 @@ mod tests {
     #[test]
     fn a_move_of_a_match_binding_keeps_the_joins_name() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("m", Binding::Join(vec![var("p"), var("q")])),
-            ("n", Binding::Move(var("m"))),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("m"), Binding::Join(vec![var("p"), var("q")])),
+            (var("n"), Binding::Move(var("m"))),
         ]);
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
     }
@@ -1320,20 +1325,15 @@ mod tests {
     #[test]
     fn a_union_holds_the_references_of_every_field_of_its_payload() {
         let type_env = type_env();
-        let union_ty = test_ty("Holder");
-        let payload_ty = test_ty("Twins");
-        let scrutinee = typed_var("u", union_ty.clone());
-        let payload = typed_var("p", payload_ty.clone());
-        let mut vars = VarTable::empty();
-        vars.bindings.insert(scrutinee.name.clone(), Binding::Param);
-        vars.param_tys
-            .insert(scrutinee.name.clone(), union_ty.clone());
-        vars.var_tys.insert(scrutinee.name.clone(), union_ty);
-        vars.bindings.insert(
-            payload.name.clone(),
-            Binding::Payload(scrutinee.clone(), Some(0)),
-        );
-        vars.var_tys.insert(payload.name.clone(), payload_ty);
+        let scrutinee = typed_var("u", test_ty("Holder"));
+        let payload = typed_var("p", test_ty("Twins"));
+        let vars = table(vec![
+            (scrutinee.clone(), Binding::Param),
+            (
+                payload.clone(),
+                Binding::Payload(scrutinee.clone(), Some(0)),
+            ),
+        ]);
 
         let whole_union = acted_references(&vars, &type_env, &scrutinee, &vec![]);
         let first_field = acted_references(&vars, &type_env, &payload, &vec![0]);
@@ -1364,11 +1364,11 @@ mod tests {
     #[test]
     fn a_join_of_joins_may_be_any_of_their_results() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("r", Binding::Producer),
-            ("inner", Binding::Join(vec![var("p"), var("q")])),
-            ("m", Binding::Join(vec![var("inner"), var("r")])),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("r"), Binding::Producer),
+            (var("inner"), Binding::Join(vec![var("p"), var("q")])),
+            (var("m"), Binding::Join(vec![var("inner"), var("r")])),
         ]);
         assert_eq!(
             origin_of(&vars, "m")

@@ -855,7 +855,7 @@ type PendingRetains = Map<VarPath, Vec<PendingRetain>>;
 /// projection of that payload un-bumps one of them, so a retain is un-bumped by a group of releases
 /// rather than by a single one. Cancelling it takes the whole group, and only once the group leaves
 /// nothing outstanding.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 struct PendingRetain {
     /// The retain node, which the group of releases that un-bump it is recorded against.
     node: NodeId,
@@ -871,6 +871,34 @@ enum UnBump {
     OutsideTheBracket,
     /// No retain is pending for the unit.
     NoBracket,
+}
+
+/// Take a release's references off the innermost retain pending for `key`, where that retain bumped
+/// all of them. A retain the release leaves nothing outstanding of is un-bumped whole, and stops
+/// being pending.
+fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
+    // A release with nothing pending for `key` disposes of a reference the walk did not add — an
+    // owned parameter, or a value produced here — so it un-bumps no retain.
+    let Some(stack) = pending.get_mut(key) else {
+        return UnBump::NoBracket;
+    };
+    // A stack kept in `pending` is never empty (an emptied one is removed below), so a pending
+    // retain to un-bump is always present.
+    let innermost = stack
+        .last_mut()
+        .expect("a stack kept in `pending` is non-empty");
+    if !innermost.outstanding.covers(un_bumped) {
+        return UnBump::OutsideTheBracket;
+    }
+    innermost.outstanding.remove(un_bumped);
+    let retain = innermost.node;
+    if innermost.outstanding.is_empty() {
+        stack.pop();
+    }
+    if stack.is_empty() {
+        pending.remove(key);
+    }
+    UnBump::Bracket(retain)
 }
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
@@ -972,39 +1000,6 @@ impl<'a> CancelAnalysis<'a> {
         acted_references(self.vars, self.type_env, v, path)
     }
 
-    /// Take a release's references off the innermost retain pending for `key`, where that retain
-    /// bumped all of them. A retain the release leaves nothing outstanding of is un-bumped whole,
-    /// and stops being pending.
-    fn un_bump(
-        &self,
-        pending: &mut PendingRetains,
-        key: &VarPath,
-        un_bumped: &References,
-    ) -> UnBump {
-        // A release with nothing pending for `key` disposes of a reference this walk did not add —
-        // an owned parameter, or a value produced here — so it un-bumps no retain.
-        let Some(stack) = pending.get_mut(key) else {
-            return UnBump::NoBracket;
-        };
-        // A stack kept in `pending` is never empty (an emptied one is removed below), so a pending
-        // retain to un-bump is always present.
-        let innermost = stack
-            .last_mut()
-            .expect("a stack kept in `pending` is non-empty");
-        if !innermost.outstanding.covers(un_bumped) {
-            return UnBump::OutsideTheBracket;
-        }
-        innermost.outstanding.remove(un_bumped);
-        let retain = innermost.node;
-        if innermost.outstanding.is_empty() {
-            stack.pop();
-        }
-        if stack.is_empty() {
-            pending.remove(key);
-        }
-        UnBump::Bracket(retain)
-    }
-
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
     /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
     /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
@@ -1061,7 +1056,7 @@ impl<'a> CancelAnalysis<'a> {
                     }
                 }
                 let un_bumped = self.acted_references(v, path);
-                match self.un_bump(&mut pending, &key, &un_bumped) {
+                match un_bump(&mut pending, &key, &un_bumped) {
                     UnBump::Bracket(retain) => self
                         .unbump_releases
                         .entry(retain)
@@ -1152,10 +1147,12 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// Merge match arms into their continuation: a retain that every arm exits with the same
-    /// references still outstanding continues (a single downstream release un-bumps it on all
-    /// paths); one the arms leave in different states has a non-uniform fate and cannot be cleanly
-    /// cancelled, so it is disqualified.
+    /// Merge match arms into their continuation: a retain that the match was entered with and that
+    /// every arm exits with the same references still outstanding continues (a single downstream
+    /// release un-bumps it on all paths). One the arms leave in different states has a non-uniform
+    /// fate, and one an arm itself created has no place in the merged state, which is built over the
+    /// retains the match was entered with; neither can be cleanly cancelled, so both are
+    /// disqualified.
     fn merge(
         &mut self,
         pending_in: &PendingRetains,
@@ -1172,12 +1169,18 @@ impl<'a> CancelAnalysis<'a> {
                     .collect()
             })
             .collect();
+        let entered_with: Set<NodeId> = pending_in
+            .values()
+            .flatten()
+            .map(|retain| retain.node)
+            .collect();
         let mut uniform: Map<NodeId, References> = Map::default();
         for states in &arm_states {
             for (&retain, &outstanding) in states {
-                let agreed = arm_states
-                    .iter()
-                    .all(|other| other.get(&retain) == Some(&outstanding));
+                let agreed = entered_with.contains(&retain)
+                    && arm_states
+                        .iter()
+                        .all(|other| other.get(&retain) == Some(&outstanding));
                 if agreed {
                     uniform.insert(retain, outstanding.clone());
                 } else {
