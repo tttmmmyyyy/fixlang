@@ -1,6 +1,6 @@
 ---
 name: bug-hunt
-description: "Hunt for latent bugs in a chosen target with two finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. It never fixes the code under test; a hypothesis test that passes is kept as a regression test, on the branch under test when it covers an axis the suite lacks and on a dedicated branch otherwise. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
+description: "Hunt for latent bugs in a chosen target with two finder subagents, kill the false positives by refuting each candidate, and report every survivor with a reproduction test, a fix proposal, and a recurrence barrier. It never fixes the code under test; a hypothesis test that passes is committed as a regression test when it covers an axis the suite lacks, and dropped when the suite already covers it. Use when: sweeping a subsystem for defects, auditing before a merge or release, or running the periodic hunt."
 argument-hint: "Target (a subsystem path, a branch's diff, the standard library, or the whole compiler) and optionally the lens to search from. If omitted, the skill asks."
 ---
 
@@ -10,7 +10,9 @@ Find bugs that are already in the code and that nobody is looking for. The deliv
 
 This skill **never fixes the code under test**. A compiler fix needs the author's judgment, and the hunt runs unattended often enough that silent fixes would be dangerous. A throwaway probe — a panicking arm, a temporary definition, a debug print — is reverted by whoever made it. A *test* is different: when the hunt suspects a bug, writes a test in the project's idiom to trigger it, and the test **passes** — the suspected bug is absent — that green test pins an invariant the wave just confirmed, so it is worth keeping rather than discarding.
 
-Where a kept test goes turns on one question: **would anything in the suite fail if the behavior it pins broke?** When nothing would, the test covers an axis the suite does not have, and leaving it out of the branch would waste the wave's most durable product — the orchestrator lands it on the **branch under test**. The rest go to a **dedicated branch** in its own worktree for the author to weigh. Its writes, then, are: one test commit on the branch under test, the remaining passing tests on that dedicated branch, its own *Techniques That Found Bugs* section, and the hunt log in memory.
+Whether a kept test earns a place turns on one question: **would anything in the suite fail if the behavior it pins broke?** That question is the orchestrator's to answer and to act on: answering it means mutating the implementation and running the whole suite, which is work the hunt is already set up to do. When nothing would fail, the test covers an axis the suite does not have, and the orchestrator commits it on the **branch under test**. When something would, the axis has an owner already and the duplicate is dropped, named in the report so the author can object. Its writes, then, are: one test commit on the branch under test, its own *Techniques That Found Bugs* section, and the hunt log in memory.
+
+The author is asked about a test in one case only: when it would settle a question the project has not decided — what a diagnostic should say, whether a boundary is legal, which of two orderings the language promises. That is a design decision, and it goes into the report as the question it is, for the author to answer in their reply.
 
 `code-review` is the complement: it applies conventions to a diff, in one pass, and it edits. A hunt is shaped differently — most of what a search turns up is wrong and has to be killed before it reaches the user, and bugs run out only when repeated search stops finding new ones. One hunt is one wave of that search, small enough to run often; the hunt log is what makes the waves add up.
 
@@ -76,7 +78,18 @@ A hunt is **two finder subagents and the orchestrator**. Each finder gets its ow
 5. **Verify adversarially, inline.** Take each candidate and try to refute it — this is the orchestrator's main job, and its independence from the finder that produced the candidate is what makes the check real. For each: can any input actually reach that path; assuming it is reached, is the result genuinely wrong; and does it reproduce when you build and run it — on the commit under test *and* on the true pre-change baseline (the fork point for a branch not yet merged; for a change already merged to main, the merge commit's **first** parent — not `git merge-base`, which for a merged PR returns the feature-branch tip that already contains the change, so a real regression looks pre-existing against it), since a pre-existing failure, environment noise, or a third-party defect looks identical to a fresh bug until that one run? Default to dropping the candidate when the evidence does not hold. Deduplicate what survives against the log and against the other finders.
 6. **Deepen each survivor, inline**: the four deliverables under *Report*.
 7. **Critique the coverage.** With both reports in hand, name the classes of bug this wave could not have surfaced, whatever its yield — what the lens looked past, and what the unlensed sweep had no way to reach. That answer goes in the report and becomes the strongest candidate lens for the next hunt.
-8. **Keep the tests worth keeping, where they belong.** Collect the passing hypothesis tests the finders handed back and drop any duplicated among the finders. Then sort the rest by the question above: would anything in the suite fail if the behavior this test pins broke? Answer it against the suite — the symbol it exercises, the file that would cover it — and when the answer is not clearly no, treat it as covered. The ones nothing covers go to the **branch under test**: run them there, then commit them as one commit whose message says what each pins. The rest go to a **dedicated branch** in its own worktree. Both are deliverables beside the report; name them there.
+8. **Keep the tests worth keeping.** Collect the passing hypothesis tests the finders handed back and drop any duplicated among the finders. Then answer, for each of the rest, the question above: would anything in the suite fail if the behavior this test pins broke?
+
+   **Answer it by measurement, not by reading.** Break what the test pins — the narrowest change to the implementation that makes the behavior wrong — and run the **whole** suite. The tests that go red are the axis's existing owners. None red means the axis has none, and the test is the wave's most durable product; one or more red means the test is a duplicate of those, and it is dropped and named in the report. One mutation serves every test that pins the same behavior, so the runs are per behavior rather than per test.
+
+   Two traps make this measurement lie:
+
+   - **Reading instead of running.** Grepping the test files that look related, or reasoning from test names, finds the tests you already thought of. The suite is large and its coverage is not organized by subject: the owner of an axis routinely lives in a file whose name gives no hint of it.
+   - **Running a subset.** A filtered run over the file the test would join answers a smaller question than the one being asked, and it answers it "uncovered" far too often.
+
+   Keep the mutation narrow for a second reason: one that makes the compiler serve wrong bodies everywhere leaves a test program looping under valgrind, and the suite never finishes. A mutation whose blast radius is the whole compiler is measuring nothing — narrow it until only the axis under question moves.
+
+   Commit the survivors on the **branch under test** as one commit whose message says what each pins, after running them there. That commit is a deliverable beside the report; name it there.
 9. **Report**, then **append** any technique that earns it, then **update the hunt log**.
 10. **Leave the working tree as you found it.** Verify `git status --porcelain` is empty on the branch under test, and that no finder worktree survives (`git worktree list`) — one that does is a finder that left a probe behind. The report is written against the commit noted in step 1; the test commit sits on top of it, and the report says so.
 
@@ -91,7 +104,7 @@ Per bug, most severe first:
 
 Close with what the hunt covered: the areas, the lens and the unlensed sweep and what each returned, how many candidates were examined and how many the refutation killed, and the classes of bug this wave could not have surfaced. A hunt that found nothing reports that plainly along with its coverage — a clean sweep of a well-worn subsystem is information, and so is an unlensed finder that out-yields the lens.
 
-Say in one line what each kept test pins, and where it went: the commit on the branch under test for the ones covering an axis the suite lacks, the dedicated branch for the rest. A green test for an invariant the hunt suspected and confirmed is as much a product of the wave as a red one that found a bug — a hunt that fixed nothing can still leave the suite stronger than it found it.
+Say in one line what each kept test pins, and for each dropped one, which existing test went red on its mutation. A green test for an invariant the hunt suspected and confirmed is as much a product of the wave as a red one that found a bug — a hunt that fixed nothing can still leave the suite stronger than it found it. The drops are worth the line too: they say which axes the suite already owns, and where.
 
 ## Recurrence Barriers
 
@@ -234,7 +247,7 @@ Output comparison and memcheck both run single-threaded and miss data races — 
 
 ## Hygiene
 
-- **The working tree stays clean.** A finder works in its own worktree and reverts every probe — a panicking arm, a temporary definition added to `std.fix`, a debug print — so that worktree is removed when it returns. The orchestrator's own probes, made while refuting candidates, are reverted the same way. A hypothesis test that passes is not a probe: it is committed, to the branch under test when it covers an axis the suite lacks and to the hunt's dedicated branch otherwise. Before reporting, the orchestrator checks `git status --porcelain` on the branch under test and `git worktree list` for survivors.
+- **The working tree stays clean.** A finder works in its own worktree and reverts every probe — a panicking arm, a temporary definition added to `std.fix`, a debug print — so that worktree is removed when it returns. The orchestrator's own probes, made while refuting candidates, are reverted the same way. A hypothesis test that passes is not a probe: when it covers an axis the suite lacks it is committed to the branch under test, and otherwise it is dropped. The mutation that measured which of the two it is gets reverted like any other probe, and it is reverted after the test it judged has been committed, so that reverting it cannot take the test with it. Before reporting, the orchestrator checks `git status --porcelain` on the branch under test and `git worktree list` for survivors.
 - **Builds run in release.** `cargo test --release`, and only the optimization levels the target can affect.
 - **The machine is shared.** A sweep that builds a corpus at several optimization levels saturates the machine; run it when the machine is idle, and say in the report that the timing matters if any measurement is part of the evidence.
 
@@ -253,7 +266,8 @@ One hunt is one wave, so the log is what turns a schedule of small hunts into a 
 - Don't report a candidate without a concrete failing scenario, however plausible the reasoning reads.
 - Don't leave a probe in a tree, and don't leave a finder's worktree behind.
 - Don't discard a passing hypothesis test that no existing test covers — it is a regression test the wave earned, and it belongs on the branch under test.
-- Don't put a test on the branch under test on a hunch that it is new. The question is whether the suite would fail without it, and an unanswered question sends the test to the dedicated branch.
+- Don't decide a test's fate on a hunch that it is new, and don't hand that decision to the author. Break what it pins, run the whole suite, and let the tests that go red answer.
+- Don't commit a test without watching it go red. A test that survives the mutation of the very behavior it claims to pin is aimed at something else, and it is worth nothing green.
 - Don't re-raise a dismissed candidate without new evidence.
 - Don't grow the hunt past two finders. The depth of this hunt comes from running it again, not from spending more on one wave.
 - Don't let the recurring-lens list stand in for the scout pass. A lens derived from the target finds what a fixed menu cannot.
