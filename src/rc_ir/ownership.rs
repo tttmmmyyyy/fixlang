@@ -339,7 +339,7 @@ fn origin_from_leaves_under(
     path: &[usize],
     here: &VarPath,
 ) -> Option<Origin> {
-    // The leaves of one unit root usually project out of one operand unit, so the operand units are
+    // The leaves of one unit usually project out of one operand unit, so the operand units are
     // gathered before any of them is followed back: resolving each distinct one once keeps a chain
     // of aliases from being walked once per leaf.
     let mut operand_units: Set<(usize, FieldPath)> = Set::default();
@@ -794,7 +794,7 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
         return (root.clone(), path.clone());
     };
     let truncated = truncate_to_unit(ty, path, type_env);
-    // Truncation only descends, so an identity whose path stops above every unit root of its type
+    // Truncation only descends, so an identity whose path stops above every unit of its type
     // comes out naming no unit at all. A retain under such a key pairs with no release of the
     // object, so cancellation drops it and the object is freed while it is still held. The check
     // sits here, where every key is made.

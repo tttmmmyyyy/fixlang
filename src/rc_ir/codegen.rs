@@ -297,8 +297,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Project the whole object `obj` down `path` to the sub-object naming one reference-counting
     /// unit. Each index descends one unboxed struct/tuple field — or a closure's capture field — so
-    /// the path stops at the unit itself: a boxed leaf, an unboxed union, or a closure capture. The
-    /// empty path names the whole value, returning `obj` unchanged. The caller retains or releases
+    /// the path stops at the unit itself, which is whatever `unit_step` answers `Unit` or `Capture`
+    /// for. The empty path names the whole value, returning `obj` unchanged. The caller retains or releases
     /// the returned sub-object as a whole, which reference-counts exactly that unit (a boxed leaf
     /// directly, a union by tag dispatch).
     fn project_rc_unit(&mut self, obj: Object<'c>, path: &[usize]) -> Object<'c> {
