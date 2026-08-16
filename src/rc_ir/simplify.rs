@@ -170,18 +170,31 @@ fn node_count(node: &RcExprNode) -> u64 {
     })
 }
 
+/// The variant number and payload operand of a union construction, and `None` where `rhs` builds no
+/// union.
+fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
+    let RcRhs::Llvm(gen, args) = rhs else {
+        return None;
+    };
+    let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    // An operation's operands are its free variables, of which a union construction has the payload
+    // alone.
+    assert_eq!(
+        args.len(),
+        1,
+        "a union construction takes its payload alone"
+    );
+    Some((make.variant_index(), &args[0]))
+}
+
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
 /// where `x` is consumed only by the match, collapses to the `tag` arm — its payload bound to the
 /// construction's operand, its result flowing into `m` — dropping both the construction and the match.
 fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
-    let RcExpr::Let(x, RcRhs::Llvm(gen, args), k) = node.expr.as_ref() else {
+    let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
     };
-    let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
-    if args.len() != 1 {
-        return None;
-    }
-    let payload = &args[0];
+    let (variant, payload) = union_construction(rhs)?;
     // The continuation must be exactly a match on `x`, and `x` must be used nowhere else.
     let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
         return None;
@@ -191,7 +204,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     }
     // Pick the arm for the known tag. A catch-all arm binds the whole union (not the payload), so it
     // would not remove the construction; skip when only a catch-all matches.
-    let arm = arms.iter().find(|a| a.tag == Some(make.variant_index()))?;
+    let arm = arms.iter().find(|a| a.tag == Some(variant))?;
     let body = substitute_expr(&arm.body, &single(&arm.payload.name, &payload.name));
     Some(replace_tail(&body, &mut |result| {
         substitute_expr(k2, &single(&m.name, &result.name))
@@ -214,8 +227,16 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
     }
     let mut subst: Map<FullName, FullName> = Map::default();
     for (idx, fv) in fields {
-        let operand = args.get(*idx)?;
-        subst.insert(fv.name.clone(), operand.name.clone());
+        // A struct construction takes one operand per field of its type, and a destructure of that
+        // value names fields of the same type, so every field index is an operand of the
+        // construction.
+        assert!(
+            *idx < args.len(),
+            "a destructure names field {} of a struct built from {} operands",
+            idx,
+            args.len()
+        );
+        subst.insert(fv.name.clone(), args[*idx].name.clone());
     }
     Some(substitute_expr(k2, &subst))
 }
@@ -296,14 +317,8 @@ fn replace_tail_construction(
             RcExpr::Ret(_) => return None,
             RcExpr::Let(r, rhs, k) => {
                 if is_ret_of(k, &r.name) {
-                    let RcRhs::Llvm(gen, args) = rhs else {
-                        return None;
-                    };
-                    let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
-                    if args.len() != 1 {
-                        return None;
-                    }
-                    return f(make.variant_index(), &args[0]);
+                    let (variant, operand) = union_construction(rhs)?;
+                    return f(variant, operand);
                 }
                 RcExpr::Let(r.clone(), rhs.clone(), replace_tail_construction(k, f)?)
             }

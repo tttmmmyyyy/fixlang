@@ -80,69 +80,25 @@ mod integration_tests {
         bodies
     }
 
-    /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
-    /// `range`'s `advance` returns and `fold` immediately matches is cancelled, so the loop-carried
-    /// state is the plain `RangeIterator` alone. The built program still sums the range, so the
-    /// removal leaves what the loop computes intact.
-    #[test]
-    fn test_range_fold_union_removed() {
-        let (_temp_dir, project_dir) = setup_test_env("read_fold");
+    /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
+    /// `needles` — which `what` names in a failure message — builds no union, and that the
+    /// executable the build leaves prints `expected`. The dump shows what the simplifier removed,
+    /// and the run shows the removal left what the program computes intact.
+    fn assert_union_cancelled(case: &str, needles: &[&str], what: &str, expected: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_all_rc_ir(&project_dir);
 
-        // The `range.fold` drivers (own and borrow version) — identified by the `RangeIterator` loop
-        // state in their signature.
-        let drivers = fn_bodies_matching(&dump, &["Iterator::fold", "RangeIterator"]);
-        assert!(
-            !drivers.is_empty(),
-            "no `range.fold` driver (an `Iterator::fold` over a `RangeIterator`) in the RC IR dump:\n{}",
-            dump
-        );
-        for driver in &drivers {
-            // The simplifier cancelled the `Option` union: the driver builds no union, so its
-            // loop-carried state is just the plain `RangeIterator` named in its signature.
-            assert!(
-                !driver.contains("union_"),
-                "the `range.fold` driver still builds a union — the simplifier did not cancel it:\n{}",
-                driver
-            );
-        }
-
-        // The program still computes 0 + 1 + .. + 99 = 4950.
-        let run = std::process::Command::new(project_dir.join("a.out"))
-            .output()
-            .expect("failed to run the built executable");
-        assert!(
-            run.status.success(),
-            "the built executable did not run cleanly"
-        );
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4950");
-    }
-
-    /// `scale`'s inner arms build one constructor, so moving the outer `some` arm into them places a
-    /// copy in each. The copy is smaller than the construction and the match it replaces, so the
-    /// simplifier takes the move and `scale` builds no union. The built program still computes what
-    /// the source says, so the removal leaves the values intact.
-    #[test]
-    fn test_one_variant_union_removed() {
-        let (_temp_dir, project_dir) = setup_test_env("one_variant");
-        let dump = emit_all_rc_ir(&project_dir);
-
-        let bodies = fn_bodies_matching(&dump, &["Main::scale"]);
-        assert!(
-            !bodies.is_empty(),
-            "no `Main::scale` in the RC IR dump:\n{}",
-            dump
-        );
+        let bodies = fn_bodies_matching(&dump, needles);
+        assert!(!bodies.is_empty(), "no {} in the RC IR dump:\n{}", what, dump);
         for body in &bodies {
             assert!(
                 !body.contains("union_"),
-                "`scale` still builds a union — the simplifier declined the move into inner arms \
-                 that build one constructor:\n{}",
+                "{} still builds a union — the simplifier did not cancel it:\n{}",
+                what,
                 body
             );
         }
 
-        // The program still computes `scale` over 0..10.
         let run = std::process::Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
@@ -150,9 +106,36 @@ mod integration_tests {
             run.status.success(),
             "the built executable did not run cleanly"
         );
-        assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
-            "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]"
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), expected);
+    }
+
+    /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
+    /// `range`'s `advance` returns and `fold` immediately matches is cancelled, so the loop-carried
+    /// state is the plain `RangeIterator` alone. The built program still sums the range — 0 + 1 + ..
+    /// + 99 — so the removal leaves what the loop computes intact.
+    #[test]
+    fn test_range_fold_union_removed() {
+        // The `range.fold` drivers (own and borrow version) — identified by the `RangeIterator` loop
+        // state in their signature.
+        assert_union_cancelled(
+            "read_fold",
+            &["Iterator::fold", "RangeIterator"],
+            "the `range.fold` driver (an `Iterator::fold` over a `RangeIterator`)",
+            "4950",
+        );
+    }
+
+    /// `scale`'s inner arms build one constructor, so moving the outer `some` arm into them places a
+    /// copy in each. The copy is smaller than the construction and the match it replaces, so the
+    /// simplifier takes the move and `scale` builds no union. The built program still computes
+    /// `scale` over 0..10, so the removal leaves the values intact.
+    #[test]
+    fn test_one_variant_union_removed() {
+        assert_union_cancelled(
+            "one_variant",
+            &["Main::scale"],
+            "`Main::scale`",
+            "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }
 }
@@ -242,13 +225,23 @@ mod build_time_tests {
     /// regression as a failure instead of occupying the machine.
     const TIMEOUT: Duration = Duration::from_secs(60);
 
+    /// The modulus level `level` of the nest tests its value against.
+    fn level_modulus(level: usize) -> i64 {
+        3 + (level % 5) as i64
+    }
+
+    /// What level `level` of the nest adds to its value where the modulus does not divide it.
+    fn level_addend(level: usize) -> i64 {
+        level as i64 + 1
+    }
+
     /// What the nest computes for `n`: each level leaves the value alone when its modulus divides it
     /// and adds its addend otherwise, and the innermost body triples the result.
     fn nested_matches_value(n: i64) -> i64 {
         let mut v = n;
-        for level in 1..=DEPTH as i64 {
-            if v % (3 + level % 5) != 0 {
-                v += level + 1;
+        for level in 1..=DEPTH {
+            if v % level_modulus(level) != 0 {
+                v += level_addend(level);
             }
         }
         v * 3
@@ -271,8 +264,8 @@ mod build_time_tests {
             source += &format!(
                 "{indent}match (if {scrutinee} % {} == 0 {{ Option::some({scrutinee}) }} \
                  else {{ Option::some({scrutinee} + {}) }}) {{\n",
-                3 + level % 5,
-                level + 1
+                level_modulus(level),
+                level_addend(level)
             );
             source += &format!("{indent}    some(v{level}) => (\n");
             indent += "        ";
