@@ -51,7 +51,8 @@ enum Binding {
     Join(Vec<RcVar>),
 }
 
-/// The variables of one function, as `origin` and the consume walk read them.
+/// The variables of one function, enough to trace a leaf back to the object it belongs to and to
+/// resolve a call to its callee's parameters.
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
@@ -86,7 +87,7 @@ impl VarTable {
         vars
     }
 
-    /// A table with no variable in it, to be filled by the constructor that knows what to put there.
+    /// An empty table, which a constructor fills.
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -165,19 +166,20 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
     Exactly(VarPath),
-    /// The leaf denotes one of `candidates`, chosen by the path taken. `identity` names the match
-    /// binding that joins them: every alias chain through that binding agrees on the name, so it is
-    /// the name to use where one name for the value is required.
+    /// The leaf denotes one of several objects, chosen by the path taken.
     Join {
+        /// The match binding that joins the candidates. Every alias chain through that binding
+        /// agrees on this name, so it is the name to use where one name for the value is required.
         identity: VarPath,
+        /// Every object the leaf may denote, one per path the match can take.
         candidates: Set<VarPath>,
     },
 }
 
 impl Origin {
-    /// The one name for the value, for a reader that pairs operations on it — reference-count
-    /// cancellation pairs a retain with the release that un-bumps it, and only a single identity can
-    /// decide that. Two leaves with the same identity hold the same reference.
+    /// The one name for the value, for a reader that pairs two operations on it — a retain with the
+    /// release that un-bumps it — which only a single name can decide. Two leaves with the same
+    /// identity hold the same reference.
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -248,8 +250,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
         // A name the table does not bind is a global — a function a direct call names, or a global
-        // value read as an atom — which this function's variables alias nothing of. So it is its own
-        // origin, as a parameter and a producer are.
+        // value read as an atom. No variable of this function aliases one, so it is its own origin,
+        // as a parameter and a producer are.
         None | Some(Binding::Param) | Some(Binding::Producer) => here(),
         Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
         Some(Binding::Join(arm_results)) => {
@@ -276,11 +278,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => {
-                    // Taking the value for its own object where the leaves beneath name none is
-                    // safe because that happens only for a value holding no reference: either the
-                    // path covers no boxed leaf, or every leaf beneath it is `⊥`, which an operation
-                    // declares for the variants a union does not have and for the result of one that
-                    // aborts. A release is keyed to a reference, so none is keyed to this answer.
+                    // The leaves beneath name no object only for a value that holds no reference:
+                    // either the path covers no boxed leaf, or every leaf beneath it is `⊥`, which
+                    // an operation declares for the variants a union does not have and for the
+                    // result of one that aborts. Taking the value for its own object is safe there,
+                    // since a release is keyed to a reference and none is keyed to this answer.
                     let here_identity = (var.clone(), path.to_vec());
                     origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
                         .unwrap_or_else(here)
@@ -317,7 +319,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 ///
 /// A reference-counting unit path may name an unboxed union itself, whose provenance is declared one
 /// level down, on the leaves of its variants, so a reader that stops at the union finds nothing
-/// recorded and takes the value for one produced on the spot — its own to release, when it may be an
+/// recorded and would read the value as one produced here — its own to release, when it may be an
 /// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
 /// variant the value does not have and holds no reference, so it names no object and is passed
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
@@ -449,8 +451,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 /// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
 /// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
 /// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
-/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`), and
-/// every reader of the consume model shares it.
+/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
@@ -597,8 +598,8 @@ fn push_boxed_leaves(
 ///
 /// Which types carry a unit is one rule, and every walk over units takes its step from here, so a
 /// new kind of unit is stated once and every walk follows it. A walk that a new kind left behind
-/// would produce a path that names no unit, which reference counting then keys an operation to,
-/// freeing the object while it is still held.
+/// would produce a path that names no unit; reference counting would key an operation to that path
+/// and free the object while it is still held.
 pub(crate) enum UnitStep {
     /// The value holds no reference, so no unit sits here or below it.
     NoUnit,

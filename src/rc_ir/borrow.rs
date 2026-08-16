@@ -1,5 +1,5 @@
-//! Borrow-ification over the RC IR: rewriting `Own` parameters that a function only
-//! reads to `Borrow`, so the caller keeps ownership across the call and no retain is needed before a
+//! Borrow-ification over the RC IR: an `Own` parameter that a function only reads becomes a
+//! `Borrow` parameter, so the caller keeps ownership across the call and needs no retain before a
 //! non-last use — which is what keeps a value `Unique` for the uniqueness analysis.
 //!
 //! Lowering makes every parameter `Own` (the callee releases it). Borrow-ification has three parts:
@@ -34,7 +34,7 @@
 //! borrow-ification exists.
 //!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`: inference, rewrite, and cancellation all read it, so they agree.
+//! model in `ownership`, so every part of this pass gives the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -262,7 +262,7 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
     FuncRef { name: borrow_name }
 }
 
-/// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
+/// Whether borrow inference left any of a function's parameter leaves `Borrow`.
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
@@ -357,8 +357,8 @@ fn param_ownership_shape(
 
 // --- tail-call recognition ---
 
-/// The variables bound to an `App` or `Match` in tail position: a call in tail position must not be
-/// turned into a non-tail one by an after-call release, so routing consults this set.
+/// The variables bound to an `App` or `Match` in tail position. Such a call must not be turned into
+/// a non-tail one by an after-call release.
 fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     let mut out = Set::default();
     mark_tail(body, true, &mut out);
@@ -576,11 +576,11 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether routing this call to the borrow version removes a reference count it would otherwise
-    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows and
-    /// that would otherwise be retained: a borrowed value (which an owning callee makes the caller
-    /// retain before the call) or an owned value used again after the call (whose retain-before the
-    /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
-    /// retain and only delays its release; it is not a benefit.
+    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
+    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
+    /// callee makes the caller retain before the call, and an owned value used again after the
+    /// call, whose retain-before the borrow cancels. An owned value at its last use is moved either
+    /// way, so borrowing it removes no retain and only delays its release.
     fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,
@@ -766,9 +766,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 // --- unit normalization ---
 
 /// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
-/// borrow-ification and cancellation both see reference counting at unit granularity. A path that
-/// already names a single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op)
-/// disappears.
+/// that every later pass sees reference counting at unit granularity. A path that already names a
+/// single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op) disappears.
 pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     for func in prog.funcs.values_mut() {
         func.body = split_body(&func.body, type_env);
@@ -886,8 +885,7 @@ enum UnBump {
 }
 
 /// Take a release's references off the innermost retain pending for `key`, where that retain bumped
-/// all of them. A retain the release leaves nothing outstanding of is un-bumped whole, and stops
-/// being pending.
+/// all of them. A retain left with nothing outstanding is un-bumped whole, and stops being pending.
 fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
     // A release with nothing pending for `key` disposes of a reference the walk did not add — an
     // owned parameter, or a value produced here — so it un-bumps no retain.
@@ -914,8 +912,8 @@ fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) 
 }
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
-/// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
-/// same borrowed tree, recognizes them by the same identity.
+/// borrowed. Nodes to drop are recorded under this identity and recognized by it again in a later
+/// walk over the same borrowed tree.
 type NodeId = usize;
 
 /// The `NodeId` of a node: the address of its boxed `RcExpr`.
@@ -1063,8 +1061,8 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Release(v, path, _, k) => {
                 let key = self.unit_key(&v.name, path);
                 // A release of a value whose object is path-dependent un-bumps a retain of that same
-                // value, so it pairs on the identity; on the other objects it may be, it is a drop
-                // that no pending retain of theirs may be cancelled across.
+                // value, so it pairs on the identity. On the other objects it may be, it is a drop:
+                // a retain of one of them that is still pending cannot be cancelled across it.
                 for other in self.acted_unit_keys(&v.name, path) {
                     if other != key {
                         self.consume_unit(&mut pending, other);
