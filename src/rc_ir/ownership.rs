@@ -14,9 +14,9 @@
 //! that produced it.
 //!
 //! What one reference-count operation bumps is a count of references per object
-//! (`acted_references`), which is what tells a retain of an unboxed union from a release of one
-//! field of the payload it holds: both key to the union, and only the counts say that the one
-//! un-bumps part of what the other bumped.
+//! (`acted_references`). A retain of an unboxed union and a release of one field of the payload it
+//! holds key to the same unit, and the counts are what tell the two apart: the release un-bumps
+//! part of what the retain bumped.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -791,13 +791,16 @@ pub(crate) fn acted_unit_keys(
 /// does not say whether a release un-bumps a retain. An unboxed union is one unit, counted on the
 /// union itself, and a retain of it bumps every reference its payload holds; a projection of that
 /// payload names those references one by one, so a release of the projection un-bumps only part of
-/// what the retain bumped. Cancellation reads this to pair a retain with the releases that un-bump
-/// exactly it.
+/// what the retain bumped.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
 
 impl References {
     /// Whether every reference of `other` is among these, counting multiplicity.
+    ///
+    /// # Examples
+    /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
+    /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
     pub(crate) fn covers(&self, other: &References) -> bool {
         other
             .0
@@ -1227,8 +1230,8 @@ mod tests {
         typed_var(name, make_i64_ty())
     }
 
-    /// A table of the given bindings, recording each variable's type as `VarTable::of` does, and a
-    /// parameter's among the parameter types.
+    /// A table of the given bindings, recording each variable's type as `VarTable::of` does. A
+    /// parameter's type is recorded among the parameter types as well.
     fn table(bindings: Vec<(RcVar, Binding)>) -> VarTable {
         let mut vars = VarTable::empty();
         for (v, binding) in bindings {

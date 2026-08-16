@@ -857,7 +857,7 @@ type PendingRetains = Map<VarPath, Vec<PendingRetain>>;
 /// nothing outstanding.
 #[derive(Clone)]
 struct PendingRetain {
-    /// The retain node, which the group of releases that un-bump it is recorded against.
+    /// The retain node. The releases that un-bump it are recorded under this id.
     node: NodeId,
     /// The references the retain bumped that are still bumped here.
     outstanding: References,
@@ -1066,8 +1066,8 @@ impl<'a> CancelAnalysis<'a> {
                         .or_default()
                         .push(node_id(node)),
                     // A release that reaches references the innermost bracket did not bump closes
-                    // no bracket here, and leaves every retain pending for the unit un-bumped in
-                    // part from outside its own group. None of them can be cancelled as a whole.
+                    // no bracket here. It un-bumps part of what retains outside that bracket
+                    // bumped, so no retain pending for the unit can be cancelled as a whole.
                     UnBump::OutsideBracket => self.consume_unit(&mut pending, key),
                     UnBump::NoBracket => {}
                 }
@@ -1150,12 +1150,12 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// Merge match arms into their continuation: a retain that the match was entered with and that
-    /// every arm exits with the same references still outstanding continues (a single downstream
-    /// release un-bumps it on all paths). One the arms leave in different states has a non-uniform
-    /// fate, and one an arm itself created has no place in the merged state, which is built over the
-    /// retains the match was entered with; neither can be cleanly cancelled, so both are
-    /// disqualified.
+    /// Merge match arms into their continuation. A retain the match was entered with continues when
+    /// every arm exits with the same references of it still outstanding, since a single downstream
+    /// release then un-bumps it on all paths. Two kinds are disqualified instead: a retain the arms
+    /// leave in different states, whose fate is non-uniform, and a retain an arm created itself,
+    /// which the merged state has no place for — that state is built over the retains the match was
+    /// entered with.
     fn merge(
         &mut self,
         pending_in: &PendingRetains,
