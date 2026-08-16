@@ -12,6 +12,11 @@
 //! reference belongs to (`origin`), reached by following the alias edges — move-binds, unboxed-
 //! aggregate projections, unboxed-union payloads, and pure `Llvm` projections — back to the binding
 //! that produced it.
+//!
+//! What one reference-count operation bumps is a count of references per object
+//! (`acted_references`). A retain of an unboxed union and a release of one field of the payload it
+//! holds key to the same unit, and the counts are what tell the two apart: the release un-bumps
+//! part of what the retain bumped.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -46,7 +51,8 @@ enum Binding {
     Join(Vec<RcVar>),
 }
 
-/// The variables of one function, as `origin` and the consume walk read them.
+/// The variables of one function, enough to trace a leaf back to the object it belongs to and to
+/// resolve a call to its callee's parameters.
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
@@ -81,7 +87,7 @@ impl VarTable {
         vars
     }
 
-    /// A table with no variable in it, to be filled by the constructor that knows what to put there.
+    /// An empty table, which a constructor fills.
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -160,19 +166,20 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
     Exactly(VarPath),
-    /// The leaf denotes one of `candidates`, chosen by the path taken. `identity` names the match
-    /// binding that joins them: every alias chain through that binding agrees on the name, so it is
-    /// the name to use where one name for the value is required.
+    /// The leaf denotes one of several objects, chosen by the path taken.
     Join {
+        /// The match binding that joins the candidates. Every alias chain through that binding
+        /// agrees on this name, so it is the name to use where one name for the value is required.
         identity: VarPath,
+        /// Every object the leaf may denote, one per path the match can take.
         candidates: Set<VarPath>,
     },
 }
 
 impl Origin {
-    /// The one name for the value, for a reader that pairs operations on it — reference-count
-    /// cancellation pairs a retain with the release that un-bumps it, and only a single identity can
-    /// decide that. Two leaves with the same identity hold the same reference.
+    /// The one name for the value, for a reader that pairs two operations on it — a retain with the
+    /// release that un-bumps it — which only a single name can decide. Two leaves with the same
+    /// identity hold the same reference.
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -243,8 +250,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
         // A name the table does not bind is a global — a function a direct call names, or a global
-        // value read as an atom — which this function's variables alias nothing of. So it is its own
-        // origin, as a parameter and a producer are.
+        // value read as an atom. No variable of this function aliases one, so it is its own origin,
+        // as a parameter and a producer are.
         None | Some(Binding::Param) | Some(Binding::Producer) => here(),
         Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
         Some(Binding::Join(arm_results)) => {
@@ -271,11 +278,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => {
-                    // Taking the value for its own object where the leaves beneath name none is
-                    // safe because that happens only for a value holding no reference: either the
-                    // path covers no boxed leaf, or every leaf beneath it is `⊥`, which an operation
-                    // declares for the variants a union does not have and for the result of one that
-                    // aborts. A release is keyed to a reference, so none is keyed to this answer.
+                    // The leaves beneath name no object only for a value that holds no reference:
+                    // either the path covers no boxed leaf, or every leaf beneath it is `⊥`, which
+                    // an operation declares for the variants a union does not have and for the
+                    // result of one that aborts. Taking the value for its own object is safe there,
+                    // since a release is keyed to a reference and none is keyed to this answer.
                     let here_identity = (var.clone(), path.to_vec());
                     origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
                         .unwrap_or_else(here)
@@ -312,7 +319,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 ///
 /// A reference-counting unit path may name an unboxed union itself, whose provenance is declared one
 /// level down, on the leaves of its variants, so a reader that stops at the union finds nothing
-/// recorded and takes the value for one produced on the spot — its own to release, when it may be an
+/// recorded and would read the value as one produced here — its own to release, when it may be an
 /// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
 /// variant the value does not have and holds no reference, so it names no object and is passed
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
@@ -421,7 +428,11 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
                         collect_consumes_go(&arm.body, vars, prog, type_env, owns, out);
                     }
                 }
-                _ => rhs_consumes(rhs, &x.ty, vars, prog, type_env, owns, out),
+                // A match holds the only sub-expressions a right-hand side can carry, so every
+                // other shape consumes within itself.
+                RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {
+                    rhs_consumes(rhs, &x.ty, vars, prog, type_env, owns, out)
+                }
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }
@@ -440,8 +451,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 /// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
 /// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
 /// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
-/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`), and
-/// every reader of the consume model shares it.
+/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
@@ -588,8 +598,8 @@ fn push_boxed_leaves(
 ///
 /// Which types carry a unit is one rule, and every walk over units takes its step from here, so a
 /// new kind of unit is stated once and every walk follows it. A walk that a new kind left behind
-/// would produce a path that names no unit, which reference counting then keys an operation to,
-/// freeing the object while it is still held.
+/// would produce a path that names no unit; reference counting would key an operation to that path
+/// and free the object while it is still held.
 pub(crate) enum UnitStep {
     /// The value holds no reference, so no unit sits here or below it.
     NoUnit,
@@ -779,6 +789,69 @@ pub(crate) fn acted_unit_keys(
         .collect()
 }
 
+/// The references a reference-count operation acts on: how many references of each object it bumps
+/// or un-bumps. A value holding one object's reference twice contributes two of it.
+///
+/// Two operations that key to one `unit_key` need not act on the same references, so the key alone
+/// does not say whether a release un-bumps a retain. An unboxed union is one unit, counted on the
+/// union itself, and a retain of it bumps every reference its payload holds; a projection of that
+/// payload names those references one by one, so a release of the projection un-bumps only part of
+/// what the retain bumped.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct References(Map<VarPath, usize>);
+
+impl References {
+    /// Whether every reference of `other` is among these, counting multiplicity.
+    ///
+    /// # Examples
+    /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
+    /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
+    pub(crate) fn covers(&self, other: &References) -> bool {
+        other
+            .0
+            .iter()
+            .all(|(object, count)| self.0.get(object).is_some_and(|held| held >= count))
+    }
+
+    /// Drop `other`'s references from these, where `covers` holds of the two.
+    pub(crate) fn subtract(&mut self, other: &References) {
+        for (object, count) in &other.0 {
+            let held = self
+                .0
+                .get_mut(object)
+                .expect("the removed references are covered by these");
+            *held -= count;
+            if *held == 0 {
+                self.0.remove(object);
+            }
+        }
+    }
+
+    /// Whether the operation acts on no reference at all.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// The references an operation on the subtree of `v` that `path` names acts on: the reference each
+/// boxed leaf under `path` holds, named by the object its `origin` identifies.
+pub(crate) fn acted_references(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    v: &RcVar,
+    path: &FieldPath,
+) -> References {
+    let mut references: Map<VarPath, usize> = Map::default();
+    for leaf in boxed_leaf_paths(&v.ty, type_env) {
+        if !leaf.starts_with(path) {
+            continue;
+        }
+        let object = origin(vars, type_env, &v.name, &leaf).identity().clone();
+        *references.entry(object).or_default() += 1;
+    }
+    References(references)
+}
+
 /// The unit key of an object identity: the root it names, with its path truncated to the
 /// reference-counting unit that holds it. The returned path is always one of that root's units.
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
@@ -865,8 +938,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 #[cfg(test)]
 mod tests {
     use super::{
-        as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit, unit_step, Binding,
-        Origin, UnitStep, VarTable,
+        acted_references, as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit,
+        unit_step, Binding, Origin, UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::program::TypeEnv;
@@ -944,7 +1017,8 @@ mod tests {
             },
         );
         // An unboxed struct holding one reference, an unboxed union of a variant that holds one and
-        // one that holds none, a boxed struct, and a struct nesting the union beside a closure.
+        // one that holds none, a boxed struct, a struct nesting the union beside a closure, and an
+        // unboxed union whose payload holds two references.
         for (name, tycon_info) in [
             (
                 "Pair",
@@ -977,6 +1051,22 @@ mod tests {
                     ],
                 ),
             ),
+            (
+                "Twins",
+                test_tycon_info(
+                    TyConVariant::Struct,
+                    true,
+                    vec![("fst", array_of_i64()), ("snd", array_of_i64())],
+                ),
+            ),
+            (
+                "TwinChoice",
+                test_tycon_info(
+                    TyConVariant::Union,
+                    true,
+                    vec![("twins", test_ty("Twins")), ("none", make_i64_ty())],
+                ),
+            ),
         ] {
             tycons.insert(TyCon::new(FullName::from_strs(&["Test"], name)), tycon_info);
         }
@@ -1005,6 +1095,8 @@ mod tests {
             test_ty("Choice"),                                  // an unboxed union
             test_ty("BoxedPair"),                               // a boxed struct
             test_ty("Nested"),                                  // a struct of a union and a closure
+            test_ty("Twins"),                                   // a struct of two references
+            test_ty("TwinChoice"), // a union whose payload holds two references
         ];
         for ty in cases {
             let truncated: Set<FieldPath> = boxed_leaf_paths(&ty, &type_env)
@@ -1127,22 +1219,30 @@ mod tests {
         assert_eq!(as_arg_projection(&sources(vec![])), None);
     }
 
-    /// A local variable of type `I64`.
-    fn var(name: &str) -> RcVar {
+    /// A local variable of the given type.
+    fn typed_var(name: &str, ty: Arc<TypeNode>) -> RcVar {
         RcVar {
             name: FullName::local(name),
-            ty: make_i64_ty(),
+            ty,
             source: None,
             debug_name: None,
             skip_null_check: false,
         }
     }
 
-    /// A table of the given bindings, with every named variable also a known local.
-    fn table(bindings: Vec<(&str, Binding)>) -> VarTable {
+    /// A local variable of type `I64`.
+    fn var(name: &str) -> RcVar {
+        typed_var(name, make_i64_ty())
+    }
+
+    /// A table of the given bindings, recording each variable's type as `VarTable::of` does. A
+    /// parameter's type is recorded among the parameter types as well.
+    fn table(bindings: Vec<(RcVar, Binding)>) -> VarTable {
         let mut vars = VarTable::empty();
-        for (name, binding) in bindings {
-            let v = var(name);
+        for (v, binding) in bindings {
+            if matches!(binding, Binding::Param) {
+                vars.param_tys.insert(v.name.clone(), v.ty.clone());
+            }
             vars.bindings.insert(v.name.clone(), binding);
             vars.var_tys.insert(v.name, v.ty);
         }
@@ -1162,7 +1262,7 @@ mod tests {
     /// A variable bound by the op that produced the value is the origin of that value.
     #[test]
     fn a_producer_is_exactly_itself() {
-        let vars = table(vec![("p", Binding::Producer)]);
+        let vars = table(vec![(var("p"), Binding::Producer)]);
         assert_eq!(origin_of(&vars, "p"), Origin::Exactly(at("p")));
     }
 
@@ -1170,8 +1270,8 @@ mod tests {
     #[test]
     fn a_move_bind_is_the_moved_variable() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("m", Binding::Move(var("p"))),
+            (var("p"), Binding::Producer),
+            (var("m"), Binding::Move(var("p"))),
         ]);
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
@@ -1181,9 +1281,9 @@ mod tests {
     #[test]
     fn a_match_binding_may_be_any_arm_result() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("m", Binding::Join(vec![var("p"), var("q")])),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("m"), Binding::Join(vec![var("p"), var("q")])),
         ]);
         let o = origin_of(&vars, "m");
         assert_eq!(o.identity(), &at("m"));
@@ -1201,9 +1301,9 @@ mod tests {
     #[test]
     fn a_match_binding_whose_arms_agree_is_exact() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("m1", Binding::Move(var("p"))),
-            ("m", Binding::Join(vec![var("p"), var("m1")])),
+            (var("p"), Binding::Producer),
+            (var("m1"), Binding::Move(var("p"))),
+            (var("m"), Binding::Join(vec![var("p"), var("m1")])),
         ]);
         assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
     }
@@ -1214,12 +1314,57 @@ mod tests {
     #[test]
     fn a_move_of_a_match_binding_keeps_the_joins_name() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("m", Binding::Join(vec![var("p"), var("q")])),
-            ("n", Binding::Move(var("m"))),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("m"), Binding::Join(vec![var("p"), var("q")])),
+            (var("n"), Binding::Move(var("m"))),
         ]);
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
+    }
+
+    /// A retain of an unboxed union acts on every reference its payload holds, while a release of
+    /// one field of that payload acts on one of them.
+    ///
+    /// Both key to one reference-counting unit — the union — so the key alone would pair them, and
+    /// cancelling the retain against that one release would leave the payload's other reference
+    /// released without ever having been retained. The references each acts on are what tells the
+    /// two apart: the field's are covered by the union's without exhausting them, and it takes the
+    /// releases of both fields to un-bump the retain.
+    #[test]
+    fn a_union_holds_the_references_of_every_field_of_its_payload() {
+        let type_env = type_env();
+        let scrutinee = typed_var("u", test_ty("TwinChoice"));
+        let payload = typed_var("p", test_ty("Twins"));
+        let vars = table(vec![
+            (scrutinee.clone(), Binding::Param),
+            (
+                payload.clone(),
+                Binding::Payload(scrutinee.clone(), Some(0)),
+            ),
+        ]);
+
+        let whole_union = acted_references(&vars, &type_env, &scrutinee, &vec![]);
+        let first_field = acted_references(&vars, &type_env, &payload, &vec![0]);
+        let second_field = acted_references(&vars, &type_env, &payload, &vec![1]);
+        assert!(whole_union.covers(&first_field));
+        assert_ne!(whole_union, first_field);
+        assert!(
+            !first_field.covers(&second_field),
+            "the two fields of the payload hold references of different objects"
+        );
+
+        let mut outstanding = whole_union;
+        outstanding.subtract(&first_field);
+        assert!(
+            !outstanding.is_empty(),
+            "the release of one field leaves the payload's other reference bumped"
+        );
+        assert!(outstanding.covers(&second_field));
+        outstanding.subtract(&second_field);
+        assert!(
+            outstanding.is_empty(),
+            "the releases of both fields un-bump the retain of the union"
+        );
     }
 
     /// A join over another join flattens: every result the inner join could yield is among the outer
@@ -1227,11 +1372,11 @@ mod tests {
     #[test]
     fn a_join_of_joins_may_be_any_of_their_results() {
         let vars = table(vec![
-            ("p", Binding::Producer),
-            ("q", Binding::Producer),
-            ("r", Binding::Producer),
-            ("inner", Binding::Join(vec![var("p"), var("q")])),
-            ("m", Binding::Join(vec![var("inner"), var("r")])),
+            (var("p"), Binding::Producer),
+            (var("q"), Binding::Producer),
+            (var("r"), Binding::Producer),
+            (var("inner"), Binding::Join(vec![var("p"), var("q")])),
+            (var("m"), Binding::Join(vec![var("inner"), var("r")])),
         ]);
         assert_eq!(
             origin_of(&vars, "m")

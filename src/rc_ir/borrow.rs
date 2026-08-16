@@ -1,5 +1,5 @@
-//! Borrow-ification over the RC IR: rewriting `Own` parameters that a function only
-//! reads to `Borrow`, so the caller keeps ownership across the call and no retain is needed before a
+//! Borrow-ification over the RC IR: an `Own` parameter that a function only reads becomes a
+//! `Borrow` parameter, so the caller keeps ownership across the call and needs no retain before a
 //! non-last use — which is what keeps a value `Unique` for the uniqueness analysis.
 //!
 //! Lowering makes every parameter `Own` (the callee releases it). Borrow-ification has three parts:
@@ -29,11 +29,12 @@
 //!
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
-//! cancellable when, on every forward path, a release un-bumps it before the value is consumed. That
-//! keeps the value `Unique` for the uniqueness analysis, the reason borrow-ification exists.
+//! cancellable when, on every forward path, releases un-bump every reference it bumped before the
+//! value is consumed. That keeps the value `Unique` for the uniqueness analysis, the reason
+//! borrow-ification exists.
 //!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`: inference, rewrite, and cancellation all read it, so they agree.
+//! model in `ownership`, so every part of this pass gives the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -46,8 +47,9 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, UnitStep, VarTable,
+    acted_references, acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes,
+    origin, rc_units, rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, References,
+    UnitStep, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
@@ -142,8 +144,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         owned_units.extend(param_capture_units(func, type_env));
         // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
         // to its unit.
-        if let Some(bref) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
+        if let Some(borrow_version) = borrow_versions.get(&func.name) {
+            let (clone, rename) = clone_func(func, borrow_version.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
                     if owned_leaves.owns(&p.name, &leaf) {
@@ -152,7 +154,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
                     }
                 }
             }
-            clones.push((bref.clone(), clone, rename));
+            clones.push((borrow_version.clone(), clone, rename));
         }
     }
 
@@ -162,8 +164,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     for func in prog.funcs.values() {
         callee_params.insert(func.name.clone(), param_names_and_types(func));
     }
-    for (bref, clone, _) in &clones {
-        callee_params.insert(bref.clone(), param_names_and_types(clone));
+    for (borrow_version, clone, _) in &clones {
+        callee_params.insert(borrow_version.clone(), param_names_and_types(clone));
     }
 
     // Rewrite every version's body: route its calls and adjust the reference counting.
@@ -181,7 +183,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         f_own.body = ctx.rewrite(&f_own.body);
         funcs.insert(f_own.name.clone(), f_own);
     }
-    for (bref, mut clone, _) in clones {
+    for (borrow_version, mut clone, _) in clones {
         let ctx = RewriteCtx::new(
             &clone,
             true,
@@ -191,7 +193,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             type_env,
         );
         clone.body = ctx.rewrite(&clone.body);
-        funcs.insert(bref, clone);
+        funcs.insert(borrow_version, clone);
     }
 
     // Globals are param-less function bodies: route and rewrite them the same way (as `f_own`).
@@ -255,12 +257,12 @@ pub fn param_ownership_shapes(
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
-    let mut n = name.name.clone();
-    n.name.push_str("#borrow");
-    FuncRef { name: n }
+    let mut borrow_name = name.name.clone();
+    borrow_name.name.push_str("#borrow");
+    FuncRef { name: borrow_name }
 }
 
-/// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
+/// Whether borrow inference left any of a function's parameter leaves `Borrow`.
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
@@ -355,8 +357,8 @@ fn param_ownership_shape(
 
 // --- tail-call recognition ---
 
-/// The variables bound to an `App` or `Match` in tail position: a call in tail position must not be
-/// turned into a non-tail one by an after-call release, so routing consults this set.
+/// The variables bound to an `App` or `Match` in tail position. Such a call must not be turned into
+/// a non-tail one by an after-call release.
 fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     let mut out = Set::default();
     mark_tail(body, true, &mut out);
@@ -383,7 +385,9 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
                         mark_tail(&arm.body, is_tail, out);
                     }
                 }
-                _ => {}
+                // A tail-position result is bound by a call or a match, so the remaining shapes —
+                // a call out of tail position included — leave the set alone.
+                RcRhs::App(..) | RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
             }
             mark_tail(k, in_tail, out);
         }
@@ -401,7 +405,13 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(v) => v.name == *x,
         RcExpr::Let(s, RcRhs::Var(y), k2) if y.name == *x => trivially_returns(k2, &s.name),
-        _ => false,
+        // A binding of anything but a rename of `x`, and every other construct, is a real operation
+        // that breaks the chain.
+        RcExpr::Let(..)
+        | RcExpr::Retain(..)
+        | RcExpr::Release(..)
+        | RcExpr::Destructure(..)
+        | RcExpr::Eval(..) => false,
     }
 }
 
@@ -549,11 +559,11 @@ impl<'a> RewriteCtx<'a> {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
-        if let Some(bref) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(bref, args, k) {
-                let mut c = callee.clone();
-                c.name = bref.name.clone();
-                return c;
+        if let Some(borrow_version) = self.borrow_versions.get(&orig) {
+            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
+                let mut routed = callee.clone();
+                routed.name = borrow_version.name.clone();
+                return routed;
             }
         }
         callee.clone()
@@ -566,23 +576,27 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether routing this call to the borrow version removes a reference count it would otherwise
-    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows and
-    /// that would otherwise be retained: a borrowed value (which an owning callee makes the caller
-    /// retain before the call) or an owned value used again after the call (whose retain-before the
-    /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
-    /// retain and only delays its release; it is not a benefit.
-    fn routing_saves_retain(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
-        // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
-        // key here.
-        let bparams = &self.callee_params[bref];
+    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
+    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
+    /// callee makes the caller retain before the call, and an owned value used again after the
+    /// call, whose retain-before the borrow cancels. An owned value at its last use is moved either
+    /// way, so borrowing it removes no retain and only delays its release.
+    fn routing_saves_retain(
+        &self,
+        borrow_version: &FuncRef,
+        args: &[RcVar],
+        k: &RcExprNode,
+    ) -> bool {
+        // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
+        let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let last_use = !used_later(&arg.name, k);
+            let is_last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
-                    .contains(&(bparams[arg_idx].0.clone(), unit.clone()));
-                callee_borrows && !(self.owns_unit(arg, unit) && last_use)
+                    .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
+                callee_borrows && !(self.owns_unit(arg, unit) && is_last_use)
             })
         })
     }
@@ -632,7 +646,7 @@ impl<'a> RewriteCtx<'a> {
         callee: &RcVar,
         args: &[RcVar],
     ) -> (Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>) {
-        let cparams = self.callee_params.get(&FuncRef {
+        let params = self.callee_params.get(&FuncRef {
             name: callee.name.clone(),
         });
         let mut before = vec![];
@@ -641,11 +655,11 @@ impl<'a> RewriteCtx<'a> {
             for unit in rc_units(&arg.ty, self.type_env) {
                 // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
                 // one is indexed by `arg_idx`, which is in range since `args.len() <= params.len()`.
-                let callee_owns = match cparams {
+                let callee_owns = match params {
                     None => true,
-                    Some(ps) => self
+                    Some(params) => self
                         .owned_units
-                        .contains(&(ps[arg_idx].0.clone(), unit.clone())),
+                        .contains(&(params[arg_idx].0.clone(), unit.clone())),
                 };
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -709,8 +723,8 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-fn prepend_rc(items: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
-    items.into_iter().rev().fold(k, |cont, (var, path)| {
+fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
+    units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
 }
@@ -752,9 +766,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 // --- unit normalization ---
 
 /// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
-/// borrow-ification and cancellation both see reference counting at unit granularity. A path that
-/// already names a single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op)
-/// disappears.
+/// that every later pass sees reference counting at unit granularity. A path that already names a
+/// single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op) disappears.
 pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     for func in prog.funcs.values_mut() {
         func.body = split_body(&func.body, type_env);
@@ -844,11 +857,63 @@ fn split_rc(
 /// The pending retains at a program point: for each object (a reference-counting unit, keyed by
 /// `unit_key`), the stack of retains that have bumped it and not yet been un-bumped. A release
 /// un-bumps the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
-type PendingRetains = Map<VarPath, Vec<NodeId>>;
+type PendingRetains = Map<VarPath, Vec<PendingRetain>>;
+
+/// A retain whose bump is still outstanding, and the references of it that no release has un-bumped
+/// yet.
+///
+/// A retain of an unboxed union bumps every reference its payload holds, while a release of a
+/// projection of that payload un-bumps one of them, so a retain is un-bumped by a group of releases
+/// rather than by a single one. Cancelling it takes the whole group, and only once the group leaves
+/// nothing outstanding.
+#[derive(Clone)]
+struct PendingRetain {
+    /// The retain node. The releases that un-bump it are recorded under this id.
+    node: NodeId,
+    /// The references the retain bumped that are still bumped here.
+    outstanding: References,
+}
+
+/// What a release does to the retains pending for the unit it is counted under.
+enum UnBump {
+    /// It un-bumps part or all of the innermost bracket, whose retain this is.
+    InBracket(NodeId),
+    /// It reaches references the innermost bracket did not bump.
+    OutsideBracket,
+    /// No retain is pending for the unit.
+    NoBracket,
+}
+
+/// Take a release's references off the innermost retain pending for `key`, where that retain bumped
+/// all of them. A retain left with nothing outstanding is un-bumped whole, and stops being pending.
+fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
+    // A release with nothing pending for `key` disposes of a reference the walk did not add — an
+    // owned parameter, or a value produced here — so it un-bumps no retain.
+    let Some(stack) = pending.get_mut(key) else {
+        return UnBump::NoBracket;
+    };
+    // A stack kept in `pending` is never empty (an emptied one is removed below), so a pending
+    // retain to un-bump is always present.
+    let innermost = stack
+        .last_mut()
+        .expect("a stack kept in `pending` is non-empty");
+    if !innermost.outstanding.covers(un_bumped) {
+        return UnBump::OutsideBracket;
+    }
+    innermost.outstanding.subtract(un_bumped);
+    let retain = innermost.node;
+    if innermost.outstanding.is_empty() {
+        stack.pop();
+    }
+    if stack.is_empty() {
+        pending.remove(key);
+    }
+    UnBump::InBracket(retain)
+}
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
-/// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
-/// same borrowed tree, recognizes them by the same identity.
+/// borrowed. Nodes to drop are recorded under this identity and recognized by it again in a later
+/// walk over the same borrowed tree.
 type NodeId = usize;
 
 /// The `NodeId` of a node: the address of its boxed `RcExpr`.
@@ -857,10 +922,10 @@ fn node_id(node: &RcExprNode) -> NodeId {
 }
 
 /// Remove the net-zero retain/release brackets borrow-ification leaves across borrow calls: a retain
-/// is cancellable when, on every forward path, a release un-bumps it before the value is consumed.
-/// Cancelling it (and the releases it pairs with) keeps the value `Unique` for the uniqueness
-/// analysis. Each call's consume sites are decided by the parameter/capture units the functions own —
-/// the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
+/// is cancellable when, on every forward path, releases un-bump every reference it bumped before the
+/// value is consumed. Cancelling it (and the releases that un-bump it) keeps the value `Unique` for
+/// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
+/// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
@@ -870,7 +935,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             owned_units: &owned_units,
             type_env,
             needed_retains: Set::default(),
-            unbump_releases: Map::default(),
+            un_bump_releases: Map::default(),
             all_retains: vec![],
         };
         analysis.walk(body, PendingRetains::default(), true);
@@ -921,7 +986,7 @@ struct CancelAnalysis<'a> {
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
     /// The releases each retain is un-bumped by; they are deleted together with the retain.
-    unbump_releases: Map<NodeId, Vec<NodeId>>,
+    un_bump_releases: Map<NodeId, Vec<NodeId>>,
     /// Every retain the walk saw, so the cancellable retains are those never marked needed.
     all_retains: Vec<NodeId>,
 }
@@ -937,6 +1002,25 @@ impl<'a> CancelAnalysis<'a> {
     /// is load-bearing across the operation (`ownership::acted_unit_keys`).
     fn acted_unit_keys(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
         acted_unit_keys(self.vars, self.type_env, var, path)
+    }
+
+    /// The references a reference-count node of this function acts on, which decide whether a
+    /// release un-bumps a retain (`ownership::acted_references`).
+    fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
+        let references = acted_references(self.vars, self.type_env, v, path);
+        // Reference counting is inserted only for a value that holds a reference, and
+        // `split_rc_units` leaves every node naming one unit of its value's type, so a node always
+        // acts on at least one reference. A node acting on none would make both sides of the pairing
+        // vacuous: such a retain would be un-bumped whole by the first release of its unit, whatever
+        // that release reaches, and such a release would count as un-bumping a retain it leaves
+        // fully bumped.
+        assert!(
+            !references.is_empty(),
+            "the reference count of `{}`{:?} acts on no reference",
+            v.name.to_string(),
+            path
+        );
+        references
     }
 
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
@@ -963,37 +1047,39 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Retain(v, path, _, k) => {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
-                self.unbump_releases.entry(retain).or_default();
+                self.un_bump_releases.entry(retain).or_default();
+                let outstanding = self.acted_references(v, path);
                 pending
                     .entry(self.unit_key(&v.name, path))
                     .or_default()
-                    .push(retain);
+                    .push(PendingRetain {
+                        node: retain,
+                        outstanding,
+                    });
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Release(v, path, _, k) => {
                 let key = self.unit_key(&v.name, path);
                 // A release of a value whose object is path-dependent un-bumps a retain of that same
-                // value, so it pairs on the identity; on the other objects it may be, it is a drop
-                // that no pending retain of theirs may be cancelled across.
+                // value, so it pairs on the identity. On the other objects it may be, it is a drop:
+                // a retain of one of them that is still pending cannot be cancelled across it.
                 for other in self.acted_unit_keys(&v.name, path) {
                     if other != key {
                         self.consume_unit(&mut pending, other);
                     }
                 }
-                // A release with nothing pending for `key` disposes of a reference this walk did not
-                // add — an owned parameter, or a value produced here — so it un-bumps no retain and
-                // pairs with nothing.
-                if let Some(stack) = pending.get_mut(&key) {
-                    // A stack kept in `pending` is never empty (emptied stacks are removed below), so a
-                    // pending retain to pair with is always present.
-                    let retain = stack.pop().expect("a stack kept in `pending` is non-empty");
-                    self.unbump_releases
+                let un_bumped = self.acted_references(v, path);
+                match un_bump(&mut pending, &key, &un_bumped) {
+                    UnBump::InBracket(retain) => self
+                        .un_bump_releases
                         .entry(retain)
                         .or_default()
-                        .push(node_id(node));
-                    if stack.is_empty() {
-                        pending.remove(&key);
-                    }
+                        .push(node_id(node)),
+                    // A release that reaches references the innermost bracket did not bump closes
+                    // no bracket here. It un-bumps part of what retains outside that bracket
+                    // bumped, so no retain pending for the unit can be cancelled as a whole.
+                    UnBump::OutsideBracket => self.consume_unit(&mut pending, key),
+                    UnBump::NoBracket => {}
                 }
                 self.walk(k, pending, returns_from_func)
             }
@@ -1022,8 +1108,8 @@ impl<'a> CancelAnalysis<'a> {
                 if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
                     for stack in pending.values() {
-                        for &retain in stack {
-                            self.needed_retains.insert(retain);
+                        for retain in stack {
+                            self.needed_retains.insert(retain.node);
                         }
                     }
                 }
@@ -1069,44 +1155,64 @@ impl<'a> CancelAnalysis<'a> {
     fn consume_unit(&mut self, pending: &mut PendingRetains, key: VarPath) {
         if let Some(stack) = pending.remove(&key) {
             for retain in stack {
-                self.needed_retains.insert(retain);
+                self.needed_retains.insert(retain.node);
             }
         }
     }
 
-    /// Merge match arms into their continuation: a retain pending in every arm's exit continues (a
-    /// single downstream release un-bumps it on all paths); a retain pending in some but not all arms
-    /// has a non-uniform fate and cannot be cleanly cancelled, so it is disqualified.
+    /// Merge match arms into their continuation. A retain the match was entered with continues when
+    /// every arm exits with the same references of it still outstanding, since a single downstream
+    /// release then un-bumps it on all paths. Two kinds are disqualified instead: a retain the arms
+    /// leave in different states, whose fate is non-uniform, and a retain an arm created itself,
+    /// which the merged state has no place for — that state is built over the retains the match was
+    /// entered with.
     fn merge(
         &mut self,
         pending_in: &PendingRetains,
         arm_exits: &[PendingRetains],
     ) -> PendingRetains {
-        let arm_count = arm_exits.len();
-        let mut pending_arm_count: Map<NodeId, usize> = Map::default();
-        for exit in arm_exits {
-            let mut seen: Set<NodeId> = Set::default();
-            for stack in exit.values() {
-                for &retain in stack {
-                    if seen.insert(retain) {
-                        *pending_arm_count.entry(retain).or_default() += 1;
-                    }
+        // What each arm exits with for each retain. A retain absent from an arm's exit was fully
+        // un-bumped on that path.
+        let arm_states: Vec<Map<NodeId, &References>> = arm_exits
+            .iter()
+            .map(|exit| {
+                exit.values()
+                    .flatten()
+                    .map(|retain| (retain.node, &retain.outstanding))
+                    .collect()
+            })
+            .collect();
+        let entered_with: Set<NodeId> = pending_in
+            .values()
+            .flatten()
+            .map(|retain| retain.node)
+            .collect();
+        let mut uniform: Map<NodeId, References> = Map::default();
+        for states in &arm_states {
+            for (&retain, &outstanding) in states {
+                let is_uniform = entered_with.contains(&retain)
+                    && arm_states
+                        .iter()
+                        .all(|other| other.get(&retain) == Some(&outstanding));
+                if is_uniform {
+                    uniform.insert(retain, outstanding.clone());
+                } else {
+                    self.needed_retains.insert(retain);
                 }
             }
         }
-        for (&retain, &count) in &pending_arm_count {
-            if count != arm_count {
-                self.needed_retains.insert(retain);
-            }
-        }
-        // Keep the retains pending in all arms, in the pre-match order so release pairing stays
+        // Keep the retains the arms agree on, in the pre-match order so release pairing stays
         // innermost-first.
         let mut merged = PendingRetains::default();
         for (key, stack) in pending_in {
-            let kept: Vec<NodeId> = stack
+            let kept: Vec<PendingRetain> = stack
                 .iter()
-                .copied()
-                .filter(|retain| pending_arm_count.get(retain) == Some(&arm_count))
+                .filter_map(|retain| {
+                    uniform.get(&retain.node).map(|outstanding| PendingRetain {
+                        node: retain.node,
+                        outstanding: outstanding.clone(),
+                    })
+                })
                 .collect();
             if !kept.is_empty() {
                 merged.insert(key.clone(), kept);
@@ -1115,8 +1221,8 @@ impl<'a> CancelAnalysis<'a> {
         merged
     }
 
-    /// The nodes to delete: every cancellable retain (one never marked needed and paired by at least
-    /// one release) together with the releases it pairs with.
+    /// The nodes to delete: every cancellable retain (one never marked needed and un-bumped by at
+    /// least one release) together with the group of releases that un-bump it.
     fn cancelled(&self) -> Set<NodeId> {
         let mut out = Set::default();
         for &retain in &self.all_retains {
@@ -1125,7 +1231,7 @@ impl<'a> CancelAnalysis<'a> {
             }
             // The walk records an entry for every retain it meets, and only retains it met are here.
             let releases = self
-                .unbump_releases
+                .un_bump_releases
                 .get(&retain)
                 .unwrap_or_else(|| unreachable!("retain {:?} was never seen by the walk", retain));
             // A retain with no un-bump release is left in place to keep the counting balanced.

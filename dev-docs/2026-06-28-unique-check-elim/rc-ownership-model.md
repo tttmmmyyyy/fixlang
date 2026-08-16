@@ -18,6 +18,11 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   （`VarPath` の先頭にある変数）の型の `rc_units` の要素である。切り詰めは下向きにしか効かないので、
   identity の path が unit root より上で止まると、どの unit も指さない `unit_key` ができる。`unit_of` の
   assertion がこれを検査する。
+- **参照** = 1 回の RC 操作が上げ下げする参照。`acted_references` が、path の下の各 boxed leaf の `origin` の
+  identity をオブジェクトごとに数えて `References` を返す。同じ `unit_key` の retain と release でも触れる参照は
+  一致しない: unbox union は 1 unit なので union の retain は payload の持つ参照を全部上げるが、payload を
+  射影した値の release はそのうち 1 つを下げる。同じオブジェクトの参照を 2 つ持つ値（`MakeStruct(a, a)` の
+  結果など）では 1 つの leaf が 1 参照なので、数は 2 になる。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は union 自身の
   path、その leaf は各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
   無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
@@ -77,7 +82,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 | `insert_rc` 直後 | 全 `Retain`/`Release` は path `[]`・`RcState::Unknown`。全パラメータ/capture が `Own`。各 binding の各参照はどのパスでもちょうど 1 回消費される |
 | `split_rc_units` 直後 | 同上、ただしキーが `(binding, unit)`。全 RC ノードの path が `rc_units(v.ty)` の要素 |
 | `borrow_ify` 直後 | `borrowed_units` に載る unit と、それに根を持つ値は**消費も RC 操作もされない**（`owns_unit` が判定）。それ以外は各パスちょうど 1 回消費 |
-| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer で +1・消費/`Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
+| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。消えるのは retain 1 個と、その retain が上げた参照をちょうど覆う release 群（`acted_references`）である。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer で +1・消費/`Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
 
 `specialize` は RC ノードを素通しコピーし、`assuming_unique` は `LLVMGen` を差し替えるだけなので、消費モデルは
 特殊化の前後で不変（`result_prov` を force-unique 有無で変える op は存在しない）。
