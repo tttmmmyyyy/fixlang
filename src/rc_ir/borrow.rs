@@ -144,8 +144,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         owned_units.extend(param_capture_units(func, type_env));
         // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
         // to its unit.
-        if let Some(bref) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
+        if let Some(borrow_version) = borrow_versions.get(&func.name) {
+            let (clone, rename) = clone_func(func, borrow_version.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
                     if owned_leaves.owns(&p.name, &leaf) {
@@ -154,7 +154,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
                     }
                 }
             }
-            clones.push((bref.clone(), clone, rename));
+            clones.push((borrow_version.clone(), clone, rename));
         }
     }
 
@@ -164,8 +164,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     for func in prog.funcs.values() {
         callee_params.insert(func.name.clone(), param_names_and_types(func));
     }
-    for (bref, clone, _) in &clones {
-        callee_params.insert(bref.clone(), param_names_and_types(clone));
+    for (borrow_version, clone, _) in &clones {
+        callee_params.insert(borrow_version.clone(), param_names_and_types(clone));
     }
 
     // Rewrite every version's body: route its calls and adjust the reference counting.
@@ -183,7 +183,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         f_own.body = ctx.rewrite(&f_own.body);
         funcs.insert(f_own.name.clone(), f_own);
     }
-    for (bref, mut clone, _) in clones {
+    for (borrow_version, mut clone, _) in clones {
         let ctx = RewriteCtx::new(
             &clone,
             true,
@@ -193,7 +193,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             type_env,
         );
         clone.body = ctx.rewrite(&clone.body);
-        funcs.insert(bref, clone);
+        funcs.insert(borrow_version, clone);
     }
 
     // Globals are param-less function bodies: route and rewrite them the same way (as `f_own`).
@@ -257,9 +257,9 @@ pub fn param_ownership_shapes(
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
-    let mut n = name.name.clone();
-    n.name.push_str("#borrow");
-    FuncRef { name: n }
+    let mut borrow_name = name.name.clone();
+    borrow_name.name.push_str("#borrow");
+    FuncRef { name: borrow_name }
 }
 
 /// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
@@ -559,11 +559,11 @@ impl<'a> RewriteCtx<'a> {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
-        if let Some(bref) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(bref, args, k) {
-                let mut c = callee.clone();
-                c.name = bref.name.clone();
-                return c;
+        if let Some(borrow_version) = self.borrow_versions.get(&orig) {
+            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
+                let mut routed = callee.clone();
+                routed.name = borrow_version.name.clone();
+                return routed;
             }
         }
         callee.clone()
@@ -581,18 +581,22 @@ impl<'a> RewriteCtx<'a> {
     /// retain before the call) or an owned value used again after the call (whose retain-before the
     /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
     /// retain and only delays its release; it is not a benefit.
-    fn routing_saves_retain(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
-        // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
-        // key here.
-        let bparams = &self.callee_params[bref];
+    fn routing_saves_retain(
+        &self,
+        borrow_version: &FuncRef,
+        args: &[RcVar],
+        k: &RcExprNode,
+    ) -> bool {
+        // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
+        let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let last_use = !used_later(&arg.name, k);
+            let is_last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
-                    .contains(&(bparams[arg_idx].0.clone(), unit.clone()));
-                callee_borrows && !(self.owns_unit(arg, unit) && last_use)
+                    .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
+                callee_borrows && !(self.owns_unit(arg, unit) && is_last_use)
             })
         })
     }
@@ -642,7 +646,7 @@ impl<'a> RewriteCtx<'a> {
         callee: &RcVar,
         args: &[RcVar],
     ) -> (Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>) {
-        let cparams = self.callee_params.get(&FuncRef {
+        let params = self.callee_params.get(&FuncRef {
             name: callee.name.clone(),
         });
         let mut before = vec![];
@@ -651,11 +655,11 @@ impl<'a> RewriteCtx<'a> {
             for unit in rc_units(&arg.ty, self.type_env) {
                 // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
                 // one is indexed by `arg_idx`, which is in range since `args.len() <= params.len()`.
-                let callee_owns = match cparams {
+                let callee_owns = match params {
                     None => true,
-                    Some(ps) => self
+                    Some(params) => self
                         .owned_units
-                        .contains(&(ps[arg_idx].0.clone(), unit.clone())),
+                        .contains(&(params[arg_idx].0.clone(), unit.clone())),
                 };
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -719,8 +723,8 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-fn prepend_rc(items: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
-    items.into_iter().rev().fold(k, |cont, (var, path)| {
+fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
+    units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
 }
