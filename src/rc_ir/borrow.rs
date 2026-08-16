@@ -1,5 +1,5 @@
-//! Borrow-ification over the RC IR: rewriting `Own` parameters that a function only
-//! reads to `Borrow`, so the caller keeps ownership across the call and no retain is needed before a
+//! Borrow-ification over the RC IR: an `Own` parameter that a function only reads becomes a
+//! `Borrow` parameter, so the caller keeps ownership across the call and needs no retain before a
 //! non-last use — which is what keeps a value `Unique` for the uniqueness analysis.
 //!
 //! Lowering makes every parameter `Own` (the callee releases it). Borrow-ification has three parts:
@@ -34,7 +34,7 @@
 //! borrow-ification exists.
 //!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`: inference, rewrite, and cancellation all read it, so they agree.
+//! model in `ownership`, so every part of this pass gives the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -144,8 +144,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         owned_units.extend(param_capture_units(func, type_env));
         // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
         // to its unit.
-        if let Some(bref) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
+        if let Some(borrow_version) = borrow_versions.get(&func.name) {
+            let (clone, rename) = clone_func(func, borrow_version.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
                     if owned_leaves.owns(&p.name, &leaf) {
@@ -154,7 +154,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
                     }
                 }
             }
-            clones.push((bref.clone(), clone, rename));
+            clones.push((borrow_version.clone(), clone, rename));
         }
     }
 
@@ -164,8 +164,8 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     for func in prog.funcs.values() {
         callee_params.insert(func.name.clone(), param_names_and_types(func));
     }
-    for (bref, clone, _) in &clones {
-        callee_params.insert(bref.clone(), param_names_and_types(clone));
+    for (borrow_version, clone, _) in &clones {
+        callee_params.insert(borrow_version.clone(), param_names_and_types(clone));
     }
 
     // Rewrite every version's body: route its calls and adjust the reference counting.
@@ -183,7 +183,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         f_own.body = ctx.rewrite(&f_own.body);
         funcs.insert(f_own.name.clone(), f_own);
     }
-    for (bref, mut clone, _) in clones {
+    for (borrow_version, mut clone, _) in clones {
         let ctx = RewriteCtx::new(
             &clone,
             true,
@@ -193,7 +193,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             type_env,
         );
         clone.body = ctx.rewrite(&clone.body);
-        funcs.insert(bref, clone);
+        funcs.insert(borrow_version, clone);
     }
 
     // Globals are param-less function bodies: route and rewrite them the same way (as `f_own`).
@@ -257,12 +257,12 @@ pub fn param_ownership_shapes(
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
-    let mut n = name.name.clone();
-    n.name.push_str("#borrow");
-    FuncRef { name: n }
+    let mut borrow_name = name.name.clone();
+    borrow_name.name.push_str("#borrow");
+    FuncRef { name: borrow_name }
 }
 
-/// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
+/// Whether borrow inference left any of a function's parameter leaves `Borrow`.
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
@@ -357,8 +357,8 @@ fn param_ownership_shape(
 
 // --- tail-call recognition ---
 
-/// The variables bound to an `App` or `Match` in tail position: a call in tail position must not be
-/// turned into a non-tail one by an after-call release, so routing consults this set.
+/// The variables bound to an `App` or `Match` in tail position. Such a call must not be turned into
+/// a non-tail one by an after-call release.
 fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     let mut out = Set::default();
     mark_tail(body, true, &mut out);
@@ -385,7 +385,9 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
                         mark_tail(&arm.body, is_tail, out);
                     }
                 }
-                _ => {}
+                // A tail-position result is bound by a call or a match, so the remaining shapes —
+                // a call out of tail position included — leave the set alone.
+                RcRhs::App(..) | RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
             }
             mark_tail(k, in_tail, out);
         }
@@ -403,7 +405,13 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(v) => v.name == *x,
         RcExpr::Let(s, RcRhs::Var(y), k2) if y.name == *x => trivially_returns(k2, &s.name),
-        _ => false,
+        // A binding of anything but a rename of `x`, and every other construct, is a real operation
+        // that breaks the chain.
+        RcExpr::Let(..)
+        | RcExpr::Retain(..)
+        | RcExpr::Release(..)
+        | RcExpr::Destructure(..)
+        | RcExpr::Eval(..) => false,
     }
 }
 
@@ -551,11 +559,11 @@ impl<'a> RewriteCtx<'a> {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
-        if let Some(bref) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(bref, args, k) {
-                let mut c = callee.clone();
-                c.name = bref.name.clone();
-                return c;
+        if let Some(borrow_version) = self.borrow_versions.get(&orig) {
+            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
+                let mut routed = callee.clone();
+                routed.name = borrow_version.name.clone();
+                return routed;
             }
         }
         callee.clone()
@@ -568,23 +576,27 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether routing this call to the borrow version removes a reference count it would otherwise
-    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows and
-    /// that would otherwise be retained: a borrowed value (which an owning callee makes the caller
-    /// retain before the call) or an owned value used again after the call (whose retain-before the
-    /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
-    /// retain and only delays its release; it is not a benefit.
-    fn routing_saves_retain(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
-        // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
-        // key here.
-        let bparams = &self.callee_params[bref];
+    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
+    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
+    /// callee makes the caller retain before the call, and an owned value used again after the
+    /// call, whose retain-before the borrow cancels. An owned value at its last use is moved either
+    /// way, so borrowing it removes no retain and only delays its release.
+    fn routing_saves_retain(
+        &self,
+        borrow_version: &FuncRef,
+        args: &[RcVar],
+        k: &RcExprNode,
+    ) -> bool {
+        // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
+        let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let last_use = !used_later(&arg.name, k);
+            let is_last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
-                    .contains(&(bparams[arg_idx].0.clone(), unit.clone()));
-                callee_borrows && !(self.owns_unit(arg, unit) && last_use)
+                    .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
+                callee_borrows && !(self.owns_unit(arg, unit) && is_last_use)
             })
         })
     }
@@ -634,7 +646,7 @@ impl<'a> RewriteCtx<'a> {
         callee: &RcVar,
         args: &[RcVar],
     ) -> (Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>) {
-        let cparams = self.callee_params.get(&FuncRef {
+        let params = self.callee_params.get(&FuncRef {
             name: callee.name.clone(),
         });
         let mut before = vec![];
@@ -643,11 +655,11 @@ impl<'a> RewriteCtx<'a> {
             for unit in rc_units(&arg.ty, self.type_env) {
                 // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
                 // one is indexed by `arg_idx`, which is in range since `args.len() <= params.len()`.
-                let callee_owns = match cparams {
+                let callee_owns = match params {
                     None => true,
-                    Some(ps) => self
+                    Some(params) => self
                         .owned_units
-                        .contains(&(ps[arg_idx].0.clone(), unit.clone())),
+                        .contains(&(params[arg_idx].0.clone(), unit.clone())),
                 };
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -711,8 +723,8 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-fn prepend_rc(items: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
-    items.into_iter().rev().fold(k, |cont, (var, path)| {
+fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
+    units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
 }
@@ -754,9 +766,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 // --- unit normalization ---
 
 /// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
-/// borrow-ification and cancellation both see reference counting at unit granularity. A path that
-/// already names a single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op)
-/// disappears.
+/// that every later pass sees reference counting at unit granularity. A path that already names a
+/// single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op) disappears.
 pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     for func in prog.funcs.values_mut() {
         func.body = split_body(&func.body, type_env);
@@ -874,8 +885,7 @@ enum UnBump {
 }
 
 /// Take a release's references off the innermost retain pending for `key`, where that retain bumped
-/// all of them. A retain the release leaves nothing outstanding of is un-bumped whole, and stops
-/// being pending.
+/// all of them. A retain left with nothing outstanding is un-bumped whole, and stops being pending.
 fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
     // A release with nothing pending for `key` disposes of a reference the walk did not add — an
     // owned parameter, or a value produced here — so it un-bumps no retain.
@@ -902,8 +912,8 @@ fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) 
 }
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
-/// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
-/// same borrowed tree, recognizes them by the same identity.
+/// borrowed. Nodes to drop are recorded under this identity and recognized by it again in a later
+/// walk over the same borrowed tree.
 type NodeId = usize;
 
 /// The `NodeId` of a node: the address of its boxed `RcExpr`.
@@ -1051,8 +1061,8 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Release(v, path, _, k) => {
                 let key = self.unit_key(&v.name, path);
                 // A release of a value whose object is path-dependent un-bumps a retain of that same
-                // value, so it pairs on the identity; on the other objects it may be, it is a drop
-                // that no pending retain of theirs may be cancelled across.
+                // value, so it pairs on the identity. On the other objects it may be, it is a drop:
+                // a retain of one of them that is still pending cannot be cancelled across it.
                 for other in self.acted_unit_keys(&v.name, path) {
                     if other != key {
                         self.consume_unit(&mut pending, other);

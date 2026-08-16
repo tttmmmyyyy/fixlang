@@ -1,6 +1,6 @@
-// Reference counting around unions that the RC IR rewrites: an operand a rewrite substitutes and
-// then nobody reads, an unboxed union nested inside unboxed aggregates, and a union built out of a
-// payload that holds its reference-counting units below the payload itself.
+//! Reference counting around unions that the RC IR rewrites: an operand a rewrite substitutes and
+//! then nobody reads, an unboxed union nested inside unboxed aggregates, and a union built out of a
+//! payload that holds its reference-counting units below the payload itself.
 
 #[cfg(test)]
 mod union_rc_shapes_tests {
@@ -9,6 +9,14 @@ mod union_rc_shapes_tests {
         misc::{function_name, platform_valgrind_supported},
         tests::test_util::test_source,
     };
+
+    /// Compile and run a source with Valgrind switched off, leaving the program's own assertions to
+    /// decide the outcome.
+    fn test_source_without_valgrind(source: &str) {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(source, config);
+    }
 
     /// Matching a union built on the spot lets the simplifier replace the match with the arm it
     /// knows is taken, substituting the payload the construction was given. Where the arm then
@@ -69,9 +77,9 @@ mod union_rc_shapes_tests {
 
     /// An unboxed union is one reference-counting unit, counted on the union itself, while the
     /// references it holds live inside its variants and differ in shape from one variant to the
-    /// next. Nesting such a union inside a struct and a tuple, and then modifying an array of them
-    /// while a second binding keeps the array shared, makes the modification copy an element, and
-    /// the copy reaches those units two levels of unboxed aggregate down. Run under memcheck.
+    /// next. This nests such a union inside a struct and a tuple, then modifies an array of them
+    /// while a second binding keeps that array shared. The modification copies an element, and the
+    /// copy reaches those units two levels of unboxed aggregate down. Run under memcheck.
     #[test]
     pub fn test_nested_unboxed_union_shared_mod() {
         let source = r#"
@@ -139,13 +147,13 @@ mod union_rc_shapes_tests {
     // own object is.
     //
     // Each union below is read through a call that stays out of line, and read once more after that
-    // call returns, so that it reaches reference counting instead of being folded into the
-    // constructor that built it. The payload it was built from stays live beside it and is read
-    // back at the end. For the shapes whose payload holds two units, freeing that payload early
-    // changes the answer. For the shape whose unit sits one level down the answer stays right
-    // either way, and the assertion in `unit_of` catches a key made for it. That payload arrives as
-    // a parameter, so the union is resolved from a value whose own unit sits a level below it; it
-    // carries a second field so that the struct around the boxed value survives to the RC IR.
+    // call returns, so that the simplifier leaves it standing as a value reference counting acts
+    // on. The payload it was built from stays live beside it and is read back at the end. For the
+    // shapes whose payload holds two units, freeing that payload early changes the answer. For the
+    // shape whose unit sits one level down the answer stays right either way, and the assertion in
+    // `unit_of` catches a key made for it. That payload arrives as a parameter, so the union is
+    // resolved from a value whose own unit sits a level below it; it carries a second field so that
+    // the struct around the boxed value survives to the RC IR.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
@@ -252,9 +260,7 @@ main = (
     /// changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_payload_units_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(UNION_PAYLOAD_UNITS_SOURCE, config);
+        test_source_without_valgrind(UNION_PAYLOAD_UNITS_SOURCE);
     }
 
     /// The boxed values the payloads carry are freed exactly once and none of them leaks, checked
@@ -327,9 +333,7 @@ main = (
     /// while the union still holds it changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_payload_taken_twice_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(PAYLOAD_TAKEN_TWICE_SOURCE, config);
+        test_source_without_valgrind(PAYLOAD_TAKEN_TWICE_SOURCE);
     }
 
     /// The arrays a payload taken out twice holds are freed exactly once and none of them leaks,
@@ -380,9 +384,7 @@ main = (
     /// the union changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_dropped_whole_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(UNION_DROPPED_WHOLE_SOURCE, config);
+        test_source_without_valgrind(UNION_DROPPED_WHOLE_SOURCE);
     }
 
     /// The array a union held twice is freed exactly once and does not leak, checked under Valgrind
