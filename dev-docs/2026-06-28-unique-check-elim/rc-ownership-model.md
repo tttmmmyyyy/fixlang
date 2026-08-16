@@ -6,8 +6,10 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 
 ## 1. 単位
 
-- **RC unit** = `(変数名, Path)`（`VarPath`）。`rc_units` が列挙し、`is_rc_unit_root`（boxed / union / punched array）で降下を止める。
-  punched フィールドはスキップする。
+- **RC unit** = `(変数名, Path)`（`VarPath`）。どの型が unit を担うかは `unit_step` が 1 か所で答える
+  （参照を持たない値、closure の capture、それ自身が 1 unit の値（boxed / union / `Array` / punched array）、
+  そのほかは unbox 集約として punched を除くフィールドへ降りる）。unit を列挙する `rc_units`、path を
+  切り詰める `truncate_to_unit`、codegen の `project_rc_unit` はいずれもその答えに従う。
 - **boxed leaf** = `boxed_leaf_paths` が列挙する末端。unbox union は**各 variant の中まで降り**、punched
   フィールドは `rc_units` と同じくスキップする（参照を持たないため）。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは

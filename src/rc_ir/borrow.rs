@@ -38,7 +38,6 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -48,42 +47,58 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
     acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_key, units_under, VarTable,
+    rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, UnitStep, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
-/// The result of borrow inference: which parameter leaves each function of the program owns.
-struct Ownerships {
-    /// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf
-    /// path. A leaf absent from it is `Borrow`.
-    own: Set<VarPath>,
+/// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
+/// leaf path; a leaf absent from the set is `Borrow`.
+///
+/// These are **leaves**, one per reference a parameter holds. The `owned_units` this pass carries
+/// beside them are **units**, one per reference-count operation, and `truncate_to_unit` turns a leaf
+/// into the unit it keys to. Both are sets of `VarPath`, so the name is what tells one from the
+/// other.
+struct OwnedLeaves(Set<VarPath>);
+
+impl OwnedLeaves {
+    /// Whether the leaf `path` of the parameter `var` is owned.
+    fn owns(&self, var: &FullName, path: &FieldPath) -> bool {
+        self.0.contains(&(var.clone(), path.clone()))
+    }
 }
 
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
+fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
         .values()
         .map(|f| (f.name.clone(), VarTable::of(f)))
         .collect();
 
-    let mut own: Set<VarPath> = Set::default();
+    let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
             let vars = &var_tables[&func.name];
             let mut consumed = vec![];
-            collect_consumes(&func.body, vars, prog, &own, type_env, &mut consumed);
+            collect_consumes(
+                &func.body,
+                vars,
+                prog,
+                &owned_leaves,
+                type_env,
+                &mut consumed,
+            );
             for (var, path) in consumed {
                 // Attribute the consume to the parameters it may originate from, and own them. A
                 // consumed leaf that is one of several objects is consumed whichever it is, so every
                 // parameter it may be has to be owned.
                 for (root_var, root_path) in origin(vars, type_env, &var, &path).candidates() {
                     if vars.param_tys.contains_key(root_var)
-                        && own.insert((root_var.clone(), root_path.clone()))
+                        && owned_leaves.insert((root_var.clone(), root_path.clone()))
                     {
                         changed = true;
                     }
@@ -95,7 +110,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
         }
     }
 
-    Ownerships { own }
+    OwnedLeaves(owned_leaves)
 }
 
 // --- borrow-ification ---
@@ -105,14 +120,14 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 /// annotate every output version with the parameter/capture units it borrows
 /// (`RcFunc::borrowed_units`).
 pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
-    let ownerships = infer_ownership(prog, type_env);
+    let owned_leaves = infer_ownership(prog, type_env);
 
     // The funptr functions that get a borrow version, and the name of that version. Only funptr
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
     for func in prog.funcs.values() {
-        if func.capture.is_none() && func_has_borrowable_param(func, &ownerships, type_env) {
+        if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
     }
@@ -131,7 +146,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
-                    if ownerships.own.contains(&(p.name.clone(), leaf.clone())) {
+                    if owned_leaves.owns(&p.name, &leaf) {
                         let unit = truncate_to_unit(&p.ty, &leaf, type_env);
                         owned_units.insert((rename[&p.name].clone(), unit));
                     }
@@ -245,12 +260,16 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
     FuncRef { name: n }
 }
 
-/// Whether any of a function's parameter leaves is borrowable (not in the inferred owned set).
-fn func_has_borrowable_param(func: &RcFunc, ownerships: &Ownerships, type_env: &TypeEnv) -> bool {
+/// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
+fn func_has_borrowable_param(
+    func: &RcFunc,
+    owned_leaves: &OwnedLeaves,
+    type_env: &TypeEnv,
+) -> bool {
     func.params.iter().any(|p| {
         boxed_leaf_paths(&p.ty, type_env)
             .iter()
-            .any(|leaf| !ownerships.own.contains(&(p.name.clone(), leaf.clone())))
+            .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
     })
 }
 
@@ -301,30 +320,35 @@ fn param_ownership_shape(
                 Ownership::Borrow
             }
         };
-        if ty.is_fully_unboxed(type_env) {
-            return OwnershipShape::NoUnit;
+        match unit_step(ty, type_env) {
+            UnitStep::NoUnit => OwnershipShape::NoUnit,
+            UnitStep::Capture {
+                capture_idx,
+                field_count,
+            } => {
+                path.push(capture_idx);
+                let capture_ownership = ownership_at(path);
+                path.pop();
+                let mut children = vec![OwnershipShape::NoUnit; field_count];
+                children[capture_idx] = OwnershipShape::Unit(capture_ownership);
+                OwnershipShape::Fields(children)
+            }
+            UnitStep::Unit => OwnershipShape::Unit(ownership_at(path)),
+            UnitStep::Fields {
+                field_count,
+                held_fields,
+            } => {
+                // A field the value holds nothing at keeps its place in the shape, so that a shape
+                // index is a field index.
+                let mut children = vec![OwnershipShape::NoUnit; field_count];
+                for (i, fty) in held_fields {
+                    path.push(i);
+                    children[i] = go(var, &fty, owned_units, type_env, path);
+                    path.pop();
+                }
+                OwnershipShape::Fields(children)
+            }
         }
-        if ty.is_closure() {
-            path.push(CLOSURE_CAPTURE_IDX as usize);
-            let capture_ownership = ownership_at(path);
-            path.pop();
-            return OwnershipShape::Fields(vec![
-                OwnershipShape::NoUnit,
-                OwnershipShape::Unit(capture_ownership),
-            ]);
-        }
-        if ty.is_rc_unit_root(type_env) {
-            return OwnershipShape::Unit(ownership_at(path));
-        }
-        // A field the value holds nothing at keeps its place in the shape, so that a shape index is a
-        // field index.
-        let mut children = vec![OwnershipShape::NoUnit; ty.field_types(type_env).len()];
-        for (i, fty) in ty.unpunched_field_types(type_env) {
-            path.push(i);
-            children[i] = go(var, &fty, owned_units, type_env, path);
-            path.pop();
-        }
-        OwnershipShape::Fields(children)
     }
     go(var, ty, owned_units, type_env, &mut vec![])
 }
