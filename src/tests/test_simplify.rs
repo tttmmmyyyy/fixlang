@@ -130,16 +130,16 @@ mod integration_tests {
         );
     }
 
-    /// `scale`'s inner arms build one constructor, so moving the outer `some` arm into them places a
-    /// copy in each. The copy is smaller than the construction and the match it replaces, so the
-    /// simplifier takes the move and `scale` builds no union. The built program still computes
-    /// `scale` over 0..10, so the removal leaves the values intact.
+    /// `shift_and_triple`'s inner arms build one constructor, so moving the outer `some` arm into
+    /// them places a copy in each. The copy is smaller than the construction and the match it
+    /// replaces, so the simplifier takes the move and the function builds no union. The built
+    /// program still computes it over 0..10, so the removal leaves the values intact.
     #[test]
     fn test_one_variant_union_removed() {
         assert_union_cancelled(
             "one_variant",
-            &["Main::scale"],
-            "`Main::scale`",
+            &["Main::shift_and_triple"],
+            "`Main::shift_and_triple`",
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }

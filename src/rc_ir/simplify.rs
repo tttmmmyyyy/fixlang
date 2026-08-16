@@ -44,19 +44,19 @@ const MARKER: &str = "cc";
 /// across the whole program, and the rewrites this body has left.
 struct Ctx<'a> {
     /// The source of the number that makes each minted name unique across the whole program.
-    fresh: &'a mut u64,
+    counter: &'a mut u64,
     /// The rewrites left for the body; the fixpoint stops when it reaches zero.
     budget: u64,
 }
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram) {
-    let mut fresh = 0;
+    let mut counter = 0;
     for func in prog.funcs.values_mut() {
-        func.body = simplify_to_fixpoint(&func.body, &mut fresh);
+        func.body = simplify_to_fixpoint(&func.body, &mut counter);
     }
     for g in &mut prog.globals {
-        g.init = simplify_to_fixpoint(&g.init, &mut fresh);
+        g.init = simplify_to_fixpoint(&g.init, &mut counter);
     }
 }
 
@@ -64,10 +64,10 @@ pub fn simplify(prog: &mut RcProgram) {
 /// the number of rewrites it admits when each makes it smaller; spending it stops the fixpoint, so a
 /// rewrite that broke that accounting halts here rather than looping forever, and the assertions below
 /// say which half of it broke.
-fn simplify_to_fixpoint(node: &RcExprNode, fresh: &mut u64) -> RcExprNode {
+fn simplify_to_fixpoint(node: &RcExprNode, counter: &mut u64) -> RcExprNode {
     let size = node_count(node);
     let mut ctx = Ctx {
-        fresh,
+        counter,
         budget: size,
     };
     let mut cur = node.clone();
@@ -75,12 +75,12 @@ fn simplify_to_fixpoint(node: &RcExprNode, fresh: &mut u64) -> RcExprNode {
         let mut changed = false;
         cur = rewrite(&cur, &mut ctx, &mut changed);
         if !changed {
-            let simplified = node_count(&cur);
+            let simplified_size = node_count(&cur);
             assert!(
-                simplified <= size,
+                simplified_size <= size,
                 "the simplifier grew a body from {} nodes to {}",
                 size,
-                simplified
+                simplified_size
             );
             assert!(
                 ctx.budget > 0,
@@ -147,7 +147,7 @@ fn try_local(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode
     }
     let rewritten = case_of_known_union(node)
         .or_else(|| destructure_of_struct(node))
-        .or_else(|| case_of_case(node, ctx.fresh));
+        .or_else(|| case_of_case(node, ctx.counter));
     match rewritten {
         Some(rewritten) => {
             ctx.budget -= 1;
@@ -275,7 +275,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
     for arm in inner_arms {
-        let body = replace_tail_construction(&arm.body, &mut |variant, operand| {
+        let body = replace_tail_union(&arm.body, &mut |variant, operand| {
             let outer = outer_arms.iter().find(|a| a.tag == Some(variant))?;
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
@@ -314,7 +314,7 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
 ///
 /// Requiring the construction to abut the `ret` makes `r` single-use — bound and immediately returned
 /// — so whatever consumed the arm's result consumed that union linearly.
-fn replace_tail_construction(
+fn replace_tail_union(
     node: &RcExprNode,
     f: &mut dyn FnMut(usize, &RcVar) -> Option<RcExprNode>,
 ) -> Option<RcExprNode> {
@@ -327,20 +327,17 @@ fn replace_tail_construction(
                     let (variant, operand) = union_construction(rhs)?;
                     return f(variant, operand);
                 }
-                RcExpr::Let(r.clone(), rhs.clone(), replace_tail_construction(k, f)?)
+                RcExpr::Let(r.clone(), rhs.clone(), replace_tail_union(k, f)?)
             }
-            RcExpr::Destructure(c, fields, state, k) => RcExpr::Destructure(
-                c.clone(),
-                fields.clone(),
-                *state,
-                replace_tail_construction(k, f)?,
-            ),
-            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_construction(k, f)?),
+            RcExpr::Destructure(c, fields, state, k) => {
+                RcExpr::Destructure(c.clone(), fields.clone(), *state, replace_tail_union(k, f)?)
+            }
+            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_union(k, f)?),
             RcExpr::Retain(v, p, st, k) => {
-                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail_construction(k, f)?)
+                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail_union(k, f)?)
             }
             RcExpr::Release(v, p, st, k) => {
-                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail_construction(k, f)?)
+                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail_union(k, f)?)
             }
         };
         Some(node_of(expr, &node.source))
