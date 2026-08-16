@@ -48,42 +48,47 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
     acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_key, units_under, VarTable,
+    rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, UnitStep, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
-/// The result of borrow inference: which parameter leaves each function of the program owns.
-struct Ownerships {
-    /// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf
-    /// path. A leaf absent from it is `Borrow`.
-    own: Set<VarPath>,
-}
-
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
+///
+/// # Returns
+/// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf path; a
+/// leaf absent from the set is `Borrow`. These are **leaves**, one per reference a parameter holds,
+/// where the `owned_units` the rest of this pass carries are **units**, one per refcount operation.
+fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
         .values()
         .map(|f| (f.name.clone(), VarTable::of(f)))
         .collect();
 
-    let mut own: Set<VarPath> = Set::default();
+    let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
             let vars = &var_tables[&func.name];
             let mut consumed = vec![];
-            collect_consumes(&func.body, vars, prog, &own, type_env, &mut consumed);
+            collect_consumes(
+                &func.body,
+                vars,
+                prog,
+                &owned_leaves,
+                type_env,
+                &mut consumed,
+            );
             for (var, path) in consumed {
                 // Attribute the consume to the parameters it may originate from, and own them. A
                 // consumed leaf that is one of several objects is consumed whichever it is, so every
                 // parameter it may be has to be owned.
                 for (root_var, root_path) in origin(vars, type_env, &var, &path).candidates() {
                     if vars.param_tys.contains_key(root_var)
-                        && own.insert((root_var.clone(), root_path.clone()))
+                        && owned_leaves.insert((root_var.clone(), root_path.clone()))
                     {
                         changed = true;
                     }
@@ -95,7 +100,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
         }
     }
 
-    Ownerships { own }
+    owned_leaves
 }
 
 // --- borrow-ification ---
@@ -105,14 +110,14 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 /// annotate every output version with the parameter/capture units it borrows
 /// (`RcFunc::borrowed_units`).
 pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
-    let ownerships = infer_ownership(prog, type_env);
+    let owned_leaves = infer_ownership(prog, type_env);
 
     // The funptr functions that get a borrow version, and the name of that version. Only funptr
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
     for func in prog.funcs.values() {
-        if func.capture.is_none() && func_has_borrowable_param(func, &ownerships, type_env) {
+        if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
     }
@@ -131,7 +136,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
-                    if ownerships.own.contains(&(p.name.clone(), leaf.clone())) {
+                    if owned_leaves.contains(&(p.name.clone(), leaf.clone())) {
                         let unit = truncate_to_unit(&p.ty, &leaf, type_env);
                         owned_units.insert((rename[&p.name].clone(), unit));
                     }
@@ -246,11 +251,15 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
 }
 
 /// Whether any of a function's parameter leaves is borrowable (not in the inferred owned set).
-fn func_has_borrowable_param(func: &RcFunc, ownerships: &Ownerships, type_env: &TypeEnv) -> bool {
+fn func_has_borrowable_param(
+    func: &RcFunc,
+    owned_leaves: &Set<VarPath>,
+    type_env: &TypeEnv,
+) -> bool {
     func.params.iter().any(|p| {
         boxed_leaf_paths(&p.ty, type_env)
             .iter()
-            .any(|leaf| !ownerships.own.contains(&(p.name.clone(), leaf.clone())))
+            .any(|leaf| !owned_leaves.contains(&(p.name.clone(), leaf.clone())))
     })
 }
 
@@ -301,30 +310,30 @@ fn param_ownership_shape(
                 Ownership::Borrow
             }
         };
-        if ty.is_fully_unboxed(type_env) {
-            return OwnershipShape::NoUnit;
+        match unit_step(ty, type_env) {
+            UnitStep::Nothing => OwnershipShape::NoUnit,
+            UnitStep::Capture => {
+                path.push(CLOSURE_CAPTURE_IDX as usize);
+                let capture_ownership = ownership_at(path);
+                path.pop();
+                OwnershipShape::Fields(vec![
+                    OwnershipShape::NoUnit,
+                    OwnershipShape::Unit(capture_ownership),
+                ])
+            }
+            UnitStep::Unit => OwnershipShape::Unit(ownership_at(path)),
+            UnitStep::Fields { width, held } => {
+                // A field the value holds nothing at keeps its place in the shape, so that a shape
+                // index is a field index.
+                let mut children = vec![OwnershipShape::NoUnit; width];
+                for (i, fty) in held {
+                    path.push(i);
+                    children[i] = go(var, &fty, owned_units, type_env, path);
+                    path.pop();
+                }
+                OwnershipShape::Fields(children)
+            }
         }
-        if ty.is_closure() {
-            path.push(CLOSURE_CAPTURE_IDX as usize);
-            let capture_ownership = ownership_at(path);
-            path.pop();
-            return OwnershipShape::Fields(vec![
-                OwnershipShape::NoUnit,
-                OwnershipShape::Unit(capture_ownership),
-            ]);
-        }
-        if ty.is_rc_unit_root(type_env) {
-            return OwnershipShape::Unit(ownership_at(path));
-        }
-        // A field the value holds nothing at keeps its place in the shape, so that a shape index is a
-        // field index.
-        let mut children = vec![OwnershipShape::NoUnit; ty.field_types(type_env).len()];
-        for (i, fty) in ty.unpunched_field_types(type_env) {
-            path.push(i);
-            children[i] = go(var, &fty, owned_units, type_env, path);
-            path.pop();
-        }
-        OwnershipShape::Fields(children)
     }
     go(var, ty, owned_units, type_env, &mut vec![])
 }

@@ -583,6 +583,75 @@ fn push_boxed_leaves(
 
 // --- reference-counting units ---
 
+/// What a walk over reference-counting units does at one type: whether a unit sits here, whether the
+/// walk descends, and where it goes next.
+///
+/// Which types carry a unit is one rule, and every walk over units needs it, so it is stated here
+/// alone. A walk that decided for itself would keep answering the question as it stood when the walk
+/// was written, and a walk left behind by a new kind of unit produces a path that names no unit —
+/// which reference counting then keys an operation to, and the object is freed while it is still
+/// held.
+pub(crate) enum UnitStep {
+    /// The value holds no reference, so no unit sits here or below it (`is_fully_unboxed`).
+    Nothing,
+    /// A closure. Its capture is the one unit it holds, at the field index `CLOSURE_CAPTURE_IDX`.
+    Capture,
+    /// One unit sits here and the walk stops (`is_rc_unit_root`): a boxed value, an unboxed union,
+    /// or a punched array.
+    Unit,
+    /// An unboxed struct or tuple, whose units are those of the fields it holds.
+    Fields {
+        /// How many fields the type declares, so that a table a walk builds over them is indexed by
+        /// field index.
+        width: usize,
+        /// The fields a value of the type holds, each with its index. A punched field holds nothing,
+        /// so it is left out.
+        held: Vec<(usize, Arc<TypeNode>)>,
+    },
+}
+
+/// The step a unit walk takes at `ty`.
+///
+/// The order the cases come in carries part of the answer: a closure is a union underneath, so
+/// `is_rc_unit_root` would claim one, and it is stated to reject the question for a closure.
+///
+/// # Examples
+/// `unit_step` of `(Array I64, I64)` is `Fields` of width 2 holding field 0 alone, of `Array I64` is
+/// `Unit`, and of `I64` is `Nothing`.
+pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
+    if ty.is_fully_unboxed(type_env) {
+        return UnitStep::Nothing;
+    }
+    if ty.is_closure() {
+        return UnitStep::Capture;
+    }
+    if ty.is_rc_unit_root(type_env) {
+        return UnitStep::Unit;
+    }
+    UnitStep::Fields {
+        width: ty.toplevel_tycon_info(type_env).fields.len(),
+        held: ty.unpunched_field_types(type_env),
+    }
+}
+
+/// The type of the field `idx` names among the fields a value holds. Every path reference counting
+/// works with comes from a unit or leaf enumeration, and both leave out a punched field, so an index
+/// that names one — or that is out of range — aborts the walk `walk_name` names.
+fn held_field_type(held: &[(usize, Arc<TypeNode>)], idx: usize, walk_name: &str) -> Arc<TypeNode> {
+    held.iter()
+        .find(|(i, _)| *i == idx)
+        .unwrap_or_else(|| {
+            panic!(
+                "{}: path index {} names no field the value holds (it holds {:?})",
+                walk_name,
+                idx,
+                held.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+            )
+        })
+        .1
+        .clone()
+}
+
 /// The reference-counting units of a value's type: the capture of a closure, or each unit root
 /// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
 /// its unboxed structs/tuples. Unlike `boxed_leaf_paths`, it stops at a unit root rather than expanding it
@@ -594,37 +663,35 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
     out
 }
 
-/// Descend a type, pushing onto `out` the path of each unit root reached. `path` is the field path
-/// from the whole value down to `ty`, which each pushed unit is named relative to.
+/// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
+/// the whole value down to `ty`, which each pushed unit is named relative to.
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
     path: &mut FieldPath,
     out: &mut Vec<FieldPath>,
 ) {
-    if ty.is_fully_unboxed(type_env) {
-        return;
-    }
-    if ty.is_closure() {
-        path.push(CLOSURE_CAPTURE_IDX as usize);
-        out.push(path.clone());
-        path.pop();
-        return;
-    }
-    if ty.is_rc_unit_root(type_env) {
-        out.push(path.clone());
-        return;
-    }
-    for (i, fty) in ty.unpunched_field_types(type_env) {
-        path.push(i);
-        rc_units_go(&fty, type_env, path, out);
-        path.pop();
+    match unit_step(ty, type_env) {
+        UnitStep::Nothing => {}
+        UnitStep::Capture => {
+            path.push(CLOSURE_CAPTURE_IDX as usize);
+            out.push(path.clone());
+            path.pop();
+        }
+        UnitStep::Unit => out.push(path.clone()),
+        UnitStep::Fields { held, .. } => {
+            for (i, fty) in held {
+                path.push(i);
+                rc_units_go(&fty, type_env, path, out);
+                path.pop();
+            }
+        }
     }
 }
 
-/// Truncate a leaf path to its reference-counting unit: the path down to the first unit root
-/// (`is_rc_unit_root`) it reaches — an unboxed union or a punched array, whose subtree is one unit.
-/// Paths that stay within unboxed structs are unchanged.
+/// Truncate a leaf path to its reference-counting unit: the path down to the first unit it reaches —
+/// an unboxed union or a punched array, whose subtree is one unit. Paths that stay within unboxed
+/// structs are unchanged.
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -633,18 +700,22 @@ pub(crate) fn truncate_to_unit(
     let mut out = vec![];
     let mut cur = ty.clone();
     for &idx in path {
-        if cur.is_closure() {
-            // The only path into a closure names its capture, which is a single unit.
-            out.push(idx);
-            break;
+        match unit_step(&cur, type_env) {
+            // A value holding no reference has no unit below it either, so the path stops here.
+            UnitStep::Nothing => break,
+            UnitStep::Capture => {
+                // The only path into a closure names its capture, which is a single unit.
+                out.push(idx);
+                break;
+            }
+            // A leaf below a unit — a boxed leaf under a union variant, or the punched array's inner
+            // array — keys to that unit.
+            UnitStep::Unit => break,
+            UnitStep::Fields { held, .. } => {
+                out.push(idx);
+                cur = held_field_type(&held, idx, "truncate_to_unit");
+            }
         }
-        if cur.is_rc_unit_root(type_env) {
-            // A boxed value, an unboxed union, or a punched array is one unit; a leaf below it (a
-            // boxed leaf under a union variant, or the punched array's inner array) keys to that unit.
-            break;
-        }
-        out.push(idx);
-        cur = field_type_at(&cur, idx, type_env, "truncate_to_unit");
     }
     out
 }
@@ -751,36 +822,16 @@ pub(crate) fn units_under(
 }
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
-/// reaches a closure, a unit root (`is_rc_unit_root`), or a fully-unboxed leaf.
+/// reaches a value the walk does not descend — a closure, a unit, or a value holding no reference.
 fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
-        if cur.is_closure() || cur.is_rc_unit_root(type_env) || cur.is_fully_unboxed(type_env) {
-            return None;
+        match unit_step(&cur, type_env) {
+            UnitStep::Fields { held, .. } => cur = held_field_type(&held, idx, "subtree_type"),
+            _ => return None,
         }
-        cur = field_type_at(&cur, idx, type_env, "subtree_type");
     }
     Some(cur)
-}
-
-/// The type of field `idx` of `ty`, where the walk that reached `ty` has established it to be an
-/// unboxed struct/tuple, so that a well-formed unit or leaf path index is in range. `walk_name`
-/// names the walk in the message an out-of-range index aborts with.
-fn field_type_at(
-    ty: &Arc<TypeNode>,
-    idx: usize,
-    type_env: &TypeEnv,
-    walk_name: &str,
-) -> Arc<TypeNode> {
-    let fields = ty.field_types(type_env);
-    assert!(
-        idx < fields.len(),
-        "{}: path index {} out of range ({} fields)",
-        walk_name,
-        idx,
-        fields.len()
-    );
-    fields[idx].clone()
 }
 
 #[cfg(test)]
