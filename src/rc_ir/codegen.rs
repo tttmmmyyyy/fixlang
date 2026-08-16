@@ -318,13 +318,17 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // Descending is what a path into an aggregate does, and a unit is where it stops, so
                 // a path going on past one would reference-count a part of that unit rather than the
                 // unit.
-                UnitStep::Unit => {
-                    panic!("a reference-counting unit path descends past the unit it names")
-                }
+                UnitStep::Unit => panic!(
+                    "the reference-counting unit path {:?} descends past the unit `{}` it names",
+                    path,
+                    cur.ty.to_string()
+                ),
                 // A value holding no reference has no unit below it for a path to name.
-                UnitStep::Nothing => {
-                    panic!("a reference-counting unit path enters a value holding no reference")
-                }
+                UnitStep::Nothing => panic!(
+                    "the reference-counting unit path {:?} enters `{}`, which holds no reference",
+                    path,
+                    cur.ty.to_string()
+                ),
             };
             let val = cur.extract_field(self, idx as u32);
             cur = Object::new(val, field_ty, self);

@@ -620,9 +620,9 @@ pub(crate) enum UnitStep {
 
 /// The step a unit walk takes at `ty`.
 ///
-/// The order the cases come in carries part of the answer: a closure is a union underneath, and the
-/// question "is a whole value of this type one unit" is answered for it by `Capture` rather than by
-/// its layout, so the closure is taken first.
+/// The order the cases come in carries part of the answer: a closure is not a declared type, so
+/// `is_box` and `is_union` abort when they are asked about one, and the closure case has to come
+/// before them.
 ///
 /// # Examples
 /// `unit_step` of `(Array I64, I64)` is `Fields` of width 2 whose held fields are both of them, of
@@ -718,9 +718,11 @@ pub(crate) fn truncate_to_unit(
     for &idx in path {
         match unit_step(&cur, type_env) {
             // A value holding no reference has no unit below it for the rest of the path to name.
-            UnitStep::Nothing => {
-                panic!("truncate_to_unit: path enters a value holding no reference")
-            }
+            UnitStep::Nothing => panic!(
+                "truncate_to_unit: the path {:?} enters `{}`, which holds no reference",
+                path,
+                cur.to_string()
+            ),
             UnitStep::Capture { idx: capture, .. } => {
                 // The only path into a closure names its capture, which is a single unit.
                 assert_eq!(
@@ -871,8 +873,8 @@ mod tests {
     };
     use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT, CLOSURE_FUNPTR_IDX};
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty,
-        make_punched_array_tycon, make_punched_array_ty,
+        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_punched_array_ty,
+        make_punched_array_tycon,
     };
     use crate::misc::{Map, Set};
     use crate::object::{ty_to_object_ty, ObjectFieldType};
