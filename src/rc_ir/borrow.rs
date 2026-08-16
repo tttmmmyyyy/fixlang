@@ -38,7 +38,6 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -53,15 +52,26 @@ use crate::rc_ir::ownership::{
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
+/// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
+/// leaf path; a leaf absent from the set is `Borrow`.
+///
+/// These are **leaves**, one per reference a parameter holds. The `owned_units` this pass carries
+/// beside them are **units**, one per reference-count operation, and `truncate_to_unit` is what turns
+/// one into the other — so the two are the same Rust type with different meanings, and this one is
+/// named to keep a set of one from being read as a set of the other.
+struct OwnedLeaves(Set<VarPath>);
+
+impl OwnedLeaves {
+    /// Whether the leaf `path` of the parameter `var` is owned.
+    fn owns(&self, var: &FullName, path: &FieldPath) -> bool {
+        self.0.contains(&(var.clone(), path.clone()))
+    }
+}
+
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-///
-/// # Returns
-/// The parameter leaves inferred `Own`, keyed by the parameter variable's name and the leaf path; a
-/// leaf absent from the set is `Borrow`. These are **leaves**, one per reference a parameter holds,
-/// where the `owned_units` the rest of this pass carries are **units**, one per refcount operation.
-fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
+fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
         .values()
@@ -100,7 +110,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
         }
     }
 
-    owned_leaves
+    OwnedLeaves(owned_leaves)
 }
 
 // --- borrow-ification ---
@@ -136,7 +146,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             let (clone, rename) = clone_func(func, bref.clone(), &mut rename_counter);
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
-                    if owned_leaves.contains(&(p.name.clone(), leaf.clone())) {
+                    if owned_leaves.owns(&p.name, &leaf) {
                         let unit = truncate_to_unit(&p.ty, &leaf, type_env);
                         owned_units.insert((rename[&p.name].clone(), unit));
                     }
@@ -253,13 +263,13 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
 /// Whether any of a function's parameter leaves is borrowable (not in the inferred owned set).
 fn func_has_borrowable_param(
     func: &RcFunc,
-    owned_leaves: &Set<VarPath>,
+    owned_leaves: &OwnedLeaves,
     type_env: &TypeEnv,
 ) -> bool {
     func.params.iter().any(|p| {
         boxed_leaf_paths(&p.ty, type_env)
             .iter()
-            .any(|leaf| !owned_leaves.contains(&(p.name.clone(), leaf.clone())))
+            .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
     })
 }
 
@@ -312,14 +322,13 @@ fn param_ownership_shape(
         };
         match unit_step(ty, type_env) {
             UnitStep::Nothing => OwnershipShape::NoUnit,
-            UnitStep::Capture => {
-                path.push(CLOSURE_CAPTURE_IDX as usize);
+            UnitStep::Capture { idx, width } => {
+                path.push(idx);
                 let capture_ownership = ownership_at(path);
                 path.pop();
-                OwnershipShape::Fields(vec![
-                    OwnershipShape::NoUnit,
-                    OwnershipShape::Unit(capture_ownership),
-                ])
+                let mut children = vec![OwnershipShape::NoUnit; width];
+                children[idx] = OwnershipShape::Unit(capture_ownership);
+                OwnershipShape::Fields(children)
             }
             UnitStep::Unit => OwnershipShape::Unit(ownership_at(path)),
             UnitStep::Fields { width, held } => {

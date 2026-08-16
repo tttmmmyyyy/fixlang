@@ -19,6 +19,7 @@ use crate::object::{create_obj, lambda_return_part_types, union_tag_type, Object
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
+use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Linkage;
@@ -303,24 +304,27 @@ impl<'c, 'm> Generator<'c, 'm> {
     fn project_rc_unit(&mut self, obj: Object<'c>, path: &[usize]) -> Object<'c> {
         let mut cur = obj;
         for &idx in path {
-            let field_ty = if cur.ty.is_closure() {
-                // The only unit path into a closure names its capture object, its second field. The
-                // other field is the function pointer, which a reference-count operation must never
-                // reach.
-                assert_eq!(
-                    idx as u32, CLOSURE_CAPTURE_IDX,
-                    "a reference-counting unit path into a closure names its capture"
-                );
-                make_dynamic_object_ty()
-            } else {
-                // Descending is what a path into an aggregate does; a unit root is where it stops,
-                // so a path going on past one would reference-count a part of that unit rather than
-                // the unit. (A closure is not a unit root: its unit is the capture, reached above.)
-                assert!(
-                    !cur.ty.is_rc_unit_root(self.type_env()),
-                    "a reference-counting unit path descends past the unit it names"
-                );
-                cur.ty.field_types(self.type_env())[idx].clone()
+            let field_ty = match unit_step(&cur.ty, self.type_env()) {
+                UnitStep::Capture { idx: capture, .. } => {
+                    // The only unit path into a closure names its capture object. The other field is
+                    // the function pointer, which a reference-count operation must never reach.
+                    assert_eq!(
+                        idx, capture,
+                        "a reference-counting unit path into a closure names its capture"
+                    );
+                    make_dynamic_object_ty()
+                }
+                UnitStep::Fields { held, .. } => held_field_type(&held, idx, "project_rc_unit"),
+                // Descending is what a path into an aggregate does, and a unit is where it stops, so
+                // a path going on past one would reference-count a part of that unit rather than the
+                // unit.
+                UnitStep::Unit => {
+                    panic!("a reference-counting unit path descends past the unit it names")
+                }
+                // A value holding no reference has no unit below it for a path to name.
+                UnitStep::Nothing => {
+                    panic!("a reference-counting unit path enters a value holding no reference")
+                }
             };
             let val = cur.extract_field(self, idx as u32);
             cur = Object::new(val, field_ty, self);

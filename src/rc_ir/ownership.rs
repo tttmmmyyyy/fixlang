@@ -17,7 +17,7 @@ use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::constants::CLOSURE_CAPTURE_IDX;
+use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar, VarPath,
@@ -592,12 +592,20 @@ fn push_boxed_leaves(
 /// which reference counting then keys an operation to, and the object is freed while it is still
 /// held.
 pub(crate) enum UnitStep {
-    /// The value holds no reference, so no unit sits here or below it (`is_fully_unboxed`).
+    /// The value holds no reference, so no unit sits here or below it.
     Nothing,
-    /// A closure. Its capture is the one unit it holds, at the field index `CLOSURE_CAPTURE_IDX`.
-    Capture,
-    /// One unit sits here and the walk stops (`is_rc_unit_root`): a boxed value, an unboxed union,
-    /// or a punched array.
+    /// A closure, whose capture is the one unit it holds.
+    Capture {
+        /// The field the capture sits at, the index a path into the closure names.
+        idx: usize,
+        /// How many fields the closure has, so that a table a walk builds over them is indexed by
+        /// field index. The other field is the function pointer, which holds no reference.
+        width: usize,
+    },
+    /// One unit sits here and the walk stops: a boxed value, an unboxed union (only its active
+    /// variant is live, so a refcount operation dispatches on the tag rather than name a variant's
+    /// leaf), an array (its own traverser drives its elements' lifetime through the storage), or a
+    /// punched array (whose traversal skips the moved-out hole at a run-time index).
     Unit,
     /// An unboxed struct or tuple, whose units are those of the fields it holds.
     Fields {
@@ -612,20 +620,24 @@ pub(crate) enum UnitStep {
 
 /// The step a unit walk takes at `ty`.
 ///
-/// The order the cases come in carries part of the answer: a closure is a union underneath, so
-/// `is_rc_unit_root` would claim one, and it is stated to reject the question for a closure.
+/// The order the cases come in carries part of the answer: a closure is a union underneath, and the
+/// question "is a whole value of this type one unit" is answered for it by `Capture` rather than by
+/// its layout, so the closure is taken first.
 ///
 /// # Examples
-/// `unit_step` of `(Array I64, I64)` is `Fields` of width 2 holding field 0 alone, of `Array I64` is
-/// `Unit`, and of `I64` is `Nothing`.
+/// `unit_step` of `(Array I64, I64)` is `Fields` of width 2 whose held fields are both of them, of
+/// `Array I64` is `Unit`, and of `I64` is `Nothing`.
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::Nothing;
     }
     if ty.is_closure() {
-        return UnitStep::Capture;
+        return UnitStep::Capture {
+            idx: CLOSURE_CAPTURE_IDX as usize,
+            width: CLOSURE_FIELD_COUNT,
+        };
     }
-    if ty.is_rc_unit_root(type_env) {
+    if ty.is_box(type_env) || ty.is_union(type_env) || ty.is_array() || ty.is_punched_array() {
         return UnitStep::Unit;
     }
     UnitStep::Fields {
@@ -637,7 +649,11 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// The type of the field `idx` names among the fields a value holds. Every path reference counting
 /// works with comes from a unit or leaf enumeration, and both leave out a punched field, so an index
 /// that names one — or that is out of range — aborts the walk `walk_name` names.
-fn held_field_type(held: &[(usize, Arc<TypeNode>)], idx: usize, walk_name: &str) -> Arc<TypeNode> {
+pub(crate) fn held_field_type(
+    held: &[(usize, Arc<TypeNode>)],
+    idx: usize,
+    walk_name: &str,
+) -> Arc<TypeNode> {
     held.iter()
         .find(|(i, _)| *i == idx)
         .unwrap_or_else(|| {
@@ -652,11 +668,11 @@ fn held_field_type(held: &[(usize, Arc<TypeNode>)], idx: usize, walk_name: &str)
         .clone()
 }
 
-/// The reference-counting units of a value's type: the capture of a closure, or each unit root
-/// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
-/// its unboxed structs/tuples. Unlike `boxed_leaf_paths`, it stops at a unit root rather than expanding it
-/// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
-/// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
+/// The reference-counting units of a value's type: each unit `unit_step` reaches by descending the
+/// unboxed structs and tuples of the type. Unlike `boxed_leaf_paths`, it stops at a unit rather than
+/// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
+/// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
+/// leaf).
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -673,8 +689,8 @@ fn rc_units_go(
 ) {
     match unit_step(ty, type_env) {
         UnitStep::Nothing => {}
-        UnitStep::Capture => {
-            path.push(CLOSURE_CAPTURE_IDX as usize);
+        UnitStep::Capture { idx, .. } => {
+            path.push(idx);
             out.push(path.clone());
             path.pop();
         }
@@ -701,10 +717,16 @@ pub(crate) fn truncate_to_unit(
     let mut cur = ty.clone();
     for &idx in path {
         match unit_step(&cur, type_env) {
-            // A value holding no reference has no unit below it either, so the path stops here.
-            UnitStep::Nothing => break,
-            UnitStep::Capture => {
+            // A value holding no reference has no unit below it for the rest of the path to name.
+            UnitStep::Nothing => {
+                panic!("truncate_to_unit: path enters a value holding no reference")
+            }
+            UnitStep::Capture { idx: capture, .. } => {
                 // The only path into a closure names its capture, which is a single unit.
+                assert_eq!(
+                    idx, capture,
+                    "truncate_to_unit: a path into a closure names its capture"
+                );
                 out.push(idx);
                 break;
             }
@@ -828,7 +850,7 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
     for &idx in path {
         match unit_step(&cur, type_env) {
             UnitStep::Fields { held, .. } => cur = held_field_type(&held, idx, "subtree_type"),
-            _ => return None,
+            UnitStep::Nothing | UnitStep::Capture { .. } | UnitStep::Unit => return None,
         }
     }
     Some(cur)
@@ -836,13 +858,220 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 
 #[cfg(test)]
 mod tests {
-    use super::{as_arg_projection, origin, Binding, Origin, VarTable};
+    use super::{
+        as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit, unit_step, Binding,
+        Origin, UnitStep, VarTable,
+    };
     use crate::ast::name::FullName;
     use crate::ast::program::TypeEnv;
-    use crate::fixstd::builtin::make_i64_ty;
-    use crate::misc::Set;
-    use crate::rc_ir::ast::{RcVar, VarPath};
+    use crate::ast::typedecl::Field;
+    use crate::ast::types::{
+        kind_arrow, kind_star, make_tyvar, tycon, type_fun, type_tyapp, type_tycon,
+        type_tyvar_star, TyCon, TyConInfo, TyConVariant, TypeNode,
+    };
+    use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT, CLOSURE_FUNPTR_IDX};
+    use crate::fixstd::builtin::{
+        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty,
+        make_punched_array_tycon, make_punched_array_ty,
+    };
+    use crate::misc::{Map, Set};
+    use crate::object::{ty_to_object_ty, ObjectFieldType};
+    use crate::rc_ir::ast::{FieldPath, RcVar, VarPath};
+    use crate::rc_ir::leaf_map::boxed_leaf_paths;
     use crate::rc_ir::provenance::{sole_origin, LeafOrigin};
+    use std::sync::Arc;
+
+    /// The type `Test::<name>`, of a declaration these tests make themselves. It takes no type
+    /// argument.
+    fn test_ty(name: &str) -> Arc<TypeNode> {
+        type_tycon(&tycon(FullName::from_strs(&["Test"], name)))
+    }
+
+    /// A declaration taking no type argument, holding the named fields in the order given.
+    fn test_decl(
+        variant: TyConVariant,
+        is_unbox: bool,
+        fields: Vec<(&str, Arc<TypeNode>)>,
+    ) -> TyConInfo {
+        TyConInfo {
+            kind: kind_star(),
+            variant,
+            is_unbox,
+            tyvars: vec![],
+            fields: fields
+                .into_iter()
+                .map(|(name, ty)| Field::make(name.to_string(), ty, None))
+                .collect(),
+            source: None,
+            document: None,
+            punched_from: None,
+        }
+    }
+
+    /// `Array I64`.
+    fn array_of_i64() -> Arc<TypeNode> {
+        type_tyapp(make_array_ty(), make_i64_ty())
+    }
+
+    /// A type environment holding the built-in type constructors, `Std::PunchedArray` as `std.fix`
+    /// declares it, and one declaration of each kind a unit walk distinguishes.
+    fn unit_type_env() -> TypeEnv {
+        let mut tycons = bulitin_tycons();
+        tycons.insert(
+            make_punched_array_tycon(),
+            TyConInfo {
+                kind: kind_arrow(kind_star(), kind_star()),
+                variant: TyConVariant::Struct,
+                is_unbox: true,
+                tyvars: vec![make_tyvar("a", &kind_star())],
+                fields: vec![
+                    Field::make(
+                        "_arr".to_string(),
+                        type_tyapp(make_array_ty(), type_tyvar_star("a")),
+                        None,
+                    ),
+                    Field::make("_idx".to_string(), make_i64_ty(), None),
+                ],
+                source: None,
+                document: None,
+                punched_from: None,
+            },
+        );
+        // An unboxed struct holding one reference, an unboxed union of a variant that holds one and
+        // one that holds none, a boxed struct, and a struct nesting the union beside a closure.
+        for (name, decl) in [
+            (
+                "Pair",
+                test_decl(
+                    TyConVariant::Struct,
+                    true,
+                    vec![("fst", array_of_i64()), ("snd", make_i64_ty())],
+                ),
+            ),
+            (
+                "Choice",
+                test_decl(
+                    TyConVariant::Union,
+                    true,
+                    vec![("l", array_of_i64()), ("r", make_i64_ty())],
+                ),
+            ),
+            (
+                "BoxedPair",
+                test_decl(TyConVariant::Struct, false, vec![("a", array_of_i64())]),
+            ),
+            (
+                "Nested",
+                test_decl(
+                    TyConVariant::Struct,
+                    true,
+                    vec![
+                        ("c", test_ty("Choice")),
+                        ("f", type_fun(make_i64_ty(), make_i64_ty())),
+                    ],
+                ),
+            ),
+        ] {
+            tycons.insert(TyCon::new(FullName::from_strs(&["Test"], name)), decl);
+        }
+        TypeEnv::new(tycons, Map::default())
+    }
+
+    /// Every boxed leaf of a type truncates to a reference-counting unit of that type, and every
+    /// unit is the truncation of a leaf.
+    ///
+    /// The leaf enumeration (`boxed_leaf_paths`) and the unit enumeration (`rc_units`) are two walks
+    /// over one type, and `truncate_to_unit` is the bridge between them: a consume is recorded at a
+    /// leaf while the retain that pays for it is keyed at a unit, so a leaf whose truncation names
+    /// no unit leaves a retain no release pairs with, and the object is freed while it is still
+    /// held. `unit_of` asserts this of each key it makes; here it is asserted of the classification
+    /// itself, over one type of every kind the walks distinguish.
+    #[test]
+    fn the_leaves_of_a_type_truncate_onto_its_units() {
+        let type_env = unit_type_env();
+        let cases: Vec<Arc<TypeNode>> = vec![
+            make_i64_ty(),                                      // holds no reference
+            array_of_i64(),                                     // an array
+            make_dynamic_object_ty(),                           // a boxed value
+            type_fun(make_i64_ty(), make_i64_ty()),             // a closure
+            type_tyapp(make_punched_array_ty(), make_i64_ty()), // a punched array
+            test_ty("Pair"),                                    // an unboxed struct
+            test_ty("Choice"),                                  // an unboxed union
+            test_ty("BoxedPair"),                               // a boxed struct
+            test_ty("Nested"),                                  // a struct of a union and a closure
+        ];
+        for ty in cases {
+            let truncated: Set<FieldPath> = boxed_leaf_paths(&ty, &type_env)
+                .into_iter()
+                .map(|leaf| truncate_to_unit(&ty, &leaf, &type_env))
+                .collect();
+            let units: Set<FieldPath> = rc_units(&ty, &type_env).into_iter().collect();
+            assert_eq!(
+                truncated,
+                units,
+                "the leaves of `{}` do not truncate onto its units",
+                ty.to_string()
+            );
+        }
+    }
+
+    /// A field is found by the index it sits at in the layout, so a punched field's slot does not
+    /// shift the fields after it.
+    ///
+    /// A punched field holds nothing and is left out of the fields a walk descends, while every
+    /// other field keeps the index it is addressed by. Reading the list by position instead would
+    /// answer an index with a neighbour's type, and the walk would carry on down a type the value
+    /// does not have there.
+    #[test]
+    fn a_held_field_is_found_by_its_layout_index() {
+        // A three-field value whose middle field is punched.
+        let held = vec![(0, make_i64_ty()), (2, array_of_i64())];
+        assert_eq!(held_field_type(&held, 0, "test"), make_i64_ty());
+        assert_eq!(held_field_type(&held, 2, "test"), array_of_i64());
+    }
+
+    /// A path index naming a punched field aborts the walk, and the message names the walk that
+    /// aborted.
+    ///
+    /// Every path reference counting works with comes from a unit or a leaf enumeration, and both
+    /// leave a punched field out, so such an index means the path and the type disagree. Answering
+    /// it with a type would key a reference-count operation to a slot that holds nothing.
+    #[test]
+    #[should_panic(expected = "truncate_to_unit")]
+    fn a_punched_field_index_aborts_the_walk() {
+        let held = vec![(0, make_i64_ty()), (2, array_of_i64())];
+        held_field_type(&held, 1, "truncate_to_unit");
+    }
+
+    /// A closure's step is its capture, and the fields it reports are the fields a closure is laid
+    /// out with.
+    ///
+    /// `unit_step` states the capture's index and the closure's field count apart from the layout
+    /// `ty_to_object_ty` gives, and `param_ownership_shape` builds a table of that width indexed by
+    /// field index. A closure that grew a field would leave the count behind, and the capture would
+    /// be recorded at a field index that is no longer the capture's.
+    #[test]
+    fn a_closures_step_is_the_capture_its_layout_holds() {
+        let type_env = unit_type_env();
+        let closure_ty = type_fun(make_i64_ty(), make_i64_ty());
+        match unit_step(&closure_ty, &type_env) {
+            UnitStep::Capture { idx, width } => {
+                assert_eq!(idx, CLOSURE_CAPTURE_IDX as usize);
+                assert_eq!(width, CLOSURE_FIELD_COUNT);
+            }
+            _ => panic!("a closure's unit step is its capture"),
+        }
+        let layout = ty_to_object_ty(&closure_ty, &vec![], &type_env);
+        assert_eq!(layout.field_types.len(), CLOSURE_FIELD_COUNT);
+        assert!(matches!(
+            layout.field_types[CLOSURE_FUNPTR_IDX as usize],
+            ObjectFieldType::LambdaFunction(_)
+        ));
+        assert!(matches!(
+            layout.field_types[CLOSURE_CAPTURE_IDX as usize],
+            ObjectFieldType::SubObject(_, false)
+        ));
+    }
 
     /// The sources of one result leaf, as `result_prov` declares them.
     fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {

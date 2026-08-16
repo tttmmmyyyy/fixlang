@@ -146,6 +146,8 @@ pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
+/// How many fields a closure has: the function pointer and the capture.
+pub const CLOSURE_FIELD_COUNT: usize = 2;
 // Field layout of the unbox `Array` value: a `SubObject` pointer to the `#ArrayStorage`, then the
 // register-resident size and capacity.
 pub const ARRAY_STORAGE_IDX: u32 = 0;
