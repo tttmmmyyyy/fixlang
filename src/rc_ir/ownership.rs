@@ -426,7 +426,11 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
                         collect_consumes_go(&arm.body, vars, prog, type_env, owns, out);
                     }
                 }
-                _ => rhs_consumes(rhs, &x.ty, vars, prog, type_env, owns, out),
+                // A match holds the only sub-expressions a right-hand side can carry, so every
+                // other shape consumes within itself.
+                RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {
+                    rhs_consumes(rhs, &x.ty, vars, prog, type_env, owns, out)
+                }
             }
             collect_consumes_go(k, vars, prog, type_env, owns, out);
         }

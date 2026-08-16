@@ -385,7 +385,9 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
                         mark_tail(&arm.body, is_tail, out);
                     }
                 }
-                _ => {}
+                // A tail-position result is bound by a call or a match, so the remaining shapes —
+                // a call out of tail position included — leave the set alone.
+                RcRhs::App(..) | RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
             }
             mark_tail(k, in_tail, out);
         }
@@ -403,7 +405,13 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(v) => v.name == *x,
         RcExpr::Let(s, RcRhs::Var(y), k2) if y.name == *x => trivially_returns(k2, &s.name),
-        _ => false,
+        // A binding of anything but a rename of `x`, and every other construct, is a real operation
+        // that breaks the chain.
+        RcExpr::Let(..)
+        | RcExpr::Retain(..)
+        | RcExpr::Release(..)
+        | RcExpr::Destructure(..)
+        | RcExpr::Eval(..) => false,
     }
 }
 

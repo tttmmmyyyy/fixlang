@@ -10,6 +10,14 @@ mod union_rc_shapes_tests {
         tests::test_util::test_source,
     };
 
+    /// Compile and run a source with Valgrind switched off, leaving the program's own assertions to
+    /// decide the outcome.
+    fn test_source_without_valgrind(source: &str) {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(source, config);
+    }
+
     /// Matching a union built on the spot lets the simplifier replace the match with the arm it
     /// knows is taken, substituting the payload the construction was given. Where the arm then
     /// ignores that payload — an arm binding nothing, a pattern binding a field the body never
@@ -252,9 +260,7 @@ main = (
     /// changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_payload_units_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(UNION_PAYLOAD_UNITS_SOURCE, config);
+        test_source_without_valgrind(UNION_PAYLOAD_UNITS_SOURCE);
     }
 
     /// The boxed values the payloads carry are freed exactly once and none of them leaks, checked
@@ -327,9 +333,7 @@ main = (
     /// while the union still holds it changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_payload_taken_twice_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(PAYLOAD_TAKEN_TWICE_SOURCE, config);
+        test_source_without_valgrind(PAYLOAD_TAKEN_TWICE_SOURCE);
     }
 
     /// The arrays a payload taken out twice holds are freed exactly once and none of them leaks,
@@ -380,9 +384,7 @@ main = (
     /// the union changes the answer, so this catches it without Valgrind.
     #[test]
     pub fn test_union_dropped_whole_correctness() {
-        let mut config = Configuration::develop_mode();
-        config.set_valgrind(ValgrindTool::None);
-        test_source(UNION_DROPPED_WHOLE_SOURCE, config);
+        test_source_without_valgrind(UNION_DROPPED_WHOLE_SOURCE);
     }
 
     /// The array a union held twice is freed exactly once and does not leak, checked under Valgrind
