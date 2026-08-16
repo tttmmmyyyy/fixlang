@@ -266,8 +266,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
             // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
             // A path whose own record does not name an object is handled by
-            // `origin_from_leaves_under`: a reference-counting unit path may name the root of an
-            // unboxed union, which is a subtree whose provenance is declared on the leaves beneath.
+            // `origin_from_leaves_under`: a reference-counting unit path may name an unboxed union
+            // itself, whose provenance is declared on the leaves of its variants.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => {
@@ -310,16 +310,16 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// The object a value denotes at a path whose own record does not name one: the objects the leaves
 /// beneath that path reach.
 ///
-/// A reference-counting unit path may name the root of an unboxed union, whose provenance is
-/// declared one level down, on the leaves of its variants, so a reader that stops at the root finds
-/// nothing recorded and takes the value for one produced on the spot — its own to release, when it
-/// may be an operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
+/// A reference-counting unit path may name an unboxed union itself, whose provenance is declared one
+/// level down, on the leaves of its variants, so a reader that stops at the union finds nothing
+/// recorded and takes the value for one produced on the spot — its own to release, when it may be an
+/// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
 /// variant the value does not have and holds no reference, so it names no object and is passed
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
 /// several sources holds one per path it can be reached by, and each of them names an object.
 ///
 /// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
-/// of them is a value produced here rather than a projection, every object the root may denote is
+/// of them is a value produced here rather than a projection, every object the value may denote is
 /// reported together, so that a reader whose answer has to hold on all paths — whether this
 /// version owns the value — sees them all. `None` where no leaf names an object.
 ///
@@ -327,7 +327,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
 ///
 /// # Examples
-/// At the root of `unbox union { wait : Guard, pair : (Guard, Guard), mark : I64 }` read out of one
+/// Asked for `unbox union { wait : Guard, pair : (Guard, Guard), mark : I64 }` itself, read out of one
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is `Exactly` the node's object. Give one of those two leaves a second operand and the
 /// answer becomes a `Join` naming both.
@@ -595,7 +595,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 }
 
 /// Descend a type, pushing onto `out` the path of each unit root reached. `path` is the field path
-/// from the value's root down to `ty`, which each pushed unit is named relative to.
+/// from the whole value down to `ty`, which each pushed unit is named relative to.
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -640,7 +640,7 @@ pub(crate) fn truncate_to_unit(
         }
         if cur.is_rc_unit_root(type_env) {
             // A boxed value, an unboxed union, or a punched array is one unit; a leaf below it (a
-            // boxed leaf under a union variant, or the punched array's inner array) keys to its root.
+            // boxed leaf under a union variant, or the punched array's inner array) keys to that unit.
             break;
         }
         out.push(idx);
@@ -650,9 +650,9 @@ pub(crate) fn truncate_to_unit(
 }
 
 /// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
-/// clamped to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
-/// retain and a payload consume land in the same bucket (without which a payload consume could not
-/// keep the union retain needed, and a later union release would wrongly cancel it).
+/// truncated to the unit. A leaf below an unboxed union keys to the union itself, so a whole-union
+/// retain and a consume of the payload get the same key: the consume marks that retain as needed,
+/// and cancellation keeps it together with the union release that un-bumps it.
 ///
 /// This is the key a retain and a release are paired on, and the key a reference count is kept
 /// under, so it must name one object: a leaf whose object is path-dependent keys to the match
@@ -764,14 +764,19 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 }
 
 /// The type of field `idx` of `ty`, where the walk that reached `ty` has established it to be an
-/// unboxed struct/tuple, so that a well-formed unit/root path index is in range. `what` names the
-/// walk in the message an out-of-range index aborts with.
-fn field_type_at(ty: &Arc<TypeNode>, idx: usize, type_env: &TypeEnv, what: &str) -> Arc<TypeNode> {
+/// unboxed struct/tuple, so that a well-formed unit or leaf path index is in range. `walk_name`
+/// names the walk in the message an out-of-range index aborts with.
+fn field_type_at(
+    ty: &Arc<TypeNode>,
+    idx: usize,
+    type_env: &TypeEnv,
+    walk_name: &str,
+) -> Arc<TypeNode> {
     let fields = ty.field_types(type_env);
     assert!(
         idx < fields.len(),
         "{}: path index {} out of range ({} fields)",
-        what,
+        walk_name,
         idx,
         fields.len()
     );

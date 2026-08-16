@@ -10,13 +10,13 @@ mod union_rc_shapes_tests {
         tests::test_util::test_source,
     };
 
+    /// Matching a union built on the spot lets the simplifier replace the match with the arm it
+    /// knows is taken, substituting the payload the construction was given. Where the arm then
+    /// ignores that payload — an arm binding nothing, a pattern binding a field the body never
+    /// reads — the substituted operand is left with no reader, and its reference has to be released
+    /// exactly once all the same. Run under memcheck.
     #[test]
     pub fn test_discarded_operand_released_once() {
-        // Matching a union built on the spot lets the simplifier replace the match with the arm it
-        // knows is taken, substituting the payload the construction was given. Where the arm then
-        // ignores that payload — an arm binding nothing, a pattern binding a field the body never
-        // reads — the substituted operand is left with no reader, and its reference has to be
-        // released exactly once all the same. Run under memcheck.
         let source = r#"
             module Main;
 
@@ -67,14 +67,13 @@ mod union_rc_shapes_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
+    /// An unboxed union is one reference-counting unit, counted on the union itself, while the
+    /// references it holds live inside its variants and differ in shape from one variant to the
+    /// next. Nesting such a union inside a struct and a tuple, and then modifying an array of them
+    /// while a second binding keeps the array shared, makes the modification copy an element, and
+    /// the copy reaches those units two levels of unboxed aggregate down. Run under memcheck.
     #[test]
     pub fn test_nested_unboxed_union_shared_mod() {
-        // An unboxed union is one reference-counting unit whose root is where its count is kept,
-        // while the references it holds live inside its variants and differ in shape from one
-        // variant to the next. Nesting such a union inside a struct and a tuple, and then modifying
-        // an array of them while a second binding keeps the array shared, makes the copy the
-        // modification takes reach those units through two levels of unboxed aggregate. Run under
-        // memcheck.
         let source = r#"
             module Main;
 
@@ -89,8 +88,8 @@ mod union_rc_shapes_tests {
                 num(i) => i
             };
 
-            // Cycles through the three variants, so that the units beneath one union's root differ
-            // from element to element.
+            // Cycles through the three variants, so that the units beneath one union differ from
+            // element to element.
             mk : I64 -> Payload;
             mk = |k| (
                 if k % 3 == 0 { Payload::arr(Array::fill(k + 1, k)) };

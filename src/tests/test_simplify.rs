@@ -14,14 +14,15 @@ mod integration_tests {
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
+    /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_simplify/cases");
         path
     }
 
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict, and
-    // return the directory of the named case project.
+    /// Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
+    /// and return the directory of the named case project.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dst = temp_dir.path().to_path_buf();
@@ -30,9 +31,10 @@ mod integration_tests {
         (temp_dir, project_dir)
     }
 
-    // Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`, returning
-    // the dumped RC IR of every module. The `range.fold` driver is a specialized `Std::Iterator`
-    // symbol, so the whole-program dump is needed to see it. Also leaves a runnable executable.
+    /// Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`,
+    /// returning the dumped RC IR of every module. The `range.fold` driver is a specialized
+    /// `Std::Iterator` symbol, so the whole-program dump is needed to see it. Also leaves a runnable
+    /// executable.
     fn emit_all_rc_ir(project_dir: &Path) -> String {
         let output = fix_command_at_opt_level("build", "max")
             .arg("--emit-rc-ir")
@@ -52,7 +54,8 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
-    // The body of each `fn` block in the dump whose header line contains all of `needles`.
+    /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
+    /// itself and every line up to the next `fn` header.
     fn fn_bodies_matching<'a>(dump: &'a str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
         let mut current: Option<String> = None;
@@ -76,6 +79,10 @@ mod integration_tests {
         bodies
     }
 
+    /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
+    /// `range`'s `advance` returns and `fold` immediately matches is cancelled, so the loop-carried
+    /// state is the plain `RangeIterator` alone. The built program still sums the range, so the
+    /// removal leaves what the loop computes intact.
     #[test]
     fn test_range_fold_union_removed() {
         let (_temp_dir, project_dir) = setup_test_env("read_fold");
