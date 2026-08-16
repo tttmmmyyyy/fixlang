@@ -400,4 +400,70 @@ main = (
         }
         test_source(UNION_DROPPED_WHOLE_SOURCE, Configuration::develop_mode());
     }
+
+    // A match whose catch-all arm has to dispose of the scrutinee. A sibling arm names the
+    // scrutinee a second time, so the scrutinee is live at every arm's head, and the arm that does
+    // not name it releases it there. In the catch-all arm that release meets a second one: the
+    // payload the arm binds is the scrutinee itself, bound without a retain, and an arm body that
+    // never reads the payload releases it too. The retain the match is entered with is what pays
+    // for the second. One release short leaves the union alive; one too many frees it while the
+    // caller still holds it.
+    const CATCH_ALL_REREAD_SOURCE: &str = r#"
+module Main;
+
+type Choice = box union { arr : Array I64, num : I64 };
+type Pair = unbox union { both : (Array I64, Array I64), none : I64 };
+
+// The tagged arm reads the scrutinee a second time; the catch-all arm reads neither the scrutinee
+// nor the payload it binds.
+reread : Choice -> I64;
+reread = |c| (
+    match c {
+        arr(a) => a.@(0) + (match c { arr(b) => b.@size, num(j) => j }),
+        other => 100
+    }
+);
+
+reread_unbox : Pair -> I64;
+reread_unbox = |p| (
+    match p {
+        none(i) => i + (match p { both(t) => t.@0.@(0), none(j) => j }),
+        other => 200
+    }
+);
+
+// The catch-all arm reads the payload it binds, so the scrutinee flows into that arm as well.
+reread_and_use : Choice -> I64;
+reread_and_use = |c| (
+    match c {
+        num(i) => i + (match c { arr(b) => b.@size, num(j) => j }),
+        other => (match other { arr(b) => b.@(0), num(j) => j * 3 })
+    }
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"boxed union, tagged arm", reread(Choice::arr([11, 12, 13])), 14);;
+    assert_eq(|_|"boxed union, catch-all arm", reread(Choice::num(7)), 100);;
+    assert_eq(|_|"unboxed union, tagged arm", reread_unbox(Pair::none(5)), 10);;
+    assert_eq(|_|"unboxed union, catch-all arm", reread_unbox(Pair::both(([1], [2]))), 200);;
+    assert_eq(|_|"catch-all arm reads its payload", reread_and_use(Choice::arr([9, 8])), 9);;
+    assert_eq(|_|"tagged arm rereads the scrutinee", reread_and_use(Choice::num(4)), 8);;
+    pure()
+);
+"#;
+
+    /// The unions are freed exactly once and none of them leaks, checked under Valgrind MemCheck,
+    /// which is what a release too few shows up as.
+    #[test]
+    pub fn test_catch_all_arm_over_a_reread_scrutinee_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(CATCH_ALL_REREAD_SOURCE, Configuration::develop_mode());
+    }
 }
