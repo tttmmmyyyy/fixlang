@@ -12,6 +12,11 @@
 //! reference belongs to (`origin`), reached by following the alias edges — move-binds, unboxed-
 //! aggregate projections, unboxed-union payloads, and pure `Llvm` projections — back to the binding
 //! that produced it.
+//!
+//! What one reference-count operation bumps is a count of references per object
+//! (`acted_references`), which is what tells a retain of an unboxed union from a release of one
+//! field of the payload it holds: both key to the union, and only the counts say that the one
+//! un-bumps part of what the other bumped.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -779,6 +784,66 @@ pub(crate) fn acted_unit_keys(
         .collect()
 }
 
+/// The references a reference-count operation acts on: how many references of each object it bumps
+/// or un-bumps. A value holding one object's reference twice contributes two of it.
+///
+/// Two operations that key to one `unit_key` need not act on the same references, so the key alone
+/// does not say whether a release un-bumps a retain. An unboxed union is one unit, counted on the
+/// union itself, and a retain of it bumps every reference its payload holds; a projection of that
+/// payload names those references one by one, so a release of the projection un-bumps only part of
+/// what the retain bumped. Cancellation reads this to pair a retain with the releases that un-bump
+/// exactly it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct References(Map<VarPath, usize>);
+
+impl References {
+    /// Whether every reference of `other` is among these, counting multiplicity.
+    pub(crate) fn covers(&self, other: &References) -> bool {
+        other
+            .0
+            .iter()
+            .all(|(object, count)| self.0.get(object).is_some_and(|held| held >= count))
+    }
+
+    /// Drop `other`'s references from these, where `covers` holds of the two.
+    pub(crate) fn remove(&mut self, other: &References) {
+        for (object, count) in &other.0 {
+            let held = self
+                .0
+                .get_mut(object)
+                .expect("the removed references are covered by these");
+            *held -= count;
+            if *held == 0 {
+                self.0.remove(object);
+            }
+        }
+    }
+
+    /// Whether the operation acts on no reference at all.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// The references an operation on the subtree of `v` that `path` names acts on: the reference each
+/// boxed leaf under `path` holds, named by the object its `origin` identifies.
+pub(crate) fn acted_references(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    v: &RcVar,
+    path: &FieldPath,
+) -> References {
+    let mut references: Map<VarPath, usize> = Map::default();
+    for leaf in boxed_leaf_paths(&v.ty, type_env) {
+        if !leaf.starts_with(path) {
+            continue;
+        }
+        let object = origin(vars, type_env, &v.name, &leaf).identity().clone();
+        *references.entry(object).or_default() += 1;
+    }
+    References(references)
+}
+
 /// The unit key of an object identity: the root it names, with its path truncated to the
 /// reference-counting unit that holds it. The returned path is always one of that root's units.
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
@@ -865,8 +930,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 #[cfg(test)]
 mod tests {
     use super::{
-        as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit, unit_step, Binding,
-        Origin, UnitStep, VarTable,
+        acted_references, as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit,
+        unit_step, Binding, Origin, UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::program::TypeEnv;
@@ -944,7 +1009,8 @@ mod tests {
             },
         );
         // An unboxed struct holding one reference, an unboxed union of a variant that holds one and
-        // one that holds none, a boxed struct, and a struct nesting the union beside a closure.
+        // one that holds none, a boxed struct, a struct nesting the union beside a closure, and an
+        // unboxed union whose payload holds two references.
         for (name, tycon_info) in [
             (
                 "Pair",
@@ -975,6 +1041,22 @@ mod tests {
                         ("c", test_ty("Choice")),
                         ("f", type_fun(make_i64_ty(), make_i64_ty())),
                     ],
+                ),
+            ),
+            (
+                "Twins",
+                test_tycon_info(
+                    TyConVariant::Struct,
+                    true,
+                    vec![("fst", array_of_i64()), ("snd", array_of_i64())],
+                ),
+            ),
+            (
+                "Holder",
+                test_tycon_info(
+                    TyConVariant::Union,
+                    true,
+                    vec![("twins", test_ty("Twins")), ("none", make_i64_ty())],
                 ),
             ),
         ] {
@@ -1127,15 +1209,20 @@ mod tests {
         assert_eq!(as_arg_projection(&sources(vec![])), None);
     }
 
-    /// A local variable of type `I64`.
-    fn var(name: &str) -> RcVar {
+    /// A local variable of the given type.
+    fn typed_var(name: &str, ty: Arc<TypeNode>) -> RcVar {
         RcVar {
             name: FullName::local(name),
-            ty: make_i64_ty(),
+            ty,
             source: None,
             debug_name: None,
             skip_null_check: false,
         }
+    }
+
+    /// A local variable of type `I64`.
+    fn var(name: &str) -> RcVar {
+        typed_var(name, make_i64_ty())
     }
 
     /// A table of the given bindings, with every named variable also a known local.
@@ -1220,6 +1307,56 @@ mod tests {
             ("n", Binding::Move(var("m"))),
         ]);
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
+    }
+
+    /// A retain of an unboxed union acts on every reference its payload holds, while a release of
+    /// one field of that payload acts on one of them.
+    ///
+    /// Both key to one reference-counting unit — the union — so the key alone would pair them, and
+    /// cancelling the retain against that one release would leave the payload's other reference
+    /// released without ever having been retained. The references each acts on are what tells the
+    /// two apart: the field's are covered by the union's without exhausting them, and it takes the
+    /// releases of both fields to un-bump the retain.
+    #[test]
+    fn a_union_holds_the_references_of_every_field_of_its_payload() {
+        let type_env = type_env();
+        let union_ty = test_ty("Holder");
+        let payload_ty = test_ty("Twins");
+        let scrutinee = typed_var("u", union_ty.clone());
+        let payload = typed_var("p", payload_ty.clone());
+        let mut vars = VarTable::empty();
+        vars.bindings.insert(scrutinee.name.clone(), Binding::Param);
+        vars.param_tys
+            .insert(scrutinee.name.clone(), union_ty.clone());
+        vars.var_tys.insert(scrutinee.name.clone(), union_ty);
+        vars.bindings.insert(
+            payload.name.clone(),
+            Binding::Payload(scrutinee.clone(), Some(0)),
+        );
+        vars.var_tys.insert(payload.name.clone(), payload_ty);
+
+        let whole_union = acted_references(&vars, &type_env, &scrutinee, &vec![]);
+        let first_field = acted_references(&vars, &type_env, &payload, &vec![0]);
+        let second_field = acted_references(&vars, &type_env, &payload, &vec![1]);
+        assert!(whole_union.covers(&first_field));
+        assert_ne!(whole_union, first_field);
+        assert!(
+            !first_field.covers(&second_field),
+            "the two fields of the payload hold references of different objects"
+        );
+
+        let mut outstanding = whole_union;
+        outstanding.remove(&first_field);
+        assert!(
+            !outstanding.is_empty(),
+            "the release of one field leaves the payload's other reference bumped"
+        );
+        assert!(outstanding.covers(&second_field));
+        outstanding.remove(&second_field);
+        assert!(
+            outstanding.is_empty(),
+            "the releases of both fields un-bump the retain of the union"
+        );
     }
 
     /// A join over another join flattens: every result the inner join could yield is among the outer

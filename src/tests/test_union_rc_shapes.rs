@@ -270,4 +270,79 @@ main = (
         }
         test_source(UNION_PAYLOAD_UNITS_SOURCE, Configuration::develop_mode());
     }
+
+    // Taking the payload out of one union value twice. Each extraction consumes a reference of the
+    // union, so the union is retained once before the first one, and that single retain pays for
+    // both. An unboxed union is one reference-counting unit, so the retain bumps every reference
+    // the payload holds at once, while each extraction releases those references one field at a
+    // time — the retain is un-bumped by a group of releases rather than by a single one. Cancelling
+    // it against one release of that group leaves the rest standing, and the second extraction then
+    // releases what the first already freed.
+    //
+    // The scalar the reads take is what keeps the extraction visible: reading a boxed field instead
+    // consumes the payload in the read itself, leaving no release of the payload to pair with.
+    //
+    // The second shape builds the union out of a payload that holds one array in both of its
+    // fields, so the union holds two references of one object. Counting them as one would let a
+    // single release un-bump a retain that bumped both.
+    const PAYLOAD_TAKEN_TWICE_SOURCE: &str = r#"
+module Main;
+
+// The `pair` payload holds two boxed values beside a scalar, and `mark` holds none.
+type Action = unbox union { pair : (I64, Array I64, Array I64), mark : I64 };
+
+// Takes the payload out of one union value twice, reading its scalar each time.
+tag_twice : Action -> I64;
+tag_twice = |action| (
+    if action.as_pair.@0 == 0 { action.as_pair.@0 + 100 };
+    -1
+);
+
+// The same, on a union built here out of a payload that holds one array in both of its fields.
+tag_twice_of_shared : Array I64 -> I64;
+tag_twice_of_shared = |arr| tag_twice(Action::pair((0, arr, arr)));
+
+main : IO ();
+main = (
+    let actions = Array::from_map(4, |k| Action::pair(
+        (0, Array::fill(k + 1, k), Array::fill(k + 2, k))
+    ));
+    assert_eq(|_|"the scalar is read twice", actions.to_iter.map(tag_twice).sum, 400);;
+    assert_eq(
+        |_|"the arrays the payload holds are read back as they were built",
+        actions.to_iter.map(|a| a.as_pair.@1.@(0) + a.as_pair.@2.@(0)).sum, 12
+    );;
+
+    let shared = Array::fill(3, 5);
+    assert_eq(
+        |_|"the scalar of a payload holding one array twice is read twice",
+        Iterator::range(0, 4).map(|_| tag_twice_of_shared(shared)).sum, 400
+    );;
+    assert_eq(|_|"the array both fields of that payload hold is read back", shared.@(0), 5);;
+    pure()
+);
+"#;
+
+    /// The arrays a payload taken out twice holds are read back as they were built. An array freed
+    /// while the union still holds it changes the answer, so this catches it without Valgrind.
+    #[test]
+    pub fn test_payload_taken_twice_correctness() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        test_source(PAYLOAD_TAKEN_TWICE_SOURCE, config);
+    }
+
+    /// The arrays a payload taken out twice holds are freed exactly once and none of them leaks,
+    /// checked under Valgrind MemCheck.
+    #[test]
+    pub fn test_payload_taken_twice_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(PAYLOAD_TAKEN_TWICE_SOURCE, Configuration::develop_mode());
+    }
 }
