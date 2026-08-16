@@ -6,7 +6,8 @@
 // cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
 // `RangeIterator` two-scalar state and no union construction — the property the integration tests
 // assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
-// what each one computes.
+// what each one computes. The build-time tests bound how long a program shaped to drive it may take
+// to compile.
 
 #[cfg(test)]
 mod integration_tests {
@@ -158,5 +159,81 @@ mod value_tests {
             );
         "#;
         test_source(&source, Configuration::develop_mode());
+    }
+}
+
+#[cfg(test)]
+mod build_time_tests {
+    use crate::tests::test_util::build_within_and_run;
+    use std::time::Duration;
+
+    /// Deep enough that a term doubling per level is out of reach, and shallow enough that a term
+    /// growing with the level compiles in under a second.
+    const DEPTH: usize = 16;
+
+    /// Generous next to the fraction of a second the build takes, and short enough to report a
+    /// regression as a failure instead of occupying the machine.
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    /// What the nest computes for `n`: each level leaves the value alone when its modulus divides it
+    /// and adds its addend otherwise, and the innermost body triples the result.
+    fn nested_matches_value(n: i64) -> i64 {
+        let mut v = n;
+        for level in 1..=DEPTH as i64 {
+            if v % (3 + level % 5) != 0 {
+                v += level + 1;
+            }
+        }
+        v * 3
+    }
+
+    /// A nest of `DEPTH` matches over an `Option` that both branches of an `if` build with the same
+    /// constructor. Case-of-case moves an outer arm into the inner arm that builds its constructor,
+    /// and here one constructor is built by both arms, so a rewrite that served both would leave the
+    /// outer match — which holds the whole nest below this level — in each of them, doubling the term
+    /// at every level.
+    fn nested_matches_source() -> String {
+        let mut source = String::from("module Main;\n\nf : I64 -> I64;\nf = |n| (\n");
+        let mut indent = String::from("    ");
+        for level in 1..=DEPTH {
+            let scrutinee = if level == 1 {
+                "n".to_string()
+            } else {
+                format!("v{}", level - 1)
+            };
+            source += &format!(
+                "{indent}match (if {scrutinee} % {} == 0 {{ Option::some({scrutinee}) }} \
+                 else {{ Option::some({scrutinee} + {}) }}) {{\n",
+                3 + level % 5,
+                level + 1
+            );
+            source += &format!("{indent}    some(v{level}) => (\n");
+            indent += "        ";
+        }
+        source += &format!("{indent}v{DEPTH} * 3\n");
+        for _ in 0..DEPTH {
+            indent.truncate(indent.len() - 8);
+            source += &format!("{indent}    ),\n{indent}    none() => 0\n{indent}}}\n");
+        }
+        source += ");\n\nmain : IO ();\nmain = println(f(7).to_string);\n";
+        source
+    }
+
+    /// The nest compiles in a time that grows with its depth rather than doubling with it, and the
+    /// program it compiles to computes what the source says. `max` is where the simplifier runs.
+    #[test]
+    fn test_nested_matches_compile_in_reasonable_time() {
+        let printed = build_within_and_run(
+            &nested_matches_source(),
+            "max",
+            TIMEOUT,
+            &format!("a nest of {} matches", DEPTH),
+        );
+        assert_eq!(
+            printed,
+            nested_matches_value(7).to_string(),
+            "the nest of {} matches returned a wrong value",
+            DEPTH
+        );
     }
 }

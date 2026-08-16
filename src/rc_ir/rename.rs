@@ -204,13 +204,3 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
 pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>) -> RcExprNode {
     rename_expr(node, subst)
 }
-
-/// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
-/// name (like `fresh_rename_function`, but for a sub-expression rather than a whole function). Free
-/// variables — those bound outside `node` — are left unchanged. The simplifier uses it when
-/// case-of-case duplicates a match into several arms, so each copy's binders stay unique.
-pub(crate) fn clone_fresh(node: &RcExprNode, marker: &str, counter: &mut u64) -> RcExprNode {
-    let mut rename: Map<FullName, FullName> = Map::default();
-    assign_fresh_names_to_binders(node, marker, &mut rename, counter);
-    rename_expr(node, &rename)
-}
