@@ -89,7 +89,12 @@ mod integration_tests {
         let dump = emit_all_rc_ir(&project_dir);
 
         let bodies = fn_bodies_matching(&dump, needles);
-        assert!(!bodies.is_empty(), "no {} in the RC IR dump:\n{}", what, dump);
+        assert!(
+            !bodies.is_empty(),
+            "no {} in the RC IR dump:\n{}",
+            what,
+            dump
+        );
         for body in &bodies {
             assert!(
                 !body.contains("union_"),

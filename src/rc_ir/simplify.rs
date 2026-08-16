@@ -26,8 +26,8 @@
 //! The fixpoint terminates because every rewrite makes the body strictly smaller: the two
 //! case-of-known-constructor rewrites drop the construction they cancel, and case-of-case is taken
 //! only when its result is smaller than what it replaces. A body of `n` nodes therefore admits at most
-//! `n` rewrites, which is the budget it is given, and the simplified body is never larger than the one
-//! it started from — which `simplify_to_fixpoint` asserts.
+//! `n` rewrites, which is the budget it is given. `simplify_to_fixpoint` asserts both halves of that:
+//! the simplified body is never larger than the one it started from, and the budget is never spent.
 
 use crate::ast::name::FullName;
 use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
@@ -40,39 +40,40 @@ use std::sync::Arc;
 /// The marker for fresh names the case-of-case move mints, keeping them distinct from other passes'.
 const MARKER: &str = "cc";
 
-/// Rewriting state threaded through a body's fixpoint: a supply of fresh-name suffixes, unique across
-/// the whole program, and the rewrites the body under simplification has left.
-struct Ctx {
+/// Rewriting state threaded through a body's fixpoint: the supply of fresh-name suffixes, unique
+/// across the whole program, and the rewrites this body has left.
+struct Ctx<'a> {
     /// The source of the number that makes each minted name unique across the whole program.
-    fresh: u64,
+    fresh: &'a mut u64,
     /// The rewrites left for the body; the fixpoint stops when it reaches zero.
     budget: u64,
 }
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram) {
-    let mut ctx = Ctx {
-        fresh: 0,
-        budget: 0,
-    };
+    let mut fresh = 0;
     for func in prog.funcs.values_mut() {
-        func.body = simplify_to_fixpoint(&func.body, &mut ctx);
+        func.body = simplify_to_fixpoint(&func.body, &mut fresh);
     }
     for g in &mut prog.globals {
-        g.init = simplify_to_fixpoint(&g.init, &mut ctx);
+        g.init = simplify_to_fixpoint(&g.init, &mut fresh);
     }
 }
 
-/// Apply the rewrites over a body until a pass makes no change. The budget the body starts with is its
-/// node count, the number of rewrites it admits when each makes it smaller; spending it stops the
-/// fixpoint, so a rewrite that broke that accounting halts here rather than looping forever.
-fn simplify_to_fixpoint(node: &RcExprNode, ctx: &mut Ctx) -> RcExprNode {
+/// Apply the rewrites over a body until a pass makes no change. The body's budget is its node count,
+/// the number of rewrites it admits when each makes it smaller; spending it stops the fixpoint, so a
+/// rewrite that broke that accounting halts here rather than looping forever, and the assertions below
+/// say which half of it broke.
+fn simplify_to_fixpoint(node: &RcExprNode, fresh: &mut u64) -> RcExprNode {
     let size = node_count(node);
-    ctx.budget = size;
+    let mut ctx = Ctx {
+        fresh,
+        budget: size,
+    };
     let mut cur = node.clone();
     loop {
         let mut changed = false;
-        cur = rewrite(&cur, ctx, &mut changed);
+        cur = rewrite(&cur, &mut ctx, &mut changed);
         if !changed {
             let simplified = node_count(&cur);
             assert!(
@@ -80,6 +81,12 @@ fn simplify_to_fixpoint(node: &RcExprNode, ctx: &mut Ctx) -> RcExprNode {
                 "the simplifier grew a body from {} nodes to {}",
                 size,
                 simplified
+            );
+            assert!(
+                ctx.budget > 0,
+                "the simplifier took {} rewrites on a body of {} nodes, so one of them did not make it smaller",
+                size - ctx.budget,
+                size
             );
             return cur;
         }
@@ -140,7 +147,7 @@ fn try_local(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode
     }
     let rewritten = case_of_known_union(node)
         .or_else(|| destructure_of_struct(node))
-        .or_else(|| case_of_case(node, &mut ctx.fresh));
+        .or_else(|| case_of_case(node, ctx.fresh));
     match rewritten {
         Some(rewritten) => {
             ctx.budget -= 1;
