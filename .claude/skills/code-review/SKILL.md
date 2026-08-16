@@ -916,7 +916,9 @@ The Rust source comments, `std.fix`'s doc comments, and the documents the projec
 
 This convention covers the text the project ships. Writing addressed to the people working on the change — a dev doc under `dev-docs/`, a pull request body, an issue — is in the language of the people who read it, and this convention does not reach it. The `devdoc` skill governs a dev doc's writing.
 
-**Rewrite**: translate the comment into clear English while preserving its meaning.
+Write that English plainly. A reader of this project need not be a native speaker, and a long sentence, a rare word where a common one fits, or a clause folded inside another costs them more than it costs a native reader. Short sentences and ordinary words carry the same meaning for less, and they are also what a translator of the document has to work from.
+
+**Rewrite**: translate the comment into clear English while preserving its meaning; say a long or ornate sentence plainly.
 
 #### Every Rust item must have a doc comment — [Rust]
 
@@ -985,6 +987,16 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 **Keep** genuine prohibitions and deprecations — "must not be called after `close()`", "callers should not rely on the ordering here". These regulate future behavior rather than negating a phantom alternative, so they belong.
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
+
+#### Name a thing the way the reader's own code names it — [Rust + Markdown]
+
+An identifier the reader's code carries is vocabulary they already share with the text, and a word they can search for. In a Rust comment that is the compiler's: write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the way back to the code, and a translated paraphrase cuts it twice.
+
+**Which code that is follows from who reads the text.** A Fix programmer reading the manual or `CHANGELOG.md` shares Fix's names — `FFI_EXPORT`, `I8`, `Std::Array::get_size` — and shares nothing with the compiler's source, so a compiler identifier there names something they cannot reach. Say what they can see instead. (`Write changelog entries for the user` says the same of the changelog, from the other side.)
+
+Where the reader's code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+
+**Rewrite**: put the reader's identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
 
 #### Reference by name, not by line or section number — [Rust + Markdown]
 

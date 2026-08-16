@@ -26,9 +26,7 @@ use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::rc_ir::ast::RcState;
 use core::panic;
-use inkwell::context::Context;
-use inkwell::types::{BasicType, BasicTypeEnum, StructType};
-use inkwell::AddressSpace;
+use inkwell::types::{BasicTypeEnum, StructType};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
@@ -277,44 +275,6 @@ impl TyCon {
     pub fn is_c_scalar(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::new_str(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
-    }
-
-    // Convert `()`, `I8`, `Ptr`, etc. to the corresponding C type.
-    // `()` is C's `void`, which carries no value, so it maps to `None`.
-    pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
-        if self.is_unit() {
-            return None;
-        }
-        assert!(
-            self.is_c_scalar(),
-            "call get_c_type for {}",
-            self.to_string()
-        );
-        Some(match self.name.name.as_str() {
-            I8_NAME | U8_NAME => ctx.i8_type().as_basic_type_enum(),
-            I16_NAME | U16_NAME => ctx.i16_type().as_basic_type_enum(),
-            I32_NAME | U32_NAME => ctx.i32_type().as_basic_type_enum(),
-            I64_NAME | U64_NAME => ctx.i64_type().as_basic_type_enum(),
-            F32_NAME => ctx.f32_type().as_basic_type_enum(),
-            F64_NAME => ctx.f64_type().as_basic_type_enum(),
-            PTR_NAME => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
-            name => unreachable!("no C type for `{}`", name),
-        })
-    }
-
-    // Whether a value of this type occupies fewer bits than the 32-bit unit a C signature extends
-    // narrow integers to. Such a value travels in the low bits of a register, and the ABI decides
-    // which side of the call extends it; a wider type fills the register and needs no extension.
-    //
-    // The 32-bit threshold holds for the targets Fix builds for. An ABI that extends a 32-bit
-    // integer to the width of a register — RISC-V 64 does — widens this set.
-    pub fn is_narrow_c_integer(self: &TyCon) -> bool {
-        self.name.namespace == NameSpace::new_str(&[STD_NAME])
-            && matches!(
-                self.name.name.as_str(),
-                I8_NAME | U8_NAME | I16_NAME | U16_NAME
-            )
     }
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an

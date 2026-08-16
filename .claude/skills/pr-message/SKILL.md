@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every function the diff touches, link every name it mentions to the implementation on GitHub, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every function the diff touches, link every item the change adds or modifies to its implementation on GitHub, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -31,19 +31,24 @@ The body is read before the diff, and it has to make the diff make sense. So the
 
 When one mechanical change lands identically in many functions — a renamed parameter, an argument threaded through a call chain — describe the change once and name the functions it lands in. Every function is still covered, without the repetition.
 
-## Link every name to its implementation
+## Link every item the change adds or modifies
 
-The body names functions for a reader who has never opened them, so it also says where each one lives. Every name the body mentions that this repository defines carries a link to its implementation, written as a Markdown link whose visible text is the name:
+The body names functions for a reader who has never opened them, so it also says where each one lives. A link is written as a Markdown link whose visible text is the name:
 
 > the pass [`request_inline_into_callers`](https://github.com/tttmmmyyyy/fixlang/blob/43883c7abbf8f3b19730f28f067093ec780b6372/src/optimization/inline.rs#L77-L85) marks each global whose body is small enough …
 
 The visible text is the name alone, so the prose goes on referring to the code by name and the reader who wants the source is one click from it. A bare URL standing on its own line is rendered as a code excerpt instead, which puts a block of code where a sentence belongs.
 
+The links sit where the body covers what the change did to the code, which is two places:
+
+- **Each entry of the function coverage above** — every changed function and every added one.
+- **Each other item the change adds or modifies**, where the body covers it: a type, a trait, a field, a constant.
+
+Those are the names the reader opens the source for, and each of them gets exactly one link. Every other mention stays plain text — a name the body brings in to explain the surroundings is read rather than opened.
+
 - **Pin every link to a commit hash.** Push the branch, take `git rev-parse HEAD`, and build all of them on that hash. A hash names the same lines forever and keeps resolving after the branch is deleted; a branch name in the path drifts with the next commit and resolves to nothing once the branch is gone.
 - **Span the definition**: `#L<signature>-L<closing>`, from the signature line to the line that closes the body. GitHub highlights that span, so the click lands on the whole function.
-- **Link the first mention of a name** and leave the rest of its mentions plain. The body and the appendix each get one, since either is read on its own.
 - **A function the change deletes is linked at the commit the branch forked from** (`git merge-base HEAD main`), where it still stands.
-- The same form serves a type, a trait, a field, or a constant the body names. A name defined elsewhere — a function of a crate, an LLVM API — stays plain text.
 - **Re-pin when the body is revised after further commits are pushed**, so the lines the links point at are the ones the body describes.
 
 The two line numbers are mechanical — the signature line, then the first line closing a block at the signature's own indentation:

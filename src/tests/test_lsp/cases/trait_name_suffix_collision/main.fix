@@ -1,0 +1,13 @@
+module Main;
+import Lib;
+
+trait a : Foo {
+    foo : a -> I64;
+}
+
+impl I64 : Foo {
+    foo = |n| n + 1;
+}
+
+main : IO ();
+main = println(3.foo.to_string);
