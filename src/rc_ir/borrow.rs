@@ -24,8 +24,8 @@
 //! Borrow-ification and cancellation both work one reference-counting unit at a time, so
 //! `split_rc_units` first normalizes the lowered reference counting to that granularity: it
 //! decomposes a whole-value or subtree `Retain`/`Release` into one node per unit — a boxed leaf, a
-//! closure capture, or an unboxed-union root (a union is one unit, since a physical refcount
-//! operation on it must dispatch on the tag rather than name a variant).
+//! closure capture, or an unboxed union (a union is one unit, since a physical refcount operation on
+//! it must dispatch on the tag rather than name a variant).
 //!
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
