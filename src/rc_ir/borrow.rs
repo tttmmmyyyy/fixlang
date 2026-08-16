@@ -260,7 +260,7 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
     FuncRef { name: n }
 }
 
-/// Whether any of a function's parameter leaves is borrowable (not in the inferred owned set).
+/// Whether any of a function's parameter leaves is one borrow inference left `Borrow`.
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
