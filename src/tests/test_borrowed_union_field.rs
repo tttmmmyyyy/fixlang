@@ -1,18 +1,17 @@
 // Memory-safety tests for a union read out of an aggregate the reading function only borrows.
 //
 // An unboxed union is one reference-counting unit: an operation on it dispatches on the tag rather
-// than naming a variant, so its reference count is kept at the union's root. Its provenance,
-// though, is recorded one level down, on the leaves of its variants. A reader that asks where the
-// union at that root came from therefore finds nothing recorded and would take it for a value
-// produced on the spot — its own to release — when it is really the caller's, read out of a
-// borrowed parameter. The release then falls twice: once in the callee that never took a
-// reference, once in the caller that did.
+// than naming a variant, so its reference count is kept on the union itself. Its provenance, though,
+// is recorded one level down, on the leaves of its variants. A reader that asks where the union came
+// from therefore finds nothing recorded and would take it for a value produced on the spot — its own
+// to release — when it is really the caller's, read out of a borrowed parameter. The release then
+// falls twice: once in the callee that never took a reference, once in the caller that did.
 //
 // The program below has that shape: a node of an array carries an unboxed union with boxed
 // variants, a function reads the union out of a node it is handed and only looks at it, and the
 // walk that hands the nodes over is a loop whose state carries an array. Two of the union's
 // variants carry a boxed value: one carries a single one, and one carries a pair of them, so that
-// the root is resolved both where a single leaf lies beneath it and where several have to agree on
+// the union is resolved both with a single leaf beneath it and with several that have to agree on
 // the object they come from.
 
 #[cfg(test)]
@@ -29,7 +28,7 @@ module Main;
 // A boxed value a variant of the union carries, so that the union holds a reference count.
 type Guard = box struct { allowed : Array U8 };
 
-// Two boxed values in one variant, so that the union's root has several leaves beneath it.
+// Two boxed values in one variant, so that the union has several leaves beneath it.
 type Pair = unbox struct { first : Guard, second : Guard };
 
 // The union the node carries: one variant holds a boxed value, one a pair of them, and one only a
@@ -177,11 +176,11 @@ module Main;
 // A boxed value a variant of the union carries, so that the union holds a reference count.
 type Guard = box struct { allowed : Array U8 };
 
-// Two boxed values in one variant, so that the union's root has several leaves beneath it.
+// Two boxed values in one variant, so that the union has several leaves beneath it.
 type Pair = unbox struct { first : Guard, second : Guard };
 
-// One variant holds a boxed value, one a pair of them, and one only a number, so that the union's
-// root is resolved with one leaf beneath it, with several, and with none.
+// One variant holds a boxed value, one a pair of them, and one only a number, so that the union is
+// resolved with one leaf beneath it, with several, and with none.
 type Action = unbox union { wait : Guard, pair : Pair, mark : I64 };
 
 type Node = unbox struct { action : Action, n : I64 };
@@ -213,9 +212,9 @@ main = (
         first : Guard { allowed : ['b'] }, second : Guard { allowed : ['c'] }
     }), n : 2 };
     let scalar = Node { action : Action::mark(9), n : 1 };
-    assert_eq(|_|"one leaf beneath the union's root", glance(3, single), 20);;
-    assert_eq(|_|"several leaves beneath the union's root", glance(3, several), 8);;
-    assert_eq(|_|"no leaf beneath the union's root", glance(3, scalar), 4);;
+    assert_eq(|_|"one leaf beneath the union", glance(3, single), 20);;
+    assert_eq(|_|"several leaves beneath the union", glance(3, several), 8);;
+    assert_eq(|_|"no leaf beneath the union", glance(3, scalar), 4);;
     assert_eq(|_|"dropped after a borrowing getter", sniff(3, several), 103);;
     assert_eq(|_|"dropped by the getter's own arm", sniff(3, scalar), 1);;
     pure()
