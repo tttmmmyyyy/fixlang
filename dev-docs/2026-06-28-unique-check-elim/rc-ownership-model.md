@@ -12,11 +12,12 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   フィールドは `rc_units` と同じくスキップする（参照を持たないため）。
 - 消費と provenance は **leaf 空間**、`Retain`/`Release` ノードは **unit 空間**に住む。橋渡しは
   `truncate_to_unit`（leaf path を unit path に切り詰める）と `units_under`。
-- `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、根の型の
-  `rc_units` の要素である。切り詰めは下向きにしか効かないので、identity の path が unit root より上で
-  止まると、どの unit も指さない `unit_key` ができる。`unit_of` の assertion がこれを検査する。
-- `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は根、その leaf は
-  各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
+- `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）が答える path は、root
+  （`VarPath` の先頭にある変数）の型の `rc_units` の要素である。切り詰めは下向きにしか効かないので、
+  identity の path が unit root より上で止まると、どの unit も指さない `unit_key` ができる。`unit_of` の
+  assertion がこれを検査する。
+- `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は union 自身の
+  path、その leaf は各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
   無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
   下の leaf が 1 つのオペランド unit に揃えば `Exactly`、複数に分かれるか射影でない leaf を含むなら、その値が
   取りうるオブジェクトを全部並べた `Join`。⊥（不在 variant）の leaf は参照を持たないので読み飛ばす。
@@ -95,9 +96,9 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - **punched フィールドの下の leaf**: `rc_units` も `boxed_leaf_paths` も降りないので、どちらの空間にも
   現れない。
 - **unbox union が参照を数えるキー**: union の参照は生きている variant の参照で、どのオブジェクトに属するかは
-  タグで決まる。`origin` は union の根に対して payload の unit 群を候補に持つ `Join` を答え、variant の中の
-  leaf に対してはその payload の unit を答える。union の根の `unit_key` と、その下の leaf が解決する
-  `unit_key` の両方を検査対象外にする。
+  タグで決まる。`origin` は union 自身の path に対して payload の unit 群を候補に持つ `Join` を答え、
+  variant の中の leaf に対してはその payload の unit を答える。union 自身の `unit_key` と、その下の leaf が
+  解決する `unit_key` の両方を検査対象外にする。
 - **fully-unboxed 値**（`needs_rc` が偽）には RC ノードが無い。funptr 型もここに入る。
 - **1 変数が複数 unit を持ち、unit ごとに所有権が違う**（`split_rc_units` 以降）。
 - **他コンパイル単位のシンボル**: `prog.funcs` に無い callee は全 `Own` とみなす（borrow 最適化が走るのは
