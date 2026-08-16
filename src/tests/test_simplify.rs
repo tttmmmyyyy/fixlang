@@ -117,6 +117,44 @@ mod integration_tests {
         );
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4950");
     }
+
+    /// `scale`'s inner arms build one constructor, so moving the outer `some` arm into them places a
+    /// copy in each. The copy is smaller than the construction and the match it replaces, so the
+    /// simplifier takes the move and `scale` builds no union. The built program still computes what
+    /// the source says, so the removal leaves the values intact.
+    #[test]
+    fn test_one_variant_union_removed() {
+        let (_temp_dir, project_dir) = setup_test_env("one_variant");
+        let dump = emit_all_rc_ir(&project_dir);
+
+        let bodies = fn_bodies_matching(&dump, &["Main::scale"]);
+        assert!(
+            !bodies.is_empty(),
+            "no `Main::scale` in the RC IR dump:\n{}",
+            dump
+        );
+        for body in &bodies {
+            assert!(
+                !body.contains("union_"),
+                "`scale` still builds a union — the simplifier declined the move into inner arms \
+                 that build one constructor:\n{}",
+                body
+            );
+        }
+
+        // The program still computes `scale` over 0..10.
+        let run = std::process::Command::new(project_dir.join("a.out"))
+            .output()
+            .expect("failed to run the built executable");
+        assert!(
+            run.status.success(),
+            "the built executable did not run cleanly"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout).trim(),
+            "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -154,6 +192,35 @@ mod value_tests {
                 assert_eq(
                     |_|"nested matches over one variant",
                     Iterator::range(0, 5).map(f).to_array, [0, 16, 26, 30, 31]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
+    /// The outer match answers the `none` an inner arm builds with a catch-all arm, which binds the
+    /// whole union rather than that constructor's payload. Moving such an arm into the inner arm
+    /// would bind it to the payload instead, so the rewrite declines and the values stay what the
+    /// source computes.
+    #[test]
+    pub fn test_catch_all_outer_arm() {
+        let source = r#"
+            module Main;
+
+            f : I64 -> I64;
+            f = |n| (
+                match (if n % 5 == 0 { Option::some(n) } else { Option::none() }) {
+                    some(v) => v * 3,
+                    rest => rest.as_some_or(-1) - 7
+                }
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"a catch-all arm of the outer match",
+                    Iterator::range(0, 6).map(f).to_array, [0, -8, -8, -8, -8, 15]
                 );;
                 pure()
             );
