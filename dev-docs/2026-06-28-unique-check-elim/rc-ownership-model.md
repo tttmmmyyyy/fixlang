@@ -81,8 +81,14 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 |---|---|
 | `insert_rc` 直後 | 全 `Retain`/`Release` は path `[]`・`RcState::Unknown`。全パラメータ/capture が `Own`。各 binding の各参照はどのパスでもちょうど 1 回消費される |
 | `split_rc_units` 直後 | 同上、ただしキーが `(binding, unit)`。全 RC ノードの path が `rc_units(v.ty)` の要素 |
-| `borrow_ify` 直後 | `borrowed_units` に載る unit と、それに根を持つ値は**消費も RC 操作もされない**（`owns_unit` が判定）。それ以外は各パスちょうど 1 回消費 |
-| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。消えるのは retain 1 個と、その retain が上げた参照をちょうど覆う release 群（`acted_references`）である。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer で +1・消費/`Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
+| `borrow_ify` 直後 | `borrowed_units` に載る unit の参照、およびそれに根を持つ値の参照は、**呼び出し元から借りたままである**（`owns_unit` が判定）。処分するのは呼び出し元であり、関数の側にはその `Release` も消費も無い。借りた値を所有側の引数位置へ渡すときだけ、その呼び出しの直前に `Retain` が置かれて参照がもう 1 つ作られ、消費されるのはその新しい参照である（`call_rc`）。それ以外は各パスちょうど 1 回消費 |
+| `cancel` / `specialize` 直後 | **binding 単位の線形性は失われる**。`cancel` は `unit_key`（`origin` の identity を `truncate_to_unit` で切り詰めたもの）のキーで別 binding をまたいで retain/release を対消滅させる。消えるのは retain 1 個と、その retain が上げた参照をちょうど覆う release 群（`acted_references`）である。成立するのは **(root オブジェクト, unit) 単位の参照数保存**: 所有パラメータ/capture unit を 1、borrowed を 0 で初期化し、producer と `Retain` で +1、消費と `Release` で -1 したカウンタが、どのパスでも負にならず関数出口で 0 |
+
+借用版が借りた値を所有側の引数位置へ渡す状況は、次のときに生じる。所有権の推論は、呼び出し先の**元の関数**
+について推論中の所有権を読んで「この位置は消費しない」と判定し、引数を借用可能なままにする。一方、版の振り分けは
+呼び出しごとに行われ、末尾位置の呼び出しが所有引数を持つ場合は借用版へ回されない（後置の `Release` が末尾呼び出しを
+末尾でなくするため）。回されなかった呼び出し先は全パラメータを所有する元の版なので、借りた値がそこでは消費される。
+`call_rc` の `Retain` はその差を埋める。
 
 `specialize` は RC ノードを素通しコピーし、`assuming_unique` は `LLVMGen` を差し替えるだけなので、消費モデルは
 特殊化の前後で不変（`result_prov` を force-unique 有無で変える op は存在しない）。
