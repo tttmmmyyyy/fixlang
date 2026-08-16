@@ -593,14 +593,14 @@ fn push_boxed_leaves(
 /// held.
 pub(crate) enum UnitStep {
     /// The value holds no reference, so no unit sits here or below it.
-    Nothing,
+    NoUnit,
     /// A closure, whose capture is the one unit it holds.
     Capture {
         /// The field the capture sits at, the index a path into the closure names.
-        idx: usize,
+        capture_idx: usize,
         /// How many fields the closure has, so that a table a walk builds over them is indexed by
         /// field index. The other field is the function pointer, which holds no reference.
-        width: usize,
+        field_count: usize,
     },
     /// One unit sits here and the walk stops: a boxed value, an unboxed union (only its active
     /// variant is live, so a refcount operation dispatches on the tag rather than name a variant's
@@ -611,10 +611,10 @@ pub(crate) enum UnitStep {
     Fields {
         /// How many fields the type declares, so that a table a walk builds over them is indexed by
         /// field index.
-        width: usize,
+        field_count: usize,
         /// The fields a value of the type holds, each with its index. A punched field holds nothing,
         /// so it is left out.
-        held: Vec<(usize, Arc<TypeNode>)>,
+        held_fields: Vec<(usize, Arc<TypeNode>)>,
     },
 }
 
@@ -625,24 +625,24 @@ pub(crate) enum UnitStep {
 /// before them.
 ///
 /// # Examples
-/// `unit_step` of `(Array I64, I64)` is `Fields` of width 2 whose held fields are both of them, of
-/// `Array I64` is `Unit`, and of `I64` is `Nothing`.
+/// `unit_step` of `(Array I64, I64)` is `Fields` of field count 2 whose held fields are both of
+/// them, of `Array I64` is `Unit`, and of `I64` is `NoUnit`.
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
-        return UnitStep::Nothing;
+        return UnitStep::NoUnit;
     }
     if ty.is_closure() {
         return UnitStep::Capture {
-            idx: CLOSURE_CAPTURE_IDX as usize,
-            width: CLOSURE_FIELD_COUNT,
+            capture_idx: CLOSURE_CAPTURE_IDX as usize,
+            field_count: CLOSURE_FIELD_COUNT,
         };
     }
     if ty.is_box(type_env) || ty.is_union(type_env) || ty.is_array() || ty.is_punched_array() {
         return UnitStep::Unit;
     }
     UnitStep::Fields {
-        width: ty.toplevel_tycon_info(type_env).fields.len(),
-        held: ty.unpunched_field_types(type_env),
+        field_count: ty.toplevel_tycon_info(type_env).fields.len(),
+        held_fields: ty.unpunched_field_types(type_env),
     }
 }
 
@@ -650,18 +650,19 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// works with comes from a unit or leaf enumeration, and both leave out a punched field, so an index
 /// that names one — or that is out of range — aborts the walk `walk_name` names.
 pub(crate) fn held_field_type(
-    held: &[(usize, Arc<TypeNode>)],
+    held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
     walk_name: &str,
 ) -> Arc<TypeNode> {
-    held.iter()
+    held_fields
+        .iter()
         .find(|(i, _)| *i == idx)
         .unwrap_or_else(|| {
             panic!(
                 "{}: path index {} names no field the value holds (it holds {:?})",
                 walk_name,
                 idx,
-                held.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+                held_fields.iter().map(|(i, _)| *i).collect::<Vec<_>>()
             )
         })
         .1
@@ -688,15 +689,15 @@ fn rc_units_go(
     out: &mut Vec<FieldPath>,
 ) {
     match unit_step(ty, type_env) {
-        UnitStep::Nothing => {}
-        UnitStep::Capture { idx, .. } => {
-            path.push(idx);
+        UnitStep::NoUnit => {}
+        UnitStep::Capture { capture_idx, .. } => {
+            path.push(capture_idx);
             out.push(path.clone());
             path.pop();
         }
         UnitStep::Unit => out.push(path.clone()),
-        UnitStep::Fields { held, .. } => {
-            for (i, fty) in held {
+        UnitStep::Fields { held_fields, .. } => {
+            for (i, fty) in held_fields {
                 path.push(i);
                 rc_units_go(&fty, type_env, path, out);
                 path.pop();
@@ -718,15 +719,15 @@ pub(crate) fn truncate_to_unit(
     for &idx in path {
         match unit_step(&cur, type_env) {
             // A value holding no reference has no unit below it for the rest of the path to name.
-            UnitStep::Nothing => panic!(
+            UnitStep::NoUnit => panic!(
                 "truncate_to_unit: the path {:?} enters `{}`, which holds no reference",
                 path,
                 cur.to_string()
             ),
-            UnitStep::Capture { idx: capture, .. } => {
+            UnitStep::Capture { capture_idx, .. } => {
                 // The only path into a closure names its capture, which is a single unit.
                 assert_eq!(
-                    idx, capture,
+                    idx, capture_idx,
                     "truncate_to_unit: a path into a closure names its capture"
                 );
                 out.push(idx);
@@ -735,9 +736,9 @@ pub(crate) fn truncate_to_unit(
             // A leaf below a unit — a boxed leaf under a union variant, or the punched array's inner
             // array — keys to that unit.
             UnitStep::Unit => break,
-            UnitStep::Fields { held, .. } => {
+            UnitStep::Fields { held_fields, .. } => {
                 out.push(idx);
-                cur = held_field_type(&held, idx, "truncate_to_unit");
+                cur = held_field_type(&held_fields, idx, "truncate_to_unit");
             }
         }
     }
@@ -851,8 +852,10 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
     let mut cur = ty.clone();
     for &idx in path {
         match unit_step(&cur, type_env) {
-            UnitStep::Fields { held, .. } => cur = held_field_type(&held, idx, "subtree_type"),
-            UnitStep::Nothing | UnitStep::Capture { .. } | UnitStep::Unit => return None,
+            UnitStep::Fields { held_fields, .. } => {
+                cur = held_field_type(&held_fields, idx, "subtree_type")
+            }
+            UnitStep::NoUnit | UnitStep::Capture { .. } | UnitStep::Unit => return None,
         }
     }
     Some(cur)
@@ -890,7 +893,7 @@ mod tests {
     }
 
     /// A declaration taking no type argument, holding the named fields in the order given.
-    fn test_decl(
+    fn test_tycon_info(
         variant: TyConVariant,
         is_unbox: bool,
         fields: Vec<(&str, Arc<TypeNode>)>,
@@ -917,7 +920,7 @@ mod tests {
 
     /// A type environment holding the built-in type constructors, `Std::PunchedArray` as `std.fix`
     /// declares it, and one declaration of each kind a unit walk distinguishes.
-    fn unit_type_env() -> TypeEnv {
+    fn type_env() -> TypeEnv {
         let mut tycons = bulitin_tycons();
         tycons.insert(
             make_punched_array_tycon(),
@@ -941,10 +944,10 @@ mod tests {
         );
         // An unboxed struct holding one reference, an unboxed union of a variant that holds one and
         // one that holds none, a boxed struct, and a struct nesting the union beside a closure.
-        for (name, decl) in [
+        for (name, tycon_info) in [
             (
                 "Pair",
-                test_decl(
+                test_tycon_info(
                     TyConVariant::Struct,
                     true,
                     vec![("fst", array_of_i64()), ("snd", make_i64_ty())],
@@ -952,7 +955,7 @@ mod tests {
             ),
             (
                 "Choice",
-                test_decl(
+                test_tycon_info(
                     TyConVariant::Union,
                     true,
                     vec![("l", array_of_i64()), ("r", make_i64_ty())],
@@ -960,11 +963,11 @@ mod tests {
             ),
             (
                 "BoxedPair",
-                test_decl(TyConVariant::Struct, false, vec![("a", array_of_i64())]),
+                test_tycon_info(TyConVariant::Struct, false, vec![("a", array_of_i64())]),
             ),
             (
                 "Nested",
-                test_decl(
+                test_tycon_info(
                     TyConVariant::Struct,
                     true,
                     vec![
@@ -974,7 +977,7 @@ mod tests {
                 ),
             ),
         ] {
-            tycons.insert(TyCon::new(FullName::from_strs(&["Test"], name)), decl);
+            tycons.insert(TyCon::new(FullName::from_strs(&["Test"], name)), tycon_info);
         }
         TypeEnv::new(tycons, Map::default())
     }
@@ -990,7 +993,7 @@ mod tests {
     /// itself, over one type of every kind the walks distinguish.
     #[test]
     fn the_leaves_of_a_type_truncate_onto_its_units() {
-        let type_env = unit_type_env();
+        let type_env = type_env();
         let cases: Vec<Arc<TypeNode>> = vec![
             make_i64_ty(),                                      // holds no reference
             array_of_i64(),                                     // an array
@@ -1054,23 +1057,26 @@ mod tests {
     /// be recorded at a field index that is no longer the capture's.
     #[test]
     fn a_closures_step_is_the_capture_its_layout_holds() {
-        let type_env = unit_type_env();
+        let type_env = type_env();
         let closure_ty = type_fun(make_i64_ty(), make_i64_ty());
         match unit_step(&closure_ty, &type_env) {
-            UnitStep::Capture { idx, width } => {
-                assert_eq!(idx, CLOSURE_CAPTURE_IDX as usize);
-                assert_eq!(width, CLOSURE_FIELD_COUNT);
+            UnitStep::Capture {
+                capture_idx,
+                field_count,
+            } => {
+                assert_eq!(capture_idx, CLOSURE_CAPTURE_IDX as usize);
+                assert_eq!(field_count, CLOSURE_FIELD_COUNT);
             }
             _ => panic!("a closure's unit step is its capture"),
         }
-        let layout = ty_to_object_ty(&closure_ty, &vec![], &type_env);
-        assert_eq!(layout.field_types.len(), CLOSURE_FIELD_COUNT);
+        let object_ty = ty_to_object_ty(&closure_ty, &vec![], &type_env);
+        assert_eq!(object_ty.field_types.len(), CLOSURE_FIELD_COUNT);
         assert!(matches!(
-            layout.field_types[CLOSURE_FUNPTR_IDX as usize],
+            object_ty.field_types[CLOSURE_FUNPTR_IDX as usize],
             ObjectFieldType::LambdaFunction(_)
         ));
         assert!(matches!(
-            layout.field_types[CLOSURE_CAPTURE_IDX as usize],
+            object_ty.field_types[CLOSURE_CAPTURE_IDX as usize],
             ObjectFieldType::SubObject(_, false)
         ));
     }

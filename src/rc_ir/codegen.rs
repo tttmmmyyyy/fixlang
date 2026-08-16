@@ -305,16 +305,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         let mut cur = obj;
         for &idx in path {
             let field_ty = match unit_step(&cur.ty, self.type_env()) {
-                UnitStep::Capture { idx: capture, .. } => {
+                UnitStep::Capture { capture_idx, .. } => {
                     // The only unit path into a closure names its capture object. The other field is
                     // the function pointer, which a reference-count operation must never reach.
                     assert_eq!(
-                        idx, capture,
+                        idx, capture_idx,
                         "a reference-counting unit path into a closure names its capture"
                     );
                     make_dynamic_object_ty()
                 }
-                UnitStep::Fields { held, .. } => held_field_type(&held, idx, "project_rc_unit"),
+                UnitStep::Fields { held_fields, .. } => {
+                    held_field_type(&held_fields, idx, "project_rc_unit")
+                }
                 // Descending is what a path into an aggregate does, and a unit is where it stops, so
                 // a path going on past one would reference-count a part of that unit rather than the
                 // unit.
@@ -324,7 +326,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     cur.ty.to_string()
                 ),
                 // A value holding no reference has no unit below it for a path to name.
-                UnitStep::Nothing => panic!(
+                UnitStep::NoUnit => panic!(
                     "the reference-counting unit path {:?} enters `{}`, which holds no reference",
                     path,
                     cur.ty.to_string()

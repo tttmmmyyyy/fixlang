@@ -321,21 +321,27 @@ fn param_ownership_shape(
             }
         };
         match unit_step(ty, type_env) {
-            UnitStep::Nothing => OwnershipShape::NoUnit,
-            UnitStep::Capture { idx, width } => {
-                path.push(idx);
+            UnitStep::NoUnit => OwnershipShape::NoUnit,
+            UnitStep::Capture {
+                capture_idx,
+                field_count,
+            } => {
+                path.push(capture_idx);
                 let capture_ownership = ownership_at(path);
                 path.pop();
-                let mut children = vec![OwnershipShape::NoUnit; width];
-                children[idx] = OwnershipShape::Unit(capture_ownership);
+                let mut children = vec![OwnershipShape::NoUnit; field_count];
+                children[capture_idx] = OwnershipShape::Unit(capture_ownership);
                 OwnershipShape::Fields(children)
             }
             UnitStep::Unit => OwnershipShape::Unit(ownership_at(path)),
-            UnitStep::Fields { width, held } => {
+            UnitStep::Fields {
+                field_count,
+                held_fields,
+            } => {
                 // A field the value holds nothing at keeps its place in the shape, so that a shape
                 // index is a field index.
-                let mut children = vec![OwnershipShape::NoUnit; width];
-                for (i, fty) in held {
+                let mut children = vec![OwnershipShape::NoUnit; field_count];
+                for (i, fty) in held_fields {
                     path.push(i);
                     children[i] = go(var, &fty, owned_units, type_env, path);
                     path.pop();
