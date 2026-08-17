@@ -389,7 +389,7 @@ pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
 }
 
 /// Like `run_source_assert_failed`, for a program whose modules are spread over several sources.
-pub fn run_sources_assert_failed(sources: &[&str], config: Configuration) -> String {
+fn run_sources_assert_failed(sources: &[&str], config: Configuration) -> String {
     let compile_result = run_sources(sources, config);
     match compile_result {
         Err(errs) => errs.to_string(),
