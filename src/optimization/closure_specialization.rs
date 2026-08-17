@@ -837,15 +837,23 @@ struct SpecializedLambdaInliner {
 }
 
 impl ExprVisitor for SpecializedLambdaInliner {
+    // A call that supplies every parameter of the lambda takes its body. One that supplies fewer is
+    // a closure being built out of the capture list, and putting the body there would leave a lambda
+    // expression where a name stood: code generation gives a lambda expression a capture object of
+    // its own, on the heap, so a wrap inside a loop would allocate on every round.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let func = expr.get_app_func();
+        let (func, args) = expr.destructure_app();
         if !func.is_var() {
             return EndVisitResult::unchanged(expr);
         }
         let Some(body) = self.bodies.get(&func.get_var().name) else {
             return EndVisitResult::unchanged(expr);
         };
-        EndVisitResult::changed(expr.set_app_func(body.clone()))
+        let (params, _) = body.destructure_lam_sequence();
+        if args.len() < params.len() {
+            return EndVisitResult::unchanged(expr);
+        }
+        EndVisitResult::changed(apply(body.clone(), args))
     }
 
     fn start_visit_var(
