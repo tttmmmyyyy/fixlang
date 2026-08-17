@@ -1,7 +1,8 @@
 use crate::ast::expr::Var;
-use crate::ast::name::{is_capital_name, FullName, Name, NameSpace};
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::EndNode;
 use crate::constants::{FORMAT_LINE_LIMIT, STD_NAME};
+use crate::parse::parser::{is_token_of, TokenCategory};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use std::cmp::Ordering;
@@ -17,18 +18,19 @@ pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
 pub struct ImportStatement {
     /// The module the statement is written in.
     pub importer: Name,
-    /// The imported module's name, with the source span of the token that named it: the `Mod` of an
-    /// `import Mod;` written in source, or the `Mod` of a `::Mod::name` written as an absolute
-    /// path. The imports a module gets of itself and of `Std` carry no span, since no token names
-    /// the module there.
-    pub module: (Name, Option<Span>),
+    /// The imported module's name.
+    pub module_name: Name,
+    /// The source span of the token that named the imported module: the `Mod` of an `import Mod;`
+    /// written in source, or the `Mod` of a `::Mod::name` written as an absolute path. The imports
+    /// a module gets of itself and of `Std` carry none, since no token names the module there.
+    pub module_span: Option<Span>,
     /// The items brought in, each as one path under the imported module.
     pub items: Vec<ImportTreeNode>,
     /// The items the `hiding` clause keeps out, even where `items` covers them.
     pub hiding: Vec<ImportTreeNode>,
     /// The span of the whole `import ...;` statement in source. A statement the compiler added
     /// carries none, since no statement stands for it in source; the span of the token that led to
-    /// it is in `module`.
+    /// it is in `module_span`.
     pub source: Option<Span>,
     /// Whether the compiler added the statement rather than the source: every module imports itself
     /// and `Std` this way.
@@ -39,7 +41,7 @@ impl ImportStatement {
     /// Orders `stmts` by the name of the module each imports, and the items of each statement by
     /// their kind and name.
     pub fn sort(stmts: &mut [ImportStatement]) {
-        stmts.sort_by(|a, b| a.module.0.cmp(&b.module.0));
+        stmts.sort_by(|a, b| a.module_name.cmp(&b.module_name));
         for stmt in stmts {
             ImportTreeNode::sort(&mut stmt.items);
             ImportTreeNode::sort(&mut stmt.hiding);
@@ -49,11 +51,11 @@ impl ImportStatement {
     /// The entity the statement names at `pos`: the imported module, or the item the path written
     /// there reaches.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        let span = self.module.1.as_ref()?;
+        let span = self.module_span.as_ref()?;
         if span.includes_pos_lsp(pos) {
-            return Some(EndNode::Module(self.module.0.clone()));
+            return Some(EndNode::Module(self.module_name.clone()));
         }
-        let namespace = NameSpace::new(vec![self.module.0.clone()]);
+        let namespace = NameSpace::new(vec![self.module_name.clone()]);
         for item in &self.items {
             let node = item.find_node_at(pos, &namespace);
             if node.is_some() {
@@ -72,7 +74,7 @@ impl ImportStatement {
     /// Whether this statement makes `name` accessible: `name` lies in the imported module, an item
     /// of the statement covers it, and the `hiding` clause leaves it in.
     pub fn is_accessible(&self, name: &FullName) -> bool {
-        if name.module() != self.module.0 {
+        if name.module() != self.module_name {
             return false;
         }
         let mut name = name.clone();
@@ -91,7 +93,8 @@ impl ImportStatement {
     pub fn implicit_self_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module.clone(),
-            module: (module, None),
+            module_name: module,
+            module_span: None,
             items: vec![ImportTreeNode::Any(None)],
             hiding: vec![],
             source: None,
@@ -103,7 +106,8 @@ impl ImportStatement {
     pub fn implicit_std_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module,
-            module: (STD_NAME.to_string(), None),
+            module_name: STD_NAME.to_string(),
+            module_span: None,
             items: vec![ImportTreeNode::Any(None)],
             hiding: vec![],
             source: None,
@@ -139,7 +143,8 @@ impl ImportStatement {
         let names = names.split_off(1);
         ImportStatement {
             importer,
-            module: (module, module_span),
+            module_name: module,
+            module_span,
             items: vec![ImportTreeNode::from_names_with_spans(&names, item_spans)],
             hiding: vec![],
             source: None,
@@ -152,13 +157,13 @@ impl ImportStatement {
     pub fn referred_items(&self) -> Vec<ImportItem> {
         let mut result = vec![];
         for item in &self.items {
-            result.append(&mut ImportTreeNode::items(item));
+            result.append(&mut item.to_items());
         }
         for item in &self.hiding {
-            result.append(&mut ImportTreeNode::items(item));
+            result.append(&mut item.to_items());
         }
         for item in &mut result {
-            item.push_front(self.module.0.clone());
+            item.push_front(self.module_name.clone());
         }
         result
     }
@@ -171,7 +176,7 @@ impl ImportStatement {
     /// The text of the statement, broken across lines where a long list of items needs it.
     fn stringify_internal(&self) -> Text {
         let text = Text::from_str("import ");
-        let text = text.append_to_last_line(&self.module.0);
+        let text = text.append_to_last_line(&self.module_name);
         let text = if self.items.len() == 0 {
             text.append_to_last_line("::{}")
         } else {
@@ -242,7 +247,7 @@ impl ImportStatement {
         let import = imports
             .iter()
             .enumerate()
-            .find(|(_i, import)| import.module.0 == module && import.hiding.is_empty());
+            .find(|(_i, import)| import.module_name == module && import.hiding.is_empty());
         // If there is no such import, create a new one.
         if import.is_none() {
             let new_import = ImportStatement::import_to_use(importer, name);
@@ -320,7 +325,7 @@ impl ImportTreeNode {
                     return None;
                 }
                 let mut namespace = namespace.clone();
-                namespace.push_baack(name.clone());
+                namespace.push_back(name.clone());
                 for item in items {
                     let node = item.find_node_at(pos, &namespace);
                     if node.is_some() {
@@ -395,7 +400,7 @@ impl ImportTreeNode {
                 !name.is_empty(),
                 "An import item is named by an empty name."
             );
-            if is_capital_name(name) {
+            if is_token_of(name, TokenCategory::CapitalName) {
                 return ImportTreeNode::TypeOrTrait(name.clone(), head_span);
             }
             return ImportTreeNode::Symbol(name.clone(), head_span);
@@ -477,13 +482,13 @@ impl ImportTreeNode {
         }
     }
 
-    /// The items the tree under `item` names, each carrying the path from `item` down to it.
+    /// The items this tree names, each carrying the path from here down to it.
     ///
     /// # Examples
     /// The items of `NameSpace("A", [Symbol("f"), TypeOrTrait("T")])` are the value `A::f` and the
     /// type or trait `A::T`.
-    fn items(item: &ImportTreeNode) -> Vec<ImportItem> {
-        match item {
+    fn to_items(&self) -> Vec<ImportItem> {
+        match self {
             ImportTreeNode::Any(src) => {
                 vec![ImportItem::NameSpace(NameSpace::new(vec![]), src.clone())]
             }
@@ -496,7 +501,7 @@ impl ImportTreeNode {
             ImportTreeNode::NameSpace(name, items, _src) => {
                 let mut result = vec![];
                 for item in items {
-                    let mut children = Self::items(item);
+                    let mut children = item.to_items();
                     for child in &mut children {
                         child.push_front(name.clone());
                     }

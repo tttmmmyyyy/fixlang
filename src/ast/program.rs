@@ -857,25 +857,25 @@ impl Program {
         import_statement: ImportStatement,
     ) -> Result<(), Errors> {
         // Refuse importing the module itself.
-        if import_statement.module.0 == import_statement.importer {
+        if import_statement.module_name == import_statement.importer {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Module `{}` cannot import itself.",
-                    import_statement.module.0.to_string()
+                    import_statement.module_name.to_string()
                 ),
                 &[&import_statement.source],
             ));
         }
 
         // When user imports `Std` explicitly, remove implicit `Std` import statement.
-        if import_statement.module.0 == STD_NAME {
+        if import_statement.module_name == STD_NAME {
             let stmts = self
                 .mod_to_import_stmts
                 .get_mut(&import_statement.importer)
                 .unwrap();
             *stmts = replace(stmts, vec![])
                 .into_iter()
-                .filter(|stmt| !(stmt.module.0 == STD_NAME && stmt.implicit))
+                .filter(|stmt| !(stmt.module_name == STD_NAME && stmt.implicit))
                 .collect();
         }
 
@@ -2982,7 +2982,7 @@ impl Program {
                 break Ok(());
             }
             let import_stmt = unresolved_imports.pop().unwrap();
-            let module = &import_stmt.module.0;
+            let module = &import_stmt.module_name;
 
             // If import is already resolved, do nothing.
             if self.is_linked(&module) {
@@ -2996,7 +2996,7 @@ impl Program {
             // single field gives us a good error location for both.
             return Err(Errors::from_msg_srcs(
                 format!("Cannot find module `{}`.", module),
-                &[&import_stmt.module.1],
+                &[&import_stmt.module_span],
             ));
         }
     }
@@ -3008,7 +3008,7 @@ impl Program {
         for (importer, stmts) in &self.mod_to_import_stmts {
             let importer_idx = *elem_to_idx.get(importer).unwrap();
             for stmt in stmts {
-                graph.connect_idx(importer_idx, *elem_to_idx.get(&stmt.module.0).unwrap());
+                graph.connect_idx(importer_idx, *elem_to_idx.get(&stmt.module_name).unwrap());
             }
         }
         (graph, elem_to_idx)

@@ -26,3 +26,9 @@ main = (
     let n = p.size;
     println("done")
 );
+
+qualified : ::Main::Point;
+qualified = ::Main::Point { x: 3, y: 4 };
+
+std_qualified : Std::I64;
+std_qualified = ::Main::Point::@x(qualified);

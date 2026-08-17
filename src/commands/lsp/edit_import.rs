@@ -102,7 +102,7 @@ pub(super) fn create_text_edit_to_import(
     // Check if the standard library is imported explicitly.
     let import_std_explicitly = import_stmts
         .iter()
-        .any(|imp: &ImportStatement| &imp.module.0 == STD_NAME && !imp.implicit);
+        .any(|imp: &ImportStatement| &imp.module_name == STD_NAME && !imp.implicit);
 
     // If the item is already accessible, we don't need to import it.
     if !import_std_explicitly && item_name.module() == STD_NAME {

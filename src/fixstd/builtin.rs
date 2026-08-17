@@ -658,7 +658,7 @@ pub fn make_io_unit_ty() -> Arc<TypeNode> {
 
 // Check if given name has form `TupleN` and returns N.
 pub fn get_tuple_n(name: &FullName) -> Option<u32> {
-    if name.namespace != NameSpace::new_str(&[STD_NAME]) {
+    if name.namespace != NameSpace::from_strs(&[STD_NAME]) {
         return None;
     }
     if name.name.len() < TUPLE_NAME.len() {

@@ -26,7 +26,7 @@
 use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::{corresponding_line_map, uri_to_path};
 use crate::ast::expr::{Expr, ExprNode};
-use crate::ast::name::{is_capital_name, FullName};
+use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{Program, SymbolExpr};
@@ -34,6 +34,7 @@ use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::{Scheme, TyCon, TyConVariant, Type, TypeNode};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parse::lexer::{is_accessor_name, lex_tokens, LexTokenKind};
+use crate::parse::parser::{is_token_of, TokenCategory};
 use crate::parse::sourcefile::Span;
 use lsp_types::{
     SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend, SemanticTokensParams,
@@ -123,19 +124,19 @@ fn base_raw_tokens(content: &str) -> Vec<RawToken> {
 /// overlay.
 #[cfg(test)]
 pub(crate) fn compute_semantic_tokens(content: &str) -> Vec<SemanticToken> {
-    pieces_to_tokens(raw_to_pieces(content, base_raw_tokens(content)))
+    encode_positioned_tokens(raw_to_positioned_tokens(content, base_raw_tokens(content)))
 }
 
 /// A positioned token: 0-based line, UTF-16 start column, UTF-16 length, and the
 /// legend token-type index.
-type Piece = (u32, u32, u32, u32);
+type PositionedToken = (u32, u32, u32, u32);
 
 /// Turn raw byte-range tokens into positioned pieces. Multi-line tokens (block
 /// comments) are split into one piece per line, since a semantic token may not
 /// span a line break. Positions and lengths are in UTF-16 code units.
-fn raw_to_pieces(content: &str, raw: Vec<RawToken>) -> Vec<Piece> {
+fn raw_to_positioned_tokens(content: &str, raw: Vec<RawToken>) -> Vec<PositionedToken> {
     let line_starts = line_start_offsets(content);
-    let mut pieces: Vec<Piece> = vec![];
+    let mut pieces: Vec<PositionedToken> = vec![];
     for (start, end, token_type) in raw {
         if start >= end || end > content.len() {
             continue;
@@ -156,8 +157,8 @@ fn raw_to_pieces(content: &str, raw: Vec<RawToken>) -> Vec<Piece> {
     pieces
 }
 
-/// Sort pieces by position and delta-encode them into the LSP wire format.
-fn pieces_to_tokens(mut pieces: Vec<Piece>) -> Vec<SemanticToken> {
+/// Sort the tokens by position and delta-encode them into the LSP wire format.
+fn encode_positioned_tokens(mut pieces: Vec<PositionedToken>) -> Vec<SemanticToken> {
     pieces.sort_by_key(|&(line, col, _, _)| (line, col));
 
     let mut data = Vec::with_capacity(pieces.len());
@@ -179,7 +180,7 @@ fn pieces_to_tokens(mut pieces: Vec<Piece>) -> Vec<SemanticToken> {
     data
 }
 
-/// Merge the AST overlay onto the live-buffer base pieces.
+/// Merge the AST overlay onto the live buffer's base tokens.
 ///
 /// Overlay pieces are positioned against the snapshot; `line_map` maps each
 /// snapshot line to the corresponding live line (or `None` if it changed). An
@@ -189,10 +190,10 @@ fn pieces_to_tokens(mut pieces: Vec<Piece>) -> Vec<SemanticToken> {
 /// `type`). This keeps the rich coloring on every untouched line while the user
 /// edits, instead of dropping the whole file to the base layer.
 fn merge_overlay(
-    base: Vec<Piece>,
-    overlay_snapshot: Vec<Piece>,
+    base: Vec<PositionedToken>,
+    overlay_snapshot: Vec<PositionedToken>,
     line_map: &[Option<u32>],
-) -> Vec<Piece> {
+) -> Vec<PositionedToken> {
     let mut by_pos: Map<(u32, u32), (u32, u32)> = Map::default();
     for (line, col, len, token_type) in base {
         by_pos.insert((line, col), (len, token_type));
@@ -306,14 +307,14 @@ impl<'a> Overlay<'a> {
                 continue;
             }
             if let Some(decl) = gv.decl_src.clone() {
-                if self.in_file(&decl) {
+                if self.is_in_file(&decl) {
                     self.push_value(&decl, T_FUNCTION);
                     let scm = gv.syn_scm.as_ref().unwrap_or(&gv.scm);
                     self.collect_scheme(scm);
                 }
             }
             if let Some(defn) = gv.defn_src.clone() {
-                if Some(&defn) != gv.decl_src.as_ref() && self.in_file(&defn) {
+                if Some(&defn) != gv.decl_src.as_ref() && self.is_in_file(&defn) {
                     self.push_value(&defn, T_FUNCTION);
                 }
             }
@@ -323,7 +324,7 @@ impl<'a> Overlay<'a> {
             };
             for root in &roots {
                 if let Some(src) = &root.source {
-                    if self.in_file(src) {
+                    if self.is_in_file(src) {
                         self.collect_expr(root);
                     }
                 }
@@ -338,7 +339,7 @@ impl<'a> Overlay<'a> {
             let Some(name_src) = td.name_src.clone() else {
                 continue;
             };
-            if !self.in_file(&name_src) {
+            if !self.is_in_file(&name_src) {
                 continue;
             }
             let name_token_type = match &td.value {
@@ -375,7 +376,7 @@ impl<'a> Overlay<'a> {
     fn collect_traits(&mut self) {
         for (_tid, tdef) in self.program.trait_env.traits.iter() {
             if let Some(name_src) = &tdef.name_src {
-                if self.in_file(name_src) {
+                if self.is_in_file(name_src) {
                     self.push_type(name_src, T_INTERFACE);
                 }
             }
@@ -384,7 +385,7 @@ impl<'a> Overlay<'a> {
 
     /// Whether `span` belongs to the file being collected. Results are cached
     /// per source file path.
-    fn in_file(&self, span: &Span) -> bool {
+    fn is_in_file(&self, span: &Span) -> bool {
         let key = &span.input.file_path;
         if let Some(is_in_file) = self.file_cache.borrow().get(key) {
             return *is_in_file;
@@ -574,29 +575,30 @@ impl<'a> Overlay<'a> {
         }
     }
 
-    /// Emit a token for a capitalized name (type / trait / namespace). The
-    /// uppercase-head check skips synthetic constructors whose span covers
-    /// punctuation (e.g. the tuple/arrow type cons).
+    /// Emit a token for a capitalized name (type / trait / namespace), when the span covers such a
+    /// name and nothing else. A span covering more — a synthetic constructor written as punctuation,
+    /// or a name carrying its namespace, as `Std::I64` does — is left to the base layer, which
+    /// colors each of its parts on its own. A token spanning several of them would overlap the
+    /// base layer's, and the protocol admits no overlapping tokens.
     fn push_type(&mut self, span: &Span, token_type: u32) {
         if let Some(text) = self.span_text(span.start, span.end) {
-            if is_capital_name(text) {
+            if is_token_of(text, TokenCategory::CapitalName) {
                 self.out.push((span.start, span.end, token_type));
             }
         }
     }
 
-    /// Emit a token for a value-identifier-shaped name (lowercase / `_` / `@`).
-    /// Field accessors are skipped: the base layer already colors them.
+    /// Emit a token for a value name — one headed by a lowercase letter, `_` or `@`. Field
+    /// accessors are skipped: the base layer already colors them.
     fn push_value(&mut self, span: &Span, token_type: u32) {
         self.push_value_range(span.start, span.end, token_type);
     }
 
-    /// Emit a token for the name in the byte range `[start, end)`, when that name is headed by a
-    /// lowercase letter, `_` or `@`. Field accessors are skipped: the base layer already colors
-    /// them.
+    /// Emit a token for the byte range `[start, end)`, when it covers a value name and nothing
+    /// else. Field accessors are skipped: the base layer already colors them.
     fn push_value_range(&mut self, start: usize, end: usize, token_type: u32) {
         if let Some(text) = self.span_text(start, end) {
-            if !matches!(text.chars().next(), Some('a'..='z') | Some('_') | Some('@')) {
+            if !is_token_of(text, TokenCategory::Name) {
                 return;
             }
             if is_accessor_name(text) {
@@ -670,7 +672,7 @@ pub(super) fn handle_semantic_tokens_full(
     };
     let live = &latest.content;
 
-    let base = raw_to_pieces(live, base_raw_tokens(live));
+    let base = raw_to_positioned_tokens(live, base_raw_tokens(live));
 
     // Look up the elaborated snapshot for this file (if any) and overlay it.
     let overlay = last_diag.and_then(|diag| {
@@ -678,7 +680,7 @@ pub(super) fn handle_semantic_tokens_full(
         let snapshot = diag.user_source_contents.get(&abs_file)?;
         let mut raw = vec![];
         collect_overlay(&diag.program, &abs_file, snapshot, &mut raw);
-        let snapshot_pieces = raw_to_pieces(snapshot, raw);
+        let snapshot_pieces = raw_to_positioned_tokens(snapshot, raw);
         let line_map = corresponding_line_map(snapshot, live);
         Some((snapshot_pieces, line_map))
     });
@@ -692,7 +694,7 @@ pub(super) fn handle_semantic_tokens_full(
         id,
         Ok::<_, ()>(SemanticTokens {
             result_id: None,
-            data: pieces_to_tokens(pieces),
+            data: encode_positioned_tokens(pieces),
         }),
     );
 }

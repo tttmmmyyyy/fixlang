@@ -95,6 +95,14 @@ mod tests {
         /// indices (the 4th element of each 5-tuple in the delta-encoded data).
         /// Polls for the response rather than sleeping a fixed time.
         fn token_types(&mut self, file: &str) -> Vec<u64> {
+            self.token_data(file)
+                .chunks_exact(5)
+                .map(|c| c[3])
+                .collect()
+        }
+
+        /// Request semantic tokens and return the delta-encoded numbers of the response.
+        fn token_data(&mut self, file: &str) -> Vec<u64> {
             let uri = self.file_uri(file);
             let id = self
                 .client
@@ -123,7 +131,26 @@ mod tests {
                 0,
                 "token data length must be a multiple of 5"
             );
-            nums.chunks_exact(5).map(|c| c[3]).collect()
+            nums
+        }
+
+        /// Request semantic tokens and return each one as `(line, column, length)`, decoded from
+        /// the delta encoding the protocol carries them in. Line and column are 0-based, and the
+        /// length is in UTF-16 code units.
+        fn token_positions(&mut self, file: &str) -> Vec<(u64, u64, u64)> {
+            let mut positions = vec![];
+            let (mut line, mut col) = (0u64, 0u64);
+            for token in self.token_data(file).chunks_exact(5) {
+                let (delta_line, delta_start, length) = (token[0], token[1], token[2]);
+                line += delta_line;
+                col = if delta_line == 0 {
+                    col + delta_start
+                } else {
+                    delta_start
+                };
+                positions.push((line, col, length));
+            }
+            positions
         }
 
         /// Like `token_types`, but waits for the AST overlay to be applied: the
@@ -165,6 +192,34 @@ mod tests {
                 .finish()
                 .expect("Reader thread should not error");
         }
+    }
+
+    /// Verifies that no two tokens of one response cover the same character, which the protocol
+    /// requires of every response. A name written with its namespace (`Std::I64`) is where this is
+    /// easiest to break: the overlay knows the whole path names one type, while the base layer
+    /// colors the namespace and the type separately, so an overlay token spanning the path lands on
+    /// top of the base layer's.
+    #[test]
+    fn semantic_tokens_do_not_overlap() {
+        let mut ctx = Ctx::setup();
+        // Wait for the overlay, which is the layer that can produce a token spanning a whole path.
+        ctx.token_types_with_overlay("main.fix");
+        let positions = ctx.token_positions("main.fix");
+        for pair in positions.windows(2) {
+            let (line, col, length) = pair[0];
+            let (next_line, next_col, _) = pair[1];
+            if line == next_line {
+                assert!(
+                    col + length <= next_col,
+                    "tokens overlap on line {}: one covers columns {}..{}, the next starts at {}",
+                    line,
+                    col,
+                    col + length,
+                    next_col
+                );
+            }
+        }
+        ctx.shutdown();
     }
 
     /// Verifies that once the file type-checks, the overlay classifies symbols

@@ -8,19 +8,6 @@ use std::hash::{Hash, Hasher};
 /// source.
 pub type Name = String;
 
-/// Is `name` the name of a type, a trait, a module or a namespace?
-///
-/// These are the names the grammar's `capital_name` rule accepts, and an ASCII uppercase letter at
-/// the head is what distinguishes them. Every other name the parser produces names a value, a field
-/// or a variant: the grammar's `name`, headed by a lowercase letter, `_` or `@`, and its
-/// `number_name`, the digits of a tuple field.
-///
-/// # Examples
-/// `is_capital_name("Box2")` is `true`, and `is_capital_name("_answer")` is `false`.
-pub fn is_capital_name(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_uppercase())
-}
-
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
@@ -84,7 +71,7 @@ impl NameSpace {
     }
 
     /// A path of `names`, the outermost first, written with no leading `::`.
-    pub fn new_str(names: &[&str]) -> Self {
+    pub fn from_strs(names: &[&str]) -> Self {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
 
@@ -97,7 +84,7 @@ impl NameSpace {
     /// it lies under. The path must hold at least one name.
     ///
     /// # Examples
-    /// `NameSpace::new_str(&["Std", "Iterator"]).to_fullname()` is the name `Iterator` under the
+    /// `NameSpace::from_strs(&["Std", "Iterator"]).to_fullname()` is the name `Iterator` under the
     /// namespace `Std`.
     pub fn to_fullname(mut self) -> FullName {
         assert!(!self.names.is_empty());
@@ -111,7 +98,7 @@ impl NameSpace {
     /// The names joined by `::`. An absolute path renders as a relative one does.
     ///
     /// # Examples
-    /// `NameSpace::new_str(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
+    /// `NameSpace::from_strs(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }
@@ -120,8 +107,8 @@ impl NameSpace {
     /// module name is split at `.` as the path is at `::`. An absolute `self` matches `rhs` whole.
     ///
     /// # Examples
-    /// `NameSpace::new_str(&["Name"])` is a suffix of `NameSpace::new_str(&["Mod.Name"])`, and is
-    /// no suffix of `NameSpace::new_str(&["ModName"])`.
+    /// `NameSpace::from_strs(&["Name"])` is a suffix of `NameSpace::from_strs(&["Mod.Name"])`, and
+    /// is no suffix of `NameSpace::from_strs(&["ModName"])`.
     pub fn is_suffix_of(&self, rhs: &NameSpace) -> bool {
         /// Splits the path at `::` and each name at `.`, so `Mod.Name::entity` becomes
         /// `[Mod, Name, entity]`.
@@ -157,7 +144,8 @@ impl NameSpace {
     /// Whether the names of `self` head the names of `rhs`.
     ///
     /// # Examples
-    /// `NameSpace::new_str(&["Std"])` is a prefix of `NameSpace::new_str(&["Std", "Iterator"])`.
+    /// `NameSpace::from_strs(&["Std"])` is a prefix of
+    /// `NameSpace::from_strs(&["Std", "Iterator"])`.
     pub fn is_prefix_of(&self, rhs: &NameSpace) -> bool {
         let n = self.names.len();
         let m = rhs.names.len();
@@ -206,7 +194,7 @@ impl NameSpace {
     }
 
     /// Puts `name` after the names of the path.
-    pub fn push_baack(&mut self, name: Name) {
+    pub fn push_back(&mut self, name: Name) {
         self.names.push(name);
     }
 
@@ -299,7 +287,7 @@ impl FullName {
 
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
-        Self::new(&NameSpace::new_str(ns), name)
+        Self::new(&NameSpace::from_strs(ns), name)
     }
 
     /// The name `name` written with no namespace.
@@ -338,8 +326,8 @@ impl FullName {
     /// `is_absolute` flag that says so.
     ///
     /// # Examples
-    /// `FullName::local("x").join_under(&NameSpace::new_str(&["Main"]))` is `Main::x`, and a `self`
-    /// written `::Lib::x` stays `::Lib::x` under any `container`.
+    /// `FullName::local("x").join_under(&NameSpace::from_strs(&["Main"]))` is `Main::x`, and a
+    /// `self` written `::Lib::x` stays `::Lib::x` under any `container`.
     pub fn join_under(mut self, container: &NameSpace) -> FullName {
         if self.namespace.is_absolute {
             return self;
@@ -405,7 +393,7 @@ impl FullName {
     ///
     /// # Examples
     /// `FullName::from_strs(&["Std", "Iterator"], "empty")` is in the namespace
-    /// `NameSpace::new_str(&["Std"])`.
+    /// `NameSpace::from_strs(&["Std"])`.
     pub fn is_in_namespace(&self, namespace: &NameSpace) -> bool {
         namespace.is_prefix_of(&self.namespace)
     }
