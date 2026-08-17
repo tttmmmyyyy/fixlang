@@ -20,6 +20,8 @@ const LIB_MODULE_OF_EVERY_NAME_SHAPE: &str = r##"
     type Box2 = unbox struct { v : I64 };
 "##;
 
+/// Verifies that an import naming no item brings in nothing, so even the `IO` that `main`'s type
+/// signature names is unknown.
 #[test]
 pub fn test_import_empty() {
     let source = r##"
@@ -38,6 +40,7 @@ pub fn test_import_empty() {
     );
 }
 
+/// Verifies that `*` as the item of an import brings in every item of the module.
 #[test]
 pub fn test_import_any() {
     let source = r##"
@@ -52,6 +55,8 @@ pub fn test_import_any() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `hiding *` keeps out every item the same statement brings in, leaving the module's
+/// items unreachable.
 #[test]
 pub fn test_import_hiding_any() {
     let source = r##"
@@ -70,6 +75,8 @@ pub fn test_import_hiding_any() {
     );
 }
 
+/// Verifies that an import naming exactly the items a program uses, the types among them, compiles
+/// it.
 #[test]
 pub fn test_import_only_necessary() {
     let source = r##"
@@ -84,6 +91,8 @@ pub fn test_import_only_necessary() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a nested item list, as `IO::{println, eprintln}`, brings in the named items of a
+/// namespace under the imported module.
 #[test]
 pub fn test_import_hierarchy() {
     let source = r##"
@@ -98,6 +107,7 @@ pub fn test_import_hierarchy() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `*` under a namespace, as `IO::*`, brings in every item of that namespace.
 #[test]
 pub fn test_import_any_in_namespace() {
     let source = r##"
@@ -112,6 +122,8 @@ pub fn test_import_any_in_namespace() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that an item the import leaves out stays unknown although the program uses it: the type
+/// `IO` here, where the import names the value `IO::println` alone.
 #[test]
 pub fn test_import_insufficient() {
     let source = r##"
@@ -130,6 +142,8 @@ pub fn test_import_insufficient() {
     );
 }
 
+/// Verifies that `hiding` keeps an item out even where the same statement names it among the items
+/// it brings in.
 #[test]
 pub fn test_import_hiding_necessary() {
     let source = r##"
@@ -148,6 +162,8 @@ pub fn test_import_hiding_necessary() {
     );
 }
 
+/// Verifies that hiding a type of `Std` lets the module define a type of that name, implement a
+/// trait for it and use it.
 #[test]
 pub fn test_import_hiding_unnecessary() {
     let source = r##"
@@ -166,6 +182,8 @@ pub fn test_import_hiding_unnecessary() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that an associated type is hidden by naming it under its trait, as `Iterator::Item`,
+/// which leaves the module free to define a type of that name.
 #[test]
 pub fn test_import_hiding_associated_type() {
     let source = r##"
@@ -182,6 +200,8 @@ pub fn test_import_hiding_associated_type() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a type and a trait carrying one name in one module are reported as a name
+/// confliction.
 #[test]
 pub fn test_type_and_trait_name_collision() {
     let source = r##"
@@ -353,6 +373,8 @@ pub fn test_every_trait_member_colliding_with_a_value_is_reported_in_one_compila
     }
 }
 
+/// Verifies that an import of a module the build holds no source for is reported at the module's
+/// name.
 #[test]
 pub fn test_import_unknown_module() {
     let source = r##"
@@ -370,6 +392,8 @@ pub fn test_import_unknown_module() {
     );
 }
 
+/// Verifies that an import naming a value the imported module does not define is reported as a
+/// missing value, under the module's name.
 #[test]
 pub fn test_import_unknown_symbol() {
     let source = r##"
@@ -386,6 +410,8 @@ pub fn test_import_unknown_symbol() {
     );
 }
 
+/// Verifies that a `hiding` clause naming a value the imported module does not define is reported
+/// as the item list is.
 #[test]
 pub fn test_import_unknown_symbol_hiding() {
     let source = r##"
@@ -402,6 +428,8 @@ pub fn test_import_unknown_symbol_hiding() {
     );
 }
 
+/// Verifies that an import naming a capitalized item the imported module does not define is
+/// reported as a missing entity, the report a type or trait gets.
 #[test]
 pub fn test_import_unknown_type_or_trait() {
     let source = r##"
@@ -418,6 +446,8 @@ pub fn test_import_unknown_type_or_trait() {
     );
 }
 
+/// Verifies that an import taking every item of a namespace the imported module does not have, as
+/// `Piyo::*`, is reported at that namespace.
 #[test]
 pub fn test_import_unknown_namespace() {
     let source = r##"

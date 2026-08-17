@@ -4,6 +4,8 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 
+/// The name of a module, a namespace, a type, a trait, a value or a field, as it is written in
+/// source.
 pub type Name = String;
 
 /// Is `name` the name of a type, a trait, a module or a namespace?
@@ -19,26 +21,26 @@ pub fn is_capital_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_uppercase())
 }
 
+/// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
-    // Items in the namespace.
+    /// The names of the path, the outermost first.
     pub names: Vec<String>,
-    // Is this FullName is given as an absolute path?
-    // For example, `Main::x` has a relative namespace, but `::Main::x` has an absolute namespace.
-    // The latter expresses that `Main` is a module name and cannot be a namespace.
+    /// Whether the path was written with a leading `::`, as `::Main::x` is and `Main::x` is not.
+    /// A leading `::` says that the first name is a module's, so it cannot be a namespace's.
     pub is_absolute: bool,
 }
 
 impl Hash for NameSpace {
+    /// Hashes the names of the path; `is_absolute` takes no part, as it takes none in equality.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Ignore `is_absolute` field.
         self.names.hash(state);
     }
 }
 
 impl PartialEq for NameSpace {
+    /// Whether the two paths hold the same names; `is_absolute` takes no part.
     fn eq(&self, other: &Self) -> bool {
-        // Ignore `is_absolute` field.
         self.names == other.names
     }
 }
@@ -46,18 +48,21 @@ impl PartialEq for NameSpace {
 impl Eq for NameSpace {}
 
 impl PartialOrd for NameSpace {
+    /// Orders by the rendered path, such as `Std::Iterator`.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
     }
 }
 
 impl Ord for NameSpace {
+    /// Orders by the rendered path, such as `Std::Iterator`.
     fn cmp(&self, other: &Self) -> Ordering {
         self.to_string().cmp(&other.to_string())
     }
 }
 
 impl NameSpace {
+    /// The empty path, which a name written with no qualification carries.
     pub fn local() -> Self {
         Self {
             names: vec![],
@@ -65,6 +70,7 @@ impl NameSpace {
         }
     }
 
+    /// A path of `names`, the outermost first, written with no leading `::`.
     pub fn new(names: Vec<String>) -> Self {
         Self {
             names,
@@ -72,19 +78,27 @@ impl NameSpace {
         }
     }
 
+    /// Marks the path as one written with a leading `::`.
     pub fn set_absolute(&mut self) {
         self.is_absolute = true;
     }
 
+    /// A path of `names`, the outermost first, written with no leading `::`.
     pub fn new_str(names: &[&str]) -> Self {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
 
+    /// Whether the path holds no name, as the path of a name written with no qualification does.
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
 
-    // Convert to a full name.
+    /// Reads the last name of the path as an entity's name and the names before it as the namespace
+    /// it lies under. The path must hold at least one name.
+    ///
+    /// # Examples
+    /// `NameSpace::new_str(&["Std", "Iterator"]).to_fullname()` is the name `Iterator` under the
+    /// namespace `Std`.
     pub fn to_fullname(mut self) -> FullName {
         assert!(!self.names.is_empty());
         let name = self.names.pop().unwrap();
@@ -94,14 +108,23 @@ impl NameSpace {
         }
     }
 
+    /// The names joined by `::`. An absolute path renders as a relative one does.
+    ///
+    /// # Examples
+    /// `NameSpace::new_str(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }
 
-    // Checks if `self` is a suffix of the argument.
-    // "Name::entity" is not suffix of "ModName::entity", but should be suffix of "Mod.Name::entity".
+    /// Whether `self` names the tail of `rhs`, down to the parts a module name is built from: a
+    /// module name is split at `.` as the path is at `::`. An absolute `self` matches `rhs` whole.
+    ///
+    /// # Examples
+    /// `NameSpace::new_str(&["Name"])` is a suffix of `NameSpace::new_str(&["Mod.Name"])`, and is
+    /// no suffix of `NameSpace::new_str(&["ModName"])`.
     pub fn is_suffix_of(&self, rhs: &NameSpace) -> bool {
-        // Splits `Mod.Name::entity` into `[Mod, Name, entity]`.
+        /// Splits the path at `::` and each name at `.`, so `Mod.Name::entity` becomes
+        /// `[Mod, Name, entity]`.
         fn to_components(namespace: &NameSpace) -> Vec<String> {
             if namespace.names.is_empty() {
                 return vec![];
@@ -131,6 +154,10 @@ impl NameSpace {
         return true;
     }
 
+    /// Whether the names of `self` head the names of `rhs`.
+    ///
+    /// # Examples
+    /// `NameSpace::new_str(&["Std"])` is a prefix of `NameSpace::new_str(&["Std", "Iterator"])`.
     pub fn is_prefix_of(&self, rhs: &NameSpace) -> bool {
         let n = self.names.len();
         let m = rhs.names.len();
@@ -145,21 +172,26 @@ impl NameSpace {
         return true;
     }
 
+    /// The number of names in the path.
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.names.len()
     }
 
+    /// The module the path lies in, which is the first of its names. The path must hold at least
+    /// one name.
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }
 
+    /// The names of `self` followed by the names of `rhs`, as a path written with no leading `::`.
     pub fn append(&self, mut rhs: NameSpace) -> NameSpace {
         let mut names = self.names.clone();
         names.append(&mut rhs.names);
         NameSpace::new(names)
     }
 
+    /// Removes the first name of the path, and reports whether there was one to remove.
     pub fn pop_front(&mut self) -> bool {
         if self.names.is_empty() {
             return false;
@@ -168,14 +200,22 @@ impl NameSpace {
         true
     }
 
+    /// Puts `name` before the names of the path.
     pub fn push_front(&mut self, name: Name) {
         self.names.insert(0, name);
     }
 
+    /// Puts `name` after the names of the path.
     pub fn push_baack(&mut self, name: Name) {
         self.names.push(name);
     }
 
+    /// Reads a path from its written form: the names between `::`, with a leading `::` marking the
+    /// path absolute.
+    ///
+    /// # Examples
+    /// `NameSpace::parse("Std::Iterator")` holds the names `["Std", "Iterator"]`, and
+    /// `NameSpace::parse("::Std::Iterator")` holds the same names marked absolute.
     pub fn parse(s: &str) -> Option<Self> {
         if s.is_empty() {
             return None;
@@ -202,21 +242,26 @@ impl NameSpace {
     }
 }
 
+/// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
+/// `empty` under the namespace `Std::Iterator`.
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
+    /// The path the entity is written under.
     pub namespace: NameSpace,
+    /// The name of the entity itself.
     pub name: String,
 }
 
 impl Hash for FullName {
+    /// Hashes the names of the namespace and the entity's name; `is_absolute` takes no part.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Ignore `is_absolute` field in namespace.
         self.namespace.names.hash(state);
         self.name.hash(state);
     }
 }
 
 impl Debug for FullName {
+    /// Writes the full name as it is written in source, with the leading `::` of an absolute name.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -228,20 +273,23 @@ impl Debug for FullName {
 }
 
 impl PartialOrd for FullName {
-    // Ignore `is_absolute` field in namespace.
+    /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
+    /// part.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
     }
 }
 
 impl Ord for FullName {
-    // Ignore `is_absolute` field in namespace.
+    /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
+    /// part.
     fn cmp(&self, other: &Self) -> Ordering {
         self.to_string().cmp(&other.to_string())
     }
 }
 
 impl FullName {
+    /// The name `name` under the namespace `ns`.
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
             namespace: ns.clone(),
@@ -249,31 +297,34 @@ impl FullName {
         }
     }
 
+    /// The name `name` under the namespace `ns` spells out, the outermost name first.
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::new_str(ns), name)
     }
 
+    /// The name `name` written with no namespace.
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }
 
+    /// Whether the name is written with no namespace, as a local variable's is.
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
 
+    /// Whether the name is written under a namespace, as a global value's is.
     pub fn is_global(&self) -> bool {
         return !self.is_local();
     }
 
-    // True if this is a compiler-generated pattern-wildcard binder (a `_` the
-    // user wrote in a pattern). Such binders are non-referenceable and are
-    // displayed as `_`.
+    /// Whether this is the binder the compiler makes for a `_` the user wrote in a pattern. Such a
+    /// binder is displayed as `_`, and source refers to it nowhere.
     pub fn is_pattern_wildcard(&self) -> bool {
         self.name.starts_with(PATTERN_WILDCARD_VAR_PREFIX)
     }
 
-    // Render this name for display, showing a pattern-wildcard binder as the
-    // `_` the user wrote.
+    /// The name as it is shown to the user, which for a pattern-wildcard binder is the `_` the user
+    /// wrote.
     pub fn display_name(&self) -> String {
         if self.is_pattern_wildcard() {
             "_".to_string()
@@ -282,13 +333,13 @@ impl FullName {
         }
     }
 
-    /// Treat `self` as a path relative to `container` and return the
-    /// qualified `FullName` (with `container` prepended to `self`'s namespace).
+    /// Reads `self` as a path relative to `container`, and returns it with `container` before its
+    /// namespace. A `self` written with a leading `::` is returned as it stands, keeping the
+    /// `is_absolute` flag that says so.
     ///
-    /// If `self` is marked absolute (was written with a leading `::`), it is
-    /// returned unchanged with the `is_absolute` flag preserved, so callers
-    /// can detect and reject absolute paths in contexts where they are not
-    /// allowed (e.g. `DEPRECATED[...]` / `FFI_EXPORT[...]`).
+    /// # Examples
+    /// `FullName::local("x").join_under(&NameSpace::new_str(&["Main"]))` is `Main::x`, and a `self`
+    /// written `::Lib::x` stays `::Lib::x` under any `container`.
     pub fn join_under(mut self, container: &NameSpace) -> FullName {
         if self.namespace.is_absolute {
             return self;
@@ -300,6 +351,11 @@ impl FullName {
         self
     }
 
+    /// The namespace and the name joined by `::`.
+    ///
+    /// # Examples
+    /// `FullName::from_strs(&["Std", "Iterator"], "empty").to_string()` is
+    /// `"Std::Iterator::empty"`.
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {
@@ -309,10 +365,13 @@ impl FullName {
         }
     }
 
+    /// Whether `self` names the tail of `other`: the same entity name, under a namespace `self`'s
+    /// namespace is a suffix of.
     pub fn is_suffix_of(&self, other: &FullName) -> bool {
         self.name == other.name && self.namespace.is_suffix_of(&other.namespace)
     }
 
+    /// The whole name read as a path, with the entity's name as its last name.
     pub fn to_namespace(&self) -> NameSpace {
         let mut names = self.namespace.names.clone();
         names.push(self.name.clone());
@@ -322,28 +381,40 @@ impl FullName {
         }
     }
 
+    /// The module the name lies in, which is the first name of its namespace.
     pub fn module(&self) -> Name {
         self.namespace.module()
     }
 
+    /// A mutable handle on the entity's name, leaving the namespace as it is.
     pub fn name_as_mut(&mut self) -> &mut Name {
         &mut self.name
     }
 
-    // Pop the first component.
-    // If the namespace is empty, return false.
+    /// Removes the first name of the namespace, and reports whether there was one to remove.
     pub fn pop_front_namespace(&mut self) -> bool {
         self.namespace.pop_front()
     }
 
+    /// Puts `name` before the names of the namespace.
     pub fn push_front(&mut self, name: Name) {
         self.namespace.push_front(name);
     }
 
+    /// Whether `namespace` heads this name's namespace, so the name lies within it.
+    ///
+    /// # Examples
+    /// `FullName::from_strs(&["Std", "Iterator"], "empty")` is in the namespace
+    /// `NameSpace::new_str(&["Std"])`.
     pub fn is_in_namespace(&self, namespace: &NameSpace) -> bool {
         namespace.is_prefix_of(&self.namespace)
     }
 
+    /// Reads a full name from its written form: the last name between `::` as the entity's, the
+    /// names before it as its namespace, and a leading `::` marking the path absolute.
+    ///
+    /// # Examples
+    /// `FullName::parse("Std::Iterator::empty")` is the name `empty` under `Std::Iterator`.
     pub fn parse(s: &str) -> Option<FullName> {
         if s.is_empty() {
             return None;
@@ -359,14 +430,18 @@ impl FullName {
         })
     }
 
+    /// Whether the name was written with a leading `::`.
     pub fn is_absolute(&self) -> bool {
         self.namespace.is_absolute
     }
 
+    /// Marks the name as one written with a leading `::`.
     pub fn set_absolute(&mut self) {
         self.namespace.is_absolute = true;
     }
 
+    /// Marks a name written under a namespace as absolute, and leaves a name written with none as
+    /// it stands.
     pub fn global_to_absolute(&mut self) {
         if !self.is_local() {
             self.namespace.is_absolute = true;

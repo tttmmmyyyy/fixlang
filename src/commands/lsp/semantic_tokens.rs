@@ -20,8 +20,8 @@
 //    editing one line only degrades that line, instead of dropping the whole
 //    file to the base layer.
 //
-// The net effect matches the desired UX: identifiers on an edited line are
-// plain, and gain local-vs-global colors once the file type-checks.
+// The net effect: identifiers on an edited line are plain, and gain
+// local-vs-global colors once the file type-checks.
 
 use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::{corresponding_line_map, uri_to_path};
@@ -45,7 +45,7 @@ use std::sync::Arc;
 
 // Token type indices. These are the positions in the legend's `token_types`
 // list; the wire format refers to a token type by this index, so the constants
-// here and `legend()` below must stay in the same order.
+// here and `legend()` must stay in the same order.
 const T_NAMESPACE: u32 = 0;
 const T_TYPE: u32 = 1;
 const T_VARIABLE: u32 = 2;
@@ -55,9 +55,9 @@ const T_STRING: u32 = 5;
 const T_COMMENT: u32 = 6;
 const T_OPERATOR: u32 = 7;
 const T_FUNCTION: u32 = 8;
-// Boolean literals (`true` / `false`) are colored as `enumMember`: they are the
-// nullary constructors of the `Bool` union, and `enumMember` is a standard
-// token type that themes color distinctly from keywords.
+/// Boolean literals (`true` / `false`) are colored as `enumMember`: they are the
+/// nullary constructors of the `Bool` union, and `enumMember` is a standard
+/// token type that themes color distinctly from keywords.
 const T_ENUM_MEMBER: u32 = 9;
 const T_PROPERTY: u32 = 10;
 const T_TYPE_PARAMETER: u32 = 11;
@@ -591,8 +591,9 @@ impl<'a> Overlay<'a> {
         self.push_value_range(span.start, span.end, token_type);
     }
 
-    /// Emit a value-identifier token for the byte range `[start, end)`, applying
-    /// the same shape and field-accessor filtering as `push_value`.
+    /// Emit a token for the name in the byte range `[start, end)`, when that name is headed by a
+    /// lowercase letter, `_` or `@`. Field accessors are skipped: the base layer already colors
+    /// them.
     fn push_value_range(&mut self, start: usize, end: usize, token_type: u32) {
         if let Some(text) = self.span_text(start, end) {
             if !matches!(text.chars().next(), Some('a'..='z') | Some('_') | Some('@')) {

@@ -6,32 +6,38 @@ use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use std::cmp::Ordering;
 
+/// Whether any statement of `stmts` makes `name` accessible in the module they are written in.
 pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
     stmts.iter().any(|stmt| stmt.is_accessible(name))
 }
 
+/// An `import` statement: the module it brings in, the items it takes from that module, and the
+/// items it keeps out.
 #[derive(Clone)]
 pub struct ImportStatement {
+    /// The module the statement is written in.
     pub importer: Name,
-    /// `module.0` is the imported module's name; `module.1` is the
-    /// source span of the token that referred to it — the `Mod` in an
-    /// `import Mod;` line for user-written imports, or the `Mod` in
-    /// `::Mod::name` for per-absolute-path implicit imports. `None`
-    /// for implicit `Std` / self-imports, where no source token
-    /// exists.
+    /// The imported module's name, with the source span of the token that named it: the `Mod` of an
+    /// `import Mod;` written in source, or the `Mod` of a `::Mod::name` written as an absolute
+    /// path. The imports a module gets of itself and of `Std` carry no span, since no token names
+    /// the module there.
     pub module: (Name, Option<Span>),
+    /// The items brought in, each as one path under the imported module.
     pub items: Vec<ImportTreeNode>,
+    /// The items the `hiding` clause keeps out, even where `items` covers them.
     pub hiding: Vec<ImportTreeNode>,
-    /// Span of the whole `import ...;` statement in source. `None`
-    /// for any compiler-synthesised import (no statement exists in
-    /// source); see `module.1` for those imports' provenance.
+    /// The span of the whole `import ...;` statement in source. A statement the compiler added
+    /// carries none, since no statement stands for it in source; the span of the token that led to
+    /// it is in `module`.
     pub source: Option<Span>,
-    // Is this import statement is added implicitly by compiler?
-    // The module itself and `Std` module are imported implicitly.
+    /// Whether the compiler added the statement rather than the source: every module imports itself
+    /// and `Std` this way.
     pub implicit: bool,
 }
 
 impl ImportStatement {
+    /// Orders `stmts` by the name of the module each imports, and the items of each statement by
+    /// their kind and name.
     pub fn sort(stmts: &mut [ImportStatement]) {
         stmts.sort_by(|a, b| a.module.0.cmp(&b.module.0));
         for stmt in stmts {
@@ -40,6 +46,8 @@ impl ImportStatement {
         }
     }
 
+    /// The entity the statement names at `pos`: the imported module, or the item the path written
+    /// there reaches.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let span = self.module.1.as_ref()?;
         if span.includes_pos_lsp(pos) {
@@ -61,7 +69,8 @@ impl ImportStatement {
         return None;
     }
 
-    // Checks if the given name is made accessible by this import statement.
+    /// Whether this statement makes `name` accessible: `name` lies in the imported module, an item
+    /// of the statement covers it, and the `hiding` clause leaves it in.
     pub fn is_accessible(&self, name: &FullName) -> bool {
         if name.module() != self.module.0 {
             return false;
@@ -78,6 +87,7 @@ impl ImportStatement {
         self.items.iter().any(|item| item.is_accessible(&name))
     }
 
+    /// The statement by which `module` brings in every item of its own.
     pub fn implicit_self_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module.clone(),
@@ -89,6 +99,7 @@ impl ImportStatement {
         }
     }
 
+    /// The statement by which `module` brings in every item of `Std`.
     pub fn implicit_std_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module,
@@ -100,18 +111,22 @@ impl ImportStatement {
         }
     }
 
+    /// A statement bringing `name` alone into `importer`.
+    ///
+    /// # Examples
+    /// The statement for `Lib::Ns::f` stringifies to `import Lib::Ns::f;`.
     pub fn import_to_use(importer: Name, name: FullName) -> ImportStatement {
         Self::import_to_use_with_spans(importer, name, &[])
     }
 
-    /// Like `import_to_use`, but attach a source span to each
-    /// component of the synthesized import. `path_spans` aligns
-    /// 1:1 with `name`'s full path: `[module_span, ns1_span, ...,
-    /// leaf_span]`. The first span (if any) becomes `module.1`; the
-    /// rest flow into the per-`ImportTreeNode` `Option<Span>` slots,
-    /// mirroring the shape a user-written
-    /// `import Mod::Ns::name;` produces. A shorter (or empty) slice
-    /// leaves the trailing nodes' spans as `None`.
+    /// A statement bringing `name` alone into `importer`, carrying the source spans of the tokens
+    /// that named it.
+    ///
+    /// # Arguments
+    /// * `path_spans` — the span of each name along `name`'s whole path, `[module, namespaces...,
+    ///   name]`. The first becomes the span of the imported module, and each of the rest the span
+    ///   of the `ImportTreeNode` that name becomes. Names a shorter `path_spans` leaves uncovered
+    ///   carry no span.
     pub fn import_to_use_with_spans(
         importer: Name,
         name: FullName,
@@ -132,8 +147,8 @@ impl ImportStatement {
         }
     }
 
-    // Returns the items that are referred by this import statement.
-    // Includes items that are hidden.
+    /// The items the statement names, each qualified by the imported module. The items of the
+    /// `hiding` clause are among them.
     pub fn referred_items(&self) -> Vec<ImportItem> {
         let mut result = vec![];
         for item in &self.items {
@@ -148,10 +163,12 @@ impl ImportStatement {
         result
     }
 
+    /// The statement as it is written in source, such as `import Lib::{f, g};`.
     pub fn stringify(&self) -> String {
         self.stringify_internal().to_string()
     }
 
+    /// The text of the statement, broken across lines where a long list of items needs it.
     fn stringify_internal(&self) -> Text {
         let text = Text::from_str("import ");
         let text = text.append_to_last_line(&self.module.0);
@@ -211,7 +228,10 @@ impl ImportStatement {
         text
     }
 
-    // Adds a new import statement for the given name.
+    /// Makes `name` accessible from `importer`: it is added to a statement of `imports` that brings
+    /// in `name`'s module and carries no `hiding` clause, and becomes a statement of its own where
+    /// `imports` holds no such statement. An `imports` that already reaches `name` is left as it
+    /// stands.
     pub fn add_import(imports: &mut Vec<ImportStatement>, importer: Name, name: FullName) {
         // If it's already accessible, do nothing.
         if is_accessible(&imports, &name) {
@@ -235,6 +255,8 @@ impl ImportStatement {
         import.add_item(&name.to_namespace().names[1..]);
     }
 
+    /// Adds the item at the path `names`, which runs from inside the imported module, to the items
+    /// brought in. `names` holds at least one name, and the statement carries no `hiding` clause.
     fn add_item(&mut self, names: &[Name]) {
         assert!(names.len() >= 1);
         assert!(self.hiding.is_empty());
@@ -242,18 +264,27 @@ impl ImportStatement {
     }
 }
 
+/// A node of the tree an import path spells out under the imported module, as `Lib::{f, Ns::g}`
+/// does. Each node carries the source span of the token that named it; the nodes of a statement the
+/// compiler added carry none.
 #[derive(Clone)]
 pub enum ImportTreeNode {
+    /// The `*` of `import Lib::*`, standing for every item of the namespace the node sits in.
     Any(Option<Span>),
+    /// A value's name.
     Symbol(Name, Option<Span>),
+    /// A type's or a trait's name.
     TypeOrTrait(Name, Option<Span>),
+    /// A namespace's name, and the items taken from within it.
     NameSpace(Name, Vec<ImportTreeNode>, Option<Span>),
 }
 
 impl ImportTreeNode {
-    // Finds a node at the given position.
-    //
-    // - `namespace` represents the namespace traversed so far in this recursive function. It is necessary to include it in the returned EndNode.
+    /// The entity this node names at `pos`.
+    ///
+    /// # Arguments
+    /// * `namespace` — the path the walk down the tree has reached, which qualifies the name found
+    ///   here.
     fn find_node_at(&self, pos: &SourcePos, namespace: &NameSpace) -> Option<EndNode> {
         match self {
             ImportTreeNode::Any(_span) => {}
@@ -301,6 +332,8 @@ impl ImportTreeNode {
         None
     }
 
+    /// Orders `nodes` by kind and by name within a kind, and orders the items of each namespace the
+    /// same way.
     fn sort(nodes: &mut [ImportTreeNode]) {
         nodes.sort_by(|a, b| {
             // Any < Symbol (cmp by name) < TypeOrTrait (cmp by name) < Namespace (cmp by name)
@@ -332,15 +365,22 @@ impl ImportTreeNode {
         }
     }
 
-    // From a list of names, for example ["A", "B", "f"], create `Namespace("A", [Namespace("B", [Symbol("f")])])`.
+    /// The tree taking `names` as one path: every name but the last becomes a namespace holding the
+    /// next, and the last becomes the item its head character tells it to be. An empty `names`
+    /// becomes `Any`, the `*` of `import Lib::*`.
+    ///
+    /// # Examples
+    /// `from_names(&["A", "B", "f"])` is `NameSpace("A", [NameSpace("B", [Symbol("f")])])`.
     fn from_names(names: &[Name]) -> ImportTreeNode {
         Self::from_names_with_spans(names, &[])
     }
 
-    /// Like `from_names`, but `spans[i]` becomes the `Option<Span>`
-    /// slot of the `ImportTreeNode` corresponding to `names[i]`.
-    /// A shorter (or empty) `spans` slice leaves the remaining nodes
-    /// with `None` spans.
+    /// The tree taking `names` as one path, with `spans[i]` as the source span of the node
+    /// `names[i]` becomes. Names a shorter `spans` leaves uncovered carry no span, and an empty
+    /// `names` becomes `Any`, the `*` of `import Lib::*`.
+    ///
+    /// # Examples
+    /// `from_names_with_spans(&["A", "f"], &[])` is `NameSpace("A", [Symbol("f")])`.
     fn from_names_with_spans(names: &[Name], spans: &[Span]) -> ImportTreeNode {
         let head_span = spans.first().cloned();
         let tail_spans = spans.get(1..).unwrap_or(&[]);
@@ -371,6 +411,8 @@ impl ImportTreeNode {
         )
     }
 
+    /// Adds the path `names`, which runs from inside this namespace, to the items taken from it.
+    /// `names` holds at least one name, and this node is a `NameSpace`.
     fn add_item(&mut self, names: &[Name]) {
         assert!(names.len() >= 1);
         assert!(matches!(self, ImportTreeNode::NameSpace(_, _, _)));
@@ -382,6 +424,9 @@ impl ImportTreeNode {
         }
     }
 
+    /// Adds the path `names` to `items`, walking into the namespace node that already carries the
+    /// head name where `items` holds one. An item `items` already names is left as it stands.
+    /// `names` holds at least one name.
     fn add_item_internal(items: &mut Vec<ImportTreeNode>, names: &[Name]) {
         assert!(names.len() >= 1);
         if names.len() >= 2 {
@@ -412,6 +457,7 @@ impl ImportTreeNode {
         items.push(ImportTreeNode::from_names(names));
     }
 
+    /// Whether this node covers `name`, a name written relative to the namespace the node sits in.
     pub fn is_accessible(&self, name: &FullName) -> bool {
         match self {
             ImportTreeNode::Any(_) => true,
@@ -431,6 +477,11 @@ impl ImportTreeNode {
         }
     }
 
+    /// The items the tree under `item` names, each carrying the path from `item` down to it.
+    ///
+    /// # Examples
+    /// The items of `NameSpace("A", [Symbol("f"), TypeOrTrait("T")])` are the value `A::f` and the
+    /// type or trait `A::T`.
     fn items(item: &ImportTreeNode) -> Vec<ImportItem> {
         match item {
             ImportTreeNode::Any(src) => {
@@ -456,6 +507,8 @@ impl ImportTreeNode {
         }
     }
 
+    /// The node as it is written in an import path, such as `Ns::{f, g}`, broken across lines where
+    /// a long list of items needs it.
     fn stringify(&self) -> Text {
         match self {
             ImportTreeNode::Any(_) => Text::from_str("*"),
@@ -490,13 +543,19 @@ impl ImportTreeNode {
     }
 }
 
+/// An item an import statement names — a value, a type or trait, or a namespace — with the source
+/// span of the token that named it.
 pub enum ImportItem {
+    /// A value's name.
     Symbol(FullName, Option<Span>),
+    /// A type's or a trait's name.
     TypeOrTrait(FullName, Option<Span>),
+    /// A namespace, every item of which the statement names.
     NameSpace(NameSpace, Option<Span>),
 }
 
 impl ImportItem {
+    /// Puts `name` before the item's path, qualifying it by one more namespace.
     pub fn push_front(&mut self, name: Name) {
         match self {
             ImportItem::Symbol(fullname, _) => {
