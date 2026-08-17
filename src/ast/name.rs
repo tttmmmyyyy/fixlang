@@ -1,6 +1,8 @@
 use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR, PATTERN_WILDCARD_VAR_PREFIX};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Formatter};
+use std::cmp::Ordering;
+use std::fmt::{self, Debug, Formatter};
+use std::hash::{Hash, Hasher};
 
 pub type Name = String;
 
@@ -27,8 +29,8 @@ pub struct NameSpace {
     pub is_absolute: bool,
 }
 
-impl std::hash::Hash for NameSpace {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for NameSpace {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         // Ignore `is_absolute` field.
         self.names.hash(state);
     }
@@ -44,13 +46,13 @@ impl PartialEq for NameSpace {
 impl Eq for NameSpace {}
 
 impl PartialOrd for NameSpace {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
     }
 }
 
 impl Ord for NameSpace {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.to_string().cmp(&other.to_string())
     }
 }
@@ -206,8 +208,8 @@ pub struct FullName {
     pub name: String,
 }
 
-impl std::hash::Hash for FullName {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for FullName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         // Ignore `is_absolute` field in namespace.
         self.namespace.names.hash(state);
         self.name.hash(state);
@@ -215,7 +217,7 @@ impl std::hash::Hash for FullName {
 }
 
 impl Debug for FullName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}{}",
@@ -227,14 +229,14 @@ impl Debug for FullName {
 
 impl PartialOrd for FullName {
     // Ignore `is_absolute` field in namespace.
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
     }
 }
 
 impl Ord for FullName {
     // Ignore `is_absolute` field in namespace.
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.to_string().cmp(&other.to_string())
     }
 }

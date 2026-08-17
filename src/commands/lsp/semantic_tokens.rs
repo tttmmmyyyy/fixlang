@@ -698,7 +698,11 @@ pub(super) fn handle_semantic_tokens_full(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        compute_semantic_tokens, legend, SemanticToken, SemanticTokenType, T_COMMENT, T_ENUM,
+        T_ENUM_MEMBER, T_FUNCTION, T_INTERFACE, T_KEYWORD, T_NAMESPACE, T_NUMBER, T_OPERATOR,
+        T_PROPERTY, T_STRING, T_STRUCT, T_TYPE, T_TYPE_PARAMETER, T_VARIABLE,
+    };
 
     /// Build a `SemanticToken` from its delta-encoded fields, with no modifiers.
     fn tok(delta_line: u32, delta_start: u32, length: u32, token_type: u32) -> SemanticToken {

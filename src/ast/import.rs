@@ -4,6 +4,7 @@ use crate::ast::program::EndNode;
 use crate::constants::{FORMAT_LINE_LIMIT, STD_NAME};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
+use std::cmp::Ordering;
 
 pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
     stmts.iter().any(|stmt| stmt.is_accessible(name))
@@ -304,20 +305,20 @@ impl ImportTreeNode {
         nodes.sort_by(|a, b| {
             // Any < Symbol (cmp by name) < TypeOrTrait (cmp by name) < Namespace (cmp by name)
             match (a, b) {
-                (ImportTreeNode::Any(_), ImportTreeNode::Any(_)) => std::cmp::Ordering::Equal,
-                (ImportTreeNode::Any(_), _) => std::cmp::Ordering::Less,
-                (_, ImportTreeNode::Any(_)) => std::cmp::Ordering::Greater,
+                (ImportTreeNode::Any(_), ImportTreeNode::Any(_)) => Ordering::Equal,
+                (ImportTreeNode::Any(_), _) => Ordering::Less,
+                (_, ImportTreeNode::Any(_)) => Ordering::Greater,
                 (ImportTreeNode::Symbol(name_a, _), ImportTreeNode::Symbol(name_b, _)) => {
                     name_a.cmp(name_b)
                 }
-                (ImportTreeNode::Symbol(_, _), _) => std::cmp::Ordering::Less,
-                (_, ImportTreeNode::Symbol(_, _)) => std::cmp::Ordering::Greater,
+                (ImportTreeNode::Symbol(_, _), _) => Ordering::Less,
+                (_, ImportTreeNode::Symbol(_, _)) => Ordering::Greater,
                 (
                     ImportTreeNode::TypeOrTrait(name_a, _),
                     ImportTreeNode::TypeOrTrait(name_b, _),
                 ) => name_a.cmp(name_b),
-                (ImportTreeNode::TypeOrTrait(_, _), _) => std::cmp::Ordering::Less,
-                (_, ImportTreeNode::TypeOrTrait(_, _)) => std::cmp::Ordering::Greater,
+                (ImportTreeNode::TypeOrTrait(_, _), _) => Ordering::Less,
+                (_, ImportTreeNode::TypeOrTrait(_, _)) => Ordering::Greater,
                 (
                     ImportTreeNode::NameSpace(name_a, _, _),
                     ImportTreeNode::NameSpace(name_b, _, _),
