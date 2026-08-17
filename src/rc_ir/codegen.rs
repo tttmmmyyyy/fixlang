@@ -13,7 +13,9 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
+use crate::generator::{
+    global_accessor_name, global_initializer_name, object_file_symbol_name, Generator, Object,
+};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -72,6 +74,43 @@ impl<'c, 'm> Generator<'c, 'm> {
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
         }
+
+        // Every reader of a global is now in the module — a function body, or the initializer of
+        // another global — so each accessor's readers can be counted.
+        for global_init in prog.globals.iter() {
+            self.keep_initializer_out_of_shared_accessor(&global_init.symbol);
+        }
+    }
+
+    /// Keep the initializer of the global named `symbol` out of its accessor, where more than one
+    /// reader takes that accessor.
+    ///
+    /// The accessor is the initializer's only caller, so an inliner folds the initializer straight
+    /// back into it and the accessor grows to the size of the initializer. An inlining decided by
+    /// size then leaves the accessor a call at each reader — one per read, with the flag test and
+    /// the load stuck in the loop behind it.
+    ///
+    /// A global with one reader keeps its initializer where it is. That initializer has one place
+    /// to be either way, and the place that costs nothing is the one the reader can see: what the
+    /// initializer knows — the length of an array, the shape of a structure — reaches the code that
+    /// reads the global, where it takes bounds checks out of loops.
+    fn keep_initializer_out_of_shared_accessor(&mut self, symbol: &FullName) {
+        let acc_fn = self
+            .module
+            .get_function(&global_accessor_name(symbol))
+            .expect("a global of the program has an accessor");
+        let acc_gv = acc_fn.as_global_value();
+        let Some(first_reader) = acc_gv.get_first_use() else {
+            return;
+        };
+        if first_reader.get_next_use().is_none() {
+            return;
+        }
+        let value_fn = self
+            .module
+            .get_function(&global_initializer_name(symbol))
+            .expect("a global of the program has an initializer");
+        self.add_enum_attribute(value_fn, "noinline", AttributeLoc::Function);
     }
 
     /// How many times a global is read for each time it is initialized, as the branch to the
@@ -643,14 +682,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Reading the global tests the initialization flag and loads the storage, and a reader
         // holding those two lifts them out of a loop that reads the global — the global becomes a
         // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
-        // when it is small, which it is exactly when the initializer is elsewhere.
+        // when it is small; `keep_initializer_out_of_shared_accessor` says which globals keep it so.
         let value_fn = self.module.add_function(
-            &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
+            &global_initializer_name(&global_init.symbol),
             BasicType::fn_type(&obj_embed_ty, &[], false),
             Some(Linkage::Internal),
         );
-        // The initializer runs once in the program's life, so it belongs at no call site.
-        self.add_enum_attribute(value_fn, "noinline", AttributeLoc::Function);
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");

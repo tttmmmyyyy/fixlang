@@ -2934,3 +2934,9 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }
+
+/// The name of the LLVM function that computes the value of the global `name`. The accessor calls
+/// it and stores what it returns, and it is internal to the module defining the global.
+pub(crate) fn global_initializer_name(name: &FullName) -> String {
+    format!("InitValue#{}", object_file_symbol_name(name))
+}
