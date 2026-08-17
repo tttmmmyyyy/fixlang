@@ -434,6 +434,9 @@ pub fn test_import_unknown_namespace() {
     );
 }
 
+/// Verifies that an absolute path reaches a value of a module the source does not import, whatever
+/// shape the value's name has: headed by a lowercase letter, headed by `_`, and the `@`-headed
+/// getter of a struct field.
 #[test]
 pub fn test_absolute_path_reaches_every_value_name_shape_without_an_import() {
     let main_source = r##"
@@ -453,6 +456,8 @@ pub fn test_absolute_path_reaches_every_value_name_shape_without_an_import() {
     );
 }
 
+/// Verifies that an absolute path ending in an undefined `_`-headed name is reported as a missing
+/// value, the report a name headed by a lowercase letter gets.
 #[test]
 pub fn test_absolute_path_to_an_undefined_value_of_another_module_is_reported_as_a_value() {
     let main_source = r##"
@@ -468,6 +473,8 @@ pub fn test_absolute_path_to_an_undefined_value_of_another_module_is_reported_as
     );
 }
 
+/// Verifies that an absolute path ending in an undefined capitalized name is reported as a missing
+/// entity, the report a type or trait gets.
 #[test]
 pub fn test_absolute_path_to_an_undefined_type_of_another_module_is_reported_as_an_entity() {
     let main_source = r##"

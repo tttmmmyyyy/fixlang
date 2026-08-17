@@ -10,6 +10,9 @@ pub type Name = String;
 /// the head is what distinguishes them. Every other name the parser produces names a value, a field
 /// or a variant: the grammar's `name`, headed by a lowercase letter, `_` or `@`, and its
 /// `number_name`, the digits of a tuple field.
+///
+/// # Examples
+/// `is_capital_name("Box2")` is `true`, and `is_capital_name("_answer")` is `false`.
 pub fn is_capital_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_uppercase())
 }

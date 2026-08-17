@@ -324,7 +324,9 @@ pub fn test_source(source: &str, config: Configuration) {
     test_sources(&[source], config);
 }
 
-/// Like `test_source`, for a program whose modules are spread over several sources.
+/// Compiles the modules `sources` into one program under `config` and runs it, failing the test
+/// unless it exits with code 0. The program's stdout and stderr are forwarded to the test's stderr,
+/// so a failing run shows what it printed.
 pub fn test_sources(sources: &[&str], config: Configuration) {
     let compile_result = run_sources(sources, config);
     let spawn_result = panic_if_err(compile_result);
@@ -376,19 +378,21 @@ pub fn assert_grammar_accepts(source: &str) {
     }
 }
 
-/// Run `source` and return the user-visible diagnostic text. Asserts
-/// that compilation/execution did not succeed; panics if it did.
-///
-/// "User-visible diagnostic text" is one of:
-///   - the rendered `Errors` if the elaborator returned `Err`;
-///   - the `io::Error` string if the child process couldn't even
-///     spawn;
-///   - the captured stderr from the child process otherwise.
+/// Compiles `source` under `config` and runs it, and returns the user-visible diagnostic text of
+/// the failure. Asserts that compilation and execution did not succeed; panics if they did.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
     run_sources_assert_failed(&[source], config)
 }
 
-/// Like `run_source_assert_failed`, for a program whose modules are spread over several sources.
+/// Compiles the modules `sources` into one program under `config`, runs it, and returns the
+/// user-visible diagnostic text. Asserts that compilation and execution did not succeed; panics if
+/// they did.
+///
+/// # Returns
+/// One of:
+///   - the rendered `Errors` if the elaborator returned `Err`;
+///   - the `io::Error` string if the child process couldn't even spawn;
+///   - the captured stderr from the child process otherwise.
 fn run_sources_assert_failed(sources: &[&str], config: Configuration) -> String {
     let compile_result = run_sources(sources, config);
     match compile_result {
@@ -423,7 +427,8 @@ pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &s
     test_sources_fail(&[source], config, included_errmsg);
 }
 
-/// Like `test_source_fail`, for a program whose modules are spread over several sources.
+/// Compiles the modules `sources` into one program and runs it, and asserts that it fails with a
+/// diagnostic containing `included_errmsg`.
 pub fn test_sources_fail(sources: &[&str], config: Configuration, included_errmsg: &str) {
     let errmsg = run_sources_assert_failed(sources, config);
     assert!(errmsg.contains(included_errmsg),
