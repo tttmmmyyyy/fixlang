@@ -342,7 +342,10 @@ impl ImportTreeNode {
             let name = &names[0];
             // The shape of the head character is what tells a type or trait from a value, so a name
             // with no character at all has no node to become.
-            assert!(!name.is_empty(), "An import item is named by an empty name.");
+            assert!(
+                !name.is_empty(),
+                "An import item is named by an empty name."
+            );
             if is_capital_name(name) {
                 return ImportTreeNode::TypeOrTrait(name.clone(), head_span);
             }
