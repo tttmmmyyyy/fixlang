@@ -1,7 +1,8 @@
 use super::{
-    application_inlining,
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
+    inline_local,
+    let_elimination::create_global_lambda_to_arity_map,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
@@ -775,6 +776,9 @@ fn inline_specialized_lambdas(
         })
         .collect::<Map<FullName, (Arc<ExprNode>, bool)>>();
 
+    // What the local inlining below needs to eliminate a `let` that binds a global lambda.
+    let arity_map = create_global_lambda_to_arity_map(symbols);
+
     for (copy, lambdas) in specialized_lambdas {
         let bodies = lambdas
             .iter()
@@ -791,9 +795,12 @@ fn inline_specialized_lambdas(
             continue;
         }
         sym.expr = Some(res.expr);
-        // Reduce the applications of the bodies just put in, so that a call becomes the body's own
-        // bindings rather than a lambda built and immediately applied.
-        application_inlining::run_on_symbol(sym);
+        // A body arrives with the lambda it was written as still around it, and where the call it
+        // replaced supplied fewer arguments than that lambda takes, a lambda expression stands where
+        // a name stood. Local inlining removes both, which is the work `inline_local` does over the
+        // program before this pass runs: without it, code generation gives the lambda left behind a
+        // capture object of its own on the heap, and a loop that builds one allocates on every round.
+        inline_local::run_on_symbol(sym, &arity_map);
     }
 }
 
@@ -837,10 +844,6 @@ struct SpecializedLambdaInliner {
 }
 
 impl ExprVisitor for SpecializedLambdaInliner {
-    // A call that supplies every parameter of the lambda takes its body. One that supplies fewer is
-    // a closure being built out of the capture list, and putting the body there would leave a lambda
-    // expression where a name stood: code generation gives a lambda expression a capture object of
-    // its own, on the heap, so a wrap inside a loop would allocate on every round.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let (func, args) = expr.destructure_app();
         if !func.is_var() {
@@ -849,10 +852,6 @@ impl ExprVisitor for SpecializedLambdaInliner {
         let Some(body) = self.bodies.get(&func.get_var().name) else {
             return EndVisitResult::unchanged(expr);
         };
-        let (params, _) = body.destructure_lam_sequence();
-        if args.len() < params.len() {
-            return EndVisitResult::unchanged(expr);
-        }
         EndVisitResult::changed(apply(body.clone(), args))
     }
 
