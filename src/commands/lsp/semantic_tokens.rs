@@ -141,16 +141,16 @@ fn raw_to_pieces(content: &str, raw: Vec<RawToken>) -> Vec<Piece> {
             continue;
         }
         let text = &content[start..end];
-        let mut seg_start = start;
+        let mut piece_start = start;
         for line_piece in text.split_inclusive('\n') {
             let piece = line_piece.strip_suffix('\n').unwrap_or(line_piece);
             let piece = piece.strip_suffix('\r').unwrap_or(piece);
             let length: u32 = piece.chars().map(|c| c.len_utf16() as u32).sum();
             if length > 0 {
-                let (line, col) = byte_to_line_col_utf16(content, &line_starts, seg_start);
+                let (line, col) = byte_to_line_col_utf16(content, &line_starts, piece_start);
                 pieces.push((line, col, length, token_type));
             }
-            seg_start += line_piece.len();
+            piece_start += line_piece.len();
         }
     }
     pieces
@@ -194,17 +194,17 @@ fn merge_overlay(
     line_map: &[Option<u32>],
 ) -> Vec<Piece> {
     let mut by_pos: Map<(u32, u32), (u32, u32)> = Map::default();
-    for (line, col, len, ty) in base {
-        by_pos.insert((line, col), (len, ty));
+    for (line, col, len, token_type) in base {
+        by_pos.insert((line, col), (len, token_type));
     }
-    for (snap_line, col, len, ty) in overlay_snapshot {
+    for (snap_line, col, len, token_type) in overlay_snapshot {
         if let Some(Some(live_line)) = line_map.get(snap_line as usize) {
-            by_pos.insert((*live_line, col), (len, ty));
+            by_pos.insert((*live_line, col), (len, token_type));
         }
     }
     by_pos
         .into_iter()
-        .map(|((line, col), (len, ty))| (line, col, len, ty))
+        .map(|((line, col), (len, token_type))| (line, col, len, token_type))
         .collect()
 }
 
@@ -341,12 +341,12 @@ impl<'a> Overlay<'a> {
             if !self.in_file(&name_src) {
                 continue;
             }
-            let name_cat = match &td.value {
+            let name_token_type = match &td.value {
                 TypeDeclValue::Struct(_) => T_STRUCT,
                 TypeDeclValue::Union(_) => T_ENUM,
                 TypeDeclValue::Alias(_) => T_TYPE,
             };
-            self.push_type(&name_src, name_cat);
+            self.push_type(&name_src, name_token_type);
             match &td.value {
                 TypeDeclValue::Struct(s) => {
                     for f in &s.fields {
@@ -386,14 +386,14 @@ impl<'a> Overlay<'a> {
     /// per source file path.
     fn in_file(&self, span: &Span) -> bool {
         let key = &span.input.file_path;
-        if let Some(b) = self.file_cache.borrow().get(key) {
-            return *b;
+        if let Some(is_in_file) = self.file_cache.borrow().get(key) {
+            return *is_in_file;
         }
-        let b = to_absolute_path(key)
+        let is_in_file = to_absolute_path(key)
             .map(|p| p.as_path() == self.abs_file)
             .unwrap_or(false);
-        self.file_cache.borrow_mut().insert(key.clone(), b);
-        b
+        self.file_cache.borrow_mut().insert(key.clone(), is_in_file);
+        is_in_file
     }
 
     /// The token type for a type constructor: `struct` / `enum` by its variant,
@@ -446,8 +446,8 @@ impl<'a> Overlay<'a> {
             }
             Type::TyCon(tc) => {
                 if let Some(s) = ty.get_source() {
-                    let cat = self.classify_tycon(tc);
-                    self.push_type(s, cat);
+                    let token_type = self.classify_tycon(tc);
+                    self.push_type(s, token_type);
                 }
             }
             Type::TyApp(f, a) => {
@@ -467,12 +467,12 @@ impl<'a> Overlay<'a> {
     fn collect_expr(&mut self, expr: &Arc<ExprNode>) {
         if let Expr::Var(v) = &*expr.expr {
             if let Some(span) = &expr.source {
-                let cat = if v.name.is_local() {
+                let token_type = if v.name.is_local() {
                     T_VARIABLE
                 } else {
                     self.classify_global(&v.name)
                 };
-                self.push_value(span, cat);
+                self.push_value(span, token_type);
             }
         }
         match &*expr.expr {
@@ -511,8 +511,8 @@ impl<'a> Overlay<'a> {
             Expr::MakeStruct(tc, fields) => {
                 // The struct type-constructor name is in `aux_src`.
                 if let Some(aux) = &expr.aux_src {
-                    let cat = self.classify_tycon(tc);
-                    self.push_type(aux, cat);
+                    let token_type = self.classify_tycon(tc);
+                    self.push_type(aux, token_type);
                 }
                 for (_name, name_span, e) in fields {
                     if let Some(s) = name_span {
@@ -555,8 +555,8 @@ impl<'a> Overlay<'a> {
             Pattern::Struct(tc, fields) => {
                 // The struct type-constructor name (`info.aux_src`).
                 if let Some(aux) = &pat.info.aux_src {
-                    let cat = self.classify_tycon(tc);
-                    self.push_type(aux, cat);
+                    let token_type = self.classify_tycon(tc);
+                    self.push_type(aux, token_type);
                 }
                 for (_name, name_span, sub) in fields {
                     if let Some(s) = name_span {
@@ -577,23 +577,23 @@ impl<'a> Overlay<'a> {
     /// Emit a token for a capitalized name (type / trait / namespace). The
     /// uppercase-head check skips synthetic constructors whose span covers
     /// punctuation (e.g. the tuple/arrow type cons).
-    fn push_type(&mut self, span: &Span, cat: u32) {
+    fn push_type(&mut self, span: &Span, token_type: u32) {
         if let Some(text) = self.span_text(span.start, span.end) {
             if is_capital_name(text) {
-                self.out.push((span.start, span.end, cat));
+                self.out.push((span.start, span.end, token_type));
             }
         }
     }
 
     /// Emit a token for a value-identifier-shaped name (lowercase / `_` / `@`).
     /// Field accessors are skipped: the base layer already colors them.
-    fn push_value(&mut self, span: &Span, cat: u32) {
-        self.push_value_range(span.start, span.end, cat);
+    fn push_value(&mut self, span: &Span, token_type: u32) {
+        self.push_value_range(span.start, span.end, token_type);
     }
 
     /// Emit a value-identifier token for the byte range `[start, end)`, applying
     /// the same shape and field-accessor filtering as `push_value`.
-    fn push_value_range(&mut self, start: usize, end: usize, cat: u32) {
+    fn push_value_range(&mut self, start: usize, end: usize, token_type: u32) {
         if let Some(text) = self.span_text(start, end) {
             if !matches!(text.chars().next(), Some('a'..='z') | Some('_') | Some('@')) {
                 return;
@@ -601,7 +601,7 @@ impl<'a> Overlay<'a> {
             if is_accessor_name(text) {
                 return;
             }
-            self.out.push((start, end, cat));
+            self.out.push((start, end, token_type));
         }
     }
 
@@ -673,10 +673,10 @@ pub(super) fn handle_semantic_tokens_full(
 
     // Look up the elaborated snapshot for this file (if any) and overlay it.
     let overlay = last_diag.and_then(|diag| {
-        let abs = to_absolute_path(&uri_to_path(uri)).ok()?;
-        let snapshot = diag.user_source_contents.get(&abs)?;
+        let abs_file = to_absolute_path(&uri_to_path(uri)).ok()?;
+        let snapshot = diag.user_source_contents.get(&abs_file)?;
         let mut raw = vec![];
-        collect_overlay(&diag.program, &abs, snapshot, &mut raw);
+        collect_overlay(&diag.program, &abs_file, snapshot, &mut raw);
         let snapshot_pieces = raw_to_pieces(snapshot, raw);
         let line_map = corresponding_line_map(snapshot, live);
         Some((snapshot_pieces, line_map))

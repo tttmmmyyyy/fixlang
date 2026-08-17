@@ -152,20 +152,20 @@ impl ImportStatement {
     }
 
     fn stringify_internal(&self) -> Text {
-        let res = Text::from_str("import ");
-        let res = res.append_to_last_line(&self.module.0);
-        let res = if self.items.len() == 0 {
-            res.append_to_last_line("::{}")
+        let text = Text::from_str("import ");
+        let text = text.append_to_last_line(&self.module.0);
+        let text = if self.items.len() == 0 {
+            text.append_to_last_line("::{}")
         } else {
-            res
+            text
         };
-        let res = if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
+        let text = if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
             // For example, "import Std::*" should be written as "import Std"
-            res
+            text
         } else {
             if self.items.len() >= 1 {
-                let res = res.append_to_last_line("::");
-                let items = Text::join(
+                let text = text.append_to_last_line("::");
+                let items_text = Text::join(
                     self.items
                         .iter()
                         .map(|item| item.stringify())
@@ -173,17 +173,21 @@ impl ImportStatement {
                     ", ",
                     FORMAT_LINE_LIMIT,
                 );
-                let brace = self.items.len() >= 2;
-                let items = if brace { items.curly_brace() } else { items };
-                let res = res.append_nobreak(items);
-                res
+                let needs_brace = self.items.len() >= 2;
+                let items_text = if needs_brace {
+                    items_text.curly_brace()
+                } else {
+                    items_text
+                };
+                let text = text.append_nobreak(items_text);
+                text
             } else {
-                res
+                text
             }
         };
-        let res = if self.hiding.len() >= 1 {
-            let res = res.append_to_last_line(" hiding ");
-            let items = Text::join(
+        let text = if self.hiding.len() >= 1 {
+            let text = text.append_to_last_line(" hiding ");
+            let hiding_text = Text::join(
                 self.hiding
                     .iter()
                     .map(|item| item.stringify())
@@ -191,15 +195,19 @@ impl ImportStatement {
                 ", ",
                 FORMAT_LINE_LIMIT,
             );
-            let brace = self.hiding.len() >= 2;
-            let items = if brace { items.curly_brace() } else { items };
-            let res = res.append_nobreak(items);
-            res
+            let needs_brace = self.hiding.len() >= 2;
+            let hiding_text = if needs_brace {
+                hiding_text.curly_brace()
+            } else {
+                hiding_text
+            };
+            let text = text.append_nobreak(hiding_text);
+            text
         } else {
-            res
+            text
         };
-        let res = res.append_to_last_line(";");
-        res
+        let text = text.append_to_last_line(";");
+        text
     }
 
     // Adds a new import statement for the given name.
@@ -393,8 +401,8 @@ impl ImportTreeNode {
         let name = &names[0];
         // If `name` is already included in `items`, do nothing.
         if items.iter().any(|item| match item {
-            ImportTreeNode::Symbol(symbol, _) => symbol == name,
-            ImportTreeNode::TypeOrTrait(symbol, _) => symbol == name,
+            ImportTreeNode::Symbol(item_name, _) => item_name == name,
+            ImportTreeNode::TypeOrTrait(item_name, _) => item_name == name,
             _ => false,
         }) {
             return;
@@ -406,18 +414,18 @@ impl ImportTreeNode {
     pub fn is_accessible(&self, name: &FullName) -> bool {
         match self {
             ImportTreeNode::Any(_) => true,
-            ImportTreeNode::Symbol(symbol, _) => name.is_local() && name.name == *symbol,
-            ImportTreeNode::TypeOrTrait(symbol, _) => name.is_local() && name.name == *symbol,
-            ImportTreeNode::NameSpace(symbol, filters, _) => {
+            ImportTreeNode::Symbol(item_name, _) => name.is_local() && name.name == *item_name,
+            ImportTreeNode::TypeOrTrait(item_name, _) => name.is_local() && name.name == *item_name,
+            ImportTreeNode::NameSpace(namespace, items, _) => {
                 if name.is_local() {
                     return false;
                 }
-                if name.namespace.names[0] != *symbol {
+                if name.namespace.names[0] != *namespace {
                     return false;
                 }
                 let mut name = name.clone();
                 assert!(name.pop_front_namespace());
-                filters.iter().any(|filter| filter.is_accessible(&name))
+                items.iter().any(|item| item.is_accessible(&name))
             }
         }
     }
@@ -436,11 +444,11 @@ impl ImportTreeNode {
             ImportTreeNode::NameSpace(name, items, _src) => {
                 let mut result = vec![];
                 for item in items {
-                    let mut childs = Self::items(item);
-                    for child in &mut childs {
+                    let mut children = Self::items(item);
+                    for child in &mut children {
                         child.push_front(name.clone());
                     }
-                    result.append(&mut childs);
+                    result.append(&mut children);
                 }
                 result
             }
@@ -453,9 +461,9 @@ impl ImportTreeNode {
             ImportTreeNode::Symbol(name, _) => Text::from_str(name),
             ImportTreeNode::TypeOrTrait(name, _) => Text::from_str(name),
             ImportTreeNode::NameSpace(name, items, _) => {
-                let res = Text::from_str(name);
-                let res = if items.len() >= 1 {
-                    let res = res.append_to_last_line("::");
+                let text = Text::from_str(name);
+                let text = if items.len() >= 1 {
+                    let text = text.append_to_last_line("::");
                     let items_text = Text::join(
                         items
                             .iter()
@@ -464,18 +472,18 @@ impl ImportTreeNode {
                         ", ",
                         FORMAT_LINE_LIMIT,
                     );
-                    let brace = items.len() >= 2;
-                    let items_text = if brace {
+                    let needs_brace = items.len() >= 2;
+                    let items_text = if needs_brace {
                         items_text.curly_brace()
                     } else {
                         items_text
                     };
-                    let res = res.append_nobreak(items_text);
-                    res
+                    let text = text.append_nobreak(items_text);
+                    text
                 } else {
-                    res
+                    text
                 };
-                res
+                text
             }
         }
     }

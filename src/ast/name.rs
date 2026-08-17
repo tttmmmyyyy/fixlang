@@ -104,9 +104,9 @@ impl NameSpace {
             if namespace.names.is_empty() {
                 return vec![];
             }
-            let str = namespace.to_string();
-            let str = str.replace(NAMESPACE_SEPARATOR, MODULE_SEPARATOR);
-            str.split(MODULE_SEPARATOR)
+            let text = namespace.to_string();
+            let text = text.replace(NAMESPACE_SEPARATOR, MODULE_SEPARATOR);
+            text.split(MODULE_SEPARATOR)
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
         }
@@ -174,14 +174,14 @@ impl NameSpace {
         self.names.push(name);
     }
 
-    pub fn parse(str: &str) -> Option<Self> {
-        if str.is_empty() {
+    pub fn parse(s: &str) -> Option<Self> {
+        if s.is_empty() {
             return None;
         }
         let mut is_absolute = false;
-        let mut names = str
+        let mut names = s
             .split(NAMESPACE_SEPARATOR)
-            .map(|s| s.to_owned())
+            .map(|name| name.to_owned())
             .collect::<Vec<_>>();
         if names.is_empty() {
             return None;
@@ -346,13 +346,13 @@ impl FullName {
         if s.is_empty() {
             return None;
         }
-        let mut names = NameSpace::parse(s)?;
-        if names.names.is_empty() {
+        let mut namespace = NameSpace::parse(s)?;
+        if namespace.names.is_empty() {
             return None;
         }
-        let name = names.names.pop();
+        let name = namespace.names.pop();
         Some(FullName {
-            namespace: names,
+            namespace,
             name: name.unwrap(),
         })
     }
