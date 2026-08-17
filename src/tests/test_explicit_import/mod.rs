@@ -32,19 +32,7 @@ pub fn run_test_case(case_path: &Path) {
     let target_path = case_path.join("main.fix");
     fs::copy(&from_path, &target_path).expect("Failed to copy from main.from.fix to main.fix");
 
-    // Execute fix edit explicit-import
-    let output = fix_command()
-        .arg("edit")
-        .arg("explicit-import")
-        .current_dir(case_path)
-        .output()
-        .expect("Failed to run fix edit explicit-import");
-    if !output.status.success() {
-        panic!(
-            "fix edit explicit-import failed:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    run_explicit_import(case_path);
 
     // Check that "fix build" succeeds after the edit
     let build_output = fix_command()
@@ -68,4 +56,31 @@ pub fn run_test_case(case_path: &Path) {
         "Test case failed: {}",
         case_path.display()
     );
+
+    // The import statements the command writes are the ones it reads back, so a second run over
+    // the rewritten project leaves the file byte for byte as the first run left it.
+    run_explicit_import(case_path);
+    let rerun_content = fs::read_to_string(&target_path).expect("Failed to read main.fix");
+    assert_eq!(
+        actual_content,
+        rerun_content,
+        "A second run changed the file: {}",
+        case_path.display()
+    );
+}
+
+/// Runs `fix edit explicit-import` in `case_path`, panicking with the command's stderr on failure.
+fn run_explicit_import(case_path: &Path) {
+    let output = fix_command()
+        .arg("edit")
+        .arg("explicit-import")
+        .current_dir(case_path)
+        .output()
+        .expect("Failed to run fix edit explicit-import");
+    if !output.status.success() {
+        panic!(
+            "fix edit explicit-import failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
