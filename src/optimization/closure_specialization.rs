@@ -1,4 +1,5 @@
 use super::{
+    application_inlining,
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
     uncurry::internalize_let_to_var_at_head,
@@ -645,6 +646,9 @@ fn realize_all(
     let mut global_names = originals.keys().cloned().collect::<Set<_>>();
     let mut symbols: Map<FullName, Symbol> = Map::default();
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
+    // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
+    // bodies go into the copy once every body has been made.
+    let mut specialized_lambdas: Map<FullName, Set<FullName>> = Map::default();
 
     // Every function stands for the copy of itself that substitutes nothing.
     let mut queue = originals
@@ -713,13 +717,239 @@ fn realize_all(
                 inline_into_callers: false,
             },
         );
+        let lambdas = request
+            .func_copy
+            .subst
+            .iter()
+            .map(|(_, tree)| tree.receiving_copy().name())
+            .collect::<Set<_>>();
+        if !lambdas.is_empty() {
+            specialized_lambdas.insert(name.clone(), lambdas);
+        }
         global_names.insert(name);
         queue.extend(visitor.required_specializations);
     }
 
+    inline_specialized_lambdas(&mut symbols, &specialized_lambdas);
+
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
     prg.symbols = symbols;
+}
+
+// Put the body of each lambda a copy is specialized on where the copy calls it.
+//
+// A copy exists because a way into it receives a lambda whose identity is known, and what the copy
+// does with that lambda is call it by name. Inlining runs before this pass, so no call made here has
+// ever been offered a body: the value a loop body returns each round, for one, is built in the lambda
+// and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two only
+// once they stand in one function.
+//
+// A body goes in one level deep and into a copy alone, so what the program grows by is bounded by the
+// bodies the copies are specialized on, and the calls those bodies make are left as calls.
+fn inline_specialized_lambdas(
+    symbols: &mut Map<FullName, Symbol>,
+    specialized_lambdas: &Map<FullName, Set<FullName>>,
+) {
+    for (copy, lambdas) in specialized_lambdas {
+        let bodies = lambdas
+            .iter()
+            .map(|lambda| {
+                let sym = symbols.get(lambda).unwrap_or_else(|| {
+                    panic!(
+                        "{} is specialized on {}, which no copy was made for",
+                        copy.to_string(),
+                        lambda.to_string()
+                    )
+                });
+                (lambda.clone(), sym.expr.as_ref().unwrap().clone())
+            })
+            .collect::<Map<_, _>>();
+        let sym = symbols.get_mut(copy).unwrap();
+        let mut inliner = SpecializedLambdaInliner { bodies };
+        let res = inliner.traverse(sym.expr.as_ref().unwrap());
+        if !res.changed {
+            continue;
+        }
+        sym.expr = Some(res.expr);
+        // Reduce the applications of the bodies just put in, so that a call becomes the body's own
+        // bindings rather than a lambda built and immediately applied.
+        application_inlining::run_on_symbol(sym);
+    }
+}
+
+// The visitor that replaces the name a copy calls a lambda through with that lambda's body.
+//
+// A body is put in where the traversal ends its visit of the call, so the body itself is not walked
+// and the calls it makes stay as they are.
+struct SpecializedLambdaInliner {
+    // The body of each lambda, by the name the calls of it use.
+    bodies: Map<FullName, Arc<ExprNode>>,
+}
+
+impl ExprVisitor for SpecializedLambdaInliner {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        let func = expr.get_app_func();
+        if !func.is_var() {
+            return EndVisitResult::unchanged(expr);
+        }
+        let Some(body) = self.bodies.get(&func.get_var().name) else {
+            return EndVisitResult::unchanged(expr);
+        };
+        EndVisitResult::changed(expr.set_app_func(body.clone()))
+    }
+
+    fn start_visit_var(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_llvm(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_app(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn start_visit_lam(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_let(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_if(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_match(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_tyanno(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_make_struct(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_array_lit(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_ffi_call(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
 }
 
 // The capture list a copy receives in place of the one its origin was built with, where the copy is
