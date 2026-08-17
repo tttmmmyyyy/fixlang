@@ -29,6 +29,9 @@ number_name = { ASCII_DIGIT+ }
 number_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ number_name }
 
 // Strings that can be used of types, traits, modules or namespaces.
+//
+// If you change the head character, please also update `is_capital_name` in `ast/name.rs`, which
+// tells a name of this shape from a name of any other shape.
 capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 capital_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ capital_name }
 

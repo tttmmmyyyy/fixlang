@@ -1,5 +1,5 @@
 use crate::ast::expr::Var;
-use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::name::{is_capital_name, FullName, Name, NameSpace};
 use crate::ast::program::EndNode;
 use crate::constants::{FORMAT_LINE_LIMIT, STD_NAME};
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -340,12 +340,10 @@ impl ImportTreeNode {
         }
         if names.len() == 1 {
             let name = &names[0];
-            // If the first letter of `name` is lowercase, create a symbol node.
-            if name.chars().next().unwrap().is_lowercase() {
-                return ImportTreeNode::Symbol(name.clone(), head_span);
+            if is_capital_name(name) {
+                return ImportTreeNode::TypeOrTrait(name.clone(), head_span);
             }
-            // If the first letter of `name` is uppercase, create a type or trait node.
-            return ImportTreeNode::TypeOrTrait(name.clone(), head_span);
+            return ImportTreeNode::Symbol(name.clone(), head_span);
         }
         let namespace = &names[0];
         ImportTreeNode::NameSpace(

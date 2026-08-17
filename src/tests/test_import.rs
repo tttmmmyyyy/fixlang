@@ -1,7 +1,24 @@
 use crate::{
-    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
+    tests::test_util::{
+        run_source_assert_failed, test_source, test_source_fail, test_sources, test_sources_fail,
+    },
     Configuration,
 };
+
+/// A module holding one value of every name shape an absolute path can end in: a name headed by a
+/// lowercase letter, one headed by `_`, one headed by `@` (the getter the compiler defines for a
+/// struct field), and a capitalized one (a type).
+const LIB_OF_EVERY_NAME_SHAPE: &str = r##"
+    module Lib;
+
+    answer : I64;
+    answer = 42;
+
+    _answer : I64;
+    _answer = 42;
+
+    type Box2 = unbox struct { v : I64 };
+"##;
 
 #[test]
 pub fn test_import_empty() {
@@ -414,5 +431,57 @@ pub fn test_import_unknown_namespace() {
         &source,
         Configuration::develop_mode(),
         "Namespace `Std::Piyo` is not defined or empty.",
+    );
+}
+
+#[test]
+pub fn test_absolute_path_reaches_every_value_name_shape_without_an_import() {
+    let main = r##"
+    module Main;
+
+    main : IO ();
+    main = (
+        eval *assert_eq(|_|"lowercase", ::Lib::answer, 42);
+        eval *assert_eq(|_|"underscore", ::Lib::_answer, 42);
+        eval *assert_eq(|_|"getter", ::Lib::Box2::@v(::Lib::Box2 { v : 7 }), 7);
+        pure()
+    );
+    "##;
+    test_sources(
+        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        Configuration::develop_mode(),
+    );
+}
+
+#[test]
+pub fn test_absolute_path_to_an_undefined_value_of_another_module_is_reported_as_a_value() {
+    let main = r##"
+    module Main;
+
+    main : IO ();
+    main = println(::Lib::_missing.to_string);
+    "##;
+    test_sources_fail(
+        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        Configuration::develop_mode(),
+        "Cannot find value named `Lib::_missing`.",
+    );
+}
+
+#[test]
+pub fn test_absolute_path_to_an_undefined_type_of_another_module_is_reported_as_an_entity() {
+    let main = r##"
+    module Main;
+
+    main : IO ();
+    main = (
+        let x : ::Lib::Missing = 0;
+        println(x.to_string)
+    );
+    "##;
+    test_sources_fail(
+        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        Configuration::develop_mode(),
+        "Cannot find entity named `Lib::Missing`.",
     );
 }

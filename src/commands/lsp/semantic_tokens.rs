@@ -26,7 +26,7 @@
 use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::{corresponding_line_map, uri_to_path};
 use crate::ast::expr::{Expr, ExprNode};
-use crate::ast::name::FullName;
+use crate::ast::name::{is_capital_name, FullName};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{Program, SymbolExpr};
@@ -579,7 +579,7 @@ impl<'a> Overlay<'a> {
     /// punctuation (e.g. the tuple/arrow type cons).
     fn push_type(&mut self, span: &Span, cat: u32) {
         if let Some(text) = self.span_text(span.start, span.end) {
-            if matches!(text.chars().next(), Some('A'..='Z')) {
+            if is_capital_name(text) {
                 self.out.push((span.start, span.end, cat));
             }
         }

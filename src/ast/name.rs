@@ -4,6 +4,16 @@ use std::fmt::{Debug, Formatter};
 
 pub type Name = String;
 
+/// Is `name` the name of a type, a trait, a module or a namespace?
+///
+/// These are the names the grammar's `capital_name` rule accepts, and an ASCII uppercase letter at
+/// the head is what distinguishes them. Every other name the parser produces names a value, a field
+/// or a variant: the grammar's `name`, headed by a lowercase letter, `_` or `@`, and its
+/// `number_name`, the digits of a tuple field.
+pub fn is_capital_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_uppercase())
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     // Items in the namespace.

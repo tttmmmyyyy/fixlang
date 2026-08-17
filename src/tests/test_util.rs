@@ -297,23 +297,36 @@ pub fn wait_within(child: &mut Child, timeout: Duration, description: &str) -> E
     }
 }
 
-/// Compiles `source` under `config` and runs the resulting program. The outer `Result` reports the
-/// compilation, and the inner one the spawning of the compiled program.
-fn run_source(
-    source: &str,
+/// Compiles the program made of the modules `sources` under `config` and runs it. The outer
+/// `Result` reports the compilation, and the inner one the spawning of the compiled program.
+fn run_sources(
+    sources: &[&str],
     mut config: Configuration,
 ) -> Result<Result<Output, io::Error>, Errors> {
     const MAIN_RUN: &str = "main_run";
-    let src = save_temporary_source(source, MAIN_RUN)?;
-    config.add_user_source_file(src.file_path);
+    for source in sources {
+        let src = save_temporary_source(source, MAIN_RUN)?;
+        config.add_user_source_file(src.file_path);
+    }
     run(config, false)
+}
+
+/// Compiles `source` under `config` and runs the resulting program. The outer `Result` reports the
+/// compilation, and the inner one the spawning of the compiled program.
+fn run_source(source: &str, config: Configuration) -> Result<Result<Output, io::Error>, Errors> {
+    run_sources(&[source], config)
 }
 
 /// Compiles `source` under `config` and runs it, failing the test unless it exits with code 0. The
 /// program's stdout and stderr are forwarded to the test's stderr, so a failing run shows what it
 /// printed.
 pub fn test_source(source: &str, config: Configuration) {
-    let compile_result = run_source(source, config);
+    test_sources(&[source], config);
+}
+
+/// Like `test_source`, for a program whose modules are spread over several sources.
+pub fn test_sources(sources: &[&str], config: Configuration) {
+    let compile_result = run_sources(sources, config);
     let spawn_result = panic_if_err(compile_result);
     let output = spawn_result.unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -372,7 +385,12 @@ pub fn assert_grammar_accepts(source: &str) {
 ///     spawn;
 ///   - the captured stderr from the child process otherwise.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
-    let compile_result = run_source(source, config);
+    run_sources_assert_failed(&[source], config)
+}
+
+/// Like `run_source_assert_failed`, for a program whose modules are spread over several sources.
+pub fn run_sources_assert_failed(sources: &[&str], config: Configuration) -> String {
+    let compile_result = run_sources(sources, config);
     match compile_result {
         Err(errs) => errs.to_string(),
         Ok(Err(e)) => e.to_string(),
@@ -402,7 +420,12 @@ pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_e
 /// Compiles and runs `source`, and asserts that it fails with a diagnostic containing
 /// `included_errmsg`.
 pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &str) {
-    let errmsg = run_source_assert_failed(source, config);
+    test_sources_fail(&[source], config, included_errmsg);
+}
+
+/// Like `test_source_fail`, for a program whose modules are spread over several sources.
+pub fn test_sources_fail(sources: &[&str], config: Configuration, included_errmsg: &str) {
+    let errmsg = run_sources_assert_failed(sources, config);
     assert!(errmsg.contains(included_errmsg),
         "Error message did not contain expected text.\nExpected to include:\n{}\n\nActual message:\n{}", included_errmsg, errmsg);
 }
