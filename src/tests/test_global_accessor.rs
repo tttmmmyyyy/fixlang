@@ -4,44 +4,62 @@ use crate::tests::test_util::{
 use std::fs;
 use tempfile::TempDir;
 
-/// A program whose global `table` has an initializer long enough that an inlining decided by size
-/// would leave the accessor a call, and whose `main` reads `table` from a loop, where the
-/// accessor's flag test and load are worth lifting out.
-const LONG_INITIALIZER_SOURCE: &str = r#"
-    module Main;
+/// How many times `widely_read` is read, which is more readers than an accessor is placed at (see
+/// `READERS_TO_PLACE_THE_ACCESSOR_AT`).
+const WIDE_READ_COUNT: usize = 70;
 
-    // The characters the table's initializer reads.
-    alphabet : Array U8;
-    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".get_bytes;
+/// A program with two globals whose accessors the compiler decides differently about.
+///
+/// `table` has an initializer long enough that an inlining decided by size would leave the accessor
+/// a call, and `main` reads it from a loop, where the accessor's flag test and load are worth
+/// lifting out. `widely_read` is read from more places than an accessor is placed at.
+fn program_source() -> String {
+    let wide_reads = vec!["widely_read"; WIDE_READ_COUNT].join(" + ");
+    format!(
+        r#"
+        module Main;
 
-    // A table built by a fold over another global.
-    table : Array I64;
-    table = Iterator::range(0, 256).fold(Array::fill(256, 3), |i, entries|
-        entries.set(alphabet.@(i.bit_and(63)).to_I64, 3)
-    );
+        // The characters the table's initializer reads.
+        alphabet : Array U8;
+        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".get_bytes;
 
-    main : IO ();
-    main = (
-        let total = Iterator::range(0, 1000).fold(0, |i, total| total + table.@(i.bit_and(255)));
-        println(total.to_string)
-    );
-"#;
+        // A table built by a fold over another global.
+        table : Array I64;
+        table = Iterator::range(0, 256).fold(Array::fill(256, 3), |i, entries|
+            entries.set(alphabet.@(i.bit_and(63)).to_I64, 3)
+        );
+
+        widely_read : I64;
+        widely_read = Iterator::range(0, 256).fold(0, |i, acc| acc + i * 3);
+
+        sum_widely_read : I64;
+        sum_widely_read = {wide_reads};
+
+        main : IO ();
+        main = (
+            let total = Iterator::range(0, 1000).fold(0, |i, total| total + table.@(i.bit_and(255)));
+            println((total + sum_widely_read).to_string)
+        );
+    "#
+    )
+}
 
 /// The name `global_accessor_name` gives the accessor of `table`, as the emitted LLVM IR quotes it.
 const TABLE_ACCESSOR: &str = "@\"Get#Main::table#";
 
-/// Build `LONG_INITIALIZER_SOURCE` with `--emit-llvm` in a directory of its own, and return that
-/// directory.
+/// The same, for `widely_read`.
+const WIDELY_READ_ACCESSOR: &str = "@\"Get#Main::widely_read#";
+
+/// Build `program_source()` with `--emit-llvm` in a directory of its own, and return that directory.
 ///
 /// The build works at `-O max` whatever level the suite runs at, which compiles the program as one
-/// compilation unit: the emitted IR is one module, holding the accessor, the loop reading it, and
-/// one numbering of the attribute groups.
+/// compilation unit: the emitted IR is one module, holding the accessors, the loop reading one of
+/// them, and one numbering of the attribute groups.
 fn build_emitting_llvm_ir() -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     let source_path = dir.join("generated.fix");
-    fs::write(&source_path, LONG_INITIALIZER_SOURCE)
-        .expect("Failed to write the generated source file");
+    fs::write(&source_path, program_source()).expect("Failed to write the generated source file");
     let build = fix_command_at_opt_level("build", "max")
         .arg("--file")
         .arg(&source_path)
@@ -56,6 +74,29 @@ fn build_emitting_llvm_ir() -> TempDir {
         String::from_utf8_lossy(&build.stderr),
     );
     temp_dir
+}
+
+/// Whether the accessor named by `accessor` asks to be placed at its readers, read off `ir`.
+fn asks_to_be_placed_at_its_readers(ir: &str, accessor: &str) -> bool {
+    let bodies = llvm_function_bodies(ir, accessor);
+    assert_eq!(bodies.len(), 1, "the build should emit one `{}`", accessor);
+    let signature = bodies[0]
+        .lines()
+        .next()
+        .expect("a function body starts with its signature");
+    let Some(group) = signature
+        .rsplit_once(')')
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        .filter(|group| group.starts_with('#'))
+    else {
+        return false;
+    };
+    let group_line = format!("attributes {} =", group);
+    let attributes = ir
+        .lines()
+        .find(|line| line.starts_with(&group_line))
+        .unwrap_or_else(|| panic!("the emitted IR should define `{}`", group_line));
+    attributes.contains("alwaysinline")
 }
 
 /// The accessor that reads a global asks to be inlined into every reader of the global.
@@ -73,35 +114,40 @@ fn build_emitting_llvm_ir() -> TempDir {
 pub fn test_the_accessor_of_a_global_asks_to_be_placed_at_its_readers() {
     let temp_dir = build_emitting_llvm_ir();
     let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
-    let accessors = llvm_function_bodies(&ir, TABLE_ACCESSOR);
-    assert_eq!(
-        accessors.len(),
-        1,
-        "the build should emit one accessor for `table`"
-    );
-    let signature = accessors[0]
-        .lines()
-        .next()
-        .expect("a function body starts with its signature");
-    let group = signature
-        .rsplit_once(')')
-        .and_then(|(_, rest)| rest.split_whitespace().next())
-        .filter(|group| group.starts_with('#'))
-        .unwrap_or_else(|| {
-            panic!(
-                "the accessor should ask for something, and its signature is `{}`",
-                signature
-            )
-        });
-    let group_line = format!("attributes {} =", group);
-    let attributes = ir
-        .lines()
-        .find(|line| line.starts_with(&group_line))
-        .unwrap_or_else(|| panic!("the emitted IR should define `{}`", group_line));
     assert!(
-        attributes.contains("alwaysinline"),
-        "the accessor should ask to be placed at its readers, and its attributes are `{}`",
-        attributes
+        asks_to_be_placed_at_its_readers(&ir, TABLE_ACCESSOR),
+        "the accessor of `table` should ask to be placed at its readers"
+    );
+}
+
+/// A global read from many places keeps its accessor to itself.
+///
+/// The request copies the accessor, and the initializer it holds, into every reader, so it is made
+/// only where the readers are few. Without the bound a global read from all over a program carries
+/// its initializer to all of those places, which costs object size and compilation time for reads
+/// that gain little: what the request buys is the lifting of a flag test and a load out of a loop,
+/// and a loop is one reader.
+#[test]
+pub fn test_a_global_with_many_readers_keeps_its_accessor_to_itself() {
+    let temp_dir = build_emitting_llvm_ir();
+    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+
+    // The reads the bound is counting: a program reaching `widely_read` some other way, or one
+    // whose reads were folded together, would satisfy the check below for free.
+    let reads = ir
+        .lines()
+        .filter(|line| line.contains("call") && line.contains(WIDELY_READ_ACCESSOR))
+        .count();
+    assert_eq!(
+        reads, WIDE_READ_COUNT,
+        "the program should read `widely_read` {} times",
+        WIDE_READ_COUNT
+    );
+
+    assert!(
+        !asks_to_be_placed_at_its_readers(&ir, WIDELY_READ_ACCESSOR),
+        "the accessor of `widely_read` should not ask to be placed at {} readers",
+        reads
     );
 }
 

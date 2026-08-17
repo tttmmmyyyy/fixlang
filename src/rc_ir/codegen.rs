@@ -71,6 +71,53 @@ impl<'c, 'm> Generator<'c, 'm> {
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
         }
+
+        // Every reader of a global is now in the module — a function body, or the initializer of
+        // another global — so each accessor's readers can be counted.
+        for global_init in prog.globals.iter() {
+            self.request_accessor_at_readers(&global_init.symbol);
+        }
+    }
+
+    /// Ask for the accessor of the global named `symbol` to be placed at every reader of it, when
+    /// the readers are few.
+    ///
+    /// Reading a global tests an initialization flag and loads the storage, and the accessor holds
+    /// the initializer as well. A reader with the test and the load in front of it lifts them out
+    /// of a loop that reads the global, and the global becomes a pointer in a register; behind a
+    /// call they stay in the loop, and every read costs a call as well. An inlining decided by size
+    /// leaves that call there, since the size it weighs is the initializer's, and the initializer
+    /// runs once in the program's life.
+    ///
+    /// A reader reaches the flag test and the load by taking the whole accessor, initializer
+    /// included, so the request costs a copy of the initializer at each reader. It is worth that
+    /// where the reads are concentrated: what the lifting saves is a loop's worth of reads, and a
+    /// loop is one reader. A global reached from all over a program is read once at each place,
+    /// where the call is a small part of what the read costs.
+    fn request_accessor_at_readers(&mut self, symbol: &FullName) {
+        /// How many readers a global may have and still have its accessor placed at each of them.
+        ///
+        /// Every reader beyond the first pays for its copy in object size and in compilation time,
+        /// so this is the bound on what the request adds. Over `benchmark/speedtest` and
+        /// `LangArena`, the most-read global has 100 readers, and the global whose reads the
+        /// request lifts out of a loop has 32.
+        const READERS_TO_PLACE_THE_ACCESSOR_AT: usize = 64;
+
+        let acc_fn = self
+            .module
+            .get_function(&global_accessor_name(symbol))
+            .expect("a global of the program has an accessor");
+        let acc_gv = acc_fn.as_global_value();
+        let mut readers = 0usize;
+        let mut use_ = acc_gv.get_first_use();
+        while let Some(u) = use_ {
+            readers += 1;
+            if readers > READERS_TO_PLACE_THE_ACCESSOR_AT {
+                return;
+            }
+            use_ = u.get_next_use();
+        }
+        self.add_enum_attribute(acc_fn, "alwaysinline", AttributeLoc::Function);
     }
 
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
@@ -610,20 +657,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
         let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
-
-        // The accessor is inlined into every reader of the global, however long the initializer it
-        // holds.
-        //
-        // Reading the global tests the initialization flag and loads the storage. A reader with
-        // those in front of it lifts them out of a loop that reads the global; behind a call they
-        // stay in the loop, and every read costs a call as well. An ordinary inlining decides by
-        // the accessor's size, which the initializer dominates, and that initializer runs once in
-        // the program's life.
-        //
-        // Making the accessor small instead — by moving the initializer into a function of its
-        // own, as the threaded build does — leaves the reader a call it cannot see through, and
-        // that call keeps the flag test and the load in the loop.
-        self.add_enum_attribute(acc_fn, "alwaysinline", AttributeLoc::Function);
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
