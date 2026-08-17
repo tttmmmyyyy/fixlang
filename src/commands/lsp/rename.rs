@@ -481,7 +481,7 @@ fn collect_import_edits_for_type(
     edits: &mut Vec<(Span, String)>,
     rebuilt_stmt_spans: &mut Vec<(Span, String)>,
 ) {
-    let module = &stmt.module.0;
+    let module = &stmt.module_name;
     let stmt_classifications =
         scan_import_tree_for_type(program, auto_ns, &[module.clone()], &stmt.items);
     let stmt_classifications_hiding =

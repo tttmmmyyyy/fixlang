@@ -260,6 +260,17 @@ pub enum TokenCategory {
     CapitalName,
 }
 
+/// Whether `text` is, in its entirety, an identifier of `category` — the question
+/// `validate_token_str` answers, for a caller that has no use for the rejection's wording.
+///
+/// # Examples
+/// `is_token_of("Box2", TokenCategory::CapitalName)` is `true`, and so is
+/// `is_token_of("@v", TokenCategory::Name)`; `is_token_of("Lib::Box2", TokenCategory::CapitalName)`
+/// is `false`, since a `capital_name` carries no namespace.
+pub fn is_token_of(text: &str, category: TokenCategory) -> bool {
+    validate_token_str(text, category).is_ok()
+}
+
 /// One `namespace_item` of a parsed fullname, with where it is written in the text it was parsed
 /// from.
 pub struct NamespaceItemSpan {
@@ -3190,7 +3201,8 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     let module = module_pair.as_str().to_string();
     let mut stmt = ImportStatement {
         importer: ctx.module_name.clone(),
-        module: (module, Some(module_span.clone())),
+        module_name: module,
+        module_span: Some(module_span.clone()),
         items: vec![ImportTreeNode::Any(Some(module_span))],
         hiding: vec![],
         source: Some(span),

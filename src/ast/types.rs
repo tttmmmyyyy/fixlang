@@ -273,14 +273,14 @@ impl TyCon {
     // number, or a pointer, which C and Fix lay down the same way. These are the types a C
     // function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
-        self.name.namespace == NameSpace::new_str(&[STD_NAME])
+        self.name.namespace == NameSpace::from_strs(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
     // Whether this is an integer type that carries a sign. Panics for a type that is not an
     // integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
-        if self.name.namespace != NameSpace::new_str(&[STD_NAME]) {
+        if self.name.namespace != NameSpace::from_strs(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
         }
         match self.name.name.as_str() {
