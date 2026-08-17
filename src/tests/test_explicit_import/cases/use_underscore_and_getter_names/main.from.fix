@@ -1,0 +1,10 @@
+module Main;
+
+import Lib;
+
+main : IO ();
+main = (
+    let b = Box2 { v : _answer };
+    eval b.@v;
+    pure()
+);
