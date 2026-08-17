@@ -8,7 +8,7 @@ use crate::{
 /// A module holding one value of every name shape an absolute path can end in: a name headed by a
 /// lowercase letter, one headed by `_`, one headed by `@` (the getter the compiler defines for a
 /// struct field), and a capitalized one (a type).
-const LIB_OF_EVERY_NAME_SHAPE: &str = r##"
+const LIB_MODULE_OF_EVERY_NAME_SHAPE: &str = r##"
     module Lib;
 
     answer : I64;
@@ -436,7 +436,7 @@ pub fn test_import_unknown_namespace() {
 
 #[test]
 pub fn test_absolute_path_reaches_every_value_name_shape_without_an_import() {
-    let main = r##"
+    let main_source = r##"
     module Main;
 
     main : IO ();
@@ -448,21 +448,21 @@ pub fn test_absolute_path_reaches_every_value_name_shape_without_an_import() {
     );
     "##;
     test_sources(
-        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        &[main_source, LIB_MODULE_OF_EVERY_NAME_SHAPE],
         Configuration::develop_mode(),
     );
 }
 
 #[test]
 pub fn test_absolute_path_to_an_undefined_value_of_another_module_is_reported_as_a_value() {
-    let main = r##"
+    let main_source = r##"
     module Main;
 
     main : IO ();
     main = println(::Lib::_missing.to_string);
     "##;
     test_sources_fail(
-        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        &[main_source, LIB_MODULE_OF_EVERY_NAME_SHAPE],
         Configuration::develop_mode(),
         "Cannot find value named `Lib::_missing`.",
     );
@@ -470,7 +470,7 @@ pub fn test_absolute_path_to_an_undefined_value_of_another_module_is_reported_as
 
 #[test]
 pub fn test_absolute_path_to_an_undefined_type_of_another_module_is_reported_as_an_entity() {
-    let main = r##"
+    let main_source = r##"
     module Main;
 
     main : IO ();
@@ -480,7 +480,7 @@ pub fn test_absolute_path_to_an_undefined_type_of_another_module_is_reported_as_
     );
     "##;
     test_sources_fail(
-        &[main, LIB_OF_EVERY_NAME_SHAPE],
+        &[main_source, LIB_MODULE_OF_EVERY_NAME_SHAPE],
         Configuration::develop_mode(),
         "Cannot find entity named `Lib::Missing`.",
     );

@@ -303,9 +303,9 @@ fn run_sources(
     sources: &[&str],
     mut config: Configuration,
 ) -> Result<Result<Output, io::Error>, Errors> {
-    const MAIN_RUN: &str = "main_run";
+    const SOURCE_FILE_NAME: &str = "main_run";
     for source in sources {
-        let src = save_temporary_source(source, MAIN_RUN)?;
+        let src = save_temporary_source(source, SOURCE_FILE_NAME)?;
         config.add_user_source_file(src.file_path);
     }
     run(config, false)
