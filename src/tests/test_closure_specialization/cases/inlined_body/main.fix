@@ -1,0 +1,24 @@
+module Main;
+
+// The body of this loop reads the array it captures through the index primitive, so nothing it
+// captures is handed to a call. The copy of `Std::loop` made for the body therefore takes the body
+// itself, and calls it nowhere.
+//
+// # Parameters
+// * `bound` - The value an element is looked for at or above.
+// * `values` - The elements to read, in the order they are read.
+first_at_least : I64 -> Array I64 -> I64;
+first_at_least = |bound, values| (
+    let n = values.@size;
+    loop(0, |i| (
+        if i == n { break $ -1 };
+        if values.@(i) >= bound { break $ i };
+        continue $ i + 1
+    ))
+);
+
+main : IO ();
+main = (
+    let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];
+    println $ values.first_at_least(5).to_string
+);

@@ -1,0 +1,36 @@
+module Main;
+
+// Big enough that the inliner leaves it a call, and it reads the array it is given without keeping
+// any of it, so borrow-ification gives it that array without counting a reference.
+//
+// # Parameters
+// * `key` - The value the elements are weighed against.
+// * `table` - The elements to read.
+scaled_sum : I64 -> Array I64 -> I64;
+scaled_sum = |key, table| (
+    let n = table.@size;
+    loop((0, 0), |(j, acc)| (
+        if j == n { break $ acc };
+        let x = table.@(j);
+        let acc = if x % 7 == key % 7 { acc + x * 3 - j } else { acc + 1 };
+        continue $ (j + 1, acc)
+    ))
+);
+
+// The loop in `main` hands the array it captures to `scaled_sum`. Where its body stands, that array
+// arrives borrowed from the capture list the copy passes it in, so the call counts no reference;
+// were the body put in the copy, the copy would own the array it hands to the next round and would
+// pay a reference-count operation for that call on every round. So the copy of `Std::loop` made for
+// this body keeps calling it.
+//
+// The loop inside `scaled_sum` hands nothing it captures to a call — it reads the array through the
+// index primitive — so the copy made for that body takes the body itself.
+main : IO ();
+main = (
+    let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];
+    let weighed = loop((0, 0), |(i, acc)| (
+        if i == 4 { break $ acc };
+        continue $ (i + 1, acc + scaled_sum(i, values))
+    ));
+    println $ weighed.to_string
+);

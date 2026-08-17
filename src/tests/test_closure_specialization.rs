@@ -105,6 +105,17 @@ mod integration_tests {
     /// records: raising the allowance the budget grants leaves this count where it is.
     const DEEP_RELAY_COPIES: usize = 7;
 
+    /// The segment `uncurry` appends to the name of a function it gives a function-pointer version,
+    /// which is what a call in the RC IR names. A capture list is named after the lambda that
+    /// receives it and carries no such segment, so this is what tells a call from a type.
+    const FUNPTR_SEGMENT: &str = "#funptr";
+
+    /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
+    const INLINED_BODY_OUTPUT: &str = "3";
+
+    /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
+    const BORROWED_CAPTURE_OUTPUT: &str = "111";
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -226,6 +237,34 @@ mod integration_tests {
             .into_iter()
             .filter(|(_, is_lambda_copy)| *is_lambda_copy)
             .map(|(name, _)| name)
+            .collect()
+    }
+
+    /// The names in `dump` carrying all of `needles`, deduplicated. A name stands in the dump
+    /// wherever the program mentions it — a function's own line, a call, or the type of a capture
+    /// list named after the copy that receives it.
+    fn names_in<'a>(dump: &'a str, needles: &[&str]) -> Vec<&'a str> {
+        let mut names = dump
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
+            .filter(|token| needles.iter().all(|needle| token.contains(needle)))
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// The copies of `Std::loop` in `dump`, each as the line naming it and the body under it. One
+    /// copy stands for one loop body of the case.
+    ///
+    /// A blank line ends a body, so what follows the last function — the initializer of every global
+    /// — stays out of it.
+    fn loop_copies(dump: &str) -> Vec<(&str, &str)> {
+        dump.split("\nfn ")
+            .filter_map(|function| function.split_once('\n'))
+            .filter(|(header, _)| {
+                header.starts_with("Std::loop") && header.contains(CLOSURE_SPEC_SUFFIX)
+            })
+            .map(|(header, body)| (header, body.split("\n\n").next().unwrap()))
             .collect()
     }
 
@@ -538,10 +577,9 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("relayed_closure");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", RELAYED_CLOSURE_OUTPUT);
 
-        let narrowed = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX)
-            .into_iter()
-            .filter(|name| name.contains(CLOSURE_LAM_SUFFIX))
-            .collect::<Vec<_>>();
+        // The copy of the lambda names the capture list it receives, so its name is in the dump
+        // whether it stands there as a function or its body was put where the copy calls it.
+        let narrowed = names_in(&dump, &[CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX]);
         assert!(
             !narrowed.is_empty(),
             "the lambda `relay` hands to `fold` should get a copy receiving the narrowed capture \
@@ -555,6 +593,82 @@ mod integration_tests {
             "the chain should reach `terminal` through that capture list and copy it, but the dump \
              names only: {:?}",
             terminal
+        );
+    }
+
+    /// A copy calls the lambda a way into it receives, and inlining has run by the time that call
+    /// exists, so the copy takes the body of that lambda: the loop of `inlined_body` reads the array
+    /// it captures through the index primitive, and its copy of `Std::loop` calls no lambda at all.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls() {
+        let (_temp_dir, project_dir) = setup_test_env("inlined_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", INLINED_BODY_OUTPUT);
+
+        let copies = loop_copies(&dump);
+        assert!(
+            !copies.is_empty(),
+            "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
+            functions_named_with(&dump, "Std::loop")
+        );
+        for (header, body) in copies {
+            let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+            assert!(
+                called.is_empty(),
+                "the copy `{}` should hold the body of the lambda it is specialized on, and it \
+                 calls {:?} instead",
+                header.split('(').next().unwrap(),
+                called
+            );
+        }
+    }
+
+    /// A captured value that reference counting has to touch reaches the calls the lambda makes
+    /// borrowed, since the copy hands the capture list over borrowed. Taking the body would put those
+    /// calls in the copy, which owns the capture list it hands to the next round and would pay a
+    /// reference-count operation for each of them on every round — so the copy keeps calling the
+    /// lambda whose body hands such a value to a call.
+    ///
+    /// `borrowed_capture` holds one loop of each kind: the loop in `main` hands the array it captures
+    /// to `scaled_sum`, and the loop inside `scaled_sum` reads the array it captures through the
+    /// index primitive.
+    #[test]
+    pub fn test_a_copy_keeps_calling_a_lambda_that_lends_what_it_captured() {
+        let (_temp_dir, project_dir) = setup_test_env("borrowed_capture");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", BORROWED_CAPTURE_OUTPUT);
+
+        let mut lending = 0;
+        let mut reading = 0;
+        for (header, body) in loop_copies(&dump) {
+            let calls_a_lambda = !names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]).is_empty();
+            // Each copy receives the capture list of the lambda it is made for, which is named after
+            // the function that lambda was written in.
+            if header.contains("CapList@main") {
+                lending += 1;
+                assert!(
+                    calls_a_lambda,
+                    "the copy `{}` is made for a body that hands a captured array to a call, so it \
+                     should keep calling that body:\n{}",
+                    header.split('(').next().unwrap(),
+                    body
+                );
+            } else if header.contains("CapList@scaled_sum") {
+                reading += 1;
+                assert!(
+                    !calls_a_lambda,
+                    "the copy `{}` is made for a body that hands nothing it captured to a call, so \
+                     it should hold that body:\n{}",
+                    header.split('(').next().unwrap(),
+                    body
+                );
+            }
+        }
+        assert!(
+            lending > 0 && reading > 0,
+            "the case should have a copy of each kind, and has {} lending and {} reading. The dump \
+             names: {:?}",
+            lending,
+            reading,
+            functions_named_with(&dump, "Std::loop")
         );
     }
 }

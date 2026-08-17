@@ -13,7 +13,7 @@ use crate::{
         },
         name::FullName,
         pattern::{Pattern, PatternNode},
-        program::{Program, Symbol},
+        program::{Program, Symbol, TypeEnv},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
@@ -648,7 +648,7 @@ fn realize_all(
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
     // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
     // bodies go into the copy once every body has been made.
-    let mut specialized_lambdas: Map<FullName, Set<FullName>> = Map::default();
+    let mut specialized_lambdas: Map<FullName, Vec<(FullName, CaptureStruct)>> = Map::default();
 
     // Every function stands for the copy of itself that substitutes nothing.
     let mut queue = originals
@@ -721,8 +721,8 @@ fn realize_all(
             .func_copy
             .subst
             .iter()
-            .map(|(_, tree)| tree.receiving_copy().name())
-            .collect::<Set<_>>();
+            .map(|(_, tree)| (tree.receiving_copy().name(), lifted.borrow_mut().capture_struct_of(tree)))
+            .collect::<Vec<_>>();
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
         }
@@ -730,10 +730,13 @@ fn realize_all(
         queue.extend(visitor.required_specializations);
     }
 
-    inline_specialized_lambdas(&mut symbols, &specialized_lambdas);
-
+    // The capture lists the copies receive are named here, and the judgement below reads the types
+    // their fields are declared at.
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
+
+    inline_specialized_lambdas(&mut symbols, &specialized_lambdas, &prg.type_env);
+
     prg.symbols = symbols;
 }
 
@@ -749,22 +752,38 @@ fn realize_all(
 // bodies the copies are specialized on, and the calls those bodies make are left as calls.
 fn inline_specialized_lambdas(
     symbols: &mut Map<FullName, Symbol>,
-    specialized_lambdas: &Map<FullName, Set<FullName>>,
+    specialized_lambdas: &Map<FullName, Vec<(FullName, CaptureStruct)>>,
+    type_env: &TypeEnv,
 ) {
+    // Every body as it stands before any of them is put anywhere. A lambda is a copy like the one
+    // receiving it, so reading the bodies as they are rewritten would hand a copy what another copy
+    // has already been given — one level per copy, but a chain of them across the program.
+    let bodies = specialized_lambdas
+        .iter()
+        .flat_map(|(copy, lambdas)| lambdas.iter().map(move |lambda| (copy, lambda)))
+        .map(|(copy, (lambda, cap))| {
+            let sym = symbols.get(lambda).unwrap_or_else(|| {
+                panic!(
+                    "{} is specialized on {}, which no copy was made for",
+                    copy.to_string(),
+                    lambda.to_string()
+                )
+            });
+            let body = sym.expr.as_ref().unwrap().clone();
+            let put = !hands_a_counted_capture_to_a_call(&body, cap, type_env);
+            (lambda.clone(), (body, put))
+        })
+        .collect::<Map<FullName, (Arc<ExprNode>, bool)>>();
+
     for (copy, lambdas) in specialized_lambdas {
         let bodies = lambdas
             .iter()
-            .map(|lambda| {
-                let sym = symbols.get(lambda).unwrap_or_else(|| {
-                    panic!(
-                        "{} is specialized on {}, which no copy was made for",
-                        copy.to_string(),
-                        lambda.to_string()
-                    )
-                });
-                (lambda.clone(), sym.expr.as_ref().unwrap().clone())
-            })
-            .collect::<Map<_, _>>();
+            .filter(|(lambda, _)| bodies[lambda].1)
+            .map(|(lambda, _)| (lambda.clone(), bodies[lambda].0.clone()))
+            .collect::<Map<FullName, Arc<ExprNode>>>();
+        if bodies.is_empty() {
+            continue;
+        }
         let sym = symbols.get_mut(copy).unwrap();
         let mut inliner = SpecializedLambdaInliner { bodies };
         let res = inliner.traverse(sym.expr.as_ref().unwrap());
@@ -776,6 +795,36 @@ fn inline_specialized_lambdas(
         // bindings rather than a lambda built and immediately applied.
         application_inlining::run_on_symbol(sym);
     }
+}
+
+// Whether the body of a lifted lambda hands a captured value that reference counting has to touch to
+// a call it makes.
+//
+// A copy hands the capture list to the lambda borrowed, so such a value reaches the calls inside the
+// lambda borrowed too, and no reference count is touched along the way. Putting the body where the
+// copy calls it takes that boundary away: the copy owns the capture list it hands to the next round,
+// so the same call is reached with an owned value and is bracketed by a reference-count operation on
+// every round of the loop. Measured over the benchmark corpus, that costs more than the union the
+// move cancels is worth — `Template::Parse` runs 69% more instructions.
+//
+// A value the body only reads through a primitive is not handed anywhere, and a value reference
+// counting has nothing to do to costs nothing to hand over, so neither blocks the move.
+fn hands_a_counted_capture_to_a_call(
+    body: &Arc<ExprNode>,
+    cap: &CaptureStruct,
+    type_env: &TypeEnv,
+) -> bool {
+    let (_params, body) = body.destructure_lam_sequence();
+    let Some((field_names, cap_body)) = capture_list_destructuring(&body, &cap.tycon) else {
+        return false;
+    };
+    cap.fields()
+        .iter()
+        .enumerate()
+        .any(|(position, (_, field_ty))| {
+            !field_ty.is_fully_unboxed(type_env)
+                && !find_usage_of_name::run(&cap_body, &field_names[position]).is_empty()
+        })
 }
 
 // The visitor that replaces the name a copy calls a lambda through with that lambda's body.
