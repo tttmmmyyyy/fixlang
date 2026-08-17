@@ -1049,7 +1049,7 @@ fn collect_field_import_occs(
                 // and must not appear in user-facing references.
                 continue;
             }
-            if stmt.module.0 != target_module {
+            if stmt.module_name != target_module {
                 continue;
             }
             for item in &stmt.items {
@@ -1140,7 +1140,7 @@ fn collect_import_refs(program: &Program, target: &FullName, is_value: bool, ref
                 // and must not appear in user-facing references.
                 continue;
             }
-            if stmt.module.0 != target_module {
+            if stmt.module_name != target_module {
                 continue;
             }
             for item in &stmt.items {

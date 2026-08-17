@@ -1,0 +1,11 @@
+module Main;
+
+import Lib::{_answer, Box2, Box2::@v};
+import Std::{IO, Monad::pure};
+
+main : IO ();
+main = (
+    let b = Box2 { v : _answer };
+    eval b.@v;
+    pure()
+);

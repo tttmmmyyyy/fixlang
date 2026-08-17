@@ -1,0 +1,6 @@
+module Lib;
+
+type Box2 = unbox struct { v : ::Std::I64 };
+
+_answer : ::Std::I64;
+_answer = 42;
