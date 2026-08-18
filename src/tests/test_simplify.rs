@@ -202,19 +202,18 @@ mod value_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
-    /// A boxed payload carried through the tails the move reaches. The arm placed at a construction
-    /// consumes the array that construction was given, and reads a second array beside it.
-    /// Development mode runs the program under memcheck and validates the RC IR after each pass, so
-    /// this measures the reference counting and the binders of what the move leaves behind — which a
-    /// payload of `I64`, holding no reference at all, leaves unmeasured.
+    /// The move carries a boxed payload through the tails it reaches: the arm placed at each
+    /// construction consumes the array that construction was given, and reads a second array beside
+    /// it. Development mode runs the program under memcheck and validates the RC IR after each pass,
+    /// so this exercises the reference counting and the binders of what the move leaves behind.
     #[test]
     pub fn test_a_boxed_payload_through_the_moved_arms() {
         let source = r#"
             module Main;
 
-            // Every end of the value matched below is a match of its own, and each of its ends
-            // builds the `Option`. The arm moved to each end consumes the array the construction
-            // was given, and reads `extra` besides.
+            // Each branch of the value matched below ends in a match of its own, and each end of
+            // that one builds the `Option`. The arm moved to an end consumes the array the
+            // construction there was given, and reads `extra` besides.
             sized : Array I64 -> I64 -> I64;
             sized = |extra, n| (
                 match (if n % 2 == 0 {

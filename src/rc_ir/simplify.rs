@@ -8,10 +8,10 @@
 //!   to the value that built it. The construction and the match/destructure both vanish.
 //! - **case-of-case**: a `match` whose scrutinee is itself a `match` (in tail position) moves each
 //!   outer arm into the inner arm that builds its constructor, so the construction and the outer match
-//!   cancel together. An inner arm that ends in a `match` of its own is followed into, so the
-//!   constructions the arms of that one build are reached as well. It fires all-or-nothing — only when
-//!   every construction so reached is matched by a specific outer arm — and only when the result is
-//!   smaller than what it replaces, since an outer arm two inner arms reach is placed in both.
+//!   cancel together. The walk over an inner arm follows into a `match` that arm ends in, so it
+//!   reaches the constructions the arms of that one build as well. It fires all-or-nothing — only
+//!   when a specific outer arm matches every construction the walk reaches — and only when the result
+//!   is smaller than what it replaces, since an outer arm two inner arms reach is placed in both.
 //!
 //! Composed, they cancel the `Option`/`LoopState`/tuple union a loop builds and immediately matches
 //! each iteration, exposing the scalar loop state underneath — which is what lets the back end form a
@@ -252,8 +252,8 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// with the outer arm's payload binder becoming the construction's operand. The inner match then
 /// produces what the outer match did, so it binds the outer match's variable.
 ///
-/// It fires all-or-nothing — every tail so reached must build a union a specific outer arm matches —
-/// and only when the result is smaller than what it replaces: the rewrite is built,
+/// It fires all-or-nothing — every tail the walk reaches must build a union a specific outer arm
+/// matches — and only when the result is smaller than what it replaces: the rewrite is built,
 /// measured, and dropped where it does not shrink the term. It grows where two inner arms build one
 /// constructor, which puts that outer arm in both: a nest of matches doing so at every level would
 /// double the term at every level. Where the inner arms build pairwise distinct constructors, each
@@ -306,15 +306,14 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
 }
 
 /// Replace the union construction at `node`'s tail — `let r = make_union(operand); ret r` — with
-/// `f(variant, operand)`. A `match` in that tail position builds a union in each of its arms, so the
-/// walk continues into them and every arm's tail is replaced. `f` declining gives `None` for the whole
-/// walk, so one walk both decides whether the tail cancels and performs the cancellation.
+/// `f(variant, operand)`. Where a `match` stands in that tail position, the walk continues into its
+/// arms and replaces the tail of each. `f` declining gives `None` for the whole walk, so one walk
+/// both decides whether the tail cancels and performs the cancellation.
 ///
 /// Requiring the construction to abut the `ret` makes `r` single-use — bound and immediately returned
 /// — so whatever consumed the arm's result consumed that union linearly.
 ///
-/// # Parameters
-/// * `node` - the body whose tail is replaced.
+/// # Arguments
 /// * `result_ty` - the type of what `f` produces, which a `match` walked into now yields.
 /// * `f` - what replaces the tail, given the variant number and the payload operand of the union
 ///   construction found there.
@@ -359,8 +358,9 @@ fn replace_tail_union(
     })
 }
 
-/// `replace_tail_union` at a tail `let r = match scrut { arms }; ret r`: each arm's own tail is
-/// replaced, and the binding takes `result_ty`, which is what the arms now produce.
+/// Replace the tail union of every arm of a `match` standing at `node`'s tail — `let r = match scrut
+/// { arms }; ret r` — with `f(variant, operand)`. The rebuilt binding of `r` takes `result_ty`, which
+/// is what those arms now produce.
 ///
 /// A body deciding between two constructors this way — read one condition, then the next — is the
 /// ordinary shape of a two-branch loop body, so this is where the union of such a loop is built.
@@ -372,7 +372,7 @@ fn replace_tail_union_of_match(
     result_ty: &Arc<TypeNode>,
     f: &mut dyn FnMut(usize, &RcVar) -> Option<RcExprNode>,
 ) -> Option<RcExprNode> {
-    let arms = arms
+    let new_arms = arms
         .iter()
         .map(|arm| {
             Some(MatchArm {
@@ -383,13 +383,13 @@ fn replace_tail_union_of_match(
             })
         })
         .collect::<Option<Vec<_>>>()?;
-    let r = RcVar {
+    let new_r = RcVar {
         ty: result_ty.clone(),
         ..r.clone()
     };
-    let ret = node_of(RcExpr::Ret(r.clone()), &node.source);
+    let ret = node_of(RcExpr::Ret(new_r.clone()), &node.source);
     Some(node_of(
-        RcExpr::Let(r, RcRhs::Match(scrut.clone(), arms), ret),
+        RcExpr::Let(new_r, RcRhs::Match(scrut.clone(), new_arms), ret),
         &node.source,
     ))
 }
