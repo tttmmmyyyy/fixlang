@@ -31,6 +31,7 @@ mod test_ffi;
 mod test_file_io;
 mod test_get_args;
 mod test_git_ref;
+mod test_global_accessor;
 mod test_hole;
 mod test_hole_cache;
 mod test_hole_negative;
