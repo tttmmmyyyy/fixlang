@@ -131,6 +131,20 @@ mod integration_tests {
         );
     }
 
+    /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
+    /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
+    /// tail, so every construction takes the arm answering it and the function builds no union. The
+    /// built program still computes the same values over 0..10.
+    #[test]
+    fn test_a_match_in_tail_position() {
+        assert_union_cancelled(
+            "tail_match",
+            &["Main::step"],
+            "`Main::step`",
+            "[0, 16, -1, 20, -1, -1, 120, 28, -1, 32]",
+        );
+    }
+
     /// `shift_and_triple`'s inner arms build one constructor, so moving the outer `some` arm into
     /// them places a copy in each. The copy is smaller than the construction and the match it
     /// replaces, so the simplifier takes the move and the function builds no union. The built
