@@ -11,7 +11,9 @@
 //!   cancel together. The walk over an inner arm follows into a `match` that arm ends in, so it
 //!   reaches the constructions the arms of that one build as well. It fires all-or-nothing — only
 //!   when a specific outer arm matches every construction the walk reaches — and only when the result
-//!   is smaller than what it replaces, since an outer arm two inner arms reach is placed in both.
+//!   is smaller than what it replaces, since an outer arm two inner arms reach is placed in both. The
+//!   walk that finds those constructions runs once on its own, so that size decides the rewrite before
+//!   an outer arm is copied anywhere.
 //!
 //! Composed, they cancel the `Option`/`LoopState`/tuple union a loop builds and immediately matches
 //! each iteration, exposing the scalar loop state underneath — which is what lets the back end form a
@@ -25,9 +27,9 @@
 //! moved — so no boxed value's lifetime is extended.
 //!
 //! Every rewrite makes the body strictly smaller: the two case-of-known-constructor rewrites drop the
-//! construction they cancel, and case-of-case is taken only when its result is smaller than what it
-//! replaces. `simplify_to_fixpoint` measures each pass against that, which is what makes the fixpoint
-//! terminate — a body of `n` nodes admits at most `n` passes that change it.
+//! construction they cancel, and case-of-case is taken only when the size it measures beforehand is
+//! smaller than what it replaces. `simplify_to_fixpoint` measures each pass against that, which is
+//! what makes the fixpoint terminate — a body of `n` nodes admits at most `n` passes that change it.
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
@@ -253,10 +255,10 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// produces what the outer match did, so it binds the outer match's variable.
 ///
 /// It fires all-or-nothing — every tail the walk reaches must build a union a specific outer arm
-/// matches — and only when the result is smaller than what it replaces: the rewrite is built,
-/// measured, and dropped where it does not shrink the term. It grows where two inner arms build one
-/// constructor, which puts that outer arm in both: a nest of matches doing so at every level would
-/// double the term at every level. Where the inner arms build pairwise distinct constructors, each
+/// matches — and only when the result is smaller than what it replaces, a size `tail_variants` gives
+/// before an outer arm is copied anywhere. It grows where two inner arms build one constructor, which
+/// puts that outer arm in both: a nest of matches doing so at every level would double the term at
+/// every level. Where the inner arms build pairwise distinct constructors, each
 /// outer arm moves to one inner arm and the result always shrinks, by the constructions and the outer
 /// match that go away.
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
@@ -270,10 +272,43 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     if outer_scrut.name != s.name || !is_ret_of(k2, &m.name) || count_value_uses(&s.name, k) != 1 {
         return None;
     }
+    // What each inner arm reaches, which decides both whether the rewrite is possible and how large
+    // it would be. Copying an outer arm into every tail is what this rewrite spends, so the copies
+    // below are made only once the size these variants predict says the result is kept.
+    let reached = inner_arms
+        .iter()
+        .map(|arm| tail_variants(&arm.body))
+        .collect::<Option<Vec<_>>>()?;
+    let outer_arm = |variant| {
+        outer_arms
+            .iter()
+            .find(|a: &&MatchArm| a.tag == Some(variant))
+    };
+    let mut rewritten_count = 2; // the binding of `m` to the inner match, and the `ret m` after it
+    for (arm, variants) in inner_arms.iter().zip(&reached) {
+        let arm_count = node_count(&arm.body);
+        // Each tail the walk reaches is a two-node `let r = make_union(operand); ret r`, and the
+        // tails are disjoint, so the arm holds at least that many nodes for the outer arms to take
+        // the place of.
+        let tail_count = 2 * variants.len() as u64;
+        assert!(
+            arm_count >= tail_count,
+            "an inner arm of {} nodes ends in {} tail constructions",
+            arm_count,
+            variants.len()
+        );
+        rewritten_count += arm_count - tail_count;
+        for variant in variants {
+            rewritten_count += node_count(&outer_arm(*variant)?.body);
+        }
+    }
+    if rewritten_count >= node_count(node) {
+        return None;
+    }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
     for arm in inner_arms {
         let body = replace_tail_union(&arm.body, &m.ty, &mut |variant, operand| {
-            let outer = outer_arms.iter().find(|a| a.tag == Some(variant))?;
+            let outer = outer_arm(variant)?;
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
             let moved = clone_fresh(&outer.body, MARKER, counter);
@@ -297,7 +332,42 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         ),
         &node.source,
     );
-    (node_count(&rewritten) < node_count(node)).then_some(rewritten)
+    // Renaming a binder and substituting a variable both leave the term's shape alone, so placing the
+    // outer arms leaves exactly the nodes counted above.
+    assert_eq!(
+        node_count(&rewritten),
+        rewritten_count,
+        "the rewrite left a term of a size other than the one measured before building it"
+    );
+    Some(rewritten)
+}
+
+/// The variant every tail of `node` builds, in the order `replace_tail_union` reaches them, or `None`
+/// where a tail builds no union. This is that walk with nothing built: the rewrite replaces each of
+/// these tails with a copy of an outer arm, so this says what the rewrite would leave and what
+/// building it would cost, before any of it is paid for.
+fn tail_variants(node: &RcExprNode) -> Option<Vec<usize>> {
+    // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(_) => None,
+        RcExpr::Let(r, rhs, k) => {
+            if !is_ret_of(k, &r.name) {
+                return tail_variants(k);
+            }
+            if let RcRhs::Match(_, arms) = rhs {
+                let mut variants = Vec::new();
+                for arm in arms {
+                    variants.extend(tail_variants(&arm.body)?);
+                }
+                return Some(variants);
+            }
+            Some(vec![union_construction(rhs)?.0])
+        }
+        RcExpr::Destructure(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => tail_variants(k),
+    })
 }
 
 /// Whether `node` is exactly `ret name`.
