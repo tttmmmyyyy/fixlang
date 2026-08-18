@@ -1,7 +1,7 @@
+use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    emitted_llvm_ir, fix_command_at_opt_level, llvm_function_bodies, EmittedIr,
+    emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, EmittedIr,
 };
-use std::fs;
 use tempfile::TempDir;
 
 /// A program with two globals the compiler decides differently about.
@@ -69,13 +69,9 @@ const COUNTER_INITIALIZER: &str = "@\"InitValue#Main::counter#";
 fn build_emitting_llvm_ir(source: &str) -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
-    let source_path = dir.join("generated.fix");
-    fs::write(&source_path, source).expect("Failed to write the generated source file");
-    let build = fix_command_at_opt_level("build", "max")
-        .arg("--file")
-        .arg(&source_path)
+    let build = fix_build_source_command(dir, source, "max")
+        .env(MAX_OPT_LEVEL_VAR, "max")
         .arg("--emit-llvm")
-        .current_dir(dir)
         .output()
         .expect("Failed to execute fix build");
     assert!(
@@ -106,6 +102,8 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
         .and_then(|(_, rest)| rest.split_whitespace().next())
         .filter(|group| group.starts_with('#'))
     else {
+        // A function carrying no attribute at all is printed without an attribute group, and asks
+        // for nothing — `noinline` included.
         return false;
     };
     let group_line = format!("attributes {} =", group);
