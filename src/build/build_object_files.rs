@@ -368,6 +368,9 @@ pub fn build_object_files<'c>(
                 }
             }
 
+            // Every reader of this unit's globals is in the module by now.
+            gc.keep_initializers_out_of_shared_accessors();
+
             gc.finalize_di();
 
             gc.assert_defined_symbols_fit_a_symbol_table();

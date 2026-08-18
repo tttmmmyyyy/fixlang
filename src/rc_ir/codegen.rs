@@ -13,9 +13,7 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{
-    global_accessor_name, global_initializer_name, object_file_symbol_name, Generator, Object,
-};
+use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -74,16 +72,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
         }
-
-        // Every reader of a global is now in the module — a function body, or the initializer of
-        // another global — so each accessor's readers can be counted.
-        for global_init in prog.globals.iter() {
-            self.keep_initializer_out_of_shared_accessor(&global_init.symbol);
-        }
     }
 
-    /// Keep the initializer of the global named `symbol` out of its accessor, where more than one
-    /// reader takes that accessor.
+    /// Keep each global's initializer out of the accessor that more than one reader takes.
     ///
     /// The accessor is the initializer's only caller, so an inliner folds the initializer straight
     /// back into it and the accessor grows to the size of the initializer. An inlining decided by
@@ -94,23 +85,30 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// to be either way, and the place that costs nothing is the one the reader can see: what the
     /// initializer knows — the length of an array, the shape of a structure — reaches the code that
     /// reads the global, where it takes bounds checks out of loops.
-    fn keep_initializer_out_of_shared_accessor(&mut self, symbol: &FullName) {
-        let acc_fn = self
-            .module
-            .get_function(&global_accessor_name(symbol))
-            .expect("a global of the program has an accessor");
-        let acc_gv = acc_fn.as_global_value();
-        let Some(first_reader) = acc_gv.get_first_use() else {
-            return;
-        };
-        if first_reader.get_next_use().is_none() {
+    ///
+    /// Call this once the module holds every reader of every global — the last of them are the
+    /// exported C functions and the program's entry point, which `build_object_files` implements
+    /// after the units. A reader counted short leaves the initializer in an accessor that its
+    /// readers then pay a call for.
+    ///
+    /// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a
+    /// call and a load whatever the initializer's size, and the attribute decides nothing.
+    pub(crate) fn keep_initializers_out_of_shared_accessors(&mut self) {
+        if self.config.threaded {
             return;
         }
-        let value_fn = self
-            .module
-            .get_function(&global_initializer_name(symbol))
-            .expect("a global of the program has an initializer");
-        self.add_enum_attribute(value_fn, "noinline", AttributeLoc::Function);
+        let emitted: Vec<(FunctionValue<'c>, FunctionValue<'c>)> =
+            std::mem::take(&mut self.emitted_globals);
+        for (acc_fn, value_fn) in emitted {
+            let accessor = acc_fn.as_global_value();
+            let Some(first_reader) = accessor.get_first_use() else {
+                continue;
+            };
+            if first_reader.get_next_use().is_none() {
+                continue;
+            }
+            self.add_enum_attribute(value_fn, "noinline", AttributeLoc::Function);
+        }
     }
 
     /// How many times a global is read for each time it is initialized, as the branch to the
@@ -684,10 +682,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
         // when it is small; `keep_initializer_out_of_shared_accessor` says which globals keep it so.
         let value_fn = self.module.add_function(
-            &global_initializer_name(&global_init.symbol),
+            &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
             BasicType::fn_type(&obj_embed_ty, &[], false),
             Some(Linkage::Internal),
         );
+
+        self.emitted_globals.push((acc_fn, value_fn));
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
