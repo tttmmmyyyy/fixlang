@@ -26,8 +26,9 @@ use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Linkage;
 use inkwell::types::BasicType;
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
+use std::mem;
 use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
@@ -99,7 +100,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.config.threaded {
             return;
         }
-        for global in std::mem::take(&mut self.emitted_globals) {
+        for global in mem::take(&mut self.emitted_globals) {
             let accessor = global.accessor.as_global_value();
             let Some(first_use) = accessor.get_first_use() else {
                 continue;
@@ -123,7 +124,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     fn store_init_value(
         &mut self,
         init_value_fn: FunctionValue<'c>,
-        global_var_ptr: inkwell::values::PointerValue<'c>,
+        global_var_ptr: PointerValue<'c>,
     ) {
         let computed = self
             .builder()
