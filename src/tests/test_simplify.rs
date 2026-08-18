@@ -202,6 +202,45 @@ mod value_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
+    /// A boxed payload carried through the tails the move reaches. The arm placed at a construction
+    /// consumes the array that construction was given, and reads a second array beside it.
+    /// Development mode runs the program under memcheck and validates the RC IR after each pass, so
+    /// this measures the reference counting and the binders of what the move leaves behind — which a
+    /// payload of `I64`, holding no reference at all, leaves unmeasured.
+    #[test]
+    pub fn test_a_boxed_payload_through_the_moved_arms() {
+        let source = r#"
+            module Main;
+
+            // Every end of the value matched below is a match of its own, and each of its ends
+            // builds the `Option`. The arm moved to each end consumes the array the construction
+            // was given, and reads `extra` besides.
+            sized : Array I64 -> I64 -> I64;
+            sized = |extra, n| (
+                match (if n % 2 == 0 {
+                    if n % 3 == 0 { Option::some([n, n + 1]) } else { Option::none() }
+                } else {
+                    if n % 5 == 0 { Option::none() } else { Option::some([n, n * 2, n * 3]) }
+                }) {
+                    some(a) => a.@size + extra.@size,
+                    none() => -1
+                }
+            );
+
+            main : IO ();
+            main = (
+                let extra = [1, 2, 3, 4];
+                assert_eq(
+                    |_|"a boxed payload built at the end of a match in tail position",
+                    Iterator::range(0, 10).map(|n| sized(extra, n)).to_array,
+                    [6, 7, -1, 7, -1, -1, 6, 7, -1, 7]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
     /// The outer match answers the `none` an inner arm builds with a catch-all arm, which binds the
     /// whole union rather than that constructor's payload. Moving such an arm into the inner arm
     /// would bind it to the payload instead, so the rewrite declines and the values stay what the
