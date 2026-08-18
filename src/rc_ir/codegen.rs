@@ -13,7 +13,9 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
+use crate::generator::{
+    global_accessor_name, object_file_symbol_name, EmittedGlobal, Generator, Object,
+};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -97,17 +99,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.config.threaded {
             return;
         }
-        let emitted: Vec<(FunctionValue<'c>, FunctionValue<'c>)> =
-            std::mem::take(&mut self.emitted_globals);
-        for (acc_fn, value_fn) in emitted {
-            let accessor = acc_fn.as_global_value();
-            let Some(first_reader) = accessor.get_first_use() else {
+        for global in std::mem::take(&mut self.emitted_globals) {
+            let accessor = global.accessor.as_global_value();
+            let Some(first_use) = accessor.get_first_use() else {
                 continue;
             };
-            if first_reader.get_next_use().is_none() {
+            if first_use.get_next_use().is_none() {
                 continue;
             }
-            self.add_enum_attribute(value_fn, "noinline", AttributeLoc::Function);
+            self.add_enum_attribute(global.init_value, "noinline", AttributeLoc::Function);
         }
     }
 
@@ -119,15 +119,15 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// cold side of every decision that reads the weight.
     const ACCESSES_PER_INITIALIZATION: u64 = 1 << 20;
 
-    /// Call `value_fn` and store what it returns into `global_var_ptr`.
-    fn store_computed_value(
+    /// Call `init_value_fn` and store what it returns into `global_var_ptr`.
+    fn store_init_value(
         &mut self,
-        value_fn: FunctionValue<'c>,
+        init_value_fn: FunctionValue<'c>,
         global_var_ptr: inkwell::values::PointerValue<'c>,
     ) {
         let computed = self
             .builder()
-            .build_call(value_fn, &[], "call_init_value")
+            .build_call(init_value_fn, &[], "call_init_value")
             .unwrap()
             .try_as_basic_value()
             .left()
@@ -680,14 +680,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Reading the global tests the initialization flag and loads the storage, and a reader
         // holding those two lifts them out of a loop that reads the global — the global becomes a
         // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
-        // when it is small; `keep_initializer_out_of_shared_accessor` says which globals keep it so.
-        let value_fn = self.module.add_function(
+        // when it is small; `keep_initializers_out_of_shared_accessors` says which globals keep it
+        // so.
+        let init_value_fn = self.module.add_function(
             &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
             BasicType::fn_type(&obj_embed_ty, &[], false),
             Some(Linkage::Internal),
         );
 
-        self.emitted_globals.push((acc_fn, value_fn));
+        self.emitted_globals.push(EmittedGlobal {
+            accessor: acc_fn,
+            init_value: init_value_fn,
+        });
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -736,7 +740,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // them would have to assume the call above writes them, and read both again on every
             // turn of its loop.
             self.builder().position_at_end(store_bb);
-            self.store_computed_value(value_fn, global_var_ptr);
+            self.store_init_value(init_value_fn, global_var_ptr);
             self.builder()
                 .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
                 .unwrap();
@@ -756,7 +760,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.builder().position_at_end(once_bb);
                 let _di_guard =
                     self.push_debug_subprogram(once_fn, global_init.init.source.clone());
-                self.store_computed_value(value_fn, global_var_ptr);
+                self.store_init_value(init_value_fn, global_var_ptr);
                 self.builder().build_return(None).unwrap();
                 self.set_debug_location(None);
             }
@@ -775,9 +779,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Evaluate the initializer and mark it global.
         {
             let _builder_guard = self.push_builder();
-            let init_bb = self.context.append_basic_block(value_fn, "init_bb");
+            let init_bb = self.context.append_basic_block(init_value_fn, "init_bb");
             self.builder().position_at_end(init_bb);
-            let _di_guard = self.push_debug_subprogram(value_fn, global_init.init.source.clone());
+            let _di_guard =
+                self.push_debug_subprogram(init_value_fn, global_init.init.source.clone());
             let _scope_guard = self.push_scope();
             let obj = self
                 .eval_rc_expr(&global_init.init, false, func_vals)

@@ -60,8 +60,7 @@ const EXPORTED_GLOBAL_SOURCE: &str = r#"
 const COUNTER_ACCESSOR: &str = "@\"Get#Main::counter#";
 const COUNTER_INITIALIZER: &str = "@\"InitValue#Main::counter#";
 
-/// Build `TWO_GLOBALS_SOURCE` with `--emit-llvm` in a directory of its own, and return that
-/// directory.
+/// Build `source` with `--emit-llvm` in a directory of its own, and return that directory.
 ///
 /// The build works at `-O max` whatever level the suite runs at, which compiles the program as one
 /// compilation unit: the emitted IR is one module, holding the accessors, the initializers, the
@@ -115,7 +114,7 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
 }
 
 /// How many times `ir` calls the function whose name starts with `name`.
-fn calls_to(ir: &str, name: &str) -> usize {
+fn count_calls_to(ir: &str, name: &str) -> usize {
     ir.lines()
         .filter(|line| line.contains("call") && line.contains(name))
         .count()
@@ -138,7 +137,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
 
     // The readers the decision rests on.
     assert!(
-        calls_to(&ir, TABLE_ACCESSOR) > 1,
+        count_calls_to(&ir, TABLE_ACCESSOR) > 1,
         "the program should read `table` from more than one place"
     );
 
@@ -166,7 +165,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
 
     // The reader the decision rests on.
     assert_eq!(
-        calls_to(&ir, READ_ONCE_ACCESSOR),
+        count_calls_to(&ir, READ_ONCE_ACCESSOR),
         1,
         "the program should read `read_once` from one place"
     );
@@ -227,7 +226,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
     // `table` some other way would satisfy that check for free.
     let generated_ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
     assert!(
-        calls_to(&generated_ir, TABLE_ACCESSOR) > 0,
+        count_calls_to(&generated_ir, TABLE_ACCESSOR) > 0,
         "the program should read `table` through its accessor"
     );
 
@@ -258,7 +257,7 @@ pub fn test_a_global_read_from_an_exported_c_function_has_that_reader_counted() 
 
     // The readers the decision rests on: `main`, and the exported C function.
     assert_eq!(
-        calls_to(&ir, COUNTER_ACCESSOR),
+        count_calls_to(&ir, COUNTER_ACCESSOR),
         2,
         "the program should read `counter` from `main` and from the exported C function"
     );
