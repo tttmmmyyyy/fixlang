@@ -630,8 +630,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         Some(merged)
     }
 
-    /// Implement a global initializer: a lazily-initialized accessor that computes the value once
-    /// (call-once), marks it and its reachable graph global, and stores it.
+    /// Implement a global: `InitValue#<name>`, which evaluates the initializer and marks the value
+    /// and its reachable graph global, and the accessor, which calls it once and stores what it
+    /// returns, then loads the storage on every read.
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,

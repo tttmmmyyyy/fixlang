@@ -89,7 +89,7 @@ fn sole_body(ir: &str, name: &str) -> String {
     bodies[0].clone()
 }
 
-/// Whether the function whose name starts with `name` asks to be left out of its callers.
+/// Whether the function whose name starts with `name` carries the `noinline` attribute.
 fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
     let signature = sole_body(ir, name)
         .lines()
@@ -101,8 +101,8 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
         .and_then(|(_, rest)| rest.split_whitespace().next())
         .filter(|group| group.starts_with('#'))
     else {
-        // A function carrying no attribute at all is printed without an attribute group, and asks
-        // for nothing — `noinline` included.
+        // A function carrying no attribute at all is printed without an attribute group, so it
+        // carries no `noinline`.
         return false;
     };
     let group_line = format!("attributes {} =", group);
