@@ -145,6 +145,20 @@ mod integration_tests {
         );
     }
 
+    /// Two of `step`'s three ends build the `Option` the match takes apart, and the third is what a
+    /// call returned. The two that build one take the arm answering them and the third takes a copy
+    /// of the match, so the function builds no union of its own. What the call returns is built
+    /// inside it, which is why the dump is read for `Main::step` alone.
+    #[test]
+    fn test_a_tail_that_cancels_nothing() {
+        assert_union_cancelled(
+            "mixed_tails",
+            &["Main::step"],
+            "`Main::step`",
+            "[0, 0, 7, 0, 40, 22, 11, 13, 80, 36, 15, 0]",
+        );
+    }
+
     /// `shift_and_triple`'s inner arms build one constructor, so moving the outer `some` arm into
     /// them places a copy in each. The copy is smaller than the construction and the match it
     /// replaces, so the simplifier takes the move and the function builds no union. The built

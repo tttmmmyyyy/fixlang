@@ -1,0 +1,37 @@
+module Main;
+
+// Big enough that the inliner leaves it a call, so what it returns is not a construction the
+// simplifier can see.
+//
+// # Parameters
+// * `n` - The number to answer for.
+other : I64 -> Option I64;
+other = |n| (
+    let a = n * 7 % 13;
+    let b = (a + n) * 3 % 17;
+    let c = (b * b + a) % 29;
+    let d = (c + b * 5) % 31;
+    let e = (d * 3 + c) % 37;
+    if (a + b + c + d + e) % 3 == 0 { Option::some(a + e) } else { Option::none() }
+);
+
+// Two of the three ends build the `Option` the match below takes apart; the third is what `other`
+// returned. The two that build one take the arm answering them, and the third takes a copy of the
+// match — which is what lets the first two cancel at all.
+step : I64 -> I64;
+step = |n| (
+    let state = if n % 2 == 0 {
+        if n % 4 == 0 { Option::some(n * 10) } else { Option::some(n + 5) }
+    } else {
+        other(n)
+    };
+    match state {
+        some(v) => v,
+        none() => 0
+    }
+);
+
+main : IO ();
+main = (
+    println $ Iterator::range(0, 12).map(step).to_array.to_string
+);
