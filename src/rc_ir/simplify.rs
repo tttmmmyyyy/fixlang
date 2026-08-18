@@ -30,6 +30,7 @@
 //! terminate — a body of `n` nodes admits at most `n` passes that change it.
 
 use crate::ast::name::FullName;
+use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
 use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
 use crate::misc::{grow_stack, Map};
@@ -244,19 +245,20 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 }
 
 /// case-of-case (tail form): `let s = match iScrut { iArms }; let m = match s { oArms }; ret m`, where
-/// `s` is consumed only by the outer match, moves the outer match into the tails of the inner arms.
+/// `s` is consumed only by the outer match, moves each outer arm into the inner arm whose result it
+/// matches. An inner arm ends in a union it builds and immediately returns — or in a `match` whose own
+/// arms do, which `replace_tail_union` follows into — so the outer arm for that constructor is the one
+/// that arm reaches; putting that arm in place of the construction cancels the two against each other,
+/// with the outer arm's payload binder becoming the construction's operand. The inner match then
+/// produces what the outer match did, so it binds the outer match's variable.
 ///
-/// A tail that builds a union and returns it takes the outer arm for that constructor directly, and
-/// the construction and the test cancel against each other, the arm's payload binder becoming the
-/// construction's operand. A tail that is itself a `match` is followed into, so a body deciding
-/// between constructors by reading one condition and then the next is reached at every end. Any other
-/// tail takes a copy of the whole outer match, which cancels nothing there but leaves the tails that
-/// do cancel free to.
-///
-/// The move is taken only when the result is smaller than what it replaces: it is built, measured,
-/// and dropped where it does not shrink the term. That is the whole of the judgement — a copy of an
-/// outer arm reaching two tails, or a copy of the outer match at a tail that cancels nothing, is paid
-/// for out of the constructions and the outer match that go away.
+/// It fires all-or-nothing — every tail so reached must build a union a specific outer arm matches —
+/// and only when the result is smaller than what it replaces: the rewrite is built,
+/// measured, and dropped where it does not shrink the term. It grows where two inner arms build one
+/// constructor, which puts that outer arm in both: a nest of matches doing so at every level would
+/// double the term at every level. Where the inner arms build pairwise distinct constructors, each
+/// outer arm moves to one inner arm and the result always shrinks, by the constructions and the outer
+/// match that go away.
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
@@ -268,19 +270,25 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     if outer_scrut.name != s.name || !is_ret_of(k2, &m.name) || count_value_uses(&s.name, k) != 1 {
         return None;
     }
-    let outer = OuterMatch {
-        result: m,
-        arms: outer_arms,
-    };
-    let new_arms = inner_arms
-        .iter()
-        .map(|arm| MatchArm {
+    let mut new_arms = Vec::with_capacity(inner_arms.len());
+    for arm in inner_arms {
+        let body = replace_tail_union(&arm.body, &m.ty, &mut |variant, operand| {
+            let outer = outer_arms.iter().find(|a| a.tag == Some(variant))?;
+            // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
+            // two places.
+            let moved = clone_fresh(&outer.body, MARKER, counter);
+            Some(substitute_expr(
+                &moved,
+                &single(&outer.payload.name, &operand.name),
+            ))
+        })?;
+        new_arms.push(MatchArm {
             payload_state: arm.payload_state,
             tag: arm.tag,
             payload: arm.payload.clone(),
-            body: move_outer_match(&arm.body, &outer, counter),
-        })
-        .collect();
+            body,
+        });
+    }
     let rewritten = node_of(
         RcExpr::Let(
             m.clone(),
@@ -297,122 +305,93 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
     matches!(node.expr.as_ref(), RcExpr::Ret(v) if v.name == *name)
 }
 
-/// The outer match of a case-of-case, as the tails of the inner arms receive it.
-struct OuterMatch<'a> {
-    /// The variable the match binds its result to. Every tail now produces its type, and a tail that
-    /// cancels nothing binds a copy of it.
-    result: &'a RcVar,
-    /// The arms. A tail building a union takes the one matching that constructor; any other tail
-    /// takes a copy of all of them.
-    arms: &'a [MatchArm],
-}
-
-/// Move `outer` into the tails of `node`, as `case_of_case` describes.
+/// Replace the union construction at `node`'s tail — `let r = make_union(operand); ret r` — with
+/// `f(variant, operand)`. A `match` in that tail position builds a union in each of its arms, so the
+/// walk continues into them and every arm's tail is replaced. `f` declining gives `None` for the whole
+/// walk, so one walk both decides whether the tail cancels and performs the cancellation.
 ///
-/// A tail that builds a union and returns it — `let r = make_union(operand); ret r` — is where the
-/// move pays off: requiring the construction to abut the `ret` makes `r` single-use, so whatever
-/// consumed the arm's result consumed that union linearly, and the arm placed there takes the operand
-/// directly.
-fn move_outer_match(node: &RcExprNode, outer: &OuterMatch, counter: &mut u64) -> RcExprNode {
+/// Requiring the construction to abut the `ret` makes `r` single-use — bound and immediately returned
+/// — so whatever consumed the arm's result consumed that union linearly.
+///
+/// # Parameters
+/// * `node` - the body whose tail is replaced.
+/// * `result_ty` - the type of what `f` produces, which a `match` walked into now yields.
+/// * `f` - what replaces the tail, given the variant number and the payload operand of the union
+///   construction found there.
+fn replace_tail_union(
+    node: &RcExprNode,
+    result_ty: &Arc<TypeNode>,
+    f: &mut dyn FnMut(usize, &RcVar) -> Option<RcExprNode>,
+) -> Option<RcExprNode> {
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
     grow_stack(|| {
         let expr = match node.expr.as_ref() {
-            RcExpr::Ret(v) => return copy_of_outer_match(v, node, outer, counter),
+            RcExpr::Ret(_) => return None,
             RcExpr::Let(r, rhs, k) => {
                 if is_ret_of(k, &r.name) {
-                    return move_into_tail(node, r, rhs, outer, counter);
+                    if let RcRhs::Match(scrut, arms) = rhs {
+                        return replace_tail_union_of_match(node, r, scrut, arms, result_ty, f);
+                    }
+                    let (variant, operand) = union_construction(rhs)?;
+                    return f(variant, operand);
                 }
                 RcExpr::Let(
                     r.clone(),
                     rhs.clone(),
-                    move_outer_match(k, outer, counter),
+                    replace_tail_union(k, result_ty, f)?,
                 )
             }
             RcExpr::Destructure(c, fields, state, k) => RcExpr::Destructure(
                 c.clone(),
                 fields.clone(),
                 *state,
-                move_outer_match(k, outer, counter),
+                replace_tail_union(k, result_ty, f)?,
             ),
-            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), move_outer_match(k, outer, counter)),
+            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_union(k, result_ty, f)?),
             RcExpr::Retain(v, p, st, k) => {
-                RcExpr::Retain(v.clone(), p.clone(), *st, move_outer_match(k, outer, counter))
+                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail_union(k, result_ty, f)?)
             }
             RcExpr::Release(v, p, st, k) => {
-                RcExpr::Release(v.clone(), p.clone(), *st, move_outer_match(k, outer, counter))
+                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail_union(k, result_ty, f)?)
             }
         };
-        node_of(expr, &node.source)
+        Some(node_of(expr, &node.source))
     })
 }
 
-/// `move_outer_match` at the tail `let r = rhs; ret r`, which is one of three shapes: a union the arm
-/// builds, whose matching outer arm goes here in its place; a `match`, whose own arms are the tails
-/// to move into; or anything else, which keeps its binding and matches on what it produced.
-fn move_into_tail(
+/// `replace_tail_union` at a tail `let r = match scrut { arms }; ret r`: each arm's own tail is
+/// replaced, and the binding takes `result_ty`, which is what the arms now produce.
+///
+/// A body deciding between two constructors this way — read one condition, then the next — is the
+/// ordinary shape of a two-branch loop body, so this is where the union of such a loop is built.
+fn replace_tail_union_of_match(
     node: &RcExprNode,
     r: &RcVar,
-    rhs: &RcRhs,
-    outer: &OuterMatch,
-    counter: &mut u64,
-) -> RcExprNode {
-    if let RcRhs::Match(scrut, arms) = rhs {
-        let arms = arms
-            .iter()
-            .map(|arm| MatchArm {
+    scrut: &RcVar,
+    arms: &[MatchArm],
+    result_ty: &Arc<TypeNode>,
+    f: &mut dyn FnMut(usize, &RcVar) -> Option<RcExprNode>,
+) -> Option<RcExprNode> {
+    let arms = arms
+        .iter()
+        .map(|arm| {
+            Some(MatchArm {
                 payload_state: arm.payload_state,
                 tag: arm.tag,
                 payload: arm.payload.clone(),
-                body: move_outer_match(&arm.body, outer, counter),
+                body: replace_tail_union(&arm.body, result_ty, f)?,
             })
-            .collect();
-        // What the arms produce is what the outer match did, so the binding and the `ret` reading it
-        // take that type.
-        let r = RcVar {
-            ty: outer.result.ty.clone(),
-            ..r.clone()
-        };
-        let ret = node_of(RcExpr::Ret(r.clone()), &node.source);
-        return node_of(
-            RcExpr::Let(r, RcRhs::Match(scrut.clone(), arms), ret),
-            &node.source,
-        );
-    }
-    if let Some((variant, operand)) = union_construction(rhs) {
-        if let Some(arm) = outer.arms.iter().find(|a| a.tag == Some(variant)) {
-            // Fresh binders per tail, so an outer arm two tails reach does not put one name in two
-            // places.
-            let moved = clone_fresh(&arm.body, MARKER, counter);
-            return substitute_expr(&moved, &single(&arm.payload.name, &operand.name));
-        }
-    }
-    node_of(
-        RcExpr::Let(
-            r.clone(),
-            rhs.clone(),
-            copy_of_outer_match(r, node, outer, counter),
-        ),
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let r = RcVar {
+        ty: result_ty.clone(),
+        ..r.clone()
+    };
+    let ret = node_of(RcExpr::Ret(r.clone()), &node.source);
+    Some(node_of(
+        RcExpr::Let(r, RcRhs::Match(scrut.clone(), arms), ret),
         &node.source,
-    )
-}
-
-/// A copy of the outer match, taking `v`, for a tail that cancels nothing. Its binders are fresh, so
-/// the copies a move leaves in several tails name nothing in common.
-fn copy_of_outer_match(
-    v: &RcVar,
-    node: &RcExprNode,
-    outer: &OuterMatch,
-    counter: &mut u64,
-) -> RcExprNode {
-    let copied = node_of(
-        RcExpr::Let(
-            outer.result.clone(),
-            RcRhs::Match(v.clone(), outer.arms.to_vec()),
-            node_of(RcExpr::Ret(outer.result.clone()), &node.source),
-        ),
-        &node.source,
-    );
-    clone_fresh(&copied, MARKER, counter)
+    ))
 }
 
 /// Replace the terminal `ret r` of `node` with `f(r)`, threading through the continuation chain. A
