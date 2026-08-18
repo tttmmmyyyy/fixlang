@@ -334,11 +334,7 @@ fn replace_tail_union(
                     let (variant, operand) = union_construction(rhs)?;
                     return f(variant, operand);
                 }
-                RcExpr::Let(
-                    r.clone(),
-                    rhs.clone(),
-                    replace_tail_union(k, result_ty, f)?,
-                )
+                RcExpr::Let(r.clone(), rhs.clone(), replace_tail_union(k, result_ty, f)?)
             }
             RcExpr::Destructure(c, fields, state, k) => RcExpr::Destructure(
                 c.clone(),
@@ -347,12 +343,18 @@ fn replace_tail_union(
                 replace_tail_union(k, result_ty, f)?,
             ),
             RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_union(k, result_ty, f)?),
-            RcExpr::Retain(v, p, st, k) => {
-                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail_union(k, result_ty, f)?)
-            }
-            RcExpr::Release(v, p, st, k) => {
-                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail_union(k, result_ty, f)?)
-            }
+            RcExpr::Retain(v, p, st, k) => RcExpr::Retain(
+                v.clone(),
+                p.clone(),
+                *st,
+                replace_tail_union(k, result_ty, f)?,
+            ),
+            RcExpr::Release(v, p, st, k) => RcExpr::Release(
+                v.clone(),
+                p.clone(),
+                *st,
+                replace_tail_union(k, result_ty, f)?,
+            ),
         };
         Some(node_of(expr, &node.source))
     })
