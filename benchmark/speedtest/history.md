@@ -16,7 +16,7 @@ thread of the measurement's core stayed out of, and it is kept for a case whose 
 from main memory often enough for another program to take the cache from it. The same C
 counterpart, byte for byte, read 203,745,780 cycles under 11 cores of other work and 203,299,270
 with the machine to itself, a difference of 0.22%. The `-ram` columns carry the main-memory
-accesses the second condition reads.
+accesses the cache condition reads.
 
 **The split columns are comparable from `b2de6116d89ff9d43449c2a12fe5c29dd1304bb4` down, and not
 across it.** The counters were read with whatever environment the harness inherited until that row,

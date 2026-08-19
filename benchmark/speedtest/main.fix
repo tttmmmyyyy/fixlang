@@ -226,9 +226,9 @@ main = (
         let inst = case_name + "-inst";
         let mem = case_name + "-mem";
         let ram = case_name + "-ram";
-        // Add to the log. `-ram` counts the accesses that reached main memory: it is what
-        // separates a case whose cycle count another program can move from one whose it
-        // cannot, and the program decides it, so it reads the same however busy the machine is.
+        // Add to the log. `-ram` counts the accesses that reached main memory: it separates a
+        // case whose cycle count another program can move from a case where it cannot, and the
+        // program decides it, so it reads the same however busy the machine is.
         let log = log.set(inst, log.@size - 1, bench.@(0));
         let log = log.set(mem, log.@size - 1, bench.@(1));
         let log = log.set(ram, log.@size - 1, bench.@(2));
@@ -239,10 +239,11 @@ main = (
         // the time diverge -- shows up somewhere in this log.
         //
         // Both are read on every run. The cycle count survives a machine with other work on it
-        // as long as that work cannot reach the case through the cache, which the case's own
-        // `-ram` count decides; `perf_counters.py` applies the rule and leaves the field empty
-        // where it does not hold. The `contention` column says how much of the machine the run
-        // that produced this row had.
+        // when that work reached neither the core nor the cache: `perf_counters.py` runs on one
+        // thread of a core and keeps the windows the other thread stayed out of, and it reads
+        // the case's own `-ram` count to say whether the shared cache could have cost it. It
+        // leaves the field empty where either condition fails. The `contention` column says how
+        // much of the machine the run that produced this row had.
         // On a machine without the counters both columns stay empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
             "--dram-accesses", bench.@(2), "--instructions", bench.@(0),
@@ -261,7 +262,7 @@ main = (
         };
         let max_contention = max(max_contention, case_contention);
         // A case may carry `ref.c` and `ref.rs`: the same program on the same input, read
-        // with the same four counters, so the chart can show how far the Fix line is from C
+        // with the same counters, so the chart can show how far the Fix line is from C
         // and Rust on each of them. The column name keeps the language last, which is what
         // holds these out of the cost line printed at the end -- a reference does not move
         // with a pass sequence, so it has no business in what the pass search compares.
@@ -301,7 +302,8 @@ main = (
             + " cases came away without a cycle count, with other work taking "
             + max_contention.to_string_precision(2_U8) + " cores while they ran. A count is kept"
             + " from a window the thread beside the measurement stayed out of, and from a case"
-            + " whose data does not come from main memory: " + uncounted.to_iter.join(", "))
+            + " that reaches main memory seldom enough for the shared cache not to cost it: "
+            + uncounted.to_iter.join(", "))
     );;
 
     // Save the log to the log file.

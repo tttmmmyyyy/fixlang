@@ -46,9 +46,9 @@ METRICS = [
      "several windows of runs. This is the only column here that is not deterministic. Other work "
      "reaches it two ways: over the core the run shares with the thread beside it, which the "
      "harness pins for and watches, and over the cache every core shares, which costs a program in "
-     "proportion to how much of its data comes from main memory. A window either could have moved "
-     "leaves the cell empty, so the series has gaps; the contention figure beside each commit says "
-     "how much of the machine the run had.",
+     "proportion to how much of its data comes from main memory. Where either of them could have "
+     "moved a reading, the cell is left empty, so the series has gaps; the contention figure beside "
+     "each commit says how much of the machine the run had.",
      "ratio", "perf"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "

@@ -6,8 +6,8 @@ the Fix line a reference to be read against -- how far the language is from C on
 program, tracked over time rather than sampled once.
 
 Building and measuring are separate commands so that the harness can get every build out
-of the way before it reads a counter: the cycle count is dropped on a machine that is busy,
-and a compiler running between two measurements is what makes it busy.
+of the way before it reads a counter: a cycle count other work could have moved is dropped,
+and a compiler running between two measurements is that other work.
 
 Run from inside a case directory. Exits 2 when the case carries no counterpart for the
 language asked for.

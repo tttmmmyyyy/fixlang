@@ -10,11 +10,11 @@ code layout or branch density shows up.
 
 The split count is decided by the program and the environment it is given; the cycle count is
 not, so it is the minimum over `--windows` windows, and it is reported when nothing else could
-have moved it. Other work reaches it two ways: over the core it shares with the thread beside it,
-which the run is pinned and the sibling watched for, and over the cache every core shares, which
-the caller answers for by passing what cachegrind counted for this program. A run either could
-have moved leaves the cycle field empty rather than logging a figure that says more about that
-competition than about the program.
+have moved it. Other work reaches it two ways. It runs on the other thread of the same core: the
+measurement is pinned to one CPU, and how busy that thread was is read for every window. And it
+takes the cache every core shares: the caller answers for that by passing what cachegrind counted
+for this program. Where either of them could have moved a run, the cycle field comes back empty,
+since a figure logged there would say more about that competition than about the program.
 
 Exits non-zero when the counters are unavailable (no hardware PMU, or
 `kernel.perf_event_paranoid` above 2) or when the PMU had to time-slice them, so a caller
@@ -47,9 +47,9 @@ CYCLE_EVENT = "cycles:u"
 QUIET_CONTENTION = 0.5
 
 # How often a program's data comes from main memory, per instruction, before another process can
-# change its cycle count by taking the cache from it. A program above this rate loses between 1.5
-# and 2.1 times its cycles when four processes walk twice the last level cache beside it; one
-# below it stays within the spread of an undisturbed reading.
+# change its cycle count by taking the cache from it. A program above this rate takes between 1.5
+# and 2.1 times the cycles when four processes walk twice the last level cache beside it; one
+# below it takes the same cycles it takes undisturbed.
 CONTENDED_DRAM_RATE = 0.002
 
 # How much of a run the other thread of the measurement's core may be busy for. The two threads
@@ -60,9 +60,9 @@ CONTENDED_DRAM_RATE = 0.002
 SIBLING_BUSY_LIMIT = 0.5
 
 # The shortest run the sibling reading can speak for. `/proc/stat` counts in ticks of a
-# hundredth of a second, so a run of a few of them puts the reading's own quantisation above the
-# limit it is compared with. A program that returns sooner is run again until the window holds
-# enough of them, and the cycle count taken is the lowest of those runs.
+# hundredth of a second, so over a run of a few ticks the reading rounds by more than
+# `SIBLING_BUSY_LIMIT` itself. A program that returns sooner is run again until the window is this
+# long, and the cycle count taken is the lowest of those runs.
 MINIMUM_WINDOW = 0.2
 
 # The environment the measured command gets, fixed the way `cachegrind.py` fixes it. The
@@ -109,11 +109,10 @@ def measurement_core():
 
 CPU, SIBLING = measurement_core()
 
-# The programs inherit this, so they run where the sibling is watched. Setting it here rather
-# than putting `taskset` in front of the command keeps the chain of programs that leads to the
-# measured one exactly as long as it was: the initial stack is laid out above that chain's
-# arguments, and moving it moves which accesses straddle a cache line, which is the `-splits`
-# column.
+# The programs inherit this, so they run where the sibling is watched. Setting it in this process
+# leaves the chain of programs that leads to the measured one as short as it can be: the initial
+# stack is laid out above that chain's arguments, so a `taskset` in front of the command would move
+# which accesses straddle a cache line, which is the `-splits` column.
 os.sched_setaffinity(0, {CPU})
 
 
@@ -261,12 +260,12 @@ def cycles_are_comparable(contention, dram_accesses, instructions):
     """Whether a cycle count read under this much competition says more about the program than
     about the competition.
 
-    Two channels carry other work into a cycle count, and this answers for the second of them.
-    The core the program runs on is shared with the thread beside it, which `measure` answers
-    for by keeping only the windows that thread stayed out of. What is left is the cache, which
-    every core on the machine shares: another process takes a line the program was going to
-    find there, and the program that loses time to it is the one that goes to main memory often
-    enough for the loss to add up.
+    Other work reaches a cycle count two ways, and this answers for one of them. The core the
+    program runs on is shared with the thread beside it, which `measure` answers for by keeping
+    only the windows that thread stayed out of. What is left is the cache, which every core on
+    the machine shares: another process takes a line the program was going to find there, and the
+    program that loses time to it is the one that goes to main memory often enough for the loss to
+    add up.
 
     A program the scheduler takes the CPU from resumes with the same count of cycles ahead of
     it, and one the machine clocks down spends the same count getting there, so neither of those
@@ -297,8 +296,8 @@ def take_options(argv):
 
 
 def self_check():
-    """Answer what needs no machine to read, so a rule that stopped holding is seen here rather
-    than in a column of the log.
+    """Check the rules that need no machine to read, so one that stopped holding shows up here
+    rather than in a column of the log.
 
     The counters themselves need a PMU and a program to run; these are the parts that decide what
     is done with them, and they cost microseconds.
@@ -315,7 +314,7 @@ def self_check():
     assert cycles_are_comparable(QUIET_CONTENTION / 2, None, None)
     assert not cycles_are_comparable(busy, None, 10 ** 9)
     assert not cycles_are_comparable(busy, 10 ** 3, None)
-    # Above the rate another process reaches the count through the cache; below it it cannot.
+    # Above the rate another process reaches the count through the cache; below the rate it cannot.
     below = int(CONTENDED_DRAM_RATE * 10 ** 9 / 2)
     above = int(CONTENDED_DRAM_RATE * 10 ** 9 * 2)
     assert cycles_are_comparable(busy, below, 10 ** 9)
@@ -336,8 +335,8 @@ def self_check():
         raise AssertionError("--windows without a value was taken as an option")
 
     # Only the windows the sibling stayed out of reach the cycle count, and where none did there is
-    # no count to report. The window left out below carries the lowest count of the three, so a gate
-    # that stopped rejecting it would be answered with that count.
+    # no count to report. The window left out below carries the lowest count of the three, so
+    # `measure` letting it through would show up here as that count.
     global read_window
     canned = []
     real, read_window = read_window, lambda argv, splits: canned.pop(0)
