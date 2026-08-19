@@ -432,8 +432,8 @@ impl ProjectFile {
         // This ensures that when a local path dependency changes its own dependencies,
         // the lock file is invalidated and re-created.
         for dep in &deps {
-            if let Some(path) = &dep.path {
-                let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
+            if let Some(dep_dir) = &dep.path {
+                let proj_file_path = self.join_to_project_dir(dep_dir).join(PROJECT_FILE_PATH);
                 if let Ok(content) = fs::read_to_string(&proj_file_path) {
                     hash_source += &content;
                 }
@@ -717,7 +717,7 @@ impl ProjectFile {
     /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
-        let source = self
+        let project_origin = self
             .source
             .clone()
             .expect("ProjectFile::source must be set by the loader before set_config");
@@ -862,7 +862,7 @@ impl ProjectFile {
                 command: command.clone(),
                 project_name: project_name.clone(),
                 mode: PreliminaryCommandMode::Build,
-                source: source.clone(),
+                source: project_origin.clone(),
             });
         }
         if mode == BuildConfigType::Test {
@@ -877,7 +877,7 @@ impl ProjectFile {
                     command: command.clone(),
                     project_name: project_name.clone(),
                     mode: PreliminaryCommandMode::Test,
-                    source: source.clone(),
+                    source: project_origin.clone(),
                 });
             }
         }
@@ -1190,8 +1190,8 @@ impl ProjectFile {
             if &dep.name != name {
                 continue;
             }
-            if let Some(path) = &dep.path {
-                return ProjectSource::Local(self.join_to_project_dir(path));
+            if let Some(dep_dir) = &dep.path {
+                return ProjectSource::Local(self.join_to_project_dir(dep_dir));
             }
             if let Some(git) = &dep.git {
                 return ProjectSource::Git(git.url.clone(), None);
@@ -1252,56 +1252,56 @@ impl ProjectFile {
         Ok(())
     }
 
-    /// Appends a dependency entry for each project of `proj_vers` to this project file, taking the
+    /// Appends a dependency entry for each project of `proj_specs` to this project file, taking the
     /// repository of each from the registries `fix_config` names.
     ///
     /// # Arguments
     ///
-    /// * `proj_vers` - Each is `proj-name` or `proj-name@ver_req`. A name written without a version
-    ///   requirement takes the latest tagged version of the project.
+    /// * `proj_specs` - Each is `proj-name` or `proj-name@ver_req`. A name written without a
+    ///   version requirement takes the latest tagged version of the project.
     /// * `mode` - `Build` writes `[[dependencies]]` entries, `Test` writes `[[test_dependencies]]`
     ///   ones.
     pub fn add_dependencies(
         &self,
-        proj_vers: &Vec<String>,
+        proj_specs: &Vec<String>,
         fix_config: &ConfigFile,
         mode: BuildConfigType,
     ) -> Result<(), Errors> {
-        let mut added = "".to_string();
+        let mut added_toml = "".to_string();
 
-        // Parse each element of `proj_vers` as the form `proj-name@ver_req`.
-        let mut projs: Vec<(String, Option<String>)> = vec![]; // (proj_name, ver_str)
-        for proj_ver in proj_vers {
-            let proj_ver_split = proj_ver.split('@').collect::<Vec<&str>>();
-            if proj_ver_split.len() == 0 || proj_ver_split.len() > 2 {
+        // Parse each element of `proj_specs` as the form `proj-name@ver_req`.
+        let mut proj_ver_reqs: Vec<(String, Option<String>)> = vec![]; // (proj_name, ver_req)
+        for proj_spec in proj_specs {
+            let proj_spec_parts = proj_spec.split('@').collect::<Vec<&str>>();
+            if proj_spec_parts.len() == 0 || proj_spec_parts.len() > 2 {
                 return Err(Errors::from_msg(format!(
                     "Invalid project specification: \"{}\". It should be in the form \"proj-name\" or \"proj-name@ver_req\"",
-                    proj_ver
+                    proj_spec
                 )));
             }
-            let proj_name = proj_ver_split[0];
+            let proj_name = proj_spec_parts[0];
             ProjectFile::validate_project_name(&proj_name.to_string(), None)?;
-            let version = if proj_ver_split.len() == 2 {
-                let _ = VersionReq::parse(proj_ver_split[1]).map_err(|e| {
+            let version = if proj_spec_parts.len() == 2 {
+                let _ = VersionReq::parse(proj_spec_parts[1]).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to parse version requirement in \"{}\": {:?}",
-                        proj_ver, e
+                        proj_spec, e
                     ))
                 })?;
-                Some(proj_ver_split[1].to_string())
+                Some(proj_spec_parts[1].to_string())
             } else {
                 None
             };
-            projs.push((proj_name.to_string(), version));
+            proj_ver_reqs.push((proj_name.to_string(), version));
         }
 
         // Check if dependencies to the same project are specified multiple times.
-        for i in 0..projs.len() {
-            for j in i + 1..projs.len() {
-                if projs[i].0 == projs[j].0 {
+        for i in 0..proj_ver_reqs.len() {
+            for j in i + 1..proj_ver_reqs.len() {
+                if proj_ver_reqs[i].0 == proj_ver_reqs[j].0 {
                     return Err(Errors::from_msg(format!(
                         "The project \"{}\" is specified multiple times.",
-                        projs[i].0
+                        proj_ver_reqs[i].0
                     )));
                 }
             }
@@ -1309,8 +1309,8 @@ impl ProjectFile {
 
         // Check if the project file already has the dependencies.
         let existing_deps = self.get_dependencies(mode);
-        for proj in &projs {
-            let proj_name = &proj.0;
+        for proj_ver_req in &proj_ver_reqs {
+            let proj_name = &proj_ver_req.0;
             if existing_deps.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
                     "The project file already has a dependency on \"{}\".",
@@ -1325,8 +1325,8 @@ impl ProjectFile {
 
             // For each project to be added, search it in the registry file.
             let mut added_indices = Set::default();
-            for (i, proj) in projs.iter().enumerate() {
-                let (proj_name, version) = proj;
+            for (proj_idx, proj_ver_req) in proj_ver_reqs.iter().enumerate() {
+                let (proj_name, version) = proj_ver_req;
                 if let Some(proj_info) = reg_file
                     .projects
                     .iter()
@@ -1343,19 +1343,19 @@ impl ProjectFile {
                         Some(v) => v.clone(),
                         None => {
                             let (_tmp_dir, repo) = clone_git_repo(&proj_info.git)?;
-                            let vers = get_versions_from_repo(&repo)?;
-                            let mut tagged_vers = vers
+                            let version_infos = get_versions_from_repo(&repo)?;
+                            let mut tagged_versions = version_infos
                                 .iter()
-                                .filter_map(|vi| {
-                                    if vi.tagged {
-                                        Some(vi.version.clone())
+                                .filter_map(|version_info| {
+                                    if version_info.tagged {
+                                        Some(version_info.version.clone())
                                     } else {
                                         None
                                     }
                                 })
                                 .collect::<Vec<_>>();
-                            tagged_vers.sort();
-                            if tagged_vers.is_empty() {
+                            tagged_versions.sort();
+                            if tagged_versions.is_empty() {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
@@ -1363,7 +1363,7 @@ impl ProjectFile {
                                 ));
                                 "*".to_string()
                             } else {
-                                let latest = tagged_vers.pop().unwrap();
+                                let latest = tagged_versions.pop().unwrap();
                                 let latest =
                                     format!("{}.{}.{}", latest.major, latest.minor, latest.patch);
                                 info_msg(&format!(
@@ -1379,35 +1379,35 @@ impl ProjectFile {
                         BuildConfigType::Build => "[[dependencies]]",
                         BuildConfigType::Test => "[[test_dependencies]]",
                     };
-                    added += "\n\n";
-                    added += section_name;
-                    added += &format!("\nname = \"{}\"", proj_name);
-                    added += &format!("\nversion = \"{}\"", version);
-                    added += &format!("\ngit = {{ url = \"{}\" }}", proj_info.git);
+                    added_toml += "\n\n";
+                    added_toml += section_name;
+                    added_toml += &format!("\nname = \"{}\"", proj_name);
+                    added_toml += &format!("\nversion = \"{}\"", version);
+                    added_toml += &format!("\ngit = {{ url = \"{}\" }}", proj_info.git);
 
-                    added_indices.insert(i);
+                    added_indices.insert(proj_idx);
                 }
             }
 
             // Remove the projects that have been added.
-            projs = projs
+            proj_ver_reqs = proj_ver_reqs
                 .into_iter()
                 .enumerate()
-                .filter_map(|(i, v)| {
-                    if added_indices.contains(&i) {
+                .filter_map(|(proj_idx, proj_ver_req)| {
+                    if added_indices.contains(&proj_idx) {
                         None
                     } else {
-                        Some(v)
+                        Some(proj_ver_req)
                     }
                 })
                 .collect();
         }
 
         // Check if all the projects have been added.
-        for proj in projs {
+        for proj_ver_req in proj_ver_reqs {
             return Err(Errors::from_msg(format!(
                 "The project \"{}\" is not found in the registries.",
-                proj.0
+                proj_ver_req.0
             )));
         }
 
@@ -1422,7 +1422,7 @@ impl ProjectFile {
                     e
                 ))
             })?;
-        file.write_all(added.as_bytes()).map_err(|e| {
+        file.write_all(added_toml.as_bytes()).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to write to file \"{}\": {:?}",
                 self.path.to_string_lossy().to_string(),

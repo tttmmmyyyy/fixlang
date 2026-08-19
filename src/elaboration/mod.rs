@@ -96,11 +96,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
-        let modules = program.modules_from_files(&diag_config.files)?;
+        let target_module_names = program.modules_from_files(&diag_config.files)?;
         let mut errors = Errors::empty();
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
             &typechecker,
-            &modules,
+            &target_module_names,
             diag_config.target_symbols.as_deref(),
             config,
         ));
@@ -115,10 +115,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // This ensures opaque type resolutions are available before instantiation.
     {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
-        let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
+        let all_module_names: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
         program.resolve_namespace_and_check_type_in_modules(
             &typechecker,
-            &all_modules,
+            &all_module_names,
             None,
             config,
         )?;
@@ -204,11 +204,13 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     let mut program = make_std_mod(config)?;
 
     // Parse all source files.
-    let mut modules = vec![];
+    let mut parsed_programs = vec![];
     let mut errors = Errors::empty();
     for file_path in &config.source_files {
-        let res = parse_file_path(file_path.clone(), config);
-        errors.eat_err_or(res, |mod_| modules.push(mod_));
+        let parse_result = parse_file_path(file_path.clone(), config);
+        errors.eat_err_or(parse_result, |parsed_program| {
+            parsed_programs.push(parsed_program)
+        });
     }
 
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
@@ -217,14 +219,14 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         // projects alone. This gives the language server the information it needs for code
         // completion even when the root project has a parse error.
         if errors.has_error() {
-            let mut dependency_modules = vec![];
-            for mod_ in modules {
-                let mods = mod_.modules_from_files(&diag_config.files)?;
-                if mods.is_empty() {
-                    dependency_modules.push(mod_);
+            let mut dependency_programs = vec![];
+            for parsed_program in parsed_programs {
+                let target_module_names = parsed_program.modules_from_files(&diag_config.files)?;
+                if target_module_names.is_empty() {
+                    dependency_programs.push(parsed_program);
                 }
             }
-            modules = dependency_modules;
+            parsed_programs = dependency_programs;
         }
         program.deferred_errors.append(errors);
     } else {
@@ -233,8 +235,8 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     }
 
     // Link all modules.
-    for mod_ in modules {
-        program.link(mod_, false)?; // If an error occurs in linking, return the error.
+    for parsed_program in parsed_programs {
+        program.link(parsed_program, false)?; // If an error occurs in linking, return the error.
     }
 
     // Resolve imports.

@@ -84,21 +84,21 @@ mod integration_tests {
         }
 
         // Verify fixdeps.lock exists
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            lock_file.exists(),
+            lock_file_path.exists(),
             "fixdeps.lock should be created in build mode"
         );
 
         // Verify fixdeps.test.lock does NOT exist
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            !test_lock_file.exists(),
+            !test_lock_file_path.exists(),
             "fixdeps.test.lock should NOT be created in build mode"
         );
 
         // Read and verify lock file contents
-        let lock_content = fs::read_to_string(&lock_file).expect("Failed to read lock file");
+        let lock_content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
 
         // Check that normal-dep is included
         assert!(
@@ -139,22 +139,22 @@ mod integration_tests {
         }
 
         // Verify fixdeps.test.lock was created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            test_lock_file.exists(),
+            test_lock_file_path.exists(),
             "fixdeps.test.lock should be created by `fix test`"
         );
 
         // Verify fixdeps.lock was NOT created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            !lock_file.exists(),
+            !lock_file_path.exists(),
             "fixdeps.lock should NOT be created by `fix test`"
         );
 
         // Read and verify test lock file contents
         let test_lock_content =
-            fs::read_to_string(&test_lock_file).expect("Failed to read test lock file");
+            fs::read_to_string(&test_lock_file_path).expect("Failed to read test lock file");
 
         // Check that both dependencies are included in test lock file
         assert!(
@@ -197,16 +197,16 @@ mod integration_tests {
         }
 
         // Verify fixdeps.lock was created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            lock_file.exists(),
+            lock_file_path.exists(),
             "fixdeps.lock should be created by `fix deps update`"
         );
 
         // Verify fixdeps.test.lock was NOT created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            !test_lock_file.exists(),
+            !test_lock_file_path.exists(),
             "fixdeps.test.lock should NOT be created by `fix deps update` (without --test)"
         );
 
@@ -245,7 +245,7 @@ mod integration_tests {
         }
 
         // Verify lock file contents
-        let lock_content = fs::read_to_string(&lock_file).expect("Failed to read lock file");
+        let lock_content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
         assert!(
             lock_content.contains("normal-dep"),
             "Lock file should contain normal-dep"
@@ -279,16 +279,16 @@ mod integration_tests {
         }
 
         // Verify fixdeps.test.lock was created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            test_lock_file.exists(),
+            test_lock_file_path.exists(),
             "fixdeps.test.lock should be created by `fix deps update --test`"
         );
 
         // Verify fixdeps.lock was NOT created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            !lock_file.exists(),
+            !lock_file_path.exists(),
             "fixdeps.lock should NOT be created by `fix deps update --test`"
         );
 
@@ -328,7 +328,7 @@ mod integration_tests {
 
         // Verify test lock file contents
         let test_lock_content =
-            fs::read_to_string(&test_lock_file).expect("Failed to read test lock file");
+            fs::read_to_string(&test_lock_file_path).expect("Failed to read test lock file");
         assert!(
             test_lock_content.contains("normal-dep"),
             "Test lock file should contain normal-dep"
