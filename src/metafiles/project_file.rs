@@ -515,11 +515,18 @@ impl ProjectFile {
     fn source_file_entries(&self, mode: BuildConfigType) -> Vec<&Spanned<PathBuf>> {
         let mut entries: Vec<&Spanned<PathBuf>> = self.build.files.iter().collect();
         if mode == BuildConfigType::Test {
-            if let Some(test) = self.build.test.as_ref() {
-                entries.extend(test.files.iter());
-            }
+            entries.extend(self.test_file_entries());
         }
         entries
+    }
+
+    /// The source-file entries listed in the `[build.test]` section of this project's own project
+    /// file, each paired (via `Spanned`) with its byte range in that file.
+    fn test_file_entries(&self) -> Vec<&Spanned<PathBuf>> {
+        self.build
+            .test
+            .as_ref()
+            .map_or(vec![], |test| test.files.iter().collect())
     }
 
     /// The paths of this project's own source files, resolved against the project directory.
@@ -545,13 +552,11 @@ impl ProjectFile {
 
     /// The paths of the source files the `[build.test]` section adds, resolved against the project
     /// directory. A test build compiles these beside the ones an ordinary build compiles.
-    pub fn get_test_files(&self) -> Vec<PathBuf> {
-        self.build.test.as_ref().map_or(vec![], |test| {
-            test.files
-                .iter()
-                .map(|entry| self.join_to_project_dir(entry.get_ref()))
-                .collect()
-        })
+    fn get_test_files(&self) -> Vec<PathBuf> {
+        self.test_file_entries()
+            .iter()
+            .map(|entry| self.join_to_project_dir(entry.get_ref()))
+            .collect()
     }
 
     /// Checks that every source file listed in the project file exists on disk. Each error points at
@@ -655,8 +660,6 @@ impl ProjectFile {
         // attach to any file.
         self.check_source_files_exist(mode)?;
 
-        let files = self.get_files(mode);
-
         // Record what this project provides and what it declares, so that an import reaching past
         // the projects it declares can be told from one that stays within them. The sources of a
         // test build carry declarations of their own, since the test dependencies are the ones the
@@ -680,6 +683,7 @@ impl ProjectFile {
         // user code (mirroring rustc/swiftc: a deprecated use inside a
         // dependency is the dependency's problem, not the user's).
         // Dependent-project files are pushed to `source_files` only.
+        let files = self.get_files(mode);
         if is_dependent_proj {
             config.source_files.extend(files);
         } else {

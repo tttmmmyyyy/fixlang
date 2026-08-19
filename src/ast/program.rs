@@ -647,6 +647,14 @@ pub struct ModuleInfo {
     pub source: Span,
 }
 
+impl ModuleInfo {
+    /// The path of the file the module is declared in, canonicalized so that two paths leading to
+    /// that file give one path.
+    pub fn absolute_source_path(&self) -> Result<PathBuf, Errors> {
+        to_absolute_path(&self.source.input.file_path)
+    }
+}
+
 /// A Fix program: the modules linked into it, everything they declare, and the symbols the linked
 /// whole is instantiated into.
 ///
@@ -754,7 +762,7 @@ impl Program {
         let path = to_absolute_path(path).ok()?;
         self.modules
             .iter()
-            .find(|mi| to_absolute_path(&mi.source.input.file_path).ok().as_ref() == Some(&path))
+            .find(|mi| mi.absolute_source_path().ok().as_ref() == Some(&path))
     }
 
     /// The names of the entry point and the exported functions.
@@ -774,7 +782,7 @@ impl Program {
         }
         let mut mod_names = vec![];
         for mod_info in &self.modules {
-            let mod_file = to_absolute_path(&mod_info.source.input.file_path)?;
+            let mod_file = mod_info.absolute_source_path()?;
             if abs_files.contains(&mod_file) {
                 mod_names.push(mod_info.name.clone());
             }
@@ -2408,7 +2416,7 @@ impl Program {
         // the files a `--file` option names outside of any project.
         let mut module_to_project: Map<Name, &ProjectSources> = Map::default();
         for module in &self.modules {
-            let Ok(path) = to_absolute_path(&module.source.input.file_path) else {
+            let Ok(path) = module.absolute_source_path() else {
                 continue;
             };
             let Some(project) = file_to_project.get(&path) else {
@@ -2441,9 +2449,7 @@ impl Program {
             }
             let key = (importer.name.clone(), imported.name.clone());
             let is_earliest = match undeclared.get(&key) {
-                Some((_, found)) => {
-                    (&span.input.file_path, span.start) < (&found.input.file_path, found.start)
-                }
+                Some((_, found)) => span < *found,
                 None => true,
             };
             if is_earliest {
@@ -2453,9 +2459,7 @@ impl Program {
 
         let mut reported: Vec<((ProjectName, ProjectName), (Name, Span))> =
             undeclared.into_iter().collect();
-        reported.sort_by(|(_, (_, lhs)), (_, (_, rhs))| {
-            (&lhs.input.file_path, lhs.start).cmp(&(&rhs.input.file_path, rhs.start))
-        });
+        reported.sort_by(|(_, (_, lhs)), (_, (_, rhs))| lhs.cmp(rhs));
 
         let mut diagnostics = Errors::empty();
         for ((importer, imported), (module, span)) in reported {
