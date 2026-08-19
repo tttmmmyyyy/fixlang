@@ -1,0 +1,33 @@
+module Main;
+
+// A struct carrying the function it was built with, in the shape the iterator combinators use: the
+// consumer destructures it, calls what it finds in the field, and builds another of the same struct
+// out of what is left.
+type Stepper = unbox struct { n : I64, f : I64 -> I64 };
+
+// The field is read out and called on every round, and the struct handed to the next round holds
+// the same function, so a copy of this may call that function by name.
+stepping : I64 -> Stepper -> I64;
+stepping = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    stepping(acc + f(n), Stepper { n : n - 1, f : f })
+);
+
+// The struct handed to the next round holds a different function, so the one a call reaches depends
+// on which round it is in and no copy can name it.
+swapping : I64 -> Stepper -> I64;
+swapping = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    let g = |x| x + 1;
+    swapping(acc + f(n), Stepper { n : n - 1, f : g })
+);
+
+main : IO () = (
+    let k = 3;
+    let f = |x| x * k;
+    let stepped = stepping(0, Stepper { n : 4, f : f });
+    let swapped = swapping(0, Stepper { n : 4, f : f });
+    println((stepped + swapped).to_string)
+);

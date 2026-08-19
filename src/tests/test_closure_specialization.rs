@@ -46,6 +46,10 @@ mod integration_tests {
     /// What `opaque_boundary` prints: `through_struct` 30, `through_array` 30, `through_union` -2.
     const OPAQUE_BOUNDARY_OUTPUT: &str = "58";
 
+    /// What `struct_field_closure` prints: `stepping` sums `3 * n` over `4..1` for 30, and
+    /// `swapping` sums `3 * 4` and then `n + 1` over `3..1` for 21.
+    const STRUCT_FIELD_CLOSURE_OUTPUT: &str = "51";
+
     /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
     /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
     const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
@@ -283,6 +287,44 @@ mod integration_tests {
         for opt_level in ["basic", "max", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
         }
+    }
+
+    /// A function that reads a closure out of a struct argument and calls it gets a copy taking the
+    /// capture list of that closure beside the struct, and calls the lambda by name. A function whose
+    /// struct argument can hold a different closure on the next round gets no such copy.
+    #[test]
+    pub fn test_a_closure_in_a_struct_argument_is_called_by_name() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_closure");
+        for opt_level in ["basic", "experimental"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_CLOSURE_OUTPUT);
+        }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", STRUCT_FIELD_CLOSURE_OUTPUT);
+
+        let stepping = copies_of(&dump, "Main::stepping");
+        assert_eq!(
+            stepping.len(),
+            1,
+            "`stepping` reads the closure out of its struct argument and calls it, so it should have \
+             one copy, but the dump names: {:?}",
+            stepping
+        );
+        let calls_the_lambda_by_name = dump
+            .split("\nfn ")
+            .filter(|function| function.starts_with("Main::stepping"))
+            .any(|function| function.contains(CLOSURE_LAM_SUFFIX));
+        assert!(
+            calls_the_lambda_by_name,
+            "the copy of `stepping` should call the lifted lambda by name, but no body of it names \
+             one"
+        );
+
+        let swapping = copies_of(&dump, "Main::swapping");
+        assert!(
+            swapping.is_empty(),
+            "`swapping` puts another closure in the field on every round, so no copy of it can name \
+             the one it was given, but the dump names: {:?}",
+            swapping
+        );
     }
 
     /// A narrowed capture field serves three readers at once: a call made there, a function the

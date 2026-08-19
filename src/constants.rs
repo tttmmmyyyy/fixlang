@@ -128,6 +128,9 @@ pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
 /// The suffix, followed by a hash of which argument received which decaptured lambda, of a
 /// function specialized on the lambdas passed to it.
 pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
+/// The name, followed by the argument and the field it belongs to, of the parameter through which a
+/// specialized copy receives the capture list of the lambda held at a field of a struct argument.
+pub const CLOSURE_SPEC_CAP_NAME: &str = "#closure_spec_cap";
 /// The suffix of the local binding holding the call of a decaptured lambda, which an inline-LLVM
 /// expression reads in place of the variable that held the lambda's capture list.
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
