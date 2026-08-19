@@ -5,7 +5,7 @@
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{fs, path::PathBuf};
+    use std::{fs, path::PathBuf, process::Output};
     use tempfile::TempDir;
 
     // Get the path to the test cases directory
@@ -15,17 +15,40 @@ mod integration_tests {
         path
     }
 
+    // Copy the test cases into a temporary directory and return it beside the directory of the
+    // project at `project_path` within it. The whole set is copied every time, so that a project
+    // reaches the ones it depends on by the relative paths its project file writes.
+    fn setup_case_env(project_path: &str) -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let test_cases_dst = temp_dir.path().to_path_buf();
+        copy_dir_recursive(&get_test_cases_dir(), &test_cases_dst)
+            .expect("Failed to copy test cases");
+        let project_dir = test_cases_dst.join(project_path);
+        (temp_dir, project_dir)
+    }
+
     // Create a temporary test environment with copied project files
     fn setup_test_env() -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_cases_src = get_test_cases_dir();
-        let test_cases_dst = temp_dir.path().to_path_buf();
+        setup_case_env("dependencies_for_test/main_project")
+    }
 
-        // Copy all test case directories
-        copy_dir_recursive(&test_cases_src, &test_cases_dst).expect("Failed to copy test cases");
-
-        let main_project_dir = test_cases_dst.join("dependencies_for_test/main_project");
-        (temp_dir, main_project_dir)
+    // The build of the project at `project_path`, run in a temporary copy of the test cases. The
+    // temporary directory is returned so that it outlives the output.
+    fn build_case(project_path: &str) -> (TempDir, Output) {
+        let (temp_dir, project_dir) = setup_case_env(project_path);
+        cleanup_test_project(&project_dir);
+        let output = fix_command()
+            .arg("build")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix build");
+        assert!(
+            output.status.success(),
+            "fix build failed:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        (temp_dir, output)
     }
 
     // Clean up lock files and build artifacts before running test
@@ -323,6 +346,66 @@ mod integration_tests {
         assert!(
             stdout.contains("PASS"),
             "Test should pass with correct output"
+        );
+    }
+
+    // A project importing a module of a project it does not declare is warned about, and the
+    // dependency it does declare is not. `root` declares `undeclared-depa` alone, and imports both
+    // `DepA` (of that project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    #[test]
+    fn test_import_of_undeclared_transitive_dependency_warns() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import of `DepB` is the one import to warn about, and the import of `DepA` is \
+             declared:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             imports it:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("import DepB;"),
+            "the warning points at the import statement:\n{}",
+            stderr
+        );
+    }
+
+    // An absolute path reaches a module without an import statement written for it, and is warned
+    // about the same way. `root_abs` imports `DepA` and writes `::DepB::secret_value`.
+    #[test]
+    fn test_absolute_path_to_undeclared_transitive_dependency_warns() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_abs");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the absolute path is the one thing to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root-abs\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             writes the path:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("::DepB::secret_value"),
+            "the warning points at the absolute path:\n{}",
+            stderr
         );
     }
 }

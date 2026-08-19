@@ -239,6 +239,11 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Resolve imports.
     program.check_imports()?;
 
+    // Warn about an import that reaches a project the importing project does not declare.
+    program
+        .deferred_errors
+        .append(program.collect_undeclared_dependency_diagnostics(config));
+
     Ok(program)
 }
 

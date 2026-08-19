@@ -11,8 +11,9 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::hash::HashSource;
+use crate::metafiles::project_file::ProjectName;
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map, Set,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -343,6 +344,25 @@ pub struct DocsConfig {
     pub mode: BuildConfigType,
 }
 
+/// What one project contributes to a build: the sources it is compiled from, and the dependencies
+/// its project file declares.
+///
+/// Dependencies are resolved transitively, so the sources of a dependency's dependency are
+/// compiled in as well, and every module of them can be imported by anyone. Recording which
+/// project each source came from, beside what that project wrote down, is what lets
+/// `Program::collect_undeclared_dependency_diagnostics` tell an import of a declared dependency
+/// from an import of a project that merely happens to be linked in.
+#[derive(Clone)]
+pub struct ProjectSources {
+    /// The project's name, as its project file gives it.
+    pub name: ProjectName,
+    /// The projects the project file declares as dependencies, by name. In test mode this holds
+    /// the test dependencies as well, which are the ones the test sources may use.
+    pub declared_dependencies: Set<ProjectName>,
+    /// The source files the project contributes to the build.
+    pub files: Vec<PathBuf>,
+}
+
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
@@ -368,6 +388,9 @@ pub struct Configuration {
     /// Maintain this in lockstep with `source_files` via
     /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
+    /// What each project contributing to the build declares and provides, the root project and
+    /// every dependency alike. `ProjectFile::set_config` adds one entry per project it configures.
+    pub projects: Vec<ProjectSources>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -529,6 +552,7 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             root_source_files: vec![],
+            projects: vec![],
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],

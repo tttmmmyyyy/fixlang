@@ -12,6 +12,9 @@ use std::{
 /// Diagnostic code for "use of a deprecated item".
 pub const WARN_DEPRECATED: &'static str = "deprecated";
 
+/// Diagnostic code for "import of a module whose project is not a declared dependency".
+pub const WARN_UNDECLARED_DEPENDENCY: &'static str = "undeclared-dependency";
+
 /// Severity of a diagnostic.
 ///
 /// Errors are fatal and cause compilation to fail. Warnings are non-fatal:

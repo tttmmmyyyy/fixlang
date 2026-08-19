@@ -14,6 +14,7 @@
 - LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
 - #214: LSP: Completion inside an `import` statement now offers what can be written there instead of expression symbols: module names at the module position, the imported module's namespaces and entities at the item positions (including inside `::{...}` and after `hiding`), and the `hiding` keyword after a complete module path.
 - #188: Added the `--skip-eval` compiler option and the `skip_eval` field of the project file, which compile `eval {expr0}; {expr1}` as `{expr1}`. Use it to take a debugging `eval debug_println(...)` out of a build without editing the source.
+- #392: The compiler now warns about an `import` of a module belonging to a project that the importing project does not declare as a dependency. Dependencies are resolved transitively, so the modules of a dependency's dependency are linked in and can be imported; an import that reaches one binds the build to a project the project file does not name, and it stops compiling when the project in between drops that dependency. Declare the project in the `[[dependencies]]` of the project file that imports from it. Absolute paths such as `::Hash::hash` reach a module the same way and are warned about the same way.
 
 #### Std
 

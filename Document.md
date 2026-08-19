@@ -3063,6 +3063,18 @@ The default registry file is managed in [this repo](https://github.com/tttmmmyyy
 You can add other registry files by specifying them in the [configuration file](#configuration-file).
 To list all available projects registered in the registry files, use "fix deps list" command.
 
+### Declaring every project whose modules you import
+
+Dependencies are resolved transitively: the projects your dependencies depend on are built into your program as well, and their modules are linked in beside the ones of the projects you declared. Such a module can be imported by an `import` statement or written as an absolute path such as `::Hash::hash`, exactly like a module of a declared dependency.
+
+Declare every project whose modules your project imports. A project that is reached only through another project's dependencies is available for as long as that project keeps depending on it: when it drops that dependency or replaces it with another project, your project stops compiling, and the report names the module that went missing rather than the update that removed it. Declaring it also states, in your project file, what your project is built from.
+
+The compiler warns about an import that reaches a project the importing project does not declare:
+
+```
+warning: Module `Hash` belongs to the project "hash", which the project "myproject" does not declare as a dependency. Add it to the `[[dependencies]]` of the project file of "myproject".
+```
+
 ### Pinning to a specific commit or tag
 
 For git dependencies, you can pin to a specific commit hash or tag by specifying `rev` or `tag` in the `git` field:

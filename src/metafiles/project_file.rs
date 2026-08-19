@@ -1,7 +1,7 @@
 use crate::{
     configuration::{
-        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType, Sanitizer,
-        ValgrindTool,
+        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType,
+        ProjectSources, Sanitizer, ValgrindTool,
     },
     constants::{
         PROJECT_FILE_PATH, SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE,
@@ -635,13 +635,26 @@ impl ProjectFile {
         // attach to any file.
         self.check_source_files_exist(mode)?;
 
+        let files = self.get_files(mode);
+
+        // Record what this project provides and what it declares, so that an import reaching past
+        // the projects it declares can be told from one that stays within them.
+        config.projects.push(ProjectSources {
+            name: self.general.name.clone(),
+            declared_dependencies: self
+                .get_dependencies(mode)
+                .iter()
+                .map(|dep| dep.name.clone())
+                .collect(),
+            files: files.clone(),
+        });
+
         // Append source files. Root-project files go through
         // `add_user_source_file` so they also land in
         // `root_source_files`, which scopes deprecation diagnostics to
         // user code (mirroring rustc/swiftc: a deprecated use inside a
         // dependency is the dependency's problem, not the user's).
         // Dependent-project files are pushed to `source_files` only.
-        let files = self.get_files(mode);
         if is_dependent_proj {
             config.source_files.extend(files);
         } else {
