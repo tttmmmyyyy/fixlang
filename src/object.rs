@@ -2,13 +2,13 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
-    TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
-    ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
-    CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
+    RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
+    ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
+    BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME,
-    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
-    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, STD_NAME, STORAGE_BUF_IDX,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -2076,8 +2076,8 @@ pub fn create_obj<'c, 'm>(
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
                     .unwrap();
 
-                // Initialize the reference counter state to REFCNT_STATE_LOCAL.
-                gc.set_refcnt_state(ptr_to_ctrl_blk, REFCNT_STATE_LOCAL);
+                // A fresh object is reachable from the thread that made it alone.
+                gc.set_refcnt_state(ptr_to_ctrl_blk, RefcntState::LOCAL);
 
                 // Record how far the object was placed above the base of its allocation.
                 write_alloc_offset(gc, ptr_to_ctrl_blk, alloc_offset);
@@ -2227,7 +2227,9 @@ pub fn create_traverser<'c, 'm>(
                 .unwrap()
                 .into_int_value();
 
-            // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
+            // Branch to the block of the work asked for: destruction of the objects it owns
+            // (`work == 0`), marking them global (`work == 1`), or marking them threaded
+            // (`work == 2`, compiled only into a program that runs on several threads).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
             let mark_global_bb = gc
                 .context
@@ -2243,13 +2245,24 @@ pub fn create_traverser<'c, 'm>(
                 work_bbs.push((TRAVERSER_WORK_MARK_THREADED, mark_threaded_bb))
             }
             let work_ty = traverser_work_type(gc.context);
-            let mut cases = work_bbs
+            let cases = work_bbs
                 .iter()
                 .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
+
+            // Every call passes a work this traverser was generated for, so the block reached by
+            // any other value ends the program instead of standing in for one of them.
+            let unknown_work_bb = gc
+                .context
+                .append_basic_block(func, "unknown_work_bb@traverser");
             gc.builder()
-                .build_switch(work, cases.pop().unwrap().1, &cases)
+                .build_switch(work, unknown_work_bb, &cases)
                 .unwrap();
+            gc.builder().position_at_end(unknown_work_bb);
+            if gc.config.develop_mode {
+                gc.panic("A traverser was called with a work it was not generated for.\n");
+            }
+            gc.builder().build_unreachable().unwrap();
 
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
