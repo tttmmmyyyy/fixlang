@@ -1,0 +1,7 @@
+[general]
+name = "undeclared-depc"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["lib.fix"]

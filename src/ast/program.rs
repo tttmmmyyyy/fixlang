@@ -2396,6 +2396,12 @@ impl Program {
     /// stops compiling the moment the project in between drops that dependency, and the report
     /// then names the module that went missing, far from the change that removed it.
     ///
+    /// The imports reported are the ones the user's own code makes, which
+    /// `Configuration.root_source_files` names: the project file an import inside a dependency
+    /// asks for is one the person building has no hand in, and for a dependency the compiler
+    /// clones it is one the next `fix deps update` writes over. Each project's own build reports
+    /// the imports its own sources make.
+    ///
     /// One warning stands for each pair of projects, since one declaration answers every import
     /// between them, and it points at the import that stands earliest in the sources. Warnings are
     /// ordered by the file they point into, so that one run reports what the next one does.
@@ -2425,6 +2431,13 @@ impl Program {
             module_to_project.insert(mod_info.name.clone(), *project);
         }
 
+        // The files the user writes, which are the ones an import is reported in.
+        let user_files: Set<PathBuf> = config
+            .root_source_files
+            .iter()
+            .filter_map(|path| to_absolute_path(path).ok())
+            .collect();
+
         // The earliest import reaching each undeclared project, by the project that makes it: the
         // two projects, the module named, and where it is named.
         let mut earliest_undeclared_import: Map<
@@ -2440,6 +2453,9 @@ impl Program {
             let Ok(path) = to_absolute_path(&span.input.file_path) else {
                 continue;
             };
+            if !user_files.contains(&path) {
+                continue;
+            }
             let Some(importing_project) = file_to_project.get(&path) else {
                 continue;
             };

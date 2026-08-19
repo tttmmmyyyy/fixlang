@@ -3082,6 +3082,8 @@ git = { url = "https://github.com/tttmmmyyyy/fixlang-hash.git" }
 
 The version the entry requires is the version resolved for this build, and every version semver-compatible with it satisfies the requirement.
 
+The imports reported are the ones your own sources make. An import inside a dependency belongs to that dependency's author, who is told about it when they build their own project.
+
 ### Pinning to a specific commit or tag
 
 For git dependencies, you can pin to a specific commit hash or tag by specifying `rev` or `tag` in the `git` field:

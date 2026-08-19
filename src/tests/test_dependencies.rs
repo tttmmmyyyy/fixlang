@@ -525,6 +525,23 @@ mod integration_tests {
         );
     }
 
+    /// A project is told about the imports its own sources make. An import inside a dependency is
+    /// that dependency's own affair: the project file the report would name belongs to its author,
+    /// and for a dependency the compiler clones, the next `fix deps update` writes over it.
+    /// `root_declares_both` declares `undeclared-depc` and `undeclared-depb`, and
+    /// `undeclared-depc` imports `DepB` while declaring nothing.
+    #[test]
+    fn test_undeclared_import_inside_a_dependency_is_not_reported() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_declares_both");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            !stderr.contains("does not declare as a dependency"),
+            "the build of a project reports the imports of that project's own sources:\n{}",
+            stderr
+        );
+    }
+
     /// One declaration answers every import between two projects, so the two of them stand for one
     /// warning, pointing at the import that comes first in the source. `root_two_imports` imports
     /// `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
