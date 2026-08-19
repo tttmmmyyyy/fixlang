@@ -1,5 +1,8 @@
 use crate::{
-    ast::{name::FullName, program::{Program, Symbol}},
+    ast::{
+        name::FullName,
+        program::{Program, Symbol},
+    },
     misc::Map,
     optimization::{application_inlining, let_elimination},
 };
