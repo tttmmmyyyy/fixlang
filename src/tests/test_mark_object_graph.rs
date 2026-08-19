@@ -8,7 +8,8 @@
 //! the objects, and the deadline on each run is what measures it: walking the paths instead takes
 //! hours on a value this shape.
 
-use crate::tests::test_util::run_within;
+use crate::configuration::Configuration;
+use crate::tests::test_util::{run_within, test_source};
 use std::time::Duration;
 
 /// The levels of sharing the values here are built from. Each level holds two references to the
@@ -107,4 +108,37 @@ fn test_marking_a_threaded_value_visits_each_object_once() {
         (LEVELS + 1).to_string(),
         "the program should walk the value it marked to the bottom"
     );
+}
+
+/// Verifies that `Std::mark_threaded` leaves an object already in the global state where it is.
+///
+/// A global object is exempt from reference counting, so its count stays at what its initialization
+/// left, and the references a value takes to it are never counted either. Were the hand-over to put
+/// such an object into the threaded state, dropping the value that holds it would release a count no
+/// retain had raised, destroying an object the global value still names. The run is under memcheck,
+/// which `Configuration::develop_mode` asks for, and that is what reports the destruction.
+#[test]
+fn test_marking_a_threaded_value_leaves_a_global_object_global() {
+    let source = r#"
+module Main;
+
+type Node = box struct { tag : I64, kids : Array Node };
+
+leaf : Node;
+leaf = Node { tag : 42, kids : Array::empty(0) };
+
+main : IO ();
+main = (
+    let sent = Node { tag : 0, kids : [leaf, leaf] }.mark_threaded;
+    assert_eq(|_|"the global object is reached along both paths",
+        sent.@kids.@(0).@tag + sent.@kids.@(1).@tag, 84);;
+
+    // `sent` is dropped here, releasing what it holds.
+    assert_eq(|_|"the global object outlives the value that held it", leaf.@tag, 42);;
+    pure()
+);
+"#;
+    let mut config = Configuration::develop_mode();
+    config.set_threaded();
+    test_source(source, config);
 }
