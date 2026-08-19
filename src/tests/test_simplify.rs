@@ -1,14 +1,12 @@
-// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
-// the simplified program computes.
-//
-// A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
-// is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
-// cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
-// `RangeIterator` two-scalar state and no union construction — the property the integration tests
-// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
-// what each one computes. The build-time tests bound how long a program shaped to drive it may take
-// to compile.
+//! Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+//! the simplified program computes.
 
+/// Case projects built with `--emit-rc-ir`, read for what the simplifier removed and run for what
+/// they print. A read loop over `range(0, size).fold` lowers to a specialized fold driver whose
+/// loop-carried state is the `Option` that `range`'s `advance` builds and `fold` immediately
+/// matches. The simplifier cancels that union (case-of-case + case-of-known-constructor), so the
+/// driver keeps only the plain `RangeIterator` two-scalar state and no union construction — the
+/// property these tests assert.
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
@@ -202,6 +200,7 @@ mod integration_tests {
     }
 }
 
+/// Fix programs written to drive the rewrites, compiled and run for the values each one computes.
 #[cfg(test)]
 mod value_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
@@ -283,9 +282,8 @@ mod value_tests {
     }
 
     /// The outer match answers the `none` an inner arm builds with a catch-all arm, which binds the
-    /// whole union rather than that constructor's payload. Moving such an arm into the inner arm
-    /// would bind it to the payload instead, so the rewrite declines and the values stay what the
-    /// source computes.
+    /// whole union. Moving such an arm into the inner arm would bind it to the construction's
+    /// payload instead, so the rewrite declines and the values stay what the source computes.
     #[test]
     pub fn test_catch_all_outer_arm() {
         let source = r#"
@@ -312,6 +310,7 @@ mod value_tests {
     }
 }
 
+/// A program shaped to drive case-of-case, bounded in how long it may take to compile.
 #[cfg(test)]
 mod build_time_tests {
     use crate::tests::test_util::build_within_and_run;

@@ -209,8 +209,8 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     if scrut.name != x.name || count_value_uses(&x.name, k) != 1 {
         return None;
     }
-    // Pick the arm for the known tag. A catch-all arm binds the whole union (not the payload), so it
-    // would not remove the construction; skip when only a catch-all matches.
+    // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
+    // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
     let body = substitute_expr(&arm.body, &single(&arm.payload.name, &operand.name));
     Some(replace_tail(&body, &mut |arm_result| {
@@ -500,7 +500,7 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
 /// inline-LLVM operand, a closure capture, a match scrutinee, a destructured container, an `eval`, or
 /// the returned variable. Binders do not count. `Retain`/`Release` name a variable only for reference
-/// counting, so they are transparent (and do not occur before `insert_rc` anyway).
+/// counting, so they are transparent.
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| {
