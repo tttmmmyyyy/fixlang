@@ -92,6 +92,7 @@
     - [Project file](#project-file)
         - [About Duplicated Build Settings](#about-duplicated-build-settings)
     - [Managing dependencies](#managing-dependencies)
+        - [Declaring every project whose modules you import](#declaring-every-project-whose-modules-you-import)
         - [Pinning to a specific commit or tag](#pinning-to-a-specific-commit-or-tag)
         - [Test dependencies](#test-dependencies)
         - [Lock files](#lock-files)
