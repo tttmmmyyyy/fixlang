@@ -2200,16 +2200,18 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Mark a boxed object, and through `traverse_refs` every object it owns.
     ///
-    /// An object that carries the mark already ends the traversal there, since it owns only
-    /// objects carrying the mark or a stronger one. Each object is therefore marked once, where a
-    /// value whose subgraphs are shared would otherwise be walked once per path reaching each of
-    /// them, and the traversal terminates on a cyclic graph.
+    /// An object that already carries the mark ends the traversal there, since it owns only
+    /// objects carrying the mark or a stronger one. Each object is therefore marked once: the work
+    /// is proportional to the objects a value holds, even where one of them is reached along many
+    /// paths, and the traversal terminates on a cyclic graph.
     ///
     /// A marked object owns only marked objects because a write in place is the only way it gains
     /// a child, and such a write reaches a marked object through `build_branch_by_is_unique`: a
     /// global object leaves that check as shared and is cloned, and a threaded one is returned to
-    /// the local state there. Unique-check elimination keeps that route, a value made threaded
-    /// being handed back unknown (see `InlineLLVMMarkThreadedFunctionBody::result_prov`).
+    /// the local state there. That check stays in place for a value made threaded, since
+    /// `Std::mark_threaded` hands the value back with an `Unknown` provenance and unique-check
+    /// elimination drops a check only on a value it knows to be uniquely owned (see
+    /// `InlineLLVMMarkThreadedFunctionBody::result_prov`).
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2309,6 +2311,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
+    ///
+    /// # Arguments
+    /// * `state` — one of the `REFCNT_STATE_*` constants.
     fn set_refcnt_state_one(&mut self, ptr: PointerValue<'c>, state: u8) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         self.builder()

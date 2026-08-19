@@ -113,10 +113,11 @@ fn test_marking_a_threaded_value_visits_each_object_once() {
 /// Verifies that `Std::mark_threaded` leaves an object already in the global state where it is.
 ///
 /// A global object is exempt from reference counting, so its count stays at what its initialization
-/// left, and the references a value takes to it are never counted either. Were the hand-over to put
-/// such an object into the threaded state, dropping the value that holds it would release a count no
-/// retain had raised, destroying an object the global value still names. The run is under memcheck,
-/// which `Configuration::develop_mode` asks for, and that is what reports the destruction.
+/// left, and the references a value takes to it are never counted either. If `Std::mark_threaded`
+/// put such an object into the threaded state, dropping the value that holds it would release a
+/// count no retain had raised, destroying an object the global value still names. The run is under
+/// memcheck, which `Configuration::develop_mode` asks for, and that is what reports the
+/// destruction.
 #[test]
 fn test_marking_a_threaded_value_leaves_a_global_object_global() {
     let source = r#"

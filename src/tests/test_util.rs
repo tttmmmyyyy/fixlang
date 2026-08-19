@@ -122,7 +122,8 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
 /// program, so the caller keeps it alive for as long as the program is to be run.
 ///
 /// Fails the test unless the build succeeds, and — where `timeout` is given — unless it finishes
-/// within it. `description` names what is being compiled (see `build_within_and_run`).
+/// within it. `description` names what is being compiled, as a phrase that reads after
+/// "compiling", e.g. "a chain of 2400 `let`s".
 fn build_program(
     source: &str,
     opt_level: &str,
