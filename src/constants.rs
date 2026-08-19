@@ -121,6 +121,8 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
+/// The prefix of the type constructor naming the capture list a decaptured lambda receives.
+pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
 /// The suffix, followed by a counter, of the global function a decaptured lambda becomes.

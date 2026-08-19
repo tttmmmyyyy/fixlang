@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
+    use crate::constants::{CAP_LIST_PREFIX, CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -233,6 +233,24 @@ mod integration_tests {
         Some(&name[..end])
     }
 
+    /// The most capture lists any copy of the function named by `func_prefix` takes as a parameter.
+    ///
+    /// A copy takes one per way in it is specialized on, so this says how many of the closures
+    /// reaching that function at once are known: one for a closure handed over as an argument, and
+    /// one more for each read out of a field of a struct argument.
+    fn most_capture_lists_taken_by(dump: &str, func_prefix: &str) -> usize {
+        dump.lines()
+            .filter_map(|line| line.strip_prefix("fn "))
+            .filter(|line| line.starts_with(func_prefix) && line.contains(CLOSURE_SPEC_SUFFIX))
+            .filter_map(|line| {
+                let open = line.find('(')?;
+                let close = line.rfind(") ->")?;
+                Some(line[open..close].matches(CAP_LIST_PREFIX).count())
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     /// The copies that `dump` names of the function whose name begins with `func_prefix`.
     fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
         spec_copies_under(dump, func_prefix)
@@ -424,14 +442,23 @@ mod integration_tests {
     }
 
     /// The chain `map` and `fold` build puts the mapped function in a struct field and reads it out
-    /// of the struct the fold is handed, which is the shape this way in was added for. What the
-    /// pass makes of it is its own decision, so what is pinned here is the answer.
+    /// of the struct the fold is handed, which is the shape this way in was added for.
     #[test]
-    pub fn test_an_iterator_chain_answers_the_same_at_every_level() {
+    pub fn test_a_mapped_iterator_gives_the_fold_a_lambda_it_can_name() {
         let (_temp_dir, project_dir) = setup_test_env("struct_field_iterator_chain");
-        for opt_level in ["basic", "max", "experimental"] {
+        for opt_level in ["basic", "experimental"] {
             build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_ITERATOR_CHAIN_OUTPUT);
         }
+        let dump =
+            build_run_and_read_rc_ir(&project_dir, "max", STRUCT_FIELD_ITERATOR_CHAIN_OUTPUT);
+
+        let capture_lists = most_capture_lists_taken_by(&dump, "Std::Iterator::fold");
+        assert!(
+            capture_lists >= 2,
+            "the fold is handed the operator as an argument and reads the mapped function out of \
+             the struct, so a copy of it should take two capture lists, but the most any takes is {}",
+            capture_lists
+        );
     }
 
     /// A narrowed capture field serves three readers at once: a call made there, a function the
