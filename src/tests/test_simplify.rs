@@ -82,10 +82,21 @@ mod integration_tests {
     }
 
     /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
-    /// `needles` — which `what` names in a failure message — builds no union, and that the
-    /// executable the build leaves prints `expected`. The dump shows what the simplifier removed,
-    /// and the run shows the removal left what the program computes intact.
-    fn assert_union_cancelled(case: &str, needles: &[&str], what: &str, expected: &str) {
+    /// `needles` — which `what` names in a failure message — holds each node of `holds`, builds no
+    /// union, and that the executable the build leaves prints `expected`. The dump shows what the
+    /// simplifier removed, and the run shows the removal left what the program computes intact.
+    ///
+    /// # Arguments
+    /// * `holds` — the nodes the body is checked to still hold, as the prefixes the dump prints them
+    ///   with. Name the nodes a case is written to place on the way to a construction, so that a
+    ///   lowering that stops placing them there fails the test.
+    fn assert_union_cancelled(
+        case: &str,
+        needles: &[&str],
+        what: &str,
+        holds: &[&str],
+        expected: &str,
+    ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_all_rc_ir(&project_dir);
 
@@ -103,6 +114,15 @@ mod integration_tests {
                 what,
                 body
             );
+            for node in holds {
+                assert!(
+                    body.contains(node),
+                    "{} holds no `{}`, so it no longer has the shape the case is written around:\n{}",
+                    what,
+                    node,
+                    body
+                );
+            }
         }
 
         let run = Command::new(project_dir.join("a.out"))
@@ -127,7 +147,25 @@ mod integration_tests {
             "read_fold",
             &["Iterator::fold", "RangeIterator"],
             "the `range.fold` driver (an `Iterator::fold` over a `RangeIterator`)",
+            &[],
             "4950",
+        );
+    }
+
+    /// One branch of `step` reaches the `Option` it builds through a destructure, the other through
+    /// an eval. The walk that finds the constructions passes both, so every construction takes the
+    /// arm answering it and the function builds no union. Both nodes are checked to still stand in
+    /// the dumped body, so a lowering that stopped placing them there fails the test rather than
+    /// leaving it passing over a shape it no longer exercises. The built program still computes the
+    /// same values over 0..10.
+    #[test]
+    fn test_a_destructure_and_an_eval_before_the_tail_construction() {
+        assert_union_cancelled(
+            "before_tail",
+            &["Main::step"],
+            "`Main::step`",
+            &["destructure ", "eval "],
+            "[14, -1, 18, -1, 22, -1, 26, -1, 30, -1]",
         );
     }
 
@@ -141,6 +179,7 @@ mod integration_tests {
             "tail_match",
             &["Main::step"],
             "`Main::step`",
+            &[],
             "[0, 16, -1, 20, -1, -1, 120, 28, -1, 32]",
         );
     }
@@ -155,6 +194,7 @@ mod integration_tests {
             "one_variant",
             &["Main::shift_and_triple"],
             "`Main::shift_and_triple`",
+            &[],
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }

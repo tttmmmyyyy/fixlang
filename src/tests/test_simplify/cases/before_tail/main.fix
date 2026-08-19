@@ -1,0 +1,29 @@
+module Main;
+
+bounds : (I64, I64);
+bounds = (3, 4);
+
+names : Array String;
+names = ["first", "second"];
+
+// One branch reaches the `Option` it builds through a destructure of `bounds`, the other through an
+// eval of `names`. The walk that finds the constructions passes both, so each construction takes the
+// arm answering it and no `Option` is built.
+step : I64 -> I64;
+step = |n| (
+    match (if n % 2 == 0 {
+        let (lo, hi) = bounds;
+        Option::some(lo + hi + n)
+    } else {
+        eval names;
+        Option::none()
+    }) {
+        some(v) => v * 2,
+        none() => -1
+    }
+);
+
+main : IO ();
+main = (
+    println $ Iterator::range(0, 10).map(step).to_array.to_string
+);
