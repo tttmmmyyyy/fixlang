@@ -297,9 +297,9 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let mut new_arms = Vec::with_capacity(inner_arms.len());
     for arm in inner_arms {
         let body = replace_tail_union(&arm.body, &m.ty, &mut |variant, operand| {
-            let (outer, _) = answering
-                .get(&variant)
-                .expect("no outer arm answers the variant the tail builds");
+            let (outer, _) = answering.get(&variant).unwrap_or_else(|| {
+                panic!("no outer arm answers variant {}, which a tail builds", variant)
+            });
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
             let moved = clone_fresh(&outer.body, MARKER, counter);
