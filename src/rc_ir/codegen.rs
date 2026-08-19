@@ -13,7 +13,9 @@ use crate::constants::{
 };
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
-use crate::generator::{global_accessor_name, object_file_symbol_name, Generator, Object};
+use crate::generator::{
+    global_accessor_name, object_file_symbol_name, EmittedGlobal, Generator, Object,
+};
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
 use crate::rc_ir::ast::{
@@ -23,8 +25,10 @@ use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
+use inkwell::types::BasicType;
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
+use std::mem;
 use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
@@ -71,6 +75,67 @@ impl<'c, 'm> Generator<'c, 'm> {
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
         }
+    }
+
+    /// Keep each global's initializer out of the accessor that more than one reader takes.
+    ///
+    /// The accessor is the initializer's only caller, so an inliner folds the initializer straight
+    /// back into it and the accessor grows to the size of the initializer. An inlining decided by
+    /// size then leaves the accessor a call at each reader — one per read, with the flag test and
+    /// the load stuck in the loop behind it.
+    ///
+    /// A global with one reader keeps its initializer where it is. That initializer has one place
+    /// to be either way, and the place that costs nothing is the one the reader can see: what the
+    /// initializer knows — the length of an array, the shape of a structure — reaches the code that
+    /// reads the global, where it takes bounds checks out of loops.
+    ///
+    /// Call this once the module holds every reader of every global — the last of them are the
+    /// exported C functions and the program's entry point, which `build_object_files` implements
+    /// after the units. A reader counted short leaves the initializer in an accessor that its
+    /// readers then pay a call for.
+    ///
+    /// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a
+    /// call and a load whatever the initializer's size, and the attribute decides nothing.
+    pub(crate) fn keep_initializers_out_of_shared_accessors(&mut self) {
+        if self.config.threaded {
+            return;
+        }
+        for global in mem::take(&mut self.emitted_globals) {
+            let accessor = global.accessor.as_global_value();
+            let Some(first_use) = accessor.get_first_use() else {
+                continue;
+            };
+            if first_use.get_next_use().is_none() {
+                continue;
+            }
+            self.add_enum_attribute(global.init_value, "noinline", AttributeLoc::Function);
+        }
+    }
+
+    /// How many times a global is read for each time it is initialized, as the branch to the
+    /// initialization is weighted.
+    ///
+    /// A global is initialized once and read as many times as the program reads it, so the true
+    /// ratio is the program's to give. This one is large enough to place the initialization on the
+    /// cold side of every decision that reads the weight.
+    const ACCESSES_PER_INITIALIZATION: u64 = 1 << 20;
+
+    /// Call `init_value_fn` and store what it returns into `global_var_ptr`.
+    fn store_init_value(
+        &mut self,
+        init_value_fn: FunctionValue<'c>,
+        global_var_ptr: PointerValue<'c>,
+    ) {
+        let computed = self
+            .builder()
+            .build_call(init_value_fn, &[], "call_init_value")
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .expect("`InitValue#...` returns the value of the global");
+        self.builder()
+            .build_store(global_var_ptr, computed)
+            .unwrap();
     }
 
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
@@ -565,8 +630,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         Some(merged)
     }
 
-    /// Implement a global initializer: a lazily-initialized accessor that computes the value once
-    /// (call-once), marks it and its reachable graph global, and stores it.
+    /// Implement a global: `InitValue#<name>`, which evaluates the initializer and marks the value
+    /// and its reachable graph global, and the accessor, which calls it once and stores what it
+    /// returns, then loads the storage on every read.
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
@@ -611,13 +677,31 @@ impl<'c, 'm> Generator<'c, 'm> {
         init_flag.set_linkage(Linkage::Internal);
         let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
+        // The value is computed by a function of its own.
+        //
+        // Reading the global tests the initialization flag and loads the storage, and a reader
+        // holding those two lifts them out of a loop that reads the global — the global becomes a
+        // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
+        // when it is small; `keep_initializers_out_of_shared_accessors` says which globals keep it
+        // so.
+        let init_value_fn = self.module.add_function(
+            &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
+            BasicType::fn_type(&obj_embed_ty, &[], false),
+            Some(Linkage::Internal),
+        );
+
+        self.emitted_globals.push(EmittedGlobal {
+            accessor: acc_fn,
+            init_value: init_value_fn,
+        });
+
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
         let _di_scope_guard = self.push_debug_subprogram(acc_fn, global_init.init.source.clone());
 
-        // Branch to the initialization code only on the first access.
-        let (init_bb, end_bb, mut init_fn_di_guard) = if !self.config.threaded {
+        // Compute and store the value on the first access alone.
+        let end_bb = if !self.config.threaded {
             let flag = self
                 .builder()
                 .build_load(flag_ty, init_flag_ptr, "load_init_flag")
@@ -632,53 +716,82 @@ impl<'c, 'm> Generator<'c, 'm> {
                     "flag_is_zero",
                 )
                 .unwrap();
-            let init_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
+            let store_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
             let end_bb = self.context.append_basic_block(acc_fn, "flag_is_nonzero");
-            self.builder()
-                .build_conditional_branch(is_zero, init_bb, end_bb)
+            let branch = self
+                .builder()
+                .build_conditional_branch(is_zero, store_bb, end_bb)
                 .unwrap();
-            (init_bb, end_bb, None)
+
+            // The flag is zero on the first access alone. Saying so keeps the store away from the
+            // reads a program spends its time on.
+            let i32_ty = self.context.i32_type();
+            let weights = self.context.metadata_node(&[
+                self.context.metadata_string("branch_weights").into(),
+                i32_ty.const_int(1, false).into(),
+                i32_ty
+                    .const_int(Self::ACCESSES_PER_INITIALIZATION, false)
+                    .into(),
+            ]);
+            branch
+                .set_metadata(weights, self.context.get_kind_id("prof"))
+                .unwrap();
+
+            // Both stores stay here, so that every write to the storage and to the flag is in
+            // front of a reader. That is what the lifting rests on: a reader that could not see
+            // them would have to assume the call above writes them, and read both again on every
+            // turn of its loop.
+            self.builder().position_at_end(store_bb);
+            self.store_init_value(init_value_fn, global_var_ptr);
+            self.builder()
+                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
+                .unwrap();
+            self.builder().build_unconditional_branch(end_bb).unwrap();
+            end_bb
         } else {
-            let init_fn_name = format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol));
-            let init_fn = self.module.add_function(
-                &init_fn_name,
+            // `pthread_once` takes a function of no arguments and no result, so the store happens
+            // inside that function, where a reader cannot see it.
+            let once_fn = self.module.add_function(
+                &format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol)),
                 self.context.void_type().fn_type(&[], false),
                 Some(Linkage::Internal),
             );
+            {
+                let _builder_guard = self.push_builder();
+                let once_bb = self.context.append_basic_block(once_fn, "entry");
+                self.builder().position_at_end(once_bb);
+                let _di_guard =
+                    self.push_debug_subprogram(once_fn, global_init.init.source.clone());
+                self.store_init_value(init_value_fn, global_var_ptr);
+                self.builder().build_return(None).unwrap();
+                self.set_debug_location(None);
+            }
             self.call_runtime(
                 RUNTIME_PTHREAD_ONCE,
                 &[
                     init_flag_ptr.into(),
-                    init_fn.as_global_value().as_pointer_value().into(),
+                    once_fn.as_global_value().as_pointer_value().into(),
                 ],
             );
             let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
             self.builder().build_unconditional_branch(end_bb).unwrap();
-            let init_bb = self.context.append_basic_block(init_fn, "init_bb");
-            let guard = self.push_debug_subprogram(init_fn, global_init.init.source.clone());
-            (init_bb, end_bb, guard)
+            end_bb
         };
 
-        // Evaluate the initializer, mark it global, and store it.
+        // Evaluate the initializer and mark it global.
         {
+            let _builder_guard = self.push_builder();
+            let init_bb = self.context.append_basic_block(init_value_fn, "init_bb");
             self.builder().position_at_end(init_bb);
+            let _di_guard =
+                self.push_debug_subprogram(init_value_fn, global_init.init.source.clone());
             let _scope_guard = self.push_scope();
             let obj = self
                 .eval_rc_expr(&global_init.init, false, func_vals)
                 .expect("an expression evaluated outside tail position yields a value");
             self.mark_global(obj.clone());
             let obj_val = obj.value(self);
-            self.builder().build_store(global_var_ptr, obj_val).unwrap();
-        }
-
-        if !self.config.threaded {
-            self.builder()
-                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
-                .unwrap();
-            self.builder().build_unconditional_branch(end_bb).unwrap();
-        } else {
-            self.builder().build_return(None).unwrap();
-            init_fn_di_guard.take();
+            self.builder().build_return(Some(&obj_val)).unwrap();
             self.set_debug_location(None);
         }
 
