@@ -208,7 +208,7 @@ pub fn build_within_and_run(
 /// # Arguments
 /// * `description` — what is being run, as a phrase that reads after "running": it is what a
 ///   failure names, e.g. "a value whose 41 objects are reached by 2^40 paths".
-pub fn run_within(
+pub fn build_and_run_within(
     source: &str,
     opt_level: &str,
     build_args: &[&str],

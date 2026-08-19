@@ -9,7 +9,7 @@
 //! hours on a value this shape.
 
 use crate::configuration::Configuration;
-use crate::tests::test_util::{run_within, test_source};
+use crate::tests::test_util::{build_and_run_within, test_source};
 use std::time::Duration;
 
 /// The levels of sharing the values here are built from. Each level holds two references to the
@@ -24,22 +24,21 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const OPT_LEVEL: &str = "max";
 
 /// The type the values are built from, the recursion that builds one of `levels` levels, and the
-/// function that counts how many levels deep a value is by walking one path from its top to its
-/// bottom.
+/// function that counts the levels by walking one path from the top of a value to its bottom.
 const PRELUDE: &str = r#"
 module Main;
 
-type Tree = box struct { kids : Array Tree };
+type Tree = box struct { children : Array Tree };
 
 tree : I64 -> Tree;
 tree = |levels| (
-    if levels == 0 { Tree { kids : Array::empty(0) } };
+    if levels == 0 { Tree { children : Array::empty(0) } };
     let below = tree(levels - 1);
-    Tree { kids : [below, below] }
+    Tree { children : [below, below] }
 );
 
 depth : Tree -> I64;
-depth = |tree| if tree.@kids.@size == 0 { 1 } else { 1 + tree.@kids.@(0).depth };
+depth = |tree| if tree.@children.@size == 0 { 0 } else { 1 + tree.@children.@(0).depth };
 "#;
 
 /// A program that holds the value in a global value, whose initialization marks it global.
@@ -76,7 +75,7 @@ main = (
 /// Verifies that initializing a global value marks each object of its result once.
 #[test]
 fn test_marking_a_global_value_visits_each_object_once() {
-    let printed = run_within(
+    let printed = build_and_run_within(
         &global_source(LEVELS),
         OPT_LEVEL,
         &[],
@@ -85,7 +84,7 @@ fn test_marking_a_global_value_visits_each_object_once() {
     );
     assert_eq!(
         printed,
-        (LEVELS + 1).to_string(),
+        LEVELS.to_string(),
         "the program should walk its global value to the bottom"
     );
 }
@@ -93,7 +92,7 @@ fn test_marking_a_global_value_visits_each_object_once() {
 /// Verifies that `Std::mark_threaded` marks each object of the value it is given once.
 #[test]
 fn test_marking_a_threaded_value_visits_each_object_once() {
-    let printed = run_within(
+    let printed = build_and_run_within(
         &threaded_source(LEVELS),
         OPT_LEVEL,
         &["--threaded"],
@@ -105,7 +104,7 @@ fn test_marking_a_threaded_value_visits_each_object_once() {
     );
     assert_eq!(
         printed,
-        (LEVELS + 1).to_string(),
+        LEVELS.to_string(),
         "the program should walk the value it marked to the bottom"
     );
 }
@@ -123,16 +122,16 @@ fn test_marking_a_threaded_value_leaves_a_global_object_global() {
     let source = r#"
 module Main;
 
-type Node = box struct { tag : I64, kids : Array Node };
+type Node = box struct { tag : I64, children : Array Node };
 
 leaf : Node;
-leaf = Node { tag : 42, kids : Array::empty(0) };
+leaf = Node { tag : 42, children : Array::empty(0) };
 
 main : IO ();
 main = (
-    let shared = Node { tag : 0, kids : [leaf, leaf] }.mark_threaded;
+    let shared = Node { tag : 0, children : [leaf, leaf] }.mark_threaded;
     assert_eq(|_|"the global object is reached along both paths",
-        shared.@kids.@(0).@tag + shared.@kids.@(1).@tag, 84);;
+        shared.@children.@(0).@tag + shared.@children.@(1).@tag, 84);;
 
     // `shared` is dropped here, releasing what it holds.
     assert_eq(|_|"the global object outlives the value that held it", leaf.@tag, 42);;

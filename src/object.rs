@@ -2077,13 +2077,7 @@ pub fn create_obj<'c, 'm>(
                     .unwrap();
 
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
-                let ptr_to_refcnt_state = gc.get_refcnt_state_ptr(ptr_to_ctrl_blk);
-                gc.builder()
-                    .build_store(
-                        ptr_to_refcnt_state,
-                        refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    )
-                    .unwrap();
+                gc.set_refcnt_state(ptr_to_ctrl_blk, REFCNT_STATE_LOCAL);
 
                 // Record how far the object was placed above the base of its allocation.
                 write_alloc_offset(gc, ptr_to_ctrl_blk, alloc_offset);

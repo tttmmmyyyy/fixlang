@@ -1066,7 +1066,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // rests on this too: `build_mark_boxed_with` ends its traversal at an object carrying
             // the mark, and a threaded object is returned to the local state here before a write
             // in place gives it a child of its own.
-            self.set_refcnt_state_one(obj_ptr, REFCNT_STATE_LOCAL);
+            self.set_refcnt_state(obj_ptr, REFCNT_STATE_LOCAL);
             // And jump to unique_bb.
             self.builder()
                 .build_unconditional_branch(unique_bb)
@@ -1106,16 +1106,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         // Load refcnt_state.
         let current_func = self.current_function();
-        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                refcnt_state_ptr,
-                "refcnt_state",
-            )
-            .unwrap()
-            .into_int_value();
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state");
 
         // Add three basic blocks.
         let local_bb = self.context.append_basic_block(current_func, "local_bb");
@@ -1191,16 +1182,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         if !self.config.develop_mode {
             return;
         }
-        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                refcnt_state_ptr,
-                "refcnt_state@assert_local",
-            )
-            .unwrap()
-            .into_int_value();
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state@assert_local");
         let is_local = self
             .builder()
             .build_int_compare(
@@ -2235,16 +2217,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .append_basic_block(current_func, "cont_bb@mark_boxed");
 
         // Load refcnt state.
-        let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                ptr_refcnt_state,
-                "refcnt_state",
-            )
-            .unwrap()
-            .into_int_value();
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state");
 
         // Branch by whether or not the object carries the mark. The global state exempts an object
         // from reference counting entirely, which is what the threaded state asks for and more, so
@@ -2274,7 +2247,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             REFCNT_STATE_THREADED
         };
-        self.set_refcnt_state_one(obj_ptr, mark_state);
+        self.set_refcnt_state(obj_ptr, mark_state);
         traverse_refs(self);
         self.builder().build_unconditional_branch(cont_bb).unwrap();
 
@@ -2310,11 +2283,21 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
+    /// Load the reference-count state of the boxed object at `obj_ptr`, naming the loaded value
+    /// `name` in the emitted code.
+    fn build_load_refcnt_state(&mut self, obj_ptr: PointerValue<'c>, name: &str) -> IntValue<'c> {
+        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
+        self.builder()
+            .build_load(refcnt_state_type(self.context), refcnt_state_ptr, name)
+            .unwrap()
+            .into_int_value()
+    }
+
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
     ///
     /// # Arguments
     /// * `state` — one of the `REFCNT_STATE_*` constants.
-    fn set_refcnt_state_one(&mut self, ptr: PointerValue<'c>, state: u8) {
+    pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: u8) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         self.builder()
             .build_store(
