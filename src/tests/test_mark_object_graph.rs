@@ -129,11 +129,11 @@ leaf = Node { tag : 42, kids : Array::empty(0) };
 
 main : IO ();
 main = (
-    let sent = Node { tag : 0, kids : [leaf, leaf] }.mark_threaded;
+    let shared = Node { tag : 0, kids : [leaf, leaf] }.mark_threaded;
     assert_eq(|_|"the global object is reached along both paths",
-        sent.@kids.@(0).@tag + sent.@kids.@(1).@tag, 84);;
+        shared.@kids.@(0).@tag + shared.@kids.@(1).@tag, 84);;
 
-    // `sent` is dropped here, releasing what it holds.
+    // `shared` is dropped here, releasing what it holds.
     assert_eq(|_|"the global object outlives the value that held it", leaf.@tag, 42);;
     pure()
 );

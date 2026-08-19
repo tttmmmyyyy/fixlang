@@ -16,11 +16,11 @@ module Main;
 // eight threads then share a value without touching its count and the control cannot fail.
 hammer_one : Ptr -> IO ();
 hammer_one = |ptr| (
-    let holder : Box (Box I64) = *FFI::boxed_from_retained_ptr(ptr);
-    let value = holder.@value;
+    let value : Box (Box I64) = *FFI::boxed_from_retained_ptr(ptr);
+    let inner = value.@value;
     loop_m(0, |i|
         if i == 4000 { break_m $ () };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *inner.FFI::boxed_to_retained_ptr;
         let taken : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
         if taken.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
         continue_m $ i + 1
@@ -29,8 +29,8 @@ hammer_one = |ptr| (
     // A write through the handle. Whichever thread finds itself the only holder left takes the
     // uniqueness check's unique answer and writes in place; the others find the value shared and
     // write to a copy of their own.
-    let value = value.set_value(value.@value + 1);
-    if value.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+    let inner = inner.set_value(inner.@value + 1);
+    if inner.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
     pure()
 );
 FFI_EXPORT[hammer_one, fix_hammer_one];
