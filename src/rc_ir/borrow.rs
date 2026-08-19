@@ -573,9 +573,10 @@ impl<'a> RewriteCtx<'a> {
     /// Whether routing this call to the borrow version removes a reference count it would otherwise
     /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
     /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
-    /// callee makes the caller retain before the call, and an owned value used again after the
-    /// call, whose retain-before the borrow cancels. An owned value at its last use is moved either
-    /// way, so borrowing it removes no retain and only delays its release.
+    /// callee makes the caller retain before the call, and an owned value whose object is still
+    /// there after the call, whose retain-before the borrow cancels. An owned value whose object
+    /// this call is the end of is moved either way, so borrowing it removes no retain and only
+    /// delays its release.
     fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,
@@ -585,15 +586,28 @@ impl<'a> RewriteCtx<'a> {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let is_last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
                     .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
-                callee_borrows && !(self.owns_unit(arg, unit) && is_last_use)
+                let dies_here =
+                    self.owns_unit(arg, unit) && !self.object_outlives_call(arg, unit, k);
+                callee_borrows && !dies_here
             })
         })
+    }
+
+    /// Whether the object `arg@unit` refers to is still there after the call: the argument names it
+    /// afterwards, or so does a value it was read out of. A leaf read out of an aggregate the caller
+    /// goes on to use is a reference this function made for the call, and routing to the borrow
+    /// version removes that reference together with the retain that made it.
+    fn object_outlives_call(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
+        used_later(&arg.name, k)
+            || origin(&self.vars, self.type_env, &arg.name, unit)
+                .candidates()
+                .iter()
+                .any(|(root, _)| used_later(root, k))
     }
 
     /// Whether this version owns the value at any of `arg`'s reference-counting units.
