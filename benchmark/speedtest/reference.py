@@ -15,7 +15,7 @@ language asked for.
     python3 reference.py build <c|rust>
     python3 reference.py measure <c|rust> [--repeat N]
 
-`measure` prints `<inst>,<mem>,<splits>,<cycles>,<contention>`. The last three come back
+`measure` prints `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>`. The last three come back
 empty, empty and `0.00` where the hardware counters are out of reach, as they do for the case
 itself.
 """
@@ -58,7 +58,7 @@ def build(language):
 
 def measure(language, repeat):
     """The counters for the counterpart of `language`, as one
-    `<inst>,<mem>,<splits>,<cycles>,<contention>` line.
+    `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>` line.
 
     # Arguments
     * `repeat` - how many times the hardware counters are read; the cycle count reported is
@@ -72,12 +72,18 @@ def measure(language, repeat):
     if simulated.returncode != 0:
         sys.exit(f"measuring {binary} failed:\n{simulated.stderr.strip()}")
     cachegrind = simulated.stdout.strip().splitlines()[-1]
-    if len(cachegrind.split(",")) != 2:
+    simulated_counts = cachegrind.split(",")
+    if len(simulated_counts) != 3:
         sys.exit(f"measuring {binary} produced \"{cachegrind}\"")
+    instructions, _memory_accesses, dram_accesses = simulated_counts
     # A machine without the counters leaves these three fields the way the case's own
     # measurement leaves them, so a row is short of the same columns on both lines.
     counted = subprocess.run(
-        ["python3", str(PERF_COUNTERS), "--repeat", str(repeat), f"./{binary}"],
+        ["python3", str(PERF_COUNTERS), "--repeat", str(repeat),
+         # What the counterpart asks of main memory decides whether its cycle count survives
+         # a busy machine, the same way it does for the case.
+         "--dram-accesses", dram_accesses, "--instructions", instructions,
+         f"./{binary}"],
         capture_output=True, text=True)
     hardware = counted.stdout.strip() if counted.returncode == 0 else ",,0.00"
     return f"{cachegrind},{hardware}"

@@ -138,4 +138,7 @@ if __name__ == "__main__":
     counts = get_counts(run_with_cachegrind(sys.argv[1:]))
     instructions = counts["Ir"]
     memory_accesses = combined_instruction_estimate(counts)
-    print(f"{instructions},{memory_accesses}")
+    # The accesses that reached main memory are printed on their own beside the combined
+    # estimate that folds them in, because they decide something the estimate cannot express:
+    # whether another program running beside this one can change how long it takes.
+    print(f"{instructions},{memory_accesses},{counts['ram']}")
