@@ -71,8 +71,7 @@ impl Errors {
     }
 
     /// Takes every diagnostic out of `self` as an error, leaving `self` empty, once one of them
-    /// has error severity. A collection of warnings alone is a success and stays where it is, for
-    /// a later `take_warnings` to print.
+    /// has error severity. A collection of warnings alone is a success and stays where it is.
     pub fn to_result(&mut self) -> Result<(), Errors> {
         if self.has_error() {
             Err(mem::replace(self, Errors::empty()))
@@ -81,9 +80,8 @@ impl Errors {
         }
     }
 
-    /// Drain all warning-severity items into a fresh `Errors`, leaving only
-    /// error-severity items in `self`. Useful for printing warnings before
-    /// checking `to_result()`.
+    /// Takes the warning-severity diagnostics out of this collection, keeping their order and
+    /// leaving the error-severity ones where they are.
     pub fn take_warnings(&mut self) -> Errors {
         let (warnings, errors) = mem::take(&mut self.errs)
             .into_iter()
@@ -152,17 +150,17 @@ impl Errors {
     /// whose rendering repeats one already written is left out.
     pub fn to_string(&self) -> String {
         let mut msg_set = Set::default();
-        let mut str = String::default();
+        let mut rendered = String::default();
         for err in &self.errs {
             let msg = err.to_string();
             if msg_set.contains(&msg) {
                 continue;
             }
             msg_set.insert(msg.clone());
-            str += &msg;
-            str += "\n";
+            rendered += &msg;
+            rendered += "\n";
         }
-        str
+        rendered
     }
 
     /// Groups the diagnostics by the file of their first source location, ordered by path.
@@ -173,22 +171,22 @@ impl Errors {
     ///   point at one.
     pub fn organize_by_path(&self, spanless_fallback: &Path) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
-        let mut map: Map<PathBuf, Vec<Error>> = Map::default();
+        let mut errs_by_path: Map<PathBuf, Vec<Error>> = Map::default();
         for err in &self.errs {
             let path = match err.srcs.first() {
                 None => spanless_fallback.to_path_buf(),
                 Some((_, span)) => span.input.file_path.clone(),
             };
-            insert_to_map_vec(&mut map, &path, err.clone());
+            insert_to_map_vec(&mut errs_by_path, &path, err.clone());
         }
 
         // Convert the hashmap into a vector.
-        let mut res = map.into_iter().collect::<Vec<_>>();
+        let mut errs_by_path = errs_by_path.into_iter().collect::<Vec<_>>();
 
         // Sort the vector by the path.
-        res.sort_by(|a, b| a.0.cmp(&b.0));
+        errs_by_path.sort_by(|a, b| a.0.cmp(&b.0));
 
-        res
+        errs_by_path
     }
 }
 
@@ -207,9 +205,8 @@ pub struct Error {
     /// Data about this diagnostic beyond its text, such as the name a fix has to insert. Its
     /// shape is decided by `code`.
     pub data: Option<Value>,
-    /// Severity of this diagnostic. Construct warnings via
-    /// `Error::warning_from_msg_srcs`; the other constructors produce
-    /// `Severity::Error`.
+    /// Severity of this diagnostic: an error fails the compilation, a warning accompanies a
+    /// compilation that still succeeds.
     pub severity: Severity,
 }
 
@@ -232,7 +229,11 @@ impl Error {
             msg,
             srcs: srcs
                 .iter()
-                .filter_map(|x| x.as_ref().map(|x| (String::default(), (*x).clone())))
+                .filter_map(|span_opt| {
+                    span_opt
+                        .as_ref()
+                        .map(|span| (String::default(), span.clone()))
+                })
                 .collect(),
             code: None,
             data: None,
@@ -267,30 +268,28 @@ impl Error {
     /// then each attached location as its description followed by the quoted source with the
     /// span underlined in the severity's color.
     pub fn to_string(&self) -> String {
-        let mut str = String::default();
+        let mut rendered = String::default();
         let (label, underline_color) = self.severity.label_and_underline_color();
-        str += &label;
-        str += ": ";
-        str += &self.msg;
-        str += "\n";
+        rendered += &label;
+        rendered += ": ";
+        rendered += &self.msg;
+        rendered += "\n";
         for (src_desc, src) in &self.srcs {
             if src_desc.len() > 0 {
-                str += "\n";
-                str += src_desc;
-                str += "\n";
+                rendered += "\n";
+                rendered += src_desc;
+                rendered += "\n";
             }
-            str += "\n";
-            str += &src.to_string(underline_color);
+            rendered += "\n";
+            rendered += &src.to_string(underline_color);
         }
-        str
+        rendered
     }
 }
 
 /// Panics with `msg`, having installed a panic hook that prints the message alone, so that the
 /// thread name, the panic location and the backtrace note stay out of the compiler's output.
 fn panic_notrace(msg: &str) -> ! {
-    // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
-    // We replace it to empty.
     panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
