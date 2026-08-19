@@ -11,9 +11,10 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::hash::HashSource;
-use crate::metafiles::project_file::ProjectName;
+use crate::metafiles::project_file::{ProjectName, ProjectOrigin};
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map, Set,
+    path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
+    Finally, Map, Set,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -359,10 +360,45 @@ pub struct DocsConfig {
 pub struct ProjectSources {
     /// The name of the project the sources come from, as its project file gives it.
     pub name: ProjectName,
+    /// The version of that project, as its project file gives it.
+    pub version: String,
+    /// Where that project came from, which is what a dependency entry naming it writes.
+    pub origin: ProjectOrigin,
     /// The projects declared as dependencies of these sources, by name.
     pub declared_dependencies: Set<ProjectName>,
     /// The source files, resolved to paths.
     pub files: Vec<PathBuf>,
+}
+
+impl ProjectSources {
+    /// The dependency entry that declares this project, written as it goes into the project file
+    /// of `importer` and ready to be pasted there. The version requirement names this project's
+    /// own version, which every version semver-compatible with it satisfies.
+    ///
+    /// # Examples
+    /// A project built from a directory beside the importing one is declared as
+    /// ```toml
+    /// [[dependencies]]
+    /// name = "depb"
+    /// version = "0.1.0"
+    /// path = "../depb"
+    /// ```
+    pub fn dependency_entry(&self, importer: &ProjectSources) -> String {
+        let source = match &self.origin {
+            ProjectOrigin::Local(dir) => {
+                let dir = match &importer.origin {
+                    ProjectOrigin::Local(importer_dir) => path_relative_to(dir, importer_dir),
+                    ProjectOrigin::Git { .. } => dir.clone(),
+                };
+                format!("path = \"{}\"", dir.to_string_lossy())
+            }
+            ProjectOrigin::Git { url, .. } => format!("git = {{ url = \"{}\" }}", url),
+        };
+        format!(
+            "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\n{}",
+            self.name, self.version, source
+        )
+    }
 }
 
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and

@@ -5,7 +5,11 @@
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{fs, path::PathBuf, process::Output};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::Output,
+    };
     use tempfile::TempDir;
 
     // Get the path to the test cases directory
@@ -379,6 +383,14 @@ mod integration_tests {
             "the warning points at the import statement:\n{}",
             stderr
         );
+        assert!(
+            stderr.contains(
+                "[[dependencies]]\nname = \"undeclared-depb\"\nversion = \"0.1.0\"\npath = \"../depb\""
+            ),
+            "the warning carries the entry to paste, naming the version to require and the path \
+             the depending project reaches it by:\n{}",
+            stderr
+        );
     }
 
     /// An absolute path reaches a module without an import statement written for it, and is warned
@@ -505,6 +517,111 @@ mod integration_tests {
             stderr.contains("Module `DepB2` belongs to the project \"undeclared-depb\""),
             "the warning names the module of the import that comes first, which the later import \
              of `DepB` does not displace:\n{}",
+            stderr
+        );
+    }
+
+    /// Creates a local upstream git repository at `repo_dir` holding a project of `name` at
+    /// `version`, whose module is `module`, and tags the commit with the version.
+    fn create_upstream_repo(repo_dir: &Path, name: &str, version: &str, module: &str) {
+        fs::create_dir_all(repo_dir).expect("Failed to create the upstream directory");
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo_dir)
+                .status()
+                .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
+            assert!(status.success(), "`git {:?}` failed", args);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Test"]);
+        fs::write(
+            repo_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n",
+                name, version
+            ),
+        )
+        .expect("Failed to write the project file of the upstream project");
+        fs::write(
+            repo_dir.join("lib.fix"),
+            format!(
+                "module {};\n\nupstream_value : I64;\nupstream_value = 7;\n",
+                module
+            ),
+        )
+        .expect("Failed to write the source of the upstream project");
+        run(&["add", "fixproj.toml", "lib.fix"]);
+        run(&["commit", "-q", "-m", "init"]);
+        run(&["tag", version]);
+    }
+
+    /// A project published through a git repository is declared by its url, so that is what the
+    /// entry the warning carries has to write. The root project declares a path dependency, which
+    /// declares the git project, and the root imports the git project's module.
+    #[test]
+    fn test_the_entry_for_a_git_project_names_its_repository() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let upstream = temp_dir.path().join("upstream");
+        create_upstream_repo(&upstream, "undeclared-gdepb", "0.1.0", "GDepB");
+
+        let middle = temp_dir.path().join("middle");
+        fs::create_dir_all(&middle).expect("Failed to create the middle project");
+        fs::write(
+            middle.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"undeclared-gdepa\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n\n\
+                 [[dependencies]]\nname = \"undeclared-gdepb\"\nversion = \"0.1.0\"\n\
+                 git = {{ url = \"{}\" }}\n",
+                upstream.to_string_lossy()
+            ),
+        )
+        .expect("Failed to write the project file of the middle project");
+        fs::write(
+            middle.join("lib.fix"),
+            "module GDepA;\n\nimport GDepB;\n\nga : I64;\nga = GDepB::upstream_value + 1;\n",
+        )
+        .expect("Failed to write the source of the middle project");
+
+        let project_dir = temp_dir.path().join("root");
+        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            "[general]\nname = \"undeclared-groot\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"main.fix\"]\n\n\
+             [[dependencies]]\nname = \"undeclared-gdepa\"\npath = \"../middle\"\n",
+        )
+        .expect("Failed to write the project file of the root project");
+        fs::write(
+            project_dir.join("main.fix"),
+            "module Main;\n\nimport GDepA;\nimport GDepB;\n\nmain : IO ();\n\
+             main = println((GDepA::ga + GDepB::upstream_value).to_string);\n",
+        )
+        .expect("Failed to write the source of the root project");
+
+        let output = fix_command()
+            .arg("build")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix build");
+        assert!(
+            output.status.success(),
+            "fix build failed:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            stderr.contains(&format!(
+                "[[dependencies]]\nname = \"undeclared-gdepb\"\nversion = \"0.1.0\"\n\
+                 git = {{ url = \"{}\" }}",
+                upstream.to_string_lossy()
+            )),
+            "the entry names the repository the project is published through:\n{}",
             stderr
         );
     }

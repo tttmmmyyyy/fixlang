@@ -2425,9 +2425,12 @@ impl Program {
             module_to_project.insert(mod_info.name.clone(), *project);
         }
 
-        // The earliest import reaching each undeclared project, by the project that makes it.
-        let mut earliest_undeclared_import: Map<(ProjectName, ProjectName), (Name, Span)> =
-            Map::default();
+        // The earliest import reaching each undeclared project, by the project that makes it: the
+        // two projects, the module named, and where it is named.
+        let mut earliest_undeclared_import: Map<
+            (ProjectName, ProjectName),
+            (&ProjectSources, &ProjectSources, Name, Span),
+        > = Map::default();
         for stmt in self.import_statements() {
             // An import no token stands for is one the compiler added, of the module itself or of
             // `Std`, and neither reaches another project.
@@ -2455,26 +2458,40 @@ impl Program {
                 imported_project.name.clone(),
             );
             let is_earliest = match earliest_undeclared_import.get(&key) {
-                Some((_, earliest)) => span < *earliest,
+                Some((_, _, _, earliest)) => span < *earliest,
                 None => true,
             };
             if is_earliest {
-                earliest_undeclared_import.insert(key, (stmt.module_name, span));
+                earliest_undeclared_import.insert(
+                    key,
+                    (
+                        *importing_project,
+                        *imported_project,
+                        stmt.module_name,
+                        span,
+                    ),
+                );
             }
         }
 
-        let mut imports_to_report: Vec<((ProjectName, ProjectName), (Name, Span))> =
-            earliest_undeclared_import.into_iter().collect();
-        imports_to_report.sort_by(|(_, (_, lhs)), (_, (_, rhs))| lhs.cmp(rhs));
+        let mut imports_to_report: Vec<_> = earliest_undeclared_import.into_values().collect();
+        imports_to_report.sort_by(|(_, _, _, lhs), (_, _, _, rhs)| lhs.cmp(rhs));
 
         let mut diagnostics = Errors::empty();
-        for ((importing_project, imported_project), (module_name, span)) in imports_to_report {
+        for (importing_project, imported_project, module_name, span) in imports_to_report {
             let mut err = Error::warning_from_msg_srcs(
                 format!(
                     "Module `{}` belongs to the project \"{}\", which the project \"{}\" does not \
-                     declare as a dependency. Add it to the `[[dependencies]]` of the project file \
-                     of \"{}\".",
-                    module_name, imported_project, importing_project, importing_project
+                     declare as a dependency. \"{}\" reaches it through the dependencies of another \
+                     project, so this import stops resolving as soon as that project stops \
+                     depending on \"{}\". Declare it in the project file of \"{}\":\n\n{}",
+                    module_name,
+                    imported_project.name,
+                    importing_project.name,
+                    importing_project.name,
+                    imported_project.name,
+                    importing_project.name,
+                    imported_project.dependency_entry(importing_project),
                 ),
                 &[&Some(span)],
             );

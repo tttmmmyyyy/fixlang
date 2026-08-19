@@ -667,12 +667,16 @@ impl ProjectFile {
         // test sources may use, so they are recorded as a contribution beside the ordinary sources.
         config.project_sources.push(ProjectSources {
             name: self.general.name.clone(),
+            version: self.general.version.clone(),
+            origin: source.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
             files: self.get_files(BuildConfigType::Build),
         });
         if mode == BuildConfigType::Test {
             config.project_sources.push(ProjectSources {
                 name: self.general.name.clone(),
+                version: self.general.version.clone(),
+                origin: source.clone(),
                 declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
                 files: self.get_test_only_files(),
             });

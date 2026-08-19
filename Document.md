@@ -3069,11 +3069,18 @@ Dependencies are resolved transitively: the projects your dependencies depend on
 
 Declare every project whose modules your project imports. A project that is reached only through another project's dependencies is available for as long as that project keeps depending on it: when it drops that dependency or replaces it with another project, your project stops compiling, and the report names the module that went missing, far from the update that removed it. Declaring it also states, in your project file, what your project is built from.
 
-The compiler warns about an import that reaches a project the importing project does not declare:
+The compiler warns about an import that reaches a project the importing project does not declare, and writes the entry that declares it:
 
 ```
-warning: Module `Hash` belongs to the project "hash", which the project "myproject" does not declare as a dependency. Add it to the `[[dependencies]]` of the project file of "myproject".
+warning: Module `Hash` belongs to the project "hash", which the project "myproject" does not declare as a dependency. "myproject" reaches it through the dependencies of another project, so this import stops resolving as soon as that project stops depending on "hash". Declare it in the project file of "myproject":
+
+[[dependencies]]
+name = "hash"
+version = "1.1.3"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-hash.git" }
 ```
+
+The version the entry requires is the version resolved for this build, and every version semver-compatible with it satisfies the requirement.
 
 ### Pinning to a specific commit or tag
 
