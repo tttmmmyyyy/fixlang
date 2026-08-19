@@ -4,4 +4,4 @@ version = "0.1.0"
 fix_version = "*"
 
 [build]
-files = ["lib.fix"]
+files = ["lib.fix", "lib2.fix"]

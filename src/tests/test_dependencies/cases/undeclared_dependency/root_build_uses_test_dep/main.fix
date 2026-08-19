@@ -1,0 +1,6 @@
+module Main;
+
+import DepA;
+
+main : IO ();
+main = println(DepA::a_value.to_string);

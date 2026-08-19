@@ -1,0 +1,8 @@
+module Main;
+
+import DepA;
+import DepB2;
+import DepB;
+
+main : IO ();
+main = println((DepB2::other_value + DepB::secret_value + DepA::a_value).to_string);
