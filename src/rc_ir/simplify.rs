@@ -12,7 +12,7 @@
 //!   reaches the constructions the arms of that one build as well. It fires all-or-nothing — only
 //!   when a specific outer arm matches every construction the walk reaches — and only when the result
 //!   is smaller than what it replaces, since an outer arm two inner arms reach is placed in both. The
-//!   walk that finds those constructions runs once on its own, so that size decides the rewrite before
+//!   walk that finds those constructions measures that size first, so the rewrite is decided before
 //!   an outer arm is copied anywhere.
 //!
 //! Composed, they cancel the `Option`/`LoopState`/tuple union a loop builds and immediately matches
@@ -255,13 +255,12 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// produces what the outer match did, so it binds the outer match's variable.
 ///
 /// It fires all-or-nothing — every tail the walk reaches must build a union a specific outer arm
-/// matches — and only when the result is smaller than what it replaces, a size `size_after_replacing_tails`
-/// gives before an outer arm is copied anywhere. It grows where two inner arms build one constructor,
-/// which
-/// puts that outer arm in both: a nest of matches doing so at every level would double the term at
-/// every level. Where the inner arms build pairwise distinct constructors, each
-/// outer arm moves to one inner arm and the result always shrinks, by the constructions and the outer
-/// match that go away.
+/// matches — and only when the result is smaller than what it replaces, a size
+/// `size_after_replacing_tails` gives before an outer arm is copied anywhere. It grows where two
+/// inner arms build one constructor, which puts that outer arm in both: a nest of matches doing so
+/// at every level would double the term at every level. Where the inner arms build pairwise
+/// distinct constructors, each outer arm moves to one inner arm and the result always shrinks, by
+/// the constructions and the outer match that go away.
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
@@ -273,8 +272,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     if outer_scrut.name != s.name || !is_ret_of(k2, &m.name) || count_value_uses(&s.name, k) != 1 {
         return None;
     }
-    // The arm answering each variant, with the size of its body, so that a tail costs a lookup
-    // rather than a scan of the arms and a recount of the one it finds.
+    // The arm answering each variant, with the size of its body, so that a tail costs one lookup.
     let mut outer_arm_of_variant: Map<usize, (&MatchArm, u64)> = Map::default();
     for arm in outer_arms {
         if let Some(tag) = arm.tag {
@@ -323,8 +321,8 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         ),
         &node.source,
     );
-    // Renaming a binder and substituting a variable both leave the term's shape alone, so placing the
-    // outer arms leaves exactly the nodes counted above.
+    // Renaming a binder and substituting a variable both leave the term's shape alone, so placing
+    // the outer arms leaves exactly the nodes `rewritten_size` counted.
     assert_eq!(
         node_count(&rewritten),
         rewritten_size,
@@ -333,10 +331,10 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     Some(rewritten)
 }
 
-/// The number of nodes `replace_tail_union` would leave in `node`, where `f` gives the size of what
-/// replaces the tail building each variant. `None` where a tail builds no union, or where `f` has
-/// nothing for the variant one builds — the all-or-nothing condition the move fires under, decided
-/// with nothing built.
+/// The number of nodes `node` holds once the union construction at each of its tails is replaced by
+/// what `f` sizes — the size `replace_tail_union` leaves. `None` where a tail builds no union, or
+/// where `f` has nothing for the variant one builds — the all-or-nothing condition the move fires
+/// under, decided with nothing built.
 fn size_after_replacing_tails(
     node: &RcExprNode,
     f: &mut dyn FnMut(usize) -> Option<u64>,
@@ -377,9 +375,9 @@ fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
 
 /// Replace the union construction at `node`'s tail — `let r = make_union(operand); ret r` — with
 /// `f(variant, operand)`. Where a `match` stands in that tail position, the walk continues into its
-/// arms and replaces the tail of each. `size_after_replacing_tails` walks the same shapes and has already
-/// answered for every tail this reaches, so a tail that builds nothing to replace stops the compiler
-/// where the two walks part ways.
+/// arms and replaces the tail of each. `size_after_replacing_tails` walks the same shapes and has
+/// already answered for every tail this reaches, so a tail that builds nothing to replace stops the
+/// compiler where the two walks part ways.
 ///
 /// Requiring the construction to abut the `ret` makes `r` single-use — bound and immediately returned
 /// — so whatever consumed the arm's result consumed that union linearly.
