@@ -9,6 +9,7 @@ use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
+use crate::constants::RefcntState;
 use crate::constants::TraverserWorkType;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::constants::CLOSURE_FUNPTR_IDX;
@@ -18,9 +19,6 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
-use crate::constants::REFCNT_STATE_GLOBAL;
-use crate::constants::REFCNT_STATE_LOCAL;
-use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
@@ -1067,7 +1065,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             // rests on this too: `build_mark_boxed_with` ends its traversal at an object carrying
             // the mark, and a threaded object is returned to the local state here before a write
             // in place gives it a child of its own.
-            self.set_refcnt_state(obj_ptr, REFCNT_STATE_LOCAL);
+            self.set_refcnt_state(obj_ptr, RefcntState::LOCAL);
             // And jump to unique_bb.
             self.builder()
                 .build_unconditional_branch(unique_bb)
@@ -1117,11 +1115,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         if !self.config.threaded {
             // In single-threaded program,
 
-            // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
+            // Check refcnt_state and jump to local_bb if the object is local.
             let is_refcnt_state_local = self.build_compare_refcnt_state(
                 refcnt_state,
                 IntPredicate::EQ,
-                REFCNT_STATE_LOCAL,
+                RefcntState::LOCAL,
                 "is_refcnt_state_local",
             );
             self.builder()
@@ -1137,7 +1135,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_state_local = self.build_compare_refcnt_state(
                 refcnt_state,
                 IntPredicate::EQ,
-                REFCNT_STATE_LOCAL,
+                RefcntState::LOCAL,
                 "is_refcnt_state_local",
             );
             self.builder()
@@ -1149,7 +1147,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let is_refcnt_state_threaded = self.build_compare_refcnt_state(
                 refcnt_state,
                 IntPredicate::EQ,
-                REFCNT_STATE_THREADED,
+                RefcntState::THREADED,
                 "is_refcnt_state_threaded",
             );
             self.builder()
@@ -1176,7 +1174,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let is_local = self.build_compare_refcnt_state(
             refcnt_state,
             IntPredicate::EQ,
-            REFCNT_STATE_LOCAL,
+            RefcntState::LOCAL,
             "is_refcnt_state_local@assert",
         );
         let current_func = self.current_function();
@@ -2210,27 +2208,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Load refcnt state.
         let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state");
 
-        // Branch by whether or not the object carries the mark. The global state exempts an object
-        // from reference counting entirely, which is what the threaded state asks for and more, so
-        // a global object carries both marks and a threaded object carries the threaded one.
-        let (predicate, compared_state, compare_name) = if marks_global {
-            (IntPredicate::EQ, REFCNT_STATE_GLOBAL, "is_marked_global")
+        // Branch by whether or not the object carries the mark. A state covers every state below
+        // it, so the object carries the mark where its state reaches the marked one.
+        let mark_state = if marks_global {
+            RefcntState::GLOBAL
         } else {
-            (IntPredicate::NE, REFCNT_STATE_LOCAL, "is_marked_threaded")
+            RefcntState::THREADED
         };
-        let is_marked =
-            self.build_compare_refcnt_state(refcnt_state, predicate, compared_state, compare_name);
+        let is_marked = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::UGE,
+            mark_state,
+            "is_marked",
+        );
         self.builder()
             .build_conditional_branch(is_marked, cont_bb, mark_bb)
             .unwrap();
 
         // Implement mark_bb: mark the object itself, then the objects it owns.
         self.builder().position_at_end(mark_bb);
-        let mark_state = if marks_global {
-            REFCNT_STATE_GLOBAL
-        } else {
-            REFCNT_STATE_THREADED
-        };
         self.set_refcnt_state(obj_ptr, mark_state);
         traverse_refs(self);
         self.builder().build_unconditional_branch(cont_bb).unwrap();
@@ -2283,36 +2279,30 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Compare a loaded reference-count state against `state` under `predicate`, naming the result
     /// `name` in the emitted code.
-    ///
-    /// # Arguments
-    /// * `state` — one of the `REFCNT_STATE_*` constants.
     fn build_compare_refcnt_state(
         &self,
         refcnt_state: IntValue<'c>,
         predicate: IntPredicate,
-        state: u8,
+        state: RefcntState,
         name: &str,
     ) -> IntValue<'c> {
         self.builder()
             .build_int_compare(
                 predicate,
                 refcnt_state,
-                refcnt_state_type(self.context).const_int(state as u64, false),
+                refcnt_state_type(self.context).const_int(state.value() as u64, false),
                 name,
             )
             .unwrap()
     }
 
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
-    ///
-    /// # Arguments
-    /// * `state` — one of the `REFCNT_STATE_*` constants.
-    pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: u8) {
+    pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: RefcntState) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(state as u64, false),
+                refcnt_state_type(self.context).const_int(state.value() as u64, false),
             )
             .unwrap();
     }

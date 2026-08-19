@@ -1,5 +1,5 @@
 //! Locality inference on the RC IR: which reference-counting operations act on an object that is
-//! certainly in the `REFCNT_STATE_LOCAL` state, so that the operation can drop the runtime state
+//! certainly in the `RefcntState::LOCAL` state, so that the operation can drop the runtime state
 //! dispatch and increment or decrement the count directly.
 //!
 //! An object leaves the local state through exactly three doors: reading a global (whose initializer
@@ -19,7 +19,7 @@
 //! concrete — inside a clone specialized on them.
 //!
 //! `Ext` throughout this module abbreviates *external*: an object outside the local heap, which is
-//! what `REFCNT_STATE_GLOBAL` and `REFCNT_STATE_THREADED` both mean to reference counting.
+//! what `RefcntState::GLOBAL` and `RefcntState::THREADED` both mean to reference counting.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
@@ -38,9 +38,9 @@ use std::sync::Arc;
 /// three-point chain `DeepLocal ⊑ RootLocal ⊑ MayExt`, joined towards `MayExt`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Locality {
-    /// The object this leaf points to, and every object reachable from it, are `REFCNT_STATE_LOCAL`.
+    /// The object this leaf points to, and every object reachable from it, are `RefcntState::LOCAL`.
     DeepLocal,
-    /// The object this leaf points to is `REFCNT_STATE_LOCAL`. Nothing is claimed about what it
+    /// The object this leaf points to is `RefcntState::LOCAL`. Nothing is claimed about what it
     /// reaches.
     RootLocal,
     /// Nothing is proved.
