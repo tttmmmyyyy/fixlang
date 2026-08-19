@@ -27,28 +27,29 @@ mod integration_tests {
         (temp_dir, project_dir)
     }
 
-    // Create a temporary test environment with copied project files
-    fn setup_test_env() -> (TempDir, PathBuf) {
-        setup_case_env("dependencies_for_test/main_project")
-    }
-
-    // The build of the project at `project_path`, run in a temporary copy of the test cases. The
-    // temporary directory is returned so that it outlives the output.
-    fn build_case(project_path: &str) -> (TempDir, Output) {
+    // The `fix <subcommand>` run of the project at `project_path`, in a temporary copy of the test
+    // cases. The temporary directory is returned so that it outlives the output.
+    fn run_case(project_path: &str, subcommand: &str) -> (TempDir, Output) {
         let (temp_dir, project_dir) = setup_case_env(project_path);
         cleanup_test_project(&project_dir);
         let output = fix_command()
-            .arg("build")
+            .arg(subcommand)
             .current_dir(&project_dir)
             .output()
-            .expect("Failed to execute fix build");
+            .unwrap_or_else(|err| panic!("Failed to execute fix {}: {}", subcommand, err));
         assert!(
             output.status.success(),
-            "fix build failed:\nstdout: {}\nstderr: {}",
+            "fix {} failed:\nstdout: {}\nstderr: {}",
+            subcommand,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
         (temp_dir, output)
+    }
+
+    // The build of the project at `project_path`, run in a temporary copy of the test cases.
+    fn build_case(project_path: &str) -> (TempDir, Output) {
+        run_case(project_path, "build")
     }
 
     // Clean up lock files and build artifacts before running test
@@ -66,7 +67,7 @@ mod integration_tests {
         // 3. Only normal dependencies are included
         // 4. Test dependencies of normal dependencies are NOT included
 
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Run `fix build` in the test project directory
@@ -123,7 +124,7 @@ mod integration_tests {
         // Note: test-dep appears in fixdeps.test.lock because main-project directly depends on it,
         // not because normal-dep has it as a test dependency (dependency's test dependencies don't propagate)
 
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Run `fix test` directly (should auto-generate lock file and install dependencies)
@@ -182,7 +183,7 @@ mod integration_tests {
         // This test verifies the explicit build workflow:
         // `fix deps update` → `fix deps install` → `fix build`
 
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Step 1: Update dependencies
@@ -264,7 +265,7 @@ mod integration_tests {
         // This test verifies the explicit test workflow:
         // `fix deps update --test` → `fix deps install --test` → `fix test`
 
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Step 1: Update test dependencies
@@ -405,6 +406,105 @@ mod integration_tests {
         assert!(
             stderr.contains("::DepB::secret_value"),
             "the warning points at the absolute path:\n{}",
+            stderr
+        );
+    }
+
+    // An import that crosses no project boundary needs no declaration: a module of the importing
+    // project itself, and `Std`, whose files belong to no project at all.
+    #[test]
+    fn test_import_within_one_project_does_not_warn() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/one_project");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            !stderr.contains("does not declare as a dependency"),
+            "a project's own module and `Std` are declared by nothing and warned about by \
+             nothing:\n{}",
+            stderr
+        );
+    }
+
+    // The test sources of a test build are judged by the test declarations. `root_test` declares
+    // `undeclared-depa` as a test dependency alone, and `test.fix` imports both `DepA` (of that
+    // project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    #[test]
+    fn test_undeclared_dependency_in_test_sources_warns() {
+        let (_temp_dir, output) = run_case("undeclared_dependency/root_test", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import of `DepB` is the one import to warn about, and the test dependency \
+             `undeclared-depa` is declared:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root-test\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             imports it:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("in \"test.fix\""),
+            "the warning points at the import in the test source:\n{}",
+            stderr
+        );
+    }
+
+    // A test dependency is declared for the test sources alone, so an ordinary source that imports
+    // one is warned about even in a test build, where the module is there to import.
+    // `root_build_uses_test_dep` declares `undeclared-depa` as a test dependency, and its
+    // `main.fix` imports `DepA`.
+    #[test]
+    fn test_ordinary_source_importing_a_test_dependency_warns() {
+        let (_temp_dir, output) =
+            run_case("undeclared_dependency/root_build_uses_test_dep", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import in `main.fix` is the one import to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepA` belongs to the project \"undeclared-depa\", which the project \
+                 \"undeclared-root-build-uses-test-dep\" does not declare as a dependency."
+            ),
+            "the warning names the test dependency the ordinary source reached:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("in \"main.fix\""),
+            "the warning points at the import in the ordinary source:\n{}",
+            stderr
+        );
+    }
+
+    // One declaration answers every import between two projects, so the two of them stand for one
+    // warning, pointing at the import that comes first in the source. `root_two_imports` imports
+    // `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
+    #[test]
+    fn test_undeclared_dependency_warns_once_at_the_earliest_import() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_two_imports");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the two imports of `undeclared-depb` are one project to declare:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("Module `DepB2` belongs to the project \"undeclared-depb\""),
+            "the warning names the module of the import that comes first, which the later import \
+             of `DepB` does not displace:\n{}",
             stderr
         );
     }
