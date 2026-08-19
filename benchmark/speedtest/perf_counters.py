@@ -81,8 +81,6 @@ def cpu_list(text):
     """The CPU numbers a sysfs list like `5,11` or `2-5,8` names."""
     numbers = []
     for part in text.strip().split(","):
-        if not part:
-            continue
         ends = part.split("-")
         numbers.extend(range(int(ends[0]), int(ends[-1]) + 1))
     return numbers
@@ -101,14 +99,11 @@ def measurement_core():
     first, so the thread watched here is the one the rest of the machine reaches for last, and a
     measurement finds its core to itself that much more often.
     """
-    present = sorted(int(name[3:]) for name in os.listdir("/sys/devices/system/cpu")
-                     if re.fullmatch(r"cpu\d+", name))
-    topology = f"/sys/devices/system/cpu/cpu{present[-1]}/topology/thread_siblings_list"
-    try:
-        with open(topology, encoding="utf-8") as siblings:
-            threads = sorted(cpu_list(siblings.read()))
-    except OSError:
-        threads = [present[-1]]
+    highest = max(int(name[3:]) for name in os.listdir("/sys/devices/system/cpu")
+                  if re.fullmatch(r"cpu\d+", name))
+    topology = f"/sys/devices/system/cpu/cpu{highest}/topology/thread_siblings_list"
+    with open(topology, encoding="utf-8") as siblings:
+        threads = sorted(cpu_list(siblings.read()))
     return threads[0], threads[-1] if len(threads) > 1 else None
 
 
@@ -232,6 +227,7 @@ def measure(argv, windows):
     a core the program had only half of gives a figure about the sharing rather than about the
     program.
     """
+    assert windows >= 1, windows
     machine_before = cpu_seconds("cpu")
     own_before = own_cpu_seconds()
     started = time.monotonic()
@@ -283,8 +279,9 @@ def cycles_are_comparable(contention, dram_accesses, instructions):
     """
     if contention <= QUIET_CONTENTION:
         return True
-    if dram_accesses is None or not instructions:
+    if dram_accesses is None or instructions is None:
         return False
+    assert instructions > 0, instructions
     return dram_accesses / instructions <= CONTENDED_DRAM_RATE
 
 
@@ -318,7 +315,6 @@ def self_check():
     assert cycles_are_comparable(QUIET_CONTENTION / 2, None, None)
     assert not cycles_are_comparable(busy, None, 10 ** 9)
     assert not cycles_are_comparable(busy, 10 ** 3, None)
-    assert not cycles_are_comparable(busy, 10 ** 3, 0)
     # Above the rate another process reaches the count through the cache; below it it cannot.
     below = int(CONTENDED_DRAM_RATE * 10 ** 9 / 2)
     above = int(CONTENDED_DRAM_RATE * 10 ** 9 * 2)
@@ -369,8 +365,8 @@ def main():
                  "       perf_counters.py --cpu")
     splits, cycles, contention = measure(argv, windows)
     # The split count is deterministic, so it is reported whatever the machine was doing.
-    reported_cycles = (str(cycles) if cycles is not None
-                       and cycles_are_comparable(contention, dram_accesses, instructions) else "")
+    comparable = cycles_are_comparable(contention, dram_accesses, instructions)
+    reported_cycles = str(cycles) if cycles is not None and comparable else ""
     print(f"{splits},{reported_cycles},{contention:.2f}")
 
 

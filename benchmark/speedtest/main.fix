@@ -216,7 +216,12 @@ main = (
         };
         let bench = bench.as_some;
         // Split by comma to get "inst", "mem" and "ram".
-        let bench = bench.split(",").to_array;
+        let fields = bench.split(",").to_array;
+        if fields.@size != 3 {
+            eprintln("error: cachegrind reported \"" + bench + "\" for " + dir);;
+            exit(1)
+        };
+        let bench = fields;
         let case_name = dir;
         let inst = case_name + "-inst";
         let mem = case_name + "-mem";
@@ -244,7 +249,10 @@ main = (
             "./a.out"].ez_run_oec(config);
         let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@(0) == "" { (log, 0.0) };
+            if perf.@size != 3 {
+                undefined("error: perf_counters.py reported \"" + perf.to_iter.join(",")
+                    + "\" for " + dir)
+            };
             let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
             let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(1));
             // A figure the harness cannot make out leaves the row's `contention` at whatever
