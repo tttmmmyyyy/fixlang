@@ -1272,6 +1272,11 @@ fn structs_built_in(
 // brings another one in. A recursive call may: the same reading holds of the body it returns from,
 // which is this one. A call that only takes such a struct is left alone — it receives the one the
 // body already has.
+//
+// The one other way a struct of the type appears is an inline-LLVM expression yielding one — reading
+// it out of an array, or the punch-and-plug-in pair that `mod_` / `set_` / `act_` on a field become.
+// Those put a value of the caller's choosing where the field was, so the struct they give back holds
+// what the one that arrived did not.
 fn struct_stays_the_one_given(
     arg: usize,
     param_tys: &[Arc<TypeNode>],
@@ -1287,6 +1292,10 @@ fn struct_stays_the_one_given(
         return false;
     }
     nodes_of(body).iter().all(|node| {
+        let ty = node.type_.as_ref().unwrap();
+        if matches!(&*node.expr, Expr::LLVM(_)) {
+            return !heads_tycon(ty, tycon);
+        }
         if !node.is_var() {
             return true;
         }
@@ -1294,15 +1303,20 @@ fn struct_stays_the_one_given(
         if name.is_local() || name == func {
             return true;
         }
-        let codom = node.type_.as_ref().unwrap().collect_app_src(usize::MAX).1;
-        !mentions_tycon(&codom, tycon)
+        !mentions_tycon(&ty.collect_app_src(usize::MAX).1, tycon)
     })
+}
+
+// Whether `ty` is `tycon` applied to its arguments, which is what a value of the struct itself is
+// typed at.
+fn heads_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
+    ty.toplevel_tycon()
+        .is_some_and(|top| top.as_ref() == tycon.as_ref())
 }
 
 // Whether `tycon` occurs anywhere in `ty`.
 fn mentions_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
-    ty.toplevel_tycon()
-        .is_some_and(|top| top.as_ref() == tycon.as_ref())
+    heads_tycon(ty, tycon)
         || ty
             .collect_type_arguments()
             .iter()
