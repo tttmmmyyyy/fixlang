@@ -1,14 +1,15 @@
 module Main;
 
 // Two of the struct's fields hold a function, so a copy takes two capture lists, standing after the
-// struct in the order the fields are declared.
+// struct in the order the fields are declared. The destructuring names them in another order, which
+// is the order the source has rather than the order the declaration does.
 type Pair = unbox struct { n : I64, f : I64 -> I64, g : I64 -> I64 };
 
 stepping : I64 -> Pair -> I64;
 stepping = |acc, s| (
-    let Pair { n : n, f : f, g : g } = s;
+    let Pair { n : n, g : g, f : f } = s;
     if n == 0 { acc };
-    stepping(acc + f(n) + g(n), Pair { n : n - 1, f : f, g : g })
+    stepping(acc + f(n) * 100 + g(n), Pair { n : n - 1, f : f, g : g })
 );
 
 main : IO () = (

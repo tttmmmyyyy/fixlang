@@ -58,9 +58,9 @@ mod integration_tests {
     /// from 1 for 30 and 31, and `step2` sums it over `2..1` for 9.
     const STRUCT_FIELD_PARTIAL_APPLICATION_OUTPUT: &str = "70";
 
-    /// What `struct_field_two_closures` prints: `stepping` sums `3 * n` and `n + 7` over `4..1` for
-    /// 68 and over `2..1` for 26.
-    const STRUCT_FIELD_TWO_CLOSURES_OUTPUT: &str = "94";
+    /// What `struct_field_two_closures` prints: `stepping` sums `3 * n` scaled by 100 and `n + 7`
+    /// over `4..1` for 3034 and over `2..1` for 921, the scaling telling the two fields apart.
+    const STRUCT_FIELD_TWO_CLOSURES_OUTPUT: &str = "3955";
 
     /// What `struct_field_named_struct` prints: `stepping` sums `3 * n` over `4..1` for 30 and over
     /// `2..1` for 9.
@@ -402,7 +402,9 @@ mod integration_tests {
     }
 
     /// A struct holding a closure at two of its fields hands over both capture lists, in the order
-    /// the fields are declared, which is the order the copy binds the parameters receiving them.
+    /// the fields are declared, which is the order the copy binds the parameters receiving them. The
+    /// destructuring names them in another order, so the position a field is read at is the one the
+    /// declaration gives it rather than the one the source writes it at.
     #[test]
     pub fn test_a_struct_holding_two_closures_hands_over_both_capture_lists() {
         let (_temp_dir, project_dir) = setup_test_env("struct_field_two_closures");

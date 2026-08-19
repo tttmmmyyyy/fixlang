@@ -10,7 +10,7 @@ use crate::{
             expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
             var_var, Expr, ExprNode,
         },
-        name::FullName,
+        name::{FullName, Name},
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol, TypeEnv},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -23,6 +23,7 @@ use crate::{
     graph::Graph,
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
+    parse::sourcefile::Span,
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -1142,8 +1143,8 @@ fn struct_field_slots_of(
     if !struct_stays_the_one_given(arg, param_tys, body, &tycon, func) {
         return Set::default();
     }
-    let destructurings = struct_destructurings_in(body, param_ty, &tycon);
-    let built_here = structs_built_in(body, param_ty, &tycon);
+    let destructurings = struct_destructurings_in(body, param_ty, &tycon, &lifted.type_env);
+    let built_here = structs_built_in(body, param_ty, &tycon, &lifted.type_env);
     let mut slots = Set::default();
     for (position, field_ty) in param_ty.field_types(&lifted.type_env).iter().enumerate() {
         if !field_ty.is_closure() {
@@ -1206,6 +1207,7 @@ fn struct_destructurings_in(
     body: &Arc<ExprNode>,
     ty: &Arc<TypeNode>,
     tycon: &Arc<TyCon>,
+    type_env: &TypeEnv,
 ) -> Vec<(Vec<Option<FullName>>, Arc<ExprNode>)> {
     let mut destructurings = Vec::new();
     body.walk_nodes(&mut |node| {
@@ -1218,19 +1220,22 @@ fn struct_destructurings_in(
         if pat_tycon != tycon || !is_same_type_node(pat.info.type_.as_ref().unwrap(), ty) {
             return;
         }
-        let names = field_to_pat
-            .iter()
-            .map(|(_, _, field_pat)| {
-                if field_pat.is_var() {
-                    Some(field_pat.get_var().name.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let mut names = vec![None; field_count(ty, type_env)];
+        for (field_name, _, field_pat) in field_to_pat {
+            if !field_pat.is_var() {
+                continue;
+            }
+            let position = ty.field_index(type_env, field_name).unwrap();
+            names[position] = Some(field_pat.get_var().name.clone());
+        }
         destructurings.push((names, value.clone()));
     });
     destructurings
+}
+
+// How many fields the struct `ty` declares.
+fn field_count(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> usize {
+    ty.field_types(type_env).len()
 }
 
 // The name put into each field of every struct of type `ty` that `body` builds, in the order the
@@ -1239,6 +1244,7 @@ fn structs_built_in(
     body: &Arc<ExprNode>,
     ty: &Arc<TypeNode>,
     tycon: &Arc<TyCon>,
+    type_env: &TypeEnv,
 ) -> Vec<Vec<Option<FullName>>> {
     let mut built = Vec::new();
     body.walk_nodes(&mut |node| {
@@ -1248,18 +1254,15 @@ fn structs_built_in(
         if made_tycon != *tycon || !is_same_type_node(node.type_.as_ref().unwrap(), ty) {
             return;
         }
-        built.push(
-            fields
-                .iter()
-                .map(|(_, _, value)| {
-                    if value.is_var() {
-                        Some(value.get_var().name.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        );
+        let mut names = vec![None; field_count(ty, type_env)];
+        for (field_name, _, value) in fields {
+            if !value.is_var() {
+                continue;
+            }
+            let position = ty.field_index(type_env, field_name).unwrap();
+            names[position] = Some(value.get_var().name.clone());
+        }
+        built.push(names);
     });
     built
 }
@@ -2444,14 +2447,14 @@ impl ClosureSpecializationVisitor {
         let Pattern::Struct(_, field_to_pat) = &pat.pattern else {
             return;
         };
-        let Some(fields) = self
-            .known_struct_fields
-            .get(&bound.type_.as_ref().unwrap().to_string())
-            .cloned()
-        else {
+        let bound_ty = bound.type_.as_ref().unwrap();
+        let Some(fields) = self.known_struct_fields.get(&bound_ty.to_string()).cloned() else {
             return;
         };
-        for (position, (_, _, field_pat)) in field_to_pat.iter().enumerate() {
+        // A pattern names the fields it destructures in the order they are written, which is the
+        // order the source has them in rather than the order they are declared.
+        let positions = self.field_positions(bound_ty, field_to_pat);
+        for ((_, _, field_pat), position) in field_to_pat.iter().zip(positions) {
             let Some(known) = fields.get(&position) else {
                 continue;
             };
@@ -2461,6 +2464,19 @@ impl ClosureSpecializationVisitor {
             self.struct_field_locals
                 .insert(field_pat.get_var().name.clone(), known.clone());
         }
+    }
+
+    // Where each of the fields named in `written` sits among the fields `ty` declares.
+    fn field_positions<T>(
+        &self,
+        ty: &Arc<TypeNode>,
+        written: &[(Name, Option<Span>, T)],
+    ) -> Vec<usize> {
+        let type_env = &self.lifted.borrow().type_env;
+        written
+            .iter()
+            .map(|(field_name, _, _)| ty.field_index(type_env, field_name).unwrap())
+            .collect()
     }
 
     // What the fields of the struct `arg` yields hold, by position in ascending order, where their
@@ -2474,6 +2490,11 @@ impl ClosureSpecializationVisitor {
             if let Some(fields) = self.local_struct_fields.get(&arg.get_var().name) {
                 return fields.clone();
             }
+        }
+        // A capture list this pass minted is not a struct the program declares, and its fields are
+        // capture fields, which are a way in of their own.
+        if declared_struct_tycon(arg.type_.as_ref().unwrap(), &self.lifted.borrow()).is_none() {
+            return Vec::new();
         }
         let mut fields = match self
             .known_struct_fields
@@ -2489,9 +2510,10 @@ impl ClosureSpecializationVisitor {
                     // where the struct itself is. One read off a name the struct binds inside itself
                     // is not.
                     let bound_inside = names_bound_in(arg);
+                    let positions = self.field_positions(arg.type_.as_ref().unwrap(), made);
                     made.iter()
-                        .enumerate()
-                        .filter_map(|(position, (_, _, value))| {
+                        .zip(positions)
+                        .filter_map(|((_, _, value), position)| {
                             let known = self.known_value(value)?;
                             known
                                 .cap_list
