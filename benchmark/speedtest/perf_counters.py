@@ -114,6 +114,13 @@ def measurement_core():
 
 CPU, SIBLING = measurement_core()
 
+# The programs inherit this, so they run where the sibling is watched. Setting it here rather
+# than putting `taskset` in front of the command keeps the chain of programs that leads to the
+# measured one exactly as long as it was: the initial stack is laid out above that chain's
+# arguments, and moving it moves which accesses straddle a cache line, which is the `-splits`
+# column.
+os.sched_setaffinity(0, {CPU})
+
 
 def sibling_cpu_seconds():
     """CPU seconds the other thread of the measurement's core has spent off idle since boot."""
@@ -146,7 +153,7 @@ def read_counters(argv):
     proc = subprocess.run(
         # ASLR off, as cachegrind.py runs it: the split count depends on where the
         # allocator puts the data, so a moving heap would move the number.
-        ["setarch", ARCH, "-R", "taskset", "-c", str(CPU), "perf", "stat", "-x,",
+        ["setarch", ARCH, "-R", "perf", "stat", "-x,",
          "-e", ",".join(SPLIT_EVENTS + [CYCLE_EVENT]), "--"] + argv,
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
         env=MEASUREMENT_ENV,
