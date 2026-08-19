@@ -228,15 +228,15 @@ type SpecializableSlots = Map<FullName, Set<Slot>>;
 // tree. A relay chain that narrows two capture fields per link would otherwise build, and repeatedly
 // walk, a structure that doubles per link while the program describing it grows by one function.
 #[derive(Clone, Debug)]
-struct ValueTree(Rc<ValueTreeData>);
+struct ClosureTree(Rc<ClosureTreeData>);
 
 // The contents of a tree, held behind an `Rc` so that every occurrence of one value shares them.
 #[derive(Debug)]
-struct ValueTreeData {
+struct ClosureTreeData {
     // The lambda decapturing lifted, which is what a call through this value reaches.
     lambda: FullName,
     // The capture fields whose own identity is known, by position, in ascending order.
-    fields: Vec<(usize, ValueTree)>,
+    fields: Vec<(usize, ClosureTree)>,
     // What the two above say. Two trees are the same value exactly when their digests agree.
     digest: md5::Digest,
     // How many lambdas this value names, itself included. The count is stored because the trees a
@@ -245,9 +245,9 @@ struct ValueTreeData {
     lambdas: usize,
 }
 
-impl ValueTree {
+impl ClosureTree {
     // The value of `lambda` with the given capture fields narrowed to the values they hold.
-    fn new(lambda: FullName, fields: Vec<(usize, ValueTree)>) -> Self {
+    fn new(lambda: FullName, fields: Vec<(usize, ClosureTree)>) -> Self {
         // Both the digest below and the substitution `receiving_copy` reads off the fields are
         // functions of their order, so the same value given in two orders would name two copies of
         // one function.
@@ -266,7 +266,7 @@ impl ValueTree {
         }
         let digest = md5::compute(hash_data);
         let lambdas = 1 + fields.iter().map(|(_, tree)| tree.lambdas()).sum::<usize>();
-        ValueTree(Rc::new(ValueTreeData {
+        ClosureTree(Rc::new(ClosureTreeData {
             lambda,
             fields,
             digest,
@@ -276,7 +276,7 @@ impl ValueTree {
 
     // The value of a lambda whose capture fields are all still closures.
     fn leaf(lambda: FullName) -> Self {
-        ValueTree::new(lambda, Vec::new())
+        ClosureTree::new(lambda, Vec::new())
     }
 
     // The lambda a call through this value reaches.
@@ -285,7 +285,7 @@ impl ValueTree {
     }
 
     // The capture fields whose own identity is known, by position, in ascending order.
-    fn fields(&self) -> &[(usize, ValueTree)] {
+    fn fields(&self) -> &[(usize, ClosureTree)] {
         &self.0.fields
     }
 
@@ -314,15 +314,15 @@ impl ValueTree {
     }
 }
 
-impl PartialEq for ValueTree {
+impl PartialEq for ClosureTree {
     // Compares the digests, each of which stands for a whole tree, so the cost stays the same
     // however deep the two values are.
     fn eq(&self, other: &Self) -> bool {
         self.0.digest == other.0.digest
     }
 }
-impl Eq for ValueTree {}
-impl Hash for ValueTree {
+impl Eq for ClosureTree {}
+impl Hash for ClosureTree {
     // Hashes the digest, so that values equal under `eq` hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.digest.hash(state);
@@ -336,12 +336,12 @@ struct FuncCopy {
     // The function the copy is made from.
     origin: FullName,
     // Slots in ascending order, so that `name` is a function of the copy alone.
-    subst: Vec<(Slot, ValueTree)>,
+    subst: Vec<(Slot, ClosureTree)>,
 }
 
 impl FuncCopy {
     // The copy of `origin` whose ways in receive the given values.
-    fn new(origin: FullName, subst: Map<Slot, ValueTree>) -> Self {
+    fn new(origin: FullName, subst: Map<Slot, ClosureTree>) -> Self {
         let mut subst = subst.into_iter().collect::<Vec<_>>();
         subst.sort_by_key(|(slot, _)| *slot);
         FuncCopy { origin, subst }
@@ -369,7 +369,7 @@ impl FuncCopy {
     //
     // A field of argument 0 of a lifted lambda is a capture field instead: that copy receives it
     // inside the capture list rather than beside it.
-    fn struct_field_slots(&self, lifted: &LiftedLambdas) -> Vec<(Slot, ValueTree)> {
+    fn struct_field_subst(&self, lifted: &LiftedLambdas) -> Vec<(Slot, ClosureTree)> {
         let origin_is_lifted = lifted.is_lifted(&self.origin);
         self.subst
             .iter()
@@ -385,11 +385,11 @@ impl FuncCopy {
     }
 
     // The capture list this copy receives, where it is a copy of a lifted lambda whose capture list
-    // is narrowed. This is the inverse of `ValueTree::receiving_copy`.
+    // is narrowed. This is the inverse of `ClosureTree::receiving_copy`.
     //
     // A way in through a field of argument 0 is a capture field only where the function copied is a
     // lifted lambda, since that is what makes argument 0 its capture list.
-    fn capture_list_tree(&self, lifted: &LiftedLambdas) -> Option<ValueTree> {
+    fn capture_list_tree(&self, lifted: &LiftedLambdas) -> Option<ClosureTree> {
         if !lifted.is_lifted(&self.origin) {
             return None;
         }
@@ -401,7 +401,7 @@ impl FuncCopy {
         if fields.is_empty() {
             return None;
         }
-        Some(ValueTree::new(self.origin.clone(), fields))
+        Some(ClosureTree::new(self.origin.clone(), fields))
     }
 }
 
@@ -410,7 +410,7 @@ impl FuncCopy {
 // recursion that wraps its closure argument on every round from asking for a copy per round. Every
 // copy carries the table of the request that created it, so the walk over that copy continues the
 // same chain rather than starting a fresh one.
-type Pinned = Map<(FullName, Slot, FullName), ValueTree>;
+type Pinned = Map<(FullName, Slot, FullName), ClosureTree>;
 
 // Commit the chain reaching here to specializing `slot` of `func` on `tree`, and report whether it
 // may be specialized on at all.
@@ -418,7 +418,7 @@ type Pinned = Map<(FullName, Slot, FullName), ValueTree>;
 // It may not where the chain has already committed that key to a different value: that is a
 // recursion handing the next round a closure built from the one it was given, and following it would
 // ask for one copy per round.
-fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &ValueTree) -> bool {
+fn commit(pinned: &mut Pinned, func: &FullName, slot: Slot, tree: &ClosureTree) -> bool {
     let key = (func.clone(), slot, tree.lambda().clone());
     match pinned.get(&key) {
         Some(committed) => committed == tree,
@@ -520,10 +520,10 @@ struct LiftedLambdas {
     lambdas: Map<FullName, LiftedLambda>,
     // The value a capture list of each type constructor this pass minted carries. This is what makes
     // the type of a capture list say what to call it with.
-    trees: Map<FullName, ValueTree>,
+    trees: Map<FullName, ClosureTree>,
     // The capture struct each value is, which is asked for once per wrap and once per call through a
     // narrowed capture list. Deriving it walks the whole tree, so it is derived once per value.
-    structs: Map<ValueTree, CaptureStruct>,
+    caps: Map<ClosureTree, CaptureStruct>,
     // The type constructors minted so far, which the caller registers into the program's type
     // environment.
     new_tycons: Map<TyCon, TyConInfo>,
@@ -536,14 +536,14 @@ impl LiftedLambdas {
             type_env,
             lambdas: Map::default(),
             trees: Map::default(),
-            structs: Map::default(),
+            caps: Map::default(),
             new_tycons: Map::default(),
         }
     }
 
     // Record a lambda just lifted, under the name of the global function it became.
     fn insert(&mut self, name: FullName, cap: CaptureStruct, func_ty: Arc<TypeNode>) {
-        self.record_minted_struct(&cap, &ValueTree::leaf(name.clone()));
+        self.record_capture_list(&cap, &ClosureTree::leaf(name.clone()));
         self.lambdas.insert(name, LiftedLambda { cap, func_ty });
     }
 
@@ -558,13 +558,13 @@ impl LiftedLambdas {
     }
 
     // The value a capture list of `tycon` carries.
-    fn tree_of_minted_struct(&self, tycon: &FullName) -> Option<ValueTree> {
+    fn tree_of_capture_list(&self, tycon: &FullName) -> Option<ClosureTree> {
         self.trees.get(tycon).cloned()
     }
 
     // The value a capture list of type `ty` carries, where `ty` is one.
-    fn tree_of_minted_struct_type(&self, ty: &Arc<TypeNode>) -> Option<ValueTree> {
-        self.tree_of_minted_struct(&ty.toplevel_tycon()?.name)
+    fn tree_of_capture_list_type(&self, ty: &Arc<TypeNode>) -> Option<ClosureTree> {
+        self.tree_of_capture_list(&ty.toplevel_tycon()?.name)
     }
 
     // Whether `name` is the global function a lambda was lifted to.
@@ -575,8 +575,8 @@ impl LiftedLambdas {
     // The capture struct a value of `tree` is: the lifted lambda's, with each known field narrowed
     // to the capture struct of what it holds. The type constructor is named after the copy that
     // receives it, so the type and the tree determine each other.
-    fn struct_of(&mut self, tree: &ValueTree) -> CaptureStruct {
-        if let Some(cap) = self.structs.get(tree) {
+    fn capture_struct_of(&mut self, tree: &ClosureTree) -> CaptureStruct {
+        if let Some(cap) = self.caps.get(tree) {
             return cap.clone();
         }
         let base = self.lambdas[tree.lambda()].cap.clone();
@@ -585,17 +585,17 @@ impl LiftedLambdas {
         }
         let mut fields = base.fields().to_vec();
         for (field, inner) in tree.fields() {
-            fields[*field].1 = self.struct_of(inner).ty;
+            fields[*field].1 = self.capture_struct_of(inner).ty;
         }
         let cap = CaptureStruct::new(CAP_LIST_PREFIX, &tree.receiving_copy().name(), &fields);
-        self.record_minted_struct(&cap, tree);
-        self.structs.insert(tree.clone(), cap.clone());
+        self.record_capture_list(&cap, tree);
+        self.caps.insert(tree.clone(), cap.clone());
         cap
     }
 
     // Remember the value a capture list of `cap`'s type constructor carries, and hold that type
     // constructor until it is registered.
-    fn record_minted_struct(&mut self, cap: &CaptureStruct, tree: &ValueTree) {
+    fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &ClosureTree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons
             .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
@@ -734,13 +734,13 @@ fn realize_all(
         // list, and every struct of that type this body meets holds that value at that field.
         let cap_params = capture_list_params(&request, lifted);
         let expr = insert_capture_list_params(&expr, &cap_params);
-        let mut known_struct_fields: Map<String, Map<usize, Known>> = Map::default();
+        let mut fields_of_struct_type: Map<String, Map<usize, Known>> = Map::default();
         for cap_param in &cap_params {
             local_decap_lambdas.insert(
                 cap_param.name.clone(),
                 Known::bare(cap_param.tree.clone(), cap_param.name_expr()),
             );
-            known_struct_fields
+            fields_of_struct_type
                 .entry(cap_param.struct_ty.to_string())
                 .or_default()
                 .insert(
@@ -764,7 +764,7 @@ fn realize_all(
         );
         visitor.local_decap_lambdas = local_decap_lambdas;
         visitor.narrowed_capture_list = narrowed;
-        visitor.known_struct_fields = known_struct_fields;
+        visitor.fields_of_struct_type = fields_of_struct_type;
         let trav_res = visitor.traverse(&expr);
         assert!(
             visitor.narrowed_capture_list.is_none(),
@@ -807,7 +807,7 @@ struct CaptureListParam {
     // The name the parameter is bound to, which is a function of the slot alone.
     name: FullName,
     // The lambda the field holds, with its own narrowed capture fields.
-    tree: ValueTree,
+    tree: ClosureTree,
     // The type of the struct the field belongs to, which is what the argument the parameter stands
     // next to is declared at.
     struct_ty: Arc<TypeNode>,
@@ -828,7 +828,7 @@ fn capture_list_params(
     request: &SpecializationRequest,
     lifted: &RefCell<LiftedLambdas>,
 ) -> Vec<CaptureListParam> {
-    let slots = request.func_copy.struct_field_slots(&lifted.borrow());
+    let slots = request.func_copy.struct_field_subst(&lifted.borrow());
     let doms = request.org_func_ty.collect_app_src(usize::MAX).0;
     slots
         .into_iter()
@@ -836,7 +836,7 @@ fn capture_list_params(
             slot,
             name: capture_list_param_name(&slot),
             struct_ty: doms[slot.arg].clone(),
-            cap_list_ty: lifted.borrow_mut().struct_of(&tree).ty,
+            cap_list_ty: lifted.borrow_mut().capture_struct_of(&tree).ty,
             tree,
         })
         .collect()
@@ -904,7 +904,7 @@ fn narrowed_capture_list(
         .unwrap()
         .tycon
         .clone();
-    let cap = lifted.borrow_mut().struct_of(&tree);
+    let cap = lifted.borrow_mut().capture_struct_of(&tree);
     Some(NarrowedCaptureList { original, cap })
 }
 
@@ -931,7 +931,7 @@ fn known_arguments(
         );
         assert_eq!(param_lists[slot.arg].len(), 1);
         let arg_name = param_lists[slot.arg][0].name.clone();
-        let cap_list_ty = lifted.borrow_mut().struct_of(tree).ty;
+        let cap_list_ty = lifted.borrow_mut().capture_struct_of(tree).ty;
         known_args.insert(
             arg_name.clone(),
             Known::bare(tree.clone(), expr_var(arg_name, None).set_type(cap_list_ty)),
@@ -1047,7 +1047,7 @@ fn reaches_a_direct_call(
             // `defunctionalize_fix` builds — carries no such way in, so the value is reached there
             // only by an indirect call.
             UsageType::CapturedInto(tycon, position) => {
-                lifted.tree_of_minted_struct(&tycon).is_some_and(|tree| {
+                lifted.tree_of_capture_list(&tycon).is_some_and(|tree| {
                     is_specializable(
                         specializable_slots,
                         tree.lambda(),
@@ -1309,7 +1309,7 @@ fn struct_stays_the_one_given(
     body.walk_nodes(&mut |node| {
         let ty = node.type_.as_ref().unwrap();
         if matches!(&*node.expr, Expr::LLVM(_)) {
-            stays &= !heads_tycon(ty, tycon);
+            stays &= !is_headed_by(ty, tycon);
             return;
         }
         if !node.is_var() {
@@ -1326,7 +1326,7 @@ fn struct_stays_the_one_given(
 
 // Whether `ty` is `tycon` applied to its arguments, which is what a value of the struct itself is
 // typed at.
-fn heads_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
+fn is_headed_by(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
     ty.toplevel_tycon()
         .is_some_and(|top| top.as_ref() == tycon.as_ref())
 }
@@ -1428,14 +1428,14 @@ struct ClosureSpecializationVisitor {
     // field. A copy specialized on a field of a struct argument is entitled to read it of every such
     // struct in its body: the table offers that way in only where the body cannot put another value
     // there.
-    known_struct_fields: Map<String, Map<usize, Known>>,
+    fields_of_struct_type: Map<String, Map<usize, Known>>,
     // The names a destructuring in this body bound to a field whose value is known, so that a call
     // through one of them names the lambda and hands it the capture list the copy received.
-    struct_field_locals: Map<FullName, Known>,
+    local_field_lambdas: Map<FullName, Known>,
     // What the fields of a struct bound to a local hold, where their identity is known. A struct is
     // built and given a name before it is handed over, so this is what a call site reads to say what
     // an argument of it carries.
-    local_struct_fields: Map<FullName, Vec<(usize, Known)>>,
+    fields_of_local_struct: Map<FullName, Vec<(usize, Known)>>,
 
     /* Specialization */
     // Which ways into which functions a copy is worth making for, solved once over the whole
@@ -1473,7 +1473,7 @@ struct ClosureSpecializationVisitor {
 #[derive(Clone)]
 struct Known {
     // Which lambda the value is, and which of its capture fields are themselves known.
-    tree: ValueTree,
+    tree: ClosureTree,
     // An expression yielding the bare capture list, evaluable wherever the value itself is.
     cap_list: Arc<ExprNode>,
     // Whether the expression this was read off is the bare capture list rather than a closure
@@ -1483,7 +1483,7 @@ struct Known {
 
 impl Known {
     // A known value carried by the bare capture list `cap_list`.
-    fn bare(tree: ValueTree, cap_list: Arc<ExprNode>) -> Self {
+    fn bare(tree: ClosureTree, cap_list: Arc<ExprNode>) -> Self {
         Known {
             tree,
             cap_list,
@@ -1508,9 +1508,9 @@ impl ClosureSpecializationVisitor {
             local_decap_lambdas: Map::default(),
             lifted,
             narrowed_capture_list: None,
-            known_struct_fields: Map::default(),
-            struct_field_locals: Map::default(),
-            local_struct_fields: Map::default(),
+            fields_of_struct_type: Map::default(),
+            local_field_lambdas: Map::default(),
+            fields_of_local_struct: Map::default(),
             specializable_slots,
             required_specializations: Vec::new(),
             lam_func_counter: 0,
@@ -1523,14 +1523,14 @@ impl ClosureSpecializationVisitor {
     }
 
     // The capture struct a value of `tree` is.
-    fn cap_of(&self, tree: &ValueTree) -> CaptureStruct {
-        self.lifted.borrow_mut().struct_of(tree)
+    fn cap_of(&self, tree: &ClosureTree) -> CaptureStruct {
+        self.lifted.borrow_mut().capture_struct_of(tree)
     }
 
     // The function a value of `tree` is called through, as an expression, together with its type.
     // For a tree whose fields are all still closures this is the lifted lambda itself; otherwise it
     // is the copy that receives the narrowed capture list.
-    fn lambda_func_of(&self, tree: &ValueTree) -> Arc<ExprNode> {
+    fn lambda_func_of(&self, tree: &ClosureTree) -> Arc<ExprNode> {
         let base = self.lifted.borrow().func_ty(tree.lambda());
         let (mut doms, codom) = base.collect_app_src(usize::MAX);
         doms[0] = self.cap_of(tree).ty;
@@ -1583,7 +1583,7 @@ impl ClosureSpecializationVisitor {
             return self.local_decap_lambdas.get(&expr.get_var().name).cloned();
         }
         if let Some((tycon, _)) = expr.destructure_make_struct() {
-            let tree = self.lifted.borrow().tree_of_minted_struct(&tycon.name)?;
+            let tree = self.lifted.borrow().tree_of_capture_list(&tycon.name)?;
             return Some(Known::bare(tree, expr.clone()));
         }
         if !expr.is_app() {
@@ -1609,7 +1609,7 @@ impl ClosureSpecializationVisitor {
             return None;
         }
         Some(Known {
-            tree: ValueTree::leaf(name),
+            tree: ClosureTree::leaf(name),
             cap_list: args[0].clone(),
             is_bare: false,
         })
@@ -1672,7 +1672,7 @@ impl ClosureSpecializationVisitor {
             return known;
         }
 
-        let tree = ValueTree::new(lambda, narrowed_fields);
+        let tree = ClosureTree::new(lambda, narrowed_fields);
         if !self
             .budget
             .borrow_mut()
@@ -1706,7 +1706,7 @@ impl ClosureSpecializationVisitor {
 
     // Ask for the copy of the lambda that receives a capture list of `tree`. Asking where the tree is
     // created is what makes wrapping a value of it back into a closure legal everywhere.
-    fn request_lambda_copy(&mut self, tree: &ValueTree, pinned: &Pinned) {
+    fn request_lambda_copy(&mut self, tree: &ClosureTree, pinned: &Pinned) {
         let func_copy = tree.receiving_copy();
         if func_copy.subst.is_empty() {
             return;
@@ -1742,7 +1742,7 @@ impl ClosureSpecializationVisitor {
         &mut self,
         lam: Arc<ExprNode>,
         state: &mut VisitState,
-    ) -> (ValueTree, Arc<ExprNode>) {
+    ) -> (ClosureTree, Arc<ExprNode>) {
         // Get the capture list.
         let cap_names = lam.lambda_cap_names();
 
@@ -1773,10 +1773,7 @@ impl ClosureSpecializationVisitor {
         // narrowing leaves alone is what lets each field be decided on its own.
         for (name, ty) in &cap_names_types {
             assert!(
-                self.lifted
-                    .borrow()
-                    .tree_of_minted_struct_type(ty)
-                    .is_none(),
+                self.lifted.borrow().tree_of_capture_list_type(ty).is_none(),
                 "the capture field `{}` of a lambda lifted in {} is declared at the capture list \
                  type {}",
                 name.to_string(),
@@ -1811,7 +1808,7 @@ impl ClosureSpecializationVisitor {
         self.lifted
             .borrow_mut()
             .insert(lambda_func_name.clone(), cap, func_ty);
-        (ValueTree::leaf(lambda_func_name), cap_list_expr)
+        (ClosureTree::leaf(lambda_func_name), cap_list_expr)
     }
 }
 
@@ -1836,20 +1833,20 @@ impl SpecializationRequest {
             if slot.field.is_some() {
                 continue;
             }
-            doms[slot.arg] = lifted.struct_of(tree).ty;
+            doms[slot.arg] = lifted.capture_struct_of(tree).ty;
         }
         // A copy of a lifted lambda receives its capture list through the first argument.
         if let Some(tree) = self.func_copy.capture_list_tree(lifted) {
-            doms[0] = lifted.struct_of(&tree).ty;
+            doms[0] = lifted.capture_struct_of(&tree).ty;
         }
         // A field of a struct argument arrives beside it, through a parameter standing directly
         // after that argument.
-        let field_slots = self.func_copy.struct_field_slots(lifted);
+        let field_slots = self.func_copy.struct_field_subst(lifted);
         let mut doms_with_cap_lists = Vec::new();
         for (arg, dom) in doms.into_iter().enumerate() {
             doms_with_cap_lists.push(dom);
             for (_, tree) in field_slots.iter().filter(|(slot, _)| slot.arg == arg) {
-                doms_with_cap_lists.push(lifted.struct_of(tree).ty);
+                doms_with_cap_lists.push(lifted.capture_struct_of(tree).ty);
             }
         }
 
@@ -2041,7 +2038,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         // other use of the field is left as it is: the field already holds a closure, and building
         // one again would allocate once per use.
         if func.is_var() {
-            if let Some(known) = self.struct_field_locals.get(&func.get_var().name).cloned() {
+            if let Some(known) = self.local_field_lambdas.get(&func.get_var().name).cloned() {
                 let head = self.lambda_func_of(&known.tree);
                 let mut called_with = vec![known.cap_list.clone()];
                 called_with.extend(args.iter().cloned());
@@ -2253,7 +2250,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         if pat.is_var() {
             let fields = self.known_fields_of(&bound);
             if !fields.is_empty() {
-                self.local_struct_fields
+                self.fields_of_local_struct
                     .insert(pat.get_var().name.clone(), fields);
             }
         }
@@ -2435,14 +2432,14 @@ impl ClosureSpecializationVisitor {
         if self
             .lifted
             .borrow()
-            .tree_of_minted_struct(&tycon.name)
+            .tree_of_capture_list(&tycon.name)
             .is_none()
         {
             return;
         }
         for (_, _, field_pat) in field_to_pat {
             let field_ty = field_pat.info.type_.as_ref().unwrap();
-            let Some(tree) = self.lifted.borrow().tree_of_minted_struct_type(field_ty) else {
+            let Some(tree) = self.lifted.borrow().tree_of_capture_list_type(field_ty) else {
                 continue;
             };
             let field_name = field_pat.get_var().name.clone();
@@ -2459,7 +2456,11 @@ impl ClosureSpecializationVisitor {
             return;
         };
         let bound_ty = bound.type_.as_ref().unwrap();
-        let Some(fields) = self.known_struct_fields.get(&bound_ty.to_string()).cloned() else {
+        let Some(fields) = self
+            .fields_of_struct_type
+            .get(&bound_ty.to_string())
+            .cloned()
+        else {
             return;
         };
         // A pattern names the fields it destructures in the order they are written, which is the
@@ -2472,7 +2473,7 @@ impl ClosureSpecializationVisitor {
             if !field_pat.is_var() {
                 continue;
             }
-            self.struct_field_locals
+            self.local_field_lambdas
                 .insert(field_pat.get_var().name.clone(), known.clone());
         }
     }
@@ -2498,7 +2499,7 @@ impl ClosureSpecializationVisitor {
     // is built right here and what goes into each field is read off the expression put there.
     fn known_fields_of(&self, arg: &Arc<ExprNode>) -> Vec<(usize, Known)> {
         if arg.is_var() {
-            if let Some(fields) = self.local_struct_fields.get(&arg.get_var().name) {
+            if let Some(fields) = self.fields_of_local_struct.get(&arg.get_var().name) {
                 return fields.clone();
             }
         }
@@ -2508,7 +2509,7 @@ impl ClosureSpecializationVisitor {
             return Vec::new();
         }
         let mut fields = match self
-            .known_struct_fields
+            .fields_of_struct_type
             .get(&arg.type_.as_ref().unwrap().to_string())
         {
             Some(fields) => fields
@@ -2613,16 +2614,16 @@ mod tests {
     #[test]
     fn a_value_nested_one_level_down_differs_from_two_side_by_side() {
         let (m, p, q) = (lifted(0), lifted(1), lifted(2));
-        let side_by_side = ValueTree::new(
+        let side_by_side = ClosureTree::new(
             m.clone(),
             vec![
-                (0, ValueTree::leaf(p.clone())),
-                (1, ValueTree::leaf(q.clone())),
+                (0, ClosureTree::leaf(p.clone())),
+                (1, ClosureTree::leaf(q.clone())),
             ],
         );
-        let nested = ValueTree::new(
+        let nested = ClosureTree::new(
             m,
-            vec![(0, ValueTree::new(p, vec![(1, ValueTree::leaf(q))]))],
+            vec![(0, ClosureTree::new(p, vec![(1, ClosureTree::leaf(q))]))],
         );
         assert_ne!(side_by_side, nested);
         assert_ne!(
@@ -2636,8 +2637,8 @@ mod tests {
     #[test]
     fn the_position_of_a_narrowed_field_is_part_of_the_value() {
         let (m, p) = (lifted(0), lifted(1));
-        let at_first = ValueTree::new(m.clone(), vec![(0, ValueTree::leaf(p.clone()))]);
-        let at_second = ValueTree::new(m, vec![(1, ValueTree::leaf(p))]);
+        let at_first = ClosureTree::new(m.clone(), vec![(0, ClosureTree::leaf(p.clone()))]);
+        let at_second = ClosureTree::new(m, vec![(1, ClosureTree::leaf(p))]);
         assert_ne!(at_first, at_second);
         assert_ne!(
             at_first.receiving_copy().name(),
@@ -2650,12 +2651,12 @@ mod tests {
     #[test]
     fn a_chain_of_narrowed_fields_says_its_own_depth() {
         let (m, p, q) = (lifted(0), lifted(1), lifted(2));
-        let one = ValueTree::new(m.clone(), vec![(0, ValueTree::leaf(p.clone()))]);
-        let two = ValueTree::new(m.clone(), vec![(0, one.clone())]);
-        let three = ValueTree::new(m.clone(), vec![(0, two.clone())]);
-        let other_end = ValueTree::new(
+        let one = ClosureTree::new(m.clone(), vec![(0, ClosureTree::leaf(p.clone()))]);
+        let two = ClosureTree::new(m.clone(), vec![(0, one.clone())]);
+        let three = ClosureTree::new(m.clone(), vec![(0, two.clone())]);
+        let other_end = ClosureTree::new(
             m,
-            vec![(0, ValueTree::new(p, vec![(0, ValueTree::leaf(q))]))],
+            vec![(0, ClosureTree::new(p, vec![(0, ClosureTree::leaf(q))]))],
         );
         let names = [&one, &two, &three, &other_end]
             .iter()
@@ -2670,11 +2671,14 @@ mod tests {
     fn a_copy_and_the_capture_list_it_receives_determine_each_other() {
         let (m, p, q) = (lifted(0), lifted(1), lifted(2));
         let lambdas = lifted_lambdas(&[&m, &p, &q]);
-        let tree = ValueTree::new(
+        let tree = ClosureTree::new(
             m,
             vec![
-                (0, ValueTree::new(p, vec![(2, ValueTree::leaf(q.clone()))])),
-                (1, ValueTree::leaf(q)),
+                (
+                    0,
+                    ClosureTree::new(p, vec![(2, ClosureTree::leaf(q.clone()))]),
+                ),
+                (1, ClosureTree::leaf(q)),
             ],
         );
         assert_eq!(
@@ -2688,7 +2692,7 @@ mod tests {
     #[test]
     fn an_argument_and_a_capture_field_of_the_same_index_name_two_copies() {
         let func = FullName::from_strs(&["Main"], "f#0123abcd");
-        let tree = ValueTree::leaf(lifted(0));
+        let tree = ClosureTree::leaf(lifted(0));
         let on_argument = FuncCopy::new(
             func.clone(),
             [(Slot::arg(0), tree.clone())].into_iter().collect(),
