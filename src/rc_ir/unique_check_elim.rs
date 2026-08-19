@@ -28,7 +28,7 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    FuncRef, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
@@ -176,12 +176,7 @@ impl<'a> Specializer<'a> {
             RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
                 let arms = arms
                     .iter()
-                    .map(|arm| MatchArm {
-                        payload_state: arm.payload_state,
-                        tag: arm.tag,
-                        payload: arm.payload.clone(),
-                        body: self.rewrite_expr(&arm.body, inputs),
-                    })
+                    .map(|arm| arm.with_body(self.rewrite_expr(&arm.body, inputs)))
                     .collect();
                 RcExpr::Let(
                     x.clone(),

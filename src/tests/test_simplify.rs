@@ -1,17 +1,16 @@
-// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
-// the simplified program computes.
-//
-// A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
-// is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
-// cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
-// `RangeIterator` two-scalar state and no union construction — the property the integration tests
-// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
-// what each one computes. The build-time tests bound how long a program shaped to drive it may take
-// to compile.
+//! Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+//! the simplified program computes.
 
+/// Case projects built with `--emit-rc-ir`, read for what the simplifier removed and run for what
+/// they print. A read loop over `range(0, size).fold` lowers to a specialized fold driver whose
+/// loop-carried state is the `Option` that `range`'s `advance` builds and `fold` immediately
+/// matches. The simplifier cancels that union (case-of-case + case-of-known-constructor), so the
+/// driver keeps only the plain `RangeIterator` two-scalar state and no union construction — the
+/// property these tests assert.
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
@@ -52,40 +51,52 @@ mod integration_tests {
         }
 
         let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        std::fs::read_to_string(&dump_path)
+        fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
     /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
     /// itself and every line up to the next `fn` header.
-    fn fn_bodies_matching<'a>(dump: &'a str, needles: &[&str]) -> Vec<String> {
+    fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
-        let mut current: Option<String> = None;
+        let mut current_body: Option<String> = None;
         for line in dump.lines() {
             if line.starts_with("fn ") {
-                if let Some(body) = current.take() {
+                if let Some(body) = current_body.take() {
                     bodies.push(body);
                 }
                 if needles.iter().all(|n| line.contains(n)) {
-                    current = Some(String::new());
+                    current_body = Some(String::new());
                 }
             }
-            if let Some(body) = current.as_mut() {
+            if let Some(body) = current_body.as_mut() {
                 body.push_str(line);
                 body.push('\n');
             }
         }
-        if let Some(body) = current.take() {
+        if let Some(body) = current_body.take() {
             bodies.push(body);
         }
         bodies
     }
 
     /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
-    /// `needles` — which `what` names in a failure message — builds no union, and that the
-    /// executable the build leaves prints `expected`. The dump shows what the simplifier removed,
-    /// and the run shows the removal left what the program computes intact.
-    fn assert_union_cancelled(case: &str, needles: &[&str], what: &str, expected: &str) {
+    /// `needles` — which `what` names in a failure message — holds each node of `held_nodes`,
+    /// builds no union, and that the executable the build leaves prints `expected`. The dump shows
+    /// what the simplifier removed, and the run shows the removal left what the program computes
+    /// intact.
+    ///
+    /// # Arguments
+    /// * `held_nodes` — the nodes the body is checked to still hold, as the prefixes the dump prints
+    ///   them with. Name the nodes a case is written to place on the way to a construction, so that
+    ///   a lowering that stops placing them there fails the test.
+    fn assert_union_cancelled(
+        case: &str,
+        needles: &[&str],
+        what: &str,
+        held_nodes: &[&str],
+        expected: &str,
+    ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_all_rc_ir(&project_dir);
 
@@ -103,16 +114,25 @@ mod integration_tests {
                 what,
                 body
             );
+            for node_prefix in held_nodes {
+                assert!(
+                    body.contains(node_prefix),
+                    "{} holds no `{}`, so it no longer has the shape the case is written around:\n{}",
+                    what,
+                    node_prefix,
+                    body
+                );
+            }
         }
 
-        let run = Command::new(project_dir.join("a.out"))
+        let output = Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
         assert!(
-            run.status.success(),
+            output.status.success(),
             "the built executable did not run cleanly"
         );
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), expected);
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
     }
 
     /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
@@ -127,7 +147,40 @@ mod integration_tests {
             "read_fold",
             &["Iterator::fold", "RangeIterator"],
             "the `range.fold` driver (an `Iterator::fold` over a `RangeIterator`)",
+            &[],
             "4950",
+        );
+    }
+
+    /// One branch of `step` reaches the `Option` it builds through a destructure, the other through
+    /// an eval. The walk that finds the constructions passes both, so every construction takes the
+    /// arm answering it and the function builds no union. Both nodes are checked to still stand in
+    /// the dumped body, so a lowering that stopped placing them there fails the test rather than
+    /// leaving it passing over a shape it no longer exercises. The built program still computes the
+    /// same values over 0..10.
+    #[test]
+    fn test_a_destructure_and_an_eval_before_the_tail_construction() {
+        assert_union_cancelled(
+            "before_tail",
+            &["Main::step"],
+            "`Main::step`",
+            &["destructure ", "eval "],
+            "[14, -1, 18, -1, 22, -1, 26, -1, 30, -1]",
+        );
+    }
+
+    /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
+    /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
+    /// tail, so every construction takes the arm answering it and the function builds no union. The
+    /// built program still computes the same values over 0..10.
+    #[test]
+    fn test_a_match_in_tail_position() {
+        assert_union_cancelled(
+            "tail_match",
+            &["Main::step"],
+            "`Main::step`",
+            &[],
+            "[0, 16, -1, 20, -1, -1, 120, 28, -1, 32]",
         );
     }
 
@@ -141,11 +194,13 @@ mod integration_tests {
             "one_variant",
             &["Main::shift_and_triple"],
             "`Main::shift_and_triple`",
+            &[],
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }
 }
 
+/// Fix programs written to drive the rewrites, compiled and run for the values each one computes.
 #[cfg(test)]
 mod value_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
@@ -188,10 +243,47 @@ mod value_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
+    /// The move carries a boxed payload through the tails it reaches: the arm placed at each
+    /// construction consumes the array that construction was given, and reads a second array beside
+    /// it. Development mode runs the program under memcheck and validates the RC IR after each pass,
+    /// so this exercises the reference counting and the binders of what the move leaves behind.
+    #[test]
+    pub fn test_a_boxed_payload_through_the_moved_arms() {
+        let source = r#"
+            module Main;
+
+            // Each branch of the value matched below ends in a match of its own, and each end of
+            // that one builds the `Option`. The arm moved to an end consumes the array the
+            // construction there was given, and reads `extra` besides.
+            sized : Array I64 -> I64 -> I64;
+            sized = |extra, n| (
+                match (if n % 2 == 0 {
+                    if n % 3 == 0 { Option::some([n, n + 1]) } else { Option::none() }
+                } else {
+                    if n % 5 == 0 { Option::none() } else { Option::some([n, n * 2, n * 3]) }
+                }) {
+                    some(a) => a.@size + extra.@size,
+                    none() => -1
+                }
+            );
+
+            main : IO ();
+            main = (
+                let extra = [1, 2, 3, 4];
+                assert_eq(
+                    |_|"a boxed payload built at the end of a match in tail position",
+                    Iterator::range(0, 10).map(|n| sized(extra, n)).to_array,
+                    [6, 7, -1, 7, -1, -1, 6, 7, -1, 7]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
     /// The outer match answers the `none` an inner arm builds with a catch-all arm, which binds the
-    /// whole union rather than that constructor's payload. Moving such an arm into the inner arm
-    /// would bind it to the payload instead, so the rewrite declines and the values stay what the
-    /// source computes.
+    /// whole union. Moving such an arm into the inner arm would bind it to the construction's
+    /// payload instead, so the rewrite declines and the values stay what the source computes.
     #[test]
     pub fn test_catch_all_outer_arm() {
         let source = r#"
@@ -218,9 +310,10 @@ mod value_tests {
     }
 }
 
+/// A program shaped to drive case-of-case, bounded in how long it may take to compile.
 #[cfg(test)]
 mod build_time_tests {
-    use crate::tests::test_util::build_within_and_run;
+    use crate::tests::test_util::{build_peak_memory, build_within_and_run};
     use std::time::Duration;
 
     /// Deep enough that a term doubling per level is out of reach, and shallow enough that a term
@@ -300,6 +393,71 @@ mod build_time_tests {
             nested_matches_value(7).to_string(),
             "the nest of {} matches returned a wrong value",
             DEPTH
+        );
+    }
+
+    /// How many conditions `discarded_candidate_source` reads in a row, each branch of which builds
+    /// the union. One more tail than that reaches the construction, and the move that would take the
+    /// outer arm to all of them is the candidate the size test discards.
+    const NEST_DEPTH: usize = 256;
+
+    /// How many bindings the outer arm of `discarded_candidate_source` holds. Large enough that a
+    /// copy of it at every tail dominates what the build allocates.
+    const ARM_BINDINGS: usize = 400;
+
+    /// What the build may hold. It takes about 230 MB, and a compiler that copies the outer arm to
+    /// every tail before measuring the result takes about 700 MB.
+    const MEMORY_BOUND: u64 = 450 * 1024 * 1024;
+
+    /// A nest of `NEST_DEPTH` conditions, each branch building an `Option`, matched by a match whose
+    /// `some` arm holds `ARM_BINDINGS` bindings. Moving that arm to every tail the nest reaches would
+    /// leave a term far larger than the one it replaces, so the move is discarded — after being
+    /// measured, and before being built.
+    fn discarded_candidate_source() -> String {
+        let mut source = String::from("module Main;\n\nf : I64 -> I64;\nf = |n| (\n    match (\n");
+        for level in 0..NEST_DEPTH {
+            source += &format!(
+                "        if n % {} == 0 {{ Option::some(n + {}) }} else (\n",
+                3 + level % 7,
+                level + 1
+            );
+        }
+        source += "            Option::some(n * 2)\n";
+        source += &"        )\n".repeat(NEST_DEPTH);
+        source += "    ) {\n        some(v) => (\n            let a0 = v + 1;\n";
+        for i in 1..ARM_BINDINGS {
+            source += &format!(
+                "            let a{} = a{} * 3 + {} - a{} / 2;\n",
+                i,
+                i - 1,
+                i % 11,
+                i - 1
+            );
+        }
+        source += &format!("            a{}\n        ),\n", ARM_BINDINGS - 1);
+        source +=
+            "        none() => 0\n    }\n);\n\nmain : IO ();\nmain = println(f(7).to_string);\n";
+        source
+    }
+
+    /// The memory a build takes stays where the size of the term decides the move, rather than the
+    /// move being built and dropped. A compiler that builds the candidate first holds a copy of the
+    /// outer arm for every tail of the nest, which this shape makes three times what the build
+    /// otherwise takes. The figure comes from `/proc`, so the check runs where that is readable.
+    #[test]
+    fn test_a_discarded_candidate_is_not_built() {
+        let description = format!("a nest of {} conditions", NEST_DEPTH);
+        let Some(peak) =
+            build_peak_memory(&discarded_candidate_source(), "max", TIMEOUT, &description)
+        else {
+            return;
+        };
+        assert!(
+            peak < MEMORY_BOUND,
+            "compiling {} held {} MB, over the {} MB this shape is allowed",
+            description,
+            peak / (1024 * 1024),
+            MEMORY_BOUND / (1024 * 1024)
         );
     }
 }

@@ -42,8 +42,8 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FieldPath, FuncRef, MatchArm, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
-    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
+    RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -516,12 +516,7 @@ impl<'a> RewriteCtx<'a> {
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
                 let arms = arms
                     .iter()
-                    .map(|arm| MatchArm {
-                        payload_state: arm.payload_state,
-                        tag: arm.tag,
-                        payload: arm.payload.clone(),
-                        body: self.rewrite(&arm.body),
-                    })
+                    .map(|arm| arm.with_body(self.rewrite(&arm.body)))
                     .collect();
                 expr_node(
                     RcExpr::Let(
@@ -797,12 +792,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
             let arms = arms
                 .iter()
-                .map(|arm| MatchArm {
-                    payload_state: arm.payload_state,
-                    tag: arm.tag,
-                    payload: arm.payload.clone(),
-                    body: split_body(&arm.body, type_env),
-                })
+                .map(|arm| arm.with_body(split_body(&arm.body, type_env)))
                 .collect();
             expr_node(
                 RcExpr::Let(
@@ -1277,12 +1267,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
             let arms = arms
                 .iter()
-                .map(|arm| MatchArm {
-                    payload_state: arm.payload_state,
-                    tag: arm.tag,
-                    payload: arm.payload.clone(),
-                    body: drop_nodes(&arm.body, to_delete),
-                })
+                .map(|arm| arm.with_body(drop_nodes(&arm.body, to_delete)))
                 .collect();
             expr_node(
                 RcExpr::Let(
