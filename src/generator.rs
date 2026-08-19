@@ -1062,7 +1062,10 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // Implement unique_threaded_bb.
             self.builder().position_at_end(unique_threaded_bb);
-            // A unique object has one holder, so its count is updated without atomics.
+            // A unique object has one holder, so its count is updated without atomics. Marking
+            // rests on this too: `build_mark_boxed_with` ends its traversal at an object carrying
+            // the mark, and a threaded object is returned to the local state here before a write
+            // in place gives it a child of its own.
             self.set_refcnt_state_one(obj_ptr, REFCNT_STATE_LOCAL);
             // And jump to unique_bb.
             self.builder()
@@ -2201,6 +2204,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// objects carrying the mark or a stronger one. Each object is therefore marked once, where a
     /// value whose subgraphs are shared would otherwise be walked once per path reaching each of
     /// them, and the traversal terminates on a cyclic graph.
+    ///
+    /// A marked object owns only marked objects because a write in place is the only way it gains
+    /// a child, and such a write reaches a marked object through `build_branch_by_is_unique`: a
+    /// global object leaves that check as shared and is cloned, and a threaded one is returned to
+    /// the local state there. Unique-check elimination keeps that route, a value made threaded
+    /// being handed back unknown (see `InlineLLVMMarkThreadedFunctionBody::result_prov`).
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2238,39 +2247,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Branch by whether or not the object carries the mark. The global state exempts an object
         // from reference counting entirely, which is what the threaded state asks for and more, so
         // a global object carries both marks and a threaded object carries the threaded one.
-        let is_marked = if marks_global {
-            self.builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
-                    "is_marked_global",
-                )
-                .unwrap()
+        let (predicate, compared_state, compare_name) = if marks_global {
+            (IntPredicate::EQ, REFCNT_STATE_GLOBAL, "is_marked_global")
         } else {
-            self.builder()
-                .build_int_compare(
-                    IntPredicate::NE,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_marked_threaded",
-                )
-                .unwrap()
+            (IntPredicate::NE, REFCNT_STATE_LOCAL, "is_marked_threaded")
         };
+        let is_marked = self
+            .builder()
+            .build_int_compare(
+                predicate,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(compared_state as u64, false),
+                compare_name,
+            )
+            .unwrap();
         self.builder()
             .build_conditional_branch(is_marked, cont_bb, mark_bb)
             .unwrap();
 
         // Implement mark_bb: mark the object itself, then the objects it owns.
         self.builder().position_at_end(mark_bb);
-        self.set_refcnt_state_one(
-            obj_ptr,
-            if marks_global {
-                REFCNT_STATE_GLOBAL
-            } else {
-                REFCNT_STATE_THREADED
-            },
-        );
+        let mark_state = if marks_global {
+            REFCNT_STATE_GLOBAL
+        } else {
+            REFCNT_STATE_THREADED
+        };
+        self.set_refcnt_state_one(obj_ptr, mark_state);
         traverse_refs(self);
         self.builder().build_unconditional_branch(cont_bb).unwrap();
 
