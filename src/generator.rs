@@ -499,10 +499,7 @@ impl<'c> Scope<'c> {
     // Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
-        if !self.data.contains_key(var) {
-            self.data.insert(var.clone(), Default::default());
-        }
-        self.data.get_mut(var).unwrap().push(ScopedValue {
+        self.data.entry(var.clone()).or_default().push(ScopedValue {
             accessor: ValueAccessor::Local(obj.clone()),
             retain_on_read: false,
         });
@@ -510,8 +507,9 @@ impl<'c> Scope<'c> {
 
     fn pop_local(&mut self, var: &FullName) {
         // TODO: add assertion that var is local (or change var to Name).
-        self.data.get_mut(var).unwrap().pop();
-        if self.data.get(var).unwrap().is_empty() {
+        let bindings = self.data.get_mut(var).unwrap();
+        bindings.pop();
+        if bindings.is_empty() {
             self.data.remove(var);
         }
     }
@@ -1117,15 +1115,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             // In single-threaded program,
 
             // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                REFCNT_STATE_LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
                 .unwrap();
@@ -1136,30 +1131,24 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                REFCNT_STATE_LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
                 .unwrap();
 
             // Implement nonlocal_bb.
             self.builder().position_at_end(nonlocal_bb);
-            let is_refcnt_state_threaded = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-                    "is_refcnt_state_threaded",
-                )
-                .unwrap();
+            let is_refcnt_state_threaded = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                REFCNT_STATE_THREADED,
+                "is_refcnt_state_threaded",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
                 .unwrap();
@@ -1183,15 +1172,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             return;
         }
         let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state@assert_local");
-        let is_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local@assert",
-            )
-            .unwrap();
+        let is_local = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::EQ,
+            REFCNT_STATE_LOCAL,
+            "is_refcnt_state_local@assert",
+        );
         let current_func = self.current_function();
         let nonlocal_bb = self
             .context
@@ -2227,15 +2213,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             (IntPredicate::NE, REFCNT_STATE_LOCAL, "is_marked_threaded")
         };
-        let is_marked = self
-            .builder()
-            .build_int_compare(
-                predicate,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(compared_state as u64, false),
-                compare_name,
-            )
-            .unwrap();
+        let is_marked =
+            self.build_compare_refcnt_state(refcnt_state, predicate, compared_state, compare_name);
         self.builder()
             .build_conditional_branch(is_marked, cont_bb, mark_bb)
             .unwrap();
@@ -2291,6 +2270,28 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_load(refcnt_state_type(self.context), refcnt_state_ptr, name)
             .unwrap()
             .into_int_value()
+    }
+
+    /// Compare a loaded reference-count state against `state` under `predicate`, naming the result
+    /// `name` in the emitted code.
+    ///
+    /// # Arguments
+    /// * `state` — one of the `REFCNT_STATE_*` constants.
+    fn build_compare_refcnt_state(
+        &self,
+        refcnt_state: IntValue<'c>,
+        predicate: IntPredicate,
+        state: u8,
+        name: &str,
+    ) -> IntValue<'c> {
+        self.builder()
+            .build_int_compare(
+                predicate,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(state as u64, false),
+                name,
+            )
+            .unwrap()
     }
 
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
