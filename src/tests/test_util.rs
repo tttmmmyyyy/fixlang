@@ -112,14 +112,8 @@ pub fn fix_command_at_opt_level(subcommand: &str, opt_level: &str) -> Command {
 pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Command {
     let src_path = dir.join("generated.fix");
     fs::write(&src_path, source).expect("Failed to write the generated source file");
-    let mut command = fix_command();
-    command
-        .arg("build")
-        .arg("--file")
-        .arg(&src_path)
-        .arg("-O")
-        .arg(opt_level)
-        .current_dir(dir);
+    let mut command = fix_command_at_opt_level("build", opt_level);
+    command.arg("--file").arg(&src_path).current_dir(dir);
     command
 }
 
