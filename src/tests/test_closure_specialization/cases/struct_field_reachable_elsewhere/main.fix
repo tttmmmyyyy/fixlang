@@ -1,0 +1,48 @@
+module Main;
+
+// A struct carrying a function, and a second struct that carries the first. A type expression names
+// the type constructors written in it, so `Holder` alone says nothing about the `Stepper` inside it.
+type Stepper = unbox struct { n : I64, f : I64 -> I64 };
+type Holder = unbox struct { s : Stepper, tag : I64 };
+
+get_holder : I64 -> Holder;
+get_holder = |d| (
+    if d > 0 { get_holder(d - 1) };
+    Holder { s : Stepper { n : 1, f : |x| x + 1000 }, tag : 7 }
+);
+
+// The body takes a second `Stepper` out of a `Holder` a call gives back, so the function a field
+// holds is not the one the argument arrived with.
+wrapped : I64 -> Stepper -> I64;
+wrapped = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    let Holder { s : s2, tag : tag } = get_holder(1);
+    let Stepper { n : n2, f : f2 } = s2;
+    wrapped(acc + f(n) + f2(n2) + tag, Stepper { n : n - 1, f : f })
+);
+
+get_fn : I64 -> (I64 -> I64);
+get_fn = |d| (
+    if d > 0 { get_fn(d - 1) };
+    |x| x + 1000
+);
+
+// A later binding takes the name the destructuring gave the field, so the struct built here holds
+// what that binding holds rather than what the argument carried.
+shadowed : I64 -> Stepper -> I64;
+shadowed = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    let acc = acc + f(n);
+    let f = get_fn(n);
+    shadowed(acc, Stepper { n : n - 1, f : f })
+);
+
+main : IO () = (
+    let k = 3;
+    let g = |x| x * k;
+    let a = wrapped(0, Stepper { n : 4, f : g }) + wrapped(0, Stepper { n : 2, f : g });
+    let b = shadowed(0, Stepper { n : 4, f : g }) + shadowed(0, Stepper { n : 2, f : g });
+    println((a * 10000 + b).to_string)
+);

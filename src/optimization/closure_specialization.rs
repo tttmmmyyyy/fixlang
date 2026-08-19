@@ -567,6 +567,21 @@ impl LiftedLambdas {
         self.tree_of_capture_list(&ty.toplevel_tycon()?.name)
     }
 
+    // Whether a value of `ty` is laid out as fields this record can read the types of.
+    fn holds_fields(&self, ty: &Arc<TypeNode>) -> bool {
+        ty.toplevel_tycon().is_some_and(|top| {
+            self.type_env
+                .tycons()
+                .get(top.as_ref())
+                .is_some_and(|info| {
+                    matches!(
+                        info.variant,
+                        TyConVariant::Struct | TyConVariant::Union | TyConVariant::Array
+                    )
+                })
+        })
+    }
+
     // Whether `name` is the global function a lambda was lifted to.
     fn is_lifted(&self, name: &FullName) -> bool {
         self.lambdas.contains_key(name)
@@ -1066,7 +1081,11 @@ fn specializable_slots_of(
     specializable_slots: &SpecializableSlots,
     lifted: &LiftedLambdas,
 ) -> Set<Slot> {
-    let expr = sym.expr.as_ref().unwrap();
+    // The names a destructuring binds are compared with the names a construction reads, and a
+    // comparison by name says what it means only where one name is one binding. Lifting leaves a
+    // body it changed nothing in with the names the source wrote, so make them unique here, as the
+    // walk that makes the copies does.
+    let expr = unique_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default());
 
     // Check if each parameter of `sym` is specializable.
     let (param_lists, body) = expr.destructure_lam_sequence();
@@ -1148,7 +1167,7 @@ fn struct_field_slots_of(
     let Some(tycon) = declared_struct_tycon(param_ty, lifted) else {
         return Set::default();
     };
-    if !struct_stays_the_one_given(arg, param_tys, body, &tycon, func) {
+    if !struct_stays_the_one_given(arg, param_tys, body, &tycon, func, lifted) {
         return Set::default();
     }
     let destructurings = struct_destructurings_in(body, param_ty, &tycon, &lifted.type_env);
@@ -1297,11 +1316,12 @@ fn struct_stays_the_one_given(
     body: &Arc<ExprNode>,
     tycon: &Arc<TyCon>,
     func: &FullName,
+    lifted: &LiftedLambdas,
 ) -> bool {
     if param_tys
         .iter()
         .enumerate()
-        .any(|(idx, ty)| idx != arg && ty.contains_tycon(tycon))
+        .any(|(idx, ty)| idx != arg && can_reach_tycon(ty, tycon, lifted))
     {
         return false;
     }
@@ -1319,9 +1339,46 @@ fn struct_stays_the_one_given(
         if name.is_local() || name == func {
             return;
         }
-        stays &= !ty.collect_app_src(usize::MAX).1.contains_tycon(tycon);
+        stays &= !can_reach_tycon(&ty.collect_app_src(usize::MAX).1, tycon, lifted);
     });
     stays
+}
+
+// Whether a value of `ty` can hold a struct of `tycon` anywhere inside it.
+//
+// A type expression names the type constructors written in it, so a struct that carries the one
+// under question mentions itself alone. Taking the carried struct out means destructuring the
+// carrier, which is what makes a value that can reach it a value the body can produce one from.
+fn can_reach_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>, lifted: &LiftedLambdas) -> bool {
+    reaches_tycon(ty, tycon, lifted, &mut Set::default())
+}
+
+// `can_reach_tycon`, answering `false` for a type the walk is already inside, so that a declaration
+// naming itself terminates.
+fn reaches_tycon(
+    ty: &Arc<TypeNode>,
+    tycon: &Arc<TyCon>,
+    lifted: &LiftedLambdas,
+    seen: &mut Set<String>,
+) -> bool {
+    if ty.contains_tycon(tycon) {
+        return true;
+    }
+    if !seen.insert(ty.to_string()) {
+        return false;
+    }
+    if lifted.holds_fields(ty)
+        && ty
+            .field_types(&lifted.type_env)
+            .iter()
+            .any(|field| reaches_tycon(field, tycon, lifted, seen))
+    {
+        return true;
+    }
+    ty.collect_type_arguments()
+        .iter()
+        .skip(1)
+        .any(|arg| reaches_tycon(arg, tycon, lifted, seen))
 }
 
 // Whether `ty` is `tycon` applied to its arguments, which is what a value of the struct itself is

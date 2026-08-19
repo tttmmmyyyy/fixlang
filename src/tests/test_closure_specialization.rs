@@ -66,6 +66,11 @@ mod integration_tests {
     /// `2..1` for 9.
     const STRUCT_FIELD_NAMED_STRUCT_OUTPUT: &str = "39";
 
+    /// What `struct_field_reachable_elsewhere` prints: `wrapped` sums `3 * n` and the wrapped
+    /// `n + 1000` and the tag over `4..1` and `2..1` for 6087, scaled by 10000 so that either half
+    /// shows on its own, and `shadowed` sums `3 * n` once and `n + 1000` thereafter for 4025.
+    const STRUCT_FIELD_REACHABLE_ELSEWHERE_OUTPUT: &str = "60874025";
+
     /// What `struct_field_iterator_chain` prints: the fold sums `3 * (i % 7)` over 64 elements for
     /// 567, and the collected array has 64 elements.
     const STRUCT_FIELD_ITERATOR_CHAIN_OUTPUT: &str = "631";
@@ -442,6 +447,21 @@ mod integration_tests {
              should have one copy, but the dump names: {:?}",
             copies
         );
+    }
+
+    /// A struct of the type under question can reach the body without being named there: carried
+    /// inside another struct a call gives back, or bound to the name the destructuring gave the
+    /// field. Neither one holds the function the argument arrived with.
+    #[test]
+    pub fn test_a_struct_reaching_the_body_another_way_is_not_the_one_given() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_reachable_elsewhere");
+        for opt_level in ["basic", "max", "experimental"] {
+            build_run_and_read_rc_ir(
+                &project_dir,
+                opt_level,
+                STRUCT_FIELD_REACHABLE_ELSEWHERE_OUTPUT,
+            );
+        }
     }
 
     /// The chain `map` and `fold` build puts the mapped function in a struct field and reads it out
