@@ -1,6 +1,5 @@
-// ==================== Integration Tests ====================
-// These tests use actual Fix projects in src/tests/test_dependencies/cases/
-
+/// Tests that run the `fix` command over the Fix projects kept in
+/// `src/tests/test_dependencies/cases`.
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
@@ -8,7 +7,8 @@ mod integration_tests {
     use std::{fs, path::PathBuf, process::Output};
     use tempfile::TempDir;
 
-    // Get the path to the test cases directory
+    /// The directory holding the test-case projects in the repository. A test copies it out and
+    /// runs in the copy, so what it holds stays as it is.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_dependencies/cases");
@@ -52,21 +52,19 @@ mod integration_tests {
         run_case(project_path, "build")
     }
 
-    // Clean up lock files and build artifacts before running test
+    /// Removes the lock files and the build artifacts of the project at `project_dir`, so that the
+    /// run that follows starts from a project that has never been built.
     fn cleanup_test_project(project_dir: &PathBuf) {
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_PATH));
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_TEST_PATH));
         let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
+    /// A build writes `fixdeps.lock` alone, and locks the ordinary dependencies alone: the test
+    /// dependencies of the project and the test dependencies of the projects it depends on both
+    /// stay out of the lock file.
     #[test]
     fn test_dependencies_build_mode() {
-        // This test verifies that in build mode:
-        // 1. Only fixdeps.lock is created
-        // 2. fixdeps.test.lock is NOT created
-        // 3. Only normal dependencies are included
-        // 4. Test dependencies of normal dependencies are NOT included
-
         let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
@@ -116,14 +114,12 @@ mod integration_tests {
         );
     }
 
+    /// `fix test` writes `fixdeps.test.lock` on its own when the project has none, and the test it
+    /// then runs reaches the test dependencies that lock file names. `test-dep` is locked because
+    /// the main project declares it as a test dependency; the test dependencies of `normal-dep`
+    /// stay out.
     #[test]
     fn test_dependencies_test_mode() {
-        // This test verifies that `fix test` automatically handles test dependencies:
-        // 1. fixdeps.test.lock is created if not present
-        // 2. Test dependencies are properly available during test execution
-        // Note: test-dep appears in fixdeps.test.lock because main-project directly depends on it,
-        // not because normal-dep has it as a test dependency (dependency's test dependencies don't propagate)
-
         let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
@@ -178,11 +174,11 @@ mod integration_tests {
         );
     }
 
+    /// Spelling the steps of a build out as `fix deps update`, `fix deps install` and `fix build`
+    /// locks the ordinary dependencies alone: `fix deps update` without `--test` writes
+    /// `fixdeps.lock` alone, and `test-dep` stays out of it.
     #[test]
     fn test_dependencies_build_workflow() {
-        // This test verifies the explicit build workflow:
-        // `fix deps update` → `fix deps install` → `fix build`
-
         let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
@@ -260,11 +256,11 @@ mod integration_tests {
         );
     }
 
+    /// Spelling the steps of a test run out as `fix deps update --test`, `fix deps install --test`
+    /// and `fix test` locks the ordinary and the test dependencies together: `--test` writes
+    /// `fixdeps.test.lock` alone, and the test the run then executes passes.
     #[test]
     fn test_dependencies_test_workflow() {
-        // This test verifies the explicit test workflow:
-        // `fix deps update --test` → `fix deps install --test` → `fix test`
-
         let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 

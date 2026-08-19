@@ -71,8 +71,7 @@ impl Errors {
     }
 
     /// Takes every diagnostic out of `self` as an error, leaving `self` empty, once one of them
-    /// has error severity. A collection of warnings alone is a success and stays where it is, for
-    /// a later `take_warnings` to print.
+    /// has error severity. A collection of warnings alone is a success and stays where it is.
     pub fn to_result(&mut self) -> Result<(), Errors> {
         if self.has_error() {
             Err(mem::replace(self, Errors::empty()))
@@ -81,9 +80,8 @@ impl Errors {
         }
     }
 
-    /// Drain all warning-severity items into a fresh `Errors`, leaving only
-    /// error-severity items in `self`. Useful for printing warnings before
-    /// checking `to_result()`.
+    /// Takes the warning-severity diagnostics out of this collection, keeping their order and
+    /// leaving the error-severity ones where they are.
     pub fn take_warnings(&mut self) -> Errors {
         let (warnings, errors) = mem::take(&mut self.errs)
             .into_iter()
@@ -207,9 +205,8 @@ pub struct Error {
     /// Data about this diagnostic beyond its text, such as the name a fix has to insert. Its
     /// shape is decided by `code`.
     pub data: Option<Value>,
-    /// Severity of this diagnostic. Construct warnings via
-    /// `Error::warning_from_msg_srcs`; the other constructors produce
-    /// `Severity::Error`.
+    /// Severity of this diagnostic: an error fails the compilation, a warning accompanies a
+    /// compilation that still succeeds.
     pub severity: Severity,
 }
 
@@ -289,8 +286,6 @@ impl Error {
 /// Panics with `msg`, having installed a panic hook that prints the message alone, so that the
 /// thread name, the panic location and the backtrace note stay out of the compiler's output.
 fn panic_notrace(msg: &str) -> ! {
-    // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
-    // We replace it to empty.
     panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);

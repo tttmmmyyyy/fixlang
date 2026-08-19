@@ -29,63 +29,91 @@ use std::{
 };
 use toml::Spanned;
 
-// The name of a project.
+/// The name of a project, as the `[general]` section of its project file gives it and the
+/// dependency entries of other projects refer to it.
 pub type ProjectName = String;
 
-// The `general` section of the project file.
+/// The `general` section of the project file, holding the project's identity: its name, its
+/// version, and the compiler versions it builds with.
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileGeneral {
-    // The name of the project.
+    /// The name of the project, which the dependency entries of other projects refer to it by.
     pub name: ProjectName,
-    // The version of the project.
-    // Use `version` method to get the value validated as semver.
+    /// The version of the project, written as semver. `ProjectFile::validate` rejects a string that
+    /// is not one.
     pub version: String,
-    // The Fix compiler version.
-    // Defaults to "*".
+    /// The compiler versions this project builds with, written as a semver requirement. Left out,
+    /// the project builds with every version.
     pub fix_version: Option<String>,
-    // The description of the project.
+    /// A sentence describing the project, shown to whoever reads the project file.
     #[allow(unused)]
     pub description: Option<String>,
-    // The authors of the project.
+    /// The people credited with the project.
     #[allow(unused)]
     pub authors: Option<Vec<String>>,
-    // The license of the project.
+    /// The name of the license the project is distributed under.
     #[allow(unused)]
     pub license: Option<String>,
 }
 
 impl ProjectFileGeneral {
-    // Get the version.
+    /// The `version` field parsed as semver. Panics unless `ProjectFile::validate` has accepted
+    /// the field.
     pub fn version(&self) -> Version {
         Version::parse(&self.version).unwrap()
     }
 }
 
-// The `build` section of the project file.
+/// The `build` section of the project file, holding the settings a build of the project reads.
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuild {
+    /// The Fix source files the build compiles, each resolved against the project directory and
+    /// paired with its byte range in the project file.
     files: Vec<Spanned<PathBuf>>,
+    /// The object files the build links, each resolved against the project directory.
     #[serde(default)]
     objects: Vec<PathBuf>,
+    /// The libraries the build links statically, each named as the linker's `-l` names it: `"abc"`
+    /// links `libabc.a`.
     static_links: Option<Vec<String>>,
+    /// The libraries the build links dynamically, each named as the linker's `-l` names it: `"xyz"`
+    /// links `libxyz.so`.
     dynamic_links: Option<Vec<String>>,
+    /// The directories the linker searches for libraries, each resolved against the project
+    /// directory.
     library_paths: Option<Vec<PathBuf>>,
+    /// Further flags handed to the linker as they are written.
     #[serde(default)]
     ld_flags: Vec<String>,
+    /// The commands run in the project directory before the Fix program is compiled, each written
+    /// as a program followed by its arguments. They run once the user has approved them.
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
+    /// Whether to build the program with thread-safe reference counting, which lets a value cross
+    /// threads. Unset builds it with single-threaded reference counting.
     threaded: Option<bool>,
     /// Name of the sanitizer to instrument the built program with, from the set
     /// `Sanitizer::from_str` accepts.
     sanitize: Option<String>,
+    /// Whether to put debugging information into the built program. Unset leaves it out.
     debug: Option<bool>,
+    /// Name of the optimization level to build at, from the set `FixOptimizationLevel::from_str`
+    /// accepts.
     opt_level: Option<String>,
+    /// The path `fix build` writes its output file to. `fix run` and `fix test` build into a
+    /// temporary place of their own.
     output: Option<PathBuf>,
+    /// Name of the kind of file `fix build` produces, from the set `OutputFileType::from_str`
+    /// accepts.
     output_type: Option<String>,
+    /// Whether the program prints a backtrace when a run-time error ends it. Unset ends it with the
+    /// error message alone.
     backtrace: Option<bool>,
+    /// Regex patterns of the CPU features to turn off, so that `"avx512.*"` keeps the program off
+    /// every feature whose name that pattern matches.
     #[serde(default)]
     disable_cpu_features: Vec<String>,
     /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
@@ -95,32 +123,53 @@ pub struct ProjectFileBuild {
     /// the program. Unset evaluates `{side}`.
     skip_eval: Option<bool>,
 
-    /// The `build.test` sub-section, which supplies the settings a `fix test` build uses in place of
+    /// The `build.test` sub-section, which supplies the settings a `fix test` build reads beside
     /// the ones this `build` section gives.
     test: Option<ProjectFileBuildTest>,
 }
 
-// The `build.test` section of the project file.
+/// The `build.test` section of the project file, holding the settings a `fix test` build reads.
+/// The doc of each field states how its value combines with the one the `build` section gives.
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuildTest {
+    /// The Fix source files a test build compiles, added to the ones the `build` section gives.
+    /// Each is resolved against the project directory and paired with its byte range in the project
+    /// file.
     files: Vec<Spanned<PathBuf>>,
+    /// The object files a test build links, added to the ones the `build` section gives.
     #[serde(default)]
     objects: Vec<PathBuf>,
+    /// The libraries a test build links statically, added to the ones the `build` section gives.
     static_links: Option<Vec<String>>,
+    /// The libraries a test build links dynamically, added to the ones the `build` section gives.
     dynamic_links: Option<Vec<String>>,
+    /// The directories the linker searches for libraries in a test build, added to the ones the
+    /// `build` section gives.
     library_paths: Option<Vec<PathBuf>>,
+    /// Further flags handed to the linker in a test build, added to the ones the `build` section
+    /// gives.
     #[serde(default)]
     ld_flags: Vec<String>,
+    /// The commands run before a test build compiles, added to the ones the `build` section gives.
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
+    /// Whether to build a test with thread-safe reference counting. Unset leaves the value the
+    /// `build` section gives in force.
     threaded: Option<bool>,
     /// Name of the sanitizer to instrument the built test program with, from the set
     /// `Sanitizer::from_str` accepts.
     sanitize: Option<String>,
+    /// Whether to put debugging information into a test build. Unset leaves the value the `build`
+    /// section gives in force.
     debug: Option<bool>,
+    /// Name of the optimization level to build a test at, from the set
+    /// `FixOptimizationLevel::from_str` accepts. Unset leaves the value the `build` section gives in
+    /// force.
     opt_level: Option<String>,
+    /// Whether a test prints a backtrace when a run-time error ends it. Unset leaves the value the
+    /// `build` section gives in force.
     backtrace: Option<bool>,
     /// Regex patterns of the CPU features to turn off in a test build, added to the ones the
     /// `build` section gives.
@@ -138,23 +187,26 @@ pub struct ProjectFileBuildTest {
     memcheck: Option<bool>,
 }
 
-// The entry of `dependencies` section of the project file.
+/// One entry of the `dependencies` or `test_dependencies` section: a project this project builds
+/// against, and where that project is fetched from.
 #[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileDependency {
-    // Name of the project.
+    /// The name of the project depended on, as that project's own `[general]` section gives it.
     pub name: ProjectName,
-    // Path to directory.
+    /// The directory the project sits in, resolved against the directory of the project file that
+    /// declares it. Exactly one of `path` and `git` is written.
     pub path: Option<PathBuf>,
-    // Git repository.
+    /// The git repository the project is cloned from. Exactly one of `path` and `git` is written.
     pub git: Option<ProjectFileDependencyGit>,
-    // Version requirement for the dependent project.
-    // If None, the latest version is used.
+    /// The versions of the project this entry accepts, written as a semver requirement in Cargo's
+    /// syntax. Left out, the latest version is taken.
     pub version: Option<String>,
 }
 
 impl ProjectFileDependency {
-    // Get the version requirement.
+    /// The `version` field parsed as a semver requirement. A field left out accepts every version.
+    /// Panics unless `ProjectFile::validate` has accepted the field.
     pub fn version(&self) -> VersionReq {
         match &self.version {
             Some(v) => VersionReq::parse(v).unwrap(),
@@ -163,16 +215,19 @@ impl ProjectFileDependency {
     }
 }
 
-// The `git` field of the dependency.
+/// The `git` field of a dependency entry: the repository the project is cloned from, and the ref
+/// the clone is pinned to.
 #[derive(Deserialize, Serialize, Default, Clone, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileDependencyGit {
-    // The URL of the git repository.
+    /// The URL of the git repository.
     pub url: String,
-    // The commit hash to pin to.
+    /// The commit hash the dependency is pinned to. At most one of `rev` and `tag` is written; with
+    /// neither, the version requirement of the entry picks a tag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rev: Option<String>,
-    // The tag name to pin to.
+    /// The tag name the dependency is pinned to. At most one of `rev` and `tag` is written; with
+    /// neither, the version requirement of the entry picks a tag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
 }
@@ -195,27 +250,33 @@ impl ProjectFileDependencyGit {
     }
 }
 
-// Role of a loaded project file in the current build: the build's root, or a dependency
-// of another project. Populated by the loader (`read_root_file` /
-// `DependencyLockFileEntry::project_file`); not serialized into `fixproj.toml`.
+/// The place a loaded project file has in the current build, set by the loader that read the
+/// file.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub enum ProjectFileRole {
+    /// The project the build was started in, whose project file alone contributes the settings that
+    /// take one value across the whole build.
     #[default]
     Root,
+    /// A project another project of the build declares as a dependency.
     Dependent,
 }
 
-// Where a project comes from.
+/// Where a project comes from.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ProjectOrigin {
-    // Root project or a local-path dependency. Holds the absolute path of the project directory.
+    /// A project in the local file system, at the absolute path this variant holds: the root
+    /// project, or one a `path` dependency entry names.
     Local(PathBuf),
-    // Git dependency. Carries the repository URL and pinned commit hash from the lockfile.
+    /// A project cloned from a git repository, identified by the repository URL and the commit hash
+    /// the lock file pins the clone to.
     Git { url: String, commit: String },
 }
 
 impl ProjectOrigin {
-    // String form used as a stable key (e.g. for the trust store).
+    /// A string naming where the project comes from: the project directory for a local project, and
+    /// `git+` followed by the repository URL for a git one, so that every commit of one repository
+    /// shares a key.
     pub fn to_trust_key(&self) -> String {
         match self {
             ProjectOrigin::Local(p) => p.to_string_lossy().to_string(),
@@ -223,7 +284,7 @@ impl ProjectOrigin {
         }
     }
 
-    // Commit hash, if this project is pinned by one.
+    /// The commit hash a git project is pinned to.
     pub fn commit_hash(&self) -> Option<&str> {
         match self {
             ProjectOrigin::Local(_) => None,
@@ -232,40 +293,45 @@ impl ProjectOrigin {
     }
 }
 
-// The project file.
+/// A project file (`fixproj.toml`): what the project is, how it is built, what it depends on, and
+/// what the loader that read it knows about where it came from.
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFile {
-    // `general` section
+    /// The `general` section, holding the project's name and version.
     pub general: ProjectFileGeneral,
-    // `build` section
+    /// The `build` section, holding the settings a build reads.
     pub build: ProjectFileBuild,
-    // `dependencies` section
+    /// The `dependencies` entries: the projects every build of this one may use.
     #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
-    // `test_dependencies` section
+    /// The `test_dependencies` entries: the projects the test sources of this one may use, beside
+    /// the ones `dependencies` names.
     #[serde(default)]
     pub test_dependencies: Vec<ProjectFileDependency>,
-    // The path to the project file.
+    /// The path this file was read from. Every relative path the file writes is resolved against
+    /// the directory holding it.
     #[serde(skip)]
     pub path: PathBuf,
-    // Role of this project file in the current build.
+    /// The place this project has in the current build, set by the loader that read the file.
     #[serde(skip)]
     pub role: ProjectFileRole,
-    // Where this project came from. Used to tag `preliminary_commands` for trust-store lookup.
-    // `None` on a freshly deserialized `ProjectFile`; loaders must set this to `Some(...)` before the
-    // file is handed off for `set_config`.
+    /// Where this project came from. A freshly deserialized `ProjectFile` carries `None`, and the
+    /// loader that read the file fills it in before the file configures a build.
     #[serde(skip)]
     pub source: Option<ProjectOrigin>,
 }
 
 impl ProjectFile {
-    // Get dependencies based on mode.
+    /// The projects this project declares as dependencies for a build of the given mode. Their
+    /// names are distinct, since `validate` rejects a project file that declares one project twice.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the entries of the `test_dependencies` section.
     pub fn get_dependencies(&self, mode: BuildConfigType) -> Vec<ProjectFileDependency> {
         match mode {
             BuildConfigType::Test => {
-                // Merge dependencies and test_dependencies
-                // Note: Duplicate check is already performed in validate()
                 let mut all_deps = self.dependencies.clone();
                 all_deps.extend(self.test_dependencies.clone());
                 all_deps
@@ -400,7 +466,13 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Validate a single dependency entry.
+    /// Checks one dependency entry: its project name, that it names exactly one of `path` and
+    /// `git`, that its version requirement parses, and that a git entry pins at most one of `rev`
+    /// and `tag`.
+    ///
+    /// # Arguments
+    ///
+    /// * `span` - The place in the project file each error points at.
     fn validate_dependency_entry(dep: &ProjectFileDependency, span: Span) -> Result<(), Errors> {
         // Validate the project name.
         Self::validate_project_name(&dep.name, Some(span.clone()))?;
@@ -585,7 +657,9 @@ impl ProjectFile {
         errors.to_result()
     }
 
-    // Get the version requirement for the Fix compiler.
+    /// The compiler versions this project builds with, as its `fix_version` field requires. A
+    /// project file naming none builds with every version. Panics unless `validate` has accepted
+    /// the field.
     pub fn fix_version(&self) -> VersionReq {
         match &self.general.fix_version {
             Some(v) => VersionReq::parse(v).unwrap(),
@@ -593,7 +667,7 @@ impl ProjectFile {
         }
     }
 
-    // Check if the project file is compatible with the current version of Fix.
+    /// Checks that the running compiler's version satisfies what this project requires of it.
     pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
         if self
             .fix_version()
@@ -648,17 +722,14 @@ impl ProjectFile {
             .clone()
             .expect("ProjectFile::source must be set by the loader before set_config");
 
-        // Determine the build mode.
-        // If the project is a dependent project, we do not consider the `[build.test]` section.
+        // Determine the build mode. A dependent project contributes its `build` section alone.
         let mut mode = config.subcommand.build_mode();
         if is_dependent_proj {
             mode = BuildConfigType::Build;
         }
 
-        // Reject missing source files up front, pointing at the offending
-        // project-file entry. Otherwise the missing file surfaces later as a
-        // span-less "failed to canonicalize" error that editors cannot
-        // attach to any file.
+        // Reject missing source files up front, so that the error points at the project-file entry
+        // naming the file and an editor attaches it there.
         self.check_source_files_exist(mode)?;
 
         // Record what this project provides and what it declares, so that an import reaching past
@@ -678,12 +749,10 @@ impl ProjectFile {
             });
         }
 
-        // Append source files. Root-project files go through
-        // `add_user_source_file` so they also land in
-        // `root_source_files`, which scopes deprecation diagnostics to
-        // user code (mirroring rustc/swiftc: a deprecated use inside a
-        // dependency is the dependency's problem, not the user's).
-        // Dependent-project files are pushed to `source_files` only.
+        // Append source files. Root-project files go through `add_user_source_file` so they also
+        // land in `root_source_files`, which scopes deprecation diagnostics to the user's own code:
+        // a deprecated use inside a dependency is the dependency's problem. Dependent-project files
+        // are pushed to `source_files` only.
         let files = self.get_files(mode);
         if is_dependent_proj {
             config.source_files.extend(files);
@@ -994,7 +1063,7 @@ impl ProjectFile {
         Ok(lock_file)
     }
 
-    // Helper method to save lock file to disk.
+    /// Writes `lock_file` to the path a lock file of the given kind is read from.
     fn save_lock_file(lock_file: &DependecyLockFile, mode: LockFileType) -> Result<(), Errors> {
         let content = toml::to_string(lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
@@ -1004,7 +1073,8 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Open the lock file or create a new one if it does not exist.
+    /// The lock file of the given kind. One that is missing or out of date is built afresh from
+    /// this project's dependency entries and written out.
     pub fn open_or_create_lock_file(
         &self,
         mode: LockFileType,
@@ -1019,9 +1089,9 @@ impl ProjectFile {
         })
     }
 
-    // Open the lock file, or automatically create/update it if it does not exist or is invalid, and install the dependencies.
-    // This method is designed for LSP to automatically manage lock files without user intervention.
-    // Returns error without panicking, allowing LSP to report diagnostics to the user.
+    /// The lock file of the given kind, with its dependencies installed. One that is missing or out
+    /// of date is built afresh and written out, creating the directory that holds it where that is
+    /// missing too, so that a project which has never been built reaches a lock file as well.
     pub fn open_or_auto_update_lock_file(
         &self,
         mode: LockFileType,
@@ -1054,13 +1124,17 @@ impl ProjectFile {
         }
     }
 
-    // Open the lock file, create a new one if it does not exist, and install the dependencies.
+    /// Installs the dependencies the lock file of the given kind pins, writing that lock file first
+    /// where the one on disk is missing or out of date.
     pub fn open_or_create_lock_file_and_install(&self, mode: LockFileType) -> Result<(), Errors> {
         self.open_or_create_lock_file(mode)
             .and_then(|lf| lf.install())
     }
 
-    // Update configuration by adding source files, linking libraries, ... as required by dependencies.
+    /// Adds what this project's dependencies contribute to `config`: their source files, the
+    /// libraries they link, and the rest of the settings their project files give. The dependencies
+    /// are installed first, and the lock file written where the one on disk is missing or out of
+    /// date.
     pub fn install_dependencies(
         self: &ProjectFile,
         config: &mut Configuration,
@@ -1079,13 +1153,19 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Create span for a range in the project file.
+    /// The place in this project file a diagnostic points at.
+    ///
+    /// # Arguments
+    ///
+    /// * `start`, `end` - Byte offsets into the project file. `0, 0` points at its head, which is
+    ///   where a diagnostic with no finer place to point goes.
     fn project_file_span(&self, start: usize, end: usize) -> Span {
         let input = SourceFile::from_file_path(self.path.clone());
         Span { start, end, input }
     }
 
-    // Convert a relative path to an absolute path by joining it with the directory of the project file.
+    /// `path` resolved against the directory holding this project file. An absolute `path` is
+    /// returned as it is.
     fn join_to_project_dir(&self, path: &Path) -> PathBuf {
         if path.is_absolute() {
             return path.to_path_buf();
@@ -1098,9 +1178,10 @@ impl ProjectFile {
         }
     }
 
-    // Get the source of a dependent project.
+    /// Where the project named `name` is fetched from, as the `dependencies` and
+    /// `test_dependencies` entries of this project file say. Panics when no entry names the
+    /// project, or when the entry that does names no source.
     pub fn get_dependency_source(&self, name: &ProjectName) -> ProjectSource {
-        // Search in both dependencies and test_dependencies
         for dep in self
             .dependencies
             .iter()
@@ -1120,11 +1201,10 @@ impl ProjectFile {
         panic!("Project `{}` not found in dependencies.", name);
     }
 
-    // Creates an example project file in the current directory.
+    /// Creates a project file named after `proj_name`, a sample "main.fix" and a sample "test.fix"
+    /// in the current directory. An error is raised as soon as one of the three names is taken, and
+    /// the file that carries it is left as it is.
     pub fn create_example_file(proj_name: String) -> Result<(), Errors> {
-        // Create sample "fixproj.toml" file in the current directory.
-
-        // If the project file already exists, do not overwrite it.
         if Path::new(PROJECT_FILE_PATH).exists() {
             return Err(Errors::from_msg(format!(
                 "The file \"{}\" already exists.",
@@ -1134,10 +1214,10 @@ impl ProjectFile {
 
         let content = include_str!("../docs/project_template.toml");
 
-        // Replace `{PLACEHOLDER_PROJECT_NAME}` to `proj_name`.
+        // Replace `{PLACEHOLDER_PROJECT_NAME}` with `proj_name`.
         let content = content.replace("{PLACEHOLDER_PROJECT_NAME}", &proj_name);
 
-        // Replace `{PLACEHOLDER_FIX_VERSION}` to the current version of Fix.
+        // Replace `{PLACEHOLDER_FIX_VERSION}` with the current version of Fix.
         let content = content.replace("{PLACEHOLDER_FIX_VERSION}", env!("CARGO_PKG_VERSION"));
 
         fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
@@ -1172,7 +1252,15 @@ impl ProjectFile {
         Ok(())
     }
 
-    // Add dependencies to Fix projects to the project file.
+    /// Appends a dependency entry for each project of `proj_vers` to this project file, taking the
+    /// repository of each from the registries `fix_config` names.
+    ///
+    /// # Arguments
+    ///
+    /// * `proj_vers` - Each is `proj-name` or `proj-name@ver_req`. A name written without a version
+    ///   requirement takes the latest tagged version of the project.
+    /// * `mode` - `Build` writes `[[dependencies]]` entries, `Test` writes `[[test_dependencies]]`
+    ///   ones.
     pub fn add_dependencies(
         &self,
         proj_vers: &Vec<String>,
@@ -1181,7 +1269,7 @@ impl ProjectFile {
     ) -> Result<(), Errors> {
         let mut added = "".to_string();
 
-        // Parse each element of `proj_vars` as the form `proj-name@ver_req`.
+        // Parse each element of `proj_vers` as the form `proj-name@ver_req`.
         let mut projs: Vec<(String, Option<String>)> = vec![]; // (proj_name, ver_str)
         for proj_ver in proj_vers {
             let proj_ver_split = proj_ver.split('@').collect::<Vec<&str>>();

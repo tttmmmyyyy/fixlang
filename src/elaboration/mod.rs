@@ -73,7 +73,8 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program.validate_import_statements()?;
 
     // Set and check kinds that appear in type signatures.
-    // NOTE: kinds of type variables appearing in type annotations in expressions are set not at this stage but at the type inference stage.
+    // NOTE: kinds of type variables appearing in type annotations in expressions are set at the
+    // type inference stage.
     program.set_kinds()?;
 
     // Check that no two implementations of one trait can apply to the same type.
@@ -210,11 +211,11 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         errors.eat_err_or(res, |mod_| modules.push(mod_));
     }
 
-    // If an error occurres in parsing,
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
-        // In eny parsing error occurres in diagnostics mode, delay the error and remove the root project from modules.
-        // In other words, in the following diagnostic process, only the dependent projects are targeted.
-        // This allows us to give the language server the information it needs for code completion, even if there is a parse error in the root project.
+        // If a parsing error occurs in diagnostics mode, delay the error and remove the root
+        // project from modules, so that the diagnostic process that follows targets the dependent
+        // projects alone. This gives the language server the information it needs for code
+        // completion even when the root project has a parse error.
         if errors.has_error() {
             let mut dependency_modules = vec![];
             for mod_ in modules {
@@ -233,7 +234,7 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
 
     // Link all modules.
     for mod_ in modules {
-        program.link(mod_, false)?; // If an error occurres in linking, return the error.
+        program.link(mod_, false)?; // If an error occurs in linking, return the error.
     }
 
     // Resolve imports.
