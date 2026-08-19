@@ -75,14 +75,14 @@ def measure(language, windows):
     simulated_counts = cachegrind.split(",")
     if len(simulated_counts) != 3:
         sys.exit(f"measuring {binary} produced \"{cachegrind}\"")
-    instructions, _memory_accesses, dram_accesses = simulated_counts
+    instructions, _memory_accesses, ram_accesses = simulated_counts
     # A machine without the counters leaves these three fields the way the case's own
     # measurement leaves them, so a row is short of the same columns on both lines.
     counted = subprocess.run(
         ["python3", str(PERF_COUNTERS), "--windows", str(windows),
          # What the counterpart asks of main memory decides whether its cycle count survives
          # a busy machine, the same way it does for the case.
-         "--dram-accesses", dram_accesses, "--instructions", instructions,
+         "--ram-accesses", ram_accesses, "--instructions", instructions,
          f"./{binary}"],
         capture_output=True, text=True)
     hardware = counted.stdout.strip() if counted.returncode == 0 else ",,0.00"
