@@ -552,11 +552,14 @@ impl ProjectFile {
     }
 
     /// The paths of the source files a test build compiles beside the ones an ordinary build
-    /// compiles, resolved against the project directory.
+    /// compiles, resolved against the project directory. A file the `[build.test]` section repeats
+    /// from the `build` section is one of the ordinary sources, so it stays out.
     fn get_test_only_files(&self) -> Vec<PathBuf> {
+        let build_files: Set<PathBuf> = self.get_files(BuildConfigType::Build).into_iter().collect();
         self.test_only_file_entries()
             .iter()
             .map(|entry| self.join_to_project_dir(entry.get_ref()))
+            .filter(|path| !build_files.contains(path))
             .collect()
     }
 

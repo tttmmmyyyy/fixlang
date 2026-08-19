@@ -499,6 +499,32 @@ mod integration_tests {
         );
     }
 
+    /// A source an ordinary build compiles is judged by the ordinary declarations, whether or not
+    /// the `[build.test]` section lists it again. `root_test_repeats_build_file` declares
+    /// `undeclared-depa` as a test dependency, its `main.fix` imports `DepA`, and its
+    /// `[build.test]` repeats `main.fix` beside `test.fix`.
+    #[test]
+    fn test_ordinary_source_repeated_under_test_still_warns() {
+        let (_temp_dir, output) =
+            run_case("undeclared_dependency/root_test_repeats_build_file", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import in `main.fix` is the one import to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepA` belongs to the project \"undeclared-depa\", which the project \
+                 \"undeclared-root-test-repeats-build-file\" does not declare as a dependency."
+            ),
+            "repeating the file under `[build.test]` leaves it under the ordinary declarations:\n{}",
+            stderr
+        );
+    }
+
     /// One declaration answers every import between two projects, so the two of them stand for one
     /// warning, pointing at the import that comes first in the source. `root_two_imports` imports
     /// `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
