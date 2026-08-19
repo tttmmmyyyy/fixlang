@@ -344,22 +344,24 @@ pub struct DocsConfig {
     pub mode: BuildConfigType,
 }
 
-/// What one project contributes to a build: the sources it is compiled from, and the dependencies
-/// its project file declares.
+/// What one project contributes to a build: sources it is compiled from, and the dependencies its
+/// project file declares for them.
 ///
 /// Dependencies are resolved transitively, so the sources of a dependency's dependency are
 /// compiled in as well, and every module of them can be imported by anyone. Recording which
 /// project each source came from, beside what that project wrote down, is what lets
 /// `Program::collect_undeclared_dependency_diagnostics` tell an import of a declared dependency
 /// from an import of a project that merely happens to be linked in.
+///
+/// A project contributes its ordinary sources as one of these, and a test build takes its test
+/// sources as another, since the test dependencies are declared for those alone.
 #[derive(Clone)]
 pub struct ProjectSources {
-    /// The project's name, as its project file gives it.
+    /// The name of the project the sources come from, as its project file gives it.
     pub name: ProjectName,
-    /// The projects the project file declares as dependencies, by name. In test mode this holds
-    /// the test dependencies as well, which are the ones the test sources may use.
+    /// The projects declared as dependencies of these sources, by name.
     pub declared_dependencies: Set<ProjectName>,
-    /// The source files the project contributes to the build.
+    /// The source files, resolved to paths.
     pub files: Vec<PathBuf>,
 }
 

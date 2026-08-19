@@ -527,11 +527,31 @@ impl ProjectFile {
     /// # Arguments
     ///
     /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
+    /// The names of the projects this project declares as dependencies for a build of the given
+    /// mode. A test build declares the test dependencies beside the ordinary ones.
+    fn declared_dependency_names(&self, mode: BuildConfigType) -> Set<ProjectName> {
+        self.get_dependencies(mode)
+            .iter()
+            .map(|dep| dep.name.clone())
+            .collect()
+    }
+
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
         self.source_file_entries(mode)
             .iter()
             .map(|entry| self.join_to_project_dir(entry.get_ref()))
             .collect()
+    }
+
+    /// The paths of the source files the `[build.test]` section adds, resolved against the project
+    /// directory. A test build compiles these beside the ones an ordinary build compiles.
+    pub fn get_test_files(&self) -> Vec<PathBuf> {
+        self.build.test.as_ref().map_or(vec![], |test| {
+            test.files
+                .iter()
+                .map(|entry| self.join_to_project_dir(entry.get_ref()))
+                .collect()
+        })
     }
 
     /// Checks that every source file listed in the project file exists on disk. Each error points at
@@ -638,16 +658,21 @@ impl ProjectFile {
         let files = self.get_files(mode);
 
         // Record what this project provides and what it declares, so that an import reaching past
-        // the projects it declares can be told from one that stays within them.
+        // the projects it declares can be told from one that stays within them. The sources of a
+        // test build carry declarations of their own, since the test dependencies are the ones the
+        // test sources may use, so they are recorded as a contribution beside the ordinary sources.
         config.projects.push(ProjectSources {
             name: self.general.name.clone(),
-            declared_dependencies: self
-                .get_dependencies(mode)
-                .iter()
-                .map(|dep| dep.name.clone())
-                .collect(),
-            files: files.clone(),
+            declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
+            files: self.get_files(BuildConfigType::Build),
         });
+        if mode == BuildConfigType::Test {
+            config.projects.push(ProjectSources {
+                name: self.general.name.clone(),
+                declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
+                files: self.get_test_files(),
+            });
+        }
 
         // Append source files. Root-project files go through
         // `add_user_source_file` so they also land in
