@@ -2115,6 +2115,13 @@ impl TypeNode {
         };
     }
 
+    /// Whether `tycon` appears anywhere in this type.
+    pub fn contains_tycon(&self, tycon: &TyCon) -> bool {
+        let mut tycons = Set::default();
+        self.collect_tycons(&mut tycons);
+        tycons.contains(tycon)
+    }
+
     /// Collect into `tycons` all type constructors that appear in this type.
     pub fn collect_tycons(&self, tycons: &mut Set<TyCon>) {
         match &self.ty {

@@ -1208,15 +1208,15 @@ fn struct_destructurings_in(
     tycon: &Arc<TyCon>,
 ) -> Vec<(Vec<Option<FullName>>, Arc<ExprNode>)> {
     let mut destructurings = Vec::new();
-    for node in nodes_of(body) {
+    body.walk_nodes(&mut |node| {
         let Expr::Let(pat, _, value) = &*node.expr else {
-            continue;
+            return;
         };
         let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern else {
-            continue;
+            return;
         };
         if pat_tycon != tycon || !is_same_type_node(pat.info.type_.as_ref().unwrap(), ty) {
-            continue;
+            return;
         }
         let names = field_to_pat
             .iter()
@@ -1229,7 +1229,7 @@ fn struct_destructurings_in(
             })
             .collect();
         destructurings.push((names, value.clone()));
-    }
+    });
     destructurings
 }
 
@@ -1241,12 +1241,12 @@ fn structs_built_in(
     tycon: &Arc<TyCon>,
 ) -> Vec<Vec<Option<FullName>>> {
     let mut built = Vec::new();
-    for node in nodes_of(body) {
+    body.walk_nodes(&mut |node| {
         let Some((made_tycon, fields)) = node.destructure_make_struct() else {
-            continue;
+            return;
         };
         if made_tycon != *tycon || !is_same_type_node(node.type_.as_ref().unwrap(), ty) {
-            continue;
+            return;
         }
         built.push(
             fields
@@ -1260,7 +1260,7 @@ fn structs_built_in(
                 })
                 .collect(),
         );
-    }
+    });
     built
 }
 
@@ -1287,24 +1287,27 @@ fn struct_stays_the_one_given(
     if param_tys
         .iter()
         .enumerate()
-        .any(|(idx, ty)| idx != arg && mentions_tycon(ty, tycon))
+        .any(|(idx, ty)| idx != arg && ty.contains_tycon(tycon))
     {
         return false;
     }
-    nodes_of(body).iter().all(|node| {
+    let mut stays = true;
+    body.walk_nodes(&mut |node| {
         let ty = node.type_.as_ref().unwrap();
         if matches!(&*node.expr, Expr::LLVM(_)) {
-            return !heads_tycon(ty, tycon);
+            stays &= !heads_tycon(ty, tycon);
+            return;
         }
         if !node.is_var() {
-            return true;
+            return;
         }
         let name = &node.get_var().name;
         if name.is_local() || name == func {
-            return true;
+            return;
         }
-        !mentions_tycon(&ty.collect_app_src(usize::MAX).1, tycon)
-    })
+        stays &= !ty.collect_app_src(usize::MAX).1.contains_tycon(tycon);
+    });
+    stays
 }
 
 // Whether `ty` is `tycon` applied to its arguments, which is what a value of the struct itself is
@@ -1314,89 +1317,21 @@ fn heads_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
         .is_some_and(|top| top.as_ref() == tycon.as_ref())
 }
 
-// Whether `tycon` occurs anywhere in `ty`.
-fn mentions_tycon(ty: &Arc<TypeNode>, tycon: &Arc<TyCon>) -> bool {
-    heads_tycon(ty, tycon)
-        || ty
-            .collect_type_arguments()
-            .iter()
-            .any(|arg| mentions_tycon(arg, tycon))
-}
-
 // The local names bound anywhere inside `expr`, which are the names an expression standing beside it
 // cannot see.
 fn names_bound_in(expr: &Arc<ExprNode>) -> Set<FullName> {
     let mut names = Set::default();
-    for node in nodes_of(expr) {
-        match &*node.expr {
-            Expr::Let(pat, _, _) => names.extend(pat.pattern.vars()),
-            Expr::Lam(params, _) => names.extend(params.iter().map(|param| param.name.clone())),
-            Expr::Match(_, arms) => {
-                for (pat, _) in arms {
-                    names.extend(pat.pattern.vars());
-                }
+    expr.walk_nodes(&mut |node| match &*node.expr {
+        Expr::Let(pat, _, _) => names.extend(pat.pattern.vars()),
+        Expr::Lam(params, _) => names.extend(params.iter().map(|param| param.name.clone())),
+        Expr::Match(_, arms) => {
+            for (pat, _) in arms {
+                names.extend(pat.pattern.vars());
             }
-            _ => {}
         }
-    }
+        _ => {}
+    });
     names
-}
-
-// Every node of `expr`, itself included. An inline-LLVM expression names the values it reads rather
-// than holding them, so it is a leaf here.
-fn nodes_of(expr: &Arc<ExprNode>) -> Vec<Arc<ExprNode>> {
-    let mut nodes = Vec::new();
-    collect_nodes(expr, &mut nodes);
-    nodes
-}
-
-fn collect_nodes(expr: &Arc<ExprNode>, nodes: &mut Vec<Arc<ExprNode>>) {
-    nodes.push(expr.clone());
-    match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
-        Expr::App(func, args) => {
-            collect_nodes(func, nodes);
-            for arg in args {
-                collect_nodes(arg, nodes);
-            }
-        }
-        Expr::Lam(_, body) => collect_nodes(body, nodes),
-        Expr::Let(_, bound, value) => {
-            collect_nodes(bound, nodes);
-            collect_nodes(value, nodes);
-        }
-        Expr::If(cond, then_expr, else_expr) => {
-            collect_nodes(cond, nodes);
-            collect_nodes(then_expr, nodes);
-            collect_nodes(else_expr, nodes);
-        }
-        Expr::Match(cond, arms) => {
-            collect_nodes(cond, nodes);
-            for (_, arm) in arms {
-                collect_nodes(arm, nodes);
-            }
-        }
-        Expr::TyAnno(expr, _) => collect_nodes(expr, nodes),
-        Expr::ArrayLit(elems) => {
-            for elem in elems {
-                collect_nodes(elem, nodes);
-            }
-        }
-        Expr::MakeStruct(_, fields) => {
-            for (_, _, value) in fields {
-                collect_nodes(value, nodes);
-            }
-        }
-        Expr::FFICall(_, _, _, _, args, _) => {
-            for arg in args {
-                collect_nodes(arg, nodes);
-            }
-        }
-        Expr::Eval(side, value) => {
-            collect_nodes(side, nodes);
-            collect_nodes(value, nodes);
-        }
-    }
 }
 
 // The `let` destructuring the capture list of a lifted lambda, as the names it binds the capture
