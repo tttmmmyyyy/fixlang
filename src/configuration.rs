@@ -413,18 +413,16 @@ impl ProjectSources {
 /// `Program::module_dependency_hash`, which decides when a cached type-check result may be reused.
 #[derive(Clone)]
 pub struct Configuration {
-    /// Every source file the program is compiled from, the root project's own files and those of
-    /// its dependencies alike.
-    pub source_files: Vec<PathBuf>,
-    /// The subset of `source_files` that is user-authored: the root
-    /// project's own files, files passed via `--file`, and files pushed
-    /// by unit-test entry points. Excludes files contributed by
-    /// dependencies. Used to scope deprecation warnings to user code,
-    /// mirroring how Rust/Swift/Kotlin/etc. only flag deprecated uses in
-    /// the crate or module currently being compiled.
+    /// The source files no project supplies: the ones a `--file` option names, and the ones a
+    /// unit-test entry point builds a configuration around. The files the projects supply are in
+    /// `project_sources`, and `source_files` answers with both.
+    pub extra_source_files: Vec<PathBuf>,
+    /// The source files that are user-authored: the root project's own files, files passed via
+    /// `--file`, and files pushed by unit-test entry points. Excludes files contributed by
+    /// dependencies. Used to scope diagnostics to user code, mirroring how Rust/Swift/Kotlin/etc.
+    /// only flag a deprecated use in the crate or module currently being compiled.
     ///
-    /// Maintain this in lockstep with `source_files` via
-    /// `add_user_source_file` whenever you're adding user code.
+    /// Every one of these is compiled, so `source_files` covers them.
     pub root_source_files: Vec<PathBuf>,
     /// The sources every project contributes to the build, beside what that project declares for
     /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
@@ -589,7 +587,7 @@ impl Configuration {
     fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,
-            source_files: vec![],
+            extra_source_files: vec![],
             root_source_files: vec![],
             project_sources: vec![],
             object_files: vec![],
@@ -708,17 +706,24 @@ impl Configuration {
             .push((name.to_string(), LinkType::Dynamic));
     }
 
-    /// Register a user-authored source file: the root project's own files,
-    /// a path passed via `--file`, or a file pushed by a unit-test entry
-    /// point. The file lands in `source_files` (so it is parsed alongside
-    /// dependencies) and additionally in `root_source_files`, which scopes
-    /// deprecation diagnostics to user code.
+    /// Take on a user-authored source file that no project supplies: a path passed via `--file`,
+    /// or a file pushed by a unit-test entry point. It is compiled, and it is the user's own, so
+    /// it lands in `extra_source_files` and in `root_source_files` alike.
     ///
-    /// Files contributed by *dependencies* must NOT use this — push them
-    /// into `source_files` directly, leaving `root_source_files` alone.
+    /// A project's own files reach the build through `ProjectFile::set_config`, which records them
+    /// in `project_sources`.
     pub fn add_user_source_file(&mut self, path: PathBuf) {
-        self.source_files.push(path.clone());
+        self.extra_source_files.push(path.clone());
         self.root_source_files.push(path);
+    }
+
+    /// Every source file the program is compiled from: the ones each project supplies, in the
+    /// order the projects were configured, and then the ones no project supplies.
+    pub fn source_files(&self) -> impl Iterator<Item = &PathBuf> {
+        self.project_sources
+            .iter()
+            .flat_map(|sources| sources.files.iter())
+            .chain(self.extra_source_files.iter())
     }
 
     /// Where `--emit-llvm` writes one compilation unit's LLVM IR: a `.ll` file beside the output
