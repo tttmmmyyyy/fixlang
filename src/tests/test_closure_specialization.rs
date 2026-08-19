@@ -66,10 +66,9 @@ mod integration_tests {
     /// `2..1` for 9.
     const STRUCT_FIELD_NAMED_STRUCT_OUTPUT: &str = "39";
 
-    /// What `struct_field_reachable_elsewhere` prints: `wrapped` sums `3 * n` and the wrapped
-    /// `n + 1000` and the tag over `4..1` and `2..1` for 6087, scaled by 10000 so that either half
-    /// shows on its own, and `shadowed` sums `3 * n` once and `n + 1000` thereafter for 4025.
-    const STRUCT_FIELD_REACHABLE_ELSEWHERE_OUTPUT: &str = "60874025";
+    /// What `struct_field_reachable_elsewhere` prints: `wrapped` 6087, `shadowed` 4025 and `both`
+    /// 39, each scaled so that one changing on its own still shows.
+    const STRUCT_FIELD_REACHABLE_ELSEWHERE_OUTPUT: &str = "608740250039";
 
     /// What `struct_field_iterator_chain` prints: the fold sums `3 * (i % 7)` over 64 elements for
     /// 567, and the collected array has 64 elements.
@@ -450,8 +449,9 @@ mod integration_tests {
     }
 
     /// A struct of the type under question can reach the body without being named there: carried
-    /// inside another struct a call gives back, or bound to the name the destructuring gave the
-    /// field. Neither one holds the function the argument arrived with.
+    /// inside another struct a call gives back, bound to the name the destructuring gave the field,
+    /// or captured into the capture list a lifted lambda receives. None of the three holds the
+    /// function the argument arrived with.
     #[test]
     pub fn test_a_struct_reaching_the_body_another_way_is_not_the_one_given() {
         let (_temp_dir, project_dir) = setup_test_env("struct_field_reachable_elsewhere");

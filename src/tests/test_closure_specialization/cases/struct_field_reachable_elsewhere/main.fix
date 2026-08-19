@@ -44,5 +44,17 @@ main : IO () = (
     let g = |x| x * k;
     let a = wrapped(0, Stepper { n : 4, f : g }) + wrapped(0, Stepper { n : 2, f : g });
     let b = shadowed(0, Stepper { n : 4, f : g }) + shadowed(0, Stepper { n : 2, f : g });
-    println((a * 10000 + b).to_string)
+
+    // A lambda that takes one of the structs and captures another. The captured one arrives through
+    // a capture list, which the program never names and whose type says only its own name.
+    let h = |x| x + 7;
+    let captured = Stepper { n : 2, f : h };
+    let both = |s| (
+        let Stepper { n : n1, f : f1 } = s;
+        let Stepper { n : n2, f : f2 } = captured;
+        f1(n1) + f2(n2)
+    );
+    let c = both(Stepper { n : 3, f : g }) + both(Stepper { n : 4, f : g });
+
+    println((a * 100000000 + b * 10000 + c).to_string)
 );

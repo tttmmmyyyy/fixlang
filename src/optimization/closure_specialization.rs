@@ -527,6 +527,11 @@ struct LiftedLambdas {
     // The type constructors minted so far, which the caller registers into the program's type
     // environment.
     new_tycons: Map<TyCon, TyConInfo>,
+    // The types the fields of each capture list this pass minted hold, by the name of its type
+    // constructor. `new_tycons` is emptied every time the caller takes what it has to register, and
+    // the environment this record reads was taken before any of them existed, so this is where a
+    // minted capture list stays answerable for.
+    minted_fields: Map<FullName, Vec<Arc<TypeNode>>>,
 }
 
 impl LiftedLambdas {
@@ -538,6 +543,7 @@ impl LiftedLambdas {
             trees: Map::default(),
             caps: Map::default(),
             new_tycons: Map::default(),
+            minted_fields: Map::default(),
         }
     }
 
@@ -567,19 +573,21 @@ impl LiftedLambdas {
         self.tree_of_capture_list(&ty.toplevel_tycon()?.name)
     }
 
-    // Whether a value of `ty` is laid out as fields this record can read the types of.
-    fn holds_fields(&self, ty: &Arc<TypeNode>) -> bool {
-        ty.toplevel_tycon().is_some_and(|top| {
-            self.type_env
-                .tycons()
-                .get(top.as_ref())
-                .is_some_and(|info| {
-                    matches!(
-                        info.variant,
-                        TyConVariant::Struct | TyConVariant::Union | TyConVariant::Array
-                    )
-                })
-        })
+    // The types the fields of a value of `ty` hold, where it is laid out as fields at all.
+    //
+    // A capture list this pass minted is answered for as well: it is where a value the program never
+    // named can carry another, and it takes no type arguments, so its declared field types are the
+    // ones a value of it holds.
+    fn field_types_of(&self, ty: &Arc<TypeNode>) -> Option<Vec<Arc<TypeNode>>> {
+        let tycon = ty.toplevel_tycon()?;
+        if let Some(info) = self.type_env.tycons().get(tycon.as_ref()) {
+            return matches!(
+                info.variant,
+                TyConVariant::Struct | TyConVariant::Union | TyConVariant::Array
+            )
+            .then(|| ty.field_types(&self.type_env));
+        }
+        self.minted_fields.get(&tycon.name).cloned()
     }
 
     // Whether `name` is the global function a lambda was lifted to.
@@ -612,6 +620,10 @@ impl LiftedLambdas {
     // constructor until it is registered.
     fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &ClosureTree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
+        self.minted_fields.insert(
+            cap.tycon.name.clone(),
+            cap.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+        );
         self.new_tycons
             .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
     }
@@ -1367,12 +1379,11 @@ fn reaches_tycon(
     if !seen.insert(ty.to_string()) {
         return false;
     }
-    if lifted.holds_fields(ty)
-        && ty
-            .field_types(&lifted.type_env)
+    if lifted.field_types_of(ty).is_some_and(|fields| {
+        fields
             .iter()
             .any(|field| reaches_tycon(field, tycon, lifted, seen))
-    {
+    }) {
         return true;
     }
     ty.collect_type_arguments()
