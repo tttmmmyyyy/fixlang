@@ -123,6 +123,53 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
     command
 }
 
+/// Builds `source` at `opt_level` with `build_args` on the build command, returning the temporary
+/// directory the build ran in and the path of the program it produced. The directory holds the
+/// program, so the caller keeps it alive for as long as the program is to be run.
+///
+/// Fails the test unless the build succeeds, and — where `timeout` is given — unless it finishes
+/// within it. `description` names what is being compiled (see `build_within_and_run`).
+fn build_program(
+    source: &str,
+    opt_level: &str,
+    build_args: &[&str],
+    timeout: Option<Duration>,
+    description: &str,
+) -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let program_path = temp_dir.path().join("program");
+
+    // The compiler's diagnostics go to a file, which is read once the child has exited. A pipe
+    // left unread that long fills its buffer and blocks the very build being timed.
+    let log_path = temp_dir.path().join("build.log");
+    let log = File::create(&log_path).expect("Failed to create the build log");
+    let log_for_stderr = log
+        .try_clone()
+        .expect("Failed to clone the build log handle");
+
+    let mut command = fix_build_source_command(temp_dir.path(), source, opt_level);
+    command
+        .arg("-o")
+        .arg(&program_path)
+        .args(build_args)
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(log_for_stderr));
+    let mut child = command.spawn().expect("Failed to execute fix build");
+    let status = match timeout {
+        Some(timeout) => wait_within(&mut child, timeout, &format!("compiling {}", description)),
+        None => child.wait().expect("Failed to wait for fix build"),
+    };
+    assert!(
+        status.success(),
+        "compiling {} failed: {}\n{}",
+        description,
+        status,
+        fs::read_to_string(&log_path).expect("Failed to read the build log")
+    );
+
+    (temp_dir, program_path)
+}
+
 /// Builds `source` at `opt_level` and runs the program it produces, returning what the program
 /// printed with the surrounding whitespace removed. Fails the test unless the build finishes
 /// within `timeout` and both the build and the program exit successfully.
@@ -140,32 +187,8 @@ pub fn build_within_and_run(
     timeout: Duration,
     description: &str,
 ) -> String {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let program_path = temp_dir.path().join("program");
-
-    // The compiler's diagnostics go to a file, which is read once the child has exited. A pipe
-    // left unread that long fills its buffer and blocks the very build being timed.
-    let log_path = temp_dir.path().join("build.log");
-    let log = File::create(&log_path).expect("Failed to create the build log");
-    let log_for_stderr = log
-        .try_clone()
-        .expect("Failed to clone the build log handle");
-
-    let mut command = fix_build_source_command(temp_dir.path(), source, opt_level);
-    command
-        .arg("-o")
-        .arg(&program_path)
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(log_for_stderr));
-    let mut child = command.spawn().expect("Failed to execute fix build");
-    let status = wait_within(&mut child, timeout, &format!("compiling {}", description));
-    assert!(
-        status.success(),
-        "compiling {} failed: {}\n{}",
-        description,
-        status,
-        fs::read_to_string(&log_path).expect("Failed to read the build log")
-    );
+    let (_temp_dir, program_path) =
+        build_program(source, opt_level, &[], Some(timeout), description);
 
     let output = Command::new(&program_path)
         .output()
@@ -177,6 +200,47 @@ pub fn build_within_and_run(
         output.status
     );
     String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+/// Builds `source` at `opt_level` with `build_args` on the build command, runs the program it
+/// produces, and returns what the program printed with the surrounding whitespace removed. Fails
+/// the test unless the program exits successfully within `timeout`.
+///
+/// Use this for a test whose subject is how long the compiled program runs: the deadline turns
+/// generated code that has become superlinear in the shape of the value it works on into a
+/// failure, where waiting for it out would occupy the machine for as long as that shape takes.
+///
+/// # Arguments
+/// * `description` — what is being run, as a phrase that reads after "running": it is what a
+///   failure names, e.g. "a value whose 41 objects are reached by 2^40 paths".
+pub fn run_within(
+    source: &str,
+    opt_level: &str,
+    build_args: &[&str],
+    timeout: Duration,
+    description: &str,
+) -> String {
+    let (temp_dir, program_path) = build_program(source, opt_level, build_args, None, description);
+
+    // The program's output goes to a file, which is read once it has exited. A pipe left unread
+    // that long fills its buffer and blocks the very run being timed.
+    let output_path = temp_dir.path().join("program.out");
+    let output_file = File::create(&output_path).expect("Failed to create the program output file");
+    let mut child = Command::new(&program_path)
+        .stdout(Stdio::from(output_file))
+        .spawn()
+        .expect("Failed to run the compiled program");
+    let status = wait_within(&mut child, timeout, &format!("running {}", description));
+    assert!(
+        status.success(),
+        "running {} exited with {}",
+        description,
+        status
+    );
+    fs::read_to_string(&output_path)
+        .expect("Failed to read the program output file")
+        .trim()
+        .to_string()
 }
 
 /// Which of a build's emitted LLVM IR files to read. The selection reads the file names

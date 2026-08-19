@@ -1062,8 +1062,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // Implement unique_threaded_bb.
             self.builder().position_at_end(unique_threaded_bb);
-            // Mark the object as non_threaded.
-            self.mark_local_one(obj_ptr);
+            // A unique object has one holder, so its count is updated without atomics.
+            self.set_refcnt_state_one(obj_ptr, REFCNT_STATE_LOCAL);
             // And jump to unique_bb.
             self.builder()
                 .build_unconditional_branch(unique_bb)
@@ -2195,8 +2195,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(end_bb);
     }
 
-    // Mark a boxed object, emitting `traverse_refs` to mark its owned references before the
-    // object itself is marked.
+    /// Mark a boxed object, and through `traverse_refs` every object it owns.
+    ///
+    /// An object that carries the mark already ends the traversal there, since it owns only
+    /// objects carrying the mark or a stronger one. Each object is therefore marked once, where a
+    /// value whose subgraphs are shared would otherwise be walked once per path reaching each of
+    /// them, and the traversal terminates on a cyclic graph.
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2206,19 +2210,72 @@ impl<'c, 'm> Generator<'c, 'm> {
         assert!(
             work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
         );
+        let marks_global = work == TraverserWorkType::mark_global();
 
         // Get pointer to the object.
         let obj_ptr = obj.value(self).into_pointer_value();
 
-        // Mark the object's owned references.
-        traverse_refs(self);
+        let current_func = self.current_function();
+        let mark_bb = self
+            .context
+            .append_basic_block(current_func, "mark_bb@mark_boxed");
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, "cont_bb@mark_boxed");
 
-        // Mark the object itself.
-        if work == TraverserWorkType::mark_global() {
-            self.mark_global_one(obj_ptr);
+        // Load refcnt state.
+        let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
+        let refcnt_state = self
+            .builder()
+            .build_load(
+                refcnt_state_type(self.context),
+                ptr_refcnt_state,
+                "refcnt_state",
+            )
+            .unwrap()
+            .into_int_value();
+
+        // Branch by whether or not the object carries the mark. The global state exempts an object
+        // from reference counting entirely, which is what the threaded state asks for and more, so
+        // a global object carries both marks and a threaded object carries the threaded one.
+        let is_marked = if marks_global {
+            self.builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                    "is_marked_global",
+                )
+                .unwrap()
         } else {
-            self.mark_threaded_one(obj_ptr);
-        }
+            self.builder()
+                .build_int_compare(
+                    IntPredicate::NE,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    "is_marked_threaded",
+                )
+                .unwrap()
+        };
+        self.builder()
+            .build_conditional_branch(is_marked, cont_bb, mark_bb)
+            .unwrap();
+
+        // Implement mark_bb: mark the object itself, then the objects it owns.
+        self.builder().position_at_end(mark_bb);
+        self.set_refcnt_state_one(
+            obj_ptr,
+            if marks_global {
+                REFCNT_STATE_GLOBAL
+            } else {
+                REFCNT_STATE_THREADED
+            },
+        );
+        traverse_refs(self);
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+
+        // Set builder's position as preparation for following implementation.
+        self.builder().position_at_end(cont_bb);
     }
 
     /// Release `obj`: decrement the reference count of every boxed object it owns, destroying the
@@ -2249,80 +2306,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
-    /// Put the boxed object at `ptr` alone into the local reference counting state, leaving the
-    /// objects it owns as they are.
-    fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
+    /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
+    fn set_refcnt_state_one(&mut self, ptr: PointerValue<'c>, state: u8) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-            )
-            .unwrap();
-    }
-
-    /// Put the boxed object at `obj_ptr` alone into the threaded reference counting state, leaving
-    /// the objects it owns as they are. An object that is already threaded or global keeps its
-    /// state, so a global object stays exempt from retain and release.
-    fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
-        let current_func = self.current_function();
-        let cont_bb = self
-            .context
-            .append_basic_block(current_func, "cont_bb@mark_threaded");
-
-        // Load refcnt state.
-        let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                ptr_refcnt_state,
-                "refcnt_state",
-            )
-            .unwrap()
-            .into_int_value();
-
-        // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
-        let local_bb = self
-            .context
-            .append_basic_block(current_func, "local_bb@mark_threaded");
-        let is_refcnt_state_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
-            )
-            .unwrap();
-        self.builder()
-            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb)
-            .unwrap();
-
-        // Implement local_bb.
-        self.builder().position_at_end(local_bb);
-        // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
-        self.builder()
-            .build_store(
-                ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-            )
-            .unwrap();
-        self.builder().build_unconditional_branch(cont_bb).unwrap();
-
-        // Set builder's position as preparation for following implementation.
-        self.builder().position_at_end(cont_bb);
-    }
-
-    // Mark object as global so that it will not be retained or released.
-    fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
-        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
-        self.builder()
-            .build_store(
-                ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                refcnt_state_type(self.context).const_int(state as u64, false),
             )
             .unwrap();
     }
