@@ -2402,7 +2402,7 @@ impl Program {
     pub fn collect_undeclared_dependency_diagnostics(&self, config: &Configuration) -> Errors {
         // The project each source file belongs to.
         let mut file_to_project: Map<PathBuf, &ProjectSources> = Map::default();
-        for project in &config.projects {
+        for project in &config.project_sources {
             for file in &project.files {
                 let Ok(path) = to_absolute_path(file) else {
                     continue;
@@ -2415,18 +2415,19 @@ impl Program {
         // none, and is importable by anyone: `Std`, the sources the compiler generates itself, and
         // the files a `--file` option names outside of any project.
         let mut module_to_project: Map<Name, &ProjectSources> = Map::default();
-        for module in &self.modules {
-            let Ok(path) = module.absolute_source_path() else {
+        for mod_info in &self.modules {
+            let Ok(path) = mod_info.absolute_source_path() else {
                 continue;
             };
             let Some(project) = file_to_project.get(&path) else {
                 continue;
             };
-            module_to_project.insert(module.name.clone(), *project);
+            module_to_project.insert(mod_info.name.clone(), *project);
         }
 
         // The earliest import reaching each undeclared project, by the project that makes it.
-        let mut undeclared: Map<(ProjectName, ProjectName), (Name, Span)> = Map::default();
+        let mut earliest_undeclared_import: Map<(ProjectName, ProjectName), (Name, Span)> =
+            Map::default();
         for stmt in self.import_statements() {
             // An import no token stands for is one the compiler added, of the module itself or of
             // `Std`, and neither reaches another project.
@@ -2436,39 +2437,44 @@ impl Program {
             let Ok(path) = to_absolute_path(&span.input.file_path) else {
                 continue;
             };
-            let Some(importer) = file_to_project.get(&path) else {
+            let Some(importing_project) = file_to_project.get(&path) else {
                 continue;
             };
-            let Some(imported) = module_to_project.get(&stmt.module_name) else {
+            let Some(imported_project) = module_to_project.get(&stmt.module_name) else {
                 continue;
             };
-            if imported.name == importer.name
-                || importer.declared_dependencies.contains(&imported.name)
+            if imported_project.name == importing_project.name
+                || importing_project
+                    .declared_dependencies
+                    .contains(&imported_project.name)
             {
                 continue;
             }
-            let key = (importer.name.clone(), imported.name.clone());
-            let is_earliest = match undeclared.get(&key) {
-                Some((_, found)) => span < *found,
+            let key = (
+                importing_project.name.clone(),
+                imported_project.name.clone(),
+            );
+            let is_earliest = match earliest_undeclared_import.get(&key) {
+                Some((_, earliest)) => span < *earliest,
                 None => true,
             };
             if is_earliest {
-                undeclared.insert(key, (stmt.module_name, span));
+                earliest_undeclared_import.insert(key, (stmt.module_name, span));
             }
         }
 
-        let mut reported: Vec<((ProjectName, ProjectName), (Name, Span))> =
-            undeclared.into_iter().collect();
-        reported.sort_by(|(_, (_, lhs)), (_, (_, rhs))| lhs.cmp(rhs));
+        let mut imports_to_report: Vec<((ProjectName, ProjectName), (Name, Span))> =
+            earliest_undeclared_import.into_iter().collect();
+        imports_to_report.sort_by(|(_, (_, lhs)), (_, (_, rhs))| lhs.cmp(rhs));
 
         let mut diagnostics = Errors::empty();
-        for ((importer, imported), (module, span)) in reported {
+        for ((importing_project, imported_project), (module_name, span)) in imports_to_report {
             let mut err = Error::warning_from_msg_srcs(
                 format!(
                     "Module `{}` belongs to the project \"{}\", which the project \"{}\" does not \
                      declare as a dependency. Add it to the `[[dependencies]]` of the project file \
                      of \"{}\".",
-                    module, imported, importer, importer
+                    module_name, imported_project, importing_project, importing_project
                 ),
                 &[&Some(span)],
             );

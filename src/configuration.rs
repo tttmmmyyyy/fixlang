@@ -390,9 +390,10 @@ pub struct Configuration {
     /// Maintain this in lockstep with `source_files` via
     /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
-    /// What each project contributing to the build declares and provides, the root project and
-    /// every dependency alike. `ProjectFile::set_config` adds one entry per project it configures.
-    pub projects: Vec<ProjectSources>,
+    /// The sources every project contributes to the build, beside what that project declares for
+    /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
+    /// configures each project.
+    pub project_sources: Vec<ProjectSources>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -554,7 +555,7 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             root_source_files: vec![],
-            projects: vec![],
+            project_sources: vec![],
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],

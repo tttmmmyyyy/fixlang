@@ -515,25 +515,21 @@ impl ProjectFile {
     fn source_file_entries(&self, mode: BuildConfigType) -> Vec<&Spanned<PathBuf>> {
         let mut entries: Vec<&Spanned<PathBuf>> = self.build.files.iter().collect();
         if mode == BuildConfigType::Test {
-            entries.extend(self.test_file_entries());
+            entries.extend(self.test_only_file_entries());
         }
         entries
     }
 
-    /// The source-file entries listed in the `[build.test]` section of this project's own project
-    /// file, each paired (via `Spanned`) with its byte range in that file.
-    fn test_file_entries(&self) -> Vec<&Spanned<PathBuf>> {
+    /// The source-file entries listed in the `[build.test]` section, which a test build compiles
+    /// beside the ones an ordinary build compiles. Each is paired with its byte range in the
+    /// project file.
+    fn test_only_file_entries(&self) -> Vec<&Spanned<PathBuf>> {
         self.build
             .test
             .as_ref()
             .map_or(vec![], |test| test.files.iter().collect())
     }
 
-    /// The paths of this project's own source files, resolved against the project directory.
-    ///
-    /// # Arguments
-    ///
-    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     /// The names of the projects this project declares as dependencies for a build of the given
     /// mode. A test build declares the test dependencies beside the ordinary ones.
     fn declared_dependency_names(&self, mode: BuildConfigType) -> Set<ProjectName> {
@@ -543,6 +539,11 @@ impl ProjectFile {
             .collect()
     }
 
+    /// The paths of this project's own source files, resolved against the project directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
         self.source_file_entries(mode)
             .iter()
@@ -550,10 +551,10 @@ impl ProjectFile {
             .collect()
     }
 
-    /// The paths of the source files the `[build.test]` section adds, resolved against the project
-    /// directory. A test build compiles these beside the ones an ordinary build compiles.
-    fn get_test_files(&self) -> Vec<PathBuf> {
-        self.test_file_entries()
+    /// The paths of the source files a test build compiles beside the ones an ordinary build
+    /// compiles, resolved against the project directory.
+    fn get_test_only_files(&self) -> Vec<PathBuf> {
+        self.test_only_file_entries()
             .iter()
             .map(|entry| self.join_to_project_dir(entry.get_ref()))
             .collect()
@@ -664,16 +665,16 @@ impl ProjectFile {
         // the projects it declares can be told from one that stays within them. The sources of a
         // test build carry declarations of their own, since the test dependencies are the ones the
         // test sources may use, so they are recorded as a contribution beside the ordinary sources.
-        config.projects.push(ProjectSources {
+        config.project_sources.push(ProjectSources {
             name: self.general.name.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
             files: self.get_files(BuildConfigType::Build),
         });
         if mode == BuildConfigType::Test {
-            config.projects.push(ProjectSources {
+            config.project_sources.push(ProjectSources {
                 name: self.general.name.clone(),
                 declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
-                files: self.get_test_files(),
+                files: self.get_test_only_files(),
             });
         }
 
