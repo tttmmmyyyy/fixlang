@@ -82,19 +82,20 @@ mod integration_tests {
     }
 
     /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
-    /// `needles` — which `what` names in a failure message — holds each node of `holds`, builds no
-    /// union, and that the executable the build leaves prints `expected`. The dump shows what the
-    /// simplifier removed, and the run shows the removal left what the program computes intact.
+    /// `needles` — which `what` names in a failure message — holds each node of `held_nodes`,
+    /// builds no union, and that the executable the build leaves prints `expected`. The dump shows
+    /// what the simplifier removed, and the run shows the removal left what the program computes
+    /// intact.
     ///
     /// # Arguments
-    /// * `holds` — the nodes the body is checked to still hold, as the prefixes the dump prints them
-    ///   with. Name the nodes a case is written to place on the way to a construction, so that a
-    ///   lowering that stops placing them there fails the test.
+    /// * `held_nodes` — the nodes the body is checked to still hold, as the prefixes the dump prints
+    ///   them with. Name the nodes a case is written to place on the way to a construction, so that
+    ///   a lowering that stops placing them there fails the test.
     fn assert_union_cancelled(
         case: &str,
         needles: &[&str],
         what: &str,
-        holds: &[&str],
+        held_nodes: &[&str],
         expected: &str,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
@@ -114,12 +115,12 @@ mod integration_tests {
                 what,
                 body
             );
-            for node in holds {
+            for node_prefix in held_nodes {
                 assert!(
-                    body.contains(node),
+                    body.contains(node_prefix),
                     "{} holds no `{}`, so it no longer has the shape the case is written around:\n{}",
                     what,
-                    node,
+                    node_prefix,
                     body
                 );
             }
