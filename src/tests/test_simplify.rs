@@ -58,7 +58,7 @@ mod integration_tests {
 
     /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
     /// itself and every line up to the next `fn` header.
-    fn fn_bodies_matching<'a>(dump: &'a str, needles: &[&str]) -> Vec<String> {
+    fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
         let mut current: Option<String> = None;
         for line in dump.lines() {
@@ -313,7 +313,7 @@ mod value_tests {
 
 #[cfg(test)]
 mod build_time_tests {
-    use crate::tests::test_util::build_within_and_run;
+    use crate::tests::test_util::{build_peak_memory, build_within_and_run};
     use std::time::Duration;
 
     /// Deep enough that a term doubling per level is out of reach, and shallow enough that a term
@@ -393,6 +393,71 @@ mod build_time_tests {
             nested_matches_value(7).to_string(),
             "the nest of {} matches returned a wrong value",
             DEPTH
+        );
+    }
+
+    /// How many conditions `discarded_candidate_source` reads in a row, each branch of which builds
+    /// the union. One more tail than that reaches the construction, and the move that would take the
+    /// outer arm to all of them is the candidate the size test discards.
+    const NEST_DEPTH: usize = 256;
+
+    /// How many bindings the outer arm of `discarded_candidate_source` holds. Large enough that a
+    /// copy of it at every tail dominates what the build allocates.
+    const ARM_BINDINGS: usize = 400;
+
+    /// What the build may hold. It takes about 230 MB, and a compiler that copies the outer arm to
+    /// every tail before measuring the result takes about 700 MB.
+    const MEMORY_BOUND: u64 = 450 * 1024 * 1024;
+
+    /// A nest of `NEST_DEPTH` conditions, each branch building an `Option`, matched by a match whose
+    /// `some` arm holds `ARM_BINDINGS` bindings. Moving that arm to every tail the nest reaches would
+    /// leave a term far larger than the one it replaces, so the move is discarded — after being
+    /// measured, and before being built.
+    fn discarded_candidate_source() -> String {
+        let mut source = String::from("module Main;\n\nf : I64 -> I64;\nf = |n| (\n    match (\n");
+        for level in 0..NEST_DEPTH {
+            source += &format!(
+                "        if n % {} == 0 {{ Option::some(n + {}) }} else (\n",
+                3 + level % 7,
+                level + 1
+            );
+        }
+        source += "            Option::some(n * 2)\n";
+        source += &"        )\n".repeat(NEST_DEPTH);
+        source += "    ) {\n        some(v) => (\n            let a0 = v + 1;\n";
+        for i in 1..ARM_BINDINGS {
+            source += &format!(
+                "            let a{} = a{} * 3 + {} - a{} / 2;\n",
+                i,
+                i - 1,
+                i % 11,
+                i - 1
+            );
+        }
+        source += &format!("            a{}\n        ),\n", ARM_BINDINGS - 1);
+        source +=
+            "        none() => 0\n    }\n);\n\nmain : IO ();\nmain = println(f(7).to_string);\n";
+        source
+    }
+
+    /// The memory a build takes stays where the size of the term decides the move, rather than the
+    /// move being built and dropped. A compiler that builds the candidate first holds a copy of the
+    /// outer arm for every tail of the nest, which this shape makes three times what the build
+    /// otherwise takes. The figure comes from `/proc`, so the check runs where that is readable.
+    #[test]
+    fn test_a_discarded_candidate_is_not_built() {
+        let description = format!("a nest of {} conditions", NEST_DEPTH);
+        let Some(peak) =
+            build_peak_memory(&discarded_candidate_source(), "max", TIMEOUT, &description)
+        else {
+            return;
+        };
+        assert!(
+            peak < MEMORY_BOUND,
+            "compiling {} held {} MB, over the {} MB this shape is allowed",
+            description,
+            peak / (1024 * 1024),
+            MEMORY_BOUND / (1024 * 1024)
         );
     }
 }
