@@ -50,6 +50,26 @@ mod integration_tests {
     /// `swapping` sums `3 * 4` and then `n + 1` over `3..1` for 21.
     const STRUCT_FIELD_CLOSURE_OUTPUT: &str = "51";
 
+    /// What `struct_field_replaced` prints: `modding` adds one more to what the field holds on every
+    /// round of `4..1` for 36, and `setting` sums `3 * 4` and then `n + 1` over `3..1` for 21.
+    const STRUCT_FIELD_REPLACED_OUTPUT: &str = "57";
+
+    /// What `struct_field_partial_application` prints: `step` sums `3 * n` over `4..1` from 0 and
+    /// from 1 for 30 and 31, and `step2` sums it over `2..1` for 9.
+    const STRUCT_FIELD_PARTIAL_APPLICATION_OUTPUT: &str = "70";
+
+    /// What `struct_field_two_closures` prints: `stepping` sums `3 * n` and `n + 7` over `4..1` for
+    /// 68 and over `2..1` for 26.
+    const STRUCT_FIELD_TWO_CLOSURES_OUTPUT: &str = "94";
+
+    /// What `struct_field_named_struct` prints: `stepping` sums `3 * n` over `4..1` for 30 and over
+    /// `2..1` for 9.
+    const STRUCT_FIELD_NAMED_STRUCT_OUTPUT: &str = "39";
+
+    /// What `struct_field_iterator_chain` prints: the fold sums `3 * (i % 7)` over 64 elements for
+    /// 567, and the collected array has 64 elements.
+    const STRUCT_FIELD_ITERATOR_CHAIN_OUTPUT: &str = "631";
+
     /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
     /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
     const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
@@ -325,6 +345,93 @@ mod integration_tests {
              the one it was given, but the dump names: {:?}",
             swapping
         );
+    }
+
+    /// A struct the body builds by replacing the field — through `mod_` or `set_` — holds a function
+    /// the one that arrived did not, so a call reading that field out cannot name the function the
+    /// argument was built with.
+    #[test]
+    pub fn test_a_field_replaced_in_the_body_is_not_the_one_the_argument_carried() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_replaced");
+        for opt_level in ["basic", "max", "experimental"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_REPLACED_OUTPUT);
+        }
+    }
+
+    /// The capture list a copy receives stands directly after the struct argument it belongs to, so
+    /// a call supplying the struct alone is still the partial application it was.
+    #[test]
+    pub fn test_a_copy_taking_a_capture_list_can_be_partly_applied() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_partial_application");
+        for opt_level in ["basic", "experimental"] {
+            build_run_and_read_rc_ir(
+                &project_dir,
+                opt_level,
+                STRUCT_FIELD_PARTIAL_APPLICATION_OUTPUT,
+            );
+        }
+        let dump =
+            build_run_and_read_rc_ir(&project_dir, "max", STRUCT_FIELD_PARTIAL_APPLICATION_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::stepping");
+        assert_eq!(
+            copies.len(),
+            1,
+            "both call sites give `stepping` the same closure at the same field, so it should have \
+             one copy, but the dump names: {:?}",
+            copies
+        );
+    }
+
+    /// A struct holding a closure at two of its fields hands over both capture lists, in the order
+    /// the fields are declared, which is the order the copy binds the parameters receiving them.
+    #[test]
+    pub fn test_a_struct_holding_two_closures_hands_over_both_capture_lists() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_two_closures");
+        for opt_level in ["basic", "experimental"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_TWO_CLOSURES_OUTPUT);
+        }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", STRUCT_FIELD_TWO_CLOSURES_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::stepping");
+        assert_eq!(
+            copies.len(),
+            1,
+            "both call sites give `stepping` the same two closures, so it should have one copy, but \
+             the dump names: {:?}",
+            copies
+        );
+    }
+
+    /// A struct built and given a name hands what its fields hold to that name, so a call it is then
+    /// passed to says what the argument carries.
+    #[test]
+    pub fn test_a_struct_named_before_it_is_handed_over_still_says_what_it_holds() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_named_struct");
+        for opt_level in ["basic", "experimental"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_NAMED_STRUCT_OUTPUT);
+        }
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", STRUCT_FIELD_NAMED_STRUCT_OUTPUT);
+
+        let copies = copies_of(&dump, "Main::stepping");
+        assert_eq!(
+            copies.len(),
+            1,
+            "`stepping` is handed a named struct holding the same closure at both call sites, so it \
+             should have one copy, but the dump names: {:?}",
+            copies
+        );
+    }
+
+    /// The chain `map` and `fold` build puts the mapped function in a struct field and reads it out
+    /// of the struct the fold is handed, which is the shape this way in was added for. What the
+    /// pass makes of it is its own decision, so what is pinned here is the answer.
+    #[test]
+    pub fn test_an_iterator_chain_answers_the_same_at_every_level() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_field_iterator_chain");
+        for opt_level in ["basic", "max", "experimental"] {
+            build_run_and_read_rc_ir(&project_dir, opt_level, STRUCT_FIELD_ITERATOR_CHAIN_OUTPUT);
+        }
     }
 
     /// A narrowed capture field serves three readers at once: a call made there, a function the

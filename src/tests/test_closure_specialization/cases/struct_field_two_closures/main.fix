@@ -1,0 +1,20 @@
+module Main;
+
+// Two of the struct's fields hold a function, so a copy takes two capture lists, standing after the
+// struct in the order the fields are declared.
+type Pair = unbox struct { n : I64, f : I64 -> I64, g : I64 -> I64 };
+
+stepping : I64 -> Pair -> I64;
+stepping = |acc, s| (
+    let Pair { n : n, f : f, g : g } = s;
+    if n == 0 { acc };
+    stepping(acc + f(n) + g(n), Pair { n : n - 1, f : f, g : g })
+);
+
+main : IO () = (
+    let k = 3;
+    let f = |x| x * k;
+    let m = 7;
+    let g = |x| x + m;
+    println((stepping(0, Pair { n : 4, f : f, g : g }) + stepping(0, Pair { n : 2, f : f, g : g })).to_string)
+);

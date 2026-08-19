@@ -1,0 +1,20 @@
+module Main;
+
+// The struct is given a name before it is handed over, at the call site and inside the body alike.
+type Stepper = unbox struct { n : I64, f : I64 -> I64 };
+
+stepping : I64 -> Stepper -> I64;
+stepping = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    let next = Stepper { n : n - 1, f : f };
+    stepping(acc + f(n), next)
+);
+
+main : IO () = (
+    let k = 3;
+    let f = |x| x * k;
+    let s = Stepper { n : 4, f : f };
+    let t = Stepper { n : 2, f : f };
+    println((stepping(0, s) + stepping(0, t)).to_string)
+);

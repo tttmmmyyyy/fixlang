@@ -1,0 +1,21 @@
+module Main;
+
+// The struct arrives at the first argument, so the parameter carrying the capture list of what its
+// field holds stands between the two arguments the function declares.
+type Stepper = unbox struct { n : I64, f : I64 -> I64 };
+
+stepping : Stepper -> I64 -> I64;
+stepping = |s, acc| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    stepping(Stepper { n : n - 1, f : f }, acc + f(n))
+);
+
+main : IO () = (
+    let k = 3;
+    let f = |x| x * k;
+    // The struct alone, which leaves a function of the argument still to come.
+    let step = stepping(Stepper { n : 4, f : f });
+    let step2 = stepping(Stepper { n : 2, f : f });
+    println((step(0) + step(1) + step2(0)).to_string)
+);

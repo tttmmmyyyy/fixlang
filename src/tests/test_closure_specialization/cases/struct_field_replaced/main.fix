@@ -1,0 +1,28 @@
+module Main;
+
+// A struct carrying the function it was built with, in the shape the iterator combinators use.
+type Stepper = unbox struct { n : I64, f : I64 -> I64 };
+
+// The struct handed to the next round has the field replaced, so what a call there reaches is a
+// function the round before it did not.
+modding : I64 -> Stepper -> I64;
+modding = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    modding(acc + f(n), Stepper { n : n - 1, f : f }.mod_f(|h| |x| h(x) + 1))
+);
+
+// The same, with the replacement written as the value to put there.
+setting : I64 -> Stepper -> I64;
+setting = |acc, s| (
+    let Stepper { n : n, f : f } = s;
+    if n == 0 { acc };
+    let bump = |x| x + 1;
+    setting(acc + f(n), Stepper { n : n - 1, f : f }.set_f(bump))
+);
+
+main : IO () = (
+    let k = 3;
+    let f = |x| x * k;
+    println((modding(0, Stepper { n : 4, f : f }) + setting(0, Stepper { n : 4, f : f })).to_string)
+);

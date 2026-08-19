@@ -1,0 +1,11 @@
+module Main;
+
+// The chain the combinators build: `map` puts the function in a field of `MapIterator`, and `fold`
+// reads it out of the struct it is handed.
+main : IO () = (
+    let k = 3;
+    let arr = Array::from_map(64, |i| (i % 7).to_U8);
+    let mapped = arr.to_iter.map(|x| x.to_I64 * k).fold(0, |x, acc| acc + x);
+    let collected = arr.to_iter.map(|x| x.to_I64 + k).to_array.@size;
+    println((mapped + collected).to_string)
+);
