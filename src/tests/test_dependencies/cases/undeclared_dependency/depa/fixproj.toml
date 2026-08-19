@@ -1,0 +1,11 @@
+[general]
+name = "undeclared-depa"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["lib.fix"]
+
+[[dependencies]]
+name = "undeclared-depb"
+path = "../depb"

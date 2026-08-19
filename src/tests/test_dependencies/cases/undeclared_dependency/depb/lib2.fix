@@ -1,0 +1,4 @@
+module DepB2;
+
+other_value : I64;
+other_value = 7;

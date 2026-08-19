@@ -11,8 +11,10 @@ use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::hash::HashSource;
+use crate::metafiles::project_file::{ProjectName, ProjectOrigin};
 use crate::misc::{
-    platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg, Finally, Map,
+    path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
+    Finally, Map, Set,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
@@ -343,6 +345,62 @@ pub struct DocsConfig {
     pub mode: BuildConfigType,
 }
 
+/// What one project contributes to a build: sources it is compiled from, and the dependencies its
+/// project file declares for them.
+///
+/// Dependencies are resolved transitively, so the sources of a dependency's dependency are
+/// compiled in as well, and every module of them can be imported by anyone. Recording which
+/// project each source came from, beside what that project wrote down, is what lets
+/// `Program::collect_undeclared_dependency_diagnostics` tell an import of a declared dependency
+/// from an import of a project that merely happens to be linked in.
+///
+/// A project contributes its ordinary sources as one of these, and a test build takes its test
+/// sources as another, since the test dependencies are declared for those alone.
+#[derive(Clone)]
+pub struct ProjectSources {
+    /// The name of the project the sources come from, as its project file gives it.
+    pub name: ProjectName,
+    /// The version of that project, as its project file gives it.
+    pub version: String,
+    /// Where that project came from, which is what a dependency entry naming it writes.
+    pub origin: ProjectOrigin,
+    /// The projects declared as dependencies of these sources, by name.
+    pub declared_dependencies: Set<ProjectName>,
+    /// The source files, resolved to paths.
+    pub files: Vec<PathBuf>,
+}
+
+impl ProjectSources {
+    /// The dependency entry that declares this project, written as it goes into the project file
+    /// of `importer` and ready to be pasted there. The version requirement names this project's
+    /// own version, which every version semver-compatible with it satisfies.
+    ///
+    /// # Examples
+    /// A project built from a directory beside the importing one is declared as
+    /// ```toml
+    /// [[dependencies]]
+    /// name = "depb"
+    /// version = "0.1.0"
+    /// path = "../depb"
+    /// ```
+    pub fn dependency_entry(&self, importer: &ProjectSources) -> String {
+        let source = match &self.origin {
+            ProjectOrigin::Local(dir) => {
+                let dir = match &importer.origin {
+                    ProjectOrigin::Local(importer_dir) => path_relative_to(dir, importer_dir),
+                    ProjectOrigin::Git { .. } => dir.clone(),
+                };
+                format!("path = \"{}\"", dir.to_string_lossy())
+            }
+            ProjectOrigin::Git { url, .. } => format!("git = {{ url = \"{}\" }}", url),
+        };
+        format!(
+            "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\n{}",
+            self.name, self.version, source
+        )
+    }
+}
+
 /// Everything one invocation of the `fix` command builds with: what to compile, how to optimize and
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
@@ -368,6 +426,10 @@ pub struct Configuration {
     /// Maintain this in lockstep with `source_files` via
     /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
+    /// The sources every project contributes to the build, beside what that project declares for
+    /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
+    /// configures each project.
+    pub project_sources: Vec<ProjectSources>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -529,6 +591,7 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             root_source_files: vec![],
+            project_sources: vec![],
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],

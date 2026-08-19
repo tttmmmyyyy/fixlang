@@ -1,0 +1,4 @@
+module Util;
+
+helper : I64;
+helper = 42;

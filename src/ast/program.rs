@@ -12,7 +12,9 @@ use crate::ast::types::{
     is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TypeNode,
 };
-use crate::configuration::{Configuration, DeprecationMode, OutputFileType, SubCommand};
+use crate::configuration::{
+    Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand,
+};
 use crate::constants::{
     C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
     MAIN_MODULE_NAME, MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
@@ -26,7 +28,7 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::TypeCheckContext;
-use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
+use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
 use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -36,6 +38,7 @@ use crate::fixstd::builtin::{
 };
 use crate::graph::Graph;
 use crate::hash::HashSource;
+use crate::metafiles::project_file::ProjectName;
 use crate::misc::{
     collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
     to_absolute_path, Map, Set,
@@ -644,6 +647,14 @@ pub struct ModuleInfo {
     pub source: Span,
 }
 
+impl ModuleInfo {
+    /// The path of the file the module is declared in, canonicalized so that two paths leading to
+    /// that file give one path.
+    pub fn absolute_source_path(&self) -> Result<PathBuf, Errors> {
+        to_absolute_path(&self.source.input.file_path)
+    }
+}
+
 /// A Fix program: the modules linked into it, everything they declare, and the symbols the linked
 /// whole is instantiated into.
 ///
@@ -751,7 +762,7 @@ impl Program {
         let path = to_absolute_path(path).ok()?;
         self.modules
             .iter()
-            .find(|mi| to_absolute_path(&mi.source.input.file_path).ok().as_ref() == Some(&path))
+            .find(|mi| mi.absolute_source_path().ok().as_ref() == Some(&path))
     }
 
     /// The names of the entry point and the exported functions.
@@ -771,7 +782,7 @@ impl Program {
         }
         let mut mod_names = vec![];
         for mod_info in &self.modules {
-            let mod_file = to_absolute_path(&mod_info.source.input.file_path)?;
+            let mod_file = mod_info.absolute_source_path()?;
             if abs_files.contains(&mod_file) {
                 mod_names.push(mod_info.name.clone());
             }
@@ -2372,6 +2383,136 @@ impl Program {
                 err.code = Some(WARN_DEPRECATED);
                 diagnostics.append(Errors::from_err(err));
             }
+        }
+        diagnostics
+    }
+
+    /// The imports this program makes of a module whose project the importing project does not
+    /// declare as a dependency, as warnings.
+    ///
+    /// Dependencies are resolved transitively, so a project reached only through another project's
+    /// dependencies contributes its sources all the same, and its modules can be imported by
+    /// anyone. Such an import ties the build to a dependency the project never wrote down: it
+    /// stops compiling the moment the project in between drops that dependency, and the report
+    /// then names the module that went missing, far from the change that removed it.
+    ///
+    /// The imports reported are the ones the user's own code makes, which
+    /// `Configuration.root_source_files` names: the project file an import inside a dependency
+    /// asks for is one the person building has no hand in, and for a dependency the compiler
+    /// clones it is one the next `fix deps update` writes over. Each project's own build reports
+    /// the imports its own sources make.
+    ///
+    /// One warning stands for each pair of projects, since one declaration answers every import
+    /// between them, and it points at the import that stands earliest in the sources. Warnings are
+    /// ordered by the file they point into, so that one run reports what the next one does.
+    pub fn collect_undeclared_dependency_diagnostics(&self, config: &Configuration) -> Errors {
+        // The project each source file belongs to.
+        let mut file_to_project: Map<PathBuf, &ProjectSources> = Map::default();
+        for project in &config.project_sources {
+            for file in &project.files {
+                let Ok(path) = to_absolute_path(file) else {
+                    continue;
+                };
+                file_to_project.insert(path, project);
+            }
+        }
+
+        // The project each module is defined by. A module whose file no project claims belongs to
+        // none, and is importable by anyone: `Std`, the sources the compiler generates itself, and
+        // the files a `--file` option names outside of any project.
+        let mut module_to_project: Map<Name, &ProjectSources> = Map::default();
+        for mod_info in &self.modules {
+            let Ok(path) = mod_info.absolute_source_path() else {
+                continue;
+            };
+            let Some(project) = file_to_project.get(&path) else {
+                continue;
+            };
+            module_to_project.insert(mod_info.name.clone(), *project);
+        }
+
+        // The files the user writes, which are the ones an import is reported in.
+        let user_files: Set<PathBuf> = config
+            .root_source_files
+            .iter()
+            .filter_map(|path| to_absolute_path(path).ok())
+            .collect();
+
+        // The earliest import reaching each undeclared project, by the project that makes it: the
+        // two projects, the module named, and where it is named.
+        let mut earliest_undeclared_import: Map<
+            (ProjectName, ProjectName),
+            (&ProjectSources, &ProjectSources, Name, Span),
+        > = Map::default();
+        for stmt in self.import_statements() {
+            // An import no token stands for is one the compiler added, of the module itself or of
+            // `Std`, and neither reaches another project.
+            let Some(span) = stmt.module_span else {
+                continue;
+            };
+            let Ok(path) = to_absolute_path(&span.input.file_path) else {
+                continue;
+            };
+            if !user_files.contains(&path) {
+                continue;
+            }
+            let Some(importing_project) = file_to_project.get(&path) else {
+                continue;
+            };
+            let Some(imported_project) = module_to_project.get(&stmt.module_name) else {
+                continue;
+            };
+            if imported_project.name == importing_project.name
+                || importing_project
+                    .declared_dependencies
+                    .contains(&imported_project.name)
+            {
+                continue;
+            }
+            let key = (
+                importing_project.name.clone(),
+                imported_project.name.clone(),
+            );
+            let is_earliest = match earliest_undeclared_import.get(&key) {
+                Some((_, _, _, earliest)) => span < *earliest,
+                None => true,
+            };
+            if is_earliest {
+                earliest_undeclared_import.insert(
+                    key,
+                    (
+                        *importing_project,
+                        *imported_project,
+                        stmt.module_name,
+                        span,
+                    ),
+                );
+            }
+        }
+
+        let mut imports_to_report: Vec<_> = earliest_undeclared_import.into_values().collect();
+        imports_to_report.sort_by(|(_, _, _, lhs), (_, _, _, rhs)| lhs.cmp(rhs));
+
+        let mut diagnostics = Errors::empty();
+        for (importing_project, imported_project, module_name, span) in imports_to_report {
+            let mut err = Error::warning_from_msg_srcs(
+                format!(
+                    "Module `{}` belongs to the project \"{}\", which the project \"{}\" does not \
+                     declare as a dependency. \"{}\" reaches it through the dependencies of another \
+                     project, so this import stops resolving as soon as that project stops \
+                     depending on \"{}\". Declare it in the project file of \"{}\":\n\n{}",
+                    module_name,
+                    imported_project.name,
+                    importing_project.name,
+                    importing_project.name,
+                    imported_project.name,
+                    importing_project.name,
+                    imported_project.dependency_entry(importing_project),
+                ),
+                &[&Some(span)],
+            );
+            err.code = Some(WARN_UNDECLARED_DEPENDENCY);
+            diagnostics.append(Errors::from_err(err));
         }
         diagnostics
     }

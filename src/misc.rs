@@ -306,6 +306,38 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(abs.unwrap())
 }
 
+/// The path `target` written relative to the path `base`, so that `base` joined with the result
+/// reaches `target`. A target that no sequence of steps from `base` reaches — one on another root,
+/// or a relative path beside an absolute one — is answered with itself.
+///
+/// # Examples
+/// `path_relative_to("/a/b/dep", "/a/b/root")` is `"../dep"`, and
+/// `path_relative_to("/a/b/root/sub", "/a/b/root")` is `"sub"`.
+pub fn path_relative_to(target: &Path, base: &Path) -> PathBuf {
+    let mut target_rest = target.components().peekable();
+    let mut base_rest = base.components().peekable();
+    // A shared first component is what makes the steps below meaningful: with none of it, climbing
+    // out of `base` leads somewhere the target cannot be named from.
+    if target_rest.peek() != base_rest.peek() {
+        return target.to_path_buf();
+    }
+    while target_rest.peek().is_some() && target_rest.peek() == base_rest.peek() {
+        target_rest.next();
+        base_rest.next();
+    }
+    let mut relative = PathBuf::new();
+    for _ in base_rest {
+        relative.push("..");
+    }
+    for component in target_rest {
+        relative.push(component);
+    }
+    if relative.as_os_str().is_empty() {
+        relative.push(".");
+    }
+    relative
+}
+
 /// Works deferred to the moment this value is dropped, run latest first.
 pub struct Finally {
     /// The works deferred so far, in the order they were deferred.
