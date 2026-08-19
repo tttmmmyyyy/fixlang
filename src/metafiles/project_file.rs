@@ -743,7 +743,7 @@ impl ProjectFile {
         config.project_sources.push(ProjectSources {
             name: self.general.name.clone(),
             version: self.general.version.clone(),
-            origin: source.clone(),
+            origin: project_origin.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
             files: self.get_files(BuildConfigType::Build),
         });
@@ -751,7 +751,7 @@ impl ProjectFile {
             config.project_sources.push(ProjectSources {
                 name: self.general.name.clone(),
                 version: self.general.version.clone(),
-                origin: source.clone(),
+                origin: project_origin.clone(),
                 declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
                 files: self.get_test_only_files(),
             });
