@@ -60,22 +60,22 @@ mod integration_tests {
     /// itself and every line up to the next `fn` header.
     fn fn_bodies_matching<'a>(dump: &'a str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
-        let mut current: Option<String> = None;
+        let mut current_body: Option<String> = None;
         for line in dump.lines() {
             if line.starts_with("fn ") {
-                if let Some(body) = current.take() {
+                if let Some(body) = current_body.take() {
                     bodies.push(body);
                 }
                 if needles.iter().all(|n| line.contains(n)) {
-                    current = Some(String::new());
+                    current_body = Some(String::new());
                 }
             }
-            if let Some(body) = current.as_mut() {
+            if let Some(body) = current_body.as_mut() {
                 body.push_str(line);
                 body.push('\n');
             }
         }
-        if let Some(body) = current.take() {
+        if let Some(body) = current_body.take() {
             bodies.push(body);
         }
         bodies
@@ -126,14 +126,14 @@ mod integration_tests {
             }
         }
 
-        let run = Command::new(project_dir.join("a.out"))
+        let output = Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
         assert!(
-            run.status.success(),
+            output.status.success(),
             "the built executable did not run cleanly"
         );
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), expected);
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
     }
 
     /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that

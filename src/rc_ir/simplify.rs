@@ -164,7 +164,9 @@ fn node_count(node: &RcExprNode) -> u64 {
         let cont = match node.expr.as_ref() {
             RcExpr::Ret(_) => return 1,
             RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
-                return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
+                return 1
+                    + arms.iter().map(|arm| node_count(&arm.body)).sum::<u64>()
+                    + node_count(k);
             }
             RcExpr::Let(_, _, k)
             | RcExpr::Destructure(_, _, _, k)
@@ -181,7 +183,7 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
     let RcRhs::Llvm(gen, args) = rhs else {
         return None;
     };
-    let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    let construction = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
     // An operation's operands are its free variables, of which a union construction has the payload
     // alone.
     assert_eq!(
@@ -189,7 +191,7 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
         1,
         "a union construction takes its payload alone"
     );
-    Some((make.variant_index(), &args[0]))
+    Some((construction.variant_index(), &args[0]))
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
@@ -199,7 +201,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
     };
-    let (variant, payload) = union_construction(rhs)?;
+    let (variant, operand) = union_construction(rhs)?;
     // The continuation must be exactly a match on `x`, and `x` must be used nowhere else.
     let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
         return None;
@@ -209,10 +211,10 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     }
     // Pick the arm for the known tag. A catch-all arm binds the whole union (not the payload), so it
     // would not remove the construction; skip when only a catch-all matches.
-    let arm = arms.iter().find(|a| a.tag == Some(variant))?;
-    let body = substitute_expr(&arm.body, &single(&arm.payload.name, &payload.name));
-    Some(replace_tail(&body, &mut |result| {
-        substitute_expr(k2, &single(&m.name, &result.name))
+    let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
+    let body = substitute_expr(&arm.body, &single(&arm.payload.name, &operand.name));
+    Some(replace_tail(&body, &mut |arm_result| {
+        substitute_expr(k2, &single(&m.name, &arm_result.name))
     }))
 }
 
@@ -409,23 +411,23 @@ fn replace_tail_union(
                 }
                 RcExpr::Let(r.clone(), rhs.clone(), replace_tail_union(k, result_ty, f))
             }
-            RcExpr::Destructure(c, fields, state, k) => RcExpr::Destructure(
-                c.clone(),
+            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
+                container.clone(),
                 fields.clone(),
                 *state,
                 replace_tail_union(k, result_ty, f),
             ),
             RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_union(k, result_ty, f)),
-            RcExpr::Retain(v, p, st, k) => RcExpr::Retain(
+            RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
                 v.clone(),
-                p.clone(),
-                *st,
+                path.clone(),
+                *state,
                 replace_tail_union(k, result_ty, f),
             ),
-            RcExpr::Release(v, p, st, k) => RcExpr::Release(
+            RcExpr::Release(v, path, state, k) => RcExpr::Release(
                 v.clone(),
-                p.clone(),
-                *st,
+                path.clone(),
+                *state,
                 replace_tail_union(k, result_ty, f),
             ),
         };
@@ -477,15 +479,18 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
         let expr = match node.expr.as_ref() {
             RcExpr::Ret(r) => return f(r),
             RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), replace_tail(k, f)),
-            RcExpr::Destructure(c, fields, state, k) => {
-                RcExpr::Destructure(c.clone(), fields.clone(), *state, replace_tail(k, f))
-            }
+            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
+                container.clone(),
+                fields.clone(),
+                *state,
+                replace_tail(k, f),
+            ),
             RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
-            RcExpr::Retain(v, p, st, k) => {
-                RcExpr::Retain(v.clone(), p.clone(), *st, replace_tail(k, f))
+            RcExpr::Retain(v, path, state, k) => {
+                RcExpr::Retain(v.clone(), path.clone(), *state, replace_tail(k, f))
             }
-            RcExpr::Release(v, p, st, k) => {
-                RcExpr::Release(v.clone(), p.clone(), *st, replace_tail(k, f))
+            RcExpr::Release(v, path, state, k) => {
+                RcExpr::Release(v.clone(), path.clone(), *state, replace_tail(k, f))
             }
         };
         node_of(expr, &node.source)
@@ -503,7 +508,9 @@ fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
         match node.expr.as_ref() {
             RcExpr::Ret(v) => hit(v),
             RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-            RcExpr::Destructure(c, _, _state, k) => hit(c) + count_value_uses(name, k),
+            RcExpr::Destructure(container, _, _state, k) => {
+                hit(container) + count_value_uses(name, k)
+            }
             RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
             RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
         }
@@ -531,9 +538,9 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
 
 /// A one-entry substitution map.
 fn single(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
-    let mut m: Map<FullName, FullName> = Map::default();
-    m.insert(from.clone(), to.clone());
-    m
+    let mut subst: Map<FullName, FullName> = Map::default();
+    subst.insert(from.clone(), to.clone());
+    subst
 }
 
 /// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries
