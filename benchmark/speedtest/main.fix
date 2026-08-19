@@ -11,10 +11,10 @@ _LOG_FILE_PATH = "log.csv";
 _COMMIT_HASH : String;
 _COMMIT_HASH = "commit";
 
-// How many times each program is run for the hardware counters. The cycle count reported is
-// the lowest of them, and a run the machine disturbed only ever raises it.
-_REPEAT : String;
-_REPEAT = "5";
+// How many windows of runs the hardware counters are read over. The cycle count reported is the
+// lowest reading of them all, and a run the machine disturbed only ever raises it.
+_WINDOWS : String;
+_WINDOWS = "5";
 
 // The languages a case may carry a counterpart in, as a `ref.*` source beside its `main.fix`.
 _REFERENCE_LANGUAGES : Array String;
@@ -239,7 +239,7 @@ main = (
         // where it does not hold. The `contention` column says how much of the machine the run
         // that produced this row had.
         // On a machine without the counters both columns stay empty and the run carries on.
-        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--repeat", _REPEAT,
+        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
             "--dram-accesses", bench.@(2), "--instructions", bench.@(0),
             "./a.out"].ez_run_oec(config);
         let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
@@ -258,7 +258,7 @@ main = (
         // holds these out of the cost line printed at the end -- a reference does not move
         // with a pass sequence, so it has no business in what the pass search compares.
         let (log, max_contention) = *_REFERENCE_LANGUAGES.to_iter.fold_m((log, max_contention), |lang, (log, max_contention)|
-            let (ref_out, _, ref_code) = *["python3", "../../reference.py", "measure", lang, "--repeat", _REPEAT].ez_run_oec(config);
+            let (ref_out, _, ref_code) = *["python3", "../../reference.py", "measure", lang, "--windows", _WINDOWS].ez_run_oec(config);
             if ref_code != 0_U8 { (log, max_contention).pure };
             let ref_out = ref_out.strip_spaces.split(",").to_array;
             if ref_out.@size < 6 { (log, max_contention).pure };

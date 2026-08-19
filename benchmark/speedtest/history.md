@@ -10,6 +10,14 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+**A cycle count no longer waits for an idle machine, and the rows read the new way stay
+comparable with the rows below them.** The count is taken from the windows of runs that the other
+thread of the measurement's core stayed out of, and it is kept for a case whose data does not come
+from main memory often enough for another program to take the cache from it. The same C
+counterpart, byte for byte, read 203,745,780 cycles under 11 cores of other work and 203,299,270
+with the machine to itself, a difference of 0.22%. The `-ram` columns carry the main-memory
+accesses the second condition reads.
+
 **The split columns are comparable from `b2de6116d89ff9d43449c2a12fe5c29dd1304bb4` down, and not
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.

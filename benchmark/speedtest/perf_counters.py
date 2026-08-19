@@ -9,7 +9,7 @@ nothing about how fast the machine gets through those instructions, which is whe
 code layout or branch density shows up.
 
 The split count is decided by the program and the environment it is given; the cycle count is
-not, so it is the minimum over `--repeat` windows, and it is reported when nothing else could
+not, so it is the minimum over `--windows` windows, and it is reported when nothing else could
 have moved it. Other work reaches it two ways: over the core it shares with the thread beside it,
 which the run is pinned and the sibling watched for, and over the cache every core shares, which
 the caller answers for by passing what cachegrind counted for this program. A run either could
@@ -20,7 +20,7 @@ Exits non-zero when the counters are unavailable (no hardware PMU, or
 `kernel.perf_event_paranoid` above 2) or when the PMU had to time-slice them, so a caller
 can leave the columns empty instead of logging an estimate.
 
-    python3 perf_counters.py [--repeat N] [--dram-accesses N --instructions N] ./a.out [args...]
+    python3 perf_counters.py [--windows N] [--dram-accesses N --instructions N] ./a.out [args...]
     python3 perf_counters.py --cpu
 """
 
@@ -122,23 +122,27 @@ CPU, SIBLING = measurement_core()
 os.sched_setaffinity(0, {CPU})
 
 
-def sibling_cpu_seconds():
-    """CPU seconds the other thread of the measurement's core has spent off idle since boot."""
-    if SIBLING is None:
-        return 0.0
+def cpu_seconds(name):
+    """CPU seconds spent off idle since boot, from the `/proc/stat` line of that name.
+
+    # Arguments
+    * `name` - what the line begins with: `cpu` for the machine as a whole, `cpu5` for one
+      logical CPU.
+    """
     with open("/proc/stat", encoding="utf-8") as stat:
         for line in stat:
-            if line.startswith(f"cpu{SIBLING} "):
+            if line.startswith(name + " "):
+                # user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice
                 fields = [int(f) for f in line.split()[1:]]
                 return (sum(fields) - fields[3] - fields[4]) / CLOCK_TICK
-    return 0.0
+    # Reading a busy CPU as an idle one would let every window through, so say so instead.
+    sys.exit(f"/proc/stat carries no {name} line")
 
 
-def machine_cpu_seconds():
-    """CPU seconds every process on this machine has spent off idle since boot."""
-    # user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice
-    fields = [int(f) for f in open("/proc/stat", encoding="utf-8").readline().split()[1:]]
-    return (sum(fields) - fields[3] - fields[4]) / CLOCK_TICK
+def sibling_cpu_seconds():
+    """CPU seconds the other thread of the measurement's core has spent off idle since boot, or
+    zero where that core has one thread and so nothing shares it."""
+    return cpu_seconds(f"cpu{SIBLING}") if SIBLING is not None else 0.0
 
 
 def own_cpu_seconds():
@@ -220,7 +224,7 @@ def read_window(argv, splits):
     return cycles, sibling_busy, splits
 
 
-def measure(argv, repeat):
+def measure(argv, windows):
     """The split count, the lowest cycle count over the windows the sibling thread left alone,
     and the CPU other work took over the whole of it, in cores.
 
@@ -228,17 +232,17 @@ def measure(argv, repeat):
     a core the program had only half of gives a figure about the sharing rather than about the
     program.
     """
-    machine_before = machine_cpu_seconds()
+    machine_before = cpu_seconds("cpu")
     own_before = own_cpu_seconds()
     started = time.monotonic()
     splits = None
     cycles = None
-    for _ in range(repeat):
+    for _ in range(windows):
         window_cycles, sibling_busy, splits = read_window(argv, splits)
         if sibling_busy <= SIBLING_BUSY_LIMIT:
             cycles = window_cycles if cycles is None else min(cycles, window_cycles)
     elapsed = time.monotonic() - started
-    others = (machine_cpu_seconds() - machine_before) - (own_cpu_seconds() - own_before)
+    others = (cpu_seconds("cpu") - machine_before) - (own_cpu_seconds() - own_before)
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
     # can put the difference slightly below zero.
     contention = max(0.0, others) / elapsed if elapsed > 0 else 0.0
@@ -286,26 +290,84 @@ def cycles_are_comparable(contention, dram_accesses, instructions):
 
 def take_options(argv):
     """The options standing in front of the program, and the command left after them."""
-    options = {"--repeat": 5, "--dram-accesses": None, "--instructions": None}
+    options = {"--windows": 5, "--dram-accesses": None, "--instructions": None}
     while argv and argv[0] in options:
         if len(argv) < 2:
             sys.exit(f"{argv[0]} takes a value")
         options[argv[0]] = int(argv[1])
         argv = argv[2:]
-    return options["--repeat"], options["--dram-accesses"], options["--instructions"], argv
+    return options["--windows"], options["--dram-accesses"], options["--instructions"], argv
+
+
+def self_check():
+    """Answer what needs no machine to read, so a rule that stopped holding is seen here rather
+    than in a column of the log.
+
+    The counters themselves need a PMU and a program to run; these are the parts that decide what
+    is done with them, and they cost microseconds.
+    """
+    # A sysfs CPU list names single CPUs, ranges, and both together, and ends in a newline.
+    assert cpu_list("5\n") == [5], cpu_list("5\n")
+    assert cpu_list("5,11\n") == [5, 11], cpu_list("5,11\n")
+    assert cpu_list("2-5\n") == [2, 3, 4, 5], cpu_list("2-5\n")
+    assert cpu_list("2-5,8\n") == [2, 3, 4, 5, 8], cpu_list("2-5,8\n")
+
+    # A quiet machine's count is kept whatever the program asks of main memory, and with no figure
+    # to go on it is kept from a quiet machine alone.
+    busy = QUIET_CONTENTION * 2
+    assert cycles_are_comparable(QUIET_CONTENTION / 2, None, None)
+    assert not cycles_are_comparable(busy, None, 10 ** 9)
+    assert not cycles_are_comparable(busy, 10 ** 3, None)
+    assert not cycles_are_comparable(busy, 10 ** 3, 0)
+    # Above the rate another process reaches the count through the cache; below it it cannot.
+    below = int(CONTENDED_DRAM_RATE * 10 ** 9 / 2)
+    above = int(CONTENDED_DRAM_RATE * 10 ** 9 * 2)
+    assert cycles_are_comparable(busy, below, 10 ** 9)
+    assert not cycles_are_comparable(busy, above, 10 ** 9)
+
+    # The options are the ones standing in front of the program; what follows the program is the
+    # program's own, however it is spelled.
+    assert take_options(["./a.out"]) == (5, None, None, ["./a.out"])
+    assert take_options(["--windows", "3", "./a.out", "--windows", "9"]) == (
+        3, None, None, ["./a.out", "--windows", "9"])
+    assert take_options(["--dram-accesses", "7", "--instructions", "11", "--windows", "3",
+                         "./a.out"]) == (3, 7, 11, ["./a.out"])
+    try:
+        take_options(["--windows"])
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("--windows without a value was taken as an option")
+
+    # Only the windows the sibling stayed out of reach the cycle count, and where none did there is
+    # no count to report. The window left out below carries the lowest count of the three, so a gate
+    # that stopped rejecting it would be answered with that count.
+    global read_window
+    canned = []
+    real, read_window = read_window, lambda argv, splits: canned.pop(0)
+    try:
+        canned[:] = [(90, 0.0, 4), (70, 1.0, 4), (80, SIBLING_BUSY_LIMIT / 2, 4)]
+        splits, cycles, _contention = measure(None, 3)
+        assert (splits, cycles) == (4, 80), (splits, cycles)
+        canned[:] = [(90, 1.0, 4), (70, 1.0, 4)]
+        _splits, cycles, _contention = measure(None, 2)
+        assert cycles is None, cycles
+    finally:
+        read_window = real
 
 
 def main():
+    self_check()
     argv = sys.argv[1:]
     if argv == ["--cpu"]:
         print(cpu_model())
         return
-    repeat, dram_accesses, instructions, argv = take_options(argv)
+    windows, dram_accesses, instructions, argv = take_options(argv)
     if not argv:
-        sys.exit("usage: perf_counters.py [--repeat N] [--dram-accesses N --instructions N]"
+        sys.exit("usage: perf_counters.py [--windows N] [--dram-accesses N --instructions N]"
                  " <program> [args...]\n"
                  "       perf_counters.py --cpu")
-    splits, cycles, contention = measure(argv, repeat)
+    splits, cycles, contention = measure(argv, windows)
     # The split count is deterministic, so it is reported whatever the machine was doing.
     reported_cycles = (str(cycles) if cycles is not None
                        and cycles_are_comparable(contention, dram_accesses, instructions) else "")
