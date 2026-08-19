@@ -1139,6 +1139,9 @@ fn struct_field_slots_of(
     let Some(tycon) = declared_struct_tycon(param_ty, lifted) else {
         return Set::default();
     };
+    if !struct_stays_the_one_given(arg, param_tys, body, &tycon, func) {
+        return Set::default();
+    }
     let destructurings = struct_destructurings_in(body, param_ty, &tycon);
     let built_here = structs_built_in(body, param_ty, &tycon);
     let mut slots = Set::default();
@@ -1168,9 +1171,6 @@ fn struct_field_slots_of(
                 .and_then(|value| value.as_ref())
                 .is_some_and(|value| names.contains(value))
         }) {
-            continue;
-        }
-        if !struct_stays_the_one_given(arg, param_tys, body, &tycon, func) {
             continue;
         }
         slots.insert(Slot::struct_field(arg, position));
