@@ -233,7 +233,8 @@ mod integration_tests {
         Some(&name[..end])
     }
 
-    /// The most capture lists any copy of the function named by `func_prefix` takes as a parameter.
+    /// The most capture lists any copy of the function whose name begins with `func_prefix` takes
+    /// as a parameter.
     ///
     /// A copy takes one per way in it is specialized on, so this says how many of the closures
     /// reaching that function at once are known: one for a closure handed over as an argument, and

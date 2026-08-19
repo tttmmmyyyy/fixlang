@@ -195,8 +195,9 @@ impl Slot {
         Slot::struct_field(0, field)
     }
 
-    // Whether this is a capture field of a lifted lambda, which is a way in through argument 0.
-    // Reading it as one is only correct where the function the slot belongs to is a lifted lambda.
+    // The capture field this way in reaches, where it is one: a field of argument 0, which is the
+    // capture list a lifted lambda receives. Reading a slot this way is correct only where the
+    // function it belongs to is a lifted lambda.
     fn as_capture_field(&self) -> Option<usize> {
         if self.arg != 0 {
             return None;
@@ -364,16 +365,16 @@ impl FuncCopy {
     }
 
     // The ways in through a field of a struct argument, in ascending order, which is the order the
-    // extra arguments carrying them are inserted.
+    // parameters carrying their capture lists stand in.
     //
     // A field of argument 0 of a lifted lambda is a capture field instead: that copy receives it
     // inside the capture list rather than beside it.
     fn struct_field_slots(&self, lifted: &LiftedLambdas) -> Vec<(Slot, ValueTree)> {
-        let of_lifted_lambda = lifted.is_lifted(&self.origin);
+        let origin_is_lifted = lifted.is_lifted(&self.origin);
         self.subst
             .iter()
             .filter(|(slot, _)| slot.field.is_some())
-            .filter(|(slot, _)| !(of_lifted_lambda && slot.arg == 0))
+            .filter(|(slot, _)| !(origin_is_lifted && slot.arg == 0))
             .cloned()
             .collect()
     }
@@ -512,8 +513,8 @@ struct LiftedLambda {
 // walks that follow keep it current.
 struct LiftedLambdas {
     // What the program declares about its types, which is what the fields of a struct argument are
-    // read from. It is the environment as this pass found it, so a capture list minted here is not
-    // among them — and a way in through the field of one is a capture field, decided elsewhere.
+    // read from. It is the environment as this pass found it, so a capture list minted here is
+    // absent from it, and a way in through a field of one is a capture field instead.
     type_env: TypeEnv,
     // Each lifted lambda by the name of the global function it became.
     lambdas: Map<FullName, LiftedLambda>,
@@ -575,8 +576,8 @@ impl LiftedLambdas {
     // to the capture struct of what it holds. The type constructor is named after the copy that
     // receives it, so the type and the tree determine each other.
     fn struct_of(&mut self, tree: &ValueTree) -> CaptureStruct {
-        if let Some(strct) = self.structs.get(tree) {
-            return strct.clone();
+        if let Some(cap) = self.structs.get(tree) {
+            return cap.clone();
         }
         let base = self.lambdas[tree.lambda()].cap.clone();
         if tree.fields().is_empty() {
@@ -586,18 +587,18 @@ impl LiftedLambdas {
         for (field, inner) in tree.fields() {
             fields[*field].1 = self.struct_of(inner).ty;
         }
-        let strct = CaptureStruct::new(CAP_LIST_PREFIX, &tree.receiving_copy().name(), &fields);
-        self.record_minted_struct(&strct, tree);
-        self.structs.insert(tree.clone(), strct.clone());
-        strct
+        let cap = CaptureStruct::new(CAP_LIST_PREFIX, &tree.receiving_copy().name(), &fields);
+        self.record_minted_struct(&cap, tree);
+        self.structs.insert(tree.clone(), cap.clone());
+        cap
     }
 
-    // Remember the value a capture list of `strct`'s type constructor carries, and hold that type
+    // Remember the value a capture list of `cap`'s type constructor carries, and hold that type
     // constructor until it is registered.
-    fn record_minted_struct(&mut self, strct: &CaptureStruct, tree: &ValueTree) {
-        self.trees.insert(strct.tycon.name.clone(), tree.clone());
+    fn record_minted_struct(&mut self, cap: &CaptureStruct, tree: &ValueTree) {
+        self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons
-            .insert(strct.tycon.as_ref().clone(), strct.tycon_info.clone());
+            .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
     }
 
     // Take the type constructors minted so far, for the caller to register into the program's type
@@ -731,22 +732,22 @@ fn realize_all(
         // A field of a struct argument is received beside the struct, through a parameter inserted
         // next to it. The walk learns two things from that: the parameter carries a bare capture
         // list, and every struct of that type this body meets holds that value at that field.
-        let extras = capture_list_params(&request, lifted);
-        let expr = insert_capture_list_params(&expr, &extras);
+        let cap_params = capture_list_params(&request, lifted);
+        let expr = insert_capture_list_params(&expr, &cap_params);
         let mut known_struct_fields: Map<String, Map<usize, Known>> = Map::default();
-        for extra in &extras {
+        for cap_param in &cap_params {
             local_decap_lambdas.insert(
-                extra.name.clone(),
-                Known::bare(extra.tree.clone(), extra.name_expr()),
+                cap_param.name.clone(),
+                Known::bare(cap_param.tree.clone(), cap_param.name_expr()),
             );
             known_struct_fields
-                .entry(extra.struct_ty.to_string())
+                .entry(cap_param.struct_ty.to_string())
                 .or_default()
                 .insert(
-                    extra.slot.field.unwrap(),
+                    cap_param.slot.field.unwrap(),
                     Known {
-                        tree: extra.tree.clone(),
-                        cap_list: extra.name_expr(),
+                        tree: cap_param.tree.clone(),
+                        cap_list: cap_param.name_expr(),
                         is_bare: false,
                     },
                 );
@@ -852,13 +853,16 @@ fn capture_list_param_name(slot: &Slot) -> FullName {
     ))
 }
 
-// `expr` with each of `extras` bound by a lambda standing directly inside the argument it belongs
-// to.
+// `expr` with each of `cap_params` bound by a lambda standing directly inside the argument it
+// belongs to.
 //
 // The parameter goes next to its argument rather than at the end so that a call supplying fewer
 // arguments than the function takes still reads as a partial application of the same shape.
-fn insert_capture_list_params(expr: &Arc<ExprNode>, extras: &[CaptureListParam]) -> Arc<ExprNode> {
-    if extras.is_empty() {
+fn insert_capture_list_params(
+    expr: &Arc<ExprNode>,
+    cap_params: &[CaptureListParam],
+) -> Arc<ExprNode> {
+    if cap_params.is_empty() {
         return expr.clone();
     }
     let (param_lists, body) = expr.destructure_lam_sequence();
@@ -870,10 +874,14 @@ fn insert_capture_list_params(expr: &Arc<ExprNode>, extras: &[CaptureListParam])
         .0;
     let mut built = body;
     for arg in (0..param_lists.len()).rev() {
-        for extra in extras.iter().filter(|extra| extra.slot.arg == arg).rev() {
+        for cap_param in cap_params
+            .iter()
+            .filter(|cap_param| cap_param.slot.arg == arg)
+            .rev()
+        {
             built = expr_abs_typed(
-                var_local(&extra.name.name),
-                extra.cap_list_ty.clone(),
+                var_local(&cap_param.name.name),
+                cap_param.cap_list_ty.clone(),
                 built,
             );
         }
@@ -1152,18 +1160,21 @@ fn struct_field_slots_of(
         }
         // The name each destructuring binds the field to, with the expression it is in scope over.
         // A pattern binding it to anything but a name leaves nothing for a call to be made through.
-        let bound = destructurings
+        let bindings = destructurings
             .iter()
             .map(|(names, value)| Some((names.get(position).cloned().flatten()?, value.clone())))
             .collect::<Option<Vec<_>>>();
-        let Some(bound) = bound else { continue };
-        if !bound
+        let Some(bindings) = bindings else { continue };
+        if !bindings
             .iter()
             .any(|(name, value)| reaches_a_direct_call(name, value, specializable_slots, lifted))
         {
             continue;
         }
-        let names = bound.into_iter().map(|(name, _)| name).collect::<Vec<_>>();
+        let names = bindings
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
         // A struct built here has to copy the field out of a struct of the same type, so that what
         // it holds there is what the one it was built from held.
         if !built_here.iter().all(|fields| {
@@ -1418,8 +1429,8 @@ struct ClosureSpecializationVisitor {
     // struct in its body: the table offers that way in only where the body cannot put another value
     // there.
     known_struct_fields: Map<String, Map<usize, Known>>,
-    // The names a destructuring in this body bound to such a field, so that a call through one of
-    // them names the lambda and hands it the capture list the copy received.
+    // The names a destructuring in this body bound to a field whose value is known, so that a call
+    // through one of them names the lambda and hands it the capture list the copy received.
     struct_field_locals: Map<FullName, Known>,
     // What the fields of a struct bound to a local hold, where their identity is known. A struct is
     // built and given a name before it is handed over, so this is what a call site reads to say what
@@ -1833,16 +1844,16 @@ impl SpecializationRequest {
         }
         // A field of a struct argument arrives beside it, through a parameter standing directly
         // after that argument.
-        let extras = self.func_copy.struct_field_slots(lifted);
-        let mut with_extras = Vec::new();
+        let field_slots = self.func_copy.struct_field_slots(lifted);
+        let mut doms_with_cap_lists = Vec::new();
         for (arg, dom) in doms.into_iter().enumerate() {
-            with_extras.push(dom);
-            for (_, tree) in extras.iter().filter(|(slot, _)| slot.arg == arg) {
-                with_extras.push(lifted.struct_of(tree).ty);
+            doms_with_cap_lists.push(dom);
+            for (_, tree) in field_slots.iter().filter(|(slot, _)| slot.arg == arg) {
+                doms_with_cap_lists.push(lifted.struct_of(tree).ty);
             }
         }
 
-        fun_ty(&with_extras, codom)
+        fun_ty(&doms_with_cap_lists, codom)
     }
 
     // Create an expression to refer to the specialized function.
@@ -2441,8 +2452,8 @@ impl ClosureSpecializationVisitor {
         }
     }
 
-    // Hand what every struct of this type holds at a field to the name that field binds, where `pat`
-    // destructures such a struct.
+    // Hand what every struct of `bound`'s type holds at a field to the name that field binds, where
+    // `pat` destructures such a struct.
     fn record_struct_fields(&mut self, pat: &Arc<PatternNode>, bound: &Arc<ExprNode>) {
         let Pattern::Struct(_, field_to_pat) = &pat.pattern else {
             return;
@@ -2466,14 +2477,14 @@ impl ClosureSpecializationVisitor {
         }
     }
 
-    // Where each of the fields named in `written` sits among the fields `ty` declares.
+    // Where each of the fields of `written_fields` sits among the fields `ty` declares.
     fn field_positions<T>(
         &self,
         ty: &Arc<TypeNode>,
-        written: &[(Name, Option<Span>, T)],
+        written_fields: &[(Name, Option<Span>, T)],
     ) -> Vec<usize> {
         let type_env = &self.lifted.borrow().type_env;
-        written
+        written_fields
             .iter()
             .map(|(field_name, _, _)| ty.field_index(type_env, field_name).unwrap())
             .collect()
@@ -2505,13 +2516,14 @@ impl ClosureSpecializationVisitor {
                 .map(|(position, known)| (*position, known.clone()))
                 .collect::<Vec<_>>(),
             None => match arg.destructure_make_struct() {
-                Some((_, made)) => {
+                Some((_, made_fields)) => {
                     // The capture list is handed over beside the struct, so it has to be readable
                     // where the struct itself is. One read off a name the struct binds inside itself
                     // is not.
                     let bound_inside = names_bound_in(arg);
-                    let positions = self.field_positions(arg.type_.as_ref().unwrap(), made);
-                    made.iter()
+                    let positions = self.field_positions(arg.type_.as_ref().unwrap(), made_fields);
+                    made_fields
+                        .iter()
                         .zip(positions)
                         .filter_map(|((_, _, value), position)| {
                             let known = self.known_value(value)?;
