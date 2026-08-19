@@ -17,7 +17,7 @@ use crate::{
         types::{type_fun, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
     constants::{
-        CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
+        CAP_LIST_PREFIX, CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
         CLOSURE_SPEC_CAP_NAME, CLOSURE_SPEC_SUFFIX,
     },
     graph::Graph,
@@ -1912,9 +1912,6 @@ impl SpecializationRequest {
         expr_var(self.func_copy.name(), None).set_type(self.specialized_func_ty(lifted))
     }
 }
-
-// The prefix of the type constructor naming a capture list this pass builds.
-const CAP_LIST_PREFIX: &str = "#CapList";
 
 // The global function a lifted lambda becomes: it receives the captured environment as an argument
 // and destructures it at the head of the body.
