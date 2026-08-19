@@ -183,6 +183,17 @@ pub struct MatchArm {
     pub body: RcExprNode,
 }
 
+impl MatchArm {
+    /// This arm with `body` in place of its own: it matches the same variant and binds the same
+    /// payload, and evaluates to what `body` gives.
+    pub fn with_body(&self, body: RcExprNode) -> MatchArm {
+        MatchArm {
+            body,
+            ..self.clone()
+        }
+    }
+}
+
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
 #[derive(Clone)]

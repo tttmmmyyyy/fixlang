@@ -41,8 +41,8 @@ use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::rename::{clone_fresh, substitute_expr};
 use std::sync::Arc;
 
-/// The marker for fresh names the case-of-case move mints, keeping them distinct from other passes'.
-const MARKER: &str = "cc";
+/// The tag on the fresh names the case-of-case move mints, keeping them distinct from other passes'.
+const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
@@ -76,7 +76,7 @@ fn simplify_to_fixpoint(
         if next_size >= size {
             if config.develop_mode {
                 panic!(
-                    "a simplifier pass left a body of {} nodes at {}, so a rewrite it fired did not make it smaller",
+                    "a simplifier pass grew a body of {} nodes to {}, so a rewrite it fired did not make it smaller",
                     size, next_size
                 );
             }
@@ -105,12 +105,7 @@ fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) ->
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
             let arms = arms
                 .iter()
-                .map(|arm| MatchArm {
-                    payload_state: arm.payload_state,
-                    tag: arm.tag,
-                    payload: arm.payload.clone(),
-                    body: rewrite(&arm.body, counter, changed),
-                })
+                .map(|arm| arm.with_body(rewrite(&arm.body, counter, changed)))
                 .collect();
             RcExpr::Let(
                 x.clone(),
@@ -212,9 +207,9 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
-    let body = substitute_expr(&arm.body, &single(&arm.payload.name, &operand.name));
+    let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
     Some(replace_tail(&body, &mut |arm_result| {
-        substitute_expr(k2, &single(&m.name, &arm_result.name))
+        substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
 }
 
@@ -291,6 +286,8 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             outer_arm_of_variant.get(&variant).map(|(_, size)| *size)
         })?;
     }
+    // Equality declines too: `simplify_to_fixpoint` counts a pass that leaves as many nodes as it
+    // found as broken, and stops the fixpoint there.
     if rewritten_size >= node_count(node) {
         return None;
     }
@@ -305,24 +302,12 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             });
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
-            let moved = clone_fresh(&outer.body, MARKER, counter);
-            substitute_expr(&moved, &single(&outer.payload.name, &operand.name))
+            let moved = clone_fresh(&outer.body, PASS_TAG, counter);
+            substitute_expr(&moved, &single_subst(&outer.payload.name, &operand.name))
         });
-        new_arms.push(MatchArm {
-            payload_state: arm.payload_state,
-            tag: arm.tag,
-            payload: arm.payload.clone(),
-            body,
-        });
+        new_arms.push(arm.with_body(body));
     }
-    let rewritten = node_of(
-        RcExpr::Let(
-            m.clone(),
-            RcRhs::Match(inner_scrut.clone(), new_arms),
-            node_of(RcExpr::Ret(m.clone()), &node.source),
-        ),
-        &node.source,
-    );
+    let rewritten = tail_match(m.clone(), inner_scrut, new_arms, &node.source);
     // Renaming a binder and substituting a variable both leave the term's shape alone, so placing
     // the outer arms leaves exactly the nodes `rewritten_size` counted.
     assert_eq!(
@@ -344,15 +329,7 @@ fn size_after_replacing_tails(
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(_) => None,
-        RcExpr::Let(r, rhs, k) => {
-            if !is_ret_of(k, &r.name) {
-                // A match anywhere but the tail stands where it stood, arms and all.
-                let arms_size = match rhs {
-                    RcRhs::Match(_, arms) => arms.iter().map(|arm| node_count(&arm.body)).sum(),
-                    _ => 0,
-                };
-                return Some(1 + arms_size + size_after_replacing_tails(k, f)?);
-            }
+        RcExpr::Let(r, rhs, k) if is_ret_of(k, &r.name) => {
             if let RcRhs::Match(_, arms) = rhs {
                 // The binding of the match and the `ret` after it stand where they stood.
                 let mut size = 2;
@@ -363,10 +340,12 @@ fn size_after_replacing_tails(
             }
             f(union_construction(rhs)?.0)
         }
-        RcExpr::Destructure(_, _, _, k)
-        | RcExpr::Eval(_, k)
-        | RcExpr::Retain(_, _, _, k)
-        | RcExpr::Release(_, _, _, k) => Some(1 + size_after_replacing_tails(k, f)?),
+        RcExpr::Let(_, RcRhs::Match(_, arms), _) => {
+            // A match anywhere but the tail stands where it stood, arms and all.
+            let arms_size: u64 = arms.iter().map(|arm| node_count(&arm.body)).sum();
+            Some(1 + arms_size + size_after_replacing_tails(continuation_of(node), f)?)
+        }
+        _ => Some(1 + size_after_replacing_tails(continuation_of(node), f)?),
     })
 }
 
@@ -394,44 +373,22 @@ fn replace_tail_union(
     f: &mut dyn FnMut(usize, &RcVar) -> RcExprNode,
 ) -> RcExprNode {
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
-    grow_stack(|| {
-        let expr = match node.expr.as_ref() {
-            RcExpr::Ret(v) => unreachable!(
-                "the tail returns {}, which it did not build",
-                v.name.to_string()
-            ),
-            RcExpr::Let(r, rhs, k) => {
-                if is_ret_of(k, &r.name) {
-                    if let RcRhs::Match(scrut, arms) = rhs {
-                        return replace_tail_union_of_match(node, r, scrut, arms, result_ty, f);
-                    }
-                    let (variant, operand) =
-                        union_construction(rhs).expect("the tail builds no union");
-                    return f(variant, operand);
-                }
-                RcExpr::Let(r.clone(), rhs.clone(), replace_tail_union(k, result_ty, f))
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!(
+            "the tail returns {}, which it did not build",
+            v.name.to_string()
+        ),
+        RcExpr::Let(r, rhs, k) if is_ret_of(k, &r.name) => {
+            if let RcRhs::Match(scrut, arms) = rhs {
+                return replace_tail_union_of_match(node, r, scrut, arms, result_ty, f);
             }
-            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                replace_tail_union(k, result_ty, f),
-            ),
-            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail_union(k, result_ty, f)),
-            RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
-                v.clone(),
-                path.clone(),
-                *state,
-                replace_tail_union(k, result_ty, f),
-            ),
-            RcExpr::Release(v, path, state, k) => RcExpr::Release(
-                v.clone(),
-                path.clone(),
-                *state,
-                replace_tail_union(k, result_ty, f),
-            ),
-        };
-        node_of(expr, &node.source)
+            let (variant, operand) = union_construction(rhs).expect("the tail builds no union");
+            f(variant, operand)
+        }
+        _ => with_continuation(
+            node,
+            replace_tail_union(continuation_of(node), result_ty, f),
+        ),
     })
 }
 
@@ -451,21 +408,22 @@ fn replace_tail_union_of_match(
 ) -> RcExprNode {
     let new_arms = arms
         .iter()
-        .map(|arm| MatchArm {
-            payload_state: arm.payload_state,
-            tag: arm.tag,
-            payload: arm.payload.clone(),
-            body: replace_tail_union(&arm.body, result_ty, f),
-        })
+        .map(|arm| arm.with_body(replace_tail_union(&arm.body, result_ty, f)))
         .collect::<Vec<_>>();
     let new_r = RcVar {
         ty: result_ty.clone(),
         ..r.clone()
     };
-    let ret = node_of(RcExpr::Ret(new_r.clone()), &node.source);
+    tail_match(new_r, scrut, new_arms, &node.source)
+}
+
+/// `let x = match scrut { arms }; ret x` — the shape a `match` takes where it stands in tail
+/// position, which is what this rewrite leaves in place of one.
+fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span>) -> RcExprNode {
+    let ret = node_of(RcExpr::Ret(x.clone()), source);
     node_of(
-        RcExpr::Let(new_r, RcRhs::Match(scrut.clone(), new_arms), ret),
-        &node.source,
+        RcExpr::Let(x, RcRhs::Match(scrut.clone(), arms), ret),
+        source,
     )
 }
 
@@ -475,26 +433,39 @@ fn replace_tail_union_of_match(
 /// they are.
 fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> RcExprNode {
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
-    grow_stack(|| {
-        let expr = match node.expr.as_ref() {
-            RcExpr::Ret(r) => return f(r),
-            RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), replace_tail(k, f)),
-            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                replace_tail(k, f),
-            ),
-            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), replace_tail(k, f)),
-            RcExpr::Retain(v, path, state, k) => {
-                RcExpr::Retain(v.clone(), path.clone(), *state, replace_tail(k, f))
-            }
-            RcExpr::Release(v, path, state, k) => {
-                RcExpr::Release(v.clone(), path.clone(), *state, replace_tail(k, f))
-            }
-        };
-        node_of(expr, &node.source)
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(r) => f(r),
+        _ => with_continuation(node, replace_tail(continuation_of(node), f)),
     })
+}
+
+/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
+/// for that case before asking.
+fn continuation_of(node: &RcExprNode) -> &RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
+        RcExpr::Let(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => k,
+    }
+}
+
+/// `node` with `k` in place of its continuation, its own step left as it is. A `ret` ends the chain,
+/// so a caller answers for that case before asking.
+fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
+    let expr = match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
+        RcExpr::Let(x, rhs, _) => RcExpr::Let(x.clone(), rhs.clone(), k),
+        RcExpr::Destructure(container, fields, state, _) => {
+            RcExpr::Destructure(container.clone(), fields.clone(), *state, k)
+        }
+        RcExpr::Eval(v, _) => RcExpr::Eval(v.clone(), k),
+        RcExpr::Retain(v, path, state, _) => RcExpr::Retain(v.clone(), path.clone(), *state, k),
+        RcExpr::Release(v, path, state, _) => RcExpr::Release(v.clone(), path.clone(), *state, k),
+    };
+    node_of(expr, &node.source)
 }
 
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
@@ -537,7 +508,7 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
 }
 
 /// A one-entry substitution map.
-fn single(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
+fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());
     subst

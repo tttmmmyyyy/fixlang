@@ -387,6 +387,20 @@ impl<'a> Validator<'a> {
                         );
                     }
                 }
+                // One arm answers each variant, so a value of that variant reaches one body. A pass
+                // that reads the arms by tag takes the first of two arms carrying one tag, and the
+                // second would be dead where code generation's switch sends the value to the first.
+                let mut tags = Set::default();
+                for arm in arms {
+                    if let Some(tag) = arm.tag {
+                        if !tags.insert(tag) {
+                            panic!(
+                                "[RC IR validate] {}: two match arms carry variant {} in `{}`",
+                                self.stage, tag, self.location,
+                            );
+                        }
+                    }
+                }
                 // Each arm's payload is in scope only within that arm's body, so bind it, check the
                 // body, and unbind it before the next sibling arm.
                 for arm in arms {
