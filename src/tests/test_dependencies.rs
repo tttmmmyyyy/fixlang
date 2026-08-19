@@ -15,9 +15,9 @@ mod integration_tests {
         path
     }
 
-    // Copy the test cases into a temporary directory and return it beside the directory of the
-    // project at `project_path` within it. The whole set is copied every time, so that a project
-    // reaches the ones it depends on by the relative paths its project file writes.
+    /// Copy the test cases into a temporary directory and return it beside the directory of the
+    /// project at `project_path` within it. The whole set is copied every time, so that a project
+    /// reaches the ones it depends on by the relative paths its project file writes.
     fn setup_case_env(project_path: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_cases_dst = temp_dir.path().to_path_buf();
@@ -27,8 +27,8 @@ mod integration_tests {
         (temp_dir, project_dir)
     }
 
-    // The `fix <subcommand>` run of the project at `project_path`, in a temporary copy of the test
-    // cases. The temporary directory is returned so that it outlives the output.
+    /// The `fix <subcommand>` run of the project at `project_path`, in a temporary copy of the test
+    /// cases. The temporary directory is returned so that it outlives the output.
     fn run_case(project_path: &str, subcommand: &str) -> (TempDir, Output) {
         let (temp_dir, project_dir) = setup_case_env(project_path);
         cleanup_test_project(&project_dir);
@@ -47,7 +47,7 @@ mod integration_tests {
         (temp_dir, output)
     }
 
-    // The build of the project at `project_path`, run in a temporary copy of the test cases.
+    /// The build of the project at `project_path`, run in a temporary copy of the test cases.
     fn build_case(project_path: &str) -> (TempDir, Output) {
         run_case(project_path, "build")
     }
@@ -350,9 +350,9 @@ mod integration_tests {
         );
     }
 
-    // A project importing a module of a project it does not declare is warned about, and the
-    // dependency it does declare is not. `root` declares `undeclared-depa` alone, and imports both
-    // `DepA` (of that project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    /// A project importing a module of a project it does not declare is warned about, and the
+    /// dependency it does declare is not. `root` declares `undeclared-depa` alone, and imports both
+    /// `DepA` (of that project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
     #[test]
     fn test_import_of_undeclared_transitive_dependency_warns() {
         let (_temp_dir, output) = build_case("undeclared_dependency/root");
@@ -381,8 +381,8 @@ mod integration_tests {
         );
     }
 
-    // An absolute path reaches a module without an import statement written for it, and is warned
-    // about the same way. `root_abs` imports `DepA` and writes `::DepB::secret_value`.
+    /// An absolute path reaches a module without an import statement written for it, and is warned
+    /// about the same way. `root_abs` imports `DepA` and writes `::DepB::secret_value`.
     #[test]
     fn test_absolute_path_to_undeclared_transitive_dependency_warns() {
         let (_temp_dir, output) = build_case("undeclared_dependency/root_abs");
@@ -410,8 +410,8 @@ mod integration_tests {
         );
     }
 
-    // An import that crosses no project boundary needs no declaration: a module of the importing
-    // project itself, and `Std`, whose files belong to no project at all.
+    /// An import that crosses no project boundary needs no declaration: a module of the importing
+    /// project itself, and `Std`, whose files belong to no project at all.
     #[test]
     fn test_import_within_one_project_does_not_warn() {
         let (_temp_dir, output) = build_case("undeclared_dependency/one_project");
@@ -425,9 +425,9 @@ mod integration_tests {
         );
     }
 
-    // The test sources of a test build are judged by the test declarations. `root_test` declares
-    // `undeclared-depa` as a test dependency alone, and `test.fix` imports both `DepA` (of that
-    // project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    /// The test sources of a test build are judged by the test declarations. `root_test` declares
+    /// `undeclared-depa` as a test dependency alone, and `test.fix` imports both `DepA` (of that
+    /// project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
     #[test]
     fn test_undeclared_dependency_in_test_sources_warns() {
         let (_temp_dir, output) = run_case("undeclared_dependency/root_test", "test");
@@ -456,10 +456,10 @@ mod integration_tests {
         );
     }
 
-    // A test dependency is declared for the test sources alone, so an ordinary source that imports
-    // one is warned about even in a test build, where the module is there to import.
-    // `root_build_uses_test_dep` declares `undeclared-depa` as a test dependency, and its
-    // `main.fix` imports `DepA`.
+    /// A test dependency is declared for the test sources alone, so an ordinary source that imports
+    /// one is warned about even in a test build, where the module is there to import.
+    /// `root_build_uses_test_dep` declares `undeclared-depa` as a test dependency, and its
+    /// `main.fix` imports `DepA`.
     #[test]
     fn test_ordinary_source_importing_a_test_dependency_warns() {
         let (_temp_dir, output) =
@@ -487,9 +487,9 @@ mod integration_tests {
         );
     }
 
-    // One declaration answers every import between two projects, so the two of them stand for one
-    // warning, pointing at the import that comes first in the source. `root_two_imports` imports
-    // `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
+    /// One declaration answers every import between two projects, so the two of them stand for one
+    /// warning, pointing at the import that comes first in the source. `root_two_imports` imports
+    /// `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
     #[test]
     fn test_undeclared_dependency_warns_once_at_the_earliest_import() {
         let (_temp_dir, output) = build_case("undeclared_dependency/root_two_imports");

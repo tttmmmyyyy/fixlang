@@ -2394,7 +2394,7 @@ impl Program {
     /// dependencies contributes its sources all the same, and its modules can be imported by
     /// anyone. Such an import ties the build to a dependency the project never wrote down: it
     /// stops compiling the moment the project in between drops that dependency, and the report
-    /// then names the module that went missing rather than the change that removed it.
+    /// then names the module that went missing, far from the change that removed it.
     ///
     /// One warning stands for each pair of projects, since one declaration answers every import
     /// between them, and it points at the import that stands earliest in the sources. Warnings are

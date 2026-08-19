@@ -3067,7 +3067,7 @@ To list all available projects registered in the registry files, use "fix deps l
 
 Dependencies are resolved transitively: the projects your dependencies depend on are built into your program as well, and their modules are linked in beside the ones of the projects you declared. Such a module can be imported by an `import` statement or written as an absolute path such as `::Hash::hash`, exactly like a module of a declared dependency.
 
-Declare every project whose modules your project imports. A project that is reached only through another project's dependencies is available for as long as that project keeps depending on it: when it drops that dependency or replaces it with another project, your project stops compiling, and the report names the module that went missing rather than the update that removed it. Declaring it also states, in your project file, what your project is built from.
+Declare every project whose modules your project imports. A project that is reached only through another project's dependencies is available for as long as that project keeps depending on it: when it drops that dependency or replaces it with another project, your project stops compiling, and the report names the module that went missing, far from the update that removed it. Declaring it also states, in your project file, what your project is built from.
 
 The compiler warns about an import that reaches a project the importing project does not declare:
 
