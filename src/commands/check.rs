@@ -3,6 +3,7 @@ use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::info_msg;
+use std::path::PathBuf;
 
 pub fn check(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Checking...");
@@ -16,9 +17,10 @@ pub fn check(mut config: Configuration) -> Result<(), Errors> {
     proj_file.install_dependencies(&mut config, BuildConfigType::Test)?;
 
     // Set all source files as diagnostics target files.
+    let source_files: Vec<PathBuf> = config.source_files().cloned().collect();
     match &mut config.subcommand {
         SubCommand::Diagnostics(diag_config) => {
-            diag_config.files = config.source_files.clone();
+            diag_config.files = source_files;
         }
         _ => unreachable!(),
     }

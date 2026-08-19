@@ -757,17 +757,11 @@ impl ProjectFile {
             });
         }
 
-        // Append source files. Root-project files go through `add_user_source_file` so they also
-        // land in `root_source_files`, which scopes deprecation diagnostics to the user's own code:
-        // a deprecated use inside a dependency is the dependency's problem. Dependent-project files
-        // are pushed to `source_files` only.
-        let files = self.get_files(mode);
-        if is_dependent_proj {
-            config.source_files.extend(files);
-        } else {
-            for file in files {
-                config.add_user_source_file(file);
-            }
+        // The records above are what the build compiles. The root project's files are the user's
+        // own as well, which scopes diagnostics to the code they can edit: a deprecated use inside
+        // a dependency is the dependency's problem.
+        if !is_dependent_proj {
+            config.root_source_files.extend(self.get_files(mode));
         }
 
         // Append object files.

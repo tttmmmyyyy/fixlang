@@ -206,7 +206,7 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Parse all source files.
     let mut parsed_programs = vec![];
     let mut errors = Errors::empty();
-    for file_path in &config.source_files {
+    for file_path in config.source_files() {
         let parse_result = parse_file_path(file_path.clone(), config);
         errors.eat_err_or(parse_result, |parsed_program| {
             parsed_programs.push(parsed_program)
