@@ -159,7 +159,9 @@ fn node_count(node: &RcExprNode) -> u64 {
         let cont = match node.expr.as_ref() {
             RcExpr::Ret(_) => return 1,
             RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
-                return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
+                return 1
+                    + arms.iter().map(|arm| node_count(&arm.body)).sum::<u64>()
+                    + node_count(k);
             }
             RcExpr::Let(_, _, k)
             | RcExpr::Destructure(_, _, _, k)
@@ -176,7 +178,7 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
     let RcRhs::Llvm(gen, args) = rhs else {
         return None;
     };
-    let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    let construction = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
     // An operation's operands are its free variables, of which a union construction has the payload
     // alone.
     assert_eq!(
@@ -184,7 +186,7 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
         1,
         "a union construction takes its payload alone"
     );
-    Some((make.variant_index(), &args[0]))
+    Some((construction.variant_index(), &args[0]))
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
@@ -194,7 +196,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
     };
-    let (variant, payload) = union_construction(rhs)?;
+    let (variant, operand) = union_construction(rhs)?;
     // The continuation must be exactly a match on `x`, and `x` must be used nowhere else.
     let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
         return None;
@@ -202,12 +204,12 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     if scrut.name != x.name || count_value_uses(&x.name, k) != 1 {
         return None;
     }
-    // Pick the arm for the known tag. A catch-all arm binds the whole union (not the payload), so it
-    // would not remove the construction; skip when only a catch-all matches.
-    let arm = arms.iter().find(|a| a.tag == Some(variant))?;
-    let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &payload.name));
-    Some(replace_tail(&body, &mut |result| {
-        substitute_expr(k2, &single_subst(&m.name, &result.name))
+    // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
+    // stays to build it; skip when only a catch-all matches.
+    let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
+    let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
+    Some(replace_tail(&body, &mut |arm_result| {
+        substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
 }
 
@@ -469,7 +471,7 @@ fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
 /// inline-LLVM operand, a closure capture, a match scrutinee, a destructured container, an `eval`, or
 /// the returned variable. Binders do not count. `Retain`/`Release` name a variable only for reference
-/// counting, so they are transparent (and do not occur before `insert_rc` anyway).
+/// counting, so they are transparent.
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| {
@@ -477,7 +479,9 @@ fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
         match node.expr.as_ref() {
             RcExpr::Ret(v) => hit(v),
             RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-            RcExpr::Destructure(c, _, _state, k) => hit(c) + count_value_uses(name, k),
+            RcExpr::Destructure(container, _, _state, k) => {
+                hit(container) + count_value_uses(name, k)
+            }
             RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
             RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
         }
@@ -505,9 +509,9 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
 
 /// A one-entry substitution map.
 fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
-    let mut m: Map<FullName, FullName> = Map::default();
-    m.insert(from.clone(), to.clone());
-    m
+    let mut subst: Map<FullName, FullName> = Map::default();
+    subst.insert(from.clone(), to.clone());
+    subst
 }
 
 /// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries

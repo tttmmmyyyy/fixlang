@@ -1,17 +1,16 @@
-// Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
-// the simplified program computes.
-//
-// A read loop over `range(0, size).fold` lowers to a specialized fold driver whose loop-carried state
-// is the `Option` that `range`'s `advance` builds and `fold` immediately matches. The simplifier
-// cancels that union (case-of-case + case-of-known-constructor), so the driver keeps only the plain
-// `RangeIterator` two-scalar state and no union construction — the property the integration tests
-// assert. The value tests compile and run Fix programs written to drive the same rewrite, and check
-// what each one computes. The build-time tests bound how long a program shaped to drive it may take
-// to compile.
+//! Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
+//! the simplified program computes.
 
+/// Case projects built with `--emit-rc-ir`, read for what the simplifier removed and run for what
+/// they print. A read loop over `range(0, size).fold` lowers to a specialized fold driver whose
+/// loop-carried state is the `Option` that `range`'s `advance` builds and `fold` immediately
+/// matches. The simplifier cancels that union (case-of-case + case-of-known-constructor), so the
+/// driver keeps only the plain `RangeIterator` two-scalar state and no union construction — the
+/// property these tests assert.
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
@@ -52,7 +51,7 @@ mod integration_tests {
         }
 
         let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        std::fs::read_to_string(&dump_path)
+        fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
@@ -60,22 +59,22 @@ mod integration_tests {
     /// itself and every line up to the next `fn` header.
     fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
         let mut bodies = Vec::new();
-        let mut current: Option<String> = None;
+        let mut current_body: Option<String> = None;
         for line in dump.lines() {
             if line.starts_with("fn ") {
-                if let Some(body) = current.take() {
+                if let Some(body) = current_body.take() {
                     bodies.push(body);
                 }
                 if needles.iter().all(|n| line.contains(n)) {
-                    current = Some(String::new());
+                    current_body = Some(String::new());
                 }
             }
-            if let Some(body) = current.as_mut() {
+            if let Some(body) = current_body.as_mut() {
                 body.push_str(line);
                 body.push('\n');
             }
         }
-        if let Some(body) = current.take() {
+        if let Some(body) = current_body.take() {
             bodies.push(body);
         }
         bodies
@@ -126,14 +125,14 @@ mod integration_tests {
             }
         }
 
-        let run = Command::new(project_dir.join("a.out"))
+        let output = Command::new(project_dir.join("a.out"))
             .output()
             .expect("failed to run the built executable");
         assert!(
-            run.status.success(),
+            output.status.success(),
             "the built executable did not run cleanly"
         );
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), expected);
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
     }
 
     /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
@@ -201,6 +200,7 @@ mod integration_tests {
     }
 }
 
+/// Fix programs written to drive the rewrites, compiled and run for the values each one computes.
 #[cfg(test)]
 mod value_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
@@ -282,9 +282,8 @@ mod value_tests {
     }
 
     /// The outer match answers the `none` an inner arm builds with a catch-all arm, which binds the
-    /// whole union rather than that constructor's payload. Moving such an arm into the inner arm
-    /// would bind it to the payload instead, so the rewrite declines and the values stay what the
-    /// source computes.
+    /// whole union. Moving such an arm into the inner arm would bind it to the construction's
+    /// payload instead, so the rewrite declines and the values stay what the source computes.
     #[test]
     pub fn test_catch_all_outer_arm() {
         let source = r#"
@@ -311,6 +310,7 @@ mod value_tests {
     }
 }
 
+/// A program shaped to drive case-of-case, bounded in how long it may take to compile.
 #[cfg(test)]
 mod build_time_tests {
     use crate::tests::test_util::{build_peak_memory, build_within_and_run};
