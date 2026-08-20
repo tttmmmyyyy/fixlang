@@ -19,9 +19,14 @@ mod integration_tests {
     /// What `nested_iterators` prints: the sum of `3 * i + 1` over `0..9`.
     const NESTED_ITERATORS_OUTPUT: &str = "145";
 
-    /// What `read_constructions` prints: `sum_pair(4)` 17, `choose(3)` 12, `choose(-2)` -2 and
-    /// `magnitude(-7)` 7.
-    const READ_CONSTRUCTIONS_OUTPUT: &str = "34";
+    /// What `read_constructions` prints: `sum_pair(4)` 17, `choose(3)` 12, `choose(-2)` -2,
+    /// `magnitude(-7)` 7, `defaulted(2)` 12 and `defaulted(-3)` -3.
+    const READ_CONSTRUCTIONS_OUTPUT: &str = "43";
+
+    /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
+    /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
+    const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
+
 
     /// The optimization levels the answers are asserted at: the one the pass runs at, the one above
     /// it, and one below it where it does not run.
@@ -134,8 +139,9 @@ mod integration_tests {
     }
 
     /// A struct built out of expressions and taken apart, a union each branch of an `if` builds a
-    /// different variant of, and one both branches build the same variant of, all answer the same
-    /// as they do at the level the rewrites do not run at.
+    /// different variant of, one both branches build the same variant of, and one whose reader has
+    /// no arm for the variant either branch builds, all answer the same as they do at the level the
+    /// rewrites do not run at.
     #[test]
     pub fn test_a_construction_read_where_it_is_built_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("read_constructions");
@@ -143,4 +149,18 @@ mod integration_tests {
             build_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
         }
     }
+
+    /// A struct argument whose pattern writes its fields in the reverse of the order they are
+    /// declared, read whole besides, answers the same at every level. Both fields hold an `I64`, so
+    /// handing the fields over in the order the pattern writes them type checks, and the value is
+    /// what says the two orders were brought together — both where the fields are handed to the
+    /// function taking them one by one, and where the body that still names the struct rebuilds it.
+    #[test]
+    pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
+        let (_temp_dir, project_dir) = setup_test_env("split_field_order");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+        }
+    }
+
 }

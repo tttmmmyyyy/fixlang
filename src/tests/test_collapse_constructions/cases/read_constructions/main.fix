@@ -33,4 +33,26 @@ magnitude = |n| (
     }
 );
 
-main : IO () = println((sum_pair(4) + choose(3) + choose(0 - 2) + magnitude(0 - 7)).to_string);
+// The variant each branch builds has no arm of its own, so the `match` takes the default arm, which
+// is handed the value the branch built rather than what it carries.
+weigh : Choice -> I64;
+weigh = |c| (
+    match c {
+        one(x) => x,
+        two(p) => p.@left * p.@right,
+    }
+);
+
+defaulted : I64 -> I64;
+defaulted = |n| (
+    let c = if n > 0 { Choice::two(Pair { left : n, right : n * 3 }) } else { Choice::one(n) };
+    match c {
+        one(x) => x,
+        rest => weigh(rest),
+    }
+);
+
+main : IO () = println(
+    (sum_pair(4) + choose(3) + choose(0 - 2) + magnitude(0 - 7) + defaulted(2) + defaulted(0 - 3))
+        .to_string
+);
