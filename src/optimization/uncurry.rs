@@ -57,7 +57,7 @@ pub fn run(fix_mod: &mut Program) {
                     generic_name,
                     ty,
                     expr: Some(expr.clone()),
-                    inline_into_callers: sym.inline_into_callers,
+                    inline_into_callers: false,
                 },
             );
         }
