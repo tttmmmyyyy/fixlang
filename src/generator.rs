@@ -2023,7 +2023,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         state: RcState,
     ) {
         if obj.is_box(self.type_env()) {
-            self.build_if_nonnull(&obj, "release_mark", |gc| {
+            self.build_if_nonnull(&obj, "traverser_work", |gc| {
                 gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_funptr() {
