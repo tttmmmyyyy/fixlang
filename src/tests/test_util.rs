@@ -439,8 +439,8 @@ fn run_sources(
 ) -> Result<Result<Output, io::Error>, Errors> {
     const SOURCE_FILE_NAME: &str = "main_run";
     for source in sources {
-        let src = save_temporary_source(source, SOURCE_FILE_NAME)?;
-        config.add_user_source_file(src.file_path);
+        let saved_source = save_temporary_source(source, SOURCE_FILE_NAME)?;
+        config.add_user_source_file(saved_source.file_path);
     }
     run(config, false)
 }

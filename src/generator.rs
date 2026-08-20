@@ -484,38 +484,37 @@ impl<'c> Object<'c> {
     }
 }
 
-// The local variables in scope at the point being generated. Globals are held separately, in
-// `Generator::global`.
+/// The local variables in scope at the point being generated. Globals are held separately, in
+/// `Generator::declared_globals`.
 #[derive(Default)]
 pub struct Scope<'c> {
-    // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
-    // shadows the outer bindings of the same name for as long as it lives.
+    /// Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
+    /// shadows the outer bindings of the same name for as long as it lives.
     data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
-    // Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
+    /// Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
-        if !self.data.contains_key(var) {
-            self.data.insert(var.clone(), Default::default());
-        }
-        self.data.get_mut(var).unwrap().push(ScopedValue {
+        self.data.entry(var.clone()).or_default().push(ScopedValue {
             accessor: ValueAccessor::Local(obj.clone()),
             retain_on_read: false,
         });
     }
 
+    /// Drop the innermost binding of `var`, revealing the binding it shadowed.
     fn pop_local(&mut self, var: &FullName) {
         // TODO: add assertion that var is local (or change var to Name).
-        self.data.get_mut(var).unwrap().pop();
-        if self.data.get(var).unwrap().is_empty() {
+        let bindings = self.data.get_mut(var).unwrap();
+        bindings.pop();
+        if bindings.is_empty() {
             self.data.remove(var);
         }
     }
 
-    // The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
-    // binding is seen again once the binding shadowing it is popped.
+    /// The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
+    /// binding is seen again once the binding shadowing it is popped.
     pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
@@ -618,7 +617,8 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
 }
 
 impl<'c, 'm> Generator<'c, 'm> {
-    // Add a global string.
+    /// The module-level constant holding `s` as a null-terminated string. One constant is created
+    /// per distinct string, and every later call for that string returns it again.
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
         if let Some(val) = self.global_strings.get(s) {
             return val.clone();
@@ -674,6 +674,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
+    /// The type definitions of the program, which a Fix type is resolved to its layout through.
     pub fn type_env(&self) -> &TypeEnv {
         &self.type_env
     }
@@ -1120,16 +1121,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             // In single-threaded program,
 
             // Check refcnt_state and jump to local_bb if the object is local.
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context)
-                        .const_int(RefcntState::LOCAL.value() as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
                 .unwrap();
@@ -1140,32 +1137,24 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context)
-                        .const_int(RefcntState::LOCAL.value() as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
                 .unwrap();
 
             // Implement nonlocal_bb.
             self.builder().position_at_end(nonlocal_bb);
-            let is_refcnt_state_threaded = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context)
-                        .const_int(RefcntState::THREADED.value() as u64, false),
-                    "is_refcnt_state_threaded",
-                )
-                .unwrap();
+            let is_refcnt_state_threaded = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::THREADED,
+                "is_refcnt_state_threaded",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
                 .unwrap();
@@ -1181,23 +1170,18 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.
     ///
-    /// Reaching every such site takes two call sites, because the state dispatch is built two ways:
-    /// `build_branch_by_refcnt_state` covers the release and the uniqueness check, and
-    /// `retain_nonnull_boxed` inlines its own dispatch and calls this itself.
+    /// The check belongs in every state dispatch, so that no annotated site goes unchecked.
     fn build_assert_refcnt_state_local(&mut self, obj_ptr: PointerValue<'c>) {
         if !self.config.develop_mode {
             return;
         }
         let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state@assert_local");
-        let is_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(RefcntState::LOCAL.value() as u64, false),
-                "is_refcnt_state_local@assert",
-            )
-            .unwrap();
+        let is_local = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::EQ,
+            RefcntState::LOCAL,
+            "is_refcnt_state_local@assert",
+        );
         let current_func = self.current_function();
         let nonlocal_bb = self
             .context
@@ -1468,7 +1452,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.lambda_calling_convention
     }
 
-    // The function currently being generated.
+    /// The function the builder is positioned in, which is the one being generated.
     pub fn current_function(&self) -> FunctionValue<'c> {
         self.builder()
             .get_insert_block()
@@ -1725,10 +1709,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(part_phis, ty, self)
     }
 
-    // Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
-    // object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so no
-    // aggregate is materialized across the call; `build_body` emits the retain / release / mark work
-    // on the object reassembled from those parts inside the helper.
+    /// Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
+    /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
+    /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
+    /// work on the object reassembled from those parts inside the helper.
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -1861,9 +1845,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Increment the reference count of a non-null boxed object, according to its refcount state,
-    // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
-    // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
+    /// Increment by `amount` the reference count of a boxed object, in the way its refcount state
+    /// calls for. The caller guarantees the object is a non-null boxed pointer (e.g. a non-empty
+    /// capture object).
     pub(crate) fn retain_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -1946,9 +1930,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    // Release or mark global or mark threaded nonnull boxed object.
-    // Release or mark a non-null boxed object: process its owned references with the standard
-    // traverser.
+    /// Release or mark a non-null boxed object, processing the references it owns with the
+    /// traverser generated for its type.
     fn build_release_mark_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -1961,9 +1944,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
-    // Release or mark a non-null boxed object, using `traverse_refs` — in place of the type's
-    // standard traverser — to process its owned references. A caller thus reuses the refcount
-    // bookkeeping with a custom reference traversal.
+    /// Release or mark a non-null boxed object, calling `traverse_refs` to process the references
+    /// it owns. `traverse_refs` stands where the traverser generated for the object's type would:
+    /// on the release path once the count reaches zero, and on a mark path once the object itself
+    /// is marked.
+    ///
+    /// # Arguments
+    /// * `state` — what is known of the object's refcount state, which the release path dispatches
+    ///   on. A mark reads the state from the object itself, whatever the caller knows of it.
     pub(crate) fn build_release_mark_nonnull_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -1975,8 +1963,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
             let obj_ptr = obj.value(self).into_pointer_value();
-            // The destructor pre-stage of a release still reads the state; annotating it is
-            // separate work.
+            // Whether the object is uniquely owned is read from its refcount state, whatever the
+            // caller knows of it.
             let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr, RcState::Unknown);
 
             // If reference counter is one, call destructor.
@@ -2035,9 +2023,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Traverse a non-null boxed object's owned references (its elements / fields) for `work`
-    // (release / mark). Dynamic objects carry their traverser and are called indirectly;
-    // others use the statically generated one.
+    /// Traverse a non-null boxed object's owned references (its elements / fields) for `work`
+    /// (release / mark). A dynamic object carries its traverser and is called through it; any other
+    /// object is traversed by the function generated for its type.
     fn traverse_boxed_refs(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
         let obj_ptr = obj.value(self).into_pointer_value();
         if obj.is_dynamic_object() {
@@ -2071,8 +2059,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Release a non-null boxed object, emitting `traverse_refs` to release its owned references
-    // once the refcount reaches zero, before the object is freed.
+    /// Release a non-null boxed object, emitting `traverse_refs` to release the references it owns
+    /// once the refcount reaches zero, before the object is freed.
     fn build_release_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2232,15 +2220,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             RefcntState::THREADED
         };
-        let is_marked = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::UGE,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(mark_state.value() as u64, false),
-                "is_marked",
-            )
-            .unwrap();
+        let is_marked = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::UGE,
+            mark_state,
+            "is_marked",
+        );
         self.builder()
             .build_conditional_branch(is_marked, cont_bb, mark_bb)
             .unwrap();
@@ -2264,19 +2249,23 @@ impl<'c, 'm> Generator<'c, 'm> {
         });
     }
 
-    // Release nonnull boxed object.
+    /// Decrement the reference count of a boxed object, releasing what it owns and freeing it
+    /// where the count reaches zero. The caller guarantees the object is a non-null boxed pointer.
     pub(crate) fn release_nonnull_boxed(&mut self, obj: &Object<'c>, state: RcState) {
         self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release(), state)
     }
 
-    // Mark all objects reachable from `obj` as global.
+    /// Put every boxed object `obj` owns into the global refcount state, in which an object is
+    /// neither retained, released nor freed, so that it lives for the rest of the program.
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
             gc.build_release_mark(obj, TraverserWorkType::mark_global(), RcState::Unknown);
         });
     }
 
-    // Mark all objects reachable from `obj` as threaded.
+    /// Put every boxed object `obj` owns into the threaded refcount state, where a reference count
+    /// is updated atomically, so that an object can be held by several threads at once. An object
+    /// already in the global state keeps it.
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
             gc.build_release_mark(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
@@ -2293,6 +2282,25 @@ impl<'c, 'm> Generator<'c, 'm> {
             .into_int_value()
     }
 
+    /// Compare a loaded reference-count state against `state` under `predicate`, naming the result
+    /// `name` in the emitted code.
+    fn build_compare_refcnt_state(
+        &self,
+        refcnt_state: IntValue<'c>,
+        predicate: IntPredicate,
+        state: RefcntState,
+        name: &str,
+    ) -> IntValue<'c> {
+        self.builder()
+            .build_int_compare(
+                predicate,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(state.value() as u64, false),
+                name,
+            )
+            .unwrap()
+    }
+
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
     pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: RefcntState) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
@@ -2304,20 +2312,21 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
-    // Print Rust's &str to stderr.
+    /// Emit code writing `string` to stderr, followed by a newline.
     fn eprint(&mut self, string: &str) {
         let string_ptr = self.add_global_string(string);
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RUNTIME_EPRINTLN, &[string_ptr.into()]);
     }
 
-    // Panic with Rust's &str (i.e, print string and abort.)
+    /// Emit code writing `string` to stderr and aborting the program.
     pub fn panic(&mut self, string: &str) {
         self.eprint(string);
         self.call_runtime(RUNTIME_ABORT, &[]);
     }
 
-    // Call a runtime function.
+    /// Emit a call to the runtime function named `func_name`, which the module must already
+    /// declare.
     pub fn call_runtime(
         &self,
         func_name: &str,
