@@ -13,14 +13,14 @@
 //!   between rounds, and it is what brings a construction out to the chain its reader stands in.
 //! - A field holds an expression rather than a name, so the pass binds it to one first. A name is
 //!   what a reader can be given without the expression being evaluated a second time.
-//! A construction left with no reader goes, which is what keeps the reference it holds from being
-//! counted alongside the one the reader now has.
-//!
 //! - The construction is chosen by a case — every arm of a `match`, or both branches of an `if`,
 //!   builds a variant — so the pass moves the reading `match` into those arms, where each meets a
 //!   construction it can read. It does that only when the arms select pairwise distinct arms of the
 //!   reading `match`, so that no arm's body is ever copied and every round makes the program
 //!   smaller.
+//!
+//! A construction left with no reader goes with it, which is what keeps the reference it holds from
+//! being counted alongside the one the reader now has.
 
 use crate::{
     ast::{
@@ -79,7 +79,9 @@ enum Construction {
 
 /// The walk, carrying what each local in scope was built as.
 struct Collapser<'a> {
+    /// The declarations a type's layout and a union's variants are read out of.
     type_env: &'a TypeEnv,
+    /// What each local in scope was built as, keyed by its name.
     constructions: Map<FullName, Construction>,
     /// How many fields this global has had bound to a name of their own, which is what the next
     /// such name is numbered by. Counting across the rounds is what keeps two rounds from choosing

@@ -263,11 +263,18 @@ fn redirect_self_calls(
 
 /// The walk of `redirect_self_calls`.
 struct SelfCallRedirector<'a> {
+    /// The global whose calls are redirected.
     orig: FullName,
+    /// Which of the arguments `orig` takes holds the struct being split.
     arg: usize,
+    /// Where the original body takes that argument apart, which is where the names the fields are
+    /// handed over under come from.
     taken_apart: &'a Destructuring,
+    /// The type of each field, in the order the struct declares them.
     field_tys: Vec<Arc<TypeNode>>,
+    /// The global the calls are sent to.
     twin_name: FullName,
+    /// The type of `twin_name`, which the variable standing for it is given.
     twin_ty: Arc<TypeNode>,
 }
 
@@ -533,10 +540,14 @@ fn declared_field_names(tycon: &Arc<TyCon>, type_env: &TypeEnv) -> Vec<Name> {
 
 /// The walk that finds the first `let` taking `param` apart and drops it from the body.
 struct DestructuringRemover<'a> {
+    /// The name the `let` has to be bound to.
     param: &'a FullName,
+    /// The type constructor the pattern has to name.
     tycon: &'a Arc<TyCon>,
     /// How many fields the struct declares, which a pattern has to name all of.
     field_count: usize,
+    /// The first `let` that answers all of the above: its pattern, the field it writes at each
+    /// position, and the name it binds that field to.
     found: Option<(Arc<PatternNode>, Vec<Name>, Vec<FullName>)>,
 }
 
@@ -727,11 +738,7 @@ fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon
 }
 
 /// `body` taken as a function of `params`, each standing at the type beside it.
-fn lambda_over(
-    params: &[Arc<Var>],
-    doms: &[Arc<TypeNode>],
-    body: Arc<ExprNode>,
-) -> Arc<ExprNode> {
+fn lambda_over(params: &[Arc<Var>], doms: &[Arc<TypeNode>], body: Arc<ExprNode>) -> Arc<ExprNode> {
     let mut expr = body;
     for (param, dom) in params.iter().zip(doms.iter()).rev() {
         expr = expr_abs_typed(param.clone(), dom.clone(), expr);

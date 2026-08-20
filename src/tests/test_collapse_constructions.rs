@@ -27,8 +27,8 @@ mod integration_tests {
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
     const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
 
-    /// The optimization levels the answers are asserted at: the one the pass runs at, the one above
-    /// it, and one below it where it does not run.
+    /// The optimization levels the answers are asserted at: one below the level the passes run at,
+    /// the level they run at, and the one above it.
     const OPT_LEVELS: [&str; 3] = ["basic", "max", "experimental"];
 
     /// Copies the cases into a temporary directory and gives back that directory together with the
@@ -106,8 +106,7 @@ mod integration_tests {
     /// the one that closes it.
     ///
     /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
-    /// list runs to the parenthesis that brings the nesting back to where it started, and stopping
-    /// at the first one would cut the list short at the first function-typed parameter.
+    /// list runs to the parenthesis that brings the nesting back to where it started.
     fn parameter_list(header: &str) -> &str {
         let Some(open) = header.find('(') else {
             return "";
