@@ -11,9 +11,9 @@
 //! the original to destructure its argument and call the second one:
 //!
 //! ```text
-//! f#split = |a, b| (               f = |s| (
+//! f#split_arg0 = |a, b| (          f = |s| (
 //!     ...body, reading a and b         let T { g : a, h : b } = s;
-//! );                                   f#split(a, b)
+//! );                                   f#split_arg0(a, b)
 //!                                  );
 //! ```
 //!
@@ -110,22 +110,22 @@ fn split_one_argument(
         .collect::<Vec<_>>();
     let (doms, codom) = sym.ty.collect_app_src(params.len());
 
-    let mut returned = Set::default();
-    codom.collect_tycons(&mut returned);
+    let mut returned_tycons = Set::default();
+    codom.collect_tycons(&mut returned_tycons);
 
-    let (arg, taken_apart) = params.iter().enumerate().find_map(|(arg, param)| {
-        let tycon = splittable_struct(&doms[arg], type_env)?;
+    let (arg_idx, taken_apart) = params.iter().enumerate().find_map(|(arg_idx, param)| {
+        let tycon = splittable_struct(&doms[arg_idx], type_env)?;
         // A function handing back a value of the kind it was given has that value put together
         // again by its caller, so taking it apart here only moves the work to the call site.
-        if returned.contains(tycon.as_ref()) {
+        if returned_tycons.contains(tycon.as_ref()) {
             return None;
         }
         let declared = declared_field_names(&tycon, type_env);
         let taken_apart = destructuring_of(&body, &param.name, &tycon, &declared)?;
-        (params.len() + declared.len() - 1 <= MAX_ARGS).then_some((arg, taken_apart))
+        (params.len() + declared.len() - 1 <= MAX_ARGS).then_some((arg_idx, taken_apart))
     })?;
 
-    let field_tys = doms[arg].field_types(type_env);
+    let field_tys = doms[arg_idx].field_types(type_env);
     assert_eq!(
         field_tys.len(),
         taken_apart.field_names.len(),
@@ -144,24 +144,24 @@ fn split_one_argument(
         .iter()
         .map(|name| var_local(&name.name))
         .collect::<Vec<_>>();
-    twin_params.splice(arg..arg + 1, field_params.clone());
-    twin_doms.splice(arg..arg + 1, field_tys.iter().cloned());
+    twin_params.splice(arg_idx..arg_idx + 1, field_params.clone());
+    twin_doms.splice(arg_idx..arg_idx + 1, field_tys.iter().cloned());
 
     // A field carries the name the pattern gave it, and a struct nested in a struct is taken apart
     // by a pattern naming its fields the same way, so two rounds of splitting hand a function two
     // parameters of one name unless every local is given a name of its own.
     let twin_ty = fun_ty(&twin_doms, codom.clone());
-    let called_twin = call_the_twin(
-        &twin_body(&taken_apart, &params[arg], &doms[arg], &field_tys),
+    let redirected_body = call_the_twin(
+        &twin_body(&taken_apart, &params[arg_idx], &doms[arg_idx], &field_tys),
         &sym.name,
-        arg,
+        arg_idx,
         &taken_apart,
         &field_tys,
         &twin_name,
         &twin_ty,
     );
     let twin_expr = unique_local_names::run_on_expr(
-        &lambda_over(&twin_params, &twin_doms, called_twin),
+        &lambda_over(&twin_params, &twin_doms, redirected_body),
         Set::default(),
     );
 
@@ -184,7 +184,7 @@ fn split_one_argument(
                 wrapper_body(
                     &taken_apart,
                     &params,
-                    arg,
+                    arg_idx,
                     &doms,
                     &field_tys,
                     &twin_name,
@@ -243,7 +243,7 @@ fn twin_body(
 fn call_the_twin(
     body: &Arc<ExprNode>,
     orig: &FullName,
-    arg: usize,
+    arg_idx: usize,
     taken_apart: &Destructuring,
     field_tys: &[Arc<TypeNode>],
     twin_name: &FullName,
@@ -251,7 +251,7 @@ fn call_the_twin(
 ) -> Arc<ExprNode> {
     let mut redirect = Redirect {
         orig: orig.clone(),
-        arg,
+        arg: arg_idx,
         taken_apart,
         field_tys: field_tys.to_vec(),
         twin_name: twin_name.clone(),
@@ -430,7 +430,7 @@ impl<'a> ExprVisitor for Redirect<'a> {
 fn wrapper_body(
     taken_apart: &Destructuring,
     params: &[Arc<crate::ast::expr::Var>],
-    arg: usize,
+    arg_idx: usize,
     doms: &[Arc<TypeNode>],
     field_tys: &[Arc<TypeNode>],
     twin_name: &FullName,
@@ -441,14 +441,15 @@ fn wrapper_body(
         .zip(doms.iter())
         .map(|(param, ty)| expr_var(param.name.clone(), None).set_type(ty.clone()))
         .collect::<Vec<_>>();
-    twin_call(&args, arg, taken_apart, field_tys, twin_name, twin_ty)
+    twin_call(&args, arg_idx, taken_apart, field_tys, twin_name, twin_ty)
 }
 
-/// A call of the twin over `args`, with the struct standing at `args[arg]` taken apart above it and
-/// its fields handed over in its place, under the names the pattern of `taken_apart` binds them to.
+/// A call of the twin over `args`, with the struct standing at `args[arg_idx]` taken apart above
+/// it and its fields handed over in its place, under the names the pattern of `taken_apart` binds
+/// them to.
 fn twin_call(
     args: &[Arc<ExprNode>],
-    arg: usize,
+    arg_idx: usize,
     taken_apart: &Destructuring,
     field_tys: &[Arc<TypeNode>],
     twin_name: &FullName,
@@ -461,13 +462,13 @@ fn twin_call(
         .map(|(name, ty)| expr_var(name.clone(), None).set_type(ty.clone()))
         .collect::<Vec<_>>();
     let mut twin_args = args.to_vec();
-    twin_args.splice(arg..arg + 1, field_args);
+    twin_args.splice(arg_idx..arg_idx + 1, field_args);
 
     let mut call = expr_var(twin_name.clone(), None).set_type(twin_ty.clone());
     for twin_arg in twin_args {
         call = expr_app_typed(call, vec![twin_arg]);
     }
-    expr_let_typed(taken_apart.pattern.clone(), args[arg].clone(), call)
+    expr_let_typed(taken_apart.pattern.clone(), args[arg_idx].clone(), call)
 }
 
 /// Where a body takes a struct argument apart, and what is left once it has.
@@ -503,12 +504,12 @@ fn destructuring_of(
         found: None,
     };
     let removed = remover.traverse(body);
-    let (pattern, written, bound) = remover.found?;
+    let (pattern, pattern_fields, bound_names) = remover.found?;
     let field_names = declared
         .iter()
         .map(|field| {
-            let at = written.iter().position(|name| name == field)?;
-            Some(bound[at].clone())
+            let idx = pattern_fields.iter().position(|name| name == field)?;
+            Some(bound_names[idx].clone())
         })
         .collect::<Option<Vec<_>>>()?;
     Some(Destructuring {

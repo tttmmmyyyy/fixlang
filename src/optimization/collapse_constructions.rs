@@ -43,12 +43,12 @@ pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
     for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = prepared(sym.expr.as_ref().unwrap());
-        let mut bound_fields = 0;
+        let mut bound_field_count = 0;
         loop {
             let mut collapser = Collapser {
                 type_env: &type_env,
                 known: Map::default(),
-                bound_fields: &mut bound_fields,
+                bound_fields: &mut bound_field_count,
             };
             let res = collapser.traverse(&expr);
             if !res.changed {
@@ -383,11 +383,11 @@ impl<'a> ExprVisitor for Collapser<'a> {
             ));
             named = named.set_make_struct_field(field, expr_var(name, None).set_type(ty));
         }
-        let bound = bindings
+        let under_bindings = bindings
             .into_iter()
             .rev()
             .fold(named, |value, (pat, expr)| expr_let_typed(pat, expr, value));
-        StartVisitResult::ReplaceAndRevisit(bound)
+        StartVisitResult::ReplaceAndRevisit(under_bindings)
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {

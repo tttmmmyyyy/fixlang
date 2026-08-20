@@ -138,12 +138,12 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
 
-        let known = most_capture_lists_taken_by_one_function(&dump);
+        let known_functions = most_capture_lists_taken_by_one_function(&dump);
         assert!(
-            known >= 3,
+            known_functions >= 3,
             "the fold should receive the chain's two functions and its own operation as capture \
              lists, but the function taking the most of them takes {}",
-            known
+            known_functions
         );
     }
 
