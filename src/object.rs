@@ -396,6 +396,11 @@ impl ObjectFieldType {
         work_type: TraverserWorkType,
         state: RcState,
     ) {
+        // A fully unboxed element holds no reference, so an array of such elements has no element
+        // to release or mark.
+        if elem_ty.is_fully_unboxed(gc.type_env()) {
+            return;
+        }
         let value_ty = elem_ty.get_embedded_type(gc);
 
         // In loop body, release object of idx = counter_val.
@@ -463,11 +468,6 @@ impl ObjectFieldType {
         hole: Option<IntValue<'c>>,
         state: RcState,
     ) {
-        // A fully unboxed element holds no reference, so an array of such elements has no element
-        // to release or mark.
-        if elem_ty.is_fully_unboxed(gc.type_env()) {
-            return;
-        }
         match hole {
             None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {
@@ -725,7 +725,8 @@ impl ObjectFieldType {
         state: RcState,
     ) {
         let elm_basic_ty = elem_ty.get_embedded_type(gc);
-        // In loop body, retain value and store it at idx.
+        // In loop body, retain value and store it at idx. A fully unboxed element holds no
+        // reference, so the copy of one is the store alone.
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _len: IntValue<'c>,
@@ -745,8 +746,10 @@ impl ObjectFieldType {
                 .build_load(elm_basic_ty, src_ptr, "src_elem")
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
-            let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-            gc.retain(src_obj, state);
+            if !elem_ty.is_fully_unboxed(gc.type_env()) {
+                let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
+                gc.retain(src_obj, state);
+            }
         };
 
         // After loop, do nothing.

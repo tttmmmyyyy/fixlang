@@ -3726,7 +3726,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // is what lets the `plug` completing the update drop its own check. The element is moved out
         // without a retain, so another holder of it may still be live: its leaves stay `Unknown`, since
         // calling them `Fresh` would let a later in-place update overwrite shared data.
-        Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
+        Provenance::fresh_under(result_ty, type_env, &[PUNCH_RESULT_ARRAY_FIELD])
     }
 
     fn result_locality(
@@ -3737,7 +3737,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
     ) -> ExtShape {
         // The result is `(punched array, element)`, and the punched array is uniquely owned either
         // way (see `result_prov`).
-        punched_out_locality(result_ty, type_env, 0, PUNCHED_ARRAY_FIELD)
+        punched_out_locality(result_ty, type_env, 0, PUNCH_RESULT_ARRAY_FIELD)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3746,10 +3746,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 }
 
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
-const PUNCHED_ARRAY_FIELD: usize = 0;
-
-/// The index of the array a `PunchedArray a` holds, in `unbox struct { _arr, _idx }`.
-const PUNCHED_ARRAY_ARR_FIELD: usize = 0;
+const PUNCH_RESULT_ARRAY_FIELD: usize = 0;
 
 /// The locality of the result of a punch — the punched container, at `container_field` of the
 /// result, beside the value moved out of it — given the operand position of the container.
@@ -3869,7 +3866,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARR_FIELD], arg_tys, type_env)
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARRAY_IDX as usize], arg_tys, type_env)
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
