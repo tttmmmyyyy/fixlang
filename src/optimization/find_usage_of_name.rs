@@ -12,9 +12,6 @@ pub enum UsageType {
     // The name is passed as an argument to a call. The first component names the function called,
     // and is `None` where the callee is an expression rather than a name; the second is the index of
     // the argument the name was passed as.
-    //
-    // A call is met once for the whole call and once for each of its prefixes, so an argument at
-    // index `i` of a call of `n` arguments is recorded `n - i` times.
     FunctionArgument(Option<FullName>, usize),
     // The name is used as a function and is called, with the number of arguments the call supplies.
     // A call is written one argument at a time, so a call of `n` arguments is met here `n` times, at

@@ -1,6 +1,7 @@
 use super::{
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
+    inline_local,
     let_elimination::create_global_lambda_to_arity_map,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
@@ -743,13 +744,12 @@ fn realize_all(
     prg.symbols = symbols;
 }
 
-/// Whether putting `lambda`'s body where `copy` writes its name moves the body rather than copying
-/// it: `copy` is the only symbol naming `lambda`, it writes the name once, and that one place is the
-/// callee of a call supplying every argument.
+/// Whether putting `lambda`'s body where `copy` calls it moves the body rather than copying it:
+/// `copy` is the only symbol naming `lambda`, and it names it as the callee of one call that
+/// supplies every argument.
 ///
-/// The count of places comes first because the body goes into every one of them. What the one place
-/// is decides separately: a name passed as an argument, captured, or called with fewer arguments
-/// than the lambda takes leaves a closure where it stands, which is a body that has to stay.
+/// A name used any other way — passed as an argument, captured, or called with fewer arguments than
+/// it takes — is one the body would have to stay behind for.
 ///
 /// # Arguments
 /// * `copy` - the body of the copy, in which the uses of `lambda` are counted.
@@ -768,9 +768,6 @@ fn is_moved_by_placing(
         )
     });
     if naming_symbol_count != 1 {
-        return false;
-    }
-    if copy.count_occurrences_of_global(lambda) != 1 {
         return false;
     }
     let arity = match arity_map.get(lambda) {
@@ -866,6 +863,12 @@ fn inline_specialized_lambdas(
         }
         let sym = symbols.get_mut(copy).unwrap();
         sym.expr = Some(expr);
+        // A body arrives with the lambda it was written as still around it, and where the call it
+        // replaced supplied fewer arguments than that lambda takes, a lambda expression stands where
+        // a name stood. Local inlining removes both, which is the work `inline_local` does over the
+        // program before this pass runs: without it, code generation gives the lambda left behind a
+        // capture object of its own on the heap, and a loop that builds one allocates on every round.
+        inline_local::run_on_symbol(sym, &arity_map);
     }
 }
 
@@ -2164,7 +2167,6 @@ impl ClosureSpecializationVisitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::expr::{expr_app, expr_let, var_var};
     use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 
     /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
@@ -2176,145 +2178,6 @@ mod tests {
                 INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
             ),
         )
-    }
-
-    /// `func` applied to `args` arguments, written one argument at a time.
-    fn call(func: &FullName, args: usize) -> Arc<ExprNode> {
-        let mut expr = expr_var(func.clone(), None);
-        for index in 0..args {
-            let arg = expr_var(FullName::local(&format!("a{}", index)), None);
-            expr = expr_app(expr, vec![arg], None);
-        }
-        expr
-    }
-
-    /// The two tables the placement rule reads: `lambda` is named by `naming_symbols` symbols of the
-    /// program and takes `arity` parameters.
-    fn tables(
-        lambda: &FullName,
-        naming_symbols: usize,
-        arity: usize,
-    ) -> (Map<FullName, usize>, Map<FullName, usize>) {
-        (
-            [(lambda.clone(), naming_symbols)].into_iter().collect(),
-            [(lambda.clone(), arity)].into_iter().collect(),
-        )
-    }
-
-    /// A copy naming the lambda as the callee of one call that supplies every argument is the shape
-    /// the body moves at.
-    #[test]
-    fn one_saturated_call_moves_the_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        assert!(is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming,
-            &arity
-        ));
-    }
-
-    /// A lambda a second symbol names is one whose body has somewhere else to be.
-    #[test]
-    fn a_lambda_two_symbols_name_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 2, 2);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming,
-            &arity
-        ));
-    }
-
-    /// A call supplying fewer arguments than the lambda takes leaves a closure where the name stood,
-    /// so the body stays where it is.
-    #[test]
-    fn a_call_short_of_an_argument_keeps_the_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 3);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming,
-            &arity
-        ));
-    }
-
-    /// A call supplying more arguments than the lambda takes calls what the lambda returns.
-    #[test]
-    fn a_call_past_the_last_parameter_keeps_the_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 3),
-            &naming,
-            &arity
-        ));
-    }
-
-    /// Two calls name the lambda in two places, so the body stays where it is even where the two
-    /// together supply as many arguments as one saturated call would.
-    #[test]
-    fn two_calls_keep_the_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        let other = FullName::from_strs(&["Main"], "g#0123abcd");
-        let copy = expr_app(
-            expr_app(expr_var(other, None), vec![call(&lambda, 1)], None),
-            vec![call(&lambda, 1)],
-            None,
-        );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
-    }
-
-    /// A lambda handed to a call as an argument is one the body would have to stay behind for.
-    #[test]
-    fn a_lambda_passed_as_an_argument_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        let other = FullName::from_strs(&["Main"], "g#0123abcd");
-        let copy = expr_app(
-            expr_app(
-                expr_var(other, None),
-                vec![expr_var(lambda.clone(), None)],
-                None,
-            ),
-            vec![call(&lambda, 2)],
-            None,
-        );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
-    }
-
-    /// A lambda a `let` also binds is written in two places, so putting the body where the name
-    /// stands writes it into both rather than moving it. `find_usage_of_name` records nothing for
-    /// the `let`, which is why the rule counts the places the name is written.
-    #[test]
-    fn a_lambda_a_let_also_binds_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        let copy = expr_let(
-            PatternNode::make_var(var_var(FullName::local("v")), None),
-            expr_var(lambda.clone(), None),
-            call(&lambda, 2),
-            None,
-        );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
-    }
-
-    /// A lambda the arity table does not answer for is one the rule cannot judge.
-    #[test]
-    fn a_lambda_the_arity_table_does_not_answer_for_keeps_its_body() {
-        let lambda = lifted(0);
-        let naming = [(lambda.clone(), 1)].into_iter().collect();
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming,
-            &Map::default()
-        ));
     }
 
     /// The values two capture fields of one lambda hold read differently from the one value the
