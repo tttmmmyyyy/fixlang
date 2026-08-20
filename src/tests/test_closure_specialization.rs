@@ -116,6 +116,10 @@ mod integration_tests {
     /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
     const BORROWED_CAPTURE_OUTPUT: &str = "111";
 
+    /// What `shared_body` prints: `twice` over `|x| x * 3 - x` at 8, and `sum_up` and `sum_down`
+    /// over `|x| x * 3` at 4, which cancel.
+    const SHARED_BODY_OUTPUT: &str = "72";
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -266,6 +270,25 @@ mod integration_tests {
             })
             .map(|(header, body)| (header, body.split("\n\n").next().unwrap()))
             .collect()
+    }
+
+    /// The name the header line of a function opens with, without the parameter list that follows
+    /// it.
+    fn func_name(header: &str) -> &str {
+        header.split('(').next().unwrap().trim()
+    }
+
+    /// Asserts that the copy whose header is `header` holds the body of the lambda it is specialized
+    /// on, which is what a body calling no lambda through a function pointer says.
+    fn assert_holds_the_lambdas_body(header: &str, body: &str) {
+        let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+        assert!(
+            called.is_empty(),
+            "the copy `{}` should hold the body of the lambda it is specialized on, and it \
+             calls {:?} instead",
+            func_name(header),
+            called
+        );
     }
 
     /// The largest number of distinct copies of the function named by `callee_prefix` that any one
@@ -611,20 +634,9 @@ mod integration_tests {
             functions_named_with(&dump, "Std::loop")
         );
         for (header, body) in copies {
-            let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
-            assert!(
-                called.is_empty(),
-                "the copy `{}` should hold the body of the lambda it is specialized on, and it \
-                 calls {:?} instead",
-                header.split('(').next().unwrap(),
-                called
-            );
+            assert_holds_the_lambdas_body(header, body);
         }
     }
-
-    /// What `shared_body` prints: `twice` over `|x| x * 3 - x` at 8, and `sum_up` and `sum_down`
-    /// over `|x| x * 3` at 4, which cancel.
-    const SHARED_BODY_OUTPUT: &str = "72";
 
     /// A body goes into a copy where that moves it, and nowhere else. Two copies name the lambda
     /// `sum_up` and `sum_down` are both specialized on, and the copy of `twice` names its lambda in
@@ -651,7 +663,7 @@ mod integration_tests {
                     !called.is_empty(),
                     "the copy `{}` should go on calling the lambda it is specialized on, since \
                      placing the body there would write it twice:\n{}",
-                    header.split('(').next().unwrap(),
+                    func_name(header),
                     body
                 );
                 for name in called {
@@ -660,7 +672,7 @@ mod integration_tests {
                         "the lambda `{}` that the copy `{}` calls should stand as a function of \
                          its own. The dump names: {:?}",
                         name,
-                        header.split('(').next().unwrap(),
+                        func_name(header),
                         standing
                     );
                 }
@@ -683,14 +695,7 @@ mod integration_tests {
 
         let mut lending = 0;
         for (header, body) in spec_copies(&dump, "Std::loop") {
-            let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
-            assert!(
-                called.is_empty(),
-                "the copy `{}` should hold the body of the lambda it is specialized on, and it \
-                 calls {:?} instead",
-                header.split('(').next().unwrap(),
-                called
-            );
+            assert_holds_the_lambdas_body(header, body);
             // Each copy receives the capture list of the lambda it is made for, which is named after
             // the function that lambda was written in.
             if !header.contains("CapList@main") {
@@ -701,14 +706,14 @@ mod integration_tests {
                 body.contains("Main::scaled_sum") && body.contains("#borrow("),
                 "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
                  through its borrow version:\n{}",
-                header.split('(').next().unwrap(),
+                func_name(header),
                 body
             );
             assert!(
                 !body.contains("retain"),
                 "the copy `{}` should hand the array over without counting a reference, and it \
                  retains:\n{}",
-                header.split('(').next().unwrap(),
+                func_name(header),
                 body
             );
         }

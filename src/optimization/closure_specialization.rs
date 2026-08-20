@@ -756,7 +756,13 @@ fn is_moved_by_placing(
     naming_symbols: &Map<FullName, usize>,
     arity_map: &Map<FullName, usize>,
 ) -> bool {
-    if naming_symbols[lambda] != 1 {
+    let naming_count = *naming_symbols.get(lambda).unwrap_or_else(|| {
+        panic!(
+            "a copy is specialized on {}, which no symbol names",
+            lambda.to_string()
+        )
+    });
+    if naming_count != 1 {
         return false;
     }
     let arity = match arity_map.get(lambda) {
@@ -830,21 +836,21 @@ fn inline_specialized_lambdas(
         // named anywhere else, or called more than once, placing the body would duplicate it, and how
         // much duplication is worth its gain is the judgement `inline` makes.
         let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
-        let bodies = lambdas
+        let moved_bodies = lambdas
             .iter()
             .filter(|lambda| is_moved_by_placing(lambda, &copy_expr, &naming_symbols, &arity_map))
             .map(|lambda| (lambda.clone(), bodies[lambda].clone()))
             .collect::<Map<FullName, Arc<ExprNode>>>();
-        if bodies.is_empty() {
+        if moved_bodies.is_empty() {
             continue;
         }
-        let sym = symbols.get_mut(copy).unwrap();
         // The lambda is named by the call alone, so putting the body where its name stands leaves the
         // body applied to the arguments the call supplies.
-        let mut expr = sym.expr.as_ref().unwrap().clone();
-        for (lambda, body) in bodies {
+        let mut expr = copy_expr;
+        for (lambda, body) in moved_bodies {
             expr = substitute_free_name(&expr, &lambda, &body);
         }
+        let sym = symbols.get_mut(copy).unwrap();
         sym.expr = Some(expr);
         // A body arrives with the lambda it was written as still around it, and where the call it
         // replaced supplied fewer arguments than that lambda takes, a lambda expression stands where
