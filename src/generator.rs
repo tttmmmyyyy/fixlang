@@ -1963,9 +1963,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.build_mark_boxed_with(obj, work, traverse_refs);
             return;
         }
-        // A `Std::Destructor` runs its destructor function on the way out, before the references it
-        // holds are released. The count reaching zero is what picks the thread that runs it, so it
-        // runs exactly once however many threads release the object at the same moment.
+        // A `Std::FFI::Destructor` runs its destructor function on the way out, before the
+        // references it holds are released. The count reaching zero is what picks the thread that
+        // runs it, so it runs exactly once however many threads release the object at the same
+        // moment.
         if obj.is_destructor_object() {
             let destructor = obj.clone();
             self.build_release_boxed_with(obj, state, move |gc| {
@@ -1977,8 +1978,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.build_release_boxed_with(obj, state, traverse_refs);
     }
 
-    /// Run a `Std::Destructor` object's destructor function on the resource it holds, leaving what
-    /// the run returns in the value field for the release that follows.
+    /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
+    /// what the run returns in the value field for the release that follows.
     fn build_run_destructor(&mut self, obj: &Object<'c>) {
         let value =
             ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);

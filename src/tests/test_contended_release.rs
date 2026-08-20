@@ -6,8 +6,8 @@
 //! whichever answer the count gave.
 //!
 //! Each program here arranges exactly that interleaving and reports whether the value was left
-//! whole: one shares an array whose storage a write copies, the other shares a `Std::Destructor`
-//! that every thread lets go of at once.
+//! whole: one shares an array whose storage a write copies, the other shares a
+//! `Std::FFI::Destructor` that every thread lets go of at once.
 
 use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
 use std::path::{Path, PathBuf};
@@ -27,10 +27,13 @@ const ELEMENT_COUNT: &str = "3000000";
 /// enough that the write finds the storage shared, short enough that the copy is still running.
 const DROP_DELAY_US: &str = "1000";
 
-/// Which write the array program makes. A copy into a storage of the array's own capacity and a
-/// copy into one of a larger capacity are separate pieces of generated code, and each has to
-/// release the elements the storage it lets go of held.
+/// The write the array program makes in place: it copies the elements into a storage of the
+/// array's own capacity, and has to release the elements the storage it lets go of held.
 const ARRAY_WRITE_IN_PLACE: &str = "set";
+
+/// The write the array program makes that grows the array: it copies the elements into a storage
+/// of a larger capacity, which is a separate piece of generated code and has to release the
+/// elements the storage it lets go of held on its own.
 const ARRAY_WRITE_GROW: &str = "reserve";
 
 /// What the array program prints when its two threads did not overlap: the thread that lets go of
@@ -148,9 +151,9 @@ fn assert_cloning_a_shared_array_releases_its_elements(opt_level: &str, write: &
 
 /// Runs the destructor case at `opt_level`.
 ///
-/// Every thread of a round holds one reference to a `Std::Destructor` and lets go of it at the same
-/// moment, so more than one of them reads the count as shared. The destructor function counts its
-/// own runs, and the program compares that count with the number of values it built.
+/// Every thread of a round holds one reference to a `Std::FFI::Destructor` and lets go of it at
+/// the same moment, so more than one of them reads the count as shared. The destructor function
+/// counts its own runs, and the program compares that count with the number of values it built.
 fn assert_a_destructor_runs_for_every_value(opt_level: &str) {
     assert_shared_value_is_destroyed_completely(
         "destructor",
@@ -159,26 +162,34 @@ fn assert_a_destructor_runs_for_every_value(opt_level: &str) {
     );
 }
 
+/// A `set` on an array another thread shares releases the elements of the storage it copied out
+/// of, where the other thread's release left this one holding the last reference. `-O none` keeps
+/// every uniqueness check and reference count the compiler emits.
 #[test]
 fn test_cloning_a_shared_array_releases_its_elements_unoptimized() {
     assert_cloning_a_shared_array_releases_its_elements("none", ARRAY_WRITE_IN_PLACE);
 }
 
-/// The same at `-O max`, where the optimizations that drop a uniqueness check or a reference count
-/// run, so a release the compiler reshapes there is checked as well as the one it emits plainly.
+/// A `set` on an array another thread shares releases the elements of the storage it copied out
+/// of, at `-O max`, where the optimizations that drop a uniqueness check or a reference count
+/// reshape the release under test.
 #[test]
 fn test_cloning_a_shared_array_releases_its_elements_optimized() {
     assert_cloning_a_shared_array_releases_its_elements("max", ARRAY_WRITE_IN_PLACE);
 }
 
-/// The same for a write that grows the array: the copy goes into a storage of a larger capacity,
-/// which is generated separately from the copy a write in place makes and lets go of the shared
-/// storage on its own.
+/// A `reserve` on an array another thread shares releases the elements of the storage it copied
+/// out of. The copy goes into a storage of a larger capacity, which is generated separately from
+/// the copy a write in place makes. `-O none` keeps every uniqueness check and reference count the
+/// compiler emits.
 #[test]
 fn test_growing_a_shared_array_releases_its_elements_unoptimized() {
     assert_cloning_a_shared_array_releases_its_elements("none", ARRAY_WRITE_GROW);
 }
 
+/// A `reserve` on an array another thread shares releases the elements of the storage it copied
+/// out of, at `-O max`, where the optimizations that drop a uniqueness check or a reference count
+/// reshape the release under test.
 #[test]
 fn test_growing_a_shared_array_releases_its_elements_optimized() {
     assert_cloning_a_shared_array_releases_its_elements("max", ARRAY_WRITE_GROW);
@@ -198,23 +209,33 @@ fn assert_plugging_a_shared_punched_array_releases_its_elements(opt_level: &str)
     );
 }
 
+/// A plug into a punched array another thread shares releases the elements of the storage it
+/// copied out of, apart from the slot whose element the punch handed back. `-O none` keeps every
+/// uniqueness check and reference count the compiler emits.
 #[test]
 fn test_plugging_a_shared_punched_array_releases_its_elements_unoptimized() {
     assert_plugging_a_shared_punched_array_releases_its_elements("none");
 }
 
-/// The same at `-O max`, for the reason the array case is run there.
+/// A plug into a punched array another thread shares releases the elements of the storage it
+/// copied out of, at `-O max`, where the optimizations that drop a uniqueness check or a reference
+/// count reshape the release under test.
 #[test]
 fn test_plugging_a_shared_punched_array_releases_its_elements_optimized() {
     assert_plugging_a_shared_punched_array_releases_its_elements("max");
 }
 
+/// A `Std::FFI::Destructor` that many threads let go of at the same moment runs its destructor
+/// function exactly once. `-O none` keeps every uniqueness check and reference count the compiler
+/// emits.
 #[test]
 fn test_a_destructor_runs_for_every_value_unoptimized() {
     assert_a_destructor_runs_for_every_value("none");
 }
 
-/// The same at `-O max`, for the reason the array case is run there.
+/// A `Std::FFI::Destructor` that many threads let go of at the same moment runs its destructor
+/// function exactly once, at `-O max`, where the optimizations that drop a uniqueness check or a
+/// reference count reshape the release under test.
 #[test]
 fn test_a_destructor_runs_for_every_value_optimized() {
     assert_a_destructor_runs_for_every_value("max");
