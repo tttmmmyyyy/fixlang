@@ -275,7 +275,15 @@ impl ObjectFieldType {
         }
     }
 
-    // Take array and generate code iterating its elements.
+    /// Emit a loop that visits the indices `[0, size)` of `buffer`, calling `loop_body` at each
+    /// index and `after_loop` once the loop ends. The builder is left positioned in the block
+    /// after the loop.
+    ///
+    /// # Arguments
+    /// * `size` — how many elements the walk covers, counted from `buffer`'s first element.
+    /// * `loop_body` — receives the current index, `size` and `buffer`.
+    /// * `after_loop` — receives `size` and `buffer`, and runs once, including when `size` is
+    ///   zero.
     fn loop_over_array_buf<'c, 'm, F, G>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -364,8 +372,15 @@ impl ObjectFieldType {
         after_loop(gc, size, buffer);
     }
 
-    // The buffer and element count of the elements that follow a hole: elements `(hole, size)`
-    // live at `&buffer[hole + 1]`, and there are `size - hole - 1` of them.
+    /// Locate the elements that follow a hole: elements `(hole, size)` live at
+    /// `&buffer[hole + 1]`, and there are `size - hole - 1` of them.
+    ///
+    /// # Arguments
+    /// * `hole` — the index of the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`).
+    ///
+    /// # Returns
+    /// The address of the first element after the hole, and how many elements follow it.
     fn array_buf_after_hole<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         elem_basic_ty: BasicTypeEnum<'c>,
@@ -387,7 +402,12 @@ impl ObjectFieldType {
         (tail_buffer, tail_count)
     }
 
-    // Release / mark each of `count` consecutive elements starting at `buffer`.
+    /// Perform `work_type`'s work — release, mark-global or mark-threaded — on each of `count`
+    /// consecutive elements starting at `buffer`. An element type that is fully unboxed holds no
+    /// reference, so nothing is emitted for one.
+    ///
+    /// # Arguments
+    /// * `state` — what is known about the reference-counting state of the elements.
     fn release_or_mark_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -403,7 +423,7 @@ impl ObjectFieldType {
         }
         let value_ty = elem_ty.get_embedded_type(gc);
 
-        // In loop body, release object of idx = counter_val.
+        // In loop body, release the element the buffer holds at `idx`.
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _size: IntValue<'c>,
@@ -434,7 +454,11 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, buffer, loop_body, after_loop);
     }
 
-    // Release / mark the elements in `[begin, end)` of an array's buffer.
+    /// Perform `work_type`'s work on the elements in `[begin, end)` of an array's buffer.
+    ///
+    /// # Arguments
+    /// * `begin`, `end` — element indices counted from `buffer`'s first element, a half-open
+    ///   range.
     pub fn release_or_mark_array_slice<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -457,8 +481,12 @@ impl ObjectFieldType {
         Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
-    // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
-    // at `idx` is skipped (a slot whose element was moved out).
+    /// Perform `work_type`'s work on every element of an array's buffer.
+    ///
+    /// # Arguments
+    /// * `size` — the array's element count; the elements walked are `[0, size)`.
+    /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
     pub fn release_or_mark_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -494,7 +522,12 @@ impl ObjectFieldType {
         }
     }
 
-    // Initialize an array by value.
+    /// Store `value` into every slot of `[0, size)` of `buffer`, giving each slot its own
+    /// reference through one retain per slot, and consume the caller's own reference to `value`.
+    /// The net change to `value`'s reference count is `size - 1`, correct at `size == 0`.
+    ///
+    /// # Arguments
+    /// * `buffer` — allocated and uninitialized; every slot this writes is a first write.
     pub fn initialize_array_buf_by_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -531,11 +564,14 @@ impl ObjectFieldType {
         }
     }
 
-    // Store `value` into `[begin, begin + count)` of an array's buffer. Each slot is given its own
-    // reference through a single retain-by-`count` rather than one retain per slot, the slots are
-    // written without releasing their (uninitialized) old contents, and the caller's own reference
-    // to `value` is then consumed. The net change to `value`'s reference count is `count - 1`,
-    // correct at `count == 0`.
+    /// Store `value` into `[begin, begin + count)` of an array's buffer. Each slot is given its
+    /// own reference through a single reference-count add of `count`, and the caller's own
+    /// reference to `value` is then consumed. The net change to `value`'s reference count is
+    /// `count - 1`, correct at `count == 0`.
+    ///
+    /// # Arguments
+    /// * `begin` — the index the store starts at, counted from `buffer`'s first element. The
+    ///   slots it covers are allocated and uninitialized, and each is a first write.
     pub fn append_value_into_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -714,8 +750,11 @@ impl ObjectFieldType {
         gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
     }
 
-    // Clone (retain + copy) `count` consecutive elements from `src_buffer` into `dst_buffer`,
-    // starting at index 0 of each. `dst_buffer` should be already allocated but not initialized.
+    /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
+    /// of each, and retain every one so that both buffers own it.
+    ///
+    /// # Arguments
+    /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
     fn clone_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src_buffer: PointerValue<'c>,
@@ -759,9 +798,14 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, src_buffer, loop_body, after_loop);
     }
 
-    // Clone an array's buffer into `dst`. When `hole` is `Some(idx)`, the element at `idx` is
-    // skipped — its slot in `dst` is left uninitialized. `dst` should be already allocated but
-    // not initialized.
+    /// Copy the `len` elements of an array's buffer from `src_buffer` into `dst_buffer`,
+    /// retaining each one so that both buffers own it.
+    ///
+    /// # Arguments
+    /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
+    /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
+    ///   leaves `dst_buffer[idx]` uninitialized.
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
