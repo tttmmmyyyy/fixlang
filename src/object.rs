@@ -6,9 +6,9 @@ use crate::constants::{
     ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
     BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_IDX,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, PUNCHED_ARRAY_ARRAY_IDX,
+    PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -2320,10 +2320,18 @@ fn build_traverse<'c, 'm>(
     if obj.ty.is_punched_array() {
         let inner_array_ty = obj.ty.field_types(gc.type_env())[0].clone();
         let elem_ty = inner_array_ty.field_types(gc.type_env())[0].clone();
-        let inner_array = Object::new(obj.extract_field(gc, 0), inner_array_ty, gc);
-        let idx = Object::new(obj.extract_field(gc, 1), make_i64_ty(), gc)
-            .extract_field(gc, 0)
-            .into_int_value();
+        let inner_array = Object::new(
+            obj.extract_field(gc, PUNCHED_ARRAY_ARRAY_IDX),
+            inner_array_ty,
+            gc,
+        );
+        let idx = Object::new(
+            obj.extract_field(gc, PUNCHED_ARRAY_HOLE_IDX),
+            make_i64_ty(),
+            gc,
+        )
+        .extract_field(gc, 0)
+        .into_int_value();
         let size = inner_array
             .extract_field(gc, ARRAY_SIZE_IDX)
             .into_int_value();
