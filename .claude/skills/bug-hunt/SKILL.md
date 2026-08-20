@@ -241,6 +241,20 @@ Two things make the reading honest. Measure the pre-change compiler on the same 
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
 
+#### Recompute a memoized answer at the hit, and diff it against what the cache serves
+
+A compiler memoizes almost everything expensive — a generated function keyed by a name, a type's layout keyed by the type, an elaborated module keyed by a hash of its sources. Every key is a claim: *this key names everything the value depends on.* Nothing checks the claim, and a key that omits an input serves a value computed for something else — a wrong answer with no diagnostic anywhere near it.
+
+Check it where the cache is read: on every hit, recompute the value from scratch under a fresh name (or into a scratch slot), diff it against the cached one, and count both the hits and the disagreements over a whole corpus. The count is what makes a silence worth something — "117,454 hits re-derived, one disagreement" is evidence where "no disagreements" alone is not. Prove it fires first by dropping one field from the key and watching the diff report the values that then collide.
+
+Both readings are useful. A disagreement names an input the key is missing. A clean sweep says the key covers everything this corpus reaches, and names its own gap: the value requested only once, since a hit is what the probe rides on.
+
+#### Put another thread's step inside the window, and read an oracle the race leaves alone
+
+Code that observes a shared state and then acts on the observation — "the count says shared, so clone", "the count says unique, so run the destructor" — is correct only while nothing changes between the two. In a threaded program something does, and the failure is invisible to the usual detectors: the counter itself is updated atomically, so a race detector sees no race, and a single-threaded memcheck run never opens the window at all.
+
+Build a harness with the window under your control: two workers, a barrier to start them together, and a delay in one of them that you sweep. Then read an oracle that does not depend on the race being detected — the allocator's in-use bytes before and after, a count of finalizer runs kept in C, the number of frees memcheck reports. What comes back is a number that appears at the delays landing the other thread inside the window and disappears at the delays that do not, and that shape is itself the evidence that the window is what you found.
+
 #### Run threaded programs under a data-race detector
 
 Output comparison and memcheck both run single-threaded and miss data races — two threads racing on a refcount or on shared state produce the right answer on a good day. A data-race detector (ThreadSanitizer, or valgrind's helgrind / DRD) is the one sanitizer routine runs skip, because its false-positive rate is high; that cost is why the concurrency class stays unhunted, and paying it is how a hunt reaches races nothing else does. Triage against a baseline exactly as with memcheck: a glibc or library-internal race pattern shows identically on unmodified code.
