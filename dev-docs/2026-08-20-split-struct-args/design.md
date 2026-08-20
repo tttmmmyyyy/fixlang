@@ -126,7 +126,50 @@ twin にも wrapper にも局所名を付け直す。フィールドはパター
 `filter` を含む形が動かないのは、`FilterIterator` の `advance` が自分自身を再帰的に呼ぶために
 `fold` へ入らないからである (#453)。
 
+コーパス 51 ケースの命令数 (`-O experimental`、`perf stat -e instructions:u`、出力は 51/51 一致):
+
+| case | 前 | 後 | |
+|---|---|---|---|
+| `bounds_check_indexable` | 69,286,596 | 289,679 | **-99.58%** |
+| `sum_by_fix` | 143,108 | 139,757 | -2.34% |
+| `cp_lib_unionfind` | 129,108,338 | 128,615,832 | -0.38% |
+| `cp_lib_conv_zp` | 246,028,306 | 290,182,826 | **+17.95%** |
+| 残り 47 ケース | | | 0.00% |
+
+`bounds_check_indexable` は 2 次元配列への `iget`/`iset` の二重ループで、要素ごとの間接呼び出しが
+無くなった結果 LLVM が内側のループを行の複写に畳んでいる。`assert_eq` は通ったままである。
+
+### `cp_lib_conv_zp` の退行
+
+`convolve_zp` に渡る 2 つの配列が **deeply local と証明できなくなる**。base では
+
+```
+retain app#768 @deeplocal
+let app#779 = CPLib.Convolution::convolve_zp#0#funptr2#l12(app#768, app#774)
+```
+
+で、`app#768` は `fold` の戻り値 (provenance `fresh`) である。後では
+
+```
+let if#652 : ... [fresh | unknown] = match v#634 { .. }
+retain if#652
+let app#679 = CPLib.Convolution::convolve_zp#0#funptr2(if#652, if#674)
+```
+
+となり、`fold` の 1 周目が呼び出し側へ剥がれて `match` の 2 つの腕の join になる。provenance が
+`fresh | unknown` なので局所と言えず、`convolve_zp` も `fft` も locality のクローンを失い、
+FFT の内側で malloc と free が動く。
+
+これは `split_struct_args` 単独で起きる (`collapse_constructions` を切っても残り、
+`split_struct_args` を切ると消える)。直すのは RC state inference の側で、分岐をまたいで
+provenance を join する所である。
+
 ## 付録: 潰れた形
+
+### 読み手を失った構築を落とす
+
+畳んだ後に構築が残ると、それが持つ参照が読み手の持つ参照と 2 つ並ぶ。落とすようにしたが、
+`cp_lib_conv_zp` の退行はこれでは動かなかった。落とすこと自体は正しいので入れてある。
 
 ### `advance` を割る
 
