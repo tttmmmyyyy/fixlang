@@ -13,6 +13,9 @@
 //!   between rounds, and it is what brings a construction out to the chain its reader stands in.
 //! - A field holds an expression rather than a name, so the pass binds it to one first. A name is
 //!   what a reader can be given without the expression being evaluated a second time.
+//! A construction left with no reader goes, which is what keeps the reference it holds from being
+//! counted alongside the one the reader now has.
+//!
 //! - The construction is chosen by a case — every arm of a `match`, or both branches of an `if`,
 //!   builds a variant — so the pass moves the reading `match` into those arms, where each meets a
 //!   construction it can read. It does that only when the arms select pairwise distinct arms of the
@@ -237,6 +240,17 @@ impl<'a> ExprVisitor for Collapser<'a> {
     ) -> StartVisitResult {
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
+
+        // A construction nothing reads goes. Reading it where it is taken apart is what takes its
+        // last reader away, and what it holds keeps a reference from it until it does — which is a
+        // reference the stages below count, and a value counted twice is a value they will not
+        // write in place.
+        if pat.is_var() && built_by(&bound).is_some() {
+            let value = expr.get_let_value();
+            if !value.free_vars().contains(&pat.get_var().name) {
+                return StartVisitResult::ReplaceAndRevisit(value);
+            }
+        }
 
         // A name bound to a construction, or to a name already holding one, carries what it holds.
         if pat.is_var() {
