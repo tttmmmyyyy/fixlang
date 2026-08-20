@@ -838,7 +838,8 @@ fn inline_specialized_lambdas(
         }
     }
 
-    // What `inline_local::run_on_symbol` needs to eliminate a `let` that binds a global lambda.
+    // How many arguments each lifted lambda takes, which says whether the call a copy makes
+    // supplies all of them.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
     for (copy, lambdas) in specialized_lambdas {
