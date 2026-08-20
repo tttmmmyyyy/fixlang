@@ -14,7 +14,7 @@ use crate::{
         },
         name::FullName,
         pattern::{Pattern, PatternNode},
-        program::{Program, Symbol, TypeEnv},
+        program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo, TypeNode},
     },
@@ -722,7 +722,12 @@ fn realize_all(
             .func_copy
             .subst
             .iter()
-            .map(|(_, tree)| (tree.receiving_copy().name(), lifted.borrow_mut().capture_struct_of(tree)))
+            .map(|(_, tree)| {
+                (
+                    tree.receiving_copy().name(),
+                    lifted.borrow_mut().capture_struct_of(tree),
+                )
+            })
             .collect::<Vec<_>>();
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
@@ -736,9 +741,36 @@ fn realize_all(
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
 
-    inline_specialized_lambdas(&mut symbols, &specialized_lambdas, &prg.type_env);
+    inline_specialized_lambdas(&mut symbols, &specialized_lambdas);
 
     prg.symbols = symbols;
+}
+
+/// Whether putting `lambda`'s body where `copy` calls it moves the body rather than copying it:
+/// `copy` is the only symbol naming `lambda`, and it names it as the callee of one saturated call.
+///
+/// A call is written one argument at a time, so a saturated call of an `n`-argument lambda stands as
+/// `n` nested applications and names the callee once in each — which is why the count of callee uses
+/// is compared against the arity rather than against one. A name used any other way — passed as an
+/// argument, captured — is one the body would have to stay behind for.
+fn is_moved_by_placing(
+    lambda: &FullName,
+    copy: &Arc<ExprNode>,
+    naming_symbols: &Map<FullName, usize>,
+    arity_map: &Map<FullName, usize>,
+) -> bool {
+    if naming_symbols[lambda] != 1 {
+        return false;
+    }
+    let usages = find_usage_of_name::run(copy, lambda);
+    let arity = match arity_map.get(lambda) {
+        Some(arity) => *arity,
+        None => return false,
+    };
+    usages.len() == arity
+        && usages
+            .iter()
+            .all(|usage| matches!(usage, UsageType::CalledAsFunction))
 }
 
 // Put the body of each lambda a copy is specialized on where the copy calls it.
@@ -754,7 +786,6 @@ fn realize_all(
 fn inline_specialized_lambdas(
     symbols: &mut Map<FullName, Symbol>,
     specialized_lambdas: &Map<FullName, Vec<(FullName, CaptureStruct)>>,
-    type_env: &TypeEnv,
 ) {
     // Every body as it stands before any of them is put anywhere. A lambda is a copy like the one
     // receiving it, so reading the bodies as they are rewritten would hand a copy what another copy
@@ -762,7 +793,7 @@ fn inline_specialized_lambdas(
     let bodies = specialized_lambdas
         .iter()
         .flat_map(|(copy, lambdas)| lambdas.iter().map(move |lambda| (copy, lambda)))
-        .map(|(copy, (lambda, cap))| {
+        .map(|(copy, (lambda, _))| {
             let sym = symbols.get(lambda).unwrap_or_else(|| {
                 panic!(
                     "{} is specialized on {}, which no copy was made for",
@@ -770,20 +801,35 @@ fn inline_specialized_lambdas(
                     lambda.to_string()
                 )
             });
-            let body = sym.expr.as_ref().unwrap().clone();
-            let put = !hands_a_counted_capture_to_a_call(&body, cap, type_env);
-            (lambda.clone(), (body, put))
+            (lambda.clone(), sym.expr.as_ref().unwrap().clone())
         })
-        .collect::<Map<FullName, (Arc<ExprNode>, bool)>>();
+        .collect::<Map<FullName, Arc<ExprNode>>>();
+
+    // How many symbols name each global. A lambda named by one symbol alone is one whose body has
+    // nowhere else to be, so putting it there moves it rather than copying it.
+    let mut naming_symbols: Map<FullName, usize> = Map::default();
+    for sym in symbols.values() {
+        for name in sym.expr.as_ref().unwrap().free_vars() {
+            *naming_symbols.entry(name.clone()).or_insert(0) += 1;
+        }
+    }
 
     // What the local inlining below needs to eliminate a `let` that binds a global lambda.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
     for (copy, lambdas) in specialized_lambdas {
+        // The body goes in where that is a move rather than a copy: this copy is the only symbol
+        // naming the lambda, and it names it as the callee of one saturated call, so the body ends up
+        // in one place and the lambda itself falls to dead-symbol elimination. Where the lambda is
+        // named anywhere else, or called more than once, placing the body would duplicate it, and how
+        // much duplication is worth its gain is the judgement `inline` makes.
+        let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
         let bodies = lambdas
             .iter()
-            .filter(|(lambda, _)| bodies[lambda].1)
-            .map(|(lambda, _)| (lambda.clone(), bodies[lambda].0.clone()))
+            .filter(|(lambda, _)| {
+                is_moved_by_placing(lambda, &copy_expr, &naming_symbols, &arity_map)
+            })
+            .map(|(lambda, _)| (lambda.clone(), bodies[lambda].clone()))
             .collect::<Map<FullName, Arc<ExprNode>>>();
         if bodies.is_empty() {
             continue;
@@ -802,36 +848,6 @@ fn inline_specialized_lambdas(
         // capture object of its own on the heap, and a loop that builds one allocates on every round.
         inline_local::run_on_symbol(sym, &arity_map);
     }
-}
-
-// Whether the body of a lifted lambda hands a captured value that reference counting has to touch to
-// a call it makes.
-//
-// A copy hands the capture list to the lambda borrowed, so such a value reaches the calls inside the
-// lambda borrowed too, and no reference count is touched along the way. Putting the body where the
-// copy calls it takes that boundary away: the copy owns the capture list it hands to the next round,
-// so the same call is reached with an owned value and is bracketed by a reference-count operation on
-// every round of the loop. Measured over the benchmark corpus, that costs more than the union the
-// move cancels is worth — `Template::Parse` runs 69% more instructions.
-//
-// A value the body only reads through a primitive is not handed anywhere, and a value reference
-// counting has nothing to do to costs nothing to hand over, so neither blocks the move.
-fn hands_a_counted_capture_to_a_call(
-    body: &Arc<ExprNode>,
-    cap: &CaptureStruct,
-    type_env: &TypeEnv,
-) -> bool {
-    let (_params, body) = body.destructure_lam_sequence();
-    let Some((field_names, cap_body)) = capture_list_destructuring(&body, &cap.tycon) else {
-        return false;
-    };
-    cap.fields()
-        .iter()
-        .enumerate()
-        .any(|(position, (_, field_ty))| {
-            !field_ty.is_fully_unboxed(type_env)
-                && !find_usage_of_name::run(&cap_body, &field_names[position]).is_empty()
-        })
 }
 
 // The visitor that replaces the name a copy calls a lambda through with that lambda's body.
@@ -943,7 +959,11 @@ impl ExprVisitor for SpecializedLambdaInliner {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
