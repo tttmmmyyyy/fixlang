@@ -144,19 +144,25 @@ fn split_one_argument(
     // A field carries the name the pattern gave it, and a struct nested in a struct is taken apart
     // by a pattern naming its fields the same way, so two rounds of splitting hand a function two
     // parameters of one name unless every local is given a name of its own.
+    let twin_ty = fun_ty(&twin_doms, codom.clone());
+    let called_twin = call_the_twin(
+        &twin_body(&taken_apart, &params[arg], &doms[arg], &field_tys),
+        &sym.name,
+        arg,
+        &taken_apart,
+        &field_tys,
+        &twin_name,
+        &twin_ty,
+    );
     let twin_expr = unique_local_names::run_on_expr(
-        &lambda_over(
-            &twin_params,
-            &twin_doms,
-            twin_body(&taken_apart, &params[arg], &doms[arg], &field_tys),
-        ),
+        &lambda_over(&twin_params, &twin_doms, called_twin),
         Set::default(),
     );
 
     let twin = Symbol {
         name: twin_name.clone(),
         generic_name: sym.generic_name.clone(),
-        ty: fun_ty(&twin_doms, codom.clone()),
+        ty: twin_ty,
         expr: Some(twin_expr),
         inline_into_callers: false,
     };
@@ -220,6 +226,213 @@ fn twin_body(
         rebuilt,
         body,
     )
+}
+
+/// `body` with every call of `orig` handing its struct argument over field by field to `twin`.
+///
+/// The twin holds the original body, whose calls of itself name the original — which is the wrapper
+/// once the split is done. A body that called itself would then call a body that calls it back, and
+/// inlining unrolls such a pair instead of leaving it alone. Naming the twin keeps a self-recursive
+/// function self-recursive, and leaves the wrapper small enough to go into its callers.
+fn call_the_twin(
+    body: &Arc<ExprNode>,
+    orig: &FullName,
+    arg: usize,
+    taken_apart: &Destructuring,
+    field_tys: &[Arc<TypeNode>],
+    twin_name: &FullName,
+    twin_ty: &Arc<TypeNode>,
+) -> Arc<ExprNode> {
+    let mut redirect = Redirect {
+        orig: orig.clone(),
+        arg,
+        taken_apart,
+        field_tys: field_tys.to_vec(),
+        twin_name: twin_name.clone(),
+        twin_ty: twin_ty.clone(),
+    };
+    redirect.traverse(body).expr
+}
+
+/// The walk of `call_the_twin`.
+struct Redirect<'a> {
+    orig: FullName,
+    arg: usize,
+    taken_apart: &'a Destructuring,
+    field_tys: Vec<Arc<TypeNode>>,
+    twin_name: FullName,
+    twin_ty: Arc<TypeNode>,
+}
+
+impl<'a> ExprVisitor for Redirect<'a> {
+    fn start_visit_app(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        let (head, args) = expr.destructure_app();
+        if !head.is_var() || head.get_var().name != self.orig || args.len() <= self.arg {
+            return StartVisitResult::VisitChildren;
+        }
+
+        // The names the fields are handed over under, taken from the pattern the original body
+        // took its argument apart with. Every local is renamed once the twin is built, so a name
+        // standing here twice over is settled there.
+        let mut call = expr_var(self.twin_name.clone(), None).set_type(self.twin_ty.clone());
+        for (idx, arg) in args.iter().enumerate() {
+            if idx != self.arg {
+                call = expr_app_typed(call, vec![arg.clone()]);
+                continue;
+            }
+            for (name, ty) in self
+                .taken_apart
+                .field_names
+                .iter()
+                .zip(self.field_tys.iter())
+            {
+                call = expr_app_typed(
+                    call,
+                    vec![expr_var(name.clone(), None).set_type(ty.clone())],
+                );
+            }
+        }
+        StartVisitResult::ReplaceAndRevisit(expr_let_typed(
+            self.taken_apart.pattern.clone(),
+            args[self.arg].clone(),
+            call,
+        ))
+    }
+
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_var(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_llvm(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_lam(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_let(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_if(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_match(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_tyanno(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_make_struct(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_array_lit(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_ffi_call(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
 }
 
 /// The original's body once it is a wrapper: take the struct apart and hand the fields to the twin.

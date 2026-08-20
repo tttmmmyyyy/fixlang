@@ -42,6 +42,11 @@ f = |p0, .., pi, ..| (
 割った後に残る wrapper は「構造体を分解してフィールドを渡す」形で、これは割る対象の形そのものである。
 だから wrapper は割らない。割るべきものは twin の側に在る。
 
+twin の中で元の名前を呼んでいる所は、twin を呼ぶように書き換える。twin が持つのは元の本体なので、
+自分を呼ぶ所は元の名前 — つまり割った後の wrapper — を名指している。そのままだと自己再帰の関数が
+**相互再帰の 2 つ**になり、`inline` は相互再帰を「自分を呼ぶ本体」と見なさないので輪をほどいて
+両方を大きくする。twin を名指せば自己再帰は自己再帰のままで、wrapper は呼び出し側へ入る大きさに留まる。
+
 twin にも wrapper にも局所名を付け直す。フィールドはパターンが与えた名前を持ち、構造体に入れ子に
 なった構造体は同じ名前でフィールドを取り出すパターンで分解されるので、2 周割ると 1 つの名前の
 引数が 2 つ並ぶ。
@@ -130,46 +135,28 @@ twin にも wrapper にも局所名を付け直す。フィールドはパター
 
 | case | 前 | 後 | |
 |---|---|---|---|
-| `bounds_check_indexable` | 69,286,596 | 289,679 | **-99.58%** |
-| `sum_by_fix` | 143,108 | 139,757 | -2.34% |
-| `cp_lib_unionfind` | 129,108,338 | 128,615,832 | -0.38% |
-| `cp_lib_conv_zp` | 246,028,306 | 290,182,826 | **+17.95%** |
-| 残り 47 ケース | | | 0.00% |
+| `bounds_check_indexable` | 69,286,599 | 289,680 | **-99.58%** |
+| `sum_by_fix` | 143,107 | 139,756 | -2.34% |
+| `cp_lib_unionfind` | 129,108,386 | 128,615,866 | -0.38% |
+| 残り 48 ケース | | | 0.00% |
+
+動いたのは 3 ケースで、どれも速くなる側である。
 
 `bounds_check_indexable` は 2 次元配列への `iget`/`iset` の二重ループで、要素ごとの間接呼び出しが
 無くなった結果 LLVM が内側のループを行の複写に畳んでいる。`assert_eq` は通ったままである。
 
-### `cp_lib_conv_zp` の退行
-
-`convolve_zp` に渡る 2 つの配列が **deeply local と証明できなくなる**。base では
-
-```
-retain app#768 @deeplocal
-let app#779 = CPLib.Convolution::convolve_zp#0#funptr2#l12(app#768, app#774)
-```
-
-で、`app#768` は `fold` の戻り値 (provenance `fresh`) である。後では
-
-```
-let if#652 : ... [fresh | unknown] = match v#634 { .. }
-retain if#652
-let app#679 = CPLib.Convolution::convolve_zp#0#funptr2(if#652, if#674)
-```
-
-となり、`fold` の 1 周目が呼び出し側へ剥がれて `match` の 2 つの腕の join になる。provenance が
-`fresh | unknown` なので局所と言えず、`convolve_zp` も `fft` も locality のクローンを失い、
-FFT の内側で malloc と free が動く。
-
-これは `split_struct_args` 単独で起きる (`collapse_constructions` を切っても残り、
-`split_struct_args` を切ると消える)。直すのは RC state inference の側で、分岐をまたいで
-provenance を join する所である。
-
 ## 付録: 潰れた形
+
+### 相互再帰を残したときに起きること
+
+twin の再帰呼び出しを wrapper に向けたままにすると、`inline` が 2 つを互いへ入れて輪をほどく。
+`cp_lib_conv_zp` では両方が大きくなって呼び出し側へ入らなくなり、`fold` が特殊化されず、
+`convolve_zp` と `fft` が locality のクローンを失って FFT の内側で malloc と free が動いた
+(+17.95%)。引数の provenance が `[fresh | unknown]` になるのはその結果であって、原因ではない。
 
 ### 読み手を失った構築を落とす
 
-畳んだ後に構築が残ると、それが持つ参照が読み手の持つ参照と 2 つ並ぶ。落とすようにしたが、
-`cp_lib_conv_zp` の退行はこれでは動かなかった。落とすこと自体は正しいので入れてある。
+畳んだ後に構築が残ると、それが持つ参照が読み手の持つ参照と 2 つ並ぶ。落とすようにしてある。
 
 ### `advance` を割る
 
