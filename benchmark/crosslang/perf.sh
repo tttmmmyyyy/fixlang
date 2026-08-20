@@ -22,6 +22,7 @@ for name in $(comparable_cases); do
         binary="bin/${name}_${lang}"
         [ -x "$binary" ] || { echo "no $binary -- run build.sh first" >&2; exit 1; }
         out=$(python3 "$COUNTERS" "$binary") || { echo "  $name $lang: unavailable"; continue; }
-        printf "  %-14s %-5s %14s %14s\n" "$name" "$lang" "${out%%,*}" "${out##*,}"
+        IFS=, read -r splits cycles _contention <<<"$out"
+        printf "  %-14s %-5s %14s %14s\n" "$name" "$lang" "$splits" "$cycles"
     done
 done

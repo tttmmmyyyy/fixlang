@@ -1,0 +1,25 @@
+module Main;
+
+// The value `state` holds is decided by two conditions read one after the other, so each branch of
+// the first ends in a match on the second. Each of the four ends builds an `Option`, and the match
+// below takes it apart.
+//
+// Moving each arm of that match to where the `Option` it answers is built cancels all four
+// constructions, which needs the walk over the arms to follow the match a branch ends in.
+step : I64 -> I64;
+step = |n| (
+    let state = if n % 2 == 0 {
+        if n % 3 == 0 { Option::some(n * 10) } else { Option::none() }
+    } else {
+        if n % 5 == 0 { Option::none() } else { Option::some(n + 7) }
+    };
+    match state {
+        some(v) => v * 2,
+        none() => -1
+    }
+);
+
+main : IO ();
+main = (
+    println $ Iterator::range(0, 10).map(step).to_array.to_string
+);

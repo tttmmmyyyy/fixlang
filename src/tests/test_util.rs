@@ -335,6 +335,81 @@ mod tests {
     }
 }
 
+/// Builds `source` at `opt_level` and returns the highest resident memory the compiler held, in
+/// bytes, or `None` where the platform does not report it (the figure is read from `/proc`, so only
+/// Linux answers). Fails the test unless the build finishes within `timeout` and exits successfully.
+///
+/// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
+/// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
+/// generation around it.
+///
+/// # Arguments
+/// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
+///   failure names, e.g. "a nest of 256 matches".
+pub fn build_peak_memory(
+    source: &str,
+    opt_level: &str,
+    timeout: Duration,
+    description: &str,
+) -> Option<u64> {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+    // The compiler's diagnostics go to a file, which is read once the child has exited. A pipe left
+    // unread that long fills its buffer and blocks the build being measured.
+    let log_path = temp_dir.path().join("build.log");
+    let log = File::create(&log_path).expect("Failed to create the build log");
+    let log_for_stderr = log
+        .try_clone()
+        .expect("Failed to clone the build log handle");
+
+    let mut command = fix_build_source_command(temp_dir.path(), source, opt_level);
+    command
+        .arg("-o")
+        .arg(temp_dir.path().join("program"))
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(log_for_stderr));
+    let mut child = command.spawn().expect("Failed to execute fix build");
+
+    // The kernel keeps the high-water mark, so the last reading before the compiler exits is its
+    // peak. Reading often enough that the final stretch is short keeps that reading close to it.
+    let deadline = Instant::now() + timeout;
+    let mut peak = None;
+    let status = loop {
+        peak = peak_resident_bytes(child.id()).or(peak);
+        if let Some(status) = child.try_wait().expect("Failed to poll the child process") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "compiling {} did not finish within {} seconds",
+                description,
+                timeout.as_secs()
+            );
+        }
+        sleep(Duration::from_millis(10));
+    };
+    assert!(
+        status.success(),
+        "compiling {} failed: {}\n{}",
+        description,
+        status,
+        fs::read_to_string(&log_path).expect("Failed to read the build log")
+    );
+    peak
+}
+
+/// The highest resident memory the process `pid` has held, in bytes, read from `/proc/<pid>/status`.
+/// `None` where that file does not exist — the process has exited, or the platform has no `/proc`.
+fn peak_resident_bytes(pid: u32) -> Option<u64> {
+    let status = fs::read_to_string(format!("/proc/{}/status", pid)).ok()?;
+    let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
+    // `VmHWM:	  123456 kB`
+    let kilobytes: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kilobytes * 1024)
+}
+
 /// Waits for `child` to exit and returns its status, killing it and failing the test once `timeout`
 /// has passed. `description` names what was being waited for, and is what the failure reports.
 pub fn wait_within(child: &mut Child, timeout: Duration, description: &str) -> ExitStatus {

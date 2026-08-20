@@ -1,0 +1,6 @@
+module DepC;
+
+import DepB;
+
+c_value : I64;
+c_value = DepB::secret_value + 2;

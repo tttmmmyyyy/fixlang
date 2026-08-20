@@ -1,0 +1,6 @@
+[general]
+name = "simplify-tail-match"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

@@ -10,6 +10,14 @@ of instructions on every case. The measured command now runs with a fixed minima
 the `startup` case records what a program that does nothing costs, so a row says how much of each
 figure was there before any of the work.
 
+**A cycle count no longer waits for an idle machine, and the rows read the new way stay
+comparable with the rows below them.** The count is taken from the windows of runs that the other
+thread of the measurement's core stayed out of, and it is kept for a case whose data does not come
+from main memory often enough for another program to take the cache from it. The same C
+counterpart, byte for byte, read 203,745,780 cycles under 11 cores of other work and 203,299,270
+with the machine to itself, a difference of 0.22%. The `-ram` columns carry the main-memory
+accesses the cache condition reads.
+
 **The split columns are comparable from `b2de6116d89ff9d43449c2a12fe5c29dd1304bb4` down, and not
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
@@ -32,7 +40,8 @@ fork point の `0343f84b` と並べて測った。両方の行がこの下に在
 捕捉を持つクロージャのプログラムでも、トラバーサの `switch` の下がり方は 2 つのコンパイラで同一だった
 (既定に `unreachable` を置いたので、LLVM は既定に来ないと分かる)。
 
-**この 2 行のサイクル列は互いに比較できない。** `0343f84b` の行は contention 0.38 で 51 ケース全部の
+**この 2 行は、サイクルを取る規則が変わる前のハーネスで測っている** (上の前書きが述べる、忙しい機械でも
+サイクルを残す読み方は、この 2 行には掛かっていない)。**したがって 2 行のサイクル列は互いに比較できない。** `0343f84b` の行は contention 0.38 で 51 ケース全部の
 サイクルを持つが、`1334dac7` の行は contention 11.47 で 34 ケース分しか残っていない。命令数とメモリ参照は
 cachegrind のもので機械の負荷に依存しないので、上の判断はそちらだけに載っている。
 

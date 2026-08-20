@@ -1,0 +1,15 @@
+[general]
+name = "undeclared-root-declares-both"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "undeclared-depc"
+path = "../depc"
+
+[[dependencies]]
+name = "undeclared-depb"
+path = "../depb"

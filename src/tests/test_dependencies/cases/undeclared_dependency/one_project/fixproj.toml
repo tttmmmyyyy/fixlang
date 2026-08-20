@@ -1,0 +1,7 @@
+[general]
+name = "undeclared-one-project"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix", "util.fix"]

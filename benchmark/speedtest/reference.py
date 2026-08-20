@@ -6,16 +6,16 @@ the Fix line a reference to be read against -- how far the language is from C on
 program, tracked over time rather than sampled once.
 
 Building and measuring are separate commands so that the harness can get every build out
-of the way before it reads a counter: the cycle count is dropped on a machine that is busy,
-and a compiler running between two measurements is what makes it busy.
+of the way before it reads a counter: a cycle count other work could have moved is dropped,
+and a compiler running between two measurements is that other work.
 
 Run from inside a case directory. Exits 2 when the case carries no counterpart for the
 language asked for.
 
     python3 reference.py build <c|rust>
-    python3 reference.py measure <c|rust> [--repeat N]
+    python3 reference.py measure <c|rust> [--windows N]
 
-`measure` prints `<inst>,<mem>,<splits>,<cycles>,<contention>`. The last three come back
+`measure` prints `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>`. The last three come back
 empty, empty and `0.00` where the hardware counters are out of reach, as they do for the case
 itself.
 """
@@ -56,13 +56,13 @@ def build(language):
         sys.exit(f"building {source} failed:\n{built.stderr.strip()}")
 
 
-def measure(language, repeat):
+def measure(language, windows):
     """The counters for the counterpart of `language`, as one
-    `<inst>,<mem>,<splits>,<cycles>,<contention>` line.
+    `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>` line.
 
     # Arguments
-    * `repeat` - how many times the hardware counters are read; the cycle count reported is
-      the lowest of them.
+    * `windows` - how many windows of runs the hardware counters are read over; the cycle
+      count reported is the lowest of them.
     """
     _source, binary = source_and_binary(language)
     # The counterpart checks its own answer, so a reference that drifted away from the case
@@ -72,12 +72,18 @@ def measure(language, repeat):
     if simulated.returncode != 0:
         sys.exit(f"measuring {binary} failed:\n{simulated.stderr.strip()}")
     cachegrind = simulated.stdout.strip().splitlines()[-1]
-    if len(cachegrind.split(",")) != 2:
+    simulated_counts = cachegrind.split(",")
+    if len(simulated_counts) != 3:
         sys.exit(f"measuring {binary} produced \"{cachegrind}\"")
+    instructions, _memory_accesses, ram_accesses = simulated_counts
     # A machine without the counters leaves these three fields the way the case's own
     # measurement leaves them, so a row is short of the same columns on both lines.
     counted = subprocess.run(
-        ["python3", str(PERF_COUNTERS), "--repeat", str(repeat), f"./{binary}"],
+        ["python3", str(PERF_COUNTERS), "--windows", str(windows),
+         # What the counterpart asks of main memory decides whether its cycle count survives
+         # a busy machine, the same way it does for the case.
+         "--ram-accesses", ram_accesses, "--instructions", instructions,
+         f"./{binary}"],
         capture_output=True, text=True)
     hardware = counted.stdout.strip() if counted.returncode == 0 else ",,0.00"
     return f"{cachegrind},{hardware}"
@@ -85,17 +91,17 @@ def measure(language, repeat):
 
 def main():
     argv = sys.argv[1:]
-    repeat = 1
-    if len(argv) >= 2 and argv[-2] == "--repeat":
-        repeat = int(argv[-1])
+    windows = 1
+    if len(argv) >= 2 and argv[-2] == "--windows":
+        windows = int(argv[-1])
         argv = argv[:-2]
     if len(argv) != 2 or argv[0] not in ("build", "measure") or argv[1] not in BUILD:
         sys.exit("usage: reference.py build <c|rust>\n"
-                 "       reference.py measure <c|rust> [--repeat N]")
+                 "       reference.py measure <c|rust> [--windows N]")
     if argv[0] == "build":
         build(argv[1])
     else:
-        print(measure(argv[1], repeat))
+        print(measure(argv[1], windows))
 
 
 main()

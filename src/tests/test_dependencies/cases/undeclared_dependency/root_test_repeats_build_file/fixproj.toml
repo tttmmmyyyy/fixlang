@@ -1,0 +1,14 @@
+[general]
+name = "undeclared-root-test-repeats-build-file"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["main.fix", "test.fix"]
+
+[[test_dependencies]]
+name = "undeclared-depa"
+path = "../depa"
