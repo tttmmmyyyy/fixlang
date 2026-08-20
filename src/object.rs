@@ -408,7 +408,7 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `state` — what is known about the reference-counting state of the elements.
-    fn release_or_mark_array_range<'c, 'm>(
+    fn traverse_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
         count: IntValue<'c>,
@@ -417,7 +417,7 @@ impl ObjectFieldType {
         state: RcState,
     ) {
         // A fully unboxed element holds no reference, so an array of such elements has no element
-        // to release or mark.
+        // the work reaches.
         if elem_ty.is_fully_unboxed(gc.type_env()) {
             return;
         }
@@ -437,9 +437,9 @@ impl ObjectFieldType {
                 .builder()
                 .build_load(value_ty, ptr, "elem_of_array")
                 .unwrap();
-            // Perform release or mark global or mark threaded.
+            // Perform the work on the element.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
-            gc.build_release_mark(obj, work_type, state);
+            gc.build_traverser_work(obj, work_type, state);
         };
 
         // After loop, do nothing.
@@ -459,7 +459,7 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `begin`, `end` — element indices counted from `buffer`'s first element, a half-open
     ///   range.
-    pub fn release_or_mark_array_slice<'c, 'm>(
+    pub fn traverse_array_slice<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
         begin: IntValue<'c>,
@@ -478,7 +478,7 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(end, begin, "array_slice_count")
             .unwrap();
-        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type, state);
+        Self::traverse_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
     /// Perform `work_type`'s work on every element of an array's buffer.
@@ -487,7 +487,7 @@ impl ObjectFieldType {
     /// * `size` — the array's element count; the elements walked are `[0, size)`.
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
-    pub fn release_or_mark_array_buf<'c, 'm>(
+    pub fn traverse_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
@@ -497,27 +497,13 @@ impl ObjectFieldType {
         state: RcState,
     ) {
         match hole {
-            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
+            None => Self::traverse_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {
                 let value_ty = elem_ty.get_embedded_type(gc);
-                Self::release_or_mark_array_range(
-                    gc,
-                    buffer,
-                    hole,
-                    elem_ty.clone(),
-                    work_type,
-                    state,
-                );
+                Self::traverse_array_range(gc, buffer, hole, elem_ty.clone(), work_type, state);
                 let (tail_buffer, tail_count) =
                     Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
-                Self::release_or_mark_array_range(
-                    gc,
-                    tail_buffer,
-                    tail_count,
-                    elem_ty,
-                    work_type,
-                    state,
-                );
+                Self::traverse_array_range(gc, tail_buffer, tail_count, elem_ty, work_type, state);
             }
         }
     }
@@ -936,7 +922,7 @@ impl ObjectFieldType {
                     gc.build_retain(subobj, amount, state);
                 }
             } else {
-                gc.build_release_mark(subobj, work_type.unwrap(), state);
+                gc.build_traverser_work(subobj, work_type.unwrap(), state);
             }
             gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2338,7 +2324,7 @@ fn build_traverse<'c, 'm>(
     state: RcState, // What is known about the state of the boxed leaves this traverser reaches.
 ) {
     // `Array a` = unbox { SubObject(#ArrayStorage a), size, cap }: the storage's own destructor is
-    // free-only, so the array value drives element release. Release / mark the storage through its
+    // free-only, so the array value drives element release. Work on the storage through its
     // refcount bookkeeping, and when that drops it to zero release its `[0, size)` elements. Doing
     // the element release inside `traverse_refs` (called only at rc 1 -> 0) keeps a shared array's
     // elements alive.
@@ -2347,8 +2333,8 @@ fn build_traverse<'c, 'm>(
         let size = obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let storage = get_array_storage(gc, &obj);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(
+        gc.build_traverser_work_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::traverse_array_buf(
                 gc,
                 size,
                 buffer,
@@ -2361,7 +2347,7 @@ fn build_traverse<'c, 'm>(
         return;
     }
 
-    // `PunchedArray a` = unbox { Array a, I64 idx }: release / mark the inner array's elements
+    // `PunchedArray a` = unbox { Array a, I64 idx }: work on the inner array's elements
     // while skipping the hole at `idx` (the moved-out element), reusing the storage's refcount
     // bookkeeping.
     if obj.ty.is_punched_array() {
@@ -2384,8 +2370,8 @@ fn build_traverse<'c, 'm>(
             .into_int_value();
         let storage = get_array_storage(gc, &inner_array);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(
+        gc.build_traverser_work_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::traverse_array_buf(
                 gc,
                 size,
                 buffer,
@@ -2414,7 +2400,7 @@ fn build_traverse<'c, 'm>(
                     obj.extract_field_as(gc, struct_type, i as u32)
                 };
                 let subobj = Object::new(subval, subty.clone(), gc);
-                gc.build_release_mark(subobj, work, state);
+                gc.build_traverser_work(subobj, work, state);
             }
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}

@@ -2011,7 +2011,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::release_or_mark_array_slice(
+        ObjectFieldType::traverse_array_slice(
             gc,
             buf,
             new_len,
@@ -2082,7 +2082,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // `release_or_mark_array_slice` releases the elements the shrink drops, whatever
+        // `traverse_array_slice` releases the elements the shrink drops, whatever
         // `force_unique` says.
         let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Contents(0, vec![]));
@@ -3206,11 +3206,11 @@ fn release_replaced_array<'c, 'm>(
     // register allocation changed once the cold arm beside it grew (`benchmark/speedtest/history.md`).
     if !(gc.config.threaded && state.dispatches()) {
         let storage = get_array_storage(gc, &array);
-        gc.build_release_mark(storage, work, state);
+        gc.build_traverser_work(storage, work, state);
         return;
     }
     match hole {
-        None => gc.build_release_mark(array, work, state),
+        None => gc.build_traverser_work(array, work, state),
         Some(hole) => {
             // An array with a hole is what a `Std::PunchedArray` holds, and its traverser is the
             // one that skips the slot.
@@ -3223,7 +3223,7 @@ fn release_replaced_array<'c, 'm>(
             );
             let hole_obj = hole_obj.insert_field(gc, 0, hole);
             let punched = build_punched_array(gc, array, &hole_obj);
-            gc.build_release_mark(punched, work, state);
+            gc.build_traverser_work(punched, work, state);
         }
     }
 }
