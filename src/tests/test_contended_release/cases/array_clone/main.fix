@@ -1,25 +1,44 @@
 module Main;
 
-// How many elements the array holds, and how long the thread that lets go of the value waits
-// before doing so, in microseconds. Both come from the command line.
-settings : IO (I64, I64);
+// How many elements the array holds, how long the thread that lets go of the value waits before
+// doing so, in microseconds, and which write the other thread makes. All three come from the
+// command line.
+settings : IO (I64, I64, String);
 settings = (
     let args = *get_args;
-    pure $ (args.@(1).from_string.as_ok, args.@(2).from_string.as_ok)
+    pure $ (args.@(1).from_string.as_ok, args.@(2).from_string.as_ok, args.@(3))
 );
 
 // Writes into the shared array. The storage is shared, so the write copies the elements into a
 // storage of its own and lets go of the shared one. That release is the one the other thread turns
 // into the last: it is the one that has to release the elements the shared storage held.
 //
-// The action that follows lets go of the same kind of storage through the other shape the copy
-// takes: `act` moves the element out of the array before the action runs, and `map` runs the plug
-// once per element the action returns, so the second plug finds the punched array shared and copies
-// it -- with the slot the element was moved out of left out of the copy, and out of the release.
+// `set` copies into a storage of the array's own capacity and `reserve` into one of a larger
+// capacity. The two are separate pieces of generated code, and each lets go of the shared storage
+// itself.
+//
+// The action that follows the write in place lets go of the same kind of storage through the other
+// shape the copy takes: `act` moves the element out of the array before the action runs, and `map`
+// runs the plug once per element the action returns, so the second plug finds the punched array
+// shared and copies it -- with the slot the element was moved out of left out of the copy, and out
+// of the release.
 worker_write : Ptr -> IO ();
 worker_write = |ptr| (
     let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let (element_count, _, write) = *settings;
     let arr = value.@value;
+
+    // The other thread is still holding the value, so this write finds the storage shared and
+    // copies it. Reading that here is what makes a run whose two threads did not overlap report
+    // itself, rather than pass without ever making the copy the release under test belongs to.
+    let (unique, arr) = arr._unsafe_is_storage_unique;
+    if unique { println("missed: the storage was this thread's own by the time the write began") };
+
+    if write == "reserve" {
+        let arr = arr.reserve(element_count * 2);
+        if arr.@(0).@value < 0 { undefined("the elements should survive the copy") };
+        pure()
+    };
     let arr = arr.set(0, Box::make(-1));
     if arr.@(0).@value > 0 { undefined("the element written should be the one read back") };
     let plugged = arr.act(1, |elem| [elem, elem]);
@@ -35,7 +54,7 @@ FFI_EXPORT[worker_write, fix_worker_write];
 worker_drop : Ptr -> IO ();
 worker_drop = |ptr| (
     let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
-    let (_, delay) = *settings;
+    let (_, delay, _) = *settings;
     FFI_CALL_IO[CInt usleep(CInt), delay.c_int];;
     if value.@value.@size < 0 { undefined("the array should have a size") };
     pure()
@@ -63,7 +82,7 @@ is_unique_io = |value| IO::from_runner $ |ios| (ios, value.unsafe_is_unique.@0);
 
 main : IO ();
 main = (
-    let (element_count, _) = *settings;
+    let (element_count, _, _) = *settings;
 
     // One object in every slot, so that its reference count reports how many of the storage's
     // references were released: the storage holds one per slot. A boxed value built from a literal

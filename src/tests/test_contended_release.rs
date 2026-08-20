@@ -27,6 +27,21 @@ const ARRAY_ELEMENT_COUNT: &str = "3000000";
 /// enough that the write finds the storage shared, short enough that the copy is still running.
 const ARRAY_DROP_DELAY: &str = "1000";
 
+/// Which write the array program makes. A copy into a storage of the array's own capacity and a
+/// copy into one of a larger capacity are separate pieces of generated code, and each has to
+/// release the elements the storage it lets go of held.
+const ARRAY_WRITE_IN_PLACE: &str = "set";
+const ARRAY_WRITE_GROW: &str = "reserve";
+
+/// What the array program prints when its two threads did not overlap: the thread that lets go of
+/// the value did so before the write began, so the write found the storage its own and made no
+/// copy. The run says nothing about the release under test, so it is taken again.
+const ARRAY_MISSED_WINDOW: &str = "missed:";
+
+/// How many times a run that missed the window is taken again before the machine is called unable
+/// to produce the overlap.
+const ARRAY_ATTEMPTS: usize = 5;
+
 /// How many values the destructor program builds and destroys. Whether the threads of a round meet
 /// inside the window is decided by the machine, so the program asks many times.
 const DESTRUCTOR_ROUNDS: &str = "5000";
@@ -63,6 +78,12 @@ fn run_case(project_dir: &Path, opt_level: &str, program_args: &[&str]) -> Outpu
 fn assert_shared_value_is_destroyed_completely(case: &str, opt_level: &str, program_args: &[&str]) {
     let (_temp_dir, project_dir) = setup_test_env(case);
     let output = run_case(&project_dir, opt_level, program_args);
+    assert_program_reports_a_complete_destruction(case, opt_level, &output);
+}
+
+/// Fails unless the run of `case` that produced `output` finished and reported that the shared
+/// value was destroyed completely.
+fn assert_program_reports_a_complete_destruction(case: &str, opt_level: &str, output: &Output) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         output.status.success(),
@@ -83,18 +104,32 @@ fn assert_shared_value_is_destroyed_completely(case: &str, opt_level: &str, prog
     );
 }
 
-/// Runs the array case at `opt_level`.
+/// Runs the array case at `opt_level`, with the array written by `write`.
 ///
 /// A write to a shared array copies the elements into a storage of its own and lets go of the
 /// shared storage. A `#ArrayStorage` carries no length, so nothing but the release that drops its
 /// last reference can release the elements it holds -- and the other thread is what makes that
 /// release the last one. The program keeps a reference to the object every slot holds and asks
 /// afterwards whether anything else still holds it.
-fn assert_cloning_a_shared_array_releases_its_elements(opt_level: &str) {
-    assert_shared_value_is_destroyed_completely(
-        "array_clone",
-        opt_level,
-        &[ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY],
+///
+/// The two threads have to overlap for the copy to happen at all, and which of them the machine
+/// runs first is not ours to decide, so a run that reports the overlap was missed is taken again.
+fn assert_cloning_a_shared_array_releases_its_elements(opt_level: &str, write: &str) {
+    let (_temp_dir, project_dir) = setup_test_env("array_clone");
+    let args = [ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY, write];
+    for _ in 0..ARRAY_ATTEMPTS {
+        let output = run_case(&project_dir, opt_level, &args);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        if stdout.contains(ARRAY_MISSED_WINDOW) {
+            continue;
+        }
+        assert_program_reports_a_complete_destruction("array_clone", opt_level, &output);
+        return;
+    }
+    panic!(
+        "the two threads of the `array_clone` program never overlapped in {} runs at -O {}, so the \
+         release under test was never reached.",
+        ARRAY_ATTEMPTS, opt_level,
     );
 }
 
@@ -113,14 +148,64 @@ fn assert_a_destructor_runs_for_every_value(opt_level: &str) {
 
 #[test]
 fn test_cloning_a_shared_array_releases_its_elements_unoptimized() {
-    assert_cloning_a_shared_array_releases_its_elements("none");
+    assert_cloning_a_shared_array_releases_its_elements("none", ARRAY_WRITE_IN_PLACE);
 }
 
 /// The same at `-O max`, where the optimizations that drop a uniqueness check or a reference count
 /// run, so a release the compiler reshapes there is checked as well as the one it emits plainly.
 #[test]
 fn test_cloning_a_shared_array_releases_its_elements_optimized() {
-    assert_cloning_a_shared_array_releases_its_elements("max");
+    assert_cloning_a_shared_array_releases_its_elements("max", ARRAY_WRITE_IN_PLACE);
+}
+
+/// The same for a write that grows the array: the copy goes into a storage of a larger capacity,
+/// which is generated separately from the copy a write in place makes and lets go of the shared
+/// storage on its own.
+#[test]
+fn test_growing_a_shared_array_releases_its_elements_unoptimized() {
+    assert_cloning_a_shared_array_releases_its_elements("none", ARRAY_WRITE_GROW);
+}
+
+#[test]
+fn test_growing_a_shared_array_releases_its_elements_optimized() {
+    assert_cloning_a_shared_array_releases_its_elements("max", ARRAY_WRITE_GROW);
+}
+
+/// Runs the punched-array case at `opt_level`.
+///
+/// A plug into a shared punched array copies the elements into a storage of its own, leaving out
+/// the slot whose element was moved out of the array, and lets go of the shared storage. The other
+/// thread is what makes that release the last one, and what it releases is every element outside
+/// the hole: the element in the hole belongs to what the punch handed back. Overlapping the two
+/// threads is the machine's to decide, so a run that reports the overlap was missed is taken again.
+fn assert_plugging_a_shared_punched_array_releases_its_elements(opt_level: &str) {
+    let (_temp_dir, project_dir) = setup_test_env("punched_clone");
+    let args = [ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY];
+    for _ in 0..ARRAY_ATTEMPTS {
+        let output = run_case(&project_dir, opt_level, &args);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        if stdout.contains(ARRAY_MISSED_WINDOW) {
+            continue;
+        }
+        assert_program_reports_a_complete_destruction("punched_clone", opt_level, &output);
+        return;
+    }
+    panic!(
+        "the two threads of the `punched_clone` program never overlapped in {} runs at -O {}, so \
+         the release under test was never reached.",
+        ARRAY_ATTEMPTS, opt_level,
+    );
+}
+
+#[test]
+fn test_plugging_a_shared_punched_array_releases_its_elements_unoptimized() {
+    assert_plugging_a_shared_punched_array_releases_its_elements("none");
+}
+
+/// The same at `-O max`, for the reason the array case is run there.
+#[test]
+fn test_plugging_a_shared_punched_array_releases_its_elements_optimized() {
+    assert_plugging_a_shared_punched_array_releases_its_elements("max");
 }
 
 #[test]
