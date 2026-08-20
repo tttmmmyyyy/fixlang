@@ -722,12 +722,7 @@ fn realize_all(
             .func_copy
             .subst
             .iter()
-            .map(|(_, tree)| {
-                (
-                    tree.receiving_copy().name(),
-                    lifted.borrow_mut().capture_struct_of(tree),
-                )
-            })
+            .map(|(_, tree)| (tree.receiving_copy().name(), lifted.borrow_mut().capture_struct_of(tree)))
             .collect::<Vec<_>>();
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
@@ -806,11 +801,6 @@ fn inline_specialized_lambdas(
         // program before this pass runs: without it, code generation gives the lambda left behind a
         // capture object of its own on the heap, and a loop that builds one allocates on every round.
         inline_local::run_on_symbol(sym, &arity_map);
-        // The copy now holds the loop it drives, and the caller that reaches the loop through it
-        // gains nothing by keeping the boundary: the body grew past what the back end inlines on its
-        // own, and leaving the call there costs the loop its enclosing function's registers.
-        // `Maze::BFS` runs 30% fewer instructions with the request than without it.
-        sym.inline_into_callers = true;
     }
 }
 
@@ -953,11 +943,7 @@ impl ExprVisitor for SpecializedLambdaInliner {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
