@@ -1,5 +1,5 @@
 use super::{
-    closure_specialization, collapse_struct_destructuring, dead_symbol_elimination,
+    closure_specialization, collapse_constructions, dead_symbol_elimination,
     defunctionalize_fix, inline, inline_local,
     optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
     unwrap_newtype,
@@ -110,15 +110,15 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         inline::run,
     );
 
-    // Where inlining brought a destructuring next to the construction that made the struct, bind
-    // the fields outright. That is what turns the two lines a split leaves behind into the fields
-    // handed over one by one.
+    // Read every construction the code taking it apart can see. That is what turns the two lines a
+    // split leaves behind into the fields handed over one by one, and what carries the function an
+    // iterator holds through the `Option` its `advance` builds.
     run_pass(
         prg,
         config,
         config.enable_split_struct_args(),
-        "collapse_struct_destructuring",
-        collapse_struct_destructuring::run,
+        "collapse_constructions",
+        collapse_constructions::run,
     );
 
     run_pass(

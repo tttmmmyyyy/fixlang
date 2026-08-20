@@ -1,7 +1,7 @@
 mod application_inlining;
 mod capture_struct;
 mod closure_specialization;
-mod collapse_struct_destructuring;
+mod collapse_constructions;
 mod dead_symbol_elimination;
 mod defunctionalize_fix;
 #[allow(dead_code)]

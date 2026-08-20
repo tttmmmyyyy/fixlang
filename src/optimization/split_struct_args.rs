@@ -22,6 +22,7 @@
 //! the two cancel, leaving the fields handed over one by one.
 
 use super::capture_struct::fresh_global_name;
+use super::unique_local_names;
 use crate::{
     ast::{
         expr::{
@@ -110,8 +111,16 @@ fn split_one_argument(
     let doms = sym.ty.collect_app_src(params.len()).0;
     let codom = sym.ty.collect_app_src(params.len()).1;
 
+    let mut returned = Set::default();
+    codom.collect_tycons(&mut returned);
+
     let (arg, taken_apart) = params.iter().enumerate().find_map(|(arg, param)| {
         let tycon = splittable_struct(&doms[arg], type_env)?;
+        // A function handing back a value of the kind it was given has that value put together
+        // again by its caller, so taking it apart here only moves the work to the call site.
+        if returned.contains(tycon.as_ref()) {
+            return None;
+        }
         let declared = declared_field_names(&tycon, type_env);
         let taken_apart = destructuring_of(&body, &param.name, &tycon, &declared)?;
         (params.len() + declared.len() - 1 <= MAX_ARGS).then_some((arg, taken_apart))
@@ -132,15 +141,23 @@ fn split_one_argument(
     twin_params.splice(arg..arg + 1, field_params.clone());
     twin_doms.splice(arg..arg + 1, field_tys.iter().cloned());
 
+    // A field carries the name the pattern gave it, and a struct nested in a struct is taken apart
+    // by a pattern naming its fields the same way, so two rounds of splitting hand a function two
+    // parameters of one name unless every local is given a name of its own.
+    let twin_expr = unique_local_names::run_on_expr(
+        &lambda_over(
+            &twin_params,
+            &twin_doms,
+            twin_body(&taken_apart, &params[arg], &doms[arg], &field_tys),
+        ),
+        Set::default(),
+    );
+
     let twin = Symbol {
         name: twin_name.clone(),
         generic_name: sym.generic_name.clone(),
         ty: fun_ty(&twin_doms, codom.clone()),
-        expr: Some(lambda_over(
-            &twin_params,
-            &twin_doms,
-            twin_body(&taken_apart, &params[arg], &doms[arg], &field_tys),
-        )),
+        expr: Some(twin_expr),
         inline_into_callers: false,
     };
 
@@ -148,18 +165,21 @@ fn split_one_argument(
         name: sym.name.clone(),
         generic_name: sym.generic_name.clone(),
         ty: sym.ty.clone(),
-        expr: Some(lambda_over(
-            &params,
-            &doms,
-            wrapper_body(
-                &taken_apart,
+        expr: Some(unique_local_names::run_on_expr(
+            &lambda_over(
                 &params,
-                arg,
                 &doms,
-                &field_tys,
-                &twin_name,
-                &twin.ty,
+                wrapper_body(
+                    &taken_apart,
+                    &params,
+                    arg,
+                    &doms,
+                    &field_tys,
+                    &twin_name,
+                    &twin.ty,
+                ),
             ),
+            Set::default(),
         )),
         inline_into_callers: sym.inline_into_callers,
     };

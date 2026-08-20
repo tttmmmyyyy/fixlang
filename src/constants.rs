@@ -125,6 +125,10 @@ pub const CAP_NAME: &str = "#CAP";
 pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
 /// The suffix, followed by a counter, of the global function taking one argument per field of a
 /// struct argument of the function it is named after.
+/// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
+/// struct is given a name rather than the expression that produced the value.
+pub const BOUND_FIELD_PREFIX: &str = "#field";
+
 pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
 pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
