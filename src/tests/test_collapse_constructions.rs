@@ -98,15 +98,35 @@ mod integration_tests {
     fn most_capture_lists_taken_by_one_function(dump: &str) -> usize {
         dump.lines()
             .filter_map(|line| line.strip_prefix("fn "))
-            .map(|header| {
-                header
-                    .split_once(')')
-                    .map_or(header, |(params, _)| params)
-                    .matches(CAP_LIST_PREFIX)
-                    .count()
-            })
+            .map(|header| parameter_list(header).matches(CAP_LIST_PREFIX).count())
             .max()
             .unwrap_or(0)
+    }
+
+    /// The parameter list of a dumped function header, taken from the parenthesis that opens it to
+    /// the one that closes it.
+    ///
+    /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
+    /// list runs to the parenthesis that brings the nesting back to where it started, and stopping
+    /// at the first one would cut the list short at the first function-typed parameter.
+    fn parameter_list(header: &str) -> &str {
+        let Some(open) = header.find('(') else {
+            return "";
+        };
+        let mut depth = 0;
+        for (offset, character) in header[open..].char_indices() {
+            match character {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return &header[open + 1..open + offset];
+                    }
+                }
+                _ => {}
+            }
+        }
+        ""
     }
 
     /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
