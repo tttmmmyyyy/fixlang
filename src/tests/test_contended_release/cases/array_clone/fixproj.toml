@@ -1,0 +1,11 @@
+[general]
+name = "array-clone"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+objects = ["driver.o"]
+threaded = true
+dynamic_links = ["pthread"]
+preliminary_commands = [["make", "driver.o"]]

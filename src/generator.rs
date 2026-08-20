@@ -1959,45 +1959,43 @@ impl<'c, 'm> Generator<'c, 'm> {
         state: RcState,
         traverse_refs: impl FnOnce(&mut Self),
     ) {
-        // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
-        if work == TraverserWorkType::release() && obj.is_destructor_object() {
-            // Branch by whether or not the reference counter is one.
-            let obj_ptr = obj.value(self).into_pointer_value();
-            // Whether the object is uniquely owned is read from its refcount state, whatever the
-            // caller knows of it.
-            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr, RcState::Unknown);
-
-            // If reference counter is one, call destructor.
-            self.builder().position_at_end(unique_bb);
-            let value = ObjectFieldType::move_out_struct_field(
-                self,
-                obj,
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-            );
-            let dtor =
-                ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
-            let one = self.context.i64_type().const_int(1, false);
-            self.build_retain(dtor.clone(), one, RcState::Unknown);
-            let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
-            let res = run_io_or_ios_runner(self, &io_act);
-            ObjectFieldType::move_into_struct_field(
-                self,
-                obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-                &res,
-            );
-            self.builder()
-                .build_unconditional_branch(shared_bb)
-                .unwrap();
-
-            self.builder().position_at_end(shared_bb);
-        }
-
-        if work == TraverserWorkType::release() {
-            self.build_release_boxed_with(obj, state, traverse_refs);
-        } else {
+        if work != TraverserWorkType::release() {
             self.build_mark_boxed_with(obj, work, traverse_refs);
+            return;
         }
+        // A `Std::Destructor` runs its destructor function on the way out, before the references it
+        // holds are released. The count reaching zero is what picks the thread that runs it, so it
+        // runs exactly once however many threads release the object at the same moment.
+        if obj.is_destructor_object() {
+            let destructor = obj.clone();
+            self.build_release_boxed_with(obj, state, move |gc| {
+                gc.build_run_destructor(&destructor);
+                traverse_refs(gc);
+            });
+            return;
+        }
+        self.build_release_boxed_with(obj, state, traverse_refs);
+    }
+
+    /// Run a `Std::Destructor` object's destructor function on the resource it holds, leaving what
+    /// the run returns in the value field for the release that follows.
+    fn build_run_destructor(&mut self, obj: &Object<'c>) {
+        let value =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
+        let dtor =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
+        // The application consumes a reference to the destructor function, and the field keeps the
+        // one that the release of the object's own references drops.
+        let one = self.context.i64_type().const_int(1, false);
+        self.build_retain(dtor.clone(), one, RcState::Unknown);
+        let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
+        let res = run_io_or_ios_runner(self, &io_act);
+        ObjectFieldType::move_into_struct_field(
+            self,
+            obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
+            DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+            &res,
+        );
     }
 
     /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.

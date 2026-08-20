@@ -1,0 +1,75 @@
+module Main;
+
+// How many elements the array holds, and how long the thread that lets go of the value waits
+// before doing so, in microseconds. Both come from the command line.
+settings : IO (I64, I64);
+settings = (
+    let args = *get_args;
+    pure $ (args.@(1).from_string.as_ok, args.@(2).from_string.as_ok)
+);
+
+// Writes into the shared array. The storage is shared, so the write copies the elements into a
+// storage of its own and lets go of the shared one. That release is the one the other thread turns
+// into the last: it is the one that has to release the elements the shared storage held.
+worker_write : Ptr -> IO ();
+worker_write = |ptr| (
+    let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let arr = value.@value;
+    let arr = arr.set(0, Box::make(-1));
+    if arr.@(0).@value > 0 { undefined("the element written should be the one read back") };
+    pure()
+);
+FFI_EXPORT[worker_write, fix_worker_write];
+
+// Lets go of the value while the other thread is copying the elements out of the storage. The wait
+// is what puts this release inside that copy: too early and the other thread finds the storage
+// unique and writes in place, too late and this release is the last one instead.
+worker_drop : Ptr -> IO ();
+worker_drop = |ptr| (
+    let value : Box (Array (Box I64)) = *FFI::boxed_from_retained_ptr(ptr);
+    let (_, delay) = *settings;
+    FFI_CALL_IO[CInt usleep(CInt), delay.c_int];;
+    if value.@value.@size < 0 { undefined("the array should have a size") };
+    pure()
+);
+FFI_EXPORT[worker_drop, fix_worker_drop];
+
+run_workers : Ptr -> IO ();
+run_workers = |ptr| FFI_CALL_IO[() run_workers(Ptr), ptr];
+
+// Takes `count` references to `value` and returns the pointer they all name, one for each thread to
+// drop.
+retain_many : I64 -> Box (Array (Box I64)) -> IO Ptr;
+retain_many = |count, value| (
+    loop_m((0, nullptr), |(i, ptr)|
+        if i == count { break_m $ ptr };
+        let ptr = *value.FFI::boxed_to_retained_ptr;
+        continue_m $ (i + 1, ptr)
+    )
+);
+
+// Whether nobody but the caller holds `value`, asked in the `IO` context so that the answer is read
+// once the threads have finished rather than wherever the question could be moved to.
+is_unique_io : Box I64 -> IO Bool;
+is_unique_io = |value| IO::from_runner $ |ios| (ios, value.unsafe_is_unique.@0);
+
+main : IO ();
+main = (
+    let (element_count, _) = *settings;
+
+    // One object in every slot, so that its reference count reports how many of the storage's
+    // references were released: the storage holds one per slot. A boxed value built from a literal
+    // is a global, and a global carries no count at all, so the element is built from the program's
+    // own arguments.
+    let args = *get_args;
+    let element = Box::make(args.@(0).@size);
+    let value = Box::make(Array::fill(element_count, element)).mark_threaded;
+
+    // Nothing here holds the value any more: the two threads hold every reference to it, so the
+    // last release of the storage comes from one of them.
+    let ptr = *value.retain_many(2);
+    run_workers(ptr);;
+
+    let unique = *element.is_unique_io;
+    println(if unique { "ok" } else { "the storage was freed without releasing the elements it held" })
+);

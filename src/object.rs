@@ -463,6 +463,11 @@ impl ObjectFieldType {
         hole: Option<IntValue<'c>>,
         state: RcState,
     ) {
+        // A fully unboxed element holds no reference, so an array of such elements has no element
+        // to release or mark.
+        if elem_ty.is_fully_unboxed(gc.type_env()) {
+            return;
+        }
         match hole {
             None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {

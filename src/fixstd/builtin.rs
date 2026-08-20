@@ -2533,13 +2533,17 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
             len,
             src_buf,
             dst_buf,
-            elem_ty,
+            elem_ty.clone(),
             None,
             assumed_state(self.assume_local),
         );
-        gc.build_release_mark(
-            storage.clone(),
-            TraverserWorkType::release(),
+        release_array_storage(
+            gc,
+            &storage,
+            len,
+            src_buf,
+            elem_ty,
+            None,
             assumed_state(self.assume_local),
         );
         let new_storage_val = new_storage.value(gc);
@@ -3180,6 +3184,36 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Drop the reference that the array value being cloned holds on `storage`, whose elements live in
+/// `buffer`.
+///
+/// In the ordinary case another holder keeps the storage alive and the elements stay theirs. Where
+/// this release is the last one, the elements the storage owns -- `[0, size)`, less the one `hole`
+/// names -- are released with it. A `#ArrayStorage` carries no length, so its own traverser reaches
+/// no element and the release that drops the last reference is the one that has to.
+fn release_array_storage<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    storage: &Object<'c>,
+    size: IntValue<'c>,
+    buffer: PointerValue<'c>,
+    elem_ty: Arc<TypeNode>,
+    hole: Option<IntValue<'c>>,
+    state: RcState,
+) {
+    let work = TraverserWorkType::release();
+    gc.build_release_mark_nonnull_boxed_with(storage, work, state, move |gc| {
+        ObjectFieldType::release_or_mark_array_buf(
+            gc,
+            size,
+            buffer,
+            elem_ty,
+            work,
+            hole,
+            RcState::Unknown,
+        );
+    });
+}
+
 /// Force an array object to be unique: a unique array is returned as it is, and a shared one is
 /// cloned.
 ///
@@ -3211,8 +3245,8 @@ fn make_array_unique_with_hole<'c, 'm>(
     let new_storage = alloc_array_storage(gc, elem_ty.clone(), cap, CapacityCheck::Skip);
     let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
-    ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole, state);
-    gc.build_release_mark(storage.clone(), TraverserWorkType::release(), state);
+    ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty.clone(), hole, state);
+    release_array_storage(gc, &storage, size, src_buf, elem_ty, hole, state);
     let new_storage_val = new_storage.value(gc);
     let cloned_array = array
         .clone()
