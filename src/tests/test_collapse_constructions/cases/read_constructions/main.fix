@@ -1,0 +1,36 @@
+module Main;
+
+type Pair = unbox struct { left : I64, right : I64 };
+type Choice = unbox union { one : I64, two : Pair };
+
+// A struct whose fields hold expressions, taken apart where it was built.
+sum_pair : I64 -> I64;
+sum_pair = |n| (
+    let p = Pair { left : n * 2, right : n + 5 };
+    let Pair { left : l, right : r } = p;
+    l + r
+);
+
+// Each branch builds a different variant, so the `match` reading the result meets a construction
+// in each of them.
+choose : I64 -> I64;
+choose = |n| (
+    let c = if n > 0 { Choice::two(Pair { left : n, right : n * 3 }) } else { Choice::one(n) };
+    match c {
+        one(x) => x,
+        two(p) => p.@left + p.@right,
+    }
+);
+
+// Both branches build one variant, so reading the result there would put the arm in the program
+// twice, and the `match` stays where it is.
+magnitude : I64 -> I64;
+magnitude = |n| (
+    let c = if n > 0 { Choice::one(n) } else { Choice::one(0 - n) };
+    match c {
+        one(x) => x,
+        two(p) => p.@left,
+    }
+);
+
+main : IO () = println((sum_pair(4) + choose(3) + choose(0 - 2) + magnitude(0 - 7)).to_string);

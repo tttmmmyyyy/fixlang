@@ -10,12 +10,14 @@ g = [1, 2, 3];
 gtup : (Array I64, Array I64);
 gtup = ([4, 5], [6, 7]);
 
-// One parameter with two boxed leaves. A caller can make one leaf local and leave the other on the
-// global, so the two leaves of one argument carry different keys.
+// One parameter with two boxed leaves, read field by field so that the pair reaches the body as one
+// value. A caller can make one leaf local and leave the other on the global, so the two leaves of
+// one argument carry different keys.
 walk_tup : I64 -> (Array I64, Array I64) -> I64;
 walk_tup = |n, t| (
     if n <= 0 { 0 };
-    let (p, q) = t;
+    let p = t.@0;
+    let q = t.@1;
     p.@(0) + q.@(0) + walk_tup(n - 1, (p, q))
 );
 

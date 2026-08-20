@@ -1,0 +1,10 @@
+module Main;
+
+// Two `map`s over an array put one iterator in a field of another, both of the same type
+// constructor, and each carries the function it was given in a field of its own. Reading each
+// construction where the fold takes it apart is what turns those two functions into arguments,
+// which is what lets the fold be copied for them and call them by name.
+main : IO () = (
+    let arr = Array::from_map(10, |i| i);
+    println(arr.to_iter.map(|x| x * 3).map(|x| x + 1).fold(0, |x, acc| acc + x).to_string)
+);

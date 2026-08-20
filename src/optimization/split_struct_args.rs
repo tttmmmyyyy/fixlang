@@ -348,7 +348,10 @@ impl ExprVisitor for DestructuringRemover<'_> {
         }
         self.found = Some((
             pat.clone(),
-            field_to_pat.iter().map(|(name, _, _)| name.clone()).collect(),
+            field_to_pat
+                .iter()
+                .map(|(name, _, _)| name.clone())
+                .collect(),
             field_to_pat
                 .iter()
                 .map(|(_, _, pat)| pat.get_var().name.clone())
@@ -428,7 +431,11 @@ impl ExprVisitor for DestructuringRemover<'_> {
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
     fn start_visit_make_struct(

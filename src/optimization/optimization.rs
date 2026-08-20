@@ -1,8 +1,7 @@
 use super::{
-    closure_specialization, collapse_constructions, dead_symbol_elimination,
-    defunctionalize_fix, inline, inline_local,
-    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
-    unwrap_newtype,
+    closure_specialization, collapse_constructions, dead_symbol_elimination, defunctionalize_fix,
+    inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval,
+    split_struct_args, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -116,7 +115,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_split_struct_args(),
+        config.enable_collapse_constructions(),
         "collapse_constructions",
         collapse_constructions::run,
     );

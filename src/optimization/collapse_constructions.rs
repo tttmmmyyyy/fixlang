@@ -26,11 +26,11 @@ use crate::{
         pattern::{Pattern, PatternNode},
         program::{Program, TypeEnv},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        types::TyCon,
+        types::{TyCon, TypeNode},
     },
+    constants::BOUND_FIELD_PREFIX,
     fixstd::builtin::InlineLLVMMakeUnionBody,
     misc::{Map, Set},
-    constants::BOUND_FIELD_PREFIX,
     optimization::{pull_let, unique_local_names},
 };
 use std::sync::Arc;
@@ -85,6 +85,21 @@ struct Collapser<'a> {
 }
 
 impl<'a> Collapser<'a> {
+    /// Whether a value of `ty` is laid out where it stands rather than behind a reference.
+    ///
+    /// A boxed value is an object of its own, and the reader this pass takes away is what its
+    /// construction is there for, so reading it here would leave an allocation nobody looks at.
+    fn is_unboxed(&self, ty: &Arc<TypeNode>) -> bool {
+        ty.toplevel_tycon()
+            .and_then(|tycon| {
+                self.type_env
+                    .tycons()
+                    .get(tycon.as_ref())
+                    .map(|ti| ti.is_unbox)
+            })
+            .unwrap_or(false)
+    }
+
     /// A name for a field value, which nothing else in the global carries.
     fn fresh_field_name(&mut self) -> FullName {
         let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
@@ -94,6 +109,9 @@ impl<'a> Collapser<'a> {
 
     /// What `expr` was built as: what it builds itself, or what the name it is holds.
     fn known_of(&self, expr: &Arc<ExprNode>) -> Option<Known> {
+        if !self.is_unboxed(expr.type_.as_ref().unwrap()) {
+            return None;
+        }
         if expr.is_var() {
             return self.known.get(&expr.get_var().name).cloned();
         }
@@ -279,10 +297,14 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let mut built = Vec::with_capacity(inner_bodies.len());
+        let mut payloads = Vec::with_capacity(inner_bodies.len());
         let mut selected = Vec::with_capacity(inner_bodies.len());
         for body in &inner_bodies {
-            let Some((variant, payload)) = union_built_by(&tail(body)) else {
+            let built = tail(body);
+            if !self.is_unboxed(built.type_.as_ref().unwrap()) {
+                return StartVisitResult::VisitChildren;
+            }
+            let Some((variant, payload)) = union_built_by(&built) else {
                 return StartVisitResult::VisitChildren;
             };
             let Some(arm) = self.arm_for_variant(&arms, variant) else {
@@ -291,13 +313,13 @@ impl<'a> ExprVisitor for Collapser<'a> {
             if selected.contains(&arm) {
                 return StartVisitResult::VisitChildren;
             }
-            built.push(payload);
+            payloads.push(payload);
             selected.push(arm);
         }
 
         let moved = inner_bodies
             .iter()
-            .zip(built.iter().zip(selected.iter()))
+            .zip(payloads.iter().zip(selected.iter()))
             .map(|(body, (payload, &arm))| {
                 let (pat, arm_body) = &arms[arm];
                 set_tail(body, Self::bound_arm(pat, &tail(body), payload, arm_body))
@@ -312,7 +334,9 @@ impl<'a> ExprVisitor for Collapser<'a> {
         _state: &mut VisitState,
     ) -> StartVisitResult {
         let fields = expr.get_make_struct_fields();
-        if fields.iter().all(|(_, _, e)| e.is_var()) {
+        if fields.iter().all(|(_, _, e)| e.is_var())
+            || !self.is_unboxed(expr.type_.as_ref().unwrap())
+        {
             return StartVisitResult::VisitChildren;
         }
 
@@ -409,7 +433,11 @@ impl<'a> ExprVisitor for Collapser<'a> {
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
     fn start_visit_array_lit(

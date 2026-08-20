@@ -1,12 +1,11 @@
 //! Tests for the RC IR term simplifier: what it removes, read from the `--emit-rc-ir` dump, and what
 //! the simplified program computes.
 
-/// Case projects built with `--emit-rc-ir`, read for what the simplifier removed and run for what
-/// they print. A read loop over `range(0, size).fold` lowers to a specialized fold driver whose
-/// loop-carried state is the `Option` that `range`'s `advance` builds and `fold` immediately
-/// matches. The simplifier cancels that union (case-of-case + case-of-known-constructor), so the
-/// driver keeps only the plain `RangeIterator` two-scalar state and no union construction — the
-/// property these tests assert.
+/// Case projects built with `--emit-rc-ir`, read for the unions the emitted program no longer
+/// builds and run for what they print. A loop written as `range(0, size).fold` carries the `Option`
+/// that `range`'s `advance` builds and `fold` immediately matches. Cancelling that union
+/// (case-of-case + case-of-known-constructor) leaves the loop carrying the range's two scalars and
+/// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
@@ -135,18 +134,16 @@ mod integration_tests {
         assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
     }
 
-    /// The `range.fold` driver the simplifier leaves behind builds no union: the `Option` that
-    /// `range`'s `advance` returns and `fold` immediately matches is cancelled, so the loop-carried
-    /// state is the plain `RangeIterator` alone. The built program still sums the range — 0 + 1 + ..
-    /// + 99 — so the removal leaves what the loop computes intact.
+    /// Every fold driver this program runs builds no union: the `Option` that `range`'s `advance`
+    /// returns and `fold` immediately matches is cancelled, so the loop carries the range's two
+    /// scalars alone. The built program still sums the range — 0 + 1 + .. + 99 — so the removal
+    /// leaves what the loop computes intact.
     #[test]
     fn test_range_fold_union_removed() {
-        // The `range.fold` drivers (own and borrow version) — identified by the `RangeIterator` loop
-        // state in their signature.
         assert_union_cancelled(
             "read_fold",
-            &["Iterator::fold", "RangeIterator"],
-            "the `range.fold` driver (an `Iterator::fold` over a `RangeIterator`)",
+            &["Iterator::fold"],
+            "a fold driver",
             &[],
             "4950",
         );

@@ -131,6 +131,10 @@ pub const BOUND_FIELD_PREFIX: &str = "#field";
 
 pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
+/// The prefix of the type constructor naming a capture list that closure specialization builds. A
+/// parameter of this type is a function whose identity the receiving body knows.
+pub const CAP_LIST_PREFIX: &str = "#CapList";
+
 pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
 /// The suffix, followed by a hash of which argument received which decaptured lambda, of a
 /// function specialized on the lambdas passed to it.
