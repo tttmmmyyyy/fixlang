@@ -22,7 +22,7 @@ pub fn run(prg: &mut Program) {
 /// # Arguments
 /// * `global_lambda_to_arity` - how many parameters each global lambda takes, which is what decides
 ///   whether a `let` binding one of them may be eliminated.
-pub fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
     let mut expr = sym.expr.as_ref().unwrap().clone();
     loop {
         let mut changed = false;
