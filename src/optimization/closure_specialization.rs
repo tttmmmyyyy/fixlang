@@ -24,7 +24,10 @@ use crate::{
     },
     graph::Graph,
     misc::{Map, Set},
-    optimization::{pull_let, rename::rename_free_names},
+    optimization::{
+        pull_let,
+        rename::{rename_free_names, substitute_free_name},
+    },
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -649,7 +652,7 @@ fn realize_all(
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
     // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
     // bodies go into the copy once every body has been made.
-    let mut specialized_lambdas: Map<FullName, Vec<(FullName, CaptureStruct)>> = Map::default();
+    let mut specialized_lambdas: Map<FullName, Vec<FullName>> = Map::default();
 
     // Every function stands for the copy of itself that substitutes nothing.
     let mut queue = originals
@@ -722,12 +725,7 @@ fn realize_all(
             .func_copy
             .subst
             .iter()
-            .map(|(_, tree)| {
-                (
-                    tree.receiving_copy().name(),
-                    lifted.borrow_mut().capture_struct_of(tree),
-                )
-            })
+            .map(|(_, tree)| tree.receiving_copy().name())
             .collect::<Vec<_>>();
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
@@ -736,8 +734,8 @@ fn realize_all(
         queue.extend(visitor.required_specializations);
     }
 
-    // The capture lists the copies receive are named here, and the judgement below reads the types
-    // their fields are declared at.
+    // The capture lists the copies receive are declared here, so that the types the copies carry are
+    // in the type environment the rest of the compiler reads.
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
 
@@ -747,12 +745,11 @@ fn realize_all(
 }
 
 /// Whether putting `lambda`'s body where `copy` calls it moves the body rather than copying it:
-/// `copy` is the only symbol naming `lambda`, and it names it as the callee of one saturated call.
+/// `copy` is the only symbol naming `lambda`, and it names it as the callee of one call that
+/// supplies every argument.
 ///
-/// A call is written one argument at a time, so a saturated call of an `n`-argument lambda stands as
-/// `n` nested applications and names the callee once in each — which is why the count of callee uses
-/// is compared against the arity rather than against one. A name used any other way — passed as an
-/// argument, captured — is one the body would have to stay behind for.
+/// A name used any other way — passed as an argument, captured, or called with fewer arguments than
+/// it takes — is one the body would have to stay behind for.
 fn is_moved_by_placing(
     lambda: &FullName,
     copy: &Arc<ExprNode>,
@@ -762,15 +759,24 @@ fn is_moved_by_placing(
     if naming_symbols[lambda] != 1 {
         return false;
     }
-    let usages = find_usage_of_name::run(copy, lambda);
     let arity = match arity_map.get(lambda) {
         Some(arity) => *arity,
         None => return false,
     };
-    usages.len() == arity
-        && usages
-            .iter()
-            .all(|usage| matches!(usage, UsageType::CalledAsFunction))
+    let usages = find_usage_of_name::run(copy, lambda);
+    let calls = usages
+        .iter()
+        .map(|usage| match usage {
+            UsageType::CalledAsFunction(args) => Some(*args),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>();
+    match calls {
+        // A call supplying every argument is met once as the whole call and `arity - 1` times as a
+        // prefix of it, and nothing else names the lambda.
+        Some(calls) => calls.iter().filter(|args| **args == arity).count() == 1,
+        None => false,
+    }
 }
 
 // Put the body of each lambda a copy is specialized on where the copy calls it.
@@ -785,7 +791,7 @@ fn is_moved_by_placing(
 // bodies the copies are specialized on, and the calls those bodies make are left as calls.
 fn inline_specialized_lambdas(
     symbols: &mut Map<FullName, Symbol>,
-    specialized_lambdas: &Map<FullName, Vec<(FullName, CaptureStruct)>>,
+    specialized_lambdas: &Map<FullName, Vec<FullName>>,
 ) {
     // Every body as it stands before any of them is put anywhere. A lambda is a copy like the one
     // receiving it, so reading the bodies as they are rewritten would hand a copy what another copy
@@ -793,7 +799,7 @@ fn inline_specialized_lambdas(
     let bodies = specialized_lambdas
         .iter()
         .flat_map(|(copy, lambdas)| lambdas.iter().map(move |lambda| (copy, lambda)))
-        .map(|(copy, (lambda, _))| {
+        .map(|(copy, lambda)| {
             let sym = symbols.get(lambda).unwrap_or_else(|| {
                 panic!(
                     "{} is specialized on {}, which no copy was made for",
@@ -826,205 +832,26 @@ fn inline_specialized_lambdas(
         let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
         let bodies = lambdas
             .iter()
-            .filter(|(lambda, _)| {
-                is_moved_by_placing(lambda, &copy_expr, &naming_symbols, &arity_map)
-            })
-            .map(|(lambda, _)| (lambda.clone(), bodies[lambda].clone()))
+            .filter(|lambda| is_moved_by_placing(lambda, &copy_expr, &naming_symbols, &arity_map))
+            .map(|lambda| (lambda.clone(), bodies[lambda].clone()))
             .collect::<Map<FullName, Arc<ExprNode>>>();
         if bodies.is_empty() {
             continue;
         }
         let sym = symbols.get_mut(copy).unwrap();
-        let mut inliner = SpecializedLambdaInliner { bodies };
-        let res = inliner.traverse(sym.expr.as_ref().unwrap());
-        if !res.changed {
-            continue;
+        // The lambda is named by the call alone, so putting the body where its name stands leaves the
+        // body applied to the arguments the call supplies.
+        let mut expr = sym.expr.as_ref().unwrap().clone();
+        for (lambda, body) in bodies {
+            expr = substitute_free_name(&expr, &lambda, &body);
         }
-        sym.expr = Some(res.expr);
+        sym.expr = Some(expr);
         // A body arrives with the lambda it was written as still around it, and where the call it
         // replaced supplied fewer arguments than that lambda takes, a lambda expression stands where
         // a name stood. Local inlining removes both, which is the work `inline_local` does over the
         // program before this pass runs: without it, code generation gives the lambda left behind a
         // capture object of its own on the heap, and a loop that builds one allocates on every round.
         inline_local::run_on_symbol(sym, &arity_map);
-    }
-}
-
-// The visitor that replaces the name a copy calls a lambda through with that lambda's body.
-//
-// A body is put in where the traversal ends its visit of the call, so the body itself is not walked
-// and the calls it makes stay as they are.
-struct SpecializedLambdaInliner {
-    // The body of each lambda, by the name the calls of it use.
-    bodies: Map<FullName, Arc<ExprNode>>,
-}
-
-impl ExprVisitor for SpecializedLambdaInliner {
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let (func, args) = expr.destructure_app();
-        if !func.is_var() {
-            return EndVisitResult::unchanged(expr);
-        }
-        let Some(body) = self.bodies.get(&func.get_var().name) else {
-            return EndVisitResult::unchanged(expr);
-        };
-        EndVisitResult::changed(apply(body.clone(), args))
-    }
-
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }
 
@@ -1173,7 +1000,7 @@ fn reaches_a_direct_call(
     find_usage_of_name::run(body, name)
         .into_iter()
         .any(|usage| match usage {
-            UsageType::CalledAsFunction => true,
+            UsageType::CalledAsFunction(_) => true,
             // A call whose callee is an expression rather than a name is one no copy can be made
             // of, so nothing arrives at a way in through it.
             UsageType::FunctionArgument(func, idx) => func
