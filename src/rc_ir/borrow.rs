@@ -586,28 +586,33 @@ impl<'a> RewriteCtx<'a> {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
+            let named_later = used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
                     .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
-                let dies_here =
-                    self.owns_unit(arg, unit) && !self.object_outlives_call(arg, unit, k);
-                callee_borrows && !dies_here
+                callee_borrows
+                    && !(self.owns_unit(arg, unit)
+                        && !named_later
+                        && !self.read_out_of_a_value_used_later(arg, unit, k))
             })
         })
     }
 
-    /// Whether the object `arg@unit` refers to is still there after the call: the argument names it
-    /// afterwards, or so does a value it was read out of. A leaf read out of an aggregate the caller
-    /// goes on to use is a reference this function made for the call, and routing to the borrow
-    /// version removes that reference together with the retain that made it.
-    fn object_outlives_call(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
-        used_later(&arg.name, k)
-            || origin(&self.vars, self.type_env, &arg.name, unit)
-                .candidates()
-                .iter()
-                .any(|(root, _)| used_later(root, k))
+    /// Whether `arg@unit` was read out of a value the caller names after the call. Such a leaf holds
+    /// a reference this function made for the call, and routing to the borrow version removes that
+    /// reference together with the retain that made it.
+    fn read_out_of_a_value_used_later(
+        &self,
+        arg: &RcVar,
+        unit: &FieldPath,
+        k: &RcExprNode,
+    ) -> bool {
+        origin(&self.vars, self.type_env, &arg.name, unit)
+            .candidates()
+            .iter()
+            .any(|(root, _)| used_later(root, k))
     }
 
     /// Whether this version owns the value at any of `arg`'s reference-counting units.
