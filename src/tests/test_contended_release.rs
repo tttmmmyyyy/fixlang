@@ -104,6 +104,33 @@ fn assert_program_reports_a_complete_destruction(case: &str, opt_level: &str, ou
     );
 }
 
+/// Runs `case` at `opt_level` with `program_args` until its two threads overlap, and fails unless
+/// the run they overlapped in reports that the shared value was destroyed completely.
+///
+/// The copy the release under test belongs to is made only where the two threads overlap, and which
+/// of them the machine runs first is not ours to decide, so a run that reports the overlap was
+/// missed is taken again.
+fn assert_an_overlapping_run_destroys_the_value_completely(
+    case: &str,
+    opt_level: &str,
+    program_args: &[&str],
+) {
+    let (_temp_dir, project_dir) = setup_test_env(case);
+    for _ in 0..ARRAY_ATTEMPTS {
+        let output = run_case(&project_dir, opt_level, program_args);
+        if String::from_utf8_lossy(&output.stdout).contains(ARRAY_MISSED_WINDOW) {
+            continue;
+        }
+        assert_program_reports_a_complete_destruction(case, opt_level, &output);
+        return;
+    }
+    panic!(
+        "the two threads of the `{}` program never overlapped in {} runs at -O {}, so the release \
+         under test was never reached.",
+        case, ARRAY_ATTEMPTS, opt_level,
+    );
+}
+
 /// Runs the array case at `opt_level`, with the array written by `write`.
 ///
 /// A write to a shared array copies the elements into a storage of its own and lets go of the
@@ -111,25 +138,11 @@ fn assert_program_reports_a_complete_destruction(case: &str, opt_level: &str, ou
 /// last reference can release the elements it holds -- and the other thread is what makes that
 /// release the last one. The program keeps a reference to the object every slot holds and asks
 /// afterwards whether anything else still holds it.
-///
-/// The two threads have to overlap for the copy to happen at all, and which of them the machine
-/// runs first is not ours to decide, so a run that reports the overlap was missed is taken again.
 fn assert_cloning_a_shared_array_releases_its_elements(opt_level: &str, write: &str) {
-    let (_temp_dir, project_dir) = setup_test_env("array_clone");
-    let args = [ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY, write];
-    for _ in 0..ARRAY_ATTEMPTS {
-        let output = run_case(&project_dir, opt_level, &args);
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if stdout.contains(ARRAY_MISSED_WINDOW) {
-            continue;
-        }
-        assert_program_reports_a_complete_destruction("array_clone", opt_level, &output);
-        return;
-    }
-    panic!(
-        "the two threads of the `array_clone` program never overlapped in {} runs at -O {}, so the \
-         release under test was never reached.",
-        ARRAY_ATTEMPTS, opt_level,
+    assert_an_overlapping_run_destroys_the_value_completely(
+        "array_clone",
+        opt_level,
+        &[ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY, write],
     );
 }
 
@@ -176,24 +189,12 @@ fn test_growing_a_shared_array_releases_its_elements_optimized() {
 /// A plug into a shared punched array copies the elements into a storage of its own, leaving out
 /// the slot whose element was moved out of the array, and lets go of the shared storage. The other
 /// thread is what makes that release the last one, and what it releases is every element outside
-/// the hole: the element in the hole belongs to what the punch handed back. Overlapping the two
-/// threads is the machine's to decide, so a run that reports the overlap was missed is taken again.
+/// the hole: the element in the hole belongs to what the punch handed back.
 fn assert_plugging_a_shared_punched_array_releases_its_elements(opt_level: &str) {
-    let (_temp_dir, project_dir) = setup_test_env("punched_clone");
-    let args = [ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY];
-    for _ in 0..ARRAY_ATTEMPTS {
-        let output = run_case(&project_dir, opt_level, &args);
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if stdout.contains(ARRAY_MISSED_WINDOW) {
-            continue;
-        }
-        assert_program_reports_a_complete_destruction("punched_clone", opt_level, &output);
-        return;
-    }
-    panic!(
-        "the two threads of the `punched_clone` program never overlapped in {} runs at -O {}, so \
-         the release under test was never reached.",
-        ARRAY_ATTEMPTS, opt_level,
+    assert_an_overlapping_run_destroys_the_value_completely(
+        "punched_clone",
+        opt_level,
+        &[ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY],
     );
 }
 

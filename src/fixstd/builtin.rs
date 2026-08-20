@@ -3225,6 +3225,16 @@ fn build_punched_array<'c, 'm>(
 ) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let punched_ty = type_tyapp(make_punched_array_ty(), elem_ty);
+    let fields = &punched_ty.toplevel_tycon_info(gc.type_env()).fields;
+    assert_eq!(
+        [
+            fields[PUNCHED_ARRAY_ARRAY_IDX as usize].name.as_str(),
+            fields[PUNCHED_ARRAY_HOLE_IDX as usize].name.as_str(),
+        ],
+        ["_arr", "_idx"],
+        "`{}` holds its fields in an order the field indices do not name.",
+        punched_ty.to_string(),
+    );
     let punched = create_obj(punched_ty, &vec![], None, gc, Some("alloca@punched_array"));
     let punched =
         ObjectFieldType::move_into_struct_field(gc, punched, PUNCHED_ARRAY_ARRAY_IDX, &array);
