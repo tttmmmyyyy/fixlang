@@ -2013,8 +2013,10 @@ impl ClosureSpecializationVisitor {
 // values a key or a name ran together would hand one copy to both.
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+    use super::{ClosureTree, FuncCopy, Slot};
+    use crate::ast::name::FullName;
+    use crate::constants::{CLOSURE_LAM_SUFFIX, INSTANCIATED_NAME_SEPARATOR};
+    use crate::misc::Set;
 
     /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
     fn lifted(index: u32) -> FullName {
