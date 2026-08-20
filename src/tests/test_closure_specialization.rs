@@ -622,52 +622,54 @@ mod integration_tests {
         }
     }
 
-    /// A captured value that reference counting has to touch reaches the calls the lambda makes
-    /// borrowed, since the copy hands the capture list over borrowed. Taking the body would put those
-    /// calls in the copy, which owns the capture list it hands to the next round and would pay a
-    /// reference-count operation for each of them on every round — so the copy keeps calling the
-    /// lambda whose body hands such a value to a call.
+    /// A loop body that hands a value it captured to a call is placed like any other: the copy is the
+    /// only symbol naming it and calls it once, so the body moves in. The call the body makes then
+    /// stands in a copy that owns the capture list it hands to the next round, and it is routed to the
+    /// callee's borrow version, so the round pays no reference count for handing the array over.
     ///
     /// `borrowed_capture` holds one loop of each kind: the loop in `main` hands the array it captures
-    /// to `scaled_sum`, and the loop inside `scaled_sum` reads the array it captures through the
-    /// index primitive.
+    /// to `scaled_sum`, and the loop inside `scaled_sum` reads the array it captures through the index
+    /// primitive.
     #[test]
-    pub fn test_a_copy_keeps_calling_a_lambda_that_lends_what_it_captured() {
+    pub fn test_a_copy_that_hands_a_captured_value_to_a_call_counts_no_reference() {
         let (_temp_dir, project_dir) = setup_test_env("borrowed_capture");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", BORROWED_CAPTURE_OUTPUT);
 
         let mut lending = 0;
-        let mut reading = 0;
         for (header, body) in loop_copies(&dump) {
-            let calls_a_lambda = !names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]).is_empty();
+            let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+            assert!(
+                called.is_empty(),
+                "the copy `{}` should hold the body of the lambda it is specialized on, and it \
+                 calls {:?} instead",
+                header.split('(').next().unwrap(),
+                called
+            );
             // Each copy receives the capture list of the lambda it is made for, which is named after
             // the function that lambda was written in.
-            if header.contains("CapList@main") {
-                lending += 1;
-                assert!(
-                    calls_a_lambda,
-                    "the copy `{}` is made for a body that hands a captured array to a call, so it \
-                     should keep calling that body:\n{}",
-                    header.split('(').next().unwrap(),
-                    body
-                );
-            } else if header.contains("CapList@scaled_sum") {
-                reading += 1;
-                assert!(
-                    !calls_a_lambda,
-                    "the copy `{}` is made for a body that hands nothing it captured to a call, so \
-                     it should hold that body:\n{}",
-                    header.split('(').next().unwrap(),
-                    body
-                );
+            if !header.contains("CapList@main") {
+                continue;
             }
+            lending += 1;
+            assert!(
+                body.contains("Main::scaled_sum") && body.contains("#borrow("),
+                "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
+                 through its borrow version:\n{}",
+                header.split('(').next().unwrap(),
+                body
+            );
+            assert!(
+                !body.contains("retain"),
+                "the copy `{}` should hand the array over without counting a reference, and it \
+                 retains:\n{}",
+                header.split('(').next().unwrap(),
+                body
+            );
         }
         assert!(
-            lending > 0 && reading > 0,
-            "the case should have a copy of each kind, and has {} lending and {} reading. The dump \
+            lending > 0,
+            "the case should have a copy made for the body that hands an array to a call. The dump \
              names: {:?}",
-            lending,
-            reading,
             functions_named_with(&dump, "Std::loop")
         );
     }
