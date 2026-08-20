@@ -273,6 +273,49 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that routing to a borrow version reads the lifetime of the object an argument refers
+    /// to rather than of the name it arrives under: a leaf read out of an aggregate the caller goes
+    /// on to use is a reference this function made for the call, so routing removes it together with
+    /// the retain that made it. The call whose aggregate is named nowhere afterwards keeps the
+    /// owning version, since the object that leaf refers to ends there either way.
+    #[test]
+    fn test_benefit_routing_by_the_objects_lifetime() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = func_block(&dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        });
+        let tally_calls = main
+            .iter()
+            .filter(|l| l.contains("= Main::tally"))
+            .collect::<Vec<_>>();
+        let borrow_calls = tally_calls
+            .iter()
+            .filter(|l| l.contains("#borrow("))
+            .count();
+        assert_eq!(
+            borrow_calls,
+            1,
+            "the call handed a leaf of an aggregate that outlives it should route to the borrow \
+             version:\n{}",
+            main.join("\n")
+        );
+        assert_eq!(
+            tally_calls.len() - borrow_calls,
+            1,
+            "the call handed a leaf whose object ends there should stay on the own version:\n{}",
+            main.join("\n")
+        );
+        // Handing an owning callee a leaf read out of an aggregate the caller goes on to use costs a
+        // retain. Routing is what removes it, so `main` counts no reference at all.
+        assert!(
+            main.iter().all(|l| !l.trim_start().starts_with("retain ")),
+            "the routed call should leave `main` with no retain to make:\n{}",
+            main.join("\n")
+        );
+    }
+
     /// Verifies that a whole-value retain of an unboxed pair is normalized into one retain per
     /// reference-counting unit, both naming the same variable at its own field path.
     #[test]

@@ -1,0 +1,34 @@
+module Main;
+
+// Two shapes a body would be written twice by: `twice` calls the closure it is given twice, so the
+// copy specialized on that closure names its lambda in two calls; `sum_up` and `sum_down` are given
+// one and the same closure, so two copies name its lambda.
+//
+// All three are recursive, so that they stay functions of their own rather than being expanded into
+// their caller.
+
+twice : (I64 -> I64) -> I64 -> I64;
+twice = |op, n| (
+    if n <= 0 { 0 };
+    op(n) + op(n - 1) + twice(op, n - 2)
+);
+
+sum_up : (I64 -> I64) -> I64 -> I64;
+sum_up = |op, n| (
+    if n <= 0 { 0 };
+    op(n) + sum_up(op, n - 1)
+);
+
+sum_down : (I64 -> I64) -> I64 -> I64;
+sum_down = |op, n| (
+    if n <= 0 { 0 };
+    op(0 - n) + sum_down(op, n - 1)
+);
+
+main : IO ();
+main = (
+    let k = 3;
+    let shared = |x| x * k;
+    let single = |x| x * k - x;
+    println $ (twice(single, 8) + sum_up(shared, 4) + sum_down(shared, 4)).to_string
+);
