@@ -1,0 +1,6 @@
+module DepA;
+
+import DepB;
+
+a_value : I64;
+a_value = DepB::secret_value - 1;

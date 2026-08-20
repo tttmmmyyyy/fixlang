@@ -1,0 +1,6 @@
+module Main;
+
+import DepC;
+
+main : IO ();
+main = println(DepC::c_value.to_string);

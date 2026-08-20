@@ -1,49 +1,75 @@
-// ==================== Integration Tests ====================
-// These tests use actual Fix projects in src/tests/test_dependencies/cases/
-
+/// Tests that run the `fix` command over the Fix projects kept in
+/// `src/tests/test_dependencies/cases`.
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::Output,
+    };
     use tempfile::TempDir;
 
-    // Get the path to the test cases directory
+    /// The directory holding the test-case projects in the repository. A test copies it out and
+    /// runs in the copy, so what it holds stays as it is.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_dependencies/cases");
         path
     }
 
-    // Create a temporary test environment with copied project files
-    fn setup_test_env() -> (TempDir, PathBuf) {
+    /// Copy the test cases into a temporary directory and return it beside the directory of the
+    /// project at `project_path` within it. The whole set is copied every time, so that a project
+    /// reaches the ones it depends on by the relative paths its project file writes.
+    fn setup_case_env(project_path: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_cases_src = get_test_cases_dir();
         let test_cases_dst = temp_dir.path().to_path_buf();
-
-        // Copy all test case directories
-        copy_dir_recursive(&test_cases_src, &test_cases_dst).expect("Failed to copy test cases");
-
-        let main_project_dir = test_cases_dst.join("dependencies_for_test/main_project");
-        (temp_dir, main_project_dir)
+        copy_dir_recursive(&get_test_cases_dir(), &test_cases_dst)
+            .expect("Failed to copy test cases");
+        let project_dir = test_cases_dst.join(project_path);
+        (temp_dir, project_dir)
     }
 
-    // Clean up lock files and build artifacts before running test
+    /// The `fix <subcommand>` run of the project at `project_path`, in a temporary copy of the test
+    /// cases. The temporary directory is returned so that it outlives the output.
+    fn run_case(project_path: &str, subcommand: &str) -> (TempDir, Output) {
+        let (temp_dir, project_dir) = setup_case_env(project_path);
+        cleanup_test_project(&project_dir);
+        let output = fix_command()
+            .arg(subcommand)
+            .current_dir(&project_dir)
+            .output()
+            .unwrap_or_else(|err| panic!("Failed to execute fix {}: {}", subcommand, err));
+        assert!(
+            output.status.success(),
+            "fix {} failed:\nstdout: {}\nstderr: {}",
+            subcommand,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        (temp_dir, output)
+    }
+
+    /// The build of the project at `project_path`, run in a temporary copy of the test cases.
+    fn build_case(project_path: &str) -> (TempDir, Output) {
+        run_case(project_path, "build")
+    }
+
+    /// Removes the lock files and the build artifacts of the project at `project_dir`, so that the
+    /// run that follows starts from a project that has never been built.
     fn cleanup_test_project(project_dir: &PathBuf) {
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_PATH));
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_TEST_PATH));
         let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
+    /// A build writes `fixdeps.lock` alone, and locks the ordinary dependencies alone: the test
+    /// dependencies of the project and the test dependencies of the projects it depends on both
+    /// stay out of the lock file.
     #[test]
     fn test_dependencies_build_mode() {
-        // This test verifies that in build mode:
-        // 1. Only fixdeps.lock is created
-        // 2. fixdeps.test.lock is NOT created
-        // 3. Only normal dependencies are included
-        // 4. Test dependencies of normal dependencies are NOT included
-
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Run `fix build` in the test project directory
@@ -62,21 +88,21 @@ mod integration_tests {
         }
 
         // Verify fixdeps.lock exists
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            lock_file.exists(),
+            lock_file_path.exists(),
             "fixdeps.lock should be created in build mode"
         );
 
         // Verify fixdeps.test.lock does NOT exist
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            !test_lock_file.exists(),
+            !test_lock_file_path.exists(),
             "fixdeps.test.lock should NOT be created in build mode"
         );
 
         // Read and verify lock file contents
-        let lock_content = fs::read_to_string(&lock_file).expect("Failed to read lock file");
+        let lock_content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
 
         // Check that normal-dep is included
         assert!(
@@ -92,15 +118,13 @@ mod integration_tests {
         );
     }
 
+    /// `fix test` writes `fixdeps.test.lock` on its own when the project has none, and the test it
+    /// then runs reaches the test dependencies that lock file names. `test-dep` is locked because
+    /// the main project declares it as a test dependency; the test dependencies of `normal-dep`
+    /// stay out.
     #[test]
     fn test_dependencies_test_mode() {
-        // This test verifies that `fix test` automatically handles test dependencies:
-        // 1. fixdeps.test.lock is created if not present
-        // 2. Test dependencies are properly available during test execution
-        // Note: test-dep appears in fixdeps.test.lock because main-project directly depends on it,
-        // not because normal-dep has it as a test dependency (dependency's test dependencies don't propagate)
-
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Run `fix test` directly (should auto-generate lock file and install dependencies)
@@ -119,22 +143,22 @@ mod integration_tests {
         }
 
         // Verify fixdeps.test.lock was created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            test_lock_file.exists(),
+            test_lock_file_path.exists(),
             "fixdeps.test.lock should be created by `fix test`"
         );
 
         // Verify fixdeps.lock was NOT created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            !lock_file.exists(),
+            !lock_file_path.exists(),
             "fixdeps.lock should NOT be created by `fix test`"
         );
 
         // Read and verify test lock file contents
         let test_lock_content =
-            fs::read_to_string(&test_lock_file).expect("Failed to read test lock file");
+            fs::read_to_string(&test_lock_file_path).expect("Failed to read test lock file");
 
         // Check that both dependencies are included in test lock file
         assert!(
@@ -154,12 +178,12 @@ mod integration_tests {
         );
     }
 
+    /// Spelling the steps of a build out as `fix deps update`, `fix deps install` and `fix build`
+    /// locks the ordinary dependencies alone: `fix deps update` without `--test` writes
+    /// `fixdeps.lock` alone, and `test-dep` stays out of it.
     #[test]
     fn test_dependencies_build_workflow() {
-        // This test verifies the explicit build workflow:
-        // `fix deps update` → `fix deps install` → `fix build`
-
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Step 1: Update dependencies
@@ -177,16 +201,16 @@ mod integration_tests {
         }
 
         // Verify fixdeps.lock was created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            lock_file.exists(),
+            lock_file_path.exists(),
             "fixdeps.lock should be created by `fix deps update`"
         );
 
         // Verify fixdeps.test.lock was NOT created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            !test_lock_file.exists(),
+            !test_lock_file_path.exists(),
             "fixdeps.test.lock should NOT be created by `fix deps update` (without --test)"
         );
 
@@ -225,7 +249,7 @@ mod integration_tests {
         }
 
         // Verify lock file contents
-        let lock_content = fs::read_to_string(&lock_file).expect("Failed to read lock file");
+        let lock_content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
         assert!(
             lock_content.contains("normal-dep"),
             "Lock file should contain normal-dep"
@@ -236,12 +260,12 @@ mod integration_tests {
         );
     }
 
+    /// Spelling the steps of a test run out as `fix deps update --test`, `fix deps install --test`
+    /// and `fix test` locks the ordinary and the test dependencies together: `--test` writes
+    /// `fixdeps.test.lock` alone, and the test the run then executes passes.
     #[test]
     fn test_dependencies_test_workflow() {
-        // This test verifies the explicit test workflow:
-        // `fix deps update --test` → `fix deps install --test` → `fix test`
-
-        let (_temp_dir, project_dir) = setup_test_env();
+        let (_temp_dir, project_dir) = setup_case_env("dependencies_for_test/main_project");
         cleanup_test_project(&project_dir);
 
         // Step 1: Update test dependencies
@@ -259,16 +283,16 @@ mod integration_tests {
         }
 
         // Verify fixdeps.test.lock was created
-        let test_lock_file = project_dir.join(LOCK_FILE_TEST_PATH);
+        let test_lock_file_path = project_dir.join(LOCK_FILE_TEST_PATH);
         assert!(
-            test_lock_file.exists(),
+            test_lock_file_path.exists(),
             "fixdeps.test.lock should be created by `fix deps update --test`"
         );
 
         // Verify fixdeps.lock was NOT created
-        let lock_file = project_dir.join(LOCK_FILE_PATH);
+        let lock_file_path = project_dir.join(LOCK_FILE_PATH);
         assert!(
-            !lock_file.exists(),
+            !lock_file_path.exists(),
             "fixdeps.lock should NOT be created by `fix deps update --test`"
         );
 
@@ -308,7 +332,7 @@ mod integration_tests {
 
         // Verify test lock file contents
         let test_lock_content =
-            fs::read_to_string(&test_lock_file).expect("Failed to read test lock file");
+            fs::read_to_string(&test_lock_file_path).expect("Failed to read test lock file");
         assert!(
             test_lock_content.contains("normal-dep"),
             "Test lock file should contain normal-dep"
@@ -323,6 +347,321 @@ mod integration_tests {
         assert!(
             stdout.contains("PASS"),
             "Test should pass with correct output"
+        );
+    }
+
+    /// A project importing a module of a project it does not declare is warned about, and the
+    /// dependency it does declare is not. `root` declares `undeclared-depa` alone, and imports both
+    /// `DepA` (of that project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    #[test]
+    fn test_import_of_undeclared_transitive_dependency_warns() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import of `DepB` is the one import to warn about, and the import of `DepA` is \
+             declared:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             imports it:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("import DepB;"),
+            "the warning points at the import statement:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "[[dependencies]]\nname = \"undeclared-depb\"\nversion = \"0.1.0\"\npath = \"../depb\""
+            ),
+            "the warning carries the entry to paste, naming the version to require and the path \
+             the depending project reaches it by:\n{}",
+            stderr
+        );
+    }
+
+    /// An absolute path reaches a module without an import statement written for it, and is warned
+    /// about the same way. `root_abs` imports `DepA` and writes `::DepB::secret_value`.
+    #[test]
+    fn test_absolute_path_to_undeclared_transitive_dependency_warns() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_abs");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the absolute path is the one thing to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root-abs\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             writes the path:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("::DepB::secret_value"),
+            "the warning points at the absolute path:\n{}",
+            stderr
+        );
+    }
+
+    /// An import that crosses no project boundary needs no declaration: a module of the importing
+    /// project itself, and `Std`, whose files belong to no project at all.
+    #[test]
+    fn test_import_within_one_project_does_not_warn() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/one_project");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            !stderr.contains("does not declare as a dependency"),
+            "a project's own module and `Std` are declared by nothing and warned about by \
+             nothing:\n{}",
+            stderr
+        );
+    }
+
+    /// The test sources of a test build are judged by the test declarations. `root_test` declares
+    /// `undeclared-depa` as a test dependency alone, and `test.fix` imports both `DepA` (of that
+    /// project) and `DepB` (of `undeclared-depb`, which `undeclared-depa` declares).
+    #[test]
+    fn test_undeclared_dependency_in_test_sources_warns() {
+        let (_temp_dir, output) = run_case("undeclared_dependency/root_test", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import of `DepB` is the one import to warn about, and the test dependency \
+             `undeclared-depa` is declared:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepB` belongs to the project \"undeclared-depb\", which the project \
+                 \"undeclared-root-test\" does not declare as a dependency."
+            ),
+            "the warning names the module, the project that provides it, and the project that \
+             imports it:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("in \"test.fix\""),
+            "the warning points at the import in the test source:\n{}",
+            stderr
+        );
+    }
+
+    /// A test dependency is declared for the test sources alone, so an ordinary source that imports
+    /// one is warned about even in a test build, where the module is there to import.
+    /// `root_build_uses_test_dep` declares `undeclared-depa` as a test dependency, and its
+    /// `main.fix` imports `DepA`.
+    #[test]
+    fn test_ordinary_source_importing_a_test_dependency_warns() {
+        let (_temp_dir, output) =
+            run_case("undeclared_dependency/root_build_uses_test_dep", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import in `main.fix` is the one import to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepA` belongs to the project \"undeclared-depa\", which the project \
+                 \"undeclared-root-build-uses-test-dep\" does not declare as a dependency."
+            ),
+            "the warning names the test dependency the ordinary source reached:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("in \"main.fix\""),
+            "the warning points at the import in the ordinary source:\n{}",
+            stderr
+        );
+    }
+
+    /// A source an ordinary build compiles is judged by the ordinary declarations, whether or not
+    /// the `[build.test]` section lists it again. `root_test_repeats_build_file` declares
+    /// `undeclared-depa` as a test dependency, its `main.fix` imports `DepA`, and its
+    /// `[build.test]` repeats `main.fix` beside `test.fix`.
+    #[test]
+    fn test_ordinary_source_repeated_under_test_still_warns() {
+        let (_temp_dir, output) =
+            run_case("undeclared_dependency/root_test_repeats_build_file", "test");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the import in `main.fix` is the one import to warn about:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains(
+                "Module `DepA` belongs to the project \"undeclared-depa\", which the project \
+                 \"undeclared-root-test-repeats-build-file\" does not declare as a dependency."
+            ),
+            "repeating the file under `[build.test]` leaves it under the ordinary declarations:\n{}",
+            stderr
+        );
+    }
+
+    /// A project is told about the imports its own sources make. An import inside a dependency is
+    /// that dependency's own affair: the project file the report would name belongs to its author,
+    /// and for a dependency the compiler clones, the next `fix deps update` writes over it.
+    /// `root_declares_both` declares `undeclared-depc` and `undeclared-depb`, and
+    /// `undeclared-depc` imports `DepB` while declaring nothing.
+    #[test]
+    fn test_undeclared_import_inside_a_dependency_is_not_reported() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_declares_both");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            !stderr.contains("does not declare as a dependency"),
+            "the build of a project reports the imports of that project's own sources:\n{}",
+            stderr
+        );
+    }
+
+    /// One declaration answers every import between two projects, so the two of them stand for one
+    /// warning, pointing at the import that comes first in the source. `root_two_imports` imports
+    /// `DepB2` and then `DepB`, both of `undeclared-depb`, and declares neither.
+    #[test]
+    fn test_undeclared_dependency_warns_once_at_the_earliest_import() {
+        let (_temp_dir, output) = build_case("undeclared_dependency/root_two_imports");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(
+            stderr.matches("does not declare as a dependency").count(),
+            1,
+            "the two imports of `undeclared-depb` are one project to declare:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("Module `DepB2` belongs to the project \"undeclared-depb\""),
+            "the warning names the module of the import that comes first, which the later import \
+             of `DepB` does not displace:\n{}",
+            stderr
+        );
+    }
+
+    /// Creates a local upstream git repository at `repo_dir` holding a project of `name` at
+    /// `version`, whose module is `module`, and tags the commit with the version.
+    fn create_upstream_repo(repo_dir: &Path, name: &str, version: &str, module: &str) {
+        fs::create_dir_all(repo_dir).expect("Failed to create the upstream directory");
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo_dir)
+                .status()
+                .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
+            assert!(status.success(), "`git {:?}` failed", args);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Test"]);
+        fs::write(
+            repo_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n",
+                name, version
+            ),
+        )
+        .expect("Failed to write the project file of the upstream project");
+        fs::write(
+            repo_dir.join("lib.fix"),
+            format!(
+                "module {};\n\nupstream_value : I64;\nupstream_value = 7;\n",
+                module
+            ),
+        )
+        .expect("Failed to write the source of the upstream project");
+        run(&["add", "fixproj.toml", "lib.fix"]);
+        run(&["commit", "-q", "-m", "init"]);
+        run(&["tag", version]);
+    }
+
+    /// A project published through a git repository is declared by its url, so that is what the
+    /// entry the warning carries has to write. The root project declares a path dependency, which
+    /// declares the git project, and the root imports the git project's module.
+    #[test]
+    fn test_the_entry_for_a_git_project_names_its_repository() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let upstream = temp_dir.path().join("upstream");
+        create_upstream_repo(&upstream, "undeclared-gdepb", "0.1.0", "GDepB");
+
+        let middle = temp_dir.path().join("middle");
+        fs::create_dir_all(&middle).expect("Failed to create the middle project");
+        fs::write(
+            middle.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"undeclared-gdepa\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n\n\
+                 [[dependencies]]\nname = \"undeclared-gdepb\"\nversion = \"0.1.0\"\n\
+                 git = {{ url = \"{}\" }}\n",
+                upstream.to_string_lossy()
+            ),
+        )
+        .expect("Failed to write the project file of the middle project");
+        fs::write(
+            middle.join("lib.fix"),
+            "module GDepA;\n\nimport GDepB;\n\nga : I64;\nga = GDepB::upstream_value + 1;\n",
+        )
+        .expect("Failed to write the source of the middle project");
+
+        let project_dir = temp_dir.path().join("root");
+        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            "[general]\nname = \"undeclared-groot\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"main.fix\"]\n\n\
+             [[dependencies]]\nname = \"undeclared-gdepa\"\npath = \"../middle\"\n",
+        )
+        .expect("Failed to write the project file of the root project");
+        fs::write(
+            project_dir.join("main.fix"),
+            "module Main;\n\nimport GDepA;\nimport GDepB;\n\nmain : IO ();\n\
+             main = println((GDepA::ga + GDepB::upstream_value).to_string);\n",
+        )
+        .expect("Failed to write the source of the root project");
+
+        let output = fix_command()
+            .arg("build")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix build");
+        assert!(
+            output.status.success(),
+            "fix build failed:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            stderr.contains(&format!(
+                "[[dependencies]]\nname = \"undeclared-gdepb\"\nversion = \"0.1.0\"\n\
+                 git = {{ url = \"{}\" }}",
+                upstream.to_string_lossy()
+            )),
+            "the entry names the repository the project is published through:\n{}",
+            stderr
         );
     }
 }
