@@ -2011,7 +2011,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::release_or_mark_array_slice(
+        ObjectFieldType::traverse_array_slice(
             gc,
             buf,
             new_len,
@@ -2082,7 +2082,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // `release_or_mark_array_slice` releases the elements the shrink drops, whatever
+        // `traverse_array_slice` releases the elements the shrink drops, whatever
         // `force_unique` says.
         let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Contents(0, vec![]));
@@ -2539,17 +2539,20 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         );
         release_replaced_array(gc, array.clone(), None, assumed_state(self.assume_local));
         let new_storage_val = new_storage.value(gc);
-        let cloned = array
+        let cloned_array = array
             .clone()
             .insert_field(gc, ARRAY_STORAGE_IDX, new_storage_val);
-        let cloned = cloned.insert_field(gc, ARRAY_CAP_IDX, new_cap);
+        let cloned_array = cloned_array.insert_field(gc, ARRAY_CAP_IDX, new_cap);
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         gc.build_object_phi(
-            &[(realloced, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
+            &[
+                (realloced, succ_of_unique_bb),
+                (cloned_array, succ_of_shared_bb),
+            ],
             "array_phi@set_capacity",
         )
     }
@@ -3203,11 +3206,11 @@ fn release_replaced_array<'c, 'm>(
     // register allocation changed once the cold arm beside it grew (`benchmark/speedtest/history.md`).
     if !(gc.config.threaded && state.dispatches()) {
         let storage = get_array_storage(gc, &array);
-        gc.build_release_mark(storage, work, state);
+        gc.build_traverser_work(storage, work, state);
         return;
     }
     match hole {
-        None => gc.build_release_mark(array, work, state),
+        None => gc.build_traverser_work(array, work, state),
         Some(hole) => {
             // An array with a hole is what a `Std::PunchedArray` holds, and its traverser is the
             // one that skips the slot.
@@ -3220,7 +3223,7 @@ fn release_replaced_array<'c, 'm>(
             );
             let hole_obj = hole_obj.insert_field(gc, 0, hole);
             let punched = build_punched_array(gc, array, &hole_obj);
-            gc.build_release_mark(punched, work, state);
+            gc.build_traverser_work(punched, work, state);
         }
     }
 }
@@ -3686,8 +3689,18 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // Build `(PunchedArray { _arr : array, _idx : idx }, elem)`.
         let punched = build_punched_array(gc, array, &idx_obj);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, Some("alloca@_punch_ret"));
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &punched);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
+        let res = ObjectFieldType::move_into_struct_field(
+            gc,
+            res,
+            PUNCH_RESULT_ARRAY_FIELD as u32,
+            &punched,
+        );
+        let res = ObjectFieldType::move_into_struct_field(
+            gc,
+            res,
+            PUNCH_RESULT_ELEMENT_FIELD as u32,
+            &elem,
+        );
         res
     }
 
@@ -3765,6 +3778,9 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
 const PUNCH_RESULT_ARRAY_FIELD: usize = 0;
+
+/// The index of the element moved out, in the result of an array punch, `(PunchedArray a, a)`.
+const PUNCH_RESULT_ELEMENT_FIELD: usize = PUNCH_RESULT_ARRAY_FIELD + 1;
 
 /// The locality of the result of a punch — the punched container, at `container_field` of the
 /// result, beside the value moved out of it — given the operand position of the container.

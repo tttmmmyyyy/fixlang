@@ -1930,29 +1930,29 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    /// Release or mark a non-null boxed object, processing the references it owns with the
-    /// traverser generated for its type.
-    fn build_release_mark_nonnull_boxed(
+    /// Perform a traverser's work on a non-null boxed object, processing the references it owns
+    /// with the traverser generated for its type.
+    fn build_traverser_work_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
         state: RcState,
     ) {
         let obj_for_refs = obj.clone();
-        self.build_release_mark_nonnull_boxed_with(obj, work, state, move |gc| {
+        self.build_traverser_work_nonnull_boxed_with(obj, work, state, move |gc| {
             gc.traverse_boxed_refs(&obj_for_refs, work)
         });
     }
 
-    /// Release or mark a non-null boxed object, calling `traverse_refs` to process the references
-    /// it owns. `traverse_refs` stands where the traverser generated for the object's type would:
-    /// on the release path once the count reaches zero, and on a mark path once the object itself
-    /// is marked.
+    /// Perform a traverser's work on a non-null boxed object, calling `traverse_refs` to process
+    /// the references it owns. `traverse_refs` stands where the traverser generated for the
+    /// object's type would: on the release path once the count reaches zero, and on a mark path
+    /// once the object itself is marked.
     ///
     /// # Arguments
     /// * `state` — what is known of the object's refcount state, which the release path dispatches
     ///   on. A mark reads the state from the object itself, whatever the caller knows of it.
-    pub(crate) fn build_release_mark_nonnull_boxed_with(
+    pub(crate) fn build_traverser_work_nonnull_boxed_with(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
@@ -2013,11 +2013,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
-    /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.
-    pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
+    /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count
+    /// where it is boxed, and on the boxed objects it holds where it is not. What it owns is
+    /// reached through the traverser generated for its type, which `build_traverse` writes.
+    pub fn build_traverser_work(
+        &mut self,
+        obj: Object<'c>,
+        work: TraverserWorkType,
+        state: RcState,
+    ) {
         if obj.is_box(self.type_env()) {
-            self.build_if_nonnull(&obj, "release_mark", |gc| {
-                gc.build_release_mark_nonnull_boxed(&obj, work, state);
+            self.build_if_nonnull(&obj, "traverser_work", |gc| {
+                gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_funptr() {
             // Nothing to do for function pointers.
@@ -2258,21 +2265,21 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::release(), state);
+            gc.build_traverser_work(obj, TraverserWorkType::release(), state);
         });
     }
 
     /// Decrement the reference count of a boxed object, releasing what it owns and freeing it
     /// where the count reaches zero. The caller guarantees the object is a non-null boxed pointer.
     pub(crate) fn release_nonnull_boxed(&mut self, obj: &Object<'c>, state: RcState) {
-        self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release(), state)
+        self.build_traverser_work_nonnull_boxed(obj, TraverserWorkType::release(), state)
     }
 
     /// Put every boxed object `obj` owns into the global refcount state, in which an object is
     /// neither retained, released nor freed, so that it lives for the rest of the program.
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_global(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);
         });
     }
 
@@ -2281,7 +2288,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// already in the global state keeps it.
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
         });
     }
 
