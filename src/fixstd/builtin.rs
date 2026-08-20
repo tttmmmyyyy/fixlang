@@ -3180,12 +3180,11 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// copied out of. `hole`, where it is given, names the slot whose element was moved out of the
 /// value, and which the value therefore does not own.
 ///
-/// Where another thread can hold the same storage -- a threaded build, and a storage the compiler
-/// has not proved local -- that thread can drop the last other reference between the count being
-/// read and this release, which leaves this release the one that destroys the storage. A
-/// `#ArrayStorage` carries no length, so the elements it holds are released by releasing the value
-/// that knows how many there are. Otherwise the count that chose the shared arm cannot fall
-/// further, so the storage stays with its other holder and the elements stay theirs.
+/// The release goes through the traverser of the value rather than of the storage, because that is
+/// what releases the elements where this release turns out to be the last one: another thread can
+/// drop the last other reference between the count being read and this release, and a
+/// `#ArrayStorage` carries no length, so the value is the only thing that knows how many elements
+/// to release.
 fn release_replaced_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -3193,6 +3192,15 @@ fn release_replaced_array<'c, 'm>(
     state: RcState,
 ) {
     let work = TraverserWorkType::release();
+    // Where no other thread can hold the storage -- a build with one thread, or a storage the
+    // compiler has proved local -- the count that chose the shared arm cannot fall further, so the
+    // element release below would never run. Releasing the storage on its own does the same work
+    // without emitting it.
+    //
+    // This arm is a shortcut and nothing else: deleting it leaves the generated code correct, and a
+    // little larger. It earns its place by what that dead traversal costs where it is emitted --
+    // `cp_lib_bipartite` grew 0.61% of its instructions, all of it in one hot function whose
+    // register allocation changed once the cold arm beside it grew (`benchmark/speedtest/history.md`).
     if !(gc.config.threaded && state.dispatches()) {
         let storage = get_array_storage(gc, &array);
         gc.build_release_mark(storage, work, state);
