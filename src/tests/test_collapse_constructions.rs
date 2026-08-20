@@ -23,6 +23,14 @@ mod integration_tests {
     /// `magnitude(-7)` 7, `defaulted(2)` 12 and `defaulted(-3)` -3.
     const READ_CONSTRUCTIONS_OUTPUT: &str = "43";
 
+    /// What `shadowed_field_name` prints: `f(2, ..)` reads the value bound before the pattern, so
+    /// the two rounds contribute 4000 + 10 + 3 and 2000 + 50 + 6.
+    const SHADOWED_FIELD_NAME_OUTPUT: &str = "6069";
+
+    /// What `field_in_another_argument` prints: `f` adds the field it was given on each of three
+    /// rounds, 1 + 2 + 4.
+    const FIELD_IN_ANOTHER_ARGUMENT_OUTPUT: &str = "7";
+
     /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
     const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
@@ -178,6 +186,28 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("split_field_order");
         for opt_level in OPT_LEVELS {
             build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+        }
+    }
+
+    /// A field handed over as an argument of its own carries its name over the whole body, so a
+    /// value bound to that name before the pattern is read as the field unless every local has a
+    /// name of its own.
+    #[test]
+    pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
+        let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
+        }
+    }
+
+    /// An argument written beside the struct can name a field of the struct the call was given,
+    /// while the struct argument builds the value the call passes on. The first reaches the call
+    /// under a name of its own, so it keeps reading the value it was written against.
+    #[test]
+    pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
+        let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
         }
     }
 }

@@ -22,6 +22,7 @@
 //! the two cancel, leaving the fields handed over one by one.
 
 use super::capture_struct::fresh_global_name;
+use super::rename::generate_new_names;
 use super::unique_local_names;
 use crate::{
     ast::{
@@ -100,7 +101,11 @@ fn split_one_argument(
     type_env: &TypeEnv,
     global_names: &mut Set<FullName>,
 ) -> Option<(Symbol, Symbol)> {
-    let expr = sym.expr.as_ref().unwrap();
+    // The names the pattern taking the struct apart binds become parameters of the twin, which stand
+    // over the whole body rather than over what follows that pattern. A name bound twice in the body
+    // would then be read as the field wherever the other binding meant it, so every local is given a
+    // name of its own before the pattern is looked for.
+    let expr = unique_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default());
     let (param_lists, body) = expr.destructure_lam_sequence();
     let params = param_lists
         .iter()
@@ -455,6 +460,13 @@ fn wrapper_body(
 /// A call of the twin over `args`, with the struct standing at `args[arg_idx]` taken apart above
 /// it and its fields handed over in its place, under the names the pattern of `taken_apart` binds
 /// them to.
+///
+/// The pattern binds the names the twin is handed, so it stands over the call alone: an argument
+/// written beside the struct can name one of those names, and a pattern standing over that argument
+/// would make it read the struct being passed where the caller wrote the one it was given. So every
+/// argument that names one, and every argument that is more than a name, is bound to a name of its
+/// own first, in the order the arguments are written — which is also the order the call they replace
+/// evaluates them in.
 fn twin_call(
     args: &[Arc<ExprNode>],
     arg_idx: usize,
@@ -463,20 +475,51 @@ fn twin_call(
     twin_name: &FullName,
     twin_ty: &Arc<TypeNode>,
 ) -> Arc<ExprNode> {
+    let bound_by_pattern = taken_apart.pattern.pattern.vars();
+    let stands_for_itself =
+        |arg: &Arc<ExprNode>| arg.is_var() && !bound_by_pattern.contains(&arg.get_var().name);
+
+    let mut occupied = bound_by_pattern.clone();
+    for arg in args {
+        occupied.extend(arg.free_vars());
+    }
+    let mut fresh = generate_new_names(&occupied, args.len()).into_iter();
+
+    // The name each argument reaches the call under, and the bindings that give it that name.
+    let mut bindings = vec![];
+    let mut named_args = vec![];
+    for (idx, arg) in args.iter().enumerate() {
+        if idx != arg_idx && stands_for_itself(arg) {
+            named_args.push(arg.clone());
+            continue;
+        }
+        let name = fresh.next().unwrap();
+        let ty = arg.type_.as_ref().unwrap().clone();
+        bindings.push((
+            PatternNode::make_var(var_local(&name.name), None).set_type(ty.clone()),
+            arg.clone(),
+        ));
+        named_args.push(expr_var(name, None).set_type(ty));
+    }
+
     let field_args = taken_apart
         .bound_names
         .iter()
         .zip(field_tys.iter())
         .map(|(name, ty)| expr_var(name.clone(), None).set_type(ty.clone()))
         .collect::<Vec<_>>();
-    let mut twin_args = args.to_vec();
-    twin_args.splice(arg_idx..arg_idx + 1, field_args);
+    let struct_arg = named_args[arg_idx].clone();
+    named_args.splice(arg_idx..arg_idx + 1, field_args);
 
     let mut call = expr_var(twin_name.clone(), None).set_type(twin_ty.clone());
-    for twin_arg in twin_args {
-        call = expr_app_typed(call, vec![twin_arg]);
+    for named_arg in named_args {
+        call = expr_app_typed(call, vec![named_arg]);
     }
-    expr_let_typed(taken_apart.pattern.clone(), args[arg_idx].clone(), call)
+    let mut taken = expr_let_typed(taken_apart.pattern.clone(), struct_arg, call);
+    for (pattern, arg) in bindings.into_iter().rev() {
+        taken = expr_let_typed(pattern, arg, taken);
+    }
+    taken
 }
 
 /// Where a body takes a struct argument apart, and what is left once it has.
