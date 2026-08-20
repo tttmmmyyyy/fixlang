@@ -138,6 +138,33 @@ impl<'a> Collapser<'a> {
         })
     }
 
+    /// The payload each of `bodies` builds and the arm of `arms` that the variant it builds selects,
+    /// where every one of them ends in a construction laid out where it stands and no two select one
+    /// arm.
+    ///
+    /// Two bodies selecting one arm would put that arm's body in the program twice, so the move this
+    /// answers for waits for a shape where nothing is copied.
+    fn arm_for_each_body(
+        &self,
+        arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
+        bodies: &[Arc<ExprNode>],
+    ) -> Option<Vec<(FullName, usize)>> {
+        let mut selected: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
+        for body in bodies {
+            let built = tail(body);
+            if !self.is_unboxed(built.type_.as_ref().unwrap()) {
+                return None;
+            }
+            let (variant, payload) = union_built_by(&built)?;
+            let arm = self.arm_for_variant(arms, variant)?;
+            if selected.iter().any(|(_, taken)| *taken == arm) {
+                return None;
+            }
+            selected.push((payload, arm));
+        }
+        Some(selected)
+    }
+
     /// `body` under the binding the arm pattern `pat` makes. A union pattern binds its sub-pattern
     /// to the payload the construction holds, and a variable pattern binds the constructed value
     /// itself, which `built` is.
@@ -156,7 +183,10 @@ impl<'a> Collapser<'a> {
                     body.clone(),
                 )
             }
-            _ => expr_let_typed(pat.clone(), built.clone(), body.clone()),
+            Pattern::Var(_, _) => expr_let_typed(pat.clone(), built.clone(), body.clone()),
+            Pattern::Struct(_, _) => {
+                unreachable!("`arm_for_variant` never selects an arm whose pattern is a struct")
+            }
         }
     }
 }
@@ -306,36 +336,19 @@ impl<'a> ExprVisitor for Collapser<'a> {
         }
 
         // A match on a case whose every arm builds a variant moves into those arms, where each meets
-        // a construction it reads. Arms selecting one arm of this match twice would have its body in
-        // the program twice, so the move waits for a shape where nothing is copied.
+        // a construction it reads.
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let mut payloads = Vec::with_capacity(inner_bodies.len());
-        let mut selected = Vec::with_capacity(inner_bodies.len());
-        for body in &inner_bodies {
-            let built = tail(body);
-            if !self.is_unboxed(built.type_.as_ref().unwrap()) {
-                return StartVisitResult::VisitChildren;
-            }
-            let Some((variant, payload)) = union_built_by(&built) else {
-                return StartVisitResult::VisitChildren;
-            };
-            let Some(arm) = self.arm_for_variant(&arms, variant) else {
-                return StartVisitResult::VisitChildren;
-            };
-            if selected.contains(&arm) {
-                return StartVisitResult::VisitChildren;
-            }
-            payloads.push(payload);
-            selected.push(arm);
-        }
+        let Some(selected) = self.arm_for_each_body(&arms, &inner_bodies) else {
+            return StartVisitResult::VisitChildren;
+        };
 
         let moved = inner_bodies
             .iter()
-            .zip(payloads.iter().zip(selected.iter()))
-            .map(|(body, (payload, &arm))| {
-                let (pat, arm_body) = &arms[arm];
+            .zip(selected.iter())
+            .map(|(body, (payload, arm))| {
+                let (pat, arm_body) = &arms[*arm];
                 set_tail(body, Self::bound_arm(pat, &tail(body), payload, arm_body))
             })
             .collect::<Vec<_>>();

@@ -99,7 +99,7 @@ fn split_one_argument(
     type_env: &TypeEnv,
     global_names: &mut Set<FullName>,
 ) -> Option<(Symbol, Symbol)> {
-    let expr = sym.expr.as_ref()?;
+    let expr = sym.expr.as_ref().unwrap();
     let (param_lists, body) = expr.destructure_lam_sequence();
     let params = param_lists
         .iter()
@@ -108,8 +108,7 @@ fn split_one_argument(
             param_list[0].clone()
         })
         .collect::<Vec<_>>();
-    let doms = sym.ty.collect_app_src(params.len()).0;
-    let codom = sym.ty.collect_app_src(params.len()).1;
+    let (doms, codom) = sym.ty.collect_app_src(params.len());
 
     let mut returned = Set::default();
     codom.collect_tycons(&mut returned);
@@ -127,6 +126,13 @@ fn split_one_argument(
     })?;
 
     let field_tys = doms[arg].field_types(type_env);
+    assert_eq!(
+        field_tys.len(),
+        taken_apart.field_names.len(),
+        "the type of a field of `{}` and the name the pattern binds that field to stand at one \
+         index, and every place a field is handed over reads the two together",
+        taken_apart.tycon.to_string()
+    );
     let mut counter = 0;
     let twin_name = fresh_global_name(&sym.name, SPLIT_ARG_SUFFIX, &mut counter, global_names);
 
@@ -278,28 +284,13 @@ impl<'a> ExprVisitor for Redirect<'a> {
         // The names the fields are handed over under, taken from the pattern the original body
         // took its argument apart with. Every local is renamed once the twin is built, so a name
         // standing here twice over is settled there.
-        let mut call = expr_var(self.twin_name.clone(), None).set_type(self.twin_ty.clone());
-        for (idx, arg) in args.iter().enumerate() {
-            if idx != self.arg {
-                call = expr_app_typed(call, vec![arg.clone()]);
-                continue;
-            }
-            for (name, ty) in self
-                .taken_apart
-                .field_names
-                .iter()
-                .zip(self.field_tys.iter())
-            {
-                call = expr_app_typed(
-                    call,
-                    vec![expr_var(name.clone(), None).set_type(ty.clone())],
-                );
-            }
-        }
-        StartVisitResult::ReplaceAndRevisit(expr_let_typed(
-            self.taken_apart.pattern.clone(),
-            args[self.arg].clone(),
-            call,
+        StartVisitResult::ReplaceAndRevisit(twin_call(
+            &args,
+            self.arg,
+            self.taken_apart,
+            &self.field_tys,
+            &self.twin_name,
+            &self.twin_ty,
         ))
     }
 
@@ -445,28 +436,38 @@ fn wrapper_body(
     twin_name: &FullName,
     twin_ty: &Arc<TypeNode>,
 ) -> Arc<ExprNode> {
-    let mut args = params
+    let args = params
         .iter()
         .zip(doms.iter())
         .map(|(param, ty)| expr_var(param.name.clone(), None).set_type(ty.clone()))
         .collect::<Vec<_>>();
+    twin_call(&args, arg, taken_apart, field_tys, twin_name, twin_ty)
+}
+
+/// A call of the twin over `args`, with the struct standing at `args[arg]` taken apart above it and
+/// its fields handed over in its place, under the names the pattern of `taken_apart` binds them to.
+fn twin_call(
+    args: &[Arc<ExprNode>],
+    arg: usize,
+    taken_apart: &Destructuring,
+    field_tys: &[Arc<TypeNode>],
+    twin_name: &FullName,
+    twin_ty: &Arc<TypeNode>,
+) -> Arc<ExprNode> {
     let field_args = taken_apart
         .field_names
         .iter()
         .zip(field_tys.iter())
         .map(|(name, ty)| expr_var(name.clone(), None).set_type(ty.clone()))
         .collect::<Vec<_>>();
-    args.splice(arg..arg + 1, field_args);
+    let mut twin_args = args.to_vec();
+    twin_args.splice(arg..arg + 1, field_args);
 
     let mut call = expr_var(twin_name.clone(), None).set_type(twin_ty.clone());
-    for arg in args {
-        call = expr_app_typed(call, vec![arg]);
+    for twin_arg in twin_args {
+        call = expr_app_typed(call, vec![twin_arg]);
     }
-    expr_let_typed(
-        taken_apart.pattern.clone(),
-        expr_var(params[arg].name.clone(), None).set_type(doms[arg].clone()),
-        call,
-    )
+    expr_let_typed(taken_apart.pattern.clone(), args[arg].clone(), call)
 }
 
 /// Where a body takes a struct argument apart, and what is left once it has.
