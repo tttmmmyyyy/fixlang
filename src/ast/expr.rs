@@ -1276,6 +1276,67 @@ impl ExprNode {
         self.with_free_vars(|free_vars| free_vars.contains(name))
     }
 
+    /// How many times `name` is written in this expression. `name` is a global, which no binder
+    /// binds, so every place it is written is a place it stands for the same value.
+    ///
+    /// `free_vars` answers whether a name occurs at all; this answers how often, which is what a
+    /// caller putting an expression where the name stands needs in order to know whether it puts it
+    /// in one place or in several.
+    pub fn count_occurrences_of_global(&self, name: &FullName) -> usize {
+        assert!(
+            !name.is_local(),
+            "{} is a local name, which a binder of this expression may bind",
+            name.to_string()
+        );
+        if !self.has_free_var(name) {
+            return 0;
+        }
+        match &*self.expr {
+            Expr::Var(var) => (var.name == *name) as usize,
+            Expr::LLVM(llvm) => llvm
+                .generator
+                .free_vars()
+                .iter()
+                .filter(|free| **free == *name)
+                .count(),
+            Expr::App(func, args) => {
+                func.count_occurrences_of_global(name)
+                    + args
+                        .iter()
+                        .map(|arg| arg.count_occurrences_of_global(name))
+                        .sum::<usize>()
+            }
+            Expr::Lam(_, body) => body.count_occurrences_of_global(name),
+            Expr::Let(_, bound, val) => {
+                bound.count_occurrences_of_global(name) + val.count_occurrences_of_global(name)
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                cond.count_occurrences_of_global(name)
+                    + then_expr.count_occurrences_of_global(name)
+                    + else_expr.count_occurrences_of_global(name)
+            }
+            Expr::Match(cond, pat_vals) => {
+                cond.count_occurrences_of_global(name)
+                    + pat_vals
+                        .iter()
+                        .map(|(_, val)| val.count_occurrences_of_global(name))
+                        .sum::<usize>()
+            }
+            Expr::TyAnno(e, _) => e.count_occurrences_of_global(name),
+            Expr::MakeStruct(_, fields) => fields
+                .iter()
+                .map(|(_, _, field)| field.count_occurrences_of_global(name))
+                .sum(),
+            Expr::ArrayLit(elems) | Expr::FFICall(_, _, _, _, elems, _) => elems
+                .iter()
+                .map(|elem| elem.count_occurrences_of_global(name))
+                .sum(),
+            Expr::Eval(side, main) => {
+                side.count_occurrences_of_global(name) + main.count_occurrences_of_global(name)
+            }
+        }
+    }
+
     // Does any local name occur free in this expression?
     pub fn has_free_local_var(&self) -> bool {
         self.with_free_vars(|free_vars| free_vars.iter().any(|name| name.is_local()))
