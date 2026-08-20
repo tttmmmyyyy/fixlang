@@ -27,7 +27,7 @@ use crate::{
     ast::{
         expr::{
             expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            ExprNode,
+            ExprNode, Var,
         },
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
@@ -36,8 +36,9 @@ use crate::{
         types::{type_fun, TyCon, TyConVariant, TypeNode},
     },
     constants::SPLIT_ARG_SUFFIX,
-    misc::Set,
+    misc::{Map, Set},
 };
+use std::mem;
 use std::sync::Arc;
 
 /// The most arguments a function may take once its struct arguments have been split.
@@ -62,9 +63,9 @@ pub fn run(prg: &mut Program) {
 
 /// Split one struct argument of each global that has one, and report whether anything was split.
 fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>) -> bool {
-    let symbols = std::mem::take(&mut prg.symbols);
+    let symbols = mem::take(&mut prg.symbols);
     let mut global_names = symbols.keys().cloned().collect::<Set<_>>();
-    let mut new_symbols = crate::misc::Map::default();
+    let mut new_symbols = Map::default();
     let mut changed = false;
 
     for (name, sym) in symbols {
@@ -206,7 +207,7 @@ fn split_one_argument(
 /// somewhere other than the destructuring needs the value it was handed.
 fn twin_body(
     taken_apart: &Destructuring,
-    param: &Arc<crate::ast::expr::Var>,
+    param: &Arc<Var>,
     struct_ty: &Arc<TypeNode>,
     field_tys: &[Arc<TypeNode>],
 ) -> Arc<ExprNode> {
@@ -429,7 +430,7 @@ impl<'a> ExprVisitor for SelfCallRedirector<'a> {
 /// The original's body once it is a wrapper: take the struct apart and hand the fields to the twin.
 fn wrapper_body(
     taken_apart: &Destructuring,
-    params: &[Arc<crate::ast::expr::Var>],
+    params: &[Arc<Var>],
     arg_idx: usize,
     doms: &[Arc<TypeNode>],
     field_tys: &[Arc<TypeNode>],
@@ -727,7 +728,7 @@ fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon
 
 /// `body` taken as a function of `params`, each standing at the type beside it.
 fn lambda_over(
-    params: &[Arc<crate::ast::expr::Var>],
+    params: &[Arc<Var>],
     doms: &[Arc<TypeNode>],
     body: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
