@@ -19,8 +19,7 @@ pub fn run(prg: &mut Program) {
 /// application of a lambda, until neither applies. Together the two turn `let f = |x| {e0}; f(y)`
 /// into `{e0}[x := y]`.
 ///
-/// # Parameters
-/// * `sym` - the symbol whose expression is rewritten.
+/// # Arguments
 /// * `global_lambda_to_arity` - how many parameters each global lambda takes, which is what decides
 ///   whether a `let` binding one of them may be eliminated.
 pub fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {

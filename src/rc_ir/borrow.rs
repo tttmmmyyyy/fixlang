@@ -573,10 +573,10 @@ impl<'a> RewriteCtx<'a> {
     /// Whether routing this call to the borrow version removes a reference count it would otherwise
     /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
     /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
-    /// callee makes the caller retain before the call, and an owned value whose object is still
-    /// there after the call, whose retain-before the borrow cancels. An owned value whose object
-    /// this call is the end of is moved either way, so borrowing it removes no retain and only
-    /// delays its release.
+    /// callee makes the caller retain before the call, and an owned value whose object outlives the
+    /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
+    /// at the call is moved either way, so borrowing it removes no retain and only delays its
+    /// release.
     fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,
@@ -600,9 +600,9 @@ impl<'a> RewriteCtx<'a> {
         })
     }
 
-    /// Whether `arg@unit` was read out of a value the caller names after the call. Such a leaf holds
-    /// a reference this function made for the call, and routing to the borrow version removes that
-    /// reference together with the retain that made it.
+    /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
+    /// holds a reference this function made for the call, and routing to the borrow version removes
+    /// that reference together with the retain that made it.
     fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()

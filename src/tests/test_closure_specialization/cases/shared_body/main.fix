@@ -4,8 +4,7 @@ module Main;
 // copy specialized on that closure names its lambda in two calls; `sum_up` and `sum_down` are given
 // one and the same closure, so two copies name its lambda.
 //
-// All three are recursive, so that they stay functions of their own rather than being expanded into
-// their caller.
+// All three are recursive, so the inliner leaves them as functions of their own.
 
 twice : (I64 -> I64) -> I64 -> I64;
 twice = |op, n| (

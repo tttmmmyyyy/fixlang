@@ -750,6 +750,11 @@ fn realize_all(
 ///
 /// A name used any other way — passed as an argument, captured, or called with fewer arguments than
 /// it takes — is one the body would have to stay behind for.
+///
+/// # Arguments
+/// * `copy` - the body of the copy, in which the uses of `lambda` are counted.
+/// * `naming_symbol_counts` - how many symbols of the program name each global.
+/// * `arity_map` - how many parameters each global lambda takes.
 fn is_moved_by_placing(
     lambda: &FullName,
     copy: &Arc<ExprNode>,
@@ -778,23 +783,27 @@ fn is_moved_by_placing(
         })
         .collect::<Option<Vec<_>>>();
     match call_arg_counts {
-        // A call supplying every argument is met once as the whole call and `arity - 1` times as a
-        // prefix of it, and nothing else names the lambda.
-        Some(arg_counts) => arg_counts.iter().filter(|count| **count == arity).count() == 1,
+        // One call supplying every argument is met `arity` times: once as the whole call, and once
+        // as each of its prefixes. A second call — supplying every argument or fewer — is met again,
+        // so the count of uses says whether the lambda is called anywhere else.
+        Some(arg_counts) => {
+            arg_counts.len() == arity
+                && arg_counts.iter().filter(|count| **count == arity).count() == 1
+        }
         None => false,
     }
 }
 
-// Put the body of each lambda a copy is specialized on where the copy calls it.
-//
-// A copy exists because a way into it receives a lambda whose identity is known, and what the copy
-// does with that lambda is call it by name. Inlining runs before this pass, so no call made here has
-// ever been offered a body: the value a loop body returns each round, for one, is built in the lambda
-// and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two only
-// once they stand in one function.
-//
-// A body goes in one level deep and into a copy alone, so what the program grows by is bounded by the
-// bodies the copies are specialized on, and the calls those bodies make are left as calls.
+/// Put the body of each lambda a copy is specialized on where the copy calls it.
+///
+/// A copy exists because a way into it receives a lambda whose identity is known, and what the copy
+/// does with that lambda is call it by name. Inlining runs before this pass, so no call made here
+/// has ever been offered a body: the value a loop body returns each round, for one, is built in the
+/// lambda and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the
+/// two only once they stand in one function.
+///
+/// A body goes in one level deep and into a copy alone, so what the program grows by is bounded by
+/// the bodies the copies are specialized on, and the calls those bodies make are left as calls.
 fn inline_specialized_lambdas(
     symbols: &mut Map<FullName, Symbol>,
     specialized_lambdas: &Map<FullName, Vec<FullName>>,
@@ -826,7 +835,7 @@ fn inline_specialized_lambdas(
         }
     }
 
-    // What the local inlining below needs to eliminate a `let` that binds a global lambda.
+    // What `inline_local::run_on_symbol` needs to eliminate a `let` that binds a global lambda.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
     for (copy, lambdas) in specialized_lambdas {

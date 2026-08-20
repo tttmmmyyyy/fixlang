@@ -59,6 +59,9 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// How many parameters each global lambda takes, keyed by its name. A name is in the map when its
+/// symbol is a lambda expression, and the count runs over the whole sequence of lambdas that
+/// expression opens with, so `|x| |y| {e0}` counts two.
 pub fn create_global_lambda_to_arity_map(symbols: &Map<FullName, Symbol>) -> Map<FullName, usize> {
     let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
     for (name, sym) in symbols {

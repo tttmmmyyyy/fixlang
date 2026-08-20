@@ -38,7 +38,8 @@ mod integration_tests {
         emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
     }
 
-    /// Build the case project as `emit_main_rc_ir` does and return the dumped RC IR of every module.
+    /// Build the case project at the `max` optimization level and return the dumped RC IR of every
+    /// module.
     ///
     /// The body of a loop written in `Main` is put into the copy of `Std::loop` made for it, so a
     /// case asserting on what such a body does reads the whole program rather than one module.

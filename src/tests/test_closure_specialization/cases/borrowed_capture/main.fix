@@ -17,14 +17,13 @@ scaled_sum = |key, table| (
     ))
 );
 
-// The loop in `main` hands the array it captures to `scaled_sum`. Where its body stands, that array
-// arrives borrowed from the capture list the copy passes it in, so the call counts no reference;
-// were the body put in the copy, the copy would own the array it hands to the next round and would
-// pay a reference-count operation for that call on every round. So the copy of `Std::loop` made for
-// this body keeps calling it.
+// The loop in `main` hands the array it captures to `scaled_sum`. Its body goes into the copy of
+// `Std::loop` made for it, so the array reaches that call as a leaf of the capture list the copy
+// owns and hands to the next round. The call is routed to the borrow version of `scaled_sum`, so
+// the round hands the array over and counts no reference for it.
 //
-// The loop inside `scaled_sum` hands nothing it captures to a call — it reads the array through the
-// index primitive — so the copy made for that body takes the body itself.
+// The loop inside `scaled_sum` reads the array it captures through the index primitive, so the copy
+// made for that body holds the read itself.
 main : IO ();
 main = (
     let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];

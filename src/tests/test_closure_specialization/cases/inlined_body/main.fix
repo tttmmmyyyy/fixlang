@@ -1,8 +1,8 @@
 module Main;
 
-// The body of this loop reads the array it captures through the index primitive, so nothing it
-// captures is handed to a call. The copy of `Std::loop` made for the body therefore takes the body
-// itself, and calls it nowhere.
+// The body of this loop is named by the copy of `Std::loop` made for it and nowhere else, and that
+// copy calls it once with every argument it takes. So the body goes into the copy: the copy reads
+// the array through the index primitive itself, and calls no lambda.
 //
 // # Parameters
 // * `bound` - The value an element is looked for at or above.
