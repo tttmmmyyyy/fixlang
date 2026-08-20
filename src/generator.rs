@@ -1981,6 +1981,20 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
     /// what the run returns in the value field for the release that follows.
     fn build_run_destructor(&mut self, obj: &Object<'c>) {
+        let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
+        assert_eq!(
+            [
+                fields[DESTRUCTOR_OBJECT_VALUE_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+                fields[DESTRUCTOR_OBJECT_DTOR_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+            ],
+            ["_value", "_dtor"],
+            "`{}` holds its fields in an order the field indices do not name.",
+            obj.ty.to_string(),
+        );
         let value =
             ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
         let dtor =
