@@ -41,9 +41,9 @@ worker_write = |ptr| (
     };
     let arr = arr.set(0, Box::make(-1));
     if arr.@(0).@value > 0 { undefined("the element written should be the one read back") };
-    let plugged = arr.act(1, |elem| [elem, elem]);
-    if plugged.@size != 2 { undefined("the action should give one array per element it returned") };
-    if plugged.@(1).@(1).@value < 0 { undefined("the plugged element should be the one moved out") };
+    let plugged_arrays = arr.act(1, |elem| [elem, elem]);
+    if plugged_arrays.@size != 2 { undefined("the action should give one array per element it returned") };
+    if plugged_arrays.@(1).@(1).@value < 0 { undefined("the plugged element should be the one moved out") };
     pure()
 );
 FFI_EXPORT[worker_write, fix_worker_write];

@@ -21,11 +21,11 @@ const EXPECTED_OUTPUT: &str = "ok";
 /// How many elements the shared array holds. The write copies them into a storage of its own, and
 /// that copy is the stretch the other thread's release has to land inside, so it has to take long
 /// enough to be aimed at.
-const ARRAY_ELEMENT_COUNT: &str = "3000000";
+const ELEMENT_COUNT: &str = "3000000";
 
-/// How long, in microseconds, the thread that lets go of the array waits before doing so. Long
+/// How long the thread that lets go of the array waits before doing so, in microseconds. Long
 /// enough that the write finds the storage shared, short enough that the copy is still running.
-const ARRAY_DROP_DELAY: &str = "1000";
+const DROP_DELAY_US: &str = "1000";
 
 /// Which write the array program makes. A copy into a storage of the array's own capacity and a
 /// copy into one of a larger capacity are separate pieces of generated code, and each has to
@@ -36,11 +36,11 @@ const ARRAY_WRITE_GROW: &str = "reserve";
 /// What the array program prints when its two threads did not overlap: the thread that lets go of
 /// the value did so before the write began, so the write found the storage its own and made no
 /// copy. The run says nothing about the release under test, so it is taken again.
-const ARRAY_MISSED_WINDOW: &str = "missed:";
+const MISSED_WINDOW: &str = "missed:";
 
 /// How many times a run that missed the window is taken again before the machine is called unable
 /// to produce the overlap.
-const ARRAY_ATTEMPTS: usize = 5;
+const OVERLAP_ATTEMPTS: usize = 5;
 
 /// How many values the destructor program builds and destroys. Whether the threads of a round meet
 /// inside the window is decided by the machine, so the program asks many times.
@@ -61,8 +61,8 @@ fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
     (temp_dir, project_dir)
 }
 
-/// Builds the case named `case` at `opt_level`, runs it with `program_args`, and returns what it
-/// produced.
+/// Builds the project in `project_dir` at `opt_level`, runs it with `program_args`, and returns
+/// what it produced.
 fn run_case(project_dir: &Path, opt_level: &str, program_args: &[&str]) -> Output {
     fix_command_at_opt_level("run", opt_level)
         .arg("--allow-preliminary-commands")
@@ -116,9 +116,9 @@ fn assert_an_overlapping_run_destroys_the_value_completely(
     program_args: &[&str],
 ) {
     let (_temp_dir, project_dir) = setup_test_env(case);
-    for _ in 0..ARRAY_ATTEMPTS {
+    for _ in 0..OVERLAP_ATTEMPTS {
         let output = run_case(&project_dir, opt_level, program_args);
-        if String::from_utf8_lossy(&output.stdout).contains(ARRAY_MISSED_WINDOW) {
+        if String::from_utf8_lossy(&output.stdout).contains(MISSED_WINDOW) {
             continue;
         }
         assert_program_reports_a_complete_destruction(case, opt_level, &output);
@@ -127,7 +127,7 @@ fn assert_an_overlapping_run_destroys_the_value_completely(
     panic!(
         "the two threads of the `{}` program never overlapped in {} runs at -O {}, so the release \
          under test was never reached.",
-        case, ARRAY_ATTEMPTS, opt_level,
+        case, OVERLAP_ATTEMPTS, opt_level,
     );
 }
 
@@ -142,7 +142,7 @@ fn assert_cloning_a_shared_array_releases_its_elements(opt_level: &str, write: &
     assert_an_overlapping_run_destroys_the_value_completely(
         "array_clone",
         opt_level,
-        &[ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY, write],
+        &[ELEMENT_COUNT, DROP_DELAY_US, write],
     );
 }
 
@@ -194,7 +194,7 @@ fn assert_plugging_a_shared_punched_array_releases_its_elements(opt_level: &str)
     assert_an_overlapping_run_destroys_the_value_completely(
         "punched_clone",
         opt_level,
-        &[ARRAY_ELEMENT_COUNT, ARRAY_DROP_DELAY],
+        &[ELEMENT_COUNT, DROP_DELAY_US],
     );
 }
 

@@ -3203,15 +3203,15 @@ fn release_replaced_array<'c, 'm>(
         Some(hole) => {
             // An array with a hole is what a `Std::PunchedArray` holds, and its traverser is the
             // one that skips the slot.
-            let idx = create_obj(
+            let hole_obj = create_obj(
                 make_i64_ty(),
                 &vec![],
                 None,
                 gc,
-                Some("hole@release_replaced"),
+                Some("hole@release_replaced_array"),
             );
-            let idx = idx.insert_field(gc, 0, hole);
-            let punched = build_punched_array(gc, array, &idx);
+            let hole_obj = hole_obj.insert_field(gc, 0, hole);
+            let punched = build_punched_array(gc, array, &hole_obj);
             gc.build_release_mark(punched, work, state);
         }
     }
