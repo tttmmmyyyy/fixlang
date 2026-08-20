@@ -42,19 +42,19 @@ use std::sync::Arc;
 pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
     for (_name, sym) in prg.symbols.iter_mut() {
-        let mut expr = prepared(sym.expr.as_ref().unwrap());
+        let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
         loop {
             let mut collapser = Collapser {
                 type_env: &type_env,
-                known: Map::default(),
+                constructions: Map::default(),
                 bound_fields: &mut bound_field_count,
             };
             let res = collapser.traverse(&expr);
             if !res.changed {
                 break;
             }
-            expr = prepared(&res.expr);
+            expr = with_lets_pulled_out(&res.expr);
         }
         sym.expr = Some(expr);
     }
@@ -63,14 +63,14 @@ pub fn run(prg: &mut Program) {
 /// `expr` with its `let`s floated outward and every local under a name of its own. Floating is what
 /// puts a construction and its reader in one chain, and unique names are what let one name stand
 /// for one value across that chain.
-fn prepared(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+fn with_lets_pulled_out(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let expr = pull_let::run_on_expr(expr);
     unique_local_names::run_on_expr(&expr, Set::default())
 }
 
 /// A value whose construction this walk has seen.
 #[derive(Clone)]
-enum Known {
+enum Construction {
     /// A struct built out of names: its type constructor, and the name each field holds.
     Struct(Arc<TyCon>, Vec<(Name, FullName)>),
     /// A union variant built out of a name: the variant's index, and the name holding its payload.
@@ -80,7 +80,7 @@ enum Known {
 /// The walk, carrying what each local in scope was built as.
 struct Collapser<'a> {
     type_env: &'a TypeEnv,
-    known: Map<FullName, Known>,
+    constructions: Map<FullName, Construction>,
     /// How many fields this global has had bound to a name of their own, which is what the next
     /// such name is numbered by. Counting across the rounds is what keeps two rounds from choosing
     /// one name for two values.
@@ -88,11 +88,14 @@ struct Collapser<'a> {
 }
 
 impl<'a> Collapser<'a> {
-    /// Whether a value of `ty` is laid out where it stands rather than behind a reference.
+    /// Whether a value of `ty` is a struct or a union laid out where it stands rather than behind a
+    /// reference.
     ///
     /// A boxed value is an object of its own, and the reader this pass takes away is what its
-    /// construction is there for, so reading it here would leave an allocation nobody looks at.
-    fn is_unboxed(&self, ty: &Arc<TypeNode>) -> bool {
+    /// construction is there for, so reading it here would leave an allocation nobody looks at. A
+    /// type the environment does not declare — a closure, a type variable — is nothing this pass
+    /// reads either way.
+    fn is_unboxed_datatype(&self, ty: &Arc<TypeNode>) -> bool {
         ty.toplevel_tycon()
             .and_then(|tycon| {
                 self.type_env
@@ -111,12 +114,12 @@ impl<'a> Collapser<'a> {
     }
 
     /// What `expr` was built as: what it builds itself, or what the name it is holds.
-    fn known_of(&self, expr: &Arc<ExprNode>) -> Option<Known> {
-        if !self.is_unboxed(expr.type_.as_ref().unwrap()) {
+    fn construction_of(&self, expr: &Arc<ExprNode>) -> Option<Construction> {
+        if !self.is_unboxed_datatype(expr.type_.as_ref().unwrap()) {
             return None;
         }
         if expr.is_var() {
-            return self.known.get(&expr.get_var().name).cloned();
+            return self.constructions.get(&expr.get_var().name).cloned();
         }
         built_by(expr)
     }
@@ -144,7 +147,7 @@ impl<'a> Collapser<'a> {
     ///
     /// Two bodies selecting one arm would put that arm's body in the program twice, so the move this
     /// answers for waits for a shape where nothing is copied.
-    fn arm_for_each_body(
+    fn payload_and_arm_for_each_body(
         &self,
         arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
         bodies: &[Arc<ExprNode>],
@@ -152,7 +155,7 @@ impl<'a> Collapser<'a> {
         let mut selected: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
         for body in bodies {
             let built = tail(body);
-            if !self.is_unboxed(built.type_.as_ref().unwrap()) {
+            if !self.is_unboxed_datatype(built.type_.as_ref().unwrap()) {
                 return None;
             }
             let (variant, payload) = union_built_by(&built)?;
@@ -205,9 +208,9 @@ fn union_built_by(expr: &Arc<ExprNode>) -> Option<(usize, FullName)> {
 }
 
 /// What `expr` builds, where it builds a struct out of names or a union variant.
-fn built_by(expr: &Arc<ExprNode>) -> Option<Known> {
+fn built_by(expr: &Arc<ExprNode>) -> Option<Construction> {
     if let Some((variant, payload)) = union_built_by(expr) {
-        return Some(Known::Union(variant, payload));
+        return Some(Construction::Union(variant, payload));
     }
     let (tycon, fields) = expr.destructure_make_struct()?;
     let fields = fields
@@ -218,7 +221,7 @@ fn built_by(expr: &Arc<ExprNode>) -> Option<Known> {
                 .then(|| (name.clone(), value.get_var().name.clone()))
         })
         .collect::<Option<Vec<_>>>()?;
-    Some(Known::Struct(tycon, fields))
+    Some(Construction::Struct(tycon, fields))
 }
 
 /// The expression a chain of `let`s ends in.
@@ -284,8 +287,9 @@ impl<'a> ExprVisitor for Collapser<'a> {
 
         // A name bound to a construction, or to a name already holding one, carries what it holds.
         if pat.is_var() {
-            if let Some(known) = self.known_of(&bound) {
-                self.known.insert(pat.get_var().name.clone(), known);
+            if let Some(construction) = self.construction_of(&bound) {
+                self.constructions
+                    .insert(pat.get_var().name.clone(), construction);
             }
             return StartVisitResult::VisitChildren;
         }
@@ -293,7 +297,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern else {
             return StartVisitResult::VisitChildren;
         };
-        let Some(Known::Struct(tycon, fields)) = self.known_of(&bound) else {
+        let Some(Construction::Struct(tycon, fields)) = self.construction_of(&bound) else {
             return StartVisitResult::VisitChildren;
         };
         if &tycon != pat_tycon {
@@ -325,7 +329,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let arms = expr.get_match_pat_vals();
 
         // A match on a variant the walk has seen built runs the arm that variant selects.
-        if let Some(Known::Union(variant, payload)) = self.known_of(&cond) {
+        if let Some(Construction::Union(variant, payload)) = self.construction_of(&cond) {
             let Some(arm) = self.arm_for_variant(&arms, variant) else {
                 return StartVisitResult::VisitChildren;
             };
@@ -340,7 +344,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let Some(selected) = self.arm_for_each_body(&arms, &inner_bodies) else {
+        let Some(selected) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
             return StartVisitResult::VisitChildren;
         };
 
@@ -362,7 +366,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
     ) -> StartVisitResult {
         let fields = expr.get_make_struct_fields();
         if fields.iter().all(|(_, _, e)| e.is_var())
-            || !self.is_unboxed(expr.type_.as_ref().unwrap())
+            || !self.is_unboxed_datatype(expr.type_.as_ref().unwrap())
         {
             return StartVisitResult::VisitChildren;
         }

@@ -128,7 +128,7 @@ fn split_one_argument(
     let field_tys = doms[arg_idx].field_types(type_env);
     assert_eq!(
         field_tys.len(),
-        taken_apart.field_names.len(),
+        taken_apart.bound_names.len(),
         "the type of a field of `{}` and the name the pattern binds that field to stand at one \
          index, and every place a field is handed over reads the two together",
         taken_apart.tycon.to_string()
@@ -140,7 +140,7 @@ fn split_one_argument(
     let mut twin_params = params.clone();
     let mut twin_doms = doms.clone();
     let field_params = taken_apart
-        .field_names
+        .bound_names
         .iter()
         .map(|name| var_local(&name.name))
         .collect::<Vec<_>>();
@@ -151,7 +151,7 @@ fn split_one_argument(
     // by a pattern naming its fields the same way, so two rounds of splitting hand a function two
     // parameters of one name unless every local is given a name of its own.
     let twin_ty = fun_ty(&twin_doms, codom.clone());
-    let redirected_body = call_the_twin(
+    let redirected_body = redirect_self_calls(
         &twin_body(&taken_apart, &params[arg_idx], &doms[arg_idx], &field_tys),
         &sym.name,
         arg_idx,
@@ -215,9 +215,9 @@ fn twin_body(
         return body;
     }
     let fields = taken_apart
-        .field_order
+        .declared_fields
         .iter()
-        .zip(taken_apart.field_names.iter())
+        .zip(taken_apart.bound_names.iter())
         .zip(field_tys.iter())
         .map(|((field, name), ty)| {
             (
@@ -240,7 +240,7 @@ fn twin_body(
 /// once the split is done. A body that called itself would then call a body that calls it back, and
 /// inlining unrolls such a pair instead of leaving it alone. Naming the twin keeps a self-recursive
 /// function self-recursive, and leaves the wrapper small enough to go into its callers.
-fn call_the_twin(
+fn redirect_self_calls(
     body: &Arc<ExprNode>,
     orig: &FullName,
     arg_idx: usize,
@@ -249,7 +249,7 @@ fn call_the_twin(
     twin_name: &FullName,
     twin_ty: &Arc<TypeNode>,
 ) -> Arc<ExprNode> {
-    let mut redirect = Redirect {
+    let mut redirect = SelfCallRedirector {
         orig: orig.clone(),
         arg: arg_idx,
         taken_apart,
@@ -260,8 +260,8 @@ fn call_the_twin(
     redirect.traverse(body).expr
 }
 
-/// The walk of `call_the_twin`.
-struct Redirect<'a> {
+/// The walk of `redirect_self_calls`.
+struct SelfCallRedirector<'a> {
     orig: FullName,
     arg: usize,
     taken_apart: &'a Destructuring,
@@ -270,7 +270,7 @@ struct Redirect<'a> {
     twin_ty: Arc<TypeNode>,
 }
 
-impl<'a> ExprVisitor for Redirect<'a> {
+impl<'a> ExprVisitor for SelfCallRedirector<'a> {
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -456,7 +456,7 @@ fn twin_call(
     twin_ty: &Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let field_args = taken_apart
-        .field_names
+        .bound_names
         .iter()
         .zip(field_tys.iter())
         .map(|(name, ty)| expr_var(name.clone(), None).set_type(ty.clone()))
@@ -478,11 +478,11 @@ struct Destructuring {
     /// The pattern itself, which the wrapper takes the struct apart with.
     pattern: Arc<PatternNode>,
     /// The declared name of each field, in the order the declaration writes them.
-    field_order: Vec<Name>,
+    declared_fields: Vec<Name>,
     /// The name the pattern binds each of those fields to, in that same order. A pattern writes its
     /// fields in the order the source has them, which is not the order they are declared, so this is
     /// where the two are brought together.
-    field_names: Vec<FullName>,
+    bound_names: Vec<FullName>,
     /// The body with that `let` removed.
     body: Arc<ExprNode>,
 }
@@ -505,7 +505,7 @@ fn destructuring_of(
     };
     let removed = remover.traverse(body);
     let (pattern, pattern_fields, bound_names) = remover.found?;
-    let field_names = declared
+    let bound_names = declared
         .iter()
         .map(|field| {
             let idx = pattern_fields.iter().position(|name| name == field)?;
@@ -515,8 +515,8 @@ fn destructuring_of(
     Some(Destructuring {
         tycon: tycon.clone(),
         pattern,
-        field_order: declared.to_vec(),
-        field_names,
+        declared_fields: declared.to_vec(),
+        bound_names,
         body: removed.expr,
     })
 }

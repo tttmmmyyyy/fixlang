@@ -27,7 +27,6 @@ mod integration_tests {
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
     const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
 
-
     /// The optimization levels the answers are asserted at: the one the pass runs at, the one above
     /// it, and one below it where it does not run.
     const OPT_LEVELS: [&str; 3] = ["basic", "max", "experimental"];
@@ -182,5 +181,4 @@ mod integration_tests {
             build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
         }
     }
-
 }
