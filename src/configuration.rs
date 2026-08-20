@@ -869,6 +869,13 @@ impl Configuration {
     /// Substitute the definition of a global value into the places that name it, and discard a
     /// global that nothing names, repeating until the program stops changing. Runs at `Max` and
     /// above.
+    /// Give a function that takes an unboxed struct a twin taking one argument per field of it, so
+    /// that a closure a field holds becomes an argument the stages after it can follow. Runs at
+    /// `Max` and above, where the stages that make use of it run.
+    pub fn enable_split_struct_args(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+    }
+
     pub fn enable_inline_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }

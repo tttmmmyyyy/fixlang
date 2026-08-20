@@ -1,6 +1,8 @@
 use super::{
-    closure_specialization, dead_symbol_elimination, defunctionalize_fix, inline, inline_local,
-    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
+    closure_specialization, collapse_struct_destructuring, dead_symbol_elimination,
+    defunctionalize_fix, inline, inline_local,
+    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
+    unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -82,6 +84,41 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_inline_local_optimization(),
         "inline_local",
         inline_local::run,
+    );
+
+    // Give a function that takes a struct a twin taking one argument per field of it, so that a
+    // closure a field holds becomes an argument the stages after it can follow.
+    //
+    // It runs after inlining because that is what puts a combinator's `advance` into the function
+    // consuming it, and a body that never takes its struct argument apart offers nothing to split.
+    run_pass(
+        prg,
+        config,
+        config.enable_split_struct_args(),
+        "split_struct_args",
+        split_struct_args::run,
+    );
+
+    // Inline again, which is what puts the two lines a split leaves behind into the callers: there
+    // the struct a caller builds meets the pattern taking it apart, and the two cancel. The twin is
+    // left where it is, being either self-recursive or as large as the body it copies.
+    run_pass(
+        prg,
+        config,
+        config.enable_split_struct_args() && config.enable_inline_optimization(),
+        "inline",
+        inline::run,
+    );
+
+    // Where inlining brought a destructuring next to the construction that made the struct, bind
+    // the fields outright. That is what turns the two lines a split leaves behind into the fields
+    // handed over one by one.
+    run_pass(
+        prg,
+        config,
+        config.enable_split_struct_args(),
+        "collapse_struct_destructuring",
+        collapse_struct_destructuring::run,
     );
 
     run_pass(

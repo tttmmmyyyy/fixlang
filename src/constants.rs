@@ -123,6 +123,9 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 pub const CAP_NAME: &str = "#CAP";
 /// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
+/// The suffix, followed by a counter, of the global function taking one argument per field of a
+/// struct argument of the function it is named after.
+pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
 pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
 /// The suffix, followed by a hash of which argument received which decaptured lambda, of a

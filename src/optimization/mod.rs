@@ -1,6 +1,7 @@
 mod application_inlining;
 mod capture_struct;
 mod closure_specialization;
+mod collapse_struct_destructuring;
 mod dead_symbol_elimination;
 mod defunctionalize_fix;
 #[allow(dead_code)]
@@ -16,6 +17,7 @@ mod remove_tyanno;
 pub mod rename;
 mod simplify_symbol_names;
 mod skip_eval;
+mod split_struct_args;
 mod uncurry;
 mod unique_local_names;
 mod unwrap_newtype;
