@@ -37,12 +37,18 @@ METRICS = [
     ("mem", "Cachegrind memory",
      "Weighted memory-access estimate from cachegrind's cache model (l1 + 5*l3 + 35*ram).",
      "ratio", "cachegrind"),
+    ("ram", "Cachegrind main-memory accesses",
+     "Accesses that reached main memory, from cachegrind's cache model. The same program and input "
+     "give the same number on any machine, and it is what decides whether that program's cycle "
+     "count survives a machine with other work on it.", "ratio", "cachegrind"),
     ("cycles", "perf cycles",
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
-     "several runs. This is the only column here that is not deterministic: it rises with whatever "
-     "else the machine is doing, so it is read only on runs taken while the machine is free and the "
-     "series is sparse. Two points are comparable only when the machine had CPU to spare for "
-     "both, which is what the contention figure beside each commit says.",
+     "several windows of runs. This is the only column here that is not deterministic. Other work "
+     "reaches it two ways: over the core the run shares with the thread beside it, which the "
+     "harness pins for and watches, and over the cache every core shares, which costs a program in "
+     "proportion to how much of its data comes from main memory. Where either of them could have "
+     "moved a reading, the cell is left empty, so the series has gaps; the contention figure beside "
+     "each commit says how much of the machine the run had.",
      "ratio", "perf"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "
@@ -161,9 +167,10 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,contention,a-inst,a-mem,a-splits,a-cycles,b-inst,a-inst-c,a-inst-rust\n"
-            "1111111111111111111111111111111111111111,Zen,0.10,100,200,4,7,50,90,\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,,150,,0,,,90,120\n",
+            "commit,cpu,contention,a-inst,a-mem,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
+            "a-inst-rust\n"
+            "1111111111111111111111111111111111111111,Zen,0.10,100,200,3,4,7,50,90,\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,,150,,5,0,,,90,120\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
@@ -179,7 +186,8 @@ def self_check():
     assert series["inst"] == {"a": [100, 150], "b": [50, None]}, series["inst"]
     assert series["mem"] == {"a": [200, None]}, series["mem"]
     assert series["splits"] == {"a": [4, 0]}, series["splits"]
-    # Cycles are read only on the runs taken while the machine was free, so the series has gaps.
+    assert series["ram"] == {"a": [3, 5]}, series["ram"]
+    # A cycle count other work could have moved leaves its cell empty, so the series has gaps.
     assert series["cycles"] == {"a": [7, None]}, series["cycles"]
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]

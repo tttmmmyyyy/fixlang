@@ -1,0 +1,11 @@
+[general]
+name = "undeclared-root-two-imports"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "undeclared-depa"
+path = "../depa"

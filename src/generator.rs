@@ -546,6 +546,10 @@ pub struct Generator<'c, 'm> {
     /// map when code generation first asks for it (`get_or_declare_global`), which is also where it
     /// is declared, so the module declares the globals it uses and no others.
     declared_globals: Map<FullName, ScopedValue<'c>>,
+    /// The functions this module emitted for each of its globals.
+    /// `keep_initializers_out_of_shared_accessors` reads it once every reader of every global is
+    /// in the module, and decides there which accessors keep their initializer.
+    pub(crate) emitted_globals: Vec<EmittedGlobal<'c>>,
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Arc<Map<FullName, Arc<TypeNode>>>,
@@ -784,6 +788,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_info: Default::default(),
             debug_location: vec![],
             declared_globals: Default::default(),
+            emitted_globals: Vec::new(),
             global_types,
             type_env,
             target_data: target_data,
@@ -2898,6 +2903,16 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
         SYMBOL_VERSION_SEPARATOR,
         SYMBOL_VERSION_SEPARATOR_SUBSTITUTE,
     )
+}
+
+/// The two functions a module emits for one of its globals.
+#[derive(Clone, Copy)]
+pub(crate) struct EmittedGlobal<'c> {
+    /// Reads the global: tests the initialization flag, calls `init_value` and stores what it
+    /// returns on the first access, and loads the storage.
+    pub accessor: FunctionValue<'c>,
+    /// Computes the value of the global, and is called once in the program's life.
+    pub init_value: FunctionValue<'c>,
 }
 
 /// The name of the LLVM function through which the global `name`, of a type other than funptr, is

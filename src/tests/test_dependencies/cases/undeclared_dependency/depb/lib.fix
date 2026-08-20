@@ -1,0 +1,4 @@
+module DepB;
+
+secret_value : I64;
+secret_value = 43;

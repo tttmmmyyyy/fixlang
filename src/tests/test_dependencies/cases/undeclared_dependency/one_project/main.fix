@@ -1,0 +1,7 @@
+module Main;
+
+import Std;
+import Util;
+
+main : IO ();
+main = println(Util::helper.to_string);

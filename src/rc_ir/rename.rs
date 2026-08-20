@@ -204,10 +204,10 @@ pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>
 }
 
 /// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
-/// name. Free variables — those bound outside `node` — are left unchanged. `marker` distinguishes
+/// name. Free variables — those bound outside `node` — are left unchanged. `pass_tag` distinguishes
 /// this clone's fresh names from the ones other passes mint.
-pub(crate) fn clone_fresh(node: &RcExprNode, marker: &str, counter: &mut u64) -> RcExprNode {
+pub(crate) fn clone_fresh(node: &RcExprNode, pass_tag: &str, counter: &mut u64) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
-    assign_fresh_names_to_binders(node, marker, &mut rename, counter);
+    assign_fresh_names_to_binders(node, pass_tag, &mut rename, counter);
     rename_expr(node, &rename)
 }
