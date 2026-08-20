@@ -1,21 +1,26 @@
 module Main;
 
-// Takes one reference to the shared value, takes and drops many more, writes through it, and drops
-// the one it was handed. The reference counts the threads run through here are what they contend
-// over, and because the threads hold every reference, all three answers the counting can give are
-// reached under contention: a count that stays above one, a count that reaches one and lets a write
-// happen in place, and a count that reaches zero and destroys the value while other threads are
-// still working.
+// Takes one reference to the object the shared value holds, takes and drops many more, writes
+// through it, and drops the one it was handed. The reference counts the threads run through here
+// are what they contend over, and because the threads hold every reference, all three answers the
+// counting can give are reached under contention: a count that stays above one, a count that
+// reaches one and lets a write happen in place, and a count that reaches zero and destroys the
+// value while other threads are still working.
+//
+// The object hammered here is the one the shared value owns, so its count is one the hand-over has
+// to have reached: a hand-over that marked the value's own object and stopped there leaves this
+// count updated non-atomically while eight threads run through it.
 //
 // Written in `IO` so that the reference counting survives optimization. Run through
 // `IO::unsafe_perform` instead, the loop's result goes unused and the whole loop is removed --
 // eight threads then share a value without touching its count and the control cannot fail.
 hammer_one : Ptr -> IO ();
 hammer_one = |ptr| (
-    let value : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
+    let value : Box (Box I64) = *FFI::boxed_from_retained_ptr(ptr);
+    let inner = value.@value;
     loop_m(0, |i|
         if i == 4000 { break_m $ () };
-        let ptr = *value.FFI::boxed_to_retained_ptr;
+        let ptr = *inner.FFI::boxed_to_retained_ptr;
         let taken : Box I64 = *FFI::boxed_from_retained_ptr(ptr);
         if taken.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
         continue_m $ i + 1
@@ -24,8 +29,8 @@ hammer_one = |ptr| (
     // A write through the handle. Whichever thread finds itself the only holder left takes the
     // uniqueness check's unique answer and writes in place; the others find the value shared and
     // write to a copy of their own.
-    let value = value.set_value(value.@value + 1);
-    if value.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
+    let inner = inner.set_value(inner.@value + 1);
+    if inner.@value < 0 { undefined("the shared value was destroyed while a thread still held it") };
     pure()
 );
 FFI_EXPORT[hammer_one, fix_hammer_one];
@@ -37,7 +42,7 @@ hammer_from_threads = |ptr, threads| (
 
 // Takes `count` references to `value` and returns the pointer they all name, one for each thread to
 // drop.
-retain_many : I64 -> Box I64 -> IO Ptr;
+retain_many : I64 -> Box (Box I64) -> IO Ptr;
 retain_many = |count, value| (
     loop_m((0, nullptr), |(i, ptr)|
         if i == count { break_m $ ptr };
@@ -55,7 +60,9 @@ main = (
     // however it was written. Building the value from the program's own arguments is what puts it
     // on the heap with a count. The length of `argv[0]` is the same on both of this program's runs,
     // so the value it holds is too.
-    let value = Box::make(args.@(0).@size);
+    // The value holds another boxed object, so that the hand-over is asked to reach past the object
+    // it is given.
+    let value = Box::make(Box::make(args.@(0).@size));
 
     // An argument asks for the value to be handed over the way the language says to. Run without it
     // and the reference counts are updated non-atomically while eight threads share the value,

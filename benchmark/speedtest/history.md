@@ -22,6 +22,31 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 1334dac79d3b0cac55a4f0c622a23b9d793137e3
+
+値のオブジェクトへ印を付けるとき、経路ごとではなくオブジェクトごとに 1 度だけ訪れるようにした変更 (#433) を、
+fork point の `0343f84b` と並べて測った。両方の行がこの下に在る。
+
+**コーパスは動かない。** 命令数の動いた 38 ケースで、最大の絶対差は **18 命令** (`cp_lib_bipartite`、
+2 億 3644 万分の 18)、最大の相対差は **`startup` の 0.0123%** (113,647 -> 113,633、14 命令) である。
+`startup` は `pure()` を返すだけで、印付けも解放も持たない — **この変更が触れようのないケースが、相対では
+最も大きく動いている**。これは #291 / #342 が記録している実行ごとのゆらぎで、ランタイムの C ソースが
+乱数の名前を持ち、その名前がシンボルを通って動的ローダの仕事を変えることによる。メモリ参照の最大の差は
+`index_syntax` の -8,208 (0.0014%)。
+
+**足した検査は最適化で消える。** `gen_random_array` (グローバルの配列に印を付ける) を両方のコンパイラで
+`--emit-llvm` してビルドすると、**最適化後の LLVM IR がバイト単位で一致する**。確保直後のオブジェクトは
+状態が分かっているので、印付けが読む load と比較と分岐は定数畳み込みで消える。生成直後の IR には差が出る。
+捕捉を持つクロージャのプログラムでも、トラバーサの `switch` の下がり方は 2 つのコンパイラで同一だった
+(既定に `unreachable` を置いたので、LLVM は既定に来ないと分かる)。
+
+**この 2 行は、サイクルを取る規則が変わる前のハーネスで測っている** (上の前書きが述べる、忙しい機械でも
+サイクルを残す読み方は、この 2 行には掛かっていない)。**したがって 2 行のサイクル列は互いに比較できない。** `0343f84b` の行は contention 0.38 で 51 ケース全部の
+サイクルを持つが、`1334dac7` の行は contention 11.47 で 34 ケース分しか残っていない。命令数とメモリ参照は
+cachegrind のもので機械の負荷に依存しないので、上の判断はそちらだけに載っている。
+
+**ベースラインは測り直した。** この 2 行の前の最新は `b08926a5` で、fork point の 51 コミット前に在る。
+
 ## b08926a54a66d5cb1eb4bb0f4708196bdddb5ab4
 
 Making the RC-IR simplifier's case-of-case rewrite cancel in one step and take a move only when the
