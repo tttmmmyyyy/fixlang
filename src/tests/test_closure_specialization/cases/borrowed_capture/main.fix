@@ -28,9 +28,9 @@ scaled_sum = |key, table| (
 main : IO ();
 main = (
     let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];
-    let weighed = loop((0, 0), |(i, acc)| (
+    let total = loop((0, 0), |(i, acc)| (
         if i == 4 { break $ acc };
         continue $ (i + 1, acc + scaled_sum(i, values))
     ));
-    println $ weighed.to_string
+    println $ total.to_string
 );

@@ -16,7 +16,7 @@ pub enum UsageType {
     // The name is used as a function and is called, with the number of arguments the call supplies.
     // A call is written one argument at a time, so a call of `n` arguments is met here `n` times, at
     // `1..=n`; the one carrying `n` is the whole call, and the rest are its prefixes.
-    CalledAsFunction(usize),
+    CalledAsFunction { arg_count: usize },
     // The name is stored into a field of a struct being built. The first component names the type
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
@@ -93,7 +93,9 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (fun, args) = expr.destructure_app();
         if fun.is_var() && &fun.get_var().name == self.name {
-            self.add_usage(UsageType::CalledAsFunction(args.len()));
+            self.add_usage(UsageType::CalledAsFunction {
+                arg_count: args.len(),
+            });
         }
         let fun_name = if fun.is_var() {
             Some(fun.get_var().name.clone())

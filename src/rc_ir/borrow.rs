@@ -586,7 +586,7 @@ impl<'a> RewriteCtx<'a> {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let named_later = used_later(&arg.name, k);
+            let arg_used_later = used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
@@ -594,8 +594,8 @@ impl<'a> RewriteCtx<'a> {
                     .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
                 callee_borrows
                     && !(self.owns_unit(arg, unit)
-                        && !named_later
-                        && !self.read_out_of_a_value_used_later(arg, unit, k))
+                        && !arg_used_later
+                        && !self.comes_from_a_value_used_later(arg, unit, k))
             })
         })
     }
@@ -603,12 +603,7 @@ impl<'a> RewriteCtx<'a> {
     /// Whether `arg@unit` was read out of a value the caller names after the call. Such a leaf holds
     /// a reference this function made for the call, and routing to the borrow version removes that
     /// reference together with the retain that made it.
-    fn read_out_of_a_value_used_later(
-        &self,
-        arg: &RcVar,
-        unit: &FieldPath,
-        k: &RcExprNode,
-    ) -> bool {
+    fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
             .iter()

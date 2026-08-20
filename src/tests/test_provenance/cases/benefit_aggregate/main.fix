@@ -27,12 +27,12 @@ main = (
     // reference the leaf holds is one this function made for the call, so routing to the borrow
     // version removes it together with the retain that made it.
     let kept = build(2);
-    let a = tally(kept.@table, 0);
-    let b = kept.@key;
+    let kept_tally = tally(kept.@table, 0);
+    let kept_key = kept.@key;
     // `spent` is read a leaf out of and named nowhere after the call, so the object that leaf refers
     // to ends at the call: the own version moves it in and frees it, and borrowing it would only
     // delay the release.
     let spent = build(1);
-    let c = tally(spent.@table, 0);
-    println $ (a + b + c).to_string
+    let spent_tally = tally(spent.@table, 0);
+    println $ (kept_tally + kept_key + spent_tally).to_string
 );

@@ -29,6 +29,6 @@ main : IO ();
 main = (
     let k = 3;
     let shared = |x| x * k;
-    let single = |x| x * k - x;
-    println $ (twice(single, 8) + sum_up(shared, 4) + sum_down(shared, 4)).to_string
+    let called_twice = |x| x * k - x;
+    println $ (twice(called_twice, 8) + sum_up(shared, 4) + sum_down(shared, 4)).to_string
 );

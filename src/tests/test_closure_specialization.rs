@@ -281,13 +281,13 @@ mod integration_tests {
     /// Asserts that the copy whose header is `header` holds the body of the lambda it is specialized
     /// on, which is what a body calling no lambda through a function pointer says.
     fn assert_holds_the_lambdas_body(header: &str, body: &str) {
-        let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+        let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
         assert!(
-            called.is_empty(),
+            called_lambdas.is_empty(),
             "the copy `{}` should hold the body of the lambda it is specialized on, and it \
              calls {:?} instead",
             func_name(header),
-            called
+            called_lambdas
         );
     }
 
@@ -647,7 +647,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("shared_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", SHARED_BODY_OUTPUT);
 
-        let standing = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
+        let standing_lambdas = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
         for func_prefix in ["Main::sum_up#", "Main::sum_down#", "Main::twice#"] {
             let copies = spec_copies(&dump, func_prefix);
             assert!(
@@ -658,22 +658,22 @@ mod integration_tests {
                 functions_named_with(&dump, "Main::")
             );
             for (header, body) in copies {
-                let called = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+                let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
                 assert!(
-                    !called.is_empty(),
+                    !called_lambdas.is_empty(),
                     "the copy `{}` should go on calling the lambda it is specialized on, since \
                      placing the body there would write it twice:\n{}",
                     func_name(header),
                     body
                 );
-                for name in called {
+                for name in called_lambdas {
                     assert!(
-                        standing.contains(&name),
+                        standing_lambdas.contains(&name),
                         "the lambda `{}` that the copy `{}` calls should stand as a function of \
                          its own. The dump names: {:?}",
                         name,
                         func_name(header),
-                        standing
+                        standing_lambdas
                     );
                 }
             }
@@ -693,7 +693,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("borrowed_capture");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", BORROWED_CAPTURE_OUTPUT);
 
-        let mut lending = 0;
+        let mut lending_copies = 0;
         for (header, body) in spec_copies(&dump, "Std::loop") {
             assert_holds_the_lambdas_body(header, body);
             // Each copy receives the capture list of the lambda it is made for, which is named after
@@ -701,7 +701,7 @@ mod integration_tests {
             if !header.contains("CapList@main") {
                 continue;
             }
-            lending += 1;
+            lending_copies += 1;
             assert!(
                 body.contains("Main::scaled_sum") && body.contains("#borrow("),
                 "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
@@ -718,7 +718,7 @@ mod integration_tests {
             );
         }
         assert!(
-            lending > 0,
+            lending_copies > 0,
             "the case should have a copy made for the body that hands an array to a call. The dump \
              names: {:?}",
             functions_named_with(&dump, "Std::loop")

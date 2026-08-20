@@ -753,16 +753,16 @@ fn realize_all(
 fn is_moved_by_placing(
     lambda: &FullName,
     copy: &Arc<ExprNode>,
-    naming_symbols: &Map<FullName, usize>,
+    naming_symbol_counts: &Map<FullName, usize>,
     arity_map: &Map<FullName, usize>,
 ) -> bool {
-    let naming_count = *naming_symbols.get(lambda).unwrap_or_else(|| {
+    let naming_symbol_count = *naming_symbol_counts.get(lambda).unwrap_or_else(|| {
         panic!(
             "a copy is specialized on {}, which no symbol names",
             lambda.to_string()
         )
     });
-    if naming_count != 1 {
+    if naming_symbol_count != 1 {
         return false;
     }
     let arity = match arity_map.get(lambda) {
@@ -770,17 +770,17 @@ fn is_moved_by_placing(
         None => return false,
     };
     let usages = find_usage_of_name::run(copy, lambda);
-    let calls = usages
+    let call_arg_counts = usages
         .iter()
         .map(|usage| match usage {
-            UsageType::CalledAsFunction(args) => Some(*args),
+            UsageType::CalledAsFunction { arg_count } => Some(*arg_count),
             _ => None,
         })
         .collect::<Option<Vec<_>>>();
-    match calls {
+    match call_arg_counts {
         // A call supplying every argument is met once as the whole call and `arity - 1` times as a
         // prefix of it, and nothing else names the lambda.
-        Some(calls) => calls.iter().filter(|args| **args == arity).count() == 1,
+        Some(arg_counts) => arg_counts.iter().filter(|count| **count == arity).count() == 1,
         None => false,
     }
 }
@@ -819,10 +819,10 @@ fn inline_specialized_lambdas(
 
     // How many symbols name each global. A lambda named by one symbol alone is one whose body has
     // nowhere else to be, so putting it there moves it rather than copying it.
-    let mut naming_symbols: Map<FullName, usize> = Map::default();
+    let mut naming_symbol_counts: Map<FullName, usize> = Map::default();
     for sym in symbols.values() {
         for name in sym.expr.as_ref().unwrap().free_vars() {
-            *naming_symbols.entry(name.clone()).or_insert(0) += 1;
+            *naming_symbol_counts.entry(name.clone()).or_insert(0) += 1;
         }
     }
 
@@ -838,7 +838,9 @@ fn inline_specialized_lambdas(
         let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
         let moved_bodies = lambdas
             .iter()
-            .filter(|lambda| is_moved_by_placing(lambda, &copy_expr, &naming_symbols, &arity_map))
+            .filter(|lambda| {
+                is_moved_by_placing(lambda, &copy_expr, &naming_symbol_counts, &arity_map)
+            })
             .map(|lambda| (lambda.clone(), bodies[lambda].clone()))
             .collect::<Map<FullName, Arc<ExprNode>>>();
         if moved_bodies.is_empty() {
@@ -1006,7 +1008,7 @@ fn reaches_a_direct_call(
     find_usage_of_name::run(body, name)
         .into_iter()
         .any(|usage| match usage {
-            UsageType::CalledAsFunction(_) => true,
+            UsageType::CalledAsFunction { .. } => true,
             // A call whose callee is an expression rather than a name is one no copy can be made
             // of, so nothing arrives at a way in through it.
             UsageType::FunctionArgument(func, idx) => func
