@@ -1297,7 +1297,7 @@ impl ExprNode {
                 .generator
                 .free_vars()
                 .iter()
-                .filter(|free| **free == *name)
+                .filter(|free_var| **free_var == *name)
                 .count(),
             Expr::App(func, args) => {
                 func.count_occurrences_of_global(name)
@@ -1864,45 +1864,45 @@ mod tests {
     #[test]
     fn count_occurrences_of_global_counts_every_position() {
         let name = global("f");
-        let here = || expr_var(name.clone(), None);
+        let counted = || expr_var(name.clone(), None);
         let other = || expr_var(global("g"), None);
         let ty = type_tycon(&tycon(global("T")));
         let cases: Vec<(&str, Arc<ExprNode>, usize)> = vec![
-            ("the name itself", here(), 1),
+            ("the name itself", counted(), 1),
             ("another name", other(), 0),
             (
                 "the callee and both arguments of a call",
-                expr_app(here(), vec![here(), here()], None),
+                expr_app(counted(), vec![counted(), counted()], None),
                 3,
             ),
             (
                 "the body of a lambda",
-                expr_abs(vec![binder("x")], here(), None),
+                expr_abs(vec![binder("x")], counted(), None),
                 1,
             ),
             (
                 "the bound value and the body of a `let`",
                 expr_let(
                     PatternNode::make_var(binder("x"), None),
-                    here(),
-                    here(),
+                    counted(),
+                    counted(),
                     None,
                 ),
                 2,
             ),
             (
                 "the condition and both branches of an `if`",
-                expr_if(here(), here(), here(), None),
+                expr_if(counted(), counted(), counted(), None),
                 3,
             ),
             (
                 "the scrutinee and every arm of a `match`",
                 expr_match(
-                    here(),
+                    counted(),
                     vec![
-                        (PatternNode::make_var(binder("x"), None), here()),
+                        (PatternNode::make_var(binder("x"), None), counted()),
                         (PatternNode::make_var(binder("y"), None), other()),
-                        (PatternNode::make_var(binder("z"), None), here()),
+                        (PatternNode::make_var(binder("z"), None), counted()),
                     ],
                     None,
                 ),
@@ -1910,7 +1910,7 @@ mod tests {
             ),
             (
                 "under a type annotation",
-                expr_tyanno(here(), ty.clone(), None),
+                expr_tyanno(counted(), ty.clone(), None),
                 1,
             ),
             (
@@ -1918,16 +1918,16 @@ mod tests {
                 expr_make_struct(
                     tycon(global("T")),
                     vec![
-                        ("a".to_string(), here()),
+                        ("a".to_string(), counted()),
                         ("b".to_string(), other()),
-                        ("c".to_string(), here()),
+                        ("c".to_string(), counted()),
                     ],
                 ),
                 2,
             ),
             (
                 "two elements of an array literal",
-                expr_array_lit(vec![here(), other(), here()], None),
+                expr_array_lit(vec![counted(), other(), counted()], None),
                 2,
             ),
             (
@@ -1937,7 +1937,7 @@ mod tests {
                     tycon(global("T")),
                     vec![],
                     false,
-                    vec![here(), other(), here()],
+                    vec![counted(), other(), counted()],
                     false,
                     None,
                 ),
@@ -1945,7 +1945,7 @@ mod tests {
             ),
             (
                 "both sides of an `eval`",
-                expr_eval(here(), here(), None),
+                expr_eval(counted(), counted(), None),
                 2,
             ),
             (

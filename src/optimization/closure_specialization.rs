@@ -2179,25 +2179,27 @@ mod tests {
         )
     }
 
-    /// `func` applied to `args` arguments, written one argument at a time.
-    fn call(func: &FullName, args: usize) -> Arc<ExprNode> {
+    /// `func` applied to `arg_count` arguments, written one argument at a time.
+    fn call(func: &FullName, arg_count: usize) -> Arc<ExprNode> {
         let mut expr = expr_var(func.clone(), None);
-        for index in 0..args {
+        for index in 0..arg_count {
             let arg = expr_var(FullName::local(&format!("a{}", index)), None);
             expr = expr_app(expr, vec![arg], None);
         }
         expr
     }
 
-    /// The two tables the placement rule reads: `lambda` is named by `naming_symbols` symbols of the
-    /// program and takes `arity` parameters.
+    /// The two tables the placement rule reads: `lambda` is named by `naming_symbol_count` symbols
+    /// of the program and takes `arity` parameters.
     fn tables(
         lambda: &FullName,
-        naming_symbols: usize,
+        naming_symbol_count: usize,
         arity: usize,
     ) -> (Map<FullName, usize>, Map<FullName, usize>) {
         (
-            [(lambda.clone(), naming_symbols)].into_iter().collect(),
+            [(lambda.clone(), naming_symbol_count)]
+                .into_iter()
+                .collect(),
             [(lambda.clone(), arity)].into_iter().collect(),
         )
     }
@@ -2207,12 +2209,12 @@ mod tests {
     #[test]
     fn one_saturated_call_moves_the_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
         assert!(is_moved_by_placing(
             &lambda,
             &call(&lambda, 2),
-            &naming,
-            &arity
+            &naming_symbol_counts,
+            &arity_map
         ));
     }
 
@@ -2220,12 +2222,12 @@ mod tests {
     #[test]
     fn a_lambda_two_symbols_name_keeps_its_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 2, 2);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 2, 2);
         assert!(!is_moved_by_placing(
             &lambda,
             &call(&lambda, 2),
-            &naming,
-            &arity
+            &naming_symbol_counts,
+            &arity_map
         ));
     }
 
@@ -2234,12 +2236,12 @@ mod tests {
     #[test]
     fn a_call_short_of_an_argument_keeps_the_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 3);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 3);
         assert!(!is_moved_by_placing(
             &lambda,
             &call(&lambda, 2),
-            &naming,
-            &arity
+            &naming_symbol_counts,
+            &arity_map
         ));
     }
 
@@ -2247,12 +2249,12 @@ mod tests {
     #[test]
     fn a_call_past_the_last_parameter_keeps_the_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
         assert!(!is_moved_by_placing(
             &lambda,
             &call(&lambda, 3),
-            &naming,
-            &arity
+            &naming_symbol_counts,
+            &arity_map
         ));
     }
 
@@ -2261,32 +2263,42 @@ mod tests {
     #[test]
     fn two_calls_keep_the_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        let other = FullName::from_strs(&["Main"], "g#0123abcd");
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
         let copy = expr_app(
-            expr_app(expr_var(other, None), vec![call(&lambda, 1)], None),
+            expr_app(expr_var(callee, None), vec![call(&lambda, 1)], None),
             vec![call(&lambda, 1)],
             None,
         );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
     }
 
     /// A lambda handed to a call as an argument is one the body would have to stay behind for.
     #[test]
     fn a_lambda_passed_as_an_argument_keeps_its_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
-        let other = FullName::from_strs(&["Main"], "g#0123abcd");
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
         let copy = expr_app(
             expr_app(
-                expr_var(other, None),
+                expr_var(callee, None),
                 vec![expr_var(lambda.clone(), None)],
                 None,
             ),
             vec![call(&lambda, 2)],
             None,
         );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
     }
 
     /// A lambda a `let` also binds is written in two places, so putting the body where the name
@@ -2295,25 +2307,30 @@ mod tests {
     #[test]
     fn a_lambda_a_let_also_binds_keeps_its_body() {
         let lambda = lifted(0);
-        let (naming, arity) = tables(&lambda, 1, 2);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
         let copy = expr_let(
             PatternNode::make_var(var_var(FullName::local("v")), None),
             expr_var(lambda.clone(), None),
             call(&lambda, 2),
             None,
         );
-        assert!(!is_moved_by_placing(&lambda, &copy, &naming, &arity));
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
     }
 
     /// A lambda the arity table does not answer for is one the rule cannot judge.
     #[test]
     fn a_lambda_the_arity_table_does_not_answer_for_keeps_its_body() {
         let lambda = lifted(0);
-        let naming = [(lambda.clone(), 1)].into_iter().collect();
+        let naming_symbol_counts = [(lambda.clone(), 1)].into_iter().collect();
         assert!(!is_moved_by_placing(
             &lambda,
             &call(&lambda, 2),
-            &naming,
+            &naming_symbol_counts,
             &Map::default()
         ));
     }

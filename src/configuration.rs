@@ -1454,7 +1454,7 @@ mod tests {
             .0;
         let mut passes = Vec::new();
         for term in assignment.split('+') {
-            let (list, repeat) = match term.split_once('*') {
+            let (list, repeat_count) = match term.split_once('*') {
                 Some((list, count)) => (
                     list,
                     count.trim().parse::<usize>().unwrap_or_else(|e| {
@@ -1467,9 +1467,9 @@ mod tests {
                 ),
                 None => (term, 1),
             };
-            let names = list.split('"').skip(1).step_by(2).collect::<Vec<_>>();
-            for _ in 0..repeat {
-                passes.extend(names.iter().map(|name| name.to_string()));
+            let pass_names = list.split('"').skip(1).step_by(2).collect::<Vec<_>>();
+            for _ in 0..repeat_count {
+                passes.extend(pass_names.iter().map(|name| name.to_string()));
             }
         }
         passes

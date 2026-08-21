@@ -258,16 +258,16 @@ mod tests {
     use super::*;
     use crate::ast::expr::{expr_app, expr_var};
 
-    /// A call of `func` supplying `args` arguments, written one argument at a time, with `name`
+    /// A call of `func` supplying `arg_count` arguments, written one argument at a time, with `name`
     /// standing at argument index `at_index`.
     fn call_with_name_at(
         func: &FullName,
-        args: usize,
+        arg_count: usize,
         at_index: usize,
         name: &FullName,
     ) -> Arc<ExprNode> {
         let mut expr = expr_var(func.clone(), None);
-        for index in 0..args {
+        for index in 0..arg_count {
             let arg = if index == at_index {
                 expr_var(name.clone(), None)
             } else {
@@ -286,9 +286,9 @@ mod tests {
     fn an_argument_is_recorded_once_per_prefix_reaching_it() {
         let func = FullName::from_strs(&["Main"], "f");
         let name = FullName::from_strs(&["Main"], "x");
-        let args = 4;
-        for at_index in 0..args {
-            let expr = call_with_name_at(&func, args, at_index, &name);
+        let arg_count = 4;
+        for at_index in 0..arg_count {
+            let expr = call_with_name_at(&func, arg_count, at_index, &name);
             let indices = run(&expr, &name)
                 .iter()
                 .map(|usage| match usage {
@@ -301,10 +301,10 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(
                 indices,
-                vec![at_index; args - at_index],
+                vec![at_index; arg_count - at_index],
                 "an argument at index {} of a call of {} arguments",
                 at_index,
-                args
+                arg_count
             );
         }
     }
