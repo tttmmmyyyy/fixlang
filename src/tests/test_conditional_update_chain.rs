@@ -4,6 +4,10 @@
 // before it, twice over. The compiler answers each value once, so a chain of `STAGES` updates
 // compiles in a time that grows with its length, and the deadline on each build is what measures
 // that: asking down both branches instead takes a time that doubles per stage.
+//
+// What the answer decides is whether a write goes into the value or into a copy of it, so a program
+// that reads the value a chain started from, after the chain, observes an answer that has collapsed
+// onto one of the two objects a stage may denote.
 
 #[cfg(test)]
 mod build_time_tests {
@@ -137,5 +141,52 @@ mod build_time_tests {
             "a chain of {} conditional field updates returned a wrong value",
             STAGES
         );
+    }
+}
+
+/// The answers the chain rests on, read through the value it started from.
+#[cfg(test)]
+mod aliasing_tests {
+    use crate::configuration::Configuration;
+    use crate::tests::test_util::test_source;
+
+    /// A chain of conditional updates over a pair the caller keeps: each stage is either the pair
+    /// before it, or that pair with one element of one field written, so every write reaches a value
+    /// the caller still holds. A write that took the value for its own would go in place, and the
+    /// pair the chain started from would read as that write left it.
+    ///
+    /// The conditions are read out of the program's arguments, which the compiler cannot fold away,
+    /// and they alternate, so both the arm that writes and the arm that passes the value through are
+    /// taken.
+    #[test]
+    pub fn test_a_chain_of_conditional_updates_leaves_the_value_it_started_from() {
+        let source = r#"
+            module Main;
+
+            type Pair = unbox struct { a : Array I64, b : Array I64 };
+
+            threaded : Array Bool -> Pair -> Pair;
+            threaded = |cs, q0| (
+                let q1 = if cs.@(0) { q0.mod_a(|xs| xs.set(0, 1)) } else { q0 };
+                let q2 = if cs.@(1) { q1.mod_a(|xs| xs.set(0, 2)) } else { q1 };
+                let q3 = if cs.@(2) { q2.mod_b(|xs| xs.set(0, 3)) } else { q2 };
+                let q4 = if cs.@(3) { q3.mod_a(|xs| xs.set(0, 4)) } else { q3 };
+                q4
+            );
+
+            main : IO ();
+            main = (
+                let args = *IO::get_args;
+                let taken = args.@size > 0;
+                let start = Pair { a : [10, 20], b : [30, 40] };
+                let end = threaded([taken, !taken, taken, !taken], start);
+                assert_eq(|_|"the field the first stage wrote", end.@a.@(0), 1);;
+                assert_eq(|_|"the field the third stage wrote", end.@b.@(0), 3);;
+                assert_eq(|_|"the first field of the value the chain started from", start.@a.@(0), 10);;
+                assert_eq(|_|"the second field of the value the chain started from", start.@b.@(0), 30);;
+                pure()
+            );
+        "#;
+        test_source(source, Configuration::develop_mode());
     }
 }
