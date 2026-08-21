@@ -22,6 +22,27 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## dde0bf3c1af23804a56e5277e5fb5395c200b978
+
+Splitting a struct argument into one argument per field, and reading a construction where the code
+taking it apart can see it (#450, #452, PR #473), measured against `c445cc15`, the fork point, whose
+row is recorded beside it. Both rows were measured on this machine, one after the other.
+
+**Five cases move, and every one of them gets faster.** `bounds_check_indexable` reads and writes a
+two-dimensional array through `Indexable`, and the indirect call it made per element is gone, so LLVM
+folds the inner loop into a copy of the row: 71,268,374 instructions to 2,271,451, **-96.81%**.
+`sum_by_fix` -3.01%, `cp_lib_segtree` -0.40%, `cp_lib_unionfind` -0.37%, `cp_lib_lsegtree` -0.08%.
+The other forty-six are identical to the instruction.
+
+Six cases read one instruction column apart by exactly fourteen instructions in each direction,
+`startup` among them. Fourteen is what `startup` itself moved by, so it is the harness environment
+and not the corpus.
+
+**Both rows came away short of cycle counts** — twenty-four of fifty-one on the new row and
+twenty-five on the old, with other work taking 1.2 and 1.8 cores while they ran. The instruction and
+memory columns are read under cachegrind and do not move with the machine, so the comparison above
+stands on those.
+
 ## b08926a54a66d5cb1eb4bb0f4708196bdddb5ab4
 
 Making the RC-IR simplifier's case-of-case rewrite cancel in one step and take a move only when the
