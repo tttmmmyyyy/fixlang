@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every item the diff touches, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every item the diff touches, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -25,6 +25,8 @@ An issue that stays open after its work has shipped is the failure this prevents
 ## Every item the diff touches
 
 The body is read before the diff, and it has to make the diff make sense. So the body covers every item the diff touches — a function, a method, a type, a trait, a trait method, a field, an enum variant, a constant. Functions are the most numerous, not the most consequential: a type the change introduces settles more about the code than most of the functions around it, and a body that walks past it leaves the reader to reconstruct it from the places it is used.
+
+**A test belongs to the tests section instead.** The items here are the ones the change puts into the program, and a test is read for the behavior it pins rather than for what it does — which is what *The tests the change adds* below says about it. An entry here would fill its three labels with one fact, that the harness runs it once, and carry a diff repeating the file its link already opens. This holds of everything a test file adds to serve its tests as well: a helper, a fixture, a builder.
 
 - **A changed item**: its **role**, written for a reader who has never opened the file; the **change** — what the diff means for it, stated in prose, since the diff shows only the text; the **purpose** — what the change contributes to the pull request; and **its diff**, bounded to the item itself (see *Show a changed item's diff, bounded to the item*).
 - **An added item**: its **role**, written the same way, and its **callers** — the functions that call an added function. An item arrives in the body as a loose thing until the reader is told what reaches it; naming the callers puts it back in the flow it was written for, and it is also what says whether the function runs once per program, once per symbol, or once per node of a walk. An added item that is not called has the same part under the word that fits it: the code that builds an added type, the implementors of an added trait, the code that reads an added constant.
@@ -109,6 +111,19 @@ A pull request body is capped at 65,536 characters, and the per-item coverage �
 So the coverage moves out of the body and hangs below it, as **one or more comments on the same pull request**, whenever the body would otherwise carry more of it than the argument. The body keeps one line where the section stood, naming where the coverage is. A comment on the same page is a scroll rather than a journey, so the reader still meets the coverage where they are.
 
 Split across several comments at the boundaries the coverage already has — one subsystem, one file, one group of items per comment — and give each a heading that says which items it covers.
+
+## The tests the change adds
+
+A test is read for the behavior it pins, so the change's tests are covered together, in one section of their own.
+
+Per test:
+
+- **What it pins** — the behavior that would have to break for it to fail, in one sentence, and the file it lives in.
+- **What it does without the change** — that it goes red, and the message it goes red with. This is what says the test discriminates: a test written against the change is the one thing in the diff that nothing else checks, and the reader has no way to tell a discriminating test from a vacuous one by reading it.
+
+A test that passes with the change and without it pins something this change did not touch. That is worth adding where the point is to hold a neighbouring behavior still, and it is a weaker claim than the label "test" suggests, so say which of the two a test is rather than leaving the reader to assume.
+
+Where several tests pin one behavior between them, say what the set covers and name them, rather than repeating the sentence per test.
 
 ## Every text the change shows to a user
 
