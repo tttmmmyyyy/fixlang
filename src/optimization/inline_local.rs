@@ -1,23 +1,36 @@
 use crate::{
-    ast::program::Program,
+    ast::{
+        name::FullName,
+        program::{Program, Symbol},
+    },
+    misc::Map,
     optimization::{application_inlining, let_elimination},
 };
 
+/// Inline the local functions of every symbol of `prg`.
 pub fn run(prg: &mut Program) {
-    // Perform let elimination and application inlining as "inlining of local functions."
-    // This transforms expressions like `let f = |x| {e0}; in f(y)` to `{e0}[x:=y]`.
-    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(prg);
+    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     for (_name, sym) in &mut prg.symbols {
-        let mut expr = sym.expr.as_ref().unwrap().clone();
-        loop {
-            let mut changed = false;
-            // changed |= pull_let::run_on_expr_once(&mut expr);
-            changed |= let_elimination::run_on_expr_once(&mut expr, &global_lambda_to_arity);
-            changed |= application_inlining::run_on_expr_once(&mut expr);
-            if !changed {
-                break;
-            }
-        }
-        sym.expr = Some(expr);
+        run_on_symbol(sym, &global_lambda_to_arity);
     }
+}
+
+/// Inline the local functions of one symbol: eliminate a `let` that binds a lambda, and reduce an
+/// application of a lambda, until neither applies. Together the two turn `let f = |x| {e0}; f(y)`
+/// into `{e0}[x := y]`.
+///
+/// # Arguments
+/// * `global_lambda_to_arity` - how many parameters each global lambda takes, which is what decides
+///   whether a `let` binding one of them may be eliminated.
+fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+    let mut expr = sym.expr.as_ref().unwrap().clone();
+    loop {
+        let mut changed = false;
+        changed |= let_elimination::run_on_expr_once(&mut expr, global_lambda_to_arity);
+        changed |= application_inlining::run_on_expr_once(&mut expr);
+        if !changed {
+            break;
+        }
+    }
+    sym.expr = Some(expr);
 }

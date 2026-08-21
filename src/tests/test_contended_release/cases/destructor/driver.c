@@ -26,7 +26,7 @@ static pthread_cond_t round_opened = PTHREAD_COND_INITIALIZER;
 static int round_arrived;
 static unsigned rounds_opened;
 
-// Threads that have reached the gate, counted across every round. A round is `worker_count`
+// Threads that have reached `wait_at_gate`, counted across every round. A round is `worker_count`
 // arrivals, so a thread waits until its own group of that many is complete.
 static unsigned gate_arrived;
 
@@ -76,8 +76,8 @@ static void *worker(void *unused) {
     }
 }
 
-// Starts the threads that take the rounds. They live across the rounds, so that a round costs the
-// two words of a rendezvous rather than the creation of a thread.
+// Starts the threads that take the rounds. They live across the rounds, so that a round costs a
+// pass through the rendezvous rather than the creation of a thread.
 void start_workers(int threads) {
     assert(threads >= 1 && threads <= MAX_THREADS);
     worker_count = threads;

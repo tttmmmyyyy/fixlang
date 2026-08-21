@@ -50,7 +50,7 @@ use crate::{
     ast::{
         expr::ExprNode,
         name::FullName,
-        program::Program,
+        program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     constants::CAP_NAME,
@@ -59,9 +59,12 @@ use crate::{
 };
 use std::sync::Arc;
 
-pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> {
+/// How many parameters each global lambda takes, keyed by its name. A name is in the map when its
+/// symbol is a lambda expression, and the count runs over the whole sequence of lambdas that
+/// expression opens with, so `|x| |y| {e0}` counts two.
+pub fn create_global_lambda_to_arity_map(symbols: &Map<FullName, Symbol>) -> Map<FullName, usize> {
     let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
-    for (name, sym) in &prg.symbols {
+    for (name, sym) in symbols {
         let expr = sym.expr.as_ref().unwrap();
         if expr.is_lam() {
             let param_lists = expr.destructure_lam_sequence().0;

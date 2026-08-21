@@ -35,9 +35,24 @@ mod integration_tests {
     /// optimization levels produce — at `none` the same code stays as closures with no funptr
     /// version to borrow.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
+        emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
+    }
+
+    /// Build the case project at the `max` optimization level and return the dumped RC IR of every
+    /// module.
+    ///
+    /// The body of a loop written in `Main` is put into the copy of `Std::loop` made for it, so a
+    /// case asserting on what such a body does reads the whole program rather than one module.
+    fn emit_all_rc_ir(project_dir: &Path) -> String {
+        emit_rc_ir(project_dir, "all", "rc_ir.post.txt")
+    }
+
+    /// Build the case project with `--emit-rc-ir <filter>` and return what it wrote to `dump_file`
+    /// under `.fixlang/`.
+    fn emit_rc_ir(project_dir: &Path, filter: &str, dump_file: &str) -> String {
         let output = fix_command_at_opt_level("build", "max")
             .arg("--emit-rc-ir")
-            .arg("Main")
+            .arg(filter)
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute fix build --emit-rc-ir");
@@ -48,7 +63,7 @@ mod integration_tests {
             panic!("fix build --emit-rc-ir failed");
         }
 
-        let dump_path = project_dir.join(".fixlang/rc_ir.Main.post.txt");
+        let dump_path = project_dir.join(".fixlang").join(dump_file);
         fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
@@ -255,6 +270,49 @@ mod integration_tests {
             own_calls,
             1,
             "the last-use call should stay on the own version:\n{}",
+            main.join("\n")
+        );
+    }
+
+    /// Verifies that routing to a borrow version reads the lifetime of the object an argument refers
+    /// to rather than of the name it arrives under: a leaf read out of an aggregate the caller goes
+    /// on to use is a reference this function made for the call, so routing removes it together with
+    /// the retain that made it. The call whose aggregate is named nowhere afterwards keeps the
+    /// owning version, since the object that leaf refers to ends there either way.
+    #[test]
+    fn test_benefit_routing_by_the_objects_lifetime() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = func_block(&dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        });
+        let tally_calls = main
+            .iter()
+            .filter(|l| l.contains("= Main::tally"))
+            .collect::<Vec<_>>();
+        let borrow_calls = tally_calls
+            .iter()
+            .filter(|l| l.contains("#borrow("))
+            .count();
+        assert_eq!(
+            borrow_calls,
+            1,
+            "the call handed a leaf of an aggregate that outlives it should route to the borrow \
+             version:\n{}",
+            main.join("\n")
+        );
+        assert_eq!(
+            tally_calls.len() - borrow_calls,
+            1,
+            "the call handed a leaf whose object ends there should stay on the own version:\n{}",
+            main.join("\n")
+        );
+        // Handing an owning callee a leaf read out of an aggregate the caller goes on to use costs a
+        // retain. Routing is what removes it, so `main` counts no reference at all.
+        assert!(
+            main.iter().all(|l| !l.trim_start().starts_with("retain ")),
+            "the routed call should leave `main` with no retain to make:\n{}",
             main.join("\n")
         );
     }
@@ -599,7 +657,7 @@ mod integration_tests {
     #[test]
     fn test_unique_check_elim_through_struct_field() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");
-        let dump = emit_main_rc_ir(&project_dir);
+        let dump = emit_all_rc_ir(&project_dir);
 
         // The loop updates the array through a field of an unboxed struct. Taking that struct apart
         // and putting it back together moves the fields in registers without touching a reference
@@ -623,7 +681,7 @@ mod integration_tests {
     #[test]
     fn test_unique_check_elim_shared_loop_entry() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
-        let dump = emit_main_rc_ir(&project_dir);
+        let dump = emit_all_rc_ir(&project_dir);
 
         // Specialization clones the loop body per input uniqueness, so a loop entered with a shared
         // array pays the uniqueness check on its first iteration only: that check clones the array,
