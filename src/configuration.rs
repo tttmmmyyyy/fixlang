@@ -23,6 +23,7 @@ use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, File};
+use std::iter;
 use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
@@ -68,7 +69,7 @@ fn llvm_passes_for_speed() -> Vec<String> {
     LLVM_HEAD_PASSES
         .iter()
         .map(|pass| pass.to_string())
-        .chain(std::iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
+        .chain(iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
         .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
         .collect()
 }
@@ -1436,14 +1437,15 @@ mod tests {
         SubCommand,
     };
     use crate::misc::Map;
+    use std::fs;
+    use std::path::Path;
 
     /// The pass list `passes_optimizer.py` starts its search from, read out of its `INITIAL_PASSES`
     /// assignment: `+`-separated Python lists of pass names, each list optionally repeated with
     /// `* n`.
     fn initial_passes_of_passes_optimizer() -> Vec<String> {
-        let script_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("passes_optimizer.py");
-        let script = std::fs::read_to_string(&script_path)
+        let script_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("passes_optimizer.py");
+        let script = fs::read_to_string(&script_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {}", script_path.display(), e));
         let assignment = script
             .split_once("INITIAL_PASSES = ")
