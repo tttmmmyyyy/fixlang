@@ -122,7 +122,7 @@ impl TypeCheckCache for FileCache {
             }
             Ok(file) => file,
         };
-        let serialized = serde_pickle::to_vec(&expr, Default::default()).unwrap();
+        let serialized = postcard::to_allocvec(expr).unwrap();
         match cache_file.write_all(&serialized) {
             Ok(_) => {}
             Err(_) => {
@@ -164,7 +164,7 @@ impl TypeCheckCache for FileCache {
                 return None;
             }
         }
-        let expr: TypedExpr = match serde_pickle::from_slice(&cache_bytes, Default::default()) {
+        let expr: TypedExpr = match postcard::from_bytes(&cache_bytes) {
             Ok(res) => res,
             Err(why) => {
                 warn_msg(&format!(
