@@ -29,6 +29,7 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::provenance::{LeafOrigin, Provenance};
+use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
@@ -65,6 +66,15 @@ pub(crate) struct VarTable {
     /// The type of every variable, parameters included, so a leaf that roots at any of them can be
     /// truncated to its reference-counting unit.
     pub(crate) var_tys: Map<FullName, Arc<TypeNode>>,
+    /// The `origin` already answered for a value at a path. An origin is a function of the bindings
+    /// and the types, and both are complete once the table is built, so an answer holds for as long
+    /// as the table does.
+    ///
+    /// A match binding asks its question of every arm, and an arm that rebuilds a value out of the
+    /// one before it asks the same question of that one, so a chain of `n` such bindings is reached
+    /// by `2^n` walks while the answers along it number one per value and path. Answering each of
+    /// them once is what keeps the walk proportional to the function.
+    origins: RefCell<Map<VarPath, Origin>>,
 }
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
@@ -94,6 +104,7 @@ impl VarTable {
             closure_targets: Map::default(),
             param_tys: Map::default(),
             var_tys: Map::default(),
+            origins: RefCell::default(),
         }
     }
 }
@@ -162,7 +173,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 }
 
 /// Where the object at a leaf comes from.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
     Exactly(VarPath),
@@ -241,7 +252,13 @@ pub(crate) fn origin(
     var: &FullName,
     path: &[usize],
 ) -> Origin {
-    grow_stack(|| origin_inner(vars, type_env, var, path))
+    let value = (var.clone(), path.to_vec());
+    if let Some(known) = vars.origins.borrow().get(&value) {
+        return known.clone();
+    }
+    let answer = grow_stack(|| origin_inner(vars, type_env, var, path));
+    vars.origins.borrow_mut().insert(value, answer.clone());
+    answer
 }
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
