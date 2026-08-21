@@ -1841,3 +1841,142 @@ pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) 
         _ => (expr.clone(), vec![]),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::types::{tycon, type_tycon};
+    use crate::fixstd::builtin::InlineLLVMMakeStructBody;
+
+    /// A global name, which is the kind of name the count is asked about.
+    fn global(name: &str) -> FullName {
+        FullName::from_strs(&["Main"], name)
+    }
+
+    /// A binder of the local `name`.
+    fn binder(name: &str) -> Arc<Var> {
+        var_var(FullName::local(name))
+    }
+
+    /// The count is the number of places the name is written, summed over every position of the
+    /// expression tree, because an expression put where the name stands goes into every one of
+    /// them.
+    #[test]
+    fn count_occurrences_of_global_counts_every_position() {
+        let name = global("f");
+        let here = || expr_var(name.clone(), None);
+        let other = || expr_var(global("g"), None);
+        let ty = type_tycon(&tycon(global("T")));
+        let cases: Vec<(&str, Arc<ExprNode>, usize)> = vec![
+            ("the name itself", here(), 1),
+            ("another name", other(), 0),
+            (
+                "the callee and both arguments of a call",
+                expr_app(here(), vec![here(), here()], None),
+                3,
+            ),
+            (
+                "the body of a lambda",
+                expr_abs(vec![binder("x")], here(), None),
+                1,
+            ),
+            (
+                "the bound value and the body of a `let`",
+                expr_let(
+                    PatternNode::make_var(binder("x"), None),
+                    here(),
+                    here(),
+                    None,
+                ),
+                2,
+            ),
+            (
+                "the condition and both branches of an `if`",
+                expr_if(here(), here(), here(), None),
+                3,
+            ),
+            (
+                "the scrutinee and every arm of a `match`",
+                expr_match(
+                    here(),
+                    vec![
+                        (PatternNode::make_var(binder("x"), None), here()),
+                        (PatternNode::make_var(binder("y"), None), other()),
+                        (PatternNode::make_var(binder("z"), None), here()),
+                    ],
+                    None,
+                ),
+                3,
+            ),
+            (
+                "under a type annotation",
+                expr_tyanno(here(), ty.clone(), None),
+                1,
+            ),
+            (
+                "two fields of a struct expression",
+                expr_make_struct(
+                    tycon(global("T")),
+                    vec![
+                        ("a".to_string(), here()),
+                        ("b".to_string(), other()),
+                        ("c".to_string(), here()),
+                    ],
+                ),
+                2,
+            ),
+            (
+                "two elements of an array literal",
+                expr_array_lit(vec![here(), other(), here()], None),
+                2,
+            ),
+            (
+                "two arguments of an FFI call",
+                expr_ffi_call(
+                    "puts".to_string(),
+                    tycon(global("T")),
+                    vec![],
+                    false,
+                    vec![here(), other(), here()],
+                    false,
+                    None,
+                ),
+                2,
+            ),
+            (
+                "both sides of an `eval`",
+                expr_eval(here(), here(), None),
+                2,
+            ),
+            (
+                "two operands of an inline-LLVM operation",
+                expr_llvm(
+                    Box::new(InlineLLVMMakeStructBody {
+                        field_names: vec![name.clone(), global("g"), name.clone()],
+                    }),
+                    ty,
+                    None,
+                ),
+                2,
+            ),
+        ];
+        for (position, expr, expected) in cases {
+            assert_eq!(
+                expr.count_occurrences_of_global(&name),
+                expected,
+                "wrong count for the name written at {}",
+                position
+            );
+        }
+    }
+
+    /// A local name is one a binder of the expression may bind, so the count, which reads every
+    /// occurrence as standing for one value, refuses it.
+    #[test]
+    #[should_panic(expected = "is a local name")]
+    fn count_occurrences_of_global_refuses_a_local_name() {
+        let name = FullName::local("x");
+        expr_abs(vec![binder("x")], expr_var(name.clone(), None), None)
+            .count_occurrences_of_global(&name);
+    }
+}

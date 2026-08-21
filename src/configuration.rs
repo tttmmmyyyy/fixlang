@@ -1425,8 +1425,69 @@ int main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
+    use super::{
+        Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand,
+        LLVM_HEAD_PASSES, LLVM_O3_PIPELINE, LLVM_O3_RUNS_FOR_SPEED, LLVM_TAIL_PASSES,
+    };
     use crate::misc::Map;
+
+    /// The pass list `passes_optimizer.py` starts its search from, read out of its `INITIAL_PASSES`
+    /// assignment: `+`-separated Python lists of pass names, each list optionally repeated with
+    /// `* n`.
+    fn initial_passes_of_passes_optimizer() -> Vec<String> {
+        let script_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("passes_optimizer.py");
+        let script = std::fs::read_to_string(&script_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", script_path.display(), e));
+        let assignment = script
+            .split_once("INITIAL_PASSES = ")
+            .expect("`passes_optimizer.py` should assign `INITIAL_PASSES`")
+            .1
+            .split_once("\n]")
+            .expect("the assignment of `INITIAL_PASSES` should end at a line opening with `]`")
+            .0;
+        let mut passes = Vec::new();
+        for term in assignment.split('+') {
+            let (list, repeat) = match term.split_once('*') {
+                Some((list, count)) => (
+                    list,
+                    count.trim().parse::<usize>().unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to read the repeat count of `{}`: {}",
+                            term.trim(),
+                            e
+                        )
+                    }),
+                ),
+                None => (term, 1),
+            };
+            let names = list.split('"').skip(1).step_by(2).collect::<Vec<_>>();
+            for _ in 0..repeat {
+                passes.extend(names.iter().map(|name| name.to_string()));
+            }
+        }
+        passes
+    }
+
+    /// `passes_optimizer.py` searches for a faster pipeline starting from the one the compiler
+    /// ships, so its `INITIAL_PASSES` is the pipeline the levels built for speed run. A pass added
+    /// to one side alone would start the search from a pipeline no build has, and report its
+    /// findings against a baseline the compiler does not run.
+    #[test]
+    fn test_passes_optimizer_starts_from_the_shipped_pipeline() {
+        let shipped = LLVM_HEAD_PASSES
+            .iter()
+            .map(|pass| pass.to_string())
+            .chain(std::iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
+            .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            initial_passes_of_passes_optimizer(),
+            shipped,
+            "`INITIAL_PASSES` in `passes_optimizer.py` is out of sync with the pipeline the \
+             optimization levels built for speed run"
+        );
+    }
 
     /// The hash `hash` gives a build configuration to which `edit` has been applied.
     fn hash_after(

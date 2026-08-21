@@ -252,3 +252,60 @@ impl ExprVisitor for UsageFinder<'_> {
         EndVisitResult::unchanged(expr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::{expr_app, expr_var};
+
+    /// A call of `func` supplying `args` arguments, written one argument at a time, with `name`
+    /// standing at argument index `at_index`.
+    fn call_with_name_at(
+        func: &FullName,
+        args: usize,
+        at_index: usize,
+        name: &FullName,
+    ) -> Arc<ExprNode> {
+        let mut expr = expr_var(func.clone(), None);
+        for index in 0..args {
+            let arg = if index == at_index {
+                expr_var(name.clone(), None)
+            } else {
+                expr_var(FullName::local(&format!("a{}", index)), None)
+            };
+            expr = expr_app(expr, vec![arg], None);
+        }
+        expr
+    }
+
+    /// A call is met once for the whole call and once for each of its prefixes, and a prefix reaches
+    /// an argument exactly when the argument is inside it, so an argument at index `i` of a call of
+    /// `n` arguments is recorded `n - i` times. A caller counting the uses of a name reads the
+    /// count this way round.
+    #[test]
+    fn an_argument_is_recorded_once_per_prefix_reaching_it() {
+        let func = FullName::from_strs(&["Main"], "f");
+        let name = FullName::from_strs(&["Main"], "x");
+        let args = 4;
+        for at_index in 0..args {
+            let expr = call_with_name_at(&func, args, at_index, &name);
+            let indices = run(&expr, &name)
+                .iter()
+                .map(|usage| match usage {
+                    UsageType::FunctionArgument(callee, index) => {
+                        assert_eq!(callee.as_ref(), Some(&func));
+                        *index
+                    }
+                    _ => panic!("a name standing only as an argument is recorded only as one"),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                indices,
+                vec![at_index; args - at_index],
+                "an argument at index {} of a call of {} arguments",
+                at_index,
+                args
+            );
+        }
+    }
+}
