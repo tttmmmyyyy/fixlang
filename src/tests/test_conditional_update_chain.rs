@@ -42,35 +42,40 @@ mod build_time_tests {
     /// The main the chains are called from. The conditions are read out of the program's arguments,
     /// which the compiler cannot fold away, and are all true for every run: a program is given its
     /// own name as its first argument.
-    fn main_calling(chain: &str) -> String {
+    fn main_source(chain_name: &str) -> String {
         format!(
             "main : IO ();\n\
              main = (\n\
              \x20   let args = *IO::get_args;\n\
              \x20   let cs = Array::fill({STAGES}, args.@size > 0);\n\
-             \x20   println $ {chain}(cs, Pair {{ a : [{FIRST_A}, 2], b : [{FIRST_B}, 4] }}).to_string\n\
+             \x20   println $ {chain_name}(cs, Pair {{ a : [{FIRST_A}, 2], b : [{FIRST_B}, 4] }}).to_string\n\
              );\n"
         )
     }
 
-    /// The source of a chain of `STAGES` stages over the pair the function `name` is given as
-    /// `{var}0`: stage `i` binds `{var}{i+1}` to what `stage` writes out of the stage before it, and
-    /// the function returns the first elements of the last stage's two fields as one number.
-    fn chain_source(name: &str, var: &str, stage: impl Fn(usize, &str) -> String) -> String {
+    /// The source of a chain of `STAGES` stages over the pair the function `chain_name` is given
+    /// as `{var_prefix}0`: stage `i` binds `{var_prefix}{i+1}` to what `stage_source` writes out of
+    /// the stage before it, and the function returns the first elements of the last stage's two
+    /// fields as one number.
+    fn chain_source(
+        chain_name: &str,
+        var_prefix: &str,
+        stage_source: impl Fn(usize, &str) -> String,
+    ) -> String {
         let mut body = String::new();
         for i in 0..STAGES {
             body += &format!(
-                "    let {var}{} = {};\n",
+                "    let {var_prefix}{} = {};\n",
                 i + 1,
-                stage(i, &format!("{var}{i}"))
+                stage_source(i, &format!("{var_prefix}{i}"))
             );
         }
-        body += &format!("    {var}{STAGES}.@a.@(0) * 10 + {var}{STAGES}.@b.@(0)\n");
+        body += &format!("    {var_prefix}{STAGES}.@a.@(0) * 10 + {var_prefix}{STAGES}.@b.@(0)\n");
         format!(
-            "{HEADER}{name} : Array Bool -> Pair -> I64;\n\
-             {name} = |cs, {var}0| (\n{body});\n\
+            "{HEADER}{chain_name} : Array Bool -> Pair -> I64;\n\
+             {chain_name} = |cs, {var_prefix}0| (\n{body});\n\
              \n{}",
-            main_calling(name)
+            main_source(chain_name)
         )
     }
 
@@ -78,7 +83,7 @@ mod build_time_tests {
     /// built out of that pair's two fields exchanged. Both arms reach the previous stage — the
     /// second through the fields it is built from — so every stage doubles the question.
     fn swap_chain_source() -> String {
-        chain_source("swaps", "p", |i, prev| {
+        chain_source("swap_chain", "p", |i, prev| {
             format!("if cs.@({i}) {{ Pair {{ a : {prev}.@b, b : {prev}.@a }} }} else {{ {prev} }}")
         })
     }
@@ -98,7 +103,7 @@ mod build_time_tests {
     /// through conditions: each stage is either the pair before it, or that pair with one element
     /// of one field written.
     fn update_chain_source() -> String {
-        chain_source("updates", "q", |i, prev| {
+        chain_source("update_chain", "q", |i, prev| {
             format!(
                 "if cs.@({i}) {{ {prev}.mod_a(|xs| xs.set(0, {})) }} else {{ {prev} }}",
                 i + 1
@@ -171,8 +176,8 @@ mod aliasing_tests {
 
             type Pair = unbox struct { a : Array I64, b : Array I64 };
 
-            threaded : Array Bool -> Pair -> Pair;
-            threaded = |cs, q0| (
+            update_chain : Array Bool -> Pair -> Pair;
+            update_chain = |cs, q0| (
                 let q1 = if cs.@(0) { q0.mod_a(|xs| xs.set(0, 1)) } else { q0 };
                 let q2 = if cs.@(1) { q1.mod_a(|xs| xs.set(0, 2)) } else { q1 };
                 let q3 = if cs.@(2) { q2.mod_b(|xs| xs.set(0, 3)) } else { q2 };
@@ -185,7 +190,7 @@ mod aliasing_tests {
                 let args = *IO::get_args;
                 let taken = args.@size > 0;
                 let start = Pair { a : [10, 20], b : [30, 40] };
-                let end = threaded([taken, !taken, taken, !taken], start);
+                let end = update_chain([taken, !taken, taken, !taken], start);
                 assert_eq(|_|"the field the first stage wrote", end.@a.@(0), 1);;
                 assert_eq(|_|"the field the third stage wrote", end.@b.@(0), 3);;
                 assert_eq(|_|"the first field of the value the chain started from", start.@a.@(0), 10);;

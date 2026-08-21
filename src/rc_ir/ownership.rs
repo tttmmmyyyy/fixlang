@@ -253,12 +253,12 @@ pub(crate) fn origin(
     var: &FullName,
     path: &[usize],
 ) -> Origin {
-    let value = (var.clone(), path.to_vec());
-    if let Some(known) = vars.origins.borrow().get(&value) {
+    let key = (var.clone(), path.to_vec());
+    if let Some(known) = vars.origins.borrow().get(&key) {
         return known.clone();
     }
     let answer = grow_stack(|| origin_inner(vars, type_env, var, path));
-    vars.origins.borrow_mut().insert(value, answer.clone());
+    vars.origins.borrow_mut().insert(key, answer.clone());
     answer
 }
 
