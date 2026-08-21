@@ -61,6 +61,18 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// stay in sync with this, `LLVM_HEAD_PASSES` and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
+/// The passes the optimization levels built for speed run over each generated module, in order:
+/// `LLVM_HEAD_PASSES`, `LLVM_O3_RUNS_FOR_SPEED` runs of `LLVM_O3_PIPELINE`, then
+/// `LLVM_TAIL_PASSES`.
+fn llvm_passes_for_speed() -> Vec<String> {
+    LLVM_HEAD_PASSES
+        .iter()
+        .map(|pass| pass.to_string())
+        .chain(std::iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
+        .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
+        .collect()
+}
+
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -960,13 +972,7 @@ impl Configuration {
             FixOptimizationLevel::None => vec![],
             FixOptimizationLevel::Basic => vec![LLVM_O3_PIPELINE.to_string()],
             FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
-                let mut passes = LLVM_HEAD_PASSES
-                    .iter()
-                    .map(|pass| pass.to_string())
-                    .collect::<Vec<_>>();
-                passes.extend(vec![LLVM_O3_PIPELINE.to_string(); LLVM_O3_RUNS_FOR_SPEED]);
-                passes.extend(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()));
-                passes
+                llvm_passes_for_speed()
             }
         }
     }
@@ -1426,8 +1432,8 @@ int main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand,
-        LLVM_HEAD_PASSES, LLVM_O3_PIPELINE, LLVM_O3_RUNS_FOR_SPEED, LLVM_TAIL_PASSES,
+        llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
+        SubCommand,
     };
     use crate::misc::Map;
 
@@ -1475,15 +1481,9 @@ mod tests {
     /// findings against a baseline the compiler does not run.
     #[test]
     fn test_passes_optimizer_starts_from_the_shipped_pipeline() {
-        let shipped = LLVM_HEAD_PASSES
-            .iter()
-            .map(|pass| pass.to_string())
-            .chain(std::iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
-            .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
-            .collect::<Vec<_>>();
         assert_eq!(
             initial_passes_of_passes_optimizer(),
-            shipped,
+            llvm_passes_for_speed(),
             "`INITIAL_PASSES` in `passes_optimizer.py` is out of sync with the pipeline the \
              optimization levels built for speed run"
         );
