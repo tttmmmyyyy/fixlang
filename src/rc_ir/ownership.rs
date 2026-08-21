@@ -580,12 +580,12 @@ fn resolve_callee_params<'a>(
     Some(func.params.as_slice())
 }
 
-/// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result — the pure
-/// projections `as_arg_projection` reads out of `result_prov`.
+/// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result: the result
+/// leaves whose sole source in `result_prov` is one argument leaf.
 ///
-/// Dropping an argument leaf's consume is sound exactly when the result aliases it, so this shares
-/// `as_arg_projection` with `origin`: a leaf that joins an argument with another source aliases nothing and
-/// keeps its consume, and one whose sole source is `Arg` does both.
+/// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
+/// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
+/// another source aliases nothing, so it keeps its consume.
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
