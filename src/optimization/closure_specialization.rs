@@ -747,9 +747,10 @@ fn realize_all(
 /// it: `copy` is the only symbol naming `lambda`, it writes the name once, and that one place is the
 /// callee of a call supplying every argument.
 ///
-/// The count of places comes first because the body goes into every one of them. What the one place
-/// is decides separately: a name passed as an argument, captured, or called with fewer arguments
-/// than the lambda takes leaves a closure where it stands, which is a body that has to stay.
+/// The body goes into every place the name is written, so one place is what makes putting it there a
+/// move. What that one place is decides the rest: a name passed as an argument, captured, held as a
+/// value, or called with fewer arguments than the lambda takes leaves a closure where it stands,
+/// which is a body that has to stay.
 ///
 /// # Arguments
 /// * `copy` - the body of the copy, in which the uses of `lambda` are counted.
@@ -770,31 +771,17 @@ fn is_moved_by_placing(
     if naming_symbol_count != 1 {
         return false;
     }
-    if copy.count_occurrences_of_global(lambda) != 1 {
-        return false;
-    }
     let arity = match arity_map.get(lambda) {
         Some(arity) => *arity,
         None => return false,
     };
-    let usages = find_usage_of_name::run(copy, lambda);
-    let call_arg_counts = usages
-        .iter()
-        .map(|usage| match usage {
-            UsageType::CalledAsFunction { arg_count } => Some(*arg_count),
-            _ => None,
-        })
-        .collect::<Option<Vec<_>>>();
-    match call_arg_counts {
-        // One call supplying every argument is met `arity` times: once as the whole call, and once
-        // as each of its prefixes. A second call — supplying every argument or fewer — is met again,
-        // so the count of uses says whether the lambda is called anywhere else.
-        Some(arg_counts) => {
-            arg_counts.len() == arity
-                && arg_counts.iter().filter(|count| **count == arity).count() == 1
-        }
-        None => false,
-    }
+    // The walk records one use per place the name is written, so the copy writes the lambda's name
+    // once, and writes it as the callee of a call supplying every parameter, exactly when this is
+    // the whole of what it says about the name.
+    matches!(
+        find_usage_of_name::run(copy, lambda).as_slice(),
+        [UsageType::CalledAsFunction { arg_count }] if *arg_count == arity
+    )
 }
 
 /// Put the body of each lambda a copy is specialized on where the copy calls it.
@@ -1034,6 +1021,9 @@ fn reaches_a_direct_call(
                     )
                 })
             }
+            // A value held where nothing takes it apart is passed on whole, so a way in is reached
+            // through whatever holds it rather than here.
+            UsageType::Elsewhere => false,
         })
 }
 

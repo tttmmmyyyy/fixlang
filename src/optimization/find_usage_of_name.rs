@@ -12,23 +12,23 @@ pub enum UsageType {
     // The name is passed as an argument to a call. The first component names the function called,
     // and is `None` where the callee is an expression rather than a name; the second is the index of
     // the argument the name was passed as.
-    //
-    // A call is met once for the whole call and once for each of its prefixes, so an argument at
-    // index `i` of a call of `n` arguments is recorded `n - i` times.
     FunctionArgument(Option<FullName>, usize),
     // The name is used as a function and is called, with the number of arguments the call supplies.
-    // A call is written one argument at a time, so a call of `n` arguments is met here `n` times, at
-    // `1..=n`; the one carrying `n` is the whole call, and the rest are its prefixes.
     CalledAsFunction { arg_count: usize },
     // The name is stored into a field of a struct being built. The first component names the type
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
     CapturedInto(FullName, usize),
+    // The name stands where none of the above receives it: the bound value of a `let`, a branch of
+    // an `if` or a `match`, an element of an array literal, under a type annotation, either side of
+    // an `eval`, or an operand of an inline-LLVM operation. What holds it there passes it on whole,
+    // so the position says nothing about the name beyond its being there.
+    Elsewhere,
 }
 
-// Every use of `name` in `expr`, in the order the walk meets them. An occurrence of a local `name`
-// standing under an inner binding of the same name is a use of that binding, and stays out of the
-// result.
+// Every use of `name` in `expr`, in the order the walk meets them, one entry per place the name is
+// written. An occurrence of a local `name` standing under an inner binding of the same name is a use
+// of that binding, and stays out of the result.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     let mut usages = Vec::new();
     let mut finder = UsageFinder {
@@ -57,14 +57,24 @@ impl UsageFinder<'_> {
     fn shadowed(&self, state: &VisitState) -> bool {
         self.name.is_local() && state.scope.has_value(&self.name.name)
     }
+
+    // Whether `expr` is the name being searched for, written there.
+    fn is_the_name(&self, expr: &Arc<ExprNode>) -> bool {
+        expr.is_var() && &expr.get_var().name == self.name
+    }
 }
 
 impl ExprVisitor for UsageFinder<'_> {
+    // The name standing anywhere the calls and the struct expressions below did not already take it
+    // from is held as a value there, which is what `Elsewhere` records.
     fn start_visit_var(
         &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
+        expr: &Arc<ExprNode>,
+        state: &mut VisitState,
     ) -> StartVisitResult {
+        if !self.shadowed(state) && self.is_the_name(expr) {
+            self.add_usage(UsageType::Elsewhere);
+        }
         StartVisitResult::VisitChildren
     }
 
@@ -72,11 +82,23 @@ impl ExprVisitor for UsageFinder<'_> {
         EndVisitResult::unchanged(expr)
     }
 
+    // An inline-LLVM operation names the values it operates on rather than holding them as
+    // subexpressions, so the walk reaches them here instead of at a `Var` of its own.
     fn start_visit_llvm(
         &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
+        expr: &Arc<ExprNode>,
+        state: &mut VisitState,
     ) -> StartVisitResult {
+        if !self.shadowed(state) {
+            let operands = expr.get_llvm().generator.free_vars();
+            let written = operands
+                .iter()
+                .filter(|operand| *operand == self.name)
+                .count();
+            for _ in 0..written {
+                self.add_usage(UsageType::Elsewhere);
+            }
+        }
         StartVisitResult::VisitChildren
     }
 
@@ -86,6 +108,11 @@ impl ExprVisitor for UsageFinder<'_> {
 
     // A call records the name once for standing as the callee, and once for each argument position
     // it is passed at, with the callee named where the callee is a name.
+    //
+    // A call of `n` arguments is written as `n` nested applications, and this reads the whole nest
+    // at its outermost node, so the walk goes on into the places the nest holds rather than into the
+    // nest itself. Were the nest walked, each of its prefixes would read the same callee and record
+    // it again.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -95,10 +122,12 @@ impl ExprVisitor for UsageFinder<'_> {
             return StartVisitResult::VisitChildren;
         }
         let (fun, args) = expr.destructure_app();
-        if fun.is_var() && &fun.get_var().name == self.name {
+        if self.is_the_name(&fun) {
             self.add_usage(UsageType::CalledAsFunction {
                 arg_count: args.len(),
             });
+        } else {
+            self.visit_expr(&fun, state);
         }
         let fun_name = if fun.is_var() {
             Some(fun.get_var().name.clone())
@@ -106,11 +135,13 @@ impl ExprVisitor for UsageFinder<'_> {
             None
         };
         for (i, arg) in args.iter().enumerate() {
-            if arg.is_var() && &arg.get_var().name == self.name {
+            if self.is_the_name(arg) {
                 self.add_usage(UsageType::FunctionArgument(fun_name.clone(), i));
+            } else {
+                self.visit_expr(arg, state);
             }
         }
-        StartVisitResult::VisitChildren
+        StartVisitResult::Return
     }
 
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -193,11 +224,13 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (tycon, fields) = expr.destructure_make_struct().unwrap();
         for (position, (_, _, value)) in fields.iter().enumerate() {
-            if value.is_var() && &value.get_var().name == self.name {
+            if self.is_the_name(value) {
                 self.add_usage(UsageType::CapturedInto(tycon.name.clone(), position));
+            } else {
+                self.visit_expr(value, state);
             }
         }
-        StartVisitResult::VisitChildren
+        StartVisitResult::Return
     }
 
     fn end_visit_make_struct(
@@ -256,7 +289,13 @@ impl ExprVisitor for UsageFinder<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::expr::{expr_app, expr_var};
+    use crate::ast::expr::{
+        expr_abs, expr_app, expr_array_lit, expr_eval, expr_ffi_call, expr_if, expr_let, expr_llvm,
+        expr_make_struct, expr_match, expr_tyanno, expr_var, var_var, Var,
+    };
+    use crate::ast::pattern::PatternNode;
+    use crate::ast::types::{tycon, type_tycon};
+    use crate::fixstd::builtin::InlineLLVMMakeStructBody;
 
     /// A call of `func` supplying `arg_count` arguments, written one argument at a time, with `name`
     /// standing at argument index `at_index`.
@@ -278,12 +317,11 @@ mod tests {
         expr
     }
 
-    /// A call is met once for the whole call and once for each of its prefixes, and a prefix reaches
-    /// an argument exactly when the argument is inside it, so an argument at index `i` of a call of
-    /// `n` arguments is recorded `n - i` times. A caller counting the uses of a name reads the
-    /// count this way round.
+    /// A call is read at its outermost node, so an argument is recorded once however many arguments
+    /// the call supplies and wherever among them it stands. A caller counting the uses of a name
+    /// reads the count this way round.
     #[test]
-    fn an_argument_is_recorded_once_per_prefix_reaching_it() {
+    fn an_argument_is_recorded_once_wherever_it_stands() {
         let func = FullName::from_strs(&["Main"], "f");
         let name = FullName::from_strs(&["Main"], "x");
         let arg_count = 4;
@@ -301,11 +339,156 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(
                 indices,
-                vec![at_index; arg_count - at_index],
+                vec![at_index],
                 "an argument at index {} of a call of {} arguments",
                 at_index,
                 arg_count
             );
         }
+    }
+
+    /// A binder of the local `name`.
+    fn binder(name: &str) -> Arc<Var> {
+        var_var(FullName::local(name))
+    }
+
+    /// The walk records one use per place the name is written, at every position an expression has,
+    /// because a caller putting an expression where the name stands puts it in every one of them.
+    /// The positions no call and no struct expression takes the name from record it as held.
+    #[test]
+    fn every_position_records_one_use() {
+        let name = FullName::from_strs(&["Main"], "f");
+        let here = || expr_var(name.clone(), None);
+        let other = || expr_var(FullName::from_strs(&["Main"], "g"), None);
+        let ty = type_tycon(&tycon(FullName::from_strs(&["Main"], "T")));
+        let cases: Vec<(&str, Arc<ExprNode>, usize)> = vec![
+            ("the name itself", here(), 1),
+            ("another name", other(), 0),
+            (
+                "the body of a lambda",
+                expr_abs(vec![binder("x")], here(), None),
+                1,
+            ),
+            (
+                "the bound value and the body of a `let`",
+                expr_let(
+                    PatternNode::make_var(binder("x"), None),
+                    here(),
+                    here(),
+                    None,
+                ),
+                2,
+            ),
+            (
+                "the condition and both branches of an `if`",
+                expr_if(here(), here(), here(), None),
+                3,
+            ),
+            (
+                "the scrutinee and every arm of a `match`",
+                expr_match(
+                    here(),
+                    vec![
+                        (PatternNode::make_var(binder("x"), None), here()),
+                        (PatternNode::make_var(binder("y"), None), other()),
+                        (PatternNode::make_var(binder("z"), None), here()),
+                    ],
+                    None,
+                ),
+                3,
+            ),
+            (
+                "under a type annotation",
+                expr_tyanno(here(), ty.clone(), None),
+                1,
+            ),
+            (
+                "two elements of an array literal",
+                expr_array_lit(vec![here(), other(), here()], None),
+                2,
+            ),
+            (
+                "two arguments of an FFI call",
+                expr_ffi_call(
+                    "puts".to_string(),
+                    tycon(FullName::from_strs(&["Main"], "T")),
+                    vec![],
+                    false,
+                    vec![here(), other(), here()],
+                    false,
+                    None,
+                ),
+                2,
+            ),
+            (
+                "both sides of an `eval`",
+                expr_eval(here(), here(), None),
+                2,
+            ),
+            (
+                "two operands of an inline-LLVM operation",
+                expr_llvm(
+                    Box::new(InlineLLVMMakeStructBody {
+                        field_names: vec![
+                            name.clone(),
+                            FullName::from_strs(&["Main"], "g"),
+                            name.clone(),
+                        ],
+                    }),
+                    ty.clone(),
+                    None,
+                ),
+                2,
+            ),
+        ];
+        for (position, expr, expected) in cases {
+            let usages = run(&expr, &name);
+            assert_eq!(
+                usages.len(),
+                expected,
+                "wrong number of uses for the name written at {}",
+                position
+            );
+            assert!(
+                usages
+                    .iter()
+                    .all(|usage| matches!(usage, UsageType::Elsewhere)),
+                "the name written at {} is held there, so every use of it is recorded as held",
+                position
+            );
+        }
+    }
+
+    /// A call takes the name from the callee position and from each argument position, so those
+    /// record what the call does with it rather than that it is held.
+    #[test]
+    fn a_call_records_its_callee_once_and_each_argument_once() {
+        let func = FullName::from_strs(&["Main"], "f");
+        let arg_count = 4;
+        let call = call_with_name_at(&func, arg_count, 1, &FullName::from_strs(&["Main"], "x"));
+        let callee_usages = run(&call, &func);
+        assert!(
+            matches!(
+                callee_usages.as_slice(),
+                [UsageType::CalledAsFunction { arg_count: n }] if *n == arg_count
+            ),
+            "a callee is recorded once for the whole call, with the arguments it supplies"
+        );
+        let struct_ty = tycon(FullName::from_strs(&["Main"], "T"));
+        let held = FullName::from_strs(&["Main"], "x");
+        let made = expr_make_struct(
+            struct_ty.clone(),
+            vec![
+                ("a".to_string(), expr_var(held.clone(), None)),
+                ("b".to_string(), expr_var(func.clone(), None)),
+            ],
+        );
+        assert!(
+            matches!(
+                run(&made, &held).as_slice(),
+                [UsageType::CapturedInto(name, 0)] if *name == struct_ty.name
+            ),
+            "a name stored into a field is recorded at the field it is stored in"
+        );
     }
 }
