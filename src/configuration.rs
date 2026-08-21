@@ -27,6 +27,18 @@ use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
 
+/// Passes run before the `default<O3>` rounds at the optimization levels built for speed.
+///
+/// Every loop a Fix program writes reaches LLVM as a function that calls itself in tail position,
+/// so the loop optimizations have nothing to work on until those calls are loops. Turning them
+/// into loops over the whole module first is worth 1.0% of the cycle counts of the fifty LangArena
+/// benchmarks — `Brainfuck::Array` 27%, `Compress::HuffEncode` 17%, `Template::Parse` 5%,
+/// `Distance::Jaro` 2.2% — against 2.0% back on `Maze::BFS` and 1.9% on `Etc::NeuralNet`.
+///
+/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there must
+/// stay in sync with this, `LLVM_O3_RUNS_FOR_SPEED` and `LLVM_TAIL_PASSES`.
+const LLVM_HEAD_PASSES: [&str; 1] = ["function(tailcallelim)"];
+
 /// The pass-pipeline string for one full LLVM optimization run.
 const LLVM_O3_PIPELINE: &str = "default<O3>";
 
@@ -45,8 +57,8 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
 /// code rather than the work it does, which is why the instruction count barely moves.
 ///
-/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there
-/// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
+/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there must
+/// stay in sync with this, `LLVM_HEAD_PASSES` and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
 /// How a linked library is bound to the program.
@@ -948,7 +960,11 @@ impl Configuration {
             FixOptimizationLevel::None => vec![],
             FixOptimizationLevel::Basic => vec![LLVM_O3_PIPELINE.to_string()],
             FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
-                let mut passes = vec![LLVM_O3_PIPELINE.to_string(); LLVM_O3_RUNS_FOR_SPEED];
+                let mut passes = LLVM_HEAD_PASSES
+                    .iter()
+                    .map(|pass| pass.to_string())
+                    .collect::<Vec<_>>();
+                passes.extend(vec![LLVM_O3_PIPELINE.to_string(); LLVM_O3_RUNS_FOR_SPEED]);
                 passes.extend(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()));
                 passes
             }

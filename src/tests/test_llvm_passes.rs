@@ -173,9 +173,10 @@ fn test_passes_file_replaces_the_level_pipeline() {
     );
 }
 
-/// The optimization levels built for speed run LLVM's pipeline three times and follow it with the
-/// passes measured to earn their place, `-O basic` runs it once, and `-O none` runs nothing, so
-/// that a level change is visible in the pipeline rather than only in the timings.
+/// The optimization levels built for speed turn the tail self-calls a Fix loop is written as into
+/// loops, run LLVM's pipeline three times and follow it with the passes measured to earn their
+/// place, `-O basic` runs the pipeline once, and `-O none` runs nothing, so that a level change is
+/// visible in the pipeline rather than only in the timings.
 #[test]
 fn test_pass_pipeline_per_optimization_level() {
     // `set_fix_opt_level` clamps to `FIX_MAX_OPT_LEVEL`, which the test suite's matrix varies, so
@@ -186,7 +187,8 @@ fn test_pass_pipeline_per_optimization_level() {
             FixOptimizationLevel::None => vec![],
             FixOptimizationLevel::Basic => vec![full_pipeline],
             FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
-                let mut passes = vec![full_pipeline; 3];
+                let mut passes = vec!["function(tailcallelim)".to_string()];
+                passes.extend(vec![full_pipeline; 3]);
                 passes.extend(
                     ["speculative-execution", "loop-vectorize", "pseudo-probe"]
                         .iter()
