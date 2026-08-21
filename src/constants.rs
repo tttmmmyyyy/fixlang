@@ -154,6 +154,12 @@ pub const ARRAY_STORAGE_IDX: u32 = 0;
 pub const ARRAY_SIZE_IDX: u32 = ARRAY_STORAGE_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
 
+/// The index of the field of the unbox `Std::PunchedArray` value that holds the array.
+pub const PUNCHED_ARRAY_ARRAY_IDX: u32 = 0;
+/// The index of the field of the unbox `Std::PunchedArray` value that holds the index of the slot
+/// whose element was moved out of the array.
+pub const PUNCHED_ARRAY_HOLE_IDX: u32 = PUNCHED_ARRAY_ARRAY_IDX + 1;
+
 // Field layout of the internal `#ArrayStorage` object: a control block and the raw element buffer,
 // with no length or capacity (those live in the owning `Array` value).
 pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;

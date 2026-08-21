@@ -1930,81 +1930,101 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    /// Release or mark a non-null boxed object, processing the references it owns with the
-    /// traverser generated for its type.
-    fn build_release_mark_nonnull_boxed(
+    /// Perform a traverser's work on a non-null boxed object, processing the references it owns
+    /// with the traverser generated for its type.
+    fn build_traverser_work_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
         state: RcState,
     ) {
         let obj_for_refs = obj.clone();
-        self.build_release_mark_nonnull_boxed_with(obj, work, state, move |gc| {
+        self.build_traverser_work_nonnull_boxed_with(obj, work, state, move |gc| {
             gc.traverse_boxed_refs(&obj_for_refs, work)
         });
     }
 
-    /// Release or mark a non-null boxed object, calling `traverse_refs` to process the references
-    /// it owns. `traverse_refs` stands where the traverser generated for the object's type would:
-    /// on the release path once the count reaches zero, and on a mark path once the object itself
-    /// is marked.
+    /// Perform a traverser's work on a non-null boxed object, calling `traverse_refs` to process
+    /// the references it owns. `traverse_refs` stands where the traverser generated for the
+    /// object's type would: on the release path once the count reaches zero, and on a mark path
+    /// once the object itself is marked.
     ///
     /// # Arguments
     /// * `state` — what is known of the object's refcount state, which the release path dispatches
     ///   on. A mark reads the state from the object itself, whatever the caller knows of it.
-    pub(crate) fn build_release_mark_nonnull_boxed_with(
+    pub(crate) fn build_traverser_work_nonnull_boxed_with(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
         state: RcState,
         traverse_refs: impl FnOnce(&mut Self),
     ) {
-        // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
-        if work == TraverserWorkType::release() && obj.is_destructor_object() {
-            // Branch by whether or not the reference counter is one.
-            let obj_ptr = obj.value(self).into_pointer_value();
-            // Whether the object is uniquely owned is read from its refcount state, whatever the
-            // caller knows of it.
-            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr, RcState::Unknown);
-
-            // If reference counter is one, call destructor.
-            self.builder().position_at_end(unique_bb);
-            let value = ObjectFieldType::move_out_struct_field(
-                self,
-                obj,
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-            );
-            let dtor =
-                ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
-            let one = self.context.i64_type().const_int(1, false);
-            self.build_retain(dtor.clone(), one, RcState::Unknown);
-            let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
-            let res = run_io_or_ios_runner(self, &io_act);
-            ObjectFieldType::move_into_struct_field(
-                self,
-                obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-                &res,
-            );
-            self.builder()
-                .build_unconditional_branch(shared_bb)
-                .unwrap();
-
-            self.builder().position_at_end(shared_bb);
-        }
-
-        if work == TraverserWorkType::release() {
-            self.build_release_boxed_with(obj, state, traverse_refs);
-        } else {
+        if work != TraverserWorkType::release() {
             self.build_mark_boxed_with(obj, work, traverse_refs);
+            return;
         }
+        // A `Std::FFI::Destructor` runs its destructor function on the way out, before the
+        // references it holds are released. The count reaching zero is what picks the thread that
+        // runs it, so it runs exactly once however many threads release the object at the same
+        // moment.
+        if obj.is_destructor_object() {
+            let destructor = obj.clone();
+            self.build_release_boxed_with(obj, state, move |gc| {
+                gc.build_run_destructor(&destructor);
+                traverse_refs(gc);
+            });
+            return;
+        }
+        self.build_release_boxed_with(obj, state, traverse_refs);
     }
 
-    /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.
-    pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
+    /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
+    /// what the run returns in the value field for the release that follows.
+    fn build_run_destructor(&mut self, obj: &Object<'c>) {
+        let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
+        assert_eq!(
+            [
+                fields[DESTRUCTOR_OBJECT_VALUE_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+                fields[DESTRUCTOR_OBJECT_DTOR_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+            ],
+            ["_value", "_dtor"],
+            "`{}` holds its fields in an order the field indices do not name.",
+            obj.ty.to_string(),
+        );
+        let value =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
+        let dtor =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
+        // The application consumes a reference to the destructor function, and the field keeps the
+        // one that the release of the object's own references drops.
+        let one = self.context.i64_type().const_int(1, false);
+        self.build_retain(dtor.clone(), one, RcState::Unknown);
+        let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
+        let res = run_io_or_ios_runner(self, &io_act);
+        ObjectFieldType::move_into_struct_field(
+            self,
+            obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
+            DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+            &res,
+        );
+    }
+
+    /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count
+    /// where it is boxed, and on the boxed objects it holds where it is not. What it owns is
+    /// reached through the traverser generated for its type, which `build_traverse` writes.
+    pub fn build_traverser_work(
+        &mut self,
+        obj: Object<'c>,
+        work: TraverserWorkType,
+        state: RcState,
+    ) {
         if obj.is_box(self.type_env()) {
-            self.build_if_nonnull(&obj, "release_mark", |gc| {
-                gc.build_release_mark_nonnull_boxed(&obj, work, state);
+            self.build_if_nonnull(&obj, "traverser_work", |gc| {
+                gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_funptr() {
             // Nothing to do for function pointers.
@@ -2245,21 +2265,21 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::release(), state);
+            gc.build_traverser_work(obj, TraverserWorkType::release(), state);
         });
     }
 
     /// Decrement the reference count of a boxed object, releasing what it owns and freeing it
     /// where the count reaches zero. The caller guarantees the object is a non-null boxed pointer.
     pub(crate) fn release_nonnull_boxed(&mut self, obj: &Object<'c>, state: RcState) {
-        self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release(), state)
+        self.build_traverser_work_nonnull_boxed(obj, TraverserWorkType::release(), state)
     }
 
     /// Put every boxed object `obj` owns into the global refcount state, in which an object is
     /// neither retained, released nor freed, so that it lives for the rest of the program.
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_global(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);
         });
     }
 
@@ -2268,7 +2288,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// already in the global state keeps it.
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
         });
     }
 
