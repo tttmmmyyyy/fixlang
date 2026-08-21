@@ -838,8 +838,8 @@ fn inline_specialized_lambdas(
         }
     }
 
-    // How many arguments each lifted lambda takes, which says whether the call a copy makes
-    // supplies all of them.
+    // How many parameters each lifted lambda takes, which says whether the call a copy makes
+    // supplies an argument for all of them.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
     for (copy, lambdas) in specialized_lambdas {

@@ -35,9 +35,6 @@ use std::{env, path::PathBuf};
 /// into loops over the whole module first is worth 1.0% of the cycle counts of the fifty LangArena
 /// benchmarks — `Brainfuck::Array` 27%, `Compress::HuffEncode` 17%, `Template::Parse` 5%,
 /// `Distance::Jaro` 2.2% — against 2.0% back on `Maze::BFS` and 1.9% on `Etc::NeuralNet`.
-///
-/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there must
-/// stay in sync with this, `LLVM_O3_RUNS_FOR_SPEED` and `LLVM_TAIL_PASSES`.
 const LLVM_HEAD_PASSES: [&str; 1] = ["function(tailcallelim)"];
 
 /// The pass-pipeline string for one full LLVM optimization run.
@@ -57,14 +54,15 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
 /// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
 /// code rather than the work it does, which is why the instruction count barely moves.
-///
-/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there must
-/// stay in sync with this, `LLVM_HEAD_PASSES` and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
 
 /// The passes the optimization levels built for speed run over each generated module, in order:
 /// `LLVM_HEAD_PASSES`, `LLVM_O3_RUNS_FOR_SPEED` runs of `LLVM_O3_PIPELINE`, then
 /// `LLVM_TAIL_PASSES`.
+///
+/// `passes_optimizer.py` searches for a faster pipeline starting from this one, so its
+/// `INITIAL_PASSES` spells the same list out; `test_passes_optimizer_starts_from_the_shipped_pipeline`
+/// holds the two together.
 fn llvm_passes_for_speed() -> Vec<String> {
     LLVM_HEAD_PASSES
         .iter()
