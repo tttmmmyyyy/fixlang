@@ -1,14 +1,17 @@
 // A value updated under a condition is, after the update, either the value that was there or one
-// built out of it, so which object each of its references belongs to is decided by looking into
-// both. Chaining such updates chains that question: the answer for one stage is asked of the stage
-// before it, twice over. The compiler answers each value once, so a chain of `STAGES` updates
-// compiles in a time that grows with its length, and the deadline on each build is what measures
-// that: asking down both branches instead takes a time that doubles per stage.
+// built out of it, so `origin` in `crate::rc_ir::ownership` decides which object each of its
+// references belongs to by looking into both. Chaining such updates chains that question: the
+// answer for one stage is asked of the stage before it, twice over. `origin` answers each value
+// once, so a chain of `STAGES` updates compiles in a time that grows with its length, and the
+// deadline on each build is what measures that: asking down both branches instead takes a time
+// that doubles per stage.
 //
-// What the answer decides is whether a write goes into the value or into a copy of it, so a program
-// that reads the value a chain started from, after the chain, observes an answer that has collapsed
-// onto one of the two objects a stage may denote.
+// The answer decides one more thing: whether a write goes into the value or into a copy of it. A
+// stage's value is one of two objects, and an answer that names a single one of them lets a write
+// land in a value another name still holds — which a program that reads the value its chain started
+// from, after the chain, reads back as changed.
 
+/// The time a chain of conditional updates takes to compile.
 #[cfg(test)]
 mod build_time_tests {
     use crate::tests::test_util::build_within_and_run;
@@ -117,8 +120,8 @@ mod build_time_tests {
         STAGES as i64 * 10 + FIRST_B
     }
 
-    /// Builds `source` within `TIMEOUT` and checks that the program prints `expected`. `max` is
-    /// where the reference counting the chain drives is inferred.
+    /// Builds `source` within `TIMEOUT` and checks that the program prints `expected`. The build
+    /// is at `max`, the lowest optimization level `origin` runs at.
     ///
     /// # Arguments
     /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is
