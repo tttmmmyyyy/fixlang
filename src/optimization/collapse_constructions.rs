@@ -44,6 +44,7 @@ pub fn run(prg: &mut Program) {
     for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
+        let mut read_any = false;
         loop {
             let mut collapser = Collapser {
                 type_env: &type_env,
@@ -54,9 +55,16 @@ pub fn run(prg: &mut Program) {
             if !res.changed {
                 break;
             }
+            read_any = true;
             expr = with_lets_pulled_out(&res.expr);
         }
-        sym.expr = Some(expr);
+        // Floating the `let`s outward and renaming the locals is what lets a construction be read,
+        // so a global holding none of them keeps the body it came with. The stages below read the
+        // shape of a body as well as its meaning, and one this pass has nothing to say about is one
+        // they should meet as it was written.
+        if read_any {
+            sym.expr = Some(expr);
+        }
     }
 }
 
