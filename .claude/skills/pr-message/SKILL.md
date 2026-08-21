@@ -61,7 +61,7 @@ Those are the names the reader opens the source for, and each of them gets exact
 - **Pin every link to a commit hash.** Push the branch, take `git rev-parse HEAD`, and build all of them on that hash. A hash names the same lines forever and keeps resolving after the branch is deleted; a branch name in the path drifts with the next commit and resolves to nothing once the branch is gone.
 - **Span the definition**: `#L<signature>-L<closing>`, from the signature line to the line that closes the body. GitHub highlights that span, so the click lands on the whole function.
 - **A function the change deletes is linked at the commit the branch forked from** (`git merge-base HEAD main`), where it still stands.
-- **Re-pin when the body is revised after further commits are pushed**, so the lines the links point at are the ones the body describes.
+- **Re-pin a link whose file the branch has changed since.** A hash keeps a link resolving, so no link ever breaks; what a later commit breaks is the agreement between the body and what the link opens, and only for a file that commit touched. So when the body is revised on a branch that has moved, re-pin the links into the files the branch changed in between (`git diff <pinned hash> HEAD -- <file>`), and leave the rest as they are.
 
 The two line numbers are mechanical — the signature line, then the first line closing a block at the signature's own indentation:
 
