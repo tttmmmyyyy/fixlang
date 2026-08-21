@@ -66,9 +66,10 @@ pub(crate) struct VarTable {
     /// The type of every variable, parameters included, so a leaf that roots at any of them can be
     /// truncated to its reference-counting unit.
     pub(crate) var_tys: Map<FullName, Arc<TypeNode>>,
-    /// The `origin` already answered for a value at a path. An origin is a function of the bindings
-    /// and the types, and both are complete once the table is built, so an answer holds for as long
-    /// as the table does.
+    /// The `origin` already answered for a value at a path. An origin is decided by the bindings,
+    /// which are complete once the table is built, and by the type environment of the program they
+    /// come from, which every reader of one table shares, so an answer holds for as long as the
+    /// table does.
     ///
     /// A match binding asks its question of every arm, and an arm that rebuilds a value out of the
     /// one before it asks the same question of that one, so a chain of `n` such bindings is reached
