@@ -52,9 +52,9 @@ LOG_FILE = REPO / "passes_optimizer.log"
 # Where the best sequence found so far is recorded.
 LLVM_PASSES_BEST_FILE = REPO / "llvm_passes_best.txt"
 
-# The pipeline the compiler ships, which the search starts from. Must stay in sync with
-# `LLVM_O3_PIPELINE`, `LLVM_O3_RUNS_FOR_SPEED` and `LLVM_TAIL_PASSES` in `src/configuration.rs`.
-INITIAL_PASSES = ["default<O3>"] * 3 + [
+# The pipeline the compiler ships, which the search starts from. Must spell out the same list as
+# `llvm_passes_for_speed` in `src/configuration.rs`.
+INITIAL_PASSES = ["function(tailcallelim)"] + ["default<O3>"] * 3 + [
     "speculative-execution", "loop-vectorize", "pseudo-probe",
 ]
 

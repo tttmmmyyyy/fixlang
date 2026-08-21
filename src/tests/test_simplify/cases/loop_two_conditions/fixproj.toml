@@ -1,0 +1,6 @@
+[general]
+name = "simplify-loop-two-conditions"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

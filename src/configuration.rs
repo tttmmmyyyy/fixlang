@@ -23,9 +23,19 @@ use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, File};
+use std::iter;
 use std::process::Command;
 use std::sync::Arc;
 use std::{env, path::PathBuf};
+
+/// Passes run before the `default<O3>` rounds at the optimization levels built for speed.
+///
+/// Every loop a Fix program writes reaches LLVM as a function that calls itself in tail position,
+/// so the loop optimizations have nothing to work on until those calls are loops. Turning them
+/// into loops over the whole module first is worth 1.0% of the cycle counts of the fifty LangArena
+/// benchmarks — `Brainfuck::Array` 27%, `Compress::HuffEncode` 17%, `Template::Parse` 5%,
+/// `Distance::Jaro` 2.2% — against 2.0% back on `Maze::BFS` and 1.9% on `Etc::NeuralNet`.
+const LLVM_HEAD_PASSES: [&str; 1] = ["function(tailcallelim)"];
 
 /// The pass-pipeline string for one full LLVM optimization run.
 const LLVM_O3_PIPELINE: &str = "default<O3>";
@@ -44,10 +54,23 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
 /// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
 /// code rather than the work it does, which is why the instruction count barely moves.
-///
-/// `passes_optimizer.py` searches for this list and starts from it, so `INITIAL_PASSES` there
-/// must stay in sync with this and `LLVM_O3_RUNS_FOR_SPEED`.
 const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
+
+/// The passes the optimization levels built for speed run over each generated module, in order:
+/// `LLVM_HEAD_PASSES`, `LLVM_O3_RUNS_FOR_SPEED` runs of `LLVM_O3_PIPELINE`, then
+/// `LLVM_TAIL_PASSES`.
+///
+/// `passes_optimizer.py` searches for a faster pipeline starting from this one, so its
+/// `INITIAL_PASSES` spells the same list out; `test_passes_optimizer_starts_from_the_shipped_pipeline`
+/// holds the two together.
+fn llvm_passes_for_speed() -> Vec<String> {
+    LLVM_HEAD_PASSES
+        .iter()
+        .map(|pass| pass.to_string())
+        .chain(iter::repeat(LLVM_O3_PIPELINE.to_string()).take(LLVM_O3_RUNS_FOR_SPEED))
+        .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
+        .collect()
+}
 
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
@@ -948,9 +971,7 @@ impl Configuration {
             FixOptimizationLevel::None => vec![],
             FixOptimizationLevel::Basic => vec![LLVM_O3_PIPELINE.to_string()],
             FixOptimizationLevel::Max | FixOptimizationLevel::Experimental => {
-                let mut passes = vec![LLVM_O3_PIPELINE.to_string(); LLVM_O3_RUNS_FOR_SPEED];
-                passes.extend(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()));
-                passes
+                llvm_passes_for_speed()
             }
         }
     }
@@ -1409,8 +1430,64 @@ int main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Configuration, FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand};
+    use super::{
+        llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
+        SubCommand,
+    };
     use crate::misc::Map;
+    use std::fs;
+    use std::path::Path;
+
+    /// The pass list `passes_optimizer.py` starts its search from, read out of its `INITIAL_PASSES`
+    /// assignment: `+`-separated Python lists of pass names, each list optionally repeated with
+    /// `* n`.
+    fn initial_passes_of_passes_optimizer() -> Vec<String> {
+        let script_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("passes_optimizer.py");
+        let script = fs::read_to_string(&script_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", script_path.display(), e));
+        let assignment = script
+            .split_once("INITIAL_PASSES = ")
+            .expect("`passes_optimizer.py` should assign `INITIAL_PASSES`")
+            .1
+            .split_once("\n]")
+            .expect("the assignment of `INITIAL_PASSES` should end at a line opening with `]`")
+            .0;
+        let mut passes = Vec::new();
+        for term in assignment.split('+') {
+            let (list, repeat_count) = match term.split_once('*') {
+                Some((list, count)) => (
+                    list,
+                    count.trim().parse::<usize>().unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to read the repeat count of `{}`: {}",
+                            term.trim(),
+                            e
+                        )
+                    }),
+                ),
+                None => (term, 1),
+            };
+            let pass_names = list.split('"').skip(1).step_by(2).collect::<Vec<_>>();
+            for _ in 0..repeat_count {
+                passes.extend(pass_names.iter().map(|name| name.to_string()));
+            }
+        }
+        passes
+    }
+
+    /// `passes_optimizer.py` searches for a faster pipeline starting from the one the compiler
+    /// ships, so its `INITIAL_PASSES` is the pipeline the levels built for speed run. A pass added
+    /// to one side alone would start the search from a pipeline no build has, and report its
+    /// findings against a baseline the compiler does not run.
+    #[test]
+    fn test_passes_optimizer_starts_from_the_shipped_pipeline() {
+        assert_eq!(
+            initial_passes_of_passes_optimizer(),
+            llvm_passes_for_speed(),
+            "`INITIAL_PASSES` in `passes_optimizer.py` is out of sync with the pipeline the \
+             optimization levels built for speed run"
+        );
+    }
 
     /// The hash `hash` gives a build configuration to which `edit` has been applied.
     fn hash_after(

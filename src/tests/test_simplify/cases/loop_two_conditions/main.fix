@@ -1,0 +1,28 @@
+module Main;
+
+// A loop whose body decides between two conditions, which is what a `loop` over an array reads like:
+// one condition ends the loop, the next answers, and what is left goes round again. Each of the three
+// builds a `LoopState`, and the driver `Std::loop` is copied for this body and matches what it built.
+//
+// The copy takes the body, so the constructions and the match stand in one function, and the
+// simplifier cancels them: the driver carries the index alone and builds no union.
+//
+// # Parameters
+// * `bound` - The value an element is looked for at or above.
+// * `values` - The elements to read, in the order they are read.
+first_at_least : I64 -> Array I64 -> I64;
+first_at_least = |bound, values| (
+    let n = values.@size;
+    loop(0, |i| (
+        if i == n { break $ -1 };
+        if values.@(i) >= bound { break $ i };
+        continue $ i + 1
+    ))
+);
+
+main : IO ();
+main = (
+    let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];
+    let found = [0, 5, 11, 13].to_iter.map(|bound| values.first_at_least(bound)).to_array;
+    println $ found.to_string
+);
