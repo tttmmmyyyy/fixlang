@@ -8,28 +8,12 @@
 // and drops it.
 void fix_hammer_one(void *value);
 
-// POSIX leaves barriers optional and Darwin omits them, so the meeting point the threads need is
-// built here out of a mutex and a condition variable, which every platform provides.
-static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t all_arrived = PTHREAD_COND_INITIALIZER;
-static int expected;
-static int arrived;
-
-// Holds a thread until every thread has reached this point, so that the reference counting they do
-// overlaps. Without this each thread finishes before the next is created and nothing contends.
-//
-// Every thread passes here once, so a thread waits for the arrivals to reach `expected` and nothing
-// resets the count.
-static void rendezvous(void) {
-    pthread_mutex_lock(&gate);
-    arrived++;
-    if (arrived == expected) pthread_cond_broadcast(&all_arrived);
-    while (arrived < expected) pthread_cond_wait(&all_arrived, &gate);
-    pthread_mutex_unlock(&gate);
-}
+static pthread_barrier_t start;
 
 static void *worker(void *value) {
-    rendezvous();
+    // Wait for every thread to arrive, so that the reference counting they do overlaps. Without
+    // this each thread finishes before the next is created and nothing contends.
+    pthread_barrier_wait(&start);
     fix_hammer_one(value);
     return 0;
 }
@@ -38,7 +22,8 @@ static void *worker(void *value) {
 void hammer_from_threads(void *value, int threads) {
     assert(threads >= 1 && threads <= MAX_THREADS);
     pthread_t ids[MAX_THREADS];
-    expected = threads;
+    pthread_barrier_init(&start, 0, threads);
     for (int i = 0; i < threads; i++) pthread_create(&ids[i], 0, worker, value);
     for (int i = 0; i < threads; i++) pthread_join(ids[i], 0);
+    pthread_barrier_destroy(&start);
 }
