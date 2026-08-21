@@ -20,6 +20,10 @@ mod build_time_tests {
     /// that the swap chain's result tells a run that took every condition from one that took none.
     const STAGES: usize = 25;
 
+    /// The swap chain's result tells a run that took every condition from one that took none only
+    /// where the stages are odd in number, since an even number of swaps puts the fields back.
+    const _: () = assert!(STAGES % 2 == 1);
+
     /// Generous next to the fraction of a second the build takes, and short enough to report a
     /// regression as a failure instead of occupying the machine.
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -49,24 +53,34 @@ mod build_time_tests {
         )
     }
 
+    /// The source of a chain of `STAGES` stages over the pair the function `name` is given as
+    /// `{var}0`: stage `i` binds `{var}{i+1}` to what `stage` writes out of the stage before it, and
+    /// the function returns the first elements of the last stage's two fields as one number.
+    fn chain_source(name: &str, var: &str, stage: impl Fn(usize, &str) -> String) -> String {
+        let mut body = String::new();
+        for i in 0..STAGES {
+            body += &format!(
+                "    let {var}{} = {};\n",
+                i + 1,
+                stage(i, &format!("{var}{i}"))
+            );
+        }
+        body += &format!("    {var}{STAGES}.@a.@(0) * 10 + {var}{STAGES}.@b.@(0)\n");
+        format!(
+            "{HEADER}{name} : Array Bool -> Pair -> I64;\n\
+             {name} = |cs, {var}0| (\n{body});\n\
+             \n{}",
+            main_calling(name)
+        )
+    }
+
     /// A chain of `STAGES` conditional swaps: each stage is either the pair before it, or a pair
     /// built out of that pair's two fields exchanged. Both arms reach the previous stage — the
     /// second through the fields it is built from — so every stage doubles the question.
     fn swap_chain_source() -> String {
-        let mut body = String::new();
-        for i in 0..STAGES {
-            body += &format!(
-                "    let p{} = if cs.@({i}) {{ Pair {{ a : p{i}.@b, b : p{i}.@a }} }} else {{ p{i} }};\n",
-                i + 1
-            );
-        }
-        body += &format!("    p{STAGES}.@a.@(0) * 10 + p{STAGES}.@b.@(0)\n");
-        format!(
-            "{HEADER}swaps : Array Bool -> Pair -> I64;\n\
-             swaps = |cs, p0| (\n{body});\n\
-             \n{}",
-            main_calling("swaps")
-        )
+        chain_source("swaps", "p", |i, prev| {
+            format!("if cs.@({i}) {{ Pair {{ a : {prev}.@b, b : {prev}.@a }} }} else {{ {prev} }}")
+        })
     }
 
     /// What `swap_chain_source` prints with every condition true: the two fields have changed places
@@ -84,21 +98,12 @@ mod build_time_tests {
     /// through conditions: each stage is either the pair before it, or that pair with one element
     /// of one field written.
     fn update_chain_source() -> String {
-        let mut body = String::new();
-        for i in 0..STAGES {
-            body += &format!(
-                "    let q{} = if cs.@({i}) {{ q{i}.mod_a(|xs| xs.set(0, {})) }} else {{ q{i} }};\n",
-                i + 1,
+        chain_source("updates", "q", |i, prev| {
+            format!(
+                "if cs.@({i}) {{ {prev}.mod_a(|xs| xs.set(0, {})) }} else {{ {prev} }}",
                 i + 1
-            );
-        }
-        body += &format!("    q{STAGES}.@a.@(0) * 10 + q{STAGES}.@b.@(0)\n");
-        format!(
-            "{HEADER}updates : Array Bool -> Pair -> I64;\n\
-             updates = |cs, q0| (\n{body});\n\
-             \n{}",
-            main_calling("updates")
-        )
+            )
+        })
     }
 
     /// What `update_chain_source` prints with every condition true: the last stage's write is the
@@ -107,21 +112,29 @@ mod build_time_tests {
         STAGES as i64 * 10 + FIRST_B
     }
 
-    /// A chain of conditional swaps compiles in reasonable time, and computes what the source says.
-    /// `max` is where the reference counting the chain drives is inferred.
-    #[test]
-    fn test_chain_of_conditional_swaps_compiles_in_reasonable_time() {
-        let printed = build_within_and_run(
-            &swap_chain_source(),
-            "max",
-            TIMEOUT,
-            &format!("a chain of {} conditional swaps", STAGES),
-        );
+    /// Builds `source` within `TIMEOUT` and checks that the program prints `expected`. `max` is
+    /// where the reference counting the chain drives is inferred.
+    ///
+    /// # Arguments
+    /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is
+    ///   what a failure names, e.g. "a chain of 25 conditional swaps".
+    fn assert_chain_compiles_and_prints(source: &str, expected: i64, description: &str) {
+        let printed = build_within_and_run(source, "max", TIMEOUT, description);
         assert_eq!(
             printed,
-            swapped_value().to_string(),
-            "a chain of {} conditional swaps returned a wrong value",
-            STAGES
+            expected.to_string(),
+            "{} returned a wrong value",
+            description
+        );
+    }
+
+    /// A chain of conditional swaps compiles in reasonable time, and computes what the source says.
+    #[test]
+    fn test_chain_of_conditional_swaps_compiles_in_reasonable_time() {
+        assert_chain_compiles_and_prints(
+            &swap_chain_source(),
+            swapped_value(),
+            &format!("a chain of {STAGES} conditional swaps"),
         );
     }
 
@@ -129,17 +142,10 @@ mod build_time_tests {
     /// source says.
     #[test]
     fn test_chain_of_conditional_field_updates_compiles_in_reasonable_time() {
-        let printed = build_within_and_run(
+        assert_chain_compiles_and_prints(
             &update_chain_source(),
-            "max",
-            TIMEOUT,
-            &format!("a chain of {} conditional field updates", STAGES),
-        );
-        assert_eq!(
-            printed,
-            updated_value().to_string(),
-            "a chain of {} conditional field updates returned a wrong value",
-            STAGES
+            updated_value(),
+            &format!("a chain of {STAGES} conditional field updates"),
         );
     }
 }
