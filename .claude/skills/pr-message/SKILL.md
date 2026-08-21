@@ -31,6 +31,8 @@ The body is read before the diff, and it has to make the diff make sense. So the
 
   Naming the callers is the opposite of the rule a doc comment follows, and deliberately so: a doc comment is read for as long as the item lives, and a list of callers in it goes stale on the next caller added, while a pull request body is read once, against a diff that is fixed.
 
+**A labelled part opens its own line.** Run `**Role**:`, `**Change**:` and `**Purpose**:` together into one paragraph and the reader has to find where each ends before reading it; each on its own line is found at a glance, and the entry can then be read by label rather than front to back.
+
 **Role** is the one word that means something different per kind of item:
 
 - a function or a method — the processing it performs;
