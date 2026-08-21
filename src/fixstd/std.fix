@@ -2224,17 +2224,26 @@ namespace Iterator {
     map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a] (a -> b) -> input -> ?out;
     map = |f, iter| MapIterator { iter: iter, f: f };
 
+    // The next element of `iter` that `pred` accepts, with the iterator advanced past it. The
+    // predicate is handed over as an argument so that the loop skipping the rejected elements is a
+    // body of its own, which is what lets `advance` go into the loop consuming it.
+    _skip_until : [i : Iterator, Item i = a] (a -> Bool) -> i -> Option (i, a);
+    _skip_until = |pred, iter| (
+        loop(iter, |iter|
+            match iter.advance {
+                none() => break $ none(),
+                some((iter, a)) => if pred(a) { break $ some((iter, a)) } else { continue $ iter }
+            }
+        )
+    );
+
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
     impl [i : Iterator, Item i = a] FilterIterator i a : Iterator {
         type Item (FilterIterator i a) = Item i;
         advance = |FilterIterator { iter : iter, pred : pred }| (
-            match iter.advance {
+            match _skip_until(pred, iter) {
                 none() => none(),
-                some((iter, a)) => if pred(a) { 
-                    some((FilterIterator { iter: iter, pred: pred }, a))
-                } else {
-                    FilterIterator { iter: iter, pred: pred }.advance
-                }
+                some((iter, a)) => some((FilterIterator { iter: iter, pred: pred }, a))
             }
         );
     }
