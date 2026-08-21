@@ -164,7 +164,11 @@ impl TypeCheckCache for FileCache {
                 return None;
             }
         }
-        let expr: TypedExpr = match postcard::from_bytes(&cache_bytes) {
+        // The format carries no end marker. A file that lost its tail fails to parse because the
+        // expression wants the bytes that went missing, but a file with bytes past the expression
+        // parses without them ever being looked at. An entry this cache wrote holds one expression
+        // and nothing else, so bytes left over say the file is not one.
+        let (expr, rest): (TypedExpr, _) = match postcard::take_from_bytes(&cache_bytes) {
             Ok(res) => res,
             Err(why) => {
                 warn_msg(&format!(
@@ -174,6 +178,13 @@ impl TypeCheckCache for FileCache {
                 return None;
             }
         };
+        if !rest.is_empty() {
+            warn_msg(&format!(
+                "Failed to parse content of cache file \"{}\": bytes follow the expression it holds.",
+                cache_file_path_str
+            ));
+            return None;
+        }
         Some(expr)
     }
 }

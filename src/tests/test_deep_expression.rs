@@ -48,8 +48,8 @@ mod integration_tests {
     }
 
     /// The nesting depth of the expression that is written to the type-check cache and read back.
-    /// It is deeper than `DEPTH` because the read is the cheapest of the three recursions to reach:
-    /// `-O none` keeps both compilations to a few seconds at this depth, where `-O max` would not.
+    /// Reading an entry recurses to the depth of the expression it holds, and `-O none` compiles a
+    /// chain this deep in a few seconds, which is what lets it reach so far past `DEPTH`.
     const CACHE_DEPTH: usize = 2000;
 
     /// When each entry of the type-check cache under `dir` was last written.
