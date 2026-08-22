@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use crate::ast::types::type_funptr;
     use crate::fixstd::builtin::make_i64_ty;
-    use crate::rc_ir::ast::{RcExpr, RcFunc, RcGlobalInit, RcVar};
+    use crate::rc_ir::ast::{RcFunc, RcGlobalInit, RcVar};
     use std::sync::Arc;
 
     /// The name lowering gives a symbol of the program under test.
