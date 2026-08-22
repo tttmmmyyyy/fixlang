@@ -3,8 +3,9 @@
 //! Lowering and the passes over the RC IR mint functions of their own — a lifted lambda body, a
 //! borrow version, a version specialized on the uniqueness or locality of its inputs — and each one
 //! that supersedes another leaves that other behind with no caller. Code generation writes out
-//! whatever the program holds, so a function left behind is LLVM IR built, verified and optimized
-//! for code no execution reaches.
+//! whatever the program holds, so a function left behind is LLVM IR built and verified for code no
+//! execution reaches. The back end drops it in turn, but only once its own dead-code elimination
+//! runs, which is after that IR has been built, verified and read.
 
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map, Set};
@@ -17,16 +18,14 @@ use crate::rc_ir::ast::{FuncRef, RcExpr, RcExprNode, RcProgram, RcRhs};
 /// a call-once initializer run when a reader first asks for it, so a global no reader mentions
 /// computes a value nothing observes, and it is dropped like an uncalled function.
 pub fn eliminate_unreachable(prog: &mut RcProgram) {
-    let globals: Map<FullName, &RcExprNode> =
-        prog.globals.iter().map(|g| (g.symbol.clone(), &g.init)).collect();
+    let globals: Map<FullName, &RcExprNode> = prog
+        .globals
+        .iter()
+        .map(|g| (g.symbol.clone(), &g.init))
+        .collect();
 
-    let mut reached: Set<FullName> = Set::default();
-    let mut pending: Vec<FullName> = vec![];
-    for root in &prog.roots {
-        if reached.insert(root.clone()) {
-            pending.push(root.clone());
-        }
-    }
+    let mut reached: Set<FullName> = prog.roots.clone();
+    let mut pending: Vec<FullName> = prog.roots.iter().cloned().collect();
     while let Some(name) = pending.pop() {
         let body = match prog.funcs.get(&FuncRef { name: name.clone() }) {
             Some(func) => &func.body,
