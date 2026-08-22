@@ -26,28 +26,38 @@ use crate::rc_ir::ast::{
 use std::mem;
 use std::sync::Arc;
 
-/// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
-/// whole struct/tuple destructure binding several fields at once (`Destructure`).
+/// A binding accumulated during A-normalization, together with the source it comes from. Once the
+/// expression it belongs to is lowered, `fold_bindings` turns each into the RC IR node of the same
+/// name.
 enum PendingBinding {
+    /// `let var = rhs`, binding one variable to the value of a compound expression.
     Let(RcVar, RcRhs, Option<Span>),
+    /// A struct/tuple destructure of the first variable, binding field `index` to `var` for each
+    /// `(index, var)`.
     Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+    /// The variable forced for its effect and discarded.
     Eval(RcVar, Option<Span>),
 }
 
 /// The result of lowering one AST symbol.
 enum LoweredSymbol {
+    /// A symbol of funptr type, which becomes a top-level function under the symbol's own name.
     Func(RcFunc),
+    /// A symbol of any other type, which becomes a global value computed by its initializer.
     Global(RcGlobalInit),
 }
 
 /// Lower `symbols` to an `RcProgram`. Symbols reference one another by name, so the set need not be
 /// closed; passing a subset (e.g. one compilation unit) lowers just those. `global_types` types a
 /// global referenced as an LLVM operand, so it must cover every symbol any lowered function might
-/// reference, including one another unit defines (`Program::global_types`).
+/// reference, including one another unit defines (`Program::global_types`). `roots` names what code
+/// generation reaches the lowered program from outside it; it becomes `RcProgram::roots`, and the
+/// build driver computes it (`reachability_roots`).
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
     global_types: &Map<FullName, Arc<TypeNode>>,
+    roots: Set<FullName>,
 ) -> RcProgram {
     let mut lowerer = Lowerer::new(type_env, global_types);
     let mut globals = vec![];
@@ -68,19 +78,10 @@ pub fn lower_program(
         }
     }
     let funcs = mem::take(&mut lowerer.funcs);
-    // `entry` labels the program in the dump only; it has no role in code generation or in
-    // entry-point selection. The actual entry point — `main` for a build, `test` for `fix test`,
-    // or an FFI-exported function — is chosen by the build driver, independently of this field.
-    // It is a placeholder, NOT a reachability root: RC-IR dead-function elimination, when added,
-    // must take its roots from the real entry points (there can be several — every FFI-exported
-    // function is one), not from this field.
-    let entry = FuncRef {
-        name: FullName::local("#entry"),
-    };
     RcProgram {
         funcs,
         globals,
-        entry,
+        roots,
     }
 }
 
@@ -108,6 +109,8 @@ struct Lowerer<'a> {
 }
 
 impl<'a> Lowerer<'a> {
+    /// A context with nothing lowered yet: an empty scope, no functions, and the fresh-name counter
+    /// at its start.
     fn new(type_env: &'a TypeEnv, global_types: &'a Map<FullName, Arc<TypeNode>>) -> Self {
         Lowerer {
             type_env,
@@ -306,7 +309,7 @@ impl<'a> Lowerer<'a> {
             let mut capture_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // A non-empty capture is a real allocation, so the capture object is non-null; an empty
             // capture is the null pointer. Recording this lets the capture's release skip the null
-            // check (matching the current back end). Set it before any clone so it propagates.
+            // check. Set it before any clone so it propagates.
             capture_var.skip_null_check = !captures.is_empty();
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
@@ -484,8 +487,7 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        // Evaluation order (matching the current generator): the callee first, then the arguments
-        // left to right.
+        // Evaluation order: the callee first, then the arguments left to right.
         let callee = self.lower_to_var(fun, bindings);
         let arg_vars: Vec<RcVar> = args
             .iter()
@@ -847,7 +849,7 @@ impl<'a> Lowerer<'a> {
                     // parameter), so it has no defining binding to name. Represent the rename
                     // faithfully with a move binding, which carries the source name. The move is
                     // reference-count-neutral: RC insertion retains `obj` before it exactly when it
-                    // is used after, matching the current back end's `let j = i`.
+                    // is used after.
                     let mut renamed =
                         self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
@@ -879,7 +881,7 @@ impl<'a> Lowerer<'a> {
                     if let Pattern::Var(v, _) = &subpat.pattern {
                         // The field binds a source variable directly: carry its name for debug info
                         // and bind it. The field variable is always freshly produced by the
-                        // destructure, so no rename move is needed (unlike the top-level `Var` case).
+                        // destructure, so the name attaches to that binding.
                         field_var.debug_name = Some(v.name.to_string());
                         self.bind(&v.name, field_var.clone());
                         bound_names.push(v.name.clone());

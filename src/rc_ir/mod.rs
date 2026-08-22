@@ -8,6 +8,7 @@
 pub mod ast;
 pub mod borrow;
 pub mod codegen;
+pub mod dead_code_elim;
 pub mod leaf_map;
 pub mod locality;
 pub mod lower;

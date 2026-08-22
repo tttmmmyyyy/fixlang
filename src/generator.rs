@@ -2449,6 +2449,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     // A funptr function is also registered as the value of `name`, because the bodies that call it
     // read it by name. Registering here is what leaves no way to declare one and reach it through a
     // name that resolves to nothing.
+    //
+    // The linkage decided here is also what decides the RC IR's reachability roots
+    // (`reachability_roots`): a function another unit may call has to be one dead-code elimination
+    // keeps. Narrowing the condition below narrows the root set with it.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,

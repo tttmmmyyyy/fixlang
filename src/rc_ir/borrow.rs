@@ -25,7 +25,7 @@
 //! `split_rc_units` first normalizes the lowered reference counting to that granularity: it
 //! decomposes a whole-value or subtree `Retain`/`Release` into one node per unit — a boxed leaf, a
 //! closure capture, or an unboxed union (a union is one unit, since a physical refcount operation on
-//! it must dispatch on the tag rather than name a variant).
+//! it must dispatch on the tag).
 //!
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
@@ -230,7 +230,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }
 
@@ -419,8 +419,8 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 
 /// Clone a function as its borrow version: mint a fresh name for every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) and rewrite all occurrences,
-/// keeping global name uniqueness. The recursive references to top-level functions are not bound
-/// here, so they are left for routing to retarget. Returns the clone and the binder renaming.
+/// keeping global name uniqueness. References to top-level functions stay free here, for routing to
+/// retarget. Returns the clone and the binder renaming.
 fn clone_func(
     func: &RcFunc,
     new_ref: FuncRef,
@@ -751,8 +751,7 @@ fn used_later(name: &FullName, node: &RcExprNode) -> bool {
         RcExpr::Destructure(container, _, _state, k) => {
             container.name == *name || used_later(name, k)
         }
-        // `Eval` observes its variable, so — unlike the transparent reference-count nodes — it counts
-        // as a use.
+        // `Eval` observes its variable, so it counts as a use.
         RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
     })
 }
@@ -867,9 +866,8 @@ type PendingRetains = Map<VarPath, Vec<PendingRetain>>;
 /// yet.
 ///
 /// A retain of an unboxed union bumps every reference its payload holds, while a release of a
-/// projection of that payload un-bumps one of them, so a retain is un-bumped by a group of releases
-/// rather than by a single one. Cancelling it takes the whole group, and only once the group leaves
-/// nothing outstanding.
+/// projection of that payload un-bumps one of them, so a group of releases un-bumps one retain.
+/// Cancelling it takes the whole group, and only once the group leaves nothing outstanding.
 #[derive(Clone)]
 struct PendingRetain {
     /// The retain node. The releases that un-bump it are recorded under this id.
@@ -896,8 +894,8 @@ fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) 
     let Some(stack) = pending.get_mut(key) else {
         return UnBump::NoBracket;
     };
-    // A stack kept in `pending` is never empty (an emptied one is removed below), so a pending
-    // retain to un-bump is always present.
+    // `un_bump` removes a stack it empties, so a stack kept in `pending` holds a pending retain to
+    // un-bump.
     let innermost = stack
         .last_mut()
         .expect("a stack kept in `pending` is non-empty");
@@ -971,7 +969,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }
 
@@ -1040,7 +1038,7 @@ impl<'a> CancelAnalysis<'a> {
         grow_stack(|| self.walk_inner(node, pending, returns_from_func))
     }
 
-    /// The body of `walk`, which owns the stack growth.
+    /// One node of the walk, threading the pending-retain state through its continuation and arms.
     fn walk_inner(
         &mut self,
         node: &RcExprNode,
@@ -1105,8 +1103,8 @@ impl<'a> CancelAnalysis<'a> {
                 }
                 self.walk(k, pending, returns_from_func)
             }
-            // `Eval` neither consumes, retains, nor releases; it is transparent to the pending-retain
-            // state (any release inserted after it is a separate `Release` node).
+            // `Eval` only observes its variable, so it is transparent to the pending-retain state
+            // (any release inserted after it is a separate `Release` node).
             RcExpr::Eval(_, k) => self.walk(k, pending, returns_from_func),
             RcExpr::Ret(_) => {
                 if returns_from_func {
