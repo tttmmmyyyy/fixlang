@@ -68,6 +68,7 @@ fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
     grow_stack(|| collect_mentions_inner(node, mention))
 }
 
+/// Call `mention` on the names one node holds, then descend into its continuation and arms.
 fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
     match node.expr.as_ref() {
         RcExpr::Let(_, rhs, k) => {
