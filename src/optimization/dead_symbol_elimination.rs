@@ -2,19 +2,11 @@ use std::mem::take;
 
 use crate::{ast::program::Program, misc::Set};
 
+/// Drop every symbol the program cannot reach from the values the C world enters it through.
 pub fn run(prg: &mut Program) {
-    // Collect names of entry point values.
-    let mut seeds = vec![];
-    if let Some(entry_io) = &mut prg.entry_io_value {
-        seeds.push(entry_io.get_var().name.clone());
-    }
-    for export_stmt in &mut prg.export_statements {
-        if let Some(entry_io) = &mut export_stmt.value_expr {
-            seeds.push(entry_io.get_var().name.clone());
-        }
-    }
+    let mut seeds = prg.root_value_names();
 
-    // Collect names called by the entry point values.
+    // Collect names called by the root values.
     let mut called_syms = seeds.clone().into_iter().collect::<Set<_>>();
     while seeds.len() > 0 {
         let mut new_seeds = vec![];
@@ -30,7 +22,7 @@ pub fn run(prg: &mut Program) {
         seeds = new_seeds;
     }
 
-    // Discaed all symbols not in `called_syms`.
+    // Discard all symbols not in `called_syms`.
     let mut new_syms = vec![];
     for (name, sym) in take(&mut prg.symbols) {
         if called_syms.contains(&name) {

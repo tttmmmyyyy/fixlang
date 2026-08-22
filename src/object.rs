@@ -102,8 +102,15 @@ fn union_buf_type<'c, 'm>(
         16 => gc.context.i128_type(),
         _ => panic!("Unsupported alignment: {}", max_align),
     };
-    let num_of_ints = (max_size as f32 / max_align as f32).ceil() as u32;
-    max_align_int.array_type(num_of_ints).into()
+    let num_of_ints = max_size.div_ceil(max_align);
+    assert!(
+        num_of_ints <= u32::MAX as u64,
+        "A payload of {} bytes needs {} integers of {} bytes to cover it, more than an LLVM array type holds.",
+        max_size,
+        num_of_ints,
+        max_align,
+    );
+    max_align_int.array_type(num_of_ints as u32).into()
 }
 
 impl ObjectFieldType {

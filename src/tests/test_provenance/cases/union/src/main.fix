@@ -21,5 +21,8 @@ main : IO ();
 main = (
     let a = Array::fill(5, 7);
     let r = via_union(a, 2);
-    println $ r.to_string
+    // `a` is read again after the call, so the call is a non-last use of it. That is what routes
+    // the call to the borrow version, which is what puts a caller on the version under test.
+    let n = a.get_size;
+    println $ (r + n).to_string
 );

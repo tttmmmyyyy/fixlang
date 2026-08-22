@@ -17,14 +17,27 @@ use crate::rc_ir::provenance::Provenance;
 /// ownership.
 #[derive(Clone, Copy, Default)]
 pub struct Annotations<'a> {
+    /// The provenance the analysis computed for each variable, keyed by variable name. `None`
+    /// leaves the bindings unannotated.
     pub provs: Option<&'a Map<FullName, Provenance>>,
+    /// The ownership inferred for each parameter and capture, keyed by its variable name. `None`
+    /// leaves the parameters unannotated.
     pub param_ownerships: Option<&'a Map<FullName, OwnershipShape>>,
 }
 
 /// Render a whole program with the given annotations.
 pub fn program_to_string_annotated(prog: &RcProgram, ann: Annotations) -> String {
     let mut out = String::new();
-    out.push_str(&format!("entry {}\n\n", prog.entry.name.to_string()));
+    // One root per line, since a unit linked against others publishes every symbol it holds and the
+    // roots then run to the hundreds. Sorted, so that the dump does not move when the set is built
+    // in a different order.
+    let mut roots: Vec<String> = prog.roots.iter().map(|r| r.to_string()).collect();
+    roots.sort();
+    out.push_str(&format!("roots ({})\n", roots.len()));
+    for root in &roots {
+        out.push_str(&format!("  {}\n", root));
+    }
+    out.push('\n');
 
     // Print the functions in a deterministic order (by name) so the dump is stable.
     let mut funcs: Vec<&RcFunc> = prog.funcs.values().collect();
