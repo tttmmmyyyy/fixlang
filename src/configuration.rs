@@ -1101,6 +1101,11 @@ impl Configuration {
 
     /// The linkage to give a symbol that other compilation units may call: external where each unit
     /// is compiled on its own, internal where the program is optimized as a whole.
+    ///
+    /// A symbol this makes external is one another unit may reach, so it is also a reachability root
+    /// of the RC IR (`reachability_roots`). Narrowing what gets external linkage narrows what that
+    /// root set may hold, and a symbol left out of it is one dead-code elimination drops while
+    /// another unit still calls it.
     pub fn external_if_separated(&self) -> Linkage {
         if self.enable_separated_compilation() {
             Linkage::External
