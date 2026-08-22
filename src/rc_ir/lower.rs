@@ -26,17 +26,24 @@ use crate::rc_ir::ast::{
 use std::mem;
 use std::sync::Arc;
 
-/// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
-/// whole struct/tuple destructure binding several fields at once (`Destructure`).
+/// A binding accumulated during A-normalization, together with the source it comes from. Once the
+/// expression it belongs to is lowered, `fold_bindings` turns each into the RC IR node of the same
+/// name.
 enum PendingBinding {
+    /// `let var = rhs`, binding one variable to the value of a compound expression.
     Let(RcVar, RcRhs, Option<Span>),
+    /// A struct/tuple destructure of the first variable, binding field `index` to `var` for each
+    /// `(index, var)`.
     Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+    /// The variable forced for its effect and discarded.
     Eval(RcVar, Option<Span>),
 }
 
 /// The result of lowering one AST symbol.
 enum LoweredSymbol {
+    /// A symbol of funptr type, which becomes a top-level function under the symbol's own name.
     Func(RcFunc),
+    /// A symbol of any other type, which becomes a global value computed by its initializer.
     Global(RcGlobalInit),
 }
 
@@ -102,6 +109,8 @@ struct Lowerer<'a> {
 }
 
 impl<'a> Lowerer<'a> {
+    /// A context with nothing lowered yet: an empty scope, no functions, and the fresh-name counter
+    /// at its start.
     fn new(type_env: &'a TypeEnv, global_types: &'a Map<FullName, Arc<TypeNode>>) -> Self {
         Lowerer {
             type_env,
@@ -300,7 +309,7 @@ impl<'a> Lowerer<'a> {
             let mut capture_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // A non-empty capture is a real allocation, so the capture object is non-null; an empty
             // capture is the null pointer. Recording this lets the capture's release skip the null
-            // check (matching the current back end). Set it before any clone so it propagates.
+            // check. Set it before any clone so it propagates.
             capture_var.skip_null_check = !captures.is_empty();
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
@@ -478,8 +487,7 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        // Evaluation order (matching the current generator): the callee first, then the arguments
-        // left to right.
+        // Evaluation order: the callee first, then the arguments left to right.
         let callee = self.lower_to_var(fun, bindings);
         let arg_vars: Vec<RcVar> = args
             .iter()
@@ -841,7 +849,7 @@ impl<'a> Lowerer<'a> {
                     // parameter), so it has no defining binding to name. Represent the rename
                     // faithfully with a move binding, which carries the source name. The move is
                     // reference-count-neutral: RC insertion retains `obj` before it exactly when it
-                    // is used after, matching the current back end's `let j = i`.
+                    // is used after.
                     let mut renamed =
                         self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
@@ -873,7 +881,7 @@ impl<'a> Lowerer<'a> {
                     if let Pattern::Var(v, _) = &subpat.pattern {
                         // The field binds a source variable directly: carry its name for debug info
                         // and bind it. The field variable is always freshly produced by the
-                        // destructure, so no rename move is needed (unlike the top-level `Var` case).
+                        // destructure, so the name attaches to that binding.
                         field_var.debug_name = Some(v.name.to_string());
                         self.bind(&v.name, field_var.clone());
                         bound_names.push(v.name.clone());
