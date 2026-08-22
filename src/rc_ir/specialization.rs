@@ -10,7 +10,7 @@
 //! The clone keyed on the least informative inputs keeps the original function's name and is called
 //! the *canonical* one. Every function keeps its canonical version, since a pass that routes calls
 //! reads no root set and so takes any function to be callable; specialization only adds the more
-//! specific clones the call sites reach. `dce::eliminate_unreachable` then drops the versions
+//! specific clones the call sites reach. `dead_code_elim::eliminate_unreachable` then drops the versions
 //! nothing calls.
 
 use crate::misc::{Map, Set};

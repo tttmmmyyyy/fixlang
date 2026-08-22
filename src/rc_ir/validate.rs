@@ -485,7 +485,7 @@ mod tests {
         }
     }
 
-    /// Validate a program made of `funcs`, the first of which is its entry point.
+    /// Validate a program made of `funcs`, the first of which is its reachability root.
     fn validate_prog(funcs: Vec<RcFunc>) {
         let root = funcs
             .first()

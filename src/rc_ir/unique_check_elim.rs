@@ -20,7 +20,7 @@
 //! indirectly, so it keeps its single all-`Dynamic` version. Every function keeps its all-`Dynamic`
 //! version, since this pass reads no root set and so takes any function to be callable;
 //! specialization only adds the more specific clones the call sites reach, and
-//! `dce::eliminate_unreachable` drops the versions nothing calls.
+//! `dead_code_elim::eliminate_unreachable` drops the versions nothing calls.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::program::TypeEnv;

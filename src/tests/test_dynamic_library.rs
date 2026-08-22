@@ -19,11 +19,11 @@ use std::process::{Command, Output};
 const CASES: &str = "src/tests/test_dynamic_library/cases";
 
 /// The argument the driver of `exported_getter` calls the exported function with.
-const DRIVER_ARGUMENT: i64 = 10;
+const EXPORTED_GETTER_ARGUMENT: i64 = 10;
 
-/// What the exported function of `exported_getter` answers to `DRIVER_ARGUMENT`: the two fields of
-/// the point it builds are the argument and its successor.
-const DRIVER_OUTPUT: &str = "21";
+/// What the exported function of `exported_getter` answers to `EXPORTED_GETTER_ARGUMENT`: the two
+/// fields of the point it builds are the argument and its successor.
+const EXPORTED_GETTER_OUTPUT: &str = "21";
 
 /// Builds `project_dir` as a dynamic library at `opt_level` and returns the path of the library.
 fn build_library(project_dir: &Path, opt_level: &str) -> PathBuf {
@@ -81,8 +81,11 @@ fn run_driver_on_library(
 /// Builds the `exported_getter` library at `opt_level`, opens it from the driver, and asserts that
 /// the function it exports answers what the Fix source says it does.
 fn assert_an_opened_library_answers(opt_level: &str) {
-    let (library, output) =
-        run_driver_on_library("exported_getter", opt_level, &[DRIVER_ARGUMENT.to_string()]);
+    let (library, output) = run_driver_on_library(
+        "exported_getter",
+        opt_level,
+        &[EXPORTED_GETTER_ARGUMENT.to_string()],
+    );
     assert_succeeded(
         &output,
         &format!(
@@ -92,10 +95,10 @@ fn assert_an_opened_library_answers(opt_level: &str) {
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        DRIVER_OUTPUT,
+        EXPORTED_GETTER_OUTPUT,
         "the exported function should answer {} to {}.",
-        DRIVER_OUTPUT,
-        DRIVER_ARGUMENT
+        EXPORTED_GETTER_OUTPUT,
+        EXPORTED_GETTER_ARGUMENT
     );
 }
 

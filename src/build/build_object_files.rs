@@ -25,7 +25,7 @@ use crate::{
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
-        dce, locality,
+        dead_code_elim, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
@@ -62,7 +62,7 @@ pub struct BuildObjFilesResult {
 }
 
 /// The names through which code generation reaches this program's functions and globals from outside
-/// it. `dce::eliminate_unreachable` keeps them and everything they reach.
+/// it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
 ///
 /// Separated compilation publishes every symbol of a unit, so that another unit can call it: a
 /// funptr symbol becomes a function of external linkage, and any other symbol becomes a value
@@ -72,28 +72,28 @@ pub struct BuildObjFilesResult {
 ///
 /// Compiled as one unit, every function and global is internal, and the C world enters the program
 /// in exactly two places: the entry point `build_main_function` runs, and the values
-/// `build_exported_c_functions` publishes under their C names — which is what
-/// `Program::root_value_names` names, and what `entry_points` carries here.
+/// `build_exported_c_functions` publishes under their C names — which together are what
+/// `Program::root_value_names` names.
 fn reachability_roots(
     symbols: &[Symbol],
-    entry_points: &[FullName],
+    root_value_names: &[FullName],
     config: &Configuration,
 ) -> Set<FullName> {
     if config.enable_separated_compilation() {
         return symbols.iter().map(|sym| sym.name.clone()).collect();
     }
-    // Compiled as one unit, `symbols` is the whole program, so every entry point names one of its
+    // Compiled as one unit, `symbols` is the whole program, so every root value names one of its
     // symbols. The walk starts at these names alone: one that names no definition reaches nothing,
-    // and the code behind that entry point is dropped.
+    // and the code behind that root value is dropped.
     let symbol_names: Set<&FullName> = symbols.iter().map(|sym| &sym.name).collect();
-    for entry_point in entry_points {
+    for root_value_name in root_value_names {
         assert!(
-            symbol_names.contains(entry_point),
-            "the entry point `{}` names no symbol of the program",
-            entry_point.to_string()
+            symbol_names.contains(root_value_name),
+            "the root value `{}` names no symbol of the program",
+            root_value_name.to_string()
         );
     }
-    entry_points.iter().cloned().collect()
+    root_value_names.iter().cloned().collect()
 }
 
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
@@ -156,7 +156,7 @@ fn optimize_rc_program(
     // The levels below these passes reroute no call, and lowering names every function it lifts from
     // the symbol it lifted it out of, so a program there holds nothing to drop.
     let prune = |prog: &mut RcProgram, stage: &str| {
-        dce::eliminate_unreachable(prog);
+        dead_code_elim::eliminate_unreachable(prog);
         validate(prog, stage);
     };
 
@@ -168,17 +168,17 @@ fn optimize_rc_program(
         validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
-        prune(&mut prog, "after cancel dce");
+        prune(&mut prog, "after dce following cancel");
         prog = unique_check_elim::specialize(&prog, type_env);
         validate(&prog, "after specialize");
-        prune(&mut prog, "after specialize dce");
+        prune(&mut prog, "after dce following specialize");
         // Locality inference rests on nothing moving a live object out of the local state, which a
         // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
         // reaches. A threaded build keeps the runtime dispatch everywhere.
         if !config.threaded {
             prog = locality::specialize(&prog, type_env);
             validate(&prog, "after locality");
-            prune(&mut prog, "after locality dce");
+            prune(&mut prog, "after dce following locality");
         }
     }
     prog
@@ -315,7 +315,7 @@ pub fn build_object_files<'c>(
     let global_types = Arc::new(program.global_types());
     // The names the C world enters the program through. Taken here, before the main unit moves the
     // export statements out of the program, so that every unit is handed the same set.
-    let entry_points = Arc::new(program.root_value_names());
+    let root_value_names = Arc::new(program.root_value_names());
     {
         let module_dependency_hash = program.module_dependency_hash_map(&config);
         let module_dependency_map = program.module_dependency_map();
@@ -367,7 +367,7 @@ pub fn build_object_files<'c>(
         }
 
         let global_types = global_types.clone();
-        let entry_points = entry_points.clone();
+        let root_value_names = root_value_names.clone();
         let config = config.clone();
         let type_env = program.type_env();
 
@@ -409,7 +409,7 @@ pub fn build_object_files<'c>(
             // one calls is declared where code generation first reaches it, from the types of the
             // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let roots = reachability_roots(&unit_symbols, &entry_points, &config);
+            let roots = reachability_roots(&unit_symbols, &root_value_names, &config);
             let rc_prog =
                 lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
