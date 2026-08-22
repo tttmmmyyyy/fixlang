@@ -698,7 +698,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntLit {
-    val: i64, // Since `serde_pickle` only supports i64 and not u64, we use i64 here.
+    val: u64,
 }
 
 #[typetag::serde]
@@ -716,7 +716,7 @@ impl LLVMGen for InlineLLVMIntLit {
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
-        let value = int_ty.const_int(self.val as u64, false);
+        let value = int_ty.const_int(self.val, false);
         obj.insert_field(gc, 0, value)
     }
 
@@ -747,7 +747,7 @@ impl LLVMGen for InlineLLVMIntLit {
 }
 
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(Box::new(InlineLLVMIntLit { val: val as i64 }), ty, source).global_to_absolute()
+    expr_llvm(Box::new(InlineLLVMIntLit { val }), ty, source).global_to_absolute()
 }
 
 #[derive(Clone, Serialize, Deserialize)]

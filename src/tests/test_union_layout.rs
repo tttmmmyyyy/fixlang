@@ -6,7 +6,8 @@ use crate::constants::STD_NAME;
 use crate::elaboration::elaborate_via_config;
 use crate::error::panic_if_err;
 use crate::fixstd::builtin::{
-    make_bool_ty, make_i64_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
+    make_bool_ty, make_i64_ty, make_ptr_ty, make_tuple_ty, make_u16_ty, make_u32_ty, make_u64_ty,
+    make_u8_ty,
 };
 use crate::generator::Generator;
 use crate::misc::Map;
@@ -121,5 +122,51 @@ fn test_union_memory_layout() {
         layout(&mut gc, result_ty(make_u8_ty(), make_i64_ty())),
         (16, 8),
         "Result U8 I64"
+    );
+}
+
+/// A union is larger than its largest variant, whatever that variant's size: the payload buffer
+/// covers the variant, and the tag needs a byte of its own beside it.
+///
+/// The payload here is one byte past 2^24, the largest integer a single-precision float counts to
+/// exactly. Counting the buffer's elements through such a float rounds the count down from there,
+/// so a buffer that covers every smaller payload can still fall short of this one.
+#[test]
+fn test_union_is_larger_than_a_payload_past_the_single_precision_significand() {
+    let config = panic_if_err(Configuration::check_mode());
+    let program = panic_if_err(elaborate_via_config(&config));
+    let type_env = program.type_env().clone();
+    let context = Context::create();
+    let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
+    let module = Generator::create_module("union_payload_test", &context, &target_machine);
+    let mut gc = Generator::new(
+        &context,
+        &module,
+        target_machine.get_target_data(),
+        config.clone(),
+        type_env,
+        Arc::new(Map::default()),
+    );
+
+    // A pair of a type is twice its size, so pairing `U8` twenty-four times over reaches 2^24
+    // bytes; the `U8` beside it makes the payload one byte more.
+    let mut payload = make_u8_ty();
+    for _ in 0..24 {
+        payload = make_tuple_ty(vec![payload.clone(), payload]);
+    }
+    let payload = make_tuple_ty(vec![payload, make_u8_ty()]);
+
+    let (payload_size, _) = layout(&mut gc, payload.clone());
+    let (union_size, _) = layout(&mut gc, option_ty(payload));
+    assert_eq!(
+        payload_size,
+        (1 << 24) + 1,
+        "the payload built for this test"
+    );
+    assert!(
+        union_size > payload_size,
+        "a union over a payload of {} bytes is {} bytes",
+        payload_size,
+        union_size,
     );
 }
