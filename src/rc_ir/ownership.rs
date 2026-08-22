@@ -312,9 +312,9 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
                 // Reading a field of a boxed struct retains it: a producer.
                 here()
             } else {
-                let mut p = vec![*idx];
-                p.extend_from_slice(path);
-                origin(vars, type_env, &container.name, &p)
+                let mut container_path = vec![*idx];
+                container_path.extend_from_slice(path);
+                origin(vars, type_env, &container.name, &container_path)
             }
         }
         Some(Binding::Payload(scrut, variant)) => match variant {
@@ -323,9 +323,9 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
             // payload is read out (retained) — a producer.
             Some(tag) if !scrut.ty.is_box(type_env) => {
-                let mut p = vec![*tag];
-                p.extend_from_slice(path);
-                origin(vars, type_env, &scrut.name, &p)
+                let mut scrut_path = vec![*tag];
+                scrut_path.extend_from_slice(path);
+                origin(vars, type_env, &scrut.name, &scrut_path)
             }
             Some(_) => here(),
         },
@@ -484,10 +484,10 @@ pub(crate) fn destructure_consumes(
         .into_iter()
         .filter(|leaf| {
             // A boxed leaf of an unboxed container starts with a field index, so its path is non-empty.
-            let field = leaf
+            let field_idx = leaf
                 .first()
                 .expect("a boxed leaf of an unboxed container has a non-empty path");
-            !named_fields.contains(field)
+            !named_fields.contains(field_idx)
         })
         .collect()
 }
@@ -580,12 +580,12 @@ fn resolve_callee_params<'a>(
     Some(func.params.as_slice())
 }
 
-/// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result — the pure
-/// projections `as_arg_projection` reads out of `result_prov`.
+/// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result: the result
+/// leaves whose sole source in `result_prov` is one argument leaf.
 ///
-/// Dropping an argument leaf's consume is sound exactly when the result aliases it, so this shares
-/// `as_arg_projection` with `origin`: a leaf that joins an argument with another source aliases nothing and
-/// keeps its consume, and one whose sole source is `Arg` does both.
+/// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
+/// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
+/// another source aliases nothing, so it keeps its consume.
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
@@ -825,21 +825,22 @@ impl References {
     /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
     /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
     pub(crate) fn covers(&self, other: &References) -> bool {
-        other
-            .0
-            .iter()
-            .all(|(object, count)| self.0.get(object).is_some_and(|held| held >= count))
+        other.0.iter().all(|(object, count)| {
+            self.0
+                .get(object)
+                .is_some_and(|held_count| held_count >= count)
+        })
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
     pub(crate) fn subtract(&mut self, other: &References) {
         for (object, count) in &other.0 {
-            let held = self
+            let held_count = self
                 .0
                 .get_mut(object)
                 .expect("the removed references are covered by these");
-            *held -= count;
-            if *held == 0 {
+            *held_count -= count;
+            if *held_count == 0 {
                 self.0.remove(object);
             }
         }
@@ -929,9 +930,9 @@ pub(crate) fn units_under(
         Some(sty) => rc_units(&sty, type_env)
             .into_iter()
             .map(|u| {
-                let mut p = path.clone();
-                p.extend(u);
-                p
+                let mut unit_path = path.clone();
+                unit_path.extend(u);
+                unit_path
             })
             .collect(),
         None => vec![path.clone()],
@@ -1141,9 +1142,9 @@ mod tests {
     #[test]
     fn a_held_field_is_found_by_its_layout_index() {
         // A three-field value whose middle field is punched.
-        let held = vec![(0, make_i64_ty()), (2, array_of_i64())];
-        assert_eq!(held_field_type(&held, 0, "test"), make_i64_ty());
-        assert_eq!(held_field_type(&held, 2, "test"), array_of_i64());
+        let held_fields = vec![(0, make_i64_ty()), (2, array_of_i64())];
+        assert_eq!(held_field_type(&held_fields, 0, "test"), make_i64_ty());
+        assert_eq!(held_field_type(&held_fields, 2, "test"), array_of_i64());
     }
 
     /// A path index naming a punched field aborts the walk, and the message names the walk that
@@ -1155,8 +1156,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "truncate_to_unit")]
     fn a_punched_field_index_aborts_the_walk() {
-        let held = vec![(0, make_i64_ty()), (2, array_of_i64())];
-        held_field_type(&held, 1, "truncate_to_unit");
+        let held_fields = vec![(0, make_i64_ty()), (2, array_of_i64())];
+        held_field_type(&held_fields, 1, "truncate_to_unit");
     }
 
     /// A closure's step is its capture, and the fields it reports are the fields a closure is laid
@@ -1193,16 +1194,16 @@ mod tests {
     }
 
     /// The sources of one result leaf, as `result_prov` declares them.
-    fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
-        srcs.into_iter().collect()
+    fn sources(leaf_sources: Vec<LeafOrigin>) -> Set<LeafOrigin> {
+        leaf_sources.into_iter().collect()
     }
 
     /// A result leaf whose only source is one argument leaf aliases that leaf, and is reported with
     /// the argument's index and path.
     #[test]
     fn a_lone_arg_is_a_projection() {
-        let leaf_srcs = sole_origin(LeafOrigin::Arg(1, vec![0]));
-        assert_eq!(as_arg_projection(&leaf_srcs), Some((1, vec![0])));
+        let leaf_sources = sole_origin(LeafOrigin::Arg(1, vec![0]));
+        assert_eq!(as_arg_projection(&leaf_sources), Some((1, vec![0])));
     }
 
     /// A result leaf that is the argument on one path and a new value on another aliases neither:
@@ -1210,16 +1211,16 @@ mod tests {
     /// projection would drop the consume without the alias, releasing one object twice.
     #[test]
     fn an_arg_joined_with_another_source_is_not_a_projection() {
-        let leaf_srcs = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
-        assert_eq!(as_arg_projection(&leaf_srcs), None);
+        let leaf_sources = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_sources), None);
     }
 
     /// A result leaf that may come from either of two arguments aliases neither: a projection names
     /// one argument, and here the choice would fall to whichever of the two the set yields first.
     #[test]
     fn one_of_two_args_is_not_a_projection() {
-        let leaf_srcs = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
-        assert_eq!(as_arg_projection(&leaf_srcs), None);
+        let leaf_sources = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
+        assert_eq!(as_arg_projection(&leaf_sources), None);
     }
 
     /// A leaf the op itself produced — a fresh object, or one of unknown origin — aliases no

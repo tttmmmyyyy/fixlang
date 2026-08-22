@@ -18,10 +18,9 @@
 //! The clone keyed on all-`Dynamic` inputs (nothing known) keeps the original function's name; every
 //! other key gets a fresh name. Only funptr functions are specialized — a closure is reached only
 //! indirectly, so it keeps its single all-`Dynamic` version. Every function keeps its all-`Dynamic`
-//! version (the entry points a program is compiled for are not identifiable from the RC IR alone, so
-//! no original is dropped, matching how code generation emits every function and lets the back end
-//! remove the unreachable ones); specialization only adds the more specific clones the call sites
-//! reach.
+//! version, since this pass reads no root set and so takes any function to be callable;
+//! specialization only adds the more specific clones the call sites reach, and
+//! `dead_code_elim::eliminate_unreachable` drops the versions nothing calls.
 
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::program::TypeEnv;
@@ -52,8 +51,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         output_funcs: Map::default(),
     };
 
-    // Keep every function's all-`Dynamic` version, since a program's entry points are not
-    // identifiable from the RC IR. Specialization adds the more specific clones on top.
+    // Keep every function's all-`Dynamic` version: this pass reads no root set, so any function may
+    // be the one called from outside. Specialization adds the more specific clones on top.
     let frefs: Vec<FuncRef> = prog.funcs.keys().cloned().collect();
     for fref in &frefs {
         let ck = spec.canonical_key(fref);
@@ -79,7 +78,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs: spec.output_funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }
 
@@ -186,8 +185,8 @@ impl<'a> Specializer<'a> {
             }
             // `Var` and `Closure` need no routing (a closure's target keeps its original name, whose
             // all-`Dynamic` version is always kept), so their right-hand sides pass through unchanged.
-            // Listed explicitly (not a catch-all) so a new `RcRhs` that might need routing fails to
-            // compile here instead of silently passing through.
+            // Each is listed explicitly, so a new `RcRhs` that might need routing fails to compile
+            // here instead of silently passing through.
             RcExpr::Let(x, rhs @ (RcRhs::Var(_) | RcRhs::Closure(_, _)), k) => {
                 RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_expr(k, inputs))
             }
