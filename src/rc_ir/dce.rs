@@ -24,6 +24,18 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
         .map(|g| (g.symbol.clone(), &g.init))
         .collect();
 
+    // A function and a global are named under a namespace: a program symbol carries the one its
+    // module and namespace declarations give it, and a lifted lambda is named under its own symbol's
+    // (`Lowerer::fresh_closure_ref`). A local is minted with no namespace, so a mention carrying none
+    // names no definition and the walk passes over it without a lookup.
+    for name in prog.funcs.keys().map(|f| &f.name).chain(globals.keys()) {
+        assert!(
+            name.is_global(),
+            "RC IR dead-code elimination reads `{}` as a local name, so no mention can reach it",
+            name.to_string()
+        );
+    }
+
     let mut reached: Set<FullName> = prog.roots.clone();
     let mut pending: Vec<FullName> = prog.roots.iter().cloned().collect();
     while let Some(name) = pending.pop() {
@@ -31,13 +43,13 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
             Some(func) => &func.body,
             None => match globals.get(&name) {
                 Some(init) => init,
-                // A name defined by no function and no global of this program: a symbol another
-                // compilation unit defines, which code generation declares and the linker resolves.
+                // A name this program defines by neither: a symbol another compilation unit defines,
+                // which code generation declares and the linker resolves.
                 None => continue,
             },
         };
         collect_mentions(body, &mut |mentioned| {
-            if reached.insert(mentioned.clone()) {
+            if mentioned.is_global() && reached.insert(mentioned.clone()) {
                 pending.push(mentioned.clone());
             }
         });
@@ -50,9 +62,8 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
 /// Call `mention` on every name `node` mentions.
 ///
 /// A name is mentioned as the reference of a closure value, or as a variable — the callee of a call,
-/// an operand, the value returned. A local variable is mentioned too: local names are globally
-/// unique fresh names, so one never collides with the name of a function or a global, and the caller
-/// resolves each mention against the program's definitions.
+/// an operand, the value returned. Local variables are mentioned along with the rest; the caller
+/// decides which of the mentions can name a definition.
 fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
     grow_stack(|| collect_mentions_inner(node, mention))
 }
@@ -70,10 +81,10 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
                     mention(&fref.name);
                     caps.iter().for_each(|c| mention(&c.name));
                 }
-                // Code generation materializes the names embedded in the generator and the RC IR
-                // passes read the operand list, so both name values this operation needs.
-                RcRhs::Llvm(llvm_gen, args) => {
-                    llvm_gen.free_vars().iter().for_each(|n| mention(n));
+                // The names the generator embeds are the operand list again, in the same order —
+                // `validate` checks it — so reading the operands reads every name the operation
+                // holds, without cloning the generator to ask it for them.
+                RcRhs::Llvm(_, args) => {
                     args.iter().for_each(|a| mention(&a.name));
                 }
                 RcRhs::Match(scrut, arms) => {
