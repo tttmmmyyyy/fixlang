@@ -2,15 +2,15 @@
 //! certainly in the `RefcntState::LOCAL` state, so that the operation can drop the runtime state
 //! dispatch and increment or decrement the count directly.
 //!
-//! An object leaves the local state through exactly three doors: reading a global (whose initializer
-//! marks its whole result graph global), `Std::mark_threaded`, and `Std::boxed_from_retained_ptr`.
-//! Everything else — allocating, updating in place, cloning a shared container — leaves the state
-//! byte alone. A forward may-analysis over the value flow therefore decides the question, provided
-//! it distinguishes two facts about a value, because reference counting is *shallow*: a retain
-//! touches only the root object, a release recurses into children only at zero and through a
-//! dispatching traverser, and `is_unique` reads only the root. So `DeepLocal ⊑ RootLocal ⊑ MayExt`:
-//! the root fact is what an annotation needs, and the deep fact is what reading out of a container
-//! needs.
+//! Exactly three operations take an object out of the local state: reading a global (whose
+//! initializer marks its whole result graph global), `Std::mark_threaded`, and
+//! `Std::boxed_from_retained_ptr`. Everything else — allocating, updating in place, cloning a
+//! shared container — leaves the state byte alone. A forward may-analysis over the value flow
+//! therefore decides the question, provided it distinguishes two facts about a value, because
+//! reference counting is *shallow*: a retain touches only the root object, a release recurses into
+//! children only at zero and through a dispatching traverser, and `is_unique` reads only the root.
+//! So `DeepLocal ⊑ RootLocal ⊑ MayExt`: the root fact is what an annotation needs, and the deep
+//! fact is what reading out of a container needs.
 //!
 //! Two layers carry those facts, mirroring the provenance / uniqueness pair. The symbolic layer
 //! (`ExtCond`, `LeafCond`, `ExtShape`) states, for a function or an op, the condition on its inputs
@@ -81,8 +81,8 @@ pub enum Aspect {
 /// One test on an input: input `input`'s boxed leaf at `path`, read through `aspect`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Atom {
-    /// The index of the input: a parameter, then the capture past them, in a summary; an operand
-    /// slot in an op's `result_locality`.
+    /// The index of the input: a parameter, then the capture past them, in a summary; the index of
+    /// an operand in an op's `result_locality`.
     pub input: usize,
     /// The boxed leaf of that input the test is about, as a path into the input's type.
     pub path: FieldPath,
@@ -95,10 +95,8 @@ pub struct Atom {
 /// does.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ExtCond {
-    /// Holds whatever the inputs are, and absorbs: `Always ⊔ c = Always`. It is a variant of its own
-    /// so that the absorption holds by the shape of the value — the specialization gate asks whether
-    /// a condition mentions any input at all, and a top expressed as an atom set would answer with
-    /// the inputs it happened to list beside it.
+    /// Holds whatever the inputs are, and absorbs: `Always ⊔ c = Always`. A variant of its own, so
+    /// that the absorption and `depends_on_inputs` both follow from the shape of the value.
     Always,
     /// Holds when any listed atom holds. The empty set is the bottom.
     IfAny(Set<Atom>),
@@ -131,7 +129,7 @@ impl ExtCond {
         }
     }
 
-    /// Whether this condition's answer depends on the inputs — the specialization gate's question.
+    /// Whether this condition's answer depends on the inputs — the clone gate's question.
     /// `Always` does not: it holds under every key.
     pub fn depends_on_inputs(&self) -> bool {
         match self {
@@ -141,17 +139,17 @@ impl ExtCond {
     }
 
     /// Substitute the operands' conditions for the atoms, moving a declared condition from the atom
-    /// space of its declaration (an op's operand slots, or a callee's inputs) into that of the
-    /// caller. Used both to compose an op's `result_locality` with its operands and to compose a
-    /// callee's summary with a call's arguments.
+    /// space of its declaration (an op's operand indices, or a callee's inputs) into that of the
+    /// caller.
     pub fn substitute(&self, operands: &[ExtShape]) -> ExtCond {
         let ExtCond::IfAny(atoms) = self else {
             return ExtCond::Always;
         };
         let mut out = ExtCond::bottom();
         for atom in atoms {
-            // Every atom names an operand: an op declares only its own argument slots, and a call
-            // supplies one operand per input of the callee's summary (the capture included).
+            // Every atom names an operand: an op declares atoms only for its own arguments, and
+            // a call supplies one operand per input of the callee's summary (the capture
+            // included).
             let operand = operands.get(atom.input).unwrap_or_else(|| {
                 unreachable!(
                     "a declaration names input {} but {} operands were supplied",
@@ -298,7 +296,7 @@ impl ExtShape {
     /// allocated, force-uniqued by this op, or updated in place under a uniqueness the caller
     /// guarantees. Its root is local; what it reaches is whatever any operand reaches.
     ///
-    /// The middle case is where the contract bites: a global object never passes a uniqueness check
+    /// Force-uniquing is where the contract bites: a global object never passes a uniqueness check
     /// (`build_branch_by_is_unique` sends its global arm to the shared arm), so a force-uniqued
     /// container is local. An op that hands back an operand's object *without* that backing must
     /// not declare `fresh_holding`.
@@ -349,7 +347,7 @@ impl ExtShape {
     }
 
     /// The conditions of the boxed leaves that descend through none of `fields` — what a
-    /// `Destructure` of an unboxed container drops rather than hands out.
+    /// `Destructure` of an unboxed container drops.
     pub fn leaves_outside_fields<'a>(
         &'a self,
         fields: &'a [usize],
@@ -417,7 +415,7 @@ struct Walk<'a> {
     prog: &'a RcProgram,
     /// Where a type's boxed leaf paths, and whether a type is boxed, are read from.
     type_env: &'a TypeEnv,
-    /// Each function's result, symbolic in its inputs, from the phase-1 fixed point.
+    /// Each function's result, symbolic in its inputs, as `summarize` computed it.
     summaries: &'a Map<FuncRef, ExtShape>,
     /// The symbolic locality of every local binding the walk has passed.
     env: Map<FullName, ExtShape>,
@@ -436,18 +434,24 @@ enum Rewritten {
 
 /// What a walk does besides computing shapes.
 enum Mode<'a> {
-    /// Compute shapes, leaving the body as it is, and collect what the clone gate asks: whether some
-    /// reference-counting site's answer depends on the inputs, and which direct callees this body
-    /// hands an input-dependent leaf to.
+    /// Compute shapes, leaving the body as it is, and collect what the clone gate asks of this
+    /// body.
     Survey {
+        /// Whether some reference-counting site of this body is annotated differently under
+        /// different input localities.
         has_dependent_site: bool,
+        /// The direct callees this body hands an input-dependent leaf to.
         dependent_calls: Vec<FuncRef>,
     },
     /// Annotate the reference-counting nodes and route the direct calls, under inputs the enclosing
     /// clone's key makes concrete.
     Clone {
+        /// The locality of each input of the enclosing clone: the parameters, then the capture past
+        /// them.
         inputs: &'a [LocalityKey],
+        /// The functions worth cloning (`clone_gate`); a call to one outside it stays as it is.
         gate: &'a Set<FuncRef>,
+        /// The clones named so far, which a routed call asks for its callee's version.
         clones: &'a mut CloneRegistry<Vec<LocalityKey>>,
     },
 }
@@ -474,7 +478,8 @@ impl<'a> Walk<'a> {
         grow_stack(|| self.walk_inner(node))
     }
 
-    /// The body of `walk`, which owns the stack growth.
+    /// One node of the walk: the shape of the value it evaluates to, and the node rewritten in
+    /// clone mode.
     fn walk_inner(&mut self, node: &RcExprNode) -> (ExtShape, RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Ret(x) => (self.shape_of(x), node.clone()),
@@ -544,12 +549,12 @@ impl<'a> Walk<'a> {
     }
 
     /// The symbolic locality of an operand. A global's graph was marked global by its initializer —
-    /// one of the three doors out of the local state, and the only rule that reads whether a name is
-    /// local. It has to sit here, at the one place an operand is resolved, because a global reaches
-    /// every operand position: the right-hand side of a `let`, an argument, a scrutinee, a
-    /// destructured container, and — after borrow-ification introduces a release for a value the
-    /// callee borrows — the target of a `Release`. A local is bound before it is read, so the
-    /// environment holds it.
+    /// one of the three operations that take an object out of the local state, and the only rule
+    /// that reads whether a name is local. It has to sit here, at the one place an operand is
+    /// resolved, because a global reaches every operand: the right-hand side of a `let`, an
+    /// argument, a scrutinee, a destructured container, and — after borrow-ification introduces a
+    /// release for a value the callee borrows — the target of a `Release`. A local is bound before
+    /// it is read, so the environment holds it.
     fn shape_of(&self, var: &RcVar) -> ExtShape {
         if var.name.is_global() {
             return ExtShape::always(&var.ty, self.type_env);
@@ -565,8 +570,8 @@ impl<'a> Walk<'a> {
             .clone()
     }
 
-    /// The shape of a `let`'s right-hand side (`Match` excepted, which the caller handles for the
-    /// payload bindings its arms make), and what the right-hand side is rewritten to, if anything.
+    /// The shape of a `let`'s right-hand side other than `Match`, whose arms `walk_match` walks for
+    /// the payload bindings they make, and what the right-hand side is rewritten to, if anything.
     fn walk_rhs(&mut self, result: &RcVar, rhs: &RcRhs) -> (ExtShape, Option<Rewritten>) {
         match rhs {
             RcRhs::Var(y) => (self.shape_of(y), None),
@@ -992,7 +997,8 @@ fn annotate<'a>(
 
 /// The functions worth cloning: those whose own reference-counting sites are annotated differently
 /// under different input localities, and those that hand an input-dependent leaf to such a function
-/// through a direct call. A least fixed point over the direct-call graph, as the uniqueness gate is.
+/// through a direct call. A least fixed point over the direct-call graph, as
+/// `funcs_reaching_unique_check` is.
 ///
 /// Closing it transitively is what keeps a forwarding function — one that counts no reference
 /// itself — from staying canonical, which would make it derive its callee's key from inputs proving

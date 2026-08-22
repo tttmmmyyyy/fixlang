@@ -299,8 +299,8 @@ pub fn build_object_files<'c>(
     // the optimizations that follow mint types of their own — a capture list, a punched type, the
     // pair a newtype opens into. Those reach code generation without having been validated, so in
     // development mode the program is validated again here, where the types are the ones code
-    // generation will actually lay out. A report at this point names a type the compiler built
-    // rather than one the user wrote, which is why a user's build does not run it.
+    // generation will actually lay out. A report at this point names a type the compiler built, so
+    // only a development build runs it.
     if config.develop_mode {
         program.validate_layouts()?;
     }
@@ -348,7 +348,7 @@ pub fn build_object_files<'c>(
     let mut threads = vec![];
     let units_count = units.len();
     for (i, unit) in units.into_iter().enumerate() {
-        // We generate the main unit in the last.
+        // The main unit is generated last.
         let is_main_unit = i == units_count - 1;
 
         obj_paths.push(unit.object_file_path());

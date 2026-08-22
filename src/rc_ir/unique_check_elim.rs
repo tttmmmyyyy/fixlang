@@ -185,8 +185,8 @@ impl<'a> Specializer<'a> {
             }
             // `Var` and `Closure` need no routing (a closure's target keeps its original name, whose
             // all-`Dynamic` version is always kept), so their right-hand sides pass through unchanged.
-            // Listed explicitly (not a catch-all) so a new `RcRhs` that might need routing fails to
-            // compile here instead of silently passing through.
+            // Each is listed explicitly, so a new `RcRhs` that might need routing fails to compile
+            // here instead of silently passing through.
             RcExpr::Let(x, rhs @ (RcRhs::Var(_) | RcRhs::Closure(_, _)), k) => {
                 RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_expr(k, inputs))
             }

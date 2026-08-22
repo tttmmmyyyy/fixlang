@@ -17,7 +17,11 @@ use crate::rc_ir::provenance::Provenance;
 /// ownership.
 #[derive(Clone, Copy, Default)]
 pub struct Annotations<'a> {
+    /// The provenance the analysis computed for each variable, keyed by variable name. `None`
+    /// leaves the bindings unannotated.
     pub provs: Option<&'a Map<FullName, Provenance>>,
+    /// The ownership inferred for each parameter and capture, keyed by its variable name. `None`
+    /// leaves the parameters unannotated.
     pub param_ownerships: Option<&'a Map<FullName, OwnershipShape>>,
 }
 

@@ -7,13 +7,15 @@ use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use std::sync::Arc;
 
-/// A variable of the RC IR: a globally unique name together with its concrete (monomorphic) type
-/// and the source span it comes from. Because a fresh name is minted at every binding, a name
-/// resolves its binding uniquely, without scope tracking.
+/// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
+/// binding uniquely, without scope tracking.
 #[derive(Clone)]
 pub struct RcVar {
+    /// The name this variable is bound under, unique across the program.
     pub name: FullName,
+    /// The type of the value bound here, always concrete (monomorphic).
     pub ty: Arc<TypeNode>,
+    /// The source the value bound here is written at. `None` where no source spells it out.
     pub source: Option<Span>,
     /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
     /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
@@ -31,13 +33,17 @@ pub struct RcVar {
 /// uncurried function-pointer version.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct FuncRef {
+    /// The name the function is defined under. It is the whole of the reference: a function is
+    /// identified by its name across the program.
     pub name: FullName,
 }
 
 /// A whole program: the top-level functions, the global-value initializers, and the names reached
 /// from outside them.
 pub struct RcProgram {
+    /// The top-level functions, keyed by the name each is defined under.
     pub funcs: Map<FuncRef, RcFunc>,
+    /// The initializer of each global value the program defines.
     pub globals: Vec<RcGlobalInit>,
     /// The functions and globals code generation reaches from outside this program: the entry
     /// point, the values exported as C functions, and — where the program is one unit among
@@ -63,8 +69,8 @@ pub struct RcFunc {
     /// `Some` for the closure ABI: the trailing capture-pointer parameter, from which the body
     /// projects the captured values. `None` for the funptr ABI, which has no captures.
     pub capture: Option<RcVar>,
-    /// The type of the value the body returns, which for a funptr-ABI function is the result after
-    /// all of its parameters rather than the arrow taking the rest of them.
+    /// The type of the value the body returns. For a funptr-ABI function it is the result after all
+    /// of its parameters.
     pub ret_ty: Arc<TypeNode>,
     /// The body, evaluated with the parameters and the capture in scope. Its `Ret` returns the
     /// function's value.
@@ -92,14 +98,14 @@ pub struct RcFunc {
 pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
-/// variable its final `Ret` returns, so it is read from that variable rather than stored here.
-///
-/// The expression is shared through an `Arc`, so cloning a node is O(1). The continuation chain is
-/// thousands of nodes deep for a large body, and the simplifier clones whole bodies, so a
-/// deep-copying clone would overflow the stack.
+/// variable its final `Ret` returns, so it is read from that variable.
 #[derive(Clone)]
 pub struct RcExprNode {
+    /// The expression this node stands for. It is shared through an `Arc`, so cloning a node is
+    /// O(1). The continuation chain is thousands of nodes deep for a large body, and the simplifier
+    /// clones whole bodies, so a deep-copying clone would overflow the stack.
     pub expr: Arc<RcExpr>,
+    /// The source the expression is written at. `None` where no source spells it out.
     pub source: Option<Span>,
 }
 
@@ -120,17 +126,16 @@ pub enum RcExpr {
     /// are moved into the field variables (no per-field retain) and its fields not named here are
     /// dropped; a boxed container retains each named field and releases the container. Reference-count
     /// insertion retains the container before this node iff it is used afterward — together this
-    /// mirrors the current back end's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
-    /// whole-container extraction. Representing the whole destructure as one node (rather than
-    /// per-field getters) lets that retain be decided once, from the container's liveness after the
-    /// destructure, and placed before the extraction.
+    /// mirrors code generation's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
+    /// whole-container extraction. One node for the whole destructure lets that retain be decided
+    /// once, from the container's liveness after the destructure, and placed before the extraction.
     Destructure(RcVar, Vec<(usize, RcVar)>, RcState, RcExprNode),
     /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
     /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
     /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
     /// global). It performs no reference-count operation itself: the variable is only observed, so a
-    /// following `Release` disposes it when it is dead. A distinct node — rather than a binding whose
-    /// result is unused — keeps a value forced for effect from being indistinguishable from dead code.
+    /// following `Release` disposes it when it is dead. A node of its own keeps a value forced for
+    /// effect distinguishable from dead code.
     Eval(RcVar, RcExprNode),
     /// The sole terminator: the value of this expression (a function body or a match arm) is this
     /// variable.
@@ -145,8 +150,7 @@ pub enum RcExpr {
 pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
-/// container, and the path to the leaf within that operand's value. Unlike `VarPath`, `container_index`
-/// is an operand slot (resolved against the op's arguments), not a bound variable name.
+/// container, and the path to the leaf within that operand's value.
 pub struct UniqueCheckOperand {
     /// The position, among the operation's arguments, of the operand holding the container.
     pub container_index: usize,
@@ -264,29 +268,36 @@ impl RcState {
     }
 }
 
-/// The ownership of a single reference-counting unit. `Own` receives ownership: the callee consumes it (by
-/// releasing it or moving it into the result), and the caller retains it before the call at a
-/// non-last use. `Borrow` only borrows it: neither side performs a refcount operation.
+/// The ownership of a single reference-counting unit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Ownership {
+    /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
+    /// the result, and the caller retains it before the call at a non-last use.
     Own,
+    /// The callee only borrows the unit: neither side performs a refcount operation.
     Borrow,
 }
 
-/// The ownership of one argument, shaped like the value: each reference-counting unit is `Own` or
-/// `Borrow`, and a part of the value holding no unit is `NoUnit`.
+/// The ownership of one argument, shaped like the value.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum OwnershipShape {
+    /// A part of the value holding no reference-counting unit.
     NoUnit,
+    /// An unboxed aggregate, with the shape of each of its fields. A field is at its own field
+    /// index, so a field holding no unit keeps its place as `NoUnit`.
     Fields(Vec<OwnershipShape>),
+    /// A single reference-counting unit, owned or borrowed.
     Unit(Ownership),
 }
 
-/// The initializer of a global value: the symbol, its type, and the expression that computes it,
-/// with the whole reachable graph marked global (refcount-exempt) before it is stored.
+/// The initializer of a global value, run once when a reader first asks for the value. The whole
+/// graph the value reaches is marked global (refcount-exempt) before it is stored.
 #[derive(Clone)]
 pub struct RcGlobalInit {
+    /// The name the global value is defined and read under.
     pub symbol: FullName,
+    /// The type of the value, always concrete (monomorphic).
     pub ty: Arc<TypeNode>,
+    /// The expression computing the value.
     pub init: RcExprNode,
 }
