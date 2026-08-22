@@ -82,6 +82,17 @@ fn reachability_roots(
     if config.enable_separated_compilation() {
         return symbols.iter().map(|sym| sym.name.clone()).collect();
     }
+    // Compiled as one unit, `symbols` is the whole program, so every entry point names one of its
+    // symbols. The walk starts at these names alone: one that names no definition reaches nothing,
+    // and the code behind that entry point is dropped.
+    let symbol_names: Set<&FullName> = symbols.iter().map(|sym| &sym.name).collect();
+    for entry_point in entry_points {
+        assert!(
+            symbol_names.contains(entry_point),
+            "the entry point `{}` names no symbol of the program",
+            entry_point.to_string()
+        );
+    }
     entry_points.iter().cloned().collect()
 }
 

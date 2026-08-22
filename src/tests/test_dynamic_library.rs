@@ -13,7 +13,7 @@ use crate::tests::test_util::{
     assert_succeeded, fix_command_at_opt_level, setup_case_projects, test_source,
 };
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// The directory holding this module's case projects.
 const CASES: &str = "src/tests/test_dynamic_library/cases";
@@ -52,10 +52,15 @@ fn build_driver(project_dir: &Path, link_arguments: &[&str]) -> PathBuf {
     driver
 }
 
-/// Builds the `exported_getter` library at `opt_level`, opens it from the driver, and asserts that
-/// the function it exports answers what the Fix source says it does.
-fn assert_an_opened_library_answers(opt_level: &str) {
-    let (_temp_dir, project_dir) = setup_case_projects(CASES, "exported_getter");
+/// Builds `case` as a dynamic library at `opt_level`, builds the driver beside it, and runs the
+/// driver on the library with `driver_arguments`. Answers the path of the library, which a failure
+/// message names, together with what the driver reported.
+fn run_driver_on_library(
+    case: &str,
+    opt_level: &str,
+    driver_arguments: &[String],
+) -> (PathBuf, Output) {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
     let library = build_library(&project_dir, opt_level);
     // Linux keeps the loader in a library of its own, which the driver names on its link line.
     let link_arguments: &[&str] = if cfg!(target_os = "linux") {
@@ -67,9 +72,17 @@ fn assert_an_opened_library_answers(opt_level: &str) {
 
     let output = Command::new(&driver)
         .arg(&library)
-        .arg(DRIVER_ARGUMENT.to_string())
+        .args(driver_arguments)
         .output()
         .expect("Failed to execute the driver");
+    (library, output)
+}
+
+/// Builds the `exported_getter` library at `opt_level`, opens it from the driver, and asserts that
+/// the function it exports answers what the Fix source says it does.
+fn assert_an_opened_library_answers(opt_level: &str) {
+    let (library, output) =
+        run_driver_on_library("exported_getter", opt_level, &[DRIVER_ARGUMENT.to_string()]);
     assert_succeeded(
         &output,
         &format!(
@@ -120,20 +133,7 @@ const EXPORTED_VALUE_OUTPUT: &str = "285";
 /// the roots naming a function would drop it and leave the library holding a call to nothing.
 #[test]
 fn test_a_library_exporting_a_value_is_read_at_max() {
-    let (_temp_dir, project_dir) = setup_case_projects(CASES, "exported_value");
-    let library = build_library(&project_dir, "max");
-    // Linux keeps the loader in a library of its own, which the driver names on its link line.
-    let link_arguments: &[&str] = if cfg!(target_os = "linux") {
-        &["-ldl"]
-    } else {
-        &[]
-    };
-    let driver = build_driver(&project_dir, link_arguments);
-
-    let output = Command::new(&driver)
-        .arg(&library)
-        .output()
-        .expect("Failed to execute the driver");
+    let (library, output) = run_driver_on_library("exported_value", "max", &[]);
     assert_succeeded(
         &output,
         &format!(
