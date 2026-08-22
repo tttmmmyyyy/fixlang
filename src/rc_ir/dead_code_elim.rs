@@ -43,8 +43,9 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
             Some(func) => &func.body,
             None => match globals.get(&name) {
                 Some(init) => init,
-                // A name this program defines by neither: a symbol another compilation unit defines,
-                // which code generation declares and the linker resolves.
+                // A name this program defines by neither. Reachability is then whatever the name
+                // reaches inside this program, which is nothing — the walk resolves a mention
+                // against the definitions it was handed, and answers for the program it was given.
                 None => continue,
             },
         };
@@ -113,8 +114,8 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
 mod tests {
     use super::*;
     use crate::ast::types::type_funptr;
-    use crate::fixstd::builtin::make_i64_ty;
-    use crate::rc_ir::ast::{RcFunc, RcGlobalInit, RcVar};
+    use crate::fixstd::builtin::{make_i64_ty, InlineLLVMMakeStructBody};
+    use crate::rc_ir::ast::{MatchArm, RcFunc, RcGlobalInit, RcState, RcVar};
     use std::sync::Arc;
 
     /// The name lowering gives a symbol of the program under test.
@@ -333,6 +334,100 @@ mod tests {
             func_names(&prog),
             vec![even.to_string(), main.to_string(), odd.to_string()],
             "the cycle the root reaches survives whole, and the cycle nothing reaches is dropped"
+        );
+    }
+
+    /// Every place a body can name a definition is followed: the `Var`, `App`, `Llvm` and `Match`
+    /// right-hand sides, the body of a match arm, the `Retain`, `Release`, `Eval` and `Destructure`
+    /// nodes, and the `Ret`. A global is lowered to an atom carrying its own name
+    /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
+    #[test]
+    fn test_every_mention_site_is_followed() {
+        fn node(expr: RcExpr) -> RcExprNode {
+            RcExprNode {
+                expr: Arc::new(expr),
+                source: None,
+            }
+        }
+
+        let names: Vec<FullName> = [
+            "renamed",
+            "callee",
+            "argument",
+            "operand",
+            "scrutinee",
+            "named_in_arm",
+            "retained",
+            "released",
+            "evaluated",
+            "destructured",
+            "returned",
+        ]
+        .iter()
+        .map(|n| global_name(n))
+        .collect();
+        let (main, unreached) = (global_name("main"), global_name("unreached"));
+        let local = |n: &str| var(FullName::local(n));
+        let at = |i: usize| var(names[i].clone());
+
+        let mut body = node(RcExpr::Ret(at(10)));
+        body = node(RcExpr::Destructure(
+            at(9),
+            vec![(0, local("field"))],
+            RcState::Unknown,
+            body,
+        ));
+        body = node(RcExpr::Eval(at(8), body));
+        body = node(RcExpr::Release(at(7), vec![], RcState::Unknown, body));
+        body = node(RcExpr::Retain(at(6), vec![], RcState::Unknown, body));
+        body = node(RcExpr::Let(
+            local("matched"),
+            RcRhs::Match(
+                at(4),
+                vec![MatchArm {
+                    tag: Some(0),
+                    payload: local("payload"),
+                    payload_state: RcState::Unknown,
+                    body: node(RcExpr::Ret(at(5))),
+                }],
+            ),
+            body,
+        ));
+        body = node(RcExpr::Let(
+            local("operation"),
+            RcRhs::Llvm(
+                Box::new(InlineLLVMMakeStructBody {
+                    field_names: vec![names[3].clone()],
+                }),
+                vec![at(3)],
+            ),
+            body,
+        ));
+        body = node(RcExpr::Let(
+            local("called"),
+            RcRhs::App(at(1), vec![at(2)]),
+            body,
+        ));
+        body = node(RcExpr::Let(local("moved"), RcRhs::Var(at(0)), body));
+
+        let mut funcs = vec![RcFunc {
+            body,
+            ..func(main.clone(), &[])
+        }];
+        funcs.extend(names.iter().map(|n| func(n.clone(), &[])));
+        funcs.push(func(unreached.clone(), &[]));
+        let mut prog = prog(funcs, vec![], &[main.clone()]);
+
+        eliminate_unreachable(&mut prog);
+
+        let mut expected: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+        expected.push(main.to_string());
+        expected.sort();
+        assert_eq!(
+            func_names(&prog),
+            expected,
+            "every function the root's body names, at whichever kind of node names it, should \
+             survive, and the one no node names should be dropped"
         );
     }
 }

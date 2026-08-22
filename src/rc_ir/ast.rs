@@ -45,10 +45,10 @@ pub struct RcProgram {
     pub funcs: Map<FuncRef, RcFunc>,
     /// The initializer of each global value the program defines.
     pub globals: Vec<RcGlobalInit>,
-    /// The functions and globals code generation reaches from outside this program: the entry point,
-    /// the values exported as C functions, and — where the program is one unit among several — every
-    /// symbol the unit publishes for the others. `dead_code_elim::eliminate_unreachable` keeps what
-    /// they reach and drops the rest.
+    /// The functions and globals code generation reaches from outside this program: the entry
+    /// point, the values exported as C functions, and — where the program is one unit among
+    /// several — every symbol the unit publishes for the others.
+    /// `dead_code_elim::eliminate_unreachable` keeps what they reach and drops the rest.
     pub roots: Set<FullName>,
 }
 
