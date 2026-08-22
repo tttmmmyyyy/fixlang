@@ -6141,6 +6141,11 @@ impl InlineLLVMMakeUnionBody {
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
+
+    /// The name holding the payload the constructed variant carries.
+    pub fn payload_name(&self) -> &FullName {
+        &self.field_name
+    }
 }
 
 #[typetag::serde]

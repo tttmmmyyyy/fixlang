@@ -1,0 +1,20 @@
+module Main;
+
+type Counter = unbox struct { high : I64, low : I64 };
+
+// Reads the value whole, which is what makes the twin of `run` rebuild it out of the arguments it
+// was handed.
+weight : Counter -> I64;
+weight = |c| c.@high * 1000 + c.@low;
+
+// The pattern writes `low` before `high`, the reverse of the order `Counter` declares them in. Both
+// fields hold an `I64`, so handing them over in the order the pattern writes them type checks and
+// answers differently.
+run : Counter -> I64;
+run = |c| (
+    let Counter { low : lo, high : hi } = c;
+    if hi == 0 { lo };
+    run(Counter { high : hi - 1, low : lo * 10 + hi }) + weight(c)
+);
+
+main : IO () = println(run(Counter { high : 3, low : 7 }).to_string);

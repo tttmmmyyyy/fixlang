@@ -1,0 +1,17 @@
+module Main;
+
+type T = unbox struct { x : I64, y : I64 };
+
+// `a` names a value of its own before the pattern binds a field to that same name. Handing the
+// field over as an argument makes its name stand over the whole body, so the earlier `a` is read as
+// the field unless every local carries a name of its own.
+f : I64 -> T -> I64;
+f = |seed, s| (
+    if seed <= 0 { 0 };
+    let a = seed * 1000;
+    let c = a + a;
+    let T { x : a, y : b } = s;
+    c + a * 10 + b + f(seed - 1, T { x : 5, y : 6 })
+);
+
+main : IO () = println(f(2, T { x : 1, y : 3 }).to_string);

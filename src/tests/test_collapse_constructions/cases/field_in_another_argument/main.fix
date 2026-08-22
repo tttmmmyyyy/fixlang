@@ -1,0 +1,15 @@
+module Main;
+
+type Pair = unbox struct { x : I64, n : I64 };
+
+// The accumulator names a field of the value this call was given, while the struct argument beside
+// it builds the value the next round gets. The two name one field between them, so the accumulator
+// reads the value being passed unless it reaches the call under a name of its own.
+f : I64 -> Pair -> I64;
+f = |acc, p| (
+    let Pair { x : a, n : k } = p;
+    if k == 0 { acc };
+    f(acc + a, Pair { x : a * 2, n : k - 1 })
+);
+
+main : IO () = println(f(0, Pair { x : 1, n : 3 }).to_string);
