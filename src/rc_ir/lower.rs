@@ -43,11 +43,14 @@ enum LoweredSymbol {
 /// Lower `symbols` to an `RcProgram`. Symbols reference one another by name, so the set need not be
 /// closed; passing a subset (e.g. one compilation unit) lowers just those. `global_types` types a
 /// global referenced as an LLVM operand, so it must cover every symbol any lowered function might
-/// reference, including one another unit defines (`Program::global_types`).
+/// reference, including one another unit defines (`Program::global_types`). `roots` names what code
+/// generation reaches the lowered program from outside it; it becomes `RcProgram::roots`, and the
+/// build driver computes it (`reachability_roots`).
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
     global_types: &Map<FullName, Arc<TypeNode>>,
+    roots: Set<FullName>,
 ) -> RcProgram {
     let mut lowerer = Lowerer::new(type_env, global_types);
     let mut globals = vec![];
@@ -68,19 +71,10 @@ pub fn lower_program(
         }
     }
     let funcs = mem::take(&mut lowerer.funcs);
-    // `entry` labels the program in the dump only; it has no role in code generation or in
-    // entry-point selection. The actual entry point — `main` for a build, `test` for `fix test`,
-    // or an FFI-exported function — is chosen by the build driver, independently of this field.
-    // It is a placeholder, NOT a reachability root: RC-IR dead-function elimination, when added,
-    // must take its roots from the real entry points (there can be several — every FFI-exported
-    // function is one), not from this field.
-    let entry = FuncRef {
-        name: FullName::local("#entry"),
-    };
     RcProgram {
         funcs,
         globals,
-        entry,
+        roots,
     }
 }
 

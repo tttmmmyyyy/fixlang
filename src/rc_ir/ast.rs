@@ -34,11 +34,16 @@ pub struct FuncRef {
     pub name: FullName,
 }
 
-/// A whole program: the top-level functions, the global-value initializers, and the entry point.
+/// A whole program: the top-level functions, the global-value initializers, and the names reached
+/// from outside them.
 pub struct RcProgram {
     pub funcs: Map<FuncRef, RcFunc>,
     pub globals: Vec<RcGlobalInit>,
-    pub entry: FuncRef,
+    /// The functions and globals code generation reaches from outside this program: the entry point,
+    /// the values exported as C functions, and — where the program is one unit among several — every
+    /// symbol the unit publishes for the others. `dce::eliminate_unreachable` keeps what they reach
+    /// and drops the rest.
+    pub roots: Set<FullName>,
 }
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and

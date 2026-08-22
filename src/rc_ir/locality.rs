@@ -1055,6 +1055,6 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs: output_funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }

@@ -457,9 +457,7 @@ mod tests {
         RcProgram {
             funcs: Map::default(),
             globals: vec![],
-            entry: FuncRef {
-                name: FullName::local("main"),
-            },
+            roots: Set::default(),
         }
     }
 
@@ -489,16 +487,17 @@ mod tests {
 
     /// Validate a program made of `funcs`, the first of which is its entry point.
     fn validate_prog(funcs: Vec<RcFunc>) {
-        let entry = funcs
+        let root = funcs
             .first()
             .expect("a program has at least one function")
+            .name
             .name
             .clone();
         let funcs = funcs.into_iter().map(|f| (f.name.clone(), f)).collect();
         let prog = RcProgram {
             funcs,
             globals: vec![],
-            entry,
+            roots: [root].into_iter().collect(),
         };
         validate(&prog, &Set::default(), &type_env(), "test");
     }

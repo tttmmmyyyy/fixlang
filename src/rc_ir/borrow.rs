@@ -230,7 +230,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }
 
@@ -971,7 +971,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     RcProgram {
         funcs,
         globals,
-        entry: prog.entry.clone(),
+        roots: prog.roots.clone(),
     }
 }
 

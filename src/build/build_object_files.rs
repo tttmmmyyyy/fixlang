@@ -25,7 +25,7 @@ use crate::{
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
-        locality,
+        dce, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
@@ -61,6 +61,37 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
+/// The names through which code generation reaches this program's functions and globals from outside
+/// it. `dce::eliminate_unreachable` keeps them and everything they reach.
+///
+/// Separated compilation publishes every symbol of a unit, so that another unit can call it: a
+/// funptr symbol becomes a function of external linkage, and any other symbol becomes a value
+/// reached through an accessor of external linkage (`Generator::declare_lambda_function`,
+/// `Configuration::external_if_separated`). Which of them the rest of the program uses is not
+/// knowable from the unit, so all of them are roots — decided by the rule that decides the linkage.
+///
+/// Compiled as one unit, every function and global is internal, and the C world enters the program
+/// in exactly two places: the entry point `build_main_function` runs, and the values
+/// `build_exported_c_functions` publishes under their C names.
+fn reachability_roots(
+    symbols: &[Symbol],
+    entry_io_value: &Option<Arc<ExprNode>>,
+    export_statements: &[ExportStatement],
+    config: &Configuration,
+) -> Set<FullName> {
+    if config.enable_separated_compilation() {
+        return symbols.iter().map(|sym| sym.name.clone()).collect();
+    }
+    let exported = export_statements
+        .iter()
+        .filter_map(|stmt| stmt.value_expr.as_ref());
+    entry_io_value
+        .iter()
+        .chain(exported)
+        .map(|expr| expr.get_var().name.clone())
+        .collect()
+}
+
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
 /// lowered program needs to run at all; the optimizations over it are separate
 /// (`optimize_rc_program`).
@@ -70,13 +101,16 @@ pub struct BuildObjFilesResult {
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
 ///   Under separated compilation such a global may be defined in another unit, so this covers the
 ///   whole program.
+/// * `roots` — what code generation reaches the lowered program from outside it
+///   (`reachability_roots`).
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
     global_types: &Map<FullName, Arc<TypeNode>>,
+    roots: Set<FullName>,
     config: &Configuration,
 ) -> RcProgram {
-    let mut prog = lower_program(type_env, symbols, global_types);
+    let mut prog = lower_program(type_env, symbols, global_types, roots);
     // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
     // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
     if config.enable_simplify() {
@@ -128,6 +162,9 @@ fn optimize_rc_program(
             validate(&prog, "after locality");
         }
     }
+    // Last, so that every version the passes above superseded has lost its caller by now.
+    dce::eliminate_unreachable(&mut prog);
+    validate(&prog, "after dce");
     prog
 }
 
@@ -176,7 +213,7 @@ fn dump_rc_ir(
             .filter(|g| in_module(&g.symbol))
             .cloned()
             .collect(),
-        entry: rc_program.entry.clone(),
+        roots: rc_program.roots.clone(),
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
@@ -216,7 +253,13 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let global_types = program.global_types();
-    let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, config);
+    let roots = reachability_roots(
+        &all_symbols,
+        &program.entry_io_value,
+        &program.export_statements,
+        config,
+    );
+    let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
     let optimized = optimize_rc_program(base, &type_env, &global_types, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
@@ -351,7 +394,10 @@ pub fn build_object_files<'c>(
             // one calls is declared where code generation first reaches it, from the types of the
             // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, &config);
+            let roots =
+                reachability_roots(&unit_symbols, &entry_io_value, &export_statements, &config);
+            let rc_prog =
+                lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
             gc.implement_rc_program(&rc_prog);
 
