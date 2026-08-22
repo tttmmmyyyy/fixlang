@@ -237,6 +237,22 @@ A pass that produces one output per key — a specializer cloning a function per
 
 Two things make the reading honest. Measure the pre-change compiler on the same generated input, because a pass that merely inherits an existing blowup is not the one to fix. And measure a sibling pass keyed the same way: when one multiplies and the other does not, the difference is usually a collapse the sibling gets for free from its own lattice — which says the new pass needs an explicit bound rather than a cleverer key.
 
+#### Turn on the checks the project already has, and run the corpus through them
+
+A project that checks its own invariants usually gates the expensive ones behind a development mode
+that only its test suite enables. Those checks are then a detector nobody has pointed at real code:
+the suite's inputs are small and written to exercise one thing each, while a corpus of real projects
+is a different distribution entirely. Wire a temporary switch that turns the mode on from the command
+line, build and **run** a corpus under it, and read what fires.
+
+The result reads both ways. A check that fires names a real input the suite's distribution never
+produced. A clean sweep is a measurement of the checks themselves — it says the invariants they state
+hold over inputs nobody wrote them for — and it costs one flag plus the corpus. Prove the switch
+reaches them the usual way, by breaking one invariant and watching its check abort.
+
+Revert the switch with the rest of the probes: the mode is gated for a reason, and a hunt that leaves
+it reachable changes what every later build costs.
+
 #### Run the emitted programs under valgrind memcheck
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
