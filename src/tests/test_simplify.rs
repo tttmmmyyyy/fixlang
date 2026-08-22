@@ -169,15 +169,17 @@ mod integration_tests {
 
     /// Every fold driver this program runs builds no union: the `Option` that `range`'s `advance`
     /// returns and `fold` immediately matches is cancelled, so the loop carries the range's two
-    /// scalars alone. The built program still sums the range — 0 + 1 + .. + 99 — so the removal
-    /// leaves what the loop computes intact.
+    /// scalars alone. The driver is checked to still add them, so a lowering that stopped putting
+    /// the range's arithmetic there fails the test rather than leaving it passing over a shape that
+    /// no longer holds a union to cancel. The built program still sums the range — 0 + 1 + .. + 99 —
+    /// so the removal leaves what the loop computes intact.
     #[test]
     fn test_range_fold_union_removed() {
         assert_union_cancelled(
             "read_fold",
             &["Iterator::fold"],
             "a fold driver",
-            &[],
+            &["int_add"],
             "4950",
         );
     }

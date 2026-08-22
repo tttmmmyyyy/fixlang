@@ -284,17 +284,6 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
 
-        // A construction nothing reads goes. Reading it where it is taken apart is what takes its
-        // last reader away, and what it holds keeps a reference from it until it does — which is a
-        // reference the stages below count, and a value counted twice is a value they will not
-        // write in place.
-        if pat.is_var() && built_by(&bound).is_some() {
-            let value = expr.get_let_value();
-            if !value.free_vars().contains(&pat.get_var().name) {
-                return StartVisitResult::ReplaceAndRevisit(value);
-            }
-        }
-
         // A name bound to a construction, or to a name already holding one, carries what it holds.
         if pat.is_var() {
             if let Some(construction) = self.construction_of(&bound) {

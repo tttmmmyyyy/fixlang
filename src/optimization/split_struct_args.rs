@@ -465,8 +465,11 @@ fn wrapper_body(
 /// written beside the struct can name one of those names, and a pattern standing over that argument
 /// would make it read the struct being passed where the caller wrote the one it was given. So every
 /// argument that names one, and every argument that is more than a name, is bound to a name of its
-/// own first, in the order the arguments are written — which is also the order the call they replace
-/// evaluates them in.
+/// own first.
+///
+/// The bindings follow the application spine, which is the order the call they replace already
+/// evaluated its arguments in at this stage. It is not the order the arguments were written: `x.f(y)`
+/// nests as `f(y)(x)`, and `ExprNode::app_order` is what tells the two apart.
 fn twin_call(
     args: &[Arc<ExprNode>],
     arg_idx: usize,
