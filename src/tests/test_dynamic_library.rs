@@ -107,6 +107,48 @@ fn test_a_library_built_at_max_is_loaded_and_called() {
     assert_an_opened_library_answers("max");
 }
 
+/// What the exported value of `exported_value` answers: the sum of the squares below ten, which the
+/// Fix source computes in the value's initializer.
+const EXPORTED_VALUE_OUTPUT: &str = "285";
+
+/// A library exporting a value rather than a function, compiled as one unit, opened from the driver
+/// and asked for that value.
+///
+/// A value is not of funptr type, so it becomes a global whose initializer runs on the first read,
+/// and the export is the library's only reachability root. Everything the iteration in that
+/// initializer compiles into is reached through the global alone, so a walk that started only from
+/// the roots naming a function would drop it and leave the library holding a call to nothing.
+#[test]
+fn test_a_library_exporting_a_value_is_read_at_max() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "exported_value");
+    let library = build_library(&project_dir, "max");
+    // Linux keeps the loader in a library of its own, which the driver names on its link line.
+    let link_arguments: &[&str] = if cfg!(target_os = "linux") {
+        &["-ldl"]
+    } else {
+        &[]
+    };
+    let driver = build_driver(&project_dir, link_arguments);
+
+    let output = Command::new(&driver)
+        .arg(&library)
+        .output()
+        .expect("Failed to execute the driver");
+    assert_succeeded(
+        &output,
+        &format!(
+            "the driver should load \"{}\" and read the value it exports.",
+            library.display()
+        ),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        EXPORTED_VALUE_OUTPUT,
+        "the exported value should be {}.",
+        EXPORTED_VALUE_OUTPUT
+    );
+}
+
 /// A C program built against the library calls the function it exports and gets the answer the Fix
 /// source gives, which the program reports through its exit status. The library is on the driver's
 /// link line, so the exported name has to be in the library's symbol table at link time as well.

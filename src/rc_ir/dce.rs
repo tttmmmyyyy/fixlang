@@ -107,3 +107,231 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
         RcExpr::Ret(v) => mention(&v.name),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::types::type_funptr;
+    use crate::fixstd::builtin::make_i64_ty;
+    use crate::rc_ir::ast::{RcExpr, RcFunc, RcGlobalInit, RcVar};
+    use std::sync::Arc;
+
+    /// The name lowering gives a symbol of the program under test.
+    fn global_name(name: &str) -> FullName {
+        FullName::from_strs(&["Main"], name)
+    }
+
+    /// A variable of type `I64` under `name`, carrying no source location or debug name.
+    fn var(name: FullName) -> RcVar {
+        RcVar {
+            name,
+            ty: make_i64_ty(),
+            source: None,
+            debug_name: None,
+            skip_null_check: false,
+        }
+    }
+
+    /// A body that mentions each of `mentions` — as the reference of a closure value — and returns
+    /// the last value it bound. A body mentioning nothing returns its own parameter.
+    fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
+        let last = FullName::local(&format!("v{}", mentions.len()));
+        let mut body = RcExprNode {
+            expr: Arc::new(RcExpr::Ret(var(last))),
+            source: None,
+        };
+        for (i, mentioned) in mentions.iter().enumerate().rev() {
+            body = RcExprNode {
+                expr: Arc::new(RcExpr::Let(
+                    var(FullName::local(&format!("v{}", i + 1))),
+                    RcRhs::Closure(
+                        FuncRef {
+                            name: mentioned.clone(),
+                        },
+                        vec![],
+                    ),
+                    body,
+                )),
+                source: None,
+            };
+        }
+        body
+    }
+
+    /// A function of one `I64` parameter whose body mentions each of `mentions`.
+    fn func(name: FullName, mentions: &[FullName]) -> RcFunc {
+        RcFunc {
+            name: FuncRef { name },
+            fn_ty: type_funptr(vec![make_i64_ty()], make_i64_ty()),
+            params: vec![var(FullName::local("v0"))],
+            capture: None,
+            ret_ty: make_i64_ty(),
+            body: body_mentioning(mentions),
+            source: None,
+            borrowed_units: Set::default(),
+            inline_into_callers: false,
+        }
+    }
+
+    /// A global value whose initializer mentions each of `mentions`.
+    fn global(symbol: FullName, mentions: &[FullName]) -> RcGlobalInit {
+        RcGlobalInit {
+            symbol,
+            ty: make_i64_ty(),
+            init: body_mentioning(mentions),
+        }
+    }
+
+    /// A program of `funcs` and `globals` reached through `roots`.
+    fn prog(funcs: Vec<RcFunc>, globals: Vec<RcGlobalInit>, roots: &[FullName]) -> RcProgram {
+        RcProgram {
+            funcs: funcs.into_iter().map(|f| (f.name.clone(), f)).collect(),
+            globals,
+            roots: roots.iter().cloned().collect(),
+        }
+    }
+
+    /// The names of `prog`'s functions, sorted, so that a comparison does not read the order the
+    /// function table happens to hold them in.
+    fn func_names(prog: &RcProgram) -> Vec<String> {
+        let mut names: Vec<String> = prog.funcs.keys().map(|f| f.name.to_string()).collect();
+        names.sort();
+        names
+    }
+
+    /// The names of `prog`'s globals, sorted.
+    fn global_names(prog: &RcProgram) -> Vec<String> {
+        let mut names: Vec<String> = prog.globals.iter().map(|g| g.symbol.to_string()).collect();
+        names.sort();
+        names
+    }
+
+    /// A function no root reaches is dropped, and so is one whose only caller was itself dropped.
+    #[test]
+    fn test_a_function_no_root_reaches_is_dropped() {
+        let (main, used, unused, unused_callee) = (
+            global_name("main"),
+            global_name("used"),
+            global_name("unused"),
+            global_name("unused_callee"),
+        );
+        let mut prog = prog(
+            vec![
+                func(main.clone(), &[used.clone()]),
+                func(used.clone(), &[]),
+                func(unused.clone(), &[unused_callee.clone()]),
+                func(unused_callee.clone(), &[]),
+            ],
+            vec![],
+            &[main.clone()],
+        );
+
+        eliminate_unreachable(&mut prog);
+
+        assert_eq!(
+            func_names(&prog),
+            vec![main.to_string(), used.to_string()],
+            "the root and what it reaches survive; the unreached function and the one only it \
+             called are dropped"
+        );
+    }
+
+    /// A global the reached code mentions survives together with what its initializer mentions, and
+    /// a global nothing mentions is dropped together with what only its initializer mentioned.
+    #[test]
+    fn test_a_global_survives_exactly_when_something_reaches_it() {
+        let (main, table, helper, orphan, orphan_helper) = (
+            global_name("main"),
+            global_name("table"),
+            global_name("helper"),
+            global_name("orphan"),
+            global_name("orphan_helper"),
+        );
+        let mut prog = prog(
+            vec![
+                func(main.clone(), &[table.clone()]),
+                func(helper.clone(), &[]),
+                func(orphan_helper.clone(), &[]),
+            ],
+            vec![
+                global(table.clone(), &[helper.clone()]),
+                global(orphan.clone(), &[orphan_helper.clone()]),
+            ],
+            &[main.clone()],
+        );
+
+        eliminate_unreachable(&mut prog);
+
+        assert_eq!(
+            global_names(&prog),
+            vec![table.to_string()],
+            "the global the root mentions survives, and the one nothing mentions is dropped"
+        );
+        assert_eq!(
+            func_names(&prog),
+            vec![helper.to_string(), main.to_string()],
+            "the function a surviving global's initializer mentions survives, and the one only the \
+             dropped global's initializer mentioned is dropped"
+        );
+    }
+
+    /// A name this program defines by neither a function nor a global — the symbol of another
+    /// compilation unit — leaves the walk to carry on past it.
+    #[test]
+    fn test_a_name_of_another_compilation_unit_is_walked_past() {
+        let (main, elsewhere, used) = (
+            global_name("main"),
+            FullName::from_strs(&["Other"], "elsewhere"),
+            global_name("used"),
+        );
+        let mut prog = prog(
+            vec![
+                func(main.clone(), &[elsewhere.clone(), used.clone()]),
+                func(used.clone(), &[]),
+            ],
+            vec![],
+            &[main.clone()],
+        );
+
+        eliminate_unreachable(&mut prog);
+
+        assert_eq!(
+            func_names(&prog),
+            vec![main.to_string(), used.to_string()],
+            "the name no definition of this program answers is passed over, and the mention after \
+             it is still followed"
+        );
+    }
+
+    /// Mutual recursion is walked once: a reachable cycle is kept and an unreachable one is
+    /// dropped, and neither makes the walk revisit a function it has already reached.
+    #[test]
+    fn test_a_cycle_is_walked_once() {
+        let (main, even, odd, dead_a, dead_b) = (
+            global_name("main"),
+            global_name("even"),
+            global_name("odd"),
+            global_name("dead_a"),
+            global_name("dead_b"),
+        );
+        let mut prog = prog(
+            vec![
+                func(main.clone(), &[even.clone()]),
+                func(even.clone(), &[odd.clone()]),
+                func(odd.clone(), &[even.clone()]),
+                func(dead_a.clone(), &[dead_b.clone()]),
+                func(dead_b.clone(), &[dead_a.clone()]),
+            ],
+            vec![],
+            &[main.clone()],
+        );
+
+        eliminate_unreachable(&mut prog);
+
+        assert_eq!(
+            func_names(&prog),
+            vec![even.to_string(), main.to_string(), odd.to_string()],
+            "the cycle the root reaches survives whole, and the cycle nothing reaches is dropped"
+        );
+    }
+}

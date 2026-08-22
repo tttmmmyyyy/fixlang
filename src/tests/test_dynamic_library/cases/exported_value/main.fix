@@ -1,0 +1,9 @@
+module Main;
+
+// A value rather than a function, so it becomes a global whose initializer runs on the first read.
+// The initializer folds an iterator, which puts the functions that iteration is compiled into on
+// the initializer alone: nothing else in the library mentions them.
+answer : CInt;
+answer = Iterator::range(0, 10).fold(0, |i, acc| acc + i * i).c_int;
+
+FFI_EXPORT[answer, fix_answer];
