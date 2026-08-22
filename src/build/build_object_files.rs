@@ -143,6 +143,15 @@ fn optimize_rc_program(
             validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
+    // Drop what nothing reaches, after `stage` and before the pass below it runs. Each pass here
+    // that sends a call to a new version of its callee leaves the version it moved off with one
+    // caller fewer, and the last such call leaves it with none — along with every function only that
+    // version called. Pruning between the passes is what keeps the one below from cloning, analyzing
+    // and generating code for functions no execution reaches.
+    let prune = |prog: &mut RcProgram, stage: &str| {
+        dce::eliminate_unreachable(prog);
+        validate(prog, stage);
+    };
 
     validate(&prog, "after insert_rc");
     split_rc_units(&mut prog, type_env);
@@ -152,19 +161,23 @@ fn optimize_rc_program(
         validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
+        prune(&mut prog, "after cancel dce");
         prog = unique_check_elim::specialize(&prog, type_env);
         validate(&prog, "after specialize");
+        prune(&mut prog, "after specialize dce");
         // Locality inference rests on nothing moving a live object out of the local state, which a
         // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
         // reaches. A threaded build keeps the runtime dispatch everywhere.
         if !config.threaded {
             prog = locality::specialize(&prog, type_env);
             validate(&prog, "after locality");
+            prune(&mut prog, "after locality dce");
         }
+    } else {
+        // No pass above reroutes a call at these levels, so one pass over the lowered program is
+        // what it takes to hand code generation a program holding nothing unreachable.
+        prune(&mut prog, "after dce");
     }
-    // Last, so that every version the passes above superseded has lost its caller by now.
-    dce::eliminate_unreachable(&mut prog);
-    validate(&prog, "after dce");
     prog
 }
 
