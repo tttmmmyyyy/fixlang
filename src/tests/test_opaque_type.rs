@@ -883,7 +883,7 @@ pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
         &source,
         Configuration::develop_mode(),
         "An opaque type variable can appear in an equality constraint only when the left side of \
-         that constraint is an associated type applied to it.",
+         that constraint is an associated type applied to an opaque type variable.",
     );
 }
 
@@ -924,7 +924,7 @@ pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() 
         &source,
         Configuration::develop_mode(),
         "An opaque type variable can appear in an equality constraint only when the left side of \
-         that constraint is an associated type applied to it.",
+         that constraint is an associated type applied to an opaque type variable.",
     );
 }
 
@@ -961,7 +961,7 @@ pub fn test_opaque_tyvar_on_right_side_of_equality_on_another_type() {
         &source,
         Configuration::develop_mode(),
         "An opaque type variable can appear in an equality constraint only when the left side of \
-         that constraint is an associated type applied to it.",
+         that constraint is an associated type applied to an opaque type variable.",
     );
 }
 

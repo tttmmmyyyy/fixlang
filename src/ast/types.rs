@@ -2292,10 +2292,10 @@ impl Scheme {
             }
         }
         // An opaque type variable stands for a type this signature hides from the use site. So an
-        // equality naming one has to be the equality on it, whose `args[0]` is that variable: such
-        // an equality states what the hidden type is like and is given to the use site. An equality
-        // on another type states a condition the use site has to meet, and a use site can meet only
-        // conditions about types it sees.
+        // equality naming one has to be an equality on an opaque type variable, whose `args[0]` is
+        // one: such an equality states what a hidden type is like and is given to the use site. An
+        // equality on another type states a condition the use site has to meet, and a use site can
+        // meet only conditions about types it sees.
         for eq in &self.equalities {
             if eq.on_opaque_tyvar() {
                 continue;
@@ -2308,8 +2308,8 @@ impl Scheme {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "An opaque type variable can appear in an equality constraint only when the \
-                     left side of that constraint is an associated type applied to it. \
-                     NOTE: `{}` appears in `{}`, whose left side is applied to `{}`.",
+                     left side of that constraint is an associated type applied to an opaque type \
+                     variable. NOTE: `{}` appears in `{}`, whose left side is applied to `{}`.",
                     opaque_var.name,
                     eq.to_string(),
                     eq.args[0].to_string(),
