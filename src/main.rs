@@ -166,7 +166,7 @@ fn run_cli() {
         .takes_value(true)
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations; the shortest compile time. Suitable for debugging."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance, with a long build time. This is the default optimization level."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
         // The option carries no default value, so that an invocation that gives it explicitly is
         // told apart from one that leaves the level to the project file or to `--debug`.
