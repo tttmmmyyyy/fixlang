@@ -131,7 +131,7 @@ pub fn test_union_of_more_variants_than_the_tag_tells_apart_is_rejected() {
     );
 }
 
-/// A run that only checks the program, as `fix check` and the editor make, reports the union of more
+/// A run that only checks the program, as `fix check` and the editor do, reports the union of more
 /// variants than the tag tells apart. Such a run type-checks the modules it is asked about and
 /// returns before the checks that need the whole program, so where the declaration is checked
 /// decides whether the editor ever shows this error.

@@ -6557,6 +6557,7 @@ pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
 pub struct InlineLLVMUnionModBody {
     union_name: FullName,
     modifier_name: FullName,
+    /// The variant modified, as its index among the union's variants.
     field_idx: usize,
 }
 
