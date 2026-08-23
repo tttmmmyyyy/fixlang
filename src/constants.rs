@@ -271,6 +271,15 @@ pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // a byte of the control block's tail padding, so the control block keeps its size.
 pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
 
+/// The name of the LLVM module a compilation unit's code is generated into, before the unit's hash.
+/// `--emit-llvm` names the file it writes after the module.
+pub const UNIT_MODULE_NAME_PREFIX: &str = "Module-";
+
+/// The name of the LLVM module the compilation units are merged into, before the hash naming the
+/// set of units. It differs from `UNIT_MODULE_NAME_PREFIX` so that the file `--emit-llvm` writes
+/// says whether it holds one unit or the whole program.
+pub const MERGED_MODULE_NAME_PREFIX: &str = "Program-";
+
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const RUN_PATH: &str = ".fixlang/run";

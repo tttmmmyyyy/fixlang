@@ -7,6 +7,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
+use crate::configuration::Configuration;
 use crate::constants::{
     pthread_once_init_flag_type, pthread_once_init_flag_value, CLOSURE_CAPTURE_IDX,
     CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX,
@@ -14,7 +15,8 @@ use crate::constants::{
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{
-    global_accessor_name, object_file_symbol_name, EmittedGlobal, Generator, Object,
+    enum_attribute_kind_id, global_accessor_name, module_functions, object_file_symbol_name,
+    Generator, Object,
 };
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
@@ -24,11 +26,10 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
-use inkwell::module::Linkage;
+use inkwell::module::{Linkage, Module};
 use inkwell::types::BasicType;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
-use std::mem;
 use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
@@ -74,41 +75,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
-        }
-    }
-
-    /// Keep each global's initializer out of the accessor that more than one reader takes.
-    ///
-    /// The accessor is the initializer's only caller, so an inliner folds the initializer straight
-    /// back into it and the accessor grows to the size of the initializer. An inlining decided by
-    /// size then leaves the accessor a call at each reader — one per read, with the flag test and
-    /// the load stuck in the loop behind it.
-    ///
-    /// A global with one reader keeps its initializer where it is. That initializer has one place
-    /// to be either way, and the place that costs nothing is the one the reader can see: what the
-    /// initializer knows — the length of an array, the shape of a structure — reaches the code that
-    /// reads the global, where it takes bounds checks out of loops.
-    ///
-    /// Call this once the module holds every reader of every global — the last of them are the
-    /// exported C functions and the program's entry point, which `build_object_files` implements
-    /// after the units. A reader counted short leaves the initializer in an accessor that its
-    /// readers then pay a call for.
-    ///
-    /// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a
-    /// call and a load whatever the initializer's size, and the attribute decides nothing.
-    pub(crate) fn keep_initializers_out_of_shared_accessors(&mut self) {
-        if self.config.threaded {
-            return;
-        }
-        for global in mem::take(&mut self.emitted_globals) {
-            let accessor = global.accessor.as_global_value();
-            let Some(first_use) = accessor.get_first_use() else {
-                continue;
-            };
-            if first_use.get_next_use().is_none() {
-                continue;
-            }
-            self.add_enum_attribute(global.init_value, "noinline", AttributeLoc::Function);
         }
     }
 
@@ -690,10 +656,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             Some(Linkage::Internal),
         );
 
-        self.emitted_globals.push(EmittedGlobal {
-            accessor: acc_fn,
-            init_value: init_value_fn,
-        });
+        // Name the accessor on the initializer, for `keep_initializers_out_of_shared_accessors` to
+        // read back off the module the optimization runs over. That module holds every reader of
+        // the global, which the module generating it need not: a reader in another compilation unit
+        // arrives when the units are merged.
+        init_value_fn.add_attribute(
+            AttributeLoc::Function,
+            self.context.create_string_attribute(
+                GLOBAL_ACCESSOR_ATTRIBUTE,
+                &global_accessor_name(&global_init.symbol),
+            ),
+        );
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -816,5 +789,61 @@ fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
         RcExpr::Ret(r) => r.name == *x,
         RcExpr::Let(y, RcRhs::Var(x2), k2) => x2.name == *x && carries_var_to_return(k2, &y.name),
         _ => false,
+    }
+}
+
+/// The name of the accessor of the global an initializer function computes, recorded on the
+/// initializer as a string attribute so that `keep_initializers_out_of_shared_accessors` finds the
+/// pair in whichever module the two end up in.
+const GLOBAL_ACCESSOR_ATTRIBUTE: &str = "fix-global-accessor";
+
+/// Keep each global's initializer out of the accessor that more than one reader takes.
+///
+/// The accessor is the initializer's only caller, so an inliner folds the initializer straight back
+/// into it and the accessor grows to the size of the initializer. An inlining decided by size then
+/// leaves the accessor a call at each reader — one per read, with the flag test and the load stuck
+/// in the loop behind it.
+///
+/// A global with one reader keeps its initializer where it is. That initializer has one place to be
+/// either way, and the place that costs nothing is the one the reader can see: what the initializer
+/// knows — the length of an array, the shape of a structure — reaches the code that reads the
+/// global, where it takes bounds checks out of loops.
+///
+/// Call this on the module the LLVM optimization pipeline is about to run over, which is the one
+/// holding every reader of every global it defines: the merged module where the compilation units
+/// are merged, and the unit itself where they are not. A reader counted short leaves the
+/// initializer in an accessor that its readers then pay a call for.
+///
+/// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a call
+/// and a load whatever the initializer's size, and the attribute decides nothing.
+pub(crate) fn keep_initializers_out_of_shared_accessors(module: &Module, config: &Configuration) {
+    let noinline = module
+        .get_context()
+        .create_enum_attribute(enum_attribute_kind_id("noinline"), 0);
+    for init_value in module_functions(module) {
+        let Some(attribute) =
+            init_value.get_string_attribute(AttributeLoc::Function, GLOBAL_ACCESSOR_ATTRIBUTE)
+        else {
+            continue;
+        };
+        let accessor_name = attribute.get_string_value().to_string_lossy().to_string();
+        init_value.remove_string_attribute(AttributeLoc::Function, GLOBAL_ACCESSOR_ATTRIBUTE);
+
+        let accessor = module.get_function(&accessor_name).unwrap_or_else(|| {
+            panic!(
+                "the accessor `{}` of a global whose initializer is in the module is missing from it",
+                accessor_name
+            )
+        });
+        let accessor = accessor.as_global_value();
+        let Some(first_use) = accessor.get_first_use() else {
+            continue;
+        };
+        if first_use.get_next_use().is_none() {
+            continue;
+        }
+        if !config.threaded {
+            init_value.add_attribute(AttributeLoc::Function, noinline);
+        }
     }
 }

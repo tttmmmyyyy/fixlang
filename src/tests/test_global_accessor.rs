@@ -62,9 +62,10 @@ const COUNTER_INITIALIZER: &str = "@\"InitValue#Main::counter#";
 
 /// Build `source` with `--emit-llvm` in a directory of its own, and return that directory.
 ///
-/// The build works at `-O max` whatever level the suite runs at, which compiles the program as one
-/// compilation unit: the emitted IR is one module, holding the accessors, the initializers, the
-/// loop reading a global, and one numbering of the attribute groups.
+/// The build works at `-O max` whatever level the suite runs at, which merges the compilation units
+/// into one module before optimizing it. `EmittedIr::WholeProgramBeforeOptimization` reads that
+/// module: it holds the accessors, the initializers, the loop reading a global, and one numbering
+/// of the attribute groups, and it is where the decisions below are taken.
 fn build_emitting_llvm_ir(source: &str) -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
@@ -133,7 +134,7 @@ fn count_calls_to(ir: &str, name: &str) -> usize {
 #[test]
 pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::WholeProgramBeforeOptimization);
 
     // The readers the decision rests on.
     assert!(
@@ -161,7 +162,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
 #[test]
 pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::WholeProgramBeforeOptimization);
 
     // The reader the decision rests on.
     assert_eq!(
@@ -185,7 +186,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
 #[test]
 pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::WholeProgramBeforeOptimization);
     let accessor = sole_body(&ir, TABLE_ACCESSOR);
 
     for variable in [TABLE_STORAGE, TABLE_FLAG] {
@@ -224,7 +225,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
 
     // The generated IR holds the calls the optimized IR is then checked for: a program reaching
     // `table` some other way would satisfy that check for free.
-    let generated_ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
+    let generated_ir = emitted_llvm_ir(dir, EmittedIr::WholeProgramBeforeOptimization);
     assert!(
         count_calls_to(&generated_ir, TABLE_ACCESSOR) > 0,
         "the program should read `table` through its accessor"
@@ -253,7 +254,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
 #[test]
 pub fn test_a_global_read_from_an_exported_c_function_has_that_reader_counted() {
     let temp_dir = build_emitting_llvm_ir(EXPORTED_GLOBAL_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::WholeProgramBeforeOptimization);
 
     // The readers the decision rests on: `main`, and the exported C function.
     assert_eq!(

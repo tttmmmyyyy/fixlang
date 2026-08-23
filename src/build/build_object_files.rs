@@ -13,7 +13,7 @@ use crate::{
     configuration::{Configuration, OutputFileType},
     constants::{
         C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
-        UNITS_CACHE_PATH,
+        MERGED_MODULE_NAME_PREFIX, UNITS_CACHE_PATH, UNIT_MODULE_NAME_PREFIX,
     },
     error::{panic_with_msg, Errors},
     ffi::c_entry_point_signature,
@@ -28,6 +28,7 @@ use crate::{
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        codegen::keep_initializers_out_of_shared_accessors,
         dead_code_elim, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
@@ -69,13 +70,62 @@ pub struct BuildObjFilesResult {
 /// The names through which code generation reaches a compilation unit's functions and globals from
 /// outside it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
 ///
-/// A unit publishes every symbol it holds, so that another unit can call it: a funptr symbol becomes
-/// a function of external linkage, and any other symbol becomes a value reached through an accessor
-/// of external linkage (`Generator::declare_lambda_function`, `Generator::declare_program_global`).
-/// Which of them the rest of the program uses is not knowable from inside the unit, so all of them
-/// are roots — decided by the rule that decides the linkage.
-fn reachability_roots(symbols: &[Symbol]) -> Set<FullName> {
-    symbols.iter().map(|sym| sym.name.clone()).collect()
+/// # Arguments
+/// * `symbols` — the symbols of one compilation unit.
+/// * `reached_from_outside_their_unit` — every symbol of the program that something outside its own
+///   unit reaches, as `symbols_reached_from_outside_their_unit` gives it.
+fn reachability_roots(
+    symbols: &[Symbol],
+    reached_from_outside_their_unit: &Set<FullName>,
+) -> Set<FullName> {
+    symbols
+        .iter()
+        .map(|symbol| &symbol.name)
+        .filter(|name| reached_from_outside_their_unit.contains(name))
+        .cloned()
+        .collect()
+}
+
+/// The symbols of the program that something outside their own compilation unit reaches: the values
+/// the C world enters the program through, and every symbol referenced by a symbol of another unit.
+///
+/// A symbol reached only from inside its unit is one the unit decides the fate of by itself, and
+/// dropping it once nothing in the unit calls it any more is what lets each version a pass rewrote
+/// a call away from go. The rest have to survive whatever the unit sees, since another unit's code
+/// calls them by name: a funptr symbol through a function of external linkage, any other symbol
+/// through an accessor of external linkage (`Generator::declare_lambda_function`,
+/// `Generator::declare_program_global`).
+///
+/// The references read here are the free variables of the symbols' expressions, which is the same
+/// relation `dead_symbol_elimination` walks to decide which symbols the program keeps at all. A
+/// reference it does not see is one this leaves out of the root set, and the symbol behind it is
+/// dropped from its unit while another unit still calls it.
+fn symbols_reached_from_outside_their_unit(
+    units: &[CompileUnit],
+    root_value_names: &[FullName],
+) -> Set<FullName> {
+    let mut unit_of: Map<&FullName, usize> = Map::default();
+    for (index, unit) in units.iter().enumerate() {
+        for symbol in unit.symbols() {
+            unit_of.insert(&symbol.name, index);
+        }
+    }
+
+    let mut reached: Set<FullName> = root_value_names.iter().cloned().collect();
+    for (index, unit) in units.iter().enumerate() {
+        for symbol in unit.symbols() {
+            let expr = symbol
+                .expr
+                .as_ref()
+                .expect("a symbol reaching code generation carries its expression");
+            for referenced in expr.free_vars() {
+                if unit_of.get(&referenced) != Some(&index) {
+                    reached.insert(referenced);
+                }
+            }
+        }
+    }
+    reached
 }
 
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
@@ -240,9 +290,12 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
-/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
-/// generation does at `Max`), then write it before and after the optimizations, filtered to the
-/// requested module in each dump.
+/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program as one unit,
+/// then write it before and after the optimizations, filtered to the requested module in each dump.
+///
+/// The build divides the program into compilation units and optimizes the RC IR of each on its own,
+/// so what it generates is this dump split at the unit boundaries: a pass here may reach across a
+/// boundary the build does not let it cross.
 fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let Some(filter) = &config.emit_rc_ir else {
         return;
@@ -250,7 +303,9 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let global_types = program.global_types();
-    let roots = reachability_roots(&all_symbols);
+    // The whole program lowered as one unit, which nothing outside reaches but through the values
+    // the C world enters it through.
+    let roots = program.root_value_names().into_iter().collect();
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
     let optimized = optimize_rc_program(base, &type_env, &global_types, config);
@@ -315,6 +370,11 @@ pub fn build_object_files<'c>(
         units
     };
 
+    let reached_from_outside_their_unit = Arc::new(symbols_reached_from_outside_their_unit(
+        &units,
+        &program.root_value_names(),
+    ));
+
     // Where each unit's generated code goes, and where the code this build hands the linker goes.
     // Merged units are linked as the one object file they are compiled into together; separate ones
     // are linked as themselves.
@@ -367,6 +427,7 @@ pub fn build_object_files<'c>(
         }
 
         let global_types = global_types.clone();
+        let reached_from_outside_their_unit = reached_from_outside_their_unit.clone();
         let config = config.clone();
         let type_env = program.type_env();
 
@@ -382,7 +443,7 @@ pub fn build_object_files<'c>(
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
             let module = Generator::create_module(
-                &format!("Module-{}", unit.unit_hash()),
+                &format!("{}{}", UNIT_MODULE_NAME_PREFIX, unit.unit_hash()),
                 &context,
                 &target_machine,
             );
@@ -408,7 +469,7 @@ pub fn build_object_files<'c>(
             // one calls is declared where code generation first reaches it, from the types of the
             // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let roots = reachability_roots(&unit_symbols);
+            let roots = reachability_roots(&unit_symbols, &reached_from_outside_their_unit);
             let rc_prog =
                 lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
@@ -427,9 +488,6 @@ pub fn build_object_files<'c>(
                 }
             }
 
-            // Every reader of this unit's globals is in the module by now.
-            gc.keep_initializers_out_of_shared_accessors();
-
             gc.finalize_di();
 
             gc.assert_defined_symbols_fit_a_symbol_table();
@@ -439,13 +497,17 @@ pub fn build_object_files<'c>(
                 gc.add_frame_pointer_attribute_to_all_functions();
             }
 
-            if config.emit_llvm {
-                // Print LLVM-IR to file before optimization.
-                emit_llvm(gc.module, &config, false);
-            }
-
             match unit_output {
                 UnitOutput::ObjectFile => {
+                    // This module is the one the optimization runs over, so it holds every reader
+                    // of every global it defines.
+                    keep_initializers_out_of_shared_accessors(gc.module, &config);
+
+                    if config.emit_llvm {
+                        // Print LLVM-IR to file before optimization.
+                        emit_llvm(gc.module, &config, false);
+                    }
+
                     optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
                     if config.emit_llvm {
@@ -459,6 +521,10 @@ pub fn build_object_files<'c>(
                     // The optimization runs over the merged module, so what is written here is the
                     // unit's code as generation left it. Verifying it now is what makes LLVM name
                     // the unit whose code is malformed; after the merge there is only one module.
+                    if config.emit_llvm {
+                        emit_llvm(gc.module, &config, false);
+                    }
+
                     run_passes_or_panic(gc.module, &["verify"], &target_machine);
 
                     write_to_bitcode_file(gc.module, &unit_path);
@@ -516,7 +582,11 @@ fn merge_units_into_object_file(
 ) {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
-    let module_name = format!("Module-{}", obj_path.file_stem().unwrap().to_string_lossy());
+    let module_name = format!(
+        "{}{}",
+        MERGED_MODULE_NAME_PREFIX,
+        obj_path.file_stem().unwrap().to_string_lossy()
+    );
     let merged = Generator::create_module(&module_name, &context, &target_machine);
     for bitcode_path in bitcode_paths {
         let unit = Module::parse_bitcode_from_path(bitcode_path, &context).unwrap_or_else(|e| {
@@ -535,6 +605,8 @@ fn merge_units_into_object_file(
         });
     }
     internalize_all_but(&merged, c_visible_names);
+    // Every reader of every global of the program is in the merged module.
+    keep_initializers_out_of_shared_accessors(&merged, config);
 
     if config.emit_llvm {
         emit_llvm(&merged, config, false);
