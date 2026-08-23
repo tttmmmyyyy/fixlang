@@ -12,6 +12,7 @@ use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
+use crate::hash::md5_hex;
 
 pub struct CompileUnit {
     // Name of symbols in the module
@@ -102,7 +103,7 @@ impl CompileUnit {
             data.push(module_dependency_hash[name].clone());
         }
 
-        self.unit_hash = format!("{:x}", md5::compute(data.join(", ")));
+        self.unit_hash = md5_hex(&data.join(", "));
     }
 
     // Set the hash of this compilation unit to a random value.
@@ -110,10 +111,7 @@ impl CompileUnit {
     #[allow(dead_code)]
     pub fn set_random_unit_hash(&mut self) {
         assert!(self.unit_hash.len() == 0);
-        self.unit_hash = format!(
-            "{:x}",
-            md5::compute(rand::thread_rng().gen::<u64>().to_string())
-        );
+        self.unit_hash = md5_hex(&rand::thread_rng().gen::<u64>().to_string());
     }
 
     pub fn split_by_max_size(self, max_size: usize) -> Vec<CompileUnit> {
