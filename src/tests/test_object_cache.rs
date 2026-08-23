@@ -64,9 +64,12 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         paths
     }
 
-    /// The RC IR, the LLVM IR and the symbols are written as the code they describe is generated, so
-    /// a build that answered from the cache would write none of them. A build asked for a dump
+    /// The RC IR, the LLVM IR and the symbols are written as the code they describe is generated,
+    /// so a build that answered from the cache would write none of them. A build asked for a dump
     /// therefore generates the code again, and what it writes is of the build that was asked.
+    ///
+    /// Each of the three is asked for on its own, since a dump written for one of them says nothing
+    /// about the other two.
     #[test]
     fn test_a_build_asked_for_a_dump_writes_it_however_much_is_cached() {
         let dir = project_dir();
@@ -82,60 +85,51 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dump_at_basic = fs::read_to_string(dumps.join("rc_ir.post.txt"))
             .expect("the build at -O basic should write the RC IR");
 
-        // A build of another level that asks for nothing, which is what fills the cache the build
-        // under test answers from.
+        // A build of another level that asks for nothing, which is what fills the cache the builds
+        // under test answer from. Asking for the RC IR or the LLVM IR leaves the generated code as
+        // it is, so a build asking for either takes this one's object files.
         run_in(
             &mut fix_command_at_opt_level("build", "none"),
             dir,
             "the build at -O none",
         );
 
-        // The build under test: its object files are all cached, and it is asked for every dump.
-        let asked_for_dumps = |dir: &Path, what: &str| {
-            run_in(
-                fix_command_at_opt_level("build", "none")
-                    .args(["--emit-rc-ir", "all"])
-                    .arg("--emit-llvm")
-                    .arg("--emit-symbols"),
-                dir,
-                what,
-            );
-        };
-        asked_for_dumps(dir, "the build at -O none asked for the dumps");
+        run_in(
+            fix_command_at_opt_level("build", "none").args(["--emit-rc-ir", "all"]),
+            dir,
+            "the build asked for the RC IR",
+        );
         let dump_at_none = fs::read_to_string(dumps.join("rc_ir.post.txt"))
             .expect("the build asked for the RC IR should write it");
         assert_ne!(
             dump_at_basic, dump_at_none,
             "the RC IR should be the one of the level the build was asked at"
         );
+
+        run_in(
+            fix_command_at_opt_level("build", "none").arg("--emit-llvm"),
+            dir,
+            "the build asked for the LLVM IR",
+        );
         assert!(
             !files_ending_in(dir, ".ll").is_empty(),
             "the build asked for the LLVM IR should write it"
         );
-        assert!(
-            !files_ending_in(&dumps, ".symbols.fix").is_empty(),
-            "the build asked for the symbols should write them"
-        );
 
-        // The same build again, with what it wrote taken away: the cache now holds its own object
-        // files, and the dumps are written all the same.
-        fs::remove_file(dumps.join("rc_ir.pre.txt")).expect("failed to remove the RC IR dump");
-        fs::remove_file(dumps.join("rc_ir.post.txt")).expect("failed to remove the RC IR dump");
-        for path in files_ending_in(dir, ".ll") {
-            fs::remove_file(path).expect("failed to remove an LLVM IR dump");
-        }
+        // `--emit-symbols` renames the symbols of the program, so its object files are its own and
+        // the first build asked for it generates them. The second is the one answered from a cache.
+        let asked_for_symbols = |what: &str| {
+            run_in(
+                fix_command_at_opt_level("build", "none").arg("--emit-symbols"),
+                dir,
+                what,
+            );
+        };
+        asked_for_symbols("the build asked for the symbols");
         for path in files_ending_in(&dumps, ".symbols.fix") {
             fs::remove_file(path).expect("failed to remove a symbols dump");
         }
-        asked_for_dumps(dir, "the build repeating the one asked for the dumps");
-        assert!(
-            dumps.join("rc_ir.post.txt").exists(),
-            "a repeated build asked for the RC IR should write it again"
-        );
-        assert!(
-            !files_ending_in(dir, ".ll").is_empty(),
-            "a repeated build asked for the LLVM IR should write it again"
-        );
+        asked_for_symbols("the build repeating the one asked for the symbols");
         assert!(
             !files_ending_in(&dumps, ".symbols.fix").is_empty(),
             "a repeated build asked for the symbols should write them again"
@@ -170,6 +164,17 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             build.contains("Using cached object files."),
             "the build after the run should take the object files the run generated.\n{}",
             build
+        );
+
+        let built = Command::new(dir.join("a.out"))
+            .current_dir(dir)
+            .output()
+            .expect("failed to run the program the build produced");
+        assert_eq!(
+            String::from_utf8_lossy(&built.stdout).trim(),
+            OUTPUT,
+            "the program linked from the object files the run generated should print what the run \
+             printed"
         );
     }
 

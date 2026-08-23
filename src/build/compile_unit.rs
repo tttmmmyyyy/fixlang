@@ -92,15 +92,13 @@ impl CompileUnit {
         hash_source.push_text(&config.object_generation_hash());
 
         // The symbols this unit implements.
-        hash_source.push_list(&self.symbols.iter().map(Symbol::hash).collect::<Vec<_>>());
+        hash_source.push_list(self.symbols.iter().map(Symbol::hash));
 
         // The sources of the modules this unit's symbols are made of.
         hash_source.push_list(
-            &self
-                .dependent_modules
+            self.dependent_modules
                 .iter()
-                .map(|name| module_dependency_hash[name].clone())
-                .collect::<Vec<_>>(),
+                .map(|name| &module_dependency_hash[name]),
         );
 
         self.unit_hash = hash_source.finish();

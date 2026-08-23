@@ -665,6 +665,8 @@ struct CacheKeySources {
     elaboration: HashSource,
     /// The settings that decide what code the compiler generates.
     object_generation: HashSource,
+    /// The settings the runtime's own object file is compiled under.
+    runtime_object: HashSource,
 }
 
 impl Configuration {
@@ -1046,15 +1048,16 @@ impl Configuration {
             num_worker_thread: _,
             type_check_cache: _,
 
+            // The macros the runtime is compiled with. The runtime is written in C rather than
+            // generated, so it has an object file and a key of its own.
+            runtime_c_macro,
+
             // The link step, which runs once the object files are made, and where its result goes.
-            // The runtime is compiled from C beside them, and `build` keys its object file on the
-            // macros it is compiled with.
             object_files: _,
             linked_libraries: _,
             library_search_paths: _,
             ld_flags: _,
             out_file_path: _,
-            runtime_c_macro: _,
 
             // What the build writes beside the object files, and what it reports as it goes. A dump
             // is written as the code is generated, so a build asked for one generates the code
@@ -1072,6 +1075,7 @@ impl Configuration {
 
         let mut elaboration = HashSource::default();
         let mut object_generation = HashSource::default();
+        let mut runtime_object = HashSource::default();
 
         // The sizes of the C types decide the Fix type the parser gives a `CInt` in an `FFI_CALL`
         // signature, and the compiler builds the trait implementations converting to a C type from
@@ -1093,6 +1097,9 @@ impl Configuration {
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
         object_generation.push_text(&sanitizer.to_string());
+        // The sanitizer decides which C compiler `build` compiles the runtime with, and the
+        // instrumentation it inserts is part of the object that comes out.
+        runtime_object.push_text(&sanitizer.to_string());
         object_generation.push_text(&backtrace.to_string());
         object_generation.push_text(&no_runtime_check.to_string());
         object_generation.push_text(&skip_eval.to_string());
@@ -1111,6 +1118,8 @@ impl Configuration {
         // only kind that carries the entry point (`elaborate_via_config`). An object built for one
         // kind therefore fails to link into the other.
         object_generation.push_text(output_file_type.to_str());
+        // A dynamic library's runtime is compiled position-independent.
+        runtime_object.push_text(output_file_type.to_str());
         // The CPU the code is generated for. The patterns are what the configuration says and the
         // CPU is what the machine answers, and an object file holds the instructions of the CPU it
         // was generated for, so a machine reading a cache another machine wrote needs both.
@@ -1129,13 +1138,23 @@ impl Configuration {
         // so `fix build` and `fix run` share their object files.
         object_generation.push_text(&self.entry_point_runs_tests().to_string());
 
+        // Each macro turns on a part of the runtime, and they are passed to the C compiler as they
+        // are written.
+        runtime_object.push_list(runtime_c_macro);
+        // A build printing a backtrace compiles the runtime keeping the frame pointers a backtrace
+        // is walked along, where the platform walks them (`no_elim_frame_pointers`).
+        runtime_object.push_text(&backtrace.to_string());
+
         // The build of the compiler. Code generation is the compiler's own work, so a differently
-        // built compiler may do it differently.
+        // built compiler may do it differently, and the runtime's source is carried in the compiler
+        // rather than read from disk.
         object_generation.push_text(build_time_utc!());
+        runtime_object.push_text(build_time_utc!());
 
         CacheKeySources {
             elaboration,
             object_generation,
+            runtime_object,
         }
     }
 
@@ -1155,6 +1174,15 @@ impl Configuration {
     /// here a value of its own and checks that the hash follows.
     pub fn object_generation_hash(&self) -> String {
         self.cache_key_sources().object_generation.finish()
+    }
+
+    /// The hash of the settings the runtime's object file is compiled under, which names that file:
+    /// a build finding it on disk compiles the runtime again only where the settings differ.
+    ///
+    /// `test_runtime_object_hash_separates_runtime_compilation_settings` gives each setting read
+    /// here a value of its own and checks that the hash follows.
+    pub fn runtime_object_hash(&self) -> String {
+        self.cache_key_sources().runtime_object.finish()
     }
 
     /// Whether the entry point of the program runs the tests rather than `Main::main`, which is
@@ -1788,6 +1816,60 @@ mod tests {
         );
     }
 
+    /// Two builds compile the runtime once between them exactly when they agree on this hash, so
+    /// each setting the runtime is compiled under gives the hash a value of its own.
+    #[test]
+    fn test_runtime_object_hash_separates_runtime_compilation_settings() {
+        assert_each_setting_moves_the_hash(
+            |config| config.runtime_object_hash(),
+            "the compilation of the runtime",
+            vec![
+                (
+                    "runtime_c_macro",
+                    Box::new(|config: &mut Configuration| {
+                        config.runtime_c_macro.push("BACKTRACE".to_string())
+                    }),
+                ),
+                (
+                    "output_file_type",
+                    Box::new(|config: &mut Configuration| {
+                        config.output_file_type = OutputFileType::DynamicLibrary
+                    }),
+                ),
+                (
+                    "sanitizer",
+                    Box::new(|config: &mut Configuration| config.sanitizer = Sanitizer::Thread),
+                ),
+                (
+                    "backtrace",
+                    Box::new(|config: &mut Configuration| config.backtrace = true),
+                ),
+            ],
+        );
+    }
+
+    /// The code is generated for the CPU of the machine the compiler runs on, with the features
+    /// `--disable-cpu-feature` names turned off. The object file cache is keyed on the CPU and the
+    /// patterns together on the strength of that.
+    #[test]
+    fn test_the_target_cpu_features_are_the_hosts_minus_the_disabled_ones() {
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = "+avx512f,+avx2,+sse2".to_string();
+        config.disable_cpu_features_regex = vec!["avx.*".to_string()];
+
+        let features = config.target_cpu_features();
+        assert!(
+            features.contains("+sse2"),
+            "a feature no pattern names is generated for as the host has it: {}",
+            features
+        );
+        assert!(
+            !features.contains("+avx512f") && !features.contains("+avx2"),
+            "a feature a pattern names is not generated for: {}",
+            features
+        );
+    }
+
     /// `fix build` and `fix run` produce the same code from the same program, so they share the hash
     /// naming the object files they may reuse. `fix test` gives the program another entry point,
     /// which is what the subcommand decides about the code.
@@ -1811,3 +1893,4 @@ mod tests {
         );
     }
 }
+
