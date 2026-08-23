@@ -333,7 +333,7 @@ pub fn test_reserve_capacity_byte_count_wraps_for_a_shared_array() {
 
 /// The runtime function the check calls is declared in every compilation unit and defined in one, so
 /// a program split into one unit per symbol links and aborts where a single-unit program does. The
-/// optimization level comes down to `Basic` because separate compilation, which `max_cu_size`
+/// optimization level comes down to `Basic` because separate compilation, which `cu_size`
 /// divides, runs only there and below.
 #[test]
 pub fn test_capacity_byte_count_under_separate_compilation() {
@@ -350,7 +350,7 @@ pub fn test_capacity_byte_count_under_separate_compilation() {
         "#;
     let mut config = runtime_checked_config();
     config.set_fix_opt_level(FixOptimizationLevel::Basic);
-    config.max_cu_size = 1;
+    config.cu_size = 1;
     test_source_fail(
         &source,
         config,

@@ -4,7 +4,7 @@ use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
     C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
+    DEFAULT_COMPILATION_UNIT_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
     OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
@@ -492,9 +492,11 @@ pub struct Configuration {
     pub show_build_times: bool,
     /// Whether the build reports what it is doing as it goes.
     pub verbose: bool,
-    /// The most symbols separate compilation puts into one compilation unit. Lowering it compiles
-    /// more units in parallel and gives the linker more to do.
-    pub max_cu_size: usize,
+    /// The average number of symbols separate compilation puts into one compilation unit. Where a
+    /// unit ends is decided by the names of the symbols it holds, so this sets how often a boundary
+    /// falls rather than bounding a unit. Lowering it compiles more units in parallel and gives the
+    /// linker more to do.
+    pub cu_size: usize,
     /// The most scalars a value is split into and carried as separate LLVM values; a type holding
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
     /// under the same treatment.
@@ -628,7 +630,7 @@ impl Configuration {
             runtime_c_macro: vec![],
             show_build_times: false,
             verbose: false,
-            max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            cu_size: DEFAULT_COMPILATION_UNIT_SIZE,
             max_split_scalars: MAX_SPLIT_SCALARS,
             valgrind_tool: ValgrindTool::None,
             sanitizer: Sanitizer::None,

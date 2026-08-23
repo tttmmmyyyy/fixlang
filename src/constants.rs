@@ -377,8 +377,8 @@ pub fn pthread_once_init_flag_value<'c>(ctx: &'c Context) -> IntValue<'c> {
 pub const GLOBAL_VAR_NAME_ARGC: &str = "fixruntime_argc";
 pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 
-pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
-pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
+pub const DEFAULT_COMPILATION_UNIT_SIZE: usize = 128;
+pub const DEFAULT_COMPILATION_UNIT_SIZE_STR: &str = "128";
 
 /// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
 /// generation recurse over the user program's expression tree, whose nesting depth (deeply nested

@@ -6,7 +6,7 @@ use crate::{
     },
     env_vars,
     error::panic_if_err,
-    misc::{function_name, number_to_varname, split_by_max_size},
+    misc::{function_name, number_to_varname},
     tests::test_util::{
         assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
         run_source_capture, test_files_in_directory, test_source, test_source_fail,
@@ -3056,7 +3056,6 @@ pub fn test93() {
     main : IO ();
     main = (
         let leaker = Leaker { data : Option::none() };
-        // let leaker = leaker.set_data!(Option::some(leaker)); // panics
         eval leaker.set_data(Option::some(leaker)); // doesn't make circular reference in fact.
         pure()
     );
@@ -6881,17 +6880,6 @@ pub fn test_state_t() {
     );
     "##;
     test_source(&source, Configuration::develop_mode());
-}
-
-#[test]
-pub fn test_split_by_max_size() {
-    let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-    let result = split_by_max_size(v, 3);
-    assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]]);
-
-    let v = vec![1, 2, 3, 4, 5, 6, 7, 8];
-    let result = split_by_max_size(v, 3);
-    assert_eq!(result, vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8]]);
 }
 
 #[test]
@@ -13534,7 +13522,7 @@ fn test_global_accessors_across_compilation_units() {
     );
     "#;
     let mut config = Configuration::develop_mode();
-    config.max_cu_size = 1;
+    config.cu_size = 1;
     test_source(source, config);
 }
 
