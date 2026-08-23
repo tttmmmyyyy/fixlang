@@ -6568,18 +6568,18 @@ impl LLVMGen for InlineLLVMUnionModBody {
         let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Create specified tag value.
-        let specified_tag_value = union_tag_value(gc.context, self.field_idx);
+        let expected_tag = union_tag_value(gc.context, self.field_idx);
 
         // Get tag value.
-        let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
+        let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Branch and store result to ret_ptr.
         let is_tag_match = gc
             .builder()
             .build_int_compare(
                 IntPredicate::EQ,
-                specified_tag_value,
-                tag_value,
+                expected_tag,
+                actual_tag,
                 "is_tag_match@union_mod_function",
             )
             .unwrap();
@@ -6607,7 +6607,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
             Some("create_obj@union_mod"),
         );
         // Set values of returned union object.
-        let ret_obj = ObjectFieldType::set_union_tag(gc, ret_obj, specified_tag_value);
+        let ret_obj = ObjectFieldType::set_union_tag(gc, ret_obj, expected_tag);
         let ret_obj = ObjectFieldType::set_union_value(gc, ret_obj, value);
         match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();

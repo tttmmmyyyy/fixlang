@@ -542,8 +542,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             let tag = arm
                 .tag
                 .expect("a non-final match arm must be a variant arm");
-            let tag_val = union_tag_value(self.context, tag);
-            cases.push((tag_val, arm_bbs[i]));
+            let case_tag = union_tag_value(self.context, tag);
+            cases.push((case_tag, arm_bbs[i]));
         }
         if cases.is_empty() {
             // The only arm takes every value of the scrutinee: it is either a catch-all, or the one

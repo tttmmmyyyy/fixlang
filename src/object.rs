@@ -905,13 +905,13 @@ impl ObjectFieldType {
             let mismatch_bb = gc
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
-            let expect_tag_val = union_tag_value(gc.context, i);
+            let expected_tag = union_tag_value(gc.context, i);
             let is_match = gc
                 .builder()
                 .build_int_compare(
                     IntPredicate::EQ,
                     tag,
-                    expect_tag_val,
+                    expected_tag,
                     &format!("is_tag_{}", i),
                 )
                 .unwrap();
