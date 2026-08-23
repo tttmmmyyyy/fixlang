@@ -50,7 +50,9 @@ mod tests;
 mod tool;
 mod type_size;
 
-use clap::{value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue};
+use clap::{
+    value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue, ValueSource,
+};
 use commands::{check, clean, deps, docs, lsp::server::launch_language_server, run};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
@@ -66,7 +68,7 @@ use error::{panic_if_err, Errors};
 use git_version::git_version;
 use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
 use mimalloc::MiMalloc;
-use misc::{disable_colored_no_tty, spawn_compiler_thread};
+use misc::{disable_colored_no_tty, spawn_compiler_thread, warn_msg};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -228,6 +230,11 @@ fn run_cli() {
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
+    let max_cu_size = Arg::new("max-cu-size")
+        .long("max-cu-size")
+        .takes_value(true)
+        .value_parser(value_parser!(usize))
+        .help("The former name of `--cu-size`. A build that gives it is warned.");
     let llvm_passes_file = Arg::new("llvm-passes-file")
         .long("llvm-passes-file")
         .takes_value(true)
@@ -306,6 +313,7 @@ fn run_cli() {
         .arg(sanitize.clone())
         .arg(verbose.clone())
         .arg(cu_size.clone())
+        .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(emit_rc_ir.clone())
@@ -334,6 +342,7 @@ fn run_cli() {
             .arg(sanitize.clone())
             .arg(verbose.clone())
             .arg(cu_size.clone())
+            .arg(max_cu_size.clone())
             .arg(llvm_passes_file.clone())
             .arg(emit_symbols.clone())
             .arg(emit_rc_ir.clone())
@@ -690,10 +699,20 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.verbose = true;
         }
 
-        // Set `cu_size`.
-        config.cu_size = *args
-            .get_one::<usize>("cu-size")
-            .expect("the `--cu-size` option carries a default value");
+        // Set `cu_size`. `--max-cu-size` is the name the option used to carry, and a build that
+        // gives it is told the name it has now; where both are given, the current name decides.
+        if let Some(size) = args.get_one::<usize>("max-cu-size") {
+            warn_msg(
+                "`--max-cu-size` is now `--cu-size`, and names the average number of symbols in a \
+                 compilation unit.",
+            );
+            config.cu_size = *size;
+        }
+        if args.value_source("cu-size") == Some(ValueSource::CommandLine) {
+            config.cu_size = *args
+                .get_one::<usize>("cu-size")
+                .expect("the `--cu-size` option carries a value on the command line");
+        }
 
         // Set `llvm_passes_override`.
         // Reading the file here puts the passes into `Configuration::object_generation_hash`, so
