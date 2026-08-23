@@ -275,11 +275,6 @@ pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
 /// `--emit-llvm` names the file it writes after the module.
 pub const UNIT_MODULE_NAME_PREFIX: &str = "Module-";
 
-/// The name of the LLVM module the compilation units are merged into, before the hash naming the
-/// set of units. It differs from `UNIT_MODULE_NAME_PREFIX` so that the file `--emit-llvm` writes
-/// says whether it holds one unit or the whole program.
-pub const MERGED_MODULE_NAME_PREFIX: &str = "Program-";
-
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const RUN_PATH: &str = ".fixlang/run";

@@ -1,5 +1,4 @@
 use crate::ast::name::FullName;
-use crate::build::compile_unit::UnitOutput;
 use crate::build::cpu_features::{CpuFeatures, HostCpu};
 use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
@@ -869,18 +868,6 @@ impl Configuration {
     /// * `level` — the lowest optimization level the pass is written to run at.
     fn runs_from(&self, level: FixOptimizationLevel) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= level
-    }
-
-    /// What each compilation unit's code generation leaves on disk for the link step.
-    ///
-    /// A program is always divided into compilation units, each generated and cached on its own, so
-    /// that a rebuild regenerates only the units whose inputs changed. What the optimization level
-    /// decides is what a unit is compiled into. At `Max` and above a unit is bitcode, and the units
-    /// are merged into one module that is optimized and compiled as a whole, so that the
-    /// optimization still sees the program entire. Below that a unit is an object file, optimized
-    /// on its own, and the linker puts the object files together.
-    pub fn unit_output(&self) -> UnitOutput {
-        UnitOutput::ObjectFile // PROBE: no merge
     }
 
     /// Give each global function a version taking one, two, ... arguments at once, and send every

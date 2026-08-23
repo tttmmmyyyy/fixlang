@@ -5,32 +5,9 @@ use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
-use crate::hash::{md5_hex, HashSource};
 use crate::misc::{split_at_name_boundaries, Map, Set};
-use rand::Rng;
 use std::fmt;
 use std::path::PathBuf;
-
-/// What a compilation unit's code generation leaves on disk for the link step, as
-/// `Configuration::unit_output` chooses it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum UnitOutput {
-    /// An object file, optimized on its own, which the linker puts together with the other units'.
-    ObjectFile,
-    /// LLVM bitcode carrying the unit's code as generation left it, to be merged with the other
-    /// units' into one module that is optimized and compiled as a whole.
-    Bitcode,
-}
-
-impl UnitOutput {
-    /// The extension naming the file this output is written to.
-    fn extension(self) -> &'static str {
-        match self {
-            UnitOutput::ObjectFile => "o",
-            UnitOutput::Bitcode => "bc",
-        }
-    }
-}
 
 /// A set of the program's symbols generated together and cached under `unit_hash`, so that a
 /// rebuild regenerates only the units whose inputs changed.
@@ -86,63 +63,23 @@ impl CompileUnit {
         &self.symbols
     }
 
-    /// The path of the file this unit's generated code is cached in: `unit_hash` under
-    /// `COMPILATION_UNITS_PATH`, with the extension `output` names. A file already there is one an
-    /// earlier build left, and the build takes it instead of generating the unit again. Requires
-    /// the unit's hash to be set.
-    pub fn output_file_path(&self, output: UnitOutput) -> PathBuf {
+    /// The path of the object file this unit's generated code is compiled into: `unit_hash` under
+    /// `COMPILATION_UNITS_PATH`. A file already there is one an earlier build left, and the build
+    /// links it instead of generating the unit again. Requires the unit's hash to be set.
+    pub fn object_file_path(&self) -> PathBuf {
         if self.unit_hash.len() == 0 {
             panic!("unit_hash is not set.");
         }
         let mut path = PathBuf::from(COMPILATION_UNITS_PATH);
-        path.push(format!("{}.{}", self.unit_hash, output.extension()));
+        path.push(format!("{}.o", self.unit_hash));
         path
     }
 
-    /// Takes this unit's hash over the configuration, the symbols and the hashes of the dependent
-    /// modules, and sets it on `self`. A unit that already carries a hash keeps it.
-    ///
-    /// # Arguments
-    /// * `module_dependency_hash` - for each module, a digest of everything a value defined in it
-    ///   is compiled from, as `Program::module_dependency_hash_map` gives it. Every module this
-    ///   unit depends on has an entry.
-    pub fn update_unit_hash(
-        &mut self,
-        module_dependency_hash: &Map<Name, String>,
-        config: &Configuration,
-    ) {
-        if self.unit_hash.len() > 0 {
-            return;
-        }
-
-        self.symbols
-            .sort_by(|a, b| a.name.to_string().cmp(&b.name.to_string()));
-        self.dependent_modules.sort();
-
-        let mut hash_source = HashSource::default();
-
-        // The settings the code of this unit is generated under.
-        hash_source.push_text(&config.object_generation_hash());
-
-        // The symbols this unit implements.
-        hash_source.push_list(self.symbols.iter().map(Symbol::hash));
-
-        // The sources of the modules this unit's symbols are made of.
-        hash_source.push_list(
-            self.dependent_modules
-                .iter()
-                .map(|name| &module_dependency_hash[name]),
-        );
-
-        self.unit_hash = hash_source.finish();
-    }
-
-    /// Sets this unit's hash to a random value, so that the build generates the unit's object file
-    /// afresh however the cache stands. Requires the unit to carry no hash yet.
-    #[allow(dead_code)]
-    pub fn set_random_unit_hash(&mut self) {
-        assert!(self.unit_hash.len() == 0);
-        self.unit_hash = md5_hex(&rand::thread_rng().gen::<u64>().to_string());
+    /// Names this unit by `hash`, which is what its object file is cached under
+    /// (`divide_program::generated_code_hash`). Requires the unit to carry no hash yet.
+    pub fn set_unit_hash(&mut self, hash: String) {
+        assert!(self.unit_hash.is_empty());
+        self.unit_hash = hash;
     }
 
     /// Divides this unit into units averaging `mean_size` symbols each, every one of them
@@ -157,8 +94,8 @@ impl CompileUnit {
 
         // The text naming a symbol is its `name` alone, so that editing a symbol's `expr` leaves
         // every boundary where it was and the units holding no edited symbol keep their cached
-        // object files. `Symbol::hash` takes in the `expr` too, so a boundary read off it would
-        // move at every symbol whose `expr` changed.
+        // object files. A boundary read off the expression would move at every symbol whose
+        // expression changed.
         let symbol_pieces =
             split_at_name_boundaries(symbols, mean_size, |symbol| symbol.name.to_string());
         let mut units = vec![];
@@ -169,13 +106,13 @@ impl CompileUnit {
         units
     }
 
-    /// Divides `symbols` into compilation units, each carrying its hash.
+    /// Divides `symbols` into compilation units.
     ///
     /// Symbols sharing a set of dependent modules go into one unit, which is then divided into
-    /// units averaging `config.cu_size` symbols.
+    /// units averaging `config.cu_size` symbols. A unit takes its hash once the program's code has
+    /// been divided among the units (`divide_program::generated_code_hash`).
     pub fn split_symbols(
         symbols: Vec<Symbol>,
-        module_dependency_hash: &Map<Name, String>,
         module_dependency_map: &Map<Name, Set<Name>>,
         config: &Configuration,
     ) -> Vec<CompileUnit> {
@@ -215,46 +152,11 @@ impl CompileUnit {
         }
 
         // Split compilation units into smaller ones if they are too large.
-        let mut units = units
+        units
             .into_iter()
             .flat_map(|unit| unit.split_at_name_boundaries(config.cu_size))
-            .collect::<Vec<_>>();
-
-        // Set unit hash.
-        for unit in &mut units {
-            unit.update_unit_hash(module_dependency_hash, config);
-        }
-
-        units
+            .collect()
     }
-}
-
-/// The digest naming the object file the merged units are compiled into. It is taken over the
-/// units' hashes, and a unit's hash covers everything its code is generated from, so two builds
-/// share this digest exactly when they would merge the same bitcode.
-///
-/// The hashes are sorted, so the digest names the set of units rather than the order they are
-/// merged in. Two orders of one set produce object files that hold the same code laid out
-/// differently, and either of them serves the build that asked for the other.
-pub fn merged_units_hash(units: &[CompileUnit]) -> String {
-    let mut unit_hashes = units
-        .iter()
-        .map(|unit| unit.unit_hash())
-        .collect::<Vec<_>>();
-    unit_hashes.sort();
-    let mut hash_source = HashSource::default();
-    hash_source.push_list(unit_hashes);
-    hash_source.finish()
-}
-
-/// The path of the file the object code compiled from the merged units is cached in: the digest
-/// `merged_units_hash` gives them, with the extension `.o`, under `COMPILATION_UNITS_PATH`. A file
-/// already there is one an earlier build left, and the build links it instead of generating and
-/// merging the units again.
-pub fn merged_object_file_path(merged_units_hash: &str) -> PathBuf {
-    let mut path = PathBuf::from(COMPILATION_UNITS_PATH);
-    path.push(format!("{}.o", merged_units_hash));
-    path
 }
 
 #[cfg(test)]
@@ -279,8 +181,8 @@ mod tests {
 
     /// Where a unit ends is decided by the names of the symbols, so editing a symbol's `expr`
     /// leaves every boundary where it was and a unit holding no edited symbol keeps the object file
-    /// it was compiled into. A boundary read off `Symbol::hash`, which takes in the `expr` as well,
-    /// moves at every symbol whose `expr` changed.
+    /// it was compiled into. A boundary read off the expression moves at every symbol whose
+    /// expression changed.
     #[test]
     fn test_split_at_name_boundaries_places_the_boundaries_by_the_symbol_names() {
         const SYMBOL_COUNT: usize = 200;

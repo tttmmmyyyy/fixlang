@@ -33,9 +33,14 @@ impl Default for HashSource {
 impl HashSource {
     /// Appends `text`.
     pub fn push_text(&mut self, text: &str) {
-        self.0.consume(text.len().to_string());
+        self.push_bytes(text.as_bytes());
+    }
+
+    /// Appends `bytes`, for a value whose serialized form is not text.
+    pub fn push_bytes(&mut self, bytes: &[u8]) {
+        self.0.consume(bytes.len().to_string());
         self.0.consume(":");
-        self.0.consume(text);
+        self.0.consume(bytes);
     }
 
     /// Appends `items`. The count comes first, so a list's items cannot be read as the next

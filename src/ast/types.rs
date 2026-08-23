@@ -476,18 +476,23 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
-impl Hash for TypeNode {
-    /// Hashes the type expression, which is what `PartialEq` compares; the source information the
-    /// node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing a
-    /// type that shares a subterm many times costs one visit per node rather than one per
+impl TypeNode {
+    /// The hash of the type expression, which is what `PartialEq` compares; the source information
+    /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
+    /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let hash = *self.hash_cache.get_or_init(|| {
+    pub fn type_hash(&self) -> u64 {
+        *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
             self.ty.hash(&mut hasher);
             hasher.finish()
-        });
-        state.write_u64(hash);
+        })
+    }
+}
+
+impl Hash for TypeNode {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.type_hash());
     }
 }
 

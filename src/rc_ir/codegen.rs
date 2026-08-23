@@ -832,10 +832,10 @@ const GLOBAL_ACCESSOR_ATTRIBUTE: &str = "fix-global-accessor";
 /// knows — the length of an array, the shape of a structure — reaches the code that reads the
 /// global, where it takes bounds checks out of loops.
 ///
-/// Call this on the module the LLVM optimization pipeline is about to run over, which is the one
-/// holding every reader of every global it defines: the merged module where the compilation units
-/// are merged, and the unit itself where they are not. A reader counted short leaves the
-/// initializer in an accessor that its readers then pay a call for.
+/// Call this on the module the LLVM optimization pipeline is about to run over, once it holds every
+/// reader of every global it defines — the last of them are the exported C functions and the
+/// program's entry point, which `build_object_files` implements after the unit's own code. A reader
+/// counted short leaves the initializer in an accessor that its readers then pay a call for.
 ///
 /// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a call
 /// and a load whatever the initializer's size, and the attribute decides nothing.

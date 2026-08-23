@@ -6,11 +6,14 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::compile_unit::{merged_object_file_path, merged_units_hash, CompileUnit, UnitOutput},
+    build::{
+        compile_unit::CompileUnit,
+        divide_program::{divide_among_units, generated_code_hash, DividedProgram},
+    },
     configuration::{Configuration, OutputFileType},
     constants::{
         C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
-        MERGED_MODULE_NAME_PREFIX, UNITS_CACHE_PATH, UNIT_MODULE_NAME_PREFIX,
+        UNITS_CACHE_PATH, UNIT_MODULE_NAME_PREFIX,
     },
     error::{panic_with_msg, Errors},
     ffi::c_entry_point_signature,
@@ -23,7 +26,7 @@ use crate::{
     misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
-        ast::{FuncRef, RcFunc, RcGlobalInit, RcProgram},
+        ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
         codegen::keep_initializers_out_of_shared_accessors,
         dead_code_elim, locality,
@@ -31,7 +34,7 @@ use crate::{
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
-        simplify::{node_count, simplify},
+        simplify::simplify,
         unique_check_elim, validate,
     },
     tool::stopwatch::StopWatch,
@@ -39,7 +42,7 @@ use crate::{
 use inkwell::{
     attributes::AttributeLoc,
     context::Context,
-    module::{Linkage, Module},
+    module::Module,
     passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     values::BasicValue,
@@ -48,7 +51,6 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
-    ffi::CStr,
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
@@ -56,86 +58,11 @@ use std::{
     sync::Arc,
 };
 
-/// The most RC IR nodes a function may hold for a unit calling it to take a copy of its own
-/// (`build_object_files`). A copy lets LLVM see the body at the call; past this size the call is
-/// what the body would compile into anyway, and the copy is compiled for nothing.
-const IMPORTED_FUNCTION_NODE_LIMIT: u64 = 200;
-
-/// PROBE: the limit this run uses, so a sweep does not rebuild the compiler per value.
-fn imported_function_node_limit() -> u64 {
-    std::env::var("FIX_IMPORT_LIMIT")
-        .ok()
-        .and_then(|text| text.parse().ok())
-        .unwrap_or(IMPORTED_FUNCTION_NODE_LIMIT)
-}
-
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    /// The object files the linker is to put together: one per compilation unit, or the single one
-    /// the merged units are compiled into (`Configuration::unit_output`).
+    /// The object files the linker is to put together, one per compilation unit.
     pub obj_paths: Vec<PathBuf>,
-}
-
-/// The names through which code generation reaches a compilation unit's functions and globals from
-/// outside it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
-///
-/// # Arguments
-/// * `symbols` — the symbols of one compilation unit.
-/// * `reached_from_outside_their_unit` — every symbol of the program that something outside its own
-///   unit reaches, as `symbols_reached_from_outside_their_unit` gives it.
-fn reachability_roots(
-    symbols: &[Symbol],
-    reached_from_outside_their_unit: &Set<FullName>,
-) -> Set<FullName> {
-    symbols
-        .iter()
-        .map(|symbol| &symbol.name)
-        .filter(|name| reached_from_outside_their_unit.contains(name))
-        .cloned()
-        .collect()
-}
-
-/// The symbols of the program that something outside their own compilation unit reaches: the values
-/// the C world enters the program through, and every symbol referenced by a symbol of another unit.
-///
-/// A symbol reached only from inside its unit is one the unit decides the fate of by itself, and
-/// dropping it once nothing in the unit calls it any more is what lets each version a pass rewrote
-/// a call away from go. The rest have to survive whatever the unit sees, since another unit's code
-/// calls them by name: a funptr symbol through a function of external linkage, any other symbol
-/// through an accessor of external linkage (`Generator::declare_lambda_function`,
-/// `Generator::declare_program_global`).
-///
-/// The references read here are the free variables of the symbols' expressions, which is the same
-/// relation `dead_symbol_elimination` walks to decide which symbols the program keeps at all. A
-/// reference it does not see is one this leaves out of the root set, and the symbol behind it is
-/// dropped from its unit while another unit still calls it.
-fn symbols_reached_from_outside_their_unit(
-    units: &[CompileUnit],
-    root_value_names: &[FullName],
-) -> Set<FullName> {
-    let mut unit_of: Map<&FullName, usize> = Map::default();
-    for (index, unit) in units.iter().enumerate() {
-        for symbol in unit.symbols() {
-            unit_of.insert(&symbol.name, index);
-        }
-    }
-
-    let mut reached: Set<FullName> = root_value_names.iter().cloned().collect();
-    for (index, unit) in units.iter().enumerate() {
-        for symbol in unit.symbols() {
-            let expr = symbol
-                .expr
-                .as_ref()
-                .expect("a symbol reaching code generation carries its expression");
-            for referenced in expr.free_vars() {
-                if unit_of.get(&referenced) != Some(&index) {
-                    reached.insert(referenced);
-                }
-            }
-        }
-    }
-    reached
 }
 
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
@@ -146,8 +73,7 @@ fn symbols_reached_from_outside_their_unit(
 /// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
 ///   Such a global may be defined in another unit, so this covers the whole program.
-/// * `roots` — the names code generation reaches the lowered program through from outside it
-///   (`reachability_roots`).
+/// * `roots` — the names code generation reaches the lowered program through from outside it.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -360,36 +286,20 @@ pub fn build_object_files<'c>(
     symbols.sort_by(|a, b| a.name.cmp(&b.name));
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
-    // The names the C world enters the program through. Taken here, before the main unit moves the
-    // export statements out of the program.
-    let c_visible_names = c_visible_names(&program);
-    let units = {
-        let module_dependency_hash = program.module_dependency_hash_map(&config);
+    let mut units = {
         let module_dependency_map = program.module_dependency_map();
         let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-        let mut units = CompileUnit::split_symbols(
-            symbols,
-            &module_dependency_hash,
-            &module_dependency_map,
-            &config,
-        );
+        let mut units = CompileUnit::split_symbols(symbols, &module_dependency_map, &config);
         // Also add main compilation unit.
         // The main unit implements the entry point of exported functions.
         // Therefore, the main unit is treated as depending on all modules.
-        let mut main_unit = CompileUnit::new(vec![], modules);
-        main_unit.update_unit_hash(&module_dependency_hash, &config);
-        units.push(main_unit);
+        units.push(CompileUnit::new(vec![], modules));
         units
     };
 
-    // PROBE: lower and optimize the whole program's RC IR, then divide it among the units.
-    let (
-        mut unit_rc_programs,
-        reached_from_outside_their_unit,
-        global_types,
-        imported,
-        shared_globals,
-    ) = {
+    // The RC IR is built and optimized over the whole program, so that a pass sees every call of
+    // every function it rewrites, and divided among the units afterwards.
+    let division = {
         let type_env = program.type_env();
         let all_symbols: Vec<Symbol> = units
             .iter()
@@ -404,220 +314,41 @@ pub fn build_object_files<'c>(
             config,
         );
         let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
-
-        // Which unit a name belongs to. A function lifted or cloned out of a symbol is named by
-        // extending that symbol's name — with `#`-separated segments, and with the whole of it as
-        // the namespace of a lambda lifted out of it — so the symbol whose name is the longest
-        // prefix of the function's is the symbol it came from.
-        let mut symbol_units: Vec<(String, usize)> = vec![];
-        for (index, unit) in units.iter().enumerate() {
-            for symbol in unit.symbols() {
-                symbol_units.push((symbol.name.to_string(), index));
-            }
-        }
-        let unit_of = |name: &FullName| -> Option<usize> {
-            let text = name.to_string();
-            symbol_units
-                .iter()
-                .filter(|(symbol, _)| text.starts_with(symbol.as_str()))
-                .max_by_key(|(symbol, _)| symbol.len())
-                .map(|(_, index)| *index)
-        };
-
-        // The type of every global the program defines, the versions the optimizer synthesized
-        // included. A unit declares a name another unit defines from this, and a synthesized version
-        // is not among the program's symbols, so its own type is all there is to declare it from.
-        let mut synthesized_types: Map<FullName, Arc<TypeNode>> = (*global_types).clone();
-        for (fref, func) in &rc_prog.funcs {
-            // A closure function is reached by an indirect call through the capture the body it was
-            // lifted from builds, so its name is mentioned only in that body's own unit and it is
-            // declared where code generation reaches it. Naming it here would have the unit defining
-            // it declare an accessor instead, since only a funptr global is the function itself.
-            if func.fn_ty.is_funptr() {
-                synthesized_types.insert(fref.name.clone(), func.fn_ty.clone());
-            }
-        }
-        for global in &rc_prog.globals {
-            synthesized_types.insert(global.symbol.clone(), global.ty.clone());
-        }
-
-        let copyable_funcs: Map<FullName, RcFunc> = rc_prog
-            .funcs
-            .iter()
-            // A closure function is reached only through the closure value a body builds, and code
-            // generation reads that function out of the module building it, so a unit that took a
-            // copy of a body building one takes a copy of the function too, whatever its size.
-            .filter(|(_, func)| {
-                !func.fn_ty.is_funptr() || node_count(&func.body) <= imported_function_node_limit()
-            })
-            .map(|(fref, func)| (fref.name.clone(), func.clone()))
-            .collect();
-        // Every global, so that a unit reading one another unit owns can carry a copy of its
-        // accessor.
-        let all_globals: Map<FullName, RcGlobalInit> = rc_prog
-            .globals
-            .iter()
-            .map(|global| (global.symbol.clone(), global.clone()))
-            .collect();
-
-        let mut unit_rc_programs: Vec<RcProgram> = (0..units.len())
-            .map(|_| RcProgram {
-                funcs: Map::default(),
-                globals: vec![],
-                roots: Set::default(),
-            })
-            .collect();
-        for (fref, func) in rc_prog.funcs {
-            let index = unit_of(&fref.name)
-                .unwrap_or_else(|| panic!("no symbol owns `{}`", fref.name.to_string()));
-            unit_rc_programs[index].funcs.insert(fref, func);
-        }
-        for global in rc_prog.globals {
-            let index = unit_of(&global.symbol)
-                .unwrap_or_else(|| panic!("no symbol owns `{}`", global.symbol.to_string()));
-            unit_rc_programs[index].globals.push(global);
-        }
-
-        // Give each unit its own copy of every small funptr function of another unit that a body in
-        // it calls, so that LLVM sees the body at the call instead of a call to a symbol it must
-        // assume anything may reach. A global is not copied: its initializer runs once per copy, and
-        // a program reading one global would compute it twice.
-        let mut imported: Vec<Set<FullName>> = vec![Set::default(); units.len()];
-        let mut shared_globals: Set<FullName> = Set::default();
-        loop {
-            let mut copied = false;
-            for index in 0..unit_rc_programs.len() {
-                let mut wanted: Set<FullName> = Set::default();
-                let unit_prog = &unit_rc_programs[index];
-                let bodies = unit_prog
-                    .funcs
-                    .values()
-                    .map(|func| &func.body)
-                    .chain(unit_prog.globals.iter().map(|global| &global.init));
-                for body in bodies {
-                    dead_code_elim::collect_mentions(body, &mut |mentioned| {
-                        let defined_here =
-                            unit_prog.funcs.contains_key(&FuncRef {
-                                name: mentioned.clone(),
-                            }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
-                        if !defined_here
-                            && (copyable_funcs.contains_key(mentioned)
-                                || all_globals.contains_key(mentioned))
-                        {
-                            wanted.insert(mentioned.clone());
-                        }
-                    });
-                }
-                for name in wanted {
-                    match copyable_funcs.get(&name) {
-                        Some(func) => {
-                            unit_rc_programs[index]
-                                .funcs
-                                .insert(FuncRef { name: name.clone() }, func.clone());
-                        }
-                        None => {
-                            let mut global = all_globals[&name].clone();
-                            global.owns_storage = false;
-                            unit_rc_programs[index].globals.push(global);
-                            shared_globals.insert(name.clone());
-                        }
-                    }
-                    imported[index].insert(name);
-                    copied = true;
-                }
-            }
-            if !copied {
-                break;
-            }
-        }
-
-        // The main unit reads the values the C world enters the program through — the entry point
-        // and the exported ones — from the code it builds rather than from an RC IR body, so the
-        // copies it needs are given to it here.
-        let main_unit = unit_rc_programs.len() - 1;
-        for name in root_value_names.iter() {
-            if unit_rc_programs[main_unit]
-                .globals
-                .iter()
-                .any(|g| &g.symbol == name)
-            {
-                continue;
-            }
-            if let Some(global) = all_globals.get(name) {
-                let mut global = global.clone();
-                global.owns_storage = false;
-                unit_rc_programs[main_unit].globals.push(global);
-                imported[main_unit].insert(name.clone());
-                shared_globals.insert(name.clone());
-            }
-        }
-
-        // A name is published to the linker when a body in a unit that has no copy of it mentions
-        // it, or when the C world enters the program through it.
-        let mut published = root_value_names;
-        for (index, unit_prog) in unit_rc_programs.iter().enumerate() {
-            let bodies = unit_prog
-                .funcs
-                .values()
-                .map(|func| &func.body)
-                .chain(unit_prog.globals.iter().map(|global| &global.init));
-            for body in bodies {
-                dead_code_elim::collect_mentions(body, &mut |mentioned| {
-                    let defined_here =
-                        unit_prog.funcs.contains_key(&FuncRef {
-                            name: mentioned.clone(),
-                        }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
-                    if mentioned.is_global() && !defined_here && unit_of(mentioned).is_some() {
-                        published.insert(mentioned.clone());
-                    }
-                });
-            }
-            let _ = index;
-        }
-        for unit_prog in unit_rc_programs.iter_mut() {
-            unit_prog.roots = published.clone();
-        }
-        (
-            unit_rc_programs,
-            Arc::new(published),
-            Arc::new(synthesized_types),
-            imported,
-            Arc::new(shared_globals),
-        )
+        divide_among_units(rc_prog, &units, &global_types, root_value_names)
     };
 
-    // Where each unit's generated code goes, and where the code this build hands the linker goes.
-    // Merged units are linked as the one object file they are compiled into together; separate ones
-    // are linked as themselves.
-    let unit_output = config.unit_output();
+    // A unit is named by the code it generates, which is what its object file is cached under. The
+    // main unit is the last, and it is the one that builds the entry point and the exported C
+    // functions.
+    let last_unit = units.len() - 1;
+    for (index, unit) in units.iter_mut().enumerate() {
+        let entry = (index == last_unit).then_some(&program);
+        let hash = generated_code_hash(
+            unit,
+            &division.unit_programs[index],
+            &division,
+            entry,
+            config,
+        );
+        unit.set_unit_hash(hash);
+    }
+    let DividedProgram {
+        mut unit_programs,
+        published,
+        global_types,
+        imported,
+        shared_globals,
+    } = division;
+
+    // The object file each unit's generated code goes into, which is what the build hands the
+    // linker.
     let unit_paths = units
         .iter()
-        .map(|unit| unit.output_file_path(unit_output))
+        .map(|unit| unit.object_file_path())
         .collect::<Vec<_>>();
-    let merged_obj_path = match unit_output {
-        UnitOutput::ObjectFile => None,
-        UnitOutput::Bitcode => Some(merged_object_file_path(&merged_units_hash(&units))),
-    };
     let obj_files = BuildObjFilesResult {
-        obj_paths: match &merged_obj_path {
-            None => unit_paths.clone(),
-            Some(path) => vec![path.clone()],
-        },
+        obj_paths: unit_paths.clone(),
     };
-
-    // The merged object file is compiled from the units' bitcode and nothing else, so one an earlier
-    // build left stands for every unit this build would generate, and neither the generation nor the
-    // merge has to run. A build asked for a dump takes neither, since the dumps are written as the
-    // code is generated (`Configuration::dumps_generated_code`).
-    if let Some(merged_obj_path) = &merged_obj_path {
-        if merged_obj_path.exists() && !config.dumps_generated_code() {
-            if config.verbose {
-                info_msg("Skipping generation of the merged object file, which is cached.");
-            }
-            save_build_object_files_cache(&program, config, &obj_files);
-            return Ok(obj_files);
-        }
-    }
 
     // Generate the code of each unit in parallel.
     let mut threads = vec![];
@@ -639,13 +370,13 @@ pub fn build_object_files<'c>(
         }
 
         let global_types = global_types.clone();
-        let reached_from_outside_their_unit = reached_from_outside_their_unit.clone();
+        let published = published.clone();
         let imported_here = Arc::new(imported[i].clone());
         let shared_globals = shared_globals.clone();
         let config = config.clone();
         let type_env = program.type_env();
-        let unit_rc_program = mem::replace(
-            &mut unit_rc_programs[i],
+        let unit_program = mem::replace(
+            &mut unit_programs[i],
             RcProgram {
                 funcs: Map::default(),
                 globals: vec![],
@@ -676,7 +407,7 @@ pub fn build_object_files<'c>(
                 config.clone(),
                 type_env,
                 global_types.clone(),
-                reached_from_outside_their_unit.clone(),
+                published.clone(),
                 imported_here.clone(),
                 shared_globals,
             );
@@ -692,7 +423,7 @@ pub fn build_object_files<'c>(
             // Generate this unit's slice of the program's RC IR. A function of another unit that
             // this one calls is declared where code generation first reaches it, from the types of
             // the program's globals the generator was given.
-            gc.implement_rc_program(&unit_rc_program);
+            gc.implement_rc_program(&unit_program);
 
             if is_main_unit {
                 // Implement runtime functions.
@@ -716,148 +447,31 @@ pub fn build_object_files<'c>(
                 gc.add_frame_pointer_attribute_to_all_functions();
             }
 
-            match unit_output {
-                UnitOutput::ObjectFile => {
-                    // This module is the one the optimization runs over, so it holds every reader
-                    // of every global it defines.
-                    keep_initializers_out_of_shared_accessors(gc.module, &config);
+            // This module is the one the optimization runs over, so it holds every reader of every
+            // global it defines.
+            keep_initializers_out_of_shared_accessors(gc.module, &config);
 
-                    if config.emit_llvm {
-                        // Print LLVM-IR to file before optimization.
-                        emit_llvm(gc.module, &config, false);
-                    }
-
-                    optimize_instrument_and_verify(gc.module, &target_machine, &config);
-
-                    if config.emit_llvm {
-                        // Print LLVM-IR to file after optimization.
-                        emit_llvm(gc.module, &config, true);
-                    }
-
-                    write_to_object_file(gc.module, &target_machine, &unit_path);
-                }
-                UnitOutput::Bitcode => {
-                    // The optimization runs over the merged module, so what is written here is the
-                    // unit's code as generation left it. Verifying it now is what makes LLVM name
-                    // the unit whose code is malformed; after the merge there is only one module.
-                    if config.emit_llvm {
-                        emit_llvm(gc.module, &config, false);
-                    }
-
-                    run_passes_or_panic(gc.module, &["verify"], &target_machine);
-
-                    write_to_bitcode_file(gc.module, &unit_path);
-                }
+            if config.emit_llvm {
+                // Print LLVM-IR to file before optimization.
+                emit_llvm(gc.module, &config, false);
             }
+
+            optimize_instrument_and_verify(gc.module, &target_machine, &config);
+
+            if config.emit_llvm {
+                // Print LLVM-IR to file after optimization.
+                emit_llvm(gc.module, &config, true);
+            }
+
+            write_to_object_file(gc.module, &target_machine, &unit_path);
         }));
     }
     join_compiler_threads(threads);
-
-    if let Some(merged_obj_path) = &merged_obj_path {
-        merge_units_into_object_file(&unit_paths, merged_obj_path, &c_visible_names, config);
-    }
 
     // Save object files cache.
     save_build_object_files_cache(&program, config, &obj_files);
 
     Ok(obj_files)
-}
-
-/// The names the C world enters the program through: the entry point the C runtime starts the
-/// program at, and the C function each `FFI_EXPORT` statement publishes.
-///
-/// Merging the compilation units gives internal linkage to everything else
-/// (`merge_units_into_object_file`), so a name missing from here is one the whole-module
-/// optimization is free to delete.
-fn c_visible_names(program: &Program) -> Set<String> {
-    let mut names: Set<String> = program
-        .export_statements
-        .iter()
-        .map(|stmt| stmt.function_name.clone())
-        .collect();
-    names.insert(C_ENTRY_POINT_NAME.to_string());
-    names
-}
-
-/// Compile the bitcode the compilation units were generated into to one object file at `obj_path`:
-/// read every unit back into one context, link them into a single module, give internal linkage to
-/// everything but `c_visible_names`, and run the optimization pipeline and code generation over the
-/// whole of it.
-///
-/// The internalization is what the merge is for. LLVM has to assume that something outside the
-/// module calls a function of external linkage, so it can neither delete the body after inlining it
-/// into every call it can see nor specialize it to the arguments those calls pass. A unit publishes
-/// every symbol it holds — that is how another unit calls into it — so units compiled separately
-/// keep every function of the program alive: over the fifty-one programs of the benchmark suite,
-/// compiling them separately and linking the object files runs 1.47 times as many cycles as
-/// compiling them as one. Merging first and internalizing after gives the optimization the linkage
-/// a program generated as a single unit has, while the units are still generated and cached one by
-/// one.
-fn merge_units_into_object_file(
-    bitcode_paths: &[PathBuf],
-    obj_path: &Path,
-    c_visible_names: &Set<String>,
-    config: &Configuration,
-) {
-    let context = Context::create();
-    let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
-    let module_name = format!(
-        "{}{}",
-        MERGED_MODULE_NAME_PREFIX,
-        obj_path.file_stem().unwrap().to_string_lossy()
-    );
-    let merged = Generator::create_module(&module_name, &context, &target_machine);
-    for bitcode_path in bitcode_paths {
-        let unit = Module::parse_bitcode_from_path(bitcode_path, &context).unwrap_or_else(|e| {
-            panic_with_msg(&format!(
-                "Failed to read the compilation unit \"{}\": {}",
-                bitcode_path.to_string_lossy(),
-                e
-            ))
-        });
-        merged.link_in_module(unit).unwrap_or_else(|e| {
-            panic_with_msg(&format!(
-                "Failed to merge the compilation unit \"{}\": {}",
-                bitcode_path.to_string_lossy(),
-                e
-            ))
-        });
-    }
-    internalize_all_but(&merged, c_visible_names);
-    // Every reader of every global of the program is in the merged module.
-    keep_initializers_out_of_shared_accessors(&merged, config);
-
-    if config.emit_llvm {
-        emit_llvm(&merged, config, false);
-    }
-
-    optimize_instrument_and_verify(&merged, &target_machine, config);
-
-    if config.emit_llvm {
-        emit_llvm(&merged, config, true);
-    }
-
-    write_to_object_file(&merged, &target_machine, obj_path);
-}
-
-/// Give internal linkage to every function and global `module` defines except the ones
-/// `c_visible_names` names, so that the optimization running next has every call of each of them in
-/// front of it.
-///
-/// A function or global with no body is a declaration of something a linked library provides, and it
-/// keeps the linkage it carries: internalizing one would leave its uses with nothing to resolve to.
-fn internalize_all_but(module: &Module, c_visible_names: &Set<String>) {
-    let is_c_visible = |name: &CStr| c_visible_names.contains(name.to_string_lossy().as_ref());
-    for function in module_functions(module) {
-        if function.count_basic_blocks() > 0 && !is_c_visible(function.get_name()) {
-            function.set_linkage(Linkage::Internal);
-        }
-    }
-    for global in module.get_globals() {
-        if global.get_initializer().is_some() && !is_c_visible(global.get_name()) {
-            global.set_linkage(Linkage::Internal);
-        }
-    }
 }
 
 /// The object files a previous build of this program and configuration left behind, when the cache
@@ -1010,18 +624,6 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
         target_machine
             .write_to_file(module, FileType::Object, path)
             .map_err(|e| e.to_string())
-    });
-}
-
-/// Write `module`'s LLVM bitcode to `bitcode_path`, for `merge_units_into_object_file` to read back.
-fn write_to_bitcode_file<'c>(module: &Module<'c>, bitcode_path: &Path) {
-    write_through_temporary_file(bitcode_path, |path| {
-        // The bitcode writer reports failure with `false` and says nothing about it.
-        if module.write_bitcode_to_path(path) {
-            Ok(())
-        } else {
-            Err("the LLVM bitcode writer failed".to_string())
-        }
     });
 }
 

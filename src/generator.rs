@@ -549,9 +549,10 @@ pub struct Generator<'c, 'm> {
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Arc<Map<FullName, Arc<TypeNode>>>,
-    /// The symbols of the program that something outside their own compilation unit reaches, which
-    /// is what decides whether a symbol this module defines is published to the linker.
-    reached_from_outside_their_unit: Arc<Set<FullName>>,
+    /// The names some compilation unit publishes to the linker, over the whole program
+    /// (`DividedProgram::published`). A name this module defines and does not hold a copy of is
+    /// published exactly when it is in here.
+    published_names: Arc<Set<FullName>>,
     /// The functions this module holds a copy of for its own calls, whose home is another unit. A
     /// copy is internal however the original is published, so that a call here reaches the copy and
     /// the linker sees one definition of the name.
@@ -787,7 +788,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         config: Configuration,
         type_env: TypeEnv,
         global_types: Arc<Map<FullName, Arc<TypeNode>>>,
-        reached_from_outside_their_unit: Arc<Set<FullName>>,
+        published_names: Arc<Set<FullName>>,
         imported: Arc<Set<FullName>>,
         shared_globals: Arc<Set<FullName>>,
     ) -> Self {
@@ -802,7 +803,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_location: vec![],
             declared_globals: Default::default(),
             global_types,
-            reached_from_outside_their_unit,
+            published_names,
             imported,
             shared_globals,
             type_env,
@@ -2455,11 +2456,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(parts, ret_ty, self)
     }
 
-    /// Whether the global `name` is published to the linker, which it is when something outside its
-    /// own compilation unit reaches it. Every other global is internal to the unit defining it, and
-    /// no other unit declares it, so LLVM optimizes it knowing every call it has.
+    /// Whether the global `name` is published to the linker, which it is when another unit reaches
+    /// it and this module is the one defining it rather than one holding a copy. Every other global
+    /// is internal to the unit defining it, and no other unit declares it, so LLVM optimizes it
+    /// knowing every call it has.
     fn published_to_the_linker(&self, name: &FullName) -> bool {
-        !self.imported.contains(name) && self.reached_from_outside_their_unit.contains(name)
+        !self.imported.contains(name) && self.published_names.contains(name)
     }
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.

@@ -28,7 +28,7 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::TypeCheckContext;
-use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
+use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
 use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -258,20 +258,6 @@ impl Symbol {
         // - By orphan rule, trait implementations are given in the module where the trait is defined, or the module where the type is defined.
         // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`),
         // so the type the trait is implemented appears in the type of the symbol.
-    }
-
-    /// The MD5 hash of everything about this symbol that decides the code generated for it — its
-    /// name, its type, its expression, and what it asks of the back end — in hexadecimal.
-    pub fn hash(&self) -> String {
-        let mut hash_source = HashSource::default();
-        hash_source.push_text(&self.name.to_string());
-        hash_source.push_text(&self.ty.to_string());
-        hash_source.push_text(&match &self.expr {
-            Some(expr) => expr.expr.stringify().to_string(),
-            None => "".to_string(),
-        });
-        hash_source.push_text(&self.inline_into_callers.to_string());
-        hash_source.finish()
     }
 }
 
@@ -3202,21 +3188,6 @@ impl Program {
         hash_source.push_text(&config.elaboration_hash());
         hash_source.push_text(build_time_utc!());
         Ok(hash_source.finish())
-    }
-
-    /// For each module linked into the program, a hash naming everything a value defined in that
-    /// module is type-checked from.
-    pub fn module_dependency_hash_map(&self, config: &Configuration) -> Map<Name, String> {
-        // TODO: Improve time complexity.
-        let mods = self.linked_mods();
-        let mut mod_to_hash = Map::default();
-        for module in &mods {
-            mod_to_hash.insert(
-                module.clone(),
-                panic_if_err(self.module_dependency_hash(&module, config)),
-            );
-        }
-        mod_to_hash
     }
 
     // Check if all items referred in import statements are defined.
