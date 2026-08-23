@@ -213,7 +213,7 @@ mod tests {
         const SYMBOL_COUNT: usize = 200;
         const MAX_SIZE: usize = 8;
 
-        let unit_shape = |body: &str| -> Vec<Vec<String>> {
+        let unit_symbol_names = |body: &str| -> Vec<Vec<String>> {
             let symbols = (0..SYMBOL_COUNT).map(|i| symbol(i, body)).collect();
             CompileUnit::new(symbols, vec![])
                 .split_by_max_size(MAX_SIZE)
@@ -222,7 +222,7 @@ mod tests {
                 .collect()
         };
 
-        let before = unit_shape("before");
+        let before = unit_symbol_names("before");
         assert!(
             before.len() > 1,
             "{} symbols fell into a single unit, which holds no boundary to move",
@@ -230,7 +230,7 @@ mod tests {
         );
         assert_eq!(
             before,
-            unit_shape("after"),
+            unit_symbol_names("after"),
             "editing the expression of every symbol moved the unit boundaries"
         );
     }

@@ -187,7 +187,7 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
 /// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
 /// and the pieces read in order giving back `v`.
 ///
-/// Where a piece ends is decided by `identity`, the text naming an element, rather than by the
+/// Where a piece ends is decided by `name_of`, the text naming an element, rather than by the
 /// element's position: a piece ends after an element whose name hashes into a `1 / max_size` slice
 /// of the numbers, and after `max_size` elements regardless. An element that appears among the
 /// others therefore changes the piece it lands in and leaves the pieces after it holding the
@@ -198,13 +198,13 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
 pub fn split_by_max_size<T>(
     v: Vec<T>,
     max_size: usize,
-    identity: impl Fn(&T) -> String,
+    name_of: impl Fn(&T) -> String,
 ) -> Vec<Vec<T>> {
     assert!(max_size > 0, "a piece holds at least one element");
     let mut pieces = vec![];
     let mut piece = vec![];
     for elem in v {
-        let name_ends_piece = md5_u64(&identity(&elem)) % max_size as u64 == 0;
+        let name_ends_piece = md5_u64(&name_of(&elem)) % max_size as u64 == 0;
         piece.push(elem);
         if name_ends_piece || piece.len() == max_size {
             pieces.push(mem::take(&mut piece));
@@ -598,41 +598,41 @@ mod tests {
     fn test_split_by_max_size_survives_an_insertion() {
         const MAX_SIZE: usize = 128;
 
-        // The pieces an element inserted at index 1000 changes, out of an input of `len` elements.
-        // Both lengths hold the same elements around that index, so the counts are of one
+        // How many pieces an element inserted at index 1000 changes, out of an input of `len`
+        // elements. Both lengths hold the same elements around that index, so the counts are of one
         // neighbourhood and differ only in how much follows it.
-        let changed_pieces = |len: usize| -> usize {
+        let changed_piece_count = |len: usize| -> usize {
             let before = element_names(len);
             let mut after = before.clone();
             after.insert(1000, "Std::Array::value#0999b".to_string());
 
-            let identity = |s: &String| s.clone();
-            let kept: Set<Vec<String>> = split_by_max_size(before, MAX_SIZE, identity)
+            let name_of = |s: &String| s.clone();
+            let pieces_before: Set<Vec<String>> = split_by_max_size(before, MAX_SIZE, name_of)
                 .into_iter()
                 .collect();
-            split_by_max_size(after, MAX_SIZE, identity)
+            split_by_max_size(after, MAX_SIZE, name_of)
                 .into_iter()
-                .filter(|piece| !kept.contains(piece))
+                .filter(|piece| !pieces_before.contains(piece))
                 .count()
         };
 
-        let short = changed_pieces(2_000);
-        let long = changed_pieces(8_000);
+        let changed_in_short_input = changed_piece_count(2_000);
+        let changed_in_long_input = changed_piece_count(8_000);
         assert!(
-            short > 0,
+            changed_in_short_input > 0,
             "the inserted element landed in no piece the split changed"
         );
         assert!(
-            long <= short,
+            changed_in_long_input <= changed_in_short_input,
             "an insertion changed {} pieces of a 2,000-element input and {} of an 8,000-element \
              one, so what an insertion disturbs grows with what follows it",
-            short,
-            long
+            changed_in_short_input,
+            changed_in_long_input
         );
     }
 
     /// The pieces come out on the scale `max_size` names. A rule that ends a piece far more often
-    /// than one element in `max_size` — an `identity` giving every element the same text, a slice
+    /// than one element in `max_size` — a `name_of` giving every element the same text, a slice
     /// of the numbers wider than `1 / max_size` — leaves pieces of a few elements each, and a piece
     /// is a unit of compilation.
     #[test]
