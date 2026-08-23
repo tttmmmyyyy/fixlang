@@ -86,10 +86,13 @@ pub fn lower_program(
     }
 }
 
-/// How many hexadecimal characters of a symbol's digest tag the local names minted for it. Eight
-/// is short enough to keep the names readable in an RC IR dump and wide enough that no two of a
-/// program's symbols share a tag.
-const SYMBOL_TAG_LENGTH: usize = 8;
+/// How many hexadecimal characters of a symbol's digest tag the local names minted for it.
+///
+/// The tag is what makes the names of two symbols differ, so two symbols sharing one would put
+/// their local names in one space. Sixteen characters are sixty-four bits: a program of a million
+/// symbols shares a tag with probability under 3e-8, while eight characters would share one at
+/// around a hundred thousand symbols.
+const SYMBOL_TAG_LENGTH: usize = 16;
 
 /// The lowering context: a fresh-name counter, the accumulated top-level functions, and the scope
 /// mapping each AST local name to the RC IR variable currently bound to it. Because a fresh
