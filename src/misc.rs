@@ -583,6 +583,13 @@ mod tests {
         }
     }
 
+    /// The names of `count` elements, of the shape the name of a symbol has.
+    fn element_names(count: usize) -> Vec<String> {
+        (0..count)
+            .map(|i| format!("Std::Array::value#{:04}", i))
+            .collect()
+    }
+
     /// An element that appears among the others changes the pieces around it and leaves the rest
     /// holding the elements they held: the same insertion into a longer input changes no more
     /// pieces than into a shorter one. Boundaries taken from the positions instead move with every
@@ -595,9 +602,7 @@ mod tests {
         // Both lengths hold the same elements around that index, so the counts are of one
         // neighbourhood and differ only in how much follows it.
         let changed_pieces = |len: usize| -> usize {
-            let before: Vec<String> = (0..len)
-                .map(|i| format!("Std::Array::value#{:04}", i))
-                .collect();
+            let before = element_names(len);
             let mut after = before.clone();
             after.insert(1000, "Std::Array::value#0999b".to_string());
 
@@ -634,11 +639,8 @@ mod tests {
     fn test_split_by_max_size_pieces_are_of_the_size_asked_for() {
         const MAX_SIZE: usize = 128;
         const LEN: usize = 2_000;
-        let v: Vec<String> = (0..LEN)
-            .map(|i| format!("Std::Array::value#{:04}", i))
-            .collect();
 
-        let pieces = split_by_max_size(v, MAX_SIZE, |s: &String| s.clone());
+        let pieces = split_by_max_size(element_names(LEN), MAX_SIZE, |s: &String| s.clone());
         let mean_len = LEN / pieces.len();
         assert!(
             mean_len >= MAX_SIZE / 4,
