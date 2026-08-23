@@ -887,6 +887,46 @@ pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
 }
 
 #[test]
+pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() {
+    // An opaque type variable inside an extra argument of an equality whose subject is another
+    // type should be rejected
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : Rebuildable {
+            type Elem c;
+            type Rebuild c a;
+            rebuild : (Elem c -> a) -> c -> Rebuild c a;
+        }
+
+        impl Array a : Rebuildable {
+            type Elem (Array a) = a;
+            type Rebuild (Array a) b = Array b;
+            rebuild = |f, arr| arr.map(f);
+        }
+
+        // `?s` sits inside an extra argument of `Rebuild c (Array ?s) = Array I64`, whose subject is `c`
+        foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c (Array ?s) = Array I64] c -> ?s;
+        foo = |x| (
+            let y = x.rebuild(|n| [n.to_string]);
+            let z : Array I64 = y;
+            z.@(0).to_string
+        );
+
+        main : IO ();
+        main = println(foo([1, 2, 3]).to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "An opaque type variable can appear in an equality constraint only when the left side of \
+         that constraint is an associated type applied to it.",
+    );
+}
+
+#[test]
 pub fn test_opaque_tyvar_on_right_side_of_equality_on_another_type() {
     // An opaque type variable on the right side of an equality whose subject is another type
     // should be rejected
