@@ -52,6 +52,15 @@ fn union_of_variants(variants: usize) -> String {
     union_of_variants_with_main(variants, &main_on_a_value_of_the_last_variant(variants, &body))
 }
 
+/// The error a declaration of a union of `variants` variants is reported with, where `variants`
+/// exceeds the number of variants a tag tells apart.
+fn too_many_variants_error(variants: usize) -> String {
+    format!(
+        "Union `Main::Many` has {} variants, but a union can have at most {} variants.",
+        variants, MAX_UNION_VARIANTS
+    )
+}
+
 /// A union of as many variants as the tag tells apart compiles, and each of its values answers for
 /// the one variant it was created as.
 #[test]
@@ -115,11 +124,7 @@ pub fn test_union_of_more_variants_than_the_tag_holds_is_rejected() {
     test_source_fail(
         &union_of_variants(MAX_UNION_VARIANTS + 1),
         Configuration::develop_mode(),
-        &format!(
-            "Union `Main::Many` has {} variants, but a union can have at most {} variants.",
-            MAX_UNION_VARIANTS + 1,
-            MAX_UNION_VARIANTS
-        ),
+        &too_many_variants_error(MAX_UNION_VARIANTS + 1),
     );
 }
 
@@ -137,11 +142,7 @@ pub fn test_union_of_more_variants_than_the_tag_holds_is_reported_by_a_check() {
     let errors = elaborate_via_config(&config)
         .err()
         .expect("a union of more variants than the tag tells apart is reported by a check");
-    let expected = format!(
-        "Union `Main::Many` has {} variants, but a union can have at most {} variants.",
-        MAX_UNION_VARIANTS + 1,
-        MAX_UNION_VARIANTS
-    );
+    let expected = too_many_variants_error(MAX_UNION_VARIANTS + 1);
     assert!(
         errors.to_string().contains(&expected),
         "the check reports `{}`, and it reported {}",
