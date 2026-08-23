@@ -16,30 +16,46 @@ pub fn md5_u64(text: &str) -> u64 {
 
 /// The values a hash is taken over, appended one at a time.
 ///
-/// Each value goes in as a hash of its own, of a length the value does not change, so the value
-/// cannot run into the one appended next: `"xy"` followed by `"z"` gives a different source from
-/// `"x"` followed by `"yz"`. Appending through this type is what holds that, so the text it
-/// accumulates is its own.
-#[derive(Default)]
-pub struct HashSource(String);
+/// Each value goes in with its length in front of it, so a value cannot run into the one appended
+/// next: `"xy"` followed by `"z"` gives a different source from `"x"` followed by `"yz"`. Appending
+/// through this type is what holds that, and it folds each value into the digest as the value is
+/// appended, so a value as large as a whole source file costs nothing to append.
+#[derive(Clone)]
+pub struct HashSource(md5::Context);
+
+impl Default for HashSource {
+    /// A hash source nothing has been appended to.
+    fn default() -> Self {
+        HashSource(md5::Context::new())
+    }
+}
 
 impl HashSource {
     /// Appends `text`.
     pub fn push_text(&mut self, text: &str) {
-        self.0.push_str(&md5_hex(text));
+        self.0.consume(text.len().to_string());
+        self.0.consume(":");
+        self.0.consume(text);
     }
 
-    /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's.
-    pub fn push_list(&mut self, items: &[String]) {
+    /// Appends `items`. The count comes first, so a list's items cannot be read as the next
+    /// list's, which is why `items` is taken as an `ExactSizeIterator`.
+    pub fn push_list<I>(&mut self, items: I)
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+        I::IntoIter: ExactSizeIterator,
+    {
+        let items = items.into_iter();
         self.push_text(&items.len().to_string());
         for item in items {
-            self.push_text(item);
+            self.push_text(item.as_ref());
         }
     }
 
     /// The hash of everything appended.
     pub fn finish(&self) -> String {
-        md5_hex(&self.0)
+        format!("{:x}", self.0.clone().compute())
     }
 }
 
@@ -72,14 +88,22 @@ mod tests {
         );
         assert_ne!(
             hash_of(|hash_source| {
-                hash_source.push_list(&["a".to_string(), "b".to_string()]);
-                hash_source.push_list(&[]);
+                hash_source.push_list(["a", "b"]);
+                hash_source.push_list::<[&str; 0]>([]);
             }),
             hash_of(|hash_source| {
-                hash_source.push_list(&["a".to_string()]);
-                hash_source.push_list(&["b".to_string()]);
+                hash_source.push_list(["a"]);
+                hash_source.push_list(["b"]);
             }),
             "an item belongs to the list it was appended with"
+        );
+        assert_ne!(
+            hash_of(|hash_source| hash_source.push_text("3:abc")),
+            hash_of(|hash_source| {
+                hash_source.push_text("3");
+                hash_source.push_text("abc");
+            }),
+            "a text spelling the length and the body of two values is still one value"
         );
     }
 }

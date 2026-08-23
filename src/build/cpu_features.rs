@@ -1,3 +1,28 @@
+use inkwell::targets::TargetMachine;
+
+/// The CPU a build generates code for, as LLVM names it.
+///
+/// A build compiles for the machine it runs on, so this is read from the host. It reaches the
+/// generated code through `get_target_machine`, and an object file therefore holds the
+/// instructions this CPU has.
+#[derive(Clone, PartialEq, Eq)]
+pub struct HostCpu {
+    /// The model name, such as `skylake-avx512`.
+    pub name: String,
+    /// The features the CPU supports, as a comma-separated list of `+name` and `-name`.
+    pub features: String,
+}
+
+impl HostCpu {
+    /// The CPU this compiler is running on.
+    pub fn of_this_machine() -> HostCpu {
+        HostCpu {
+            name: TargetMachine::get_host_cpu_name().to_string(),
+            features: TargetMachine::get_host_cpu_features().to_string(),
+        }
+    }
+}
+
 // A struct to parse and manipulate CPU features obtained by `TargetMachine::get_host_cpu_features()`.
 pub struct CpuFeatures {
     data: Vec<(String, FeatureState)>,

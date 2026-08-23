@@ -12,6 +12,7 @@ use crate::{
         LockFileType, ProjectSource,
     },
     error::Errors,
+    hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
     misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
@@ -423,25 +424,21 @@ impl ProjectFile {
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut hash_source = String::new();
-        for dep in &deps {
-            hash_source += serde_json::to_string(&dep).unwrap().as_str();
-        }
+        let mut hash_source = HashSource::default();
+        hash_source.push_list(deps.iter().map(|dep| serde_json::to_string(dep).unwrap()));
 
         // Also include the content of path-based dependencies' project files in the hash.
         // This ensures that when a local path dependency changes its own dependencies,
         // the lock file is invalidated and re-created.
-        for dep in &deps {
-            if let Some(dep_dir) = &dep.path {
+        hash_source.push_list(deps.iter().map(|dep| match &dep.path {
+            Some(dep_dir) => {
                 let proj_file_path = self.join_to_project_dir(dep_dir).join(PROJECT_FILE_PATH);
-                if let Ok(content) = fs::read_to_string(&proj_file_path) {
-                    hash_source += &content;
-                }
+                fs::read_to_string(&proj_file_path).unwrap_or_default()
             }
-        }
+            None => String::new(),
+        }));
 
-        // Calculate the hash value.
-        format!("{:x}", md5::compute(hash_source))
+        hash_source.finish()
     }
 
     /// Checks that `name` is a non-empty string of alphanumeric characters and hyphens.
@@ -1468,5 +1465,55 @@ impl ProjectFile {
             ))
         })?;
         Ok(reg_file)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectFile;
+    use crate::configuration::BuildConfigType;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// The hash deciding when the lock file is built again covers the whole project file of each
+    /// path dependency, so that a change to what a local dependency itself depends on reaches it. A
+    /// lock file surviving such a change would name the dependencies of a project that has since
+    /// asked for others.
+    #[test]
+    fn test_the_dependencies_hash_follows_a_path_dependencys_own_project_file() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let root = temp.path().join("root");
+        let dep = temp.path().join("dep");
+        fs::create_dir_all(&root).expect("Failed to create the root project's directory");
+        fs::create_dir_all(&dep).expect("Failed to create the dependency's directory");
+        fs::write(
+            root.join("fixproj.toml"),
+            "[general]\nname = \"root\"\nversion = \"0.1.0\"\n\n\
+             [build]\nfiles = [\"main.fix\"]\n\n\
+             [[dependencies]]\nname = \"dep\"\nversion = \"*\"\npath = \"../dep\"\n",
+        )
+        .expect("Failed to write the root project file");
+
+        let hash_of = |dependencies_of_the_dependency: &str| {
+            fs::write(
+                dep.join("fixproj.toml"),
+                format!(
+                    "[general]\nname = \"dep\"\nversion = \"0.1.0\"\n\n\
+                     [build]\nfiles = [\"lib.fix\"]\n{}",
+                    dependencies_of_the_dependency
+                ),
+            )
+            .expect("Failed to write the dependency's project file");
+            ProjectFile::read_file(&root.join("fixproj.toml"))
+                .unwrap_or_else(|errs| panic!("Failed to read the root project file: {}", errs))
+                .calculate_dependencies_hash(BuildConfigType::Build)
+        };
+
+        assert_ne!(
+            hash_of(""),
+            hash_of("\n[[dependencies]]\nname = \"other\"\nversion = \"*\"\npath = \"../other\"\n"),
+            "a dependency the path dependency itself declares reaches the hash the lock file is \
+             checked against"
+        );
     }
 }

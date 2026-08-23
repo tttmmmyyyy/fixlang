@@ -263,22 +263,15 @@ impl Symbol {
     /// The MD5 hash of everything about this symbol that decides the code generated for it — its
     /// name, its type, its expression, and what it asks of the back end — in hexadecimal.
     pub fn hash(&self) -> String {
-        let mut hash_source = String::new();
-        hash_source.push_str("<name>");
-        hash_source.push_str(&self.name.to_string());
-
-        hash_source.push_str("<type>");
-        hash_source.push_str(&self.ty.to_string());
-
-        hash_source.push_str("<expr>");
-        if let Some(expr) = &self.expr {
-            hash_source.push_str(&expr.expr.stringify().to_string());
-        }
-
-        hash_source.push_str("<inline_into_callers>");
-        hash_source.push_str(&self.inline_into_callers.to_string());
-
-        format!("{:x}", md5::compute(hash_source))
+        let mut hash_source = HashSource::default();
+        hash_source.push_text(&self.name.to_string());
+        hash_source.push_text(&self.ty.to_string());
+        hash_source.push_text(&match &self.expr {
+            Some(expr) => expr.expr.stringify().to_string(),
+            None => "".to_string(),
+        });
+        hash_source.push_text(&self.inline_into_callers.to_string());
+        hash_source.finish()
     }
 }
 
