@@ -428,7 +428,7 @@ impl ProjectSources {
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
 ///
-/// `cache_key_sources` sorts every field of this struct by what it reaches, and a field added here
+/// `cache_hash_sources` sorts every field of this struct by what it reaches, and a field added here
 /// is sorted there before this compiles. A field whose value changes the generated code belongs to
 /// the hash deciding when a cached object file may be reused; one whose value changes what the
 /// elaborated program is — the definitions the compiler supplies itself, or the types the parser
@@ -658,9 +658,9 @@ impl Configuration {
 }
 
 /// The hash sources of a build's caches, one per cache, each holding the settings that cache has to
-/// tell apart. `Configuration::cache_key_sources` fills them in one pass, since a setting reaching
+/// tell apart. `Configuration::cache_hash_sources` fills them in one pass, since a setting reaching
 /// both is written into both.
-struct CacheKeySources {
+struct CacheHashSources {
     /// The settings that decide what the elaborated program is.
     elaboration: HashSource,
     /// The settings that decide what code the compiler generates.
@@ -1005,7 +1005,7 @@ impl Configuration {
     ///
     /// Every value goes in through `HashSource`, which gives it a length of its own, so where one
     /// value ends and the next begins never depends on what the values are.
-    fn cache_key_sources(&self) -> CacheKeySources {
+    fn cache_hash_sources(&self) -> CacheHashSources {
         let Configuration {
             // What the compiler makes the program out of. Each is pushed below, into the hash of
             // every cache that has to tell it apart.
@@ -1151,7 +1151,7 @@ impl Configuration {
         object_generation.push_text(build_time_utc!());
         runtime_object.push_text(build_time_utc!());
 
-        CacheKeySources {
+        CacheHashSources {
             elaboration,
             object_generation,
             runtime_object,
@@ -1164,7 +1164,7 @@ impl Configuration {
     /// `test_elaboration_hash_separates_elaboration_settings` gives each setting read here a value
     /// of its own and checks that the hash follows.
     pub fn elaboration_hash(&self) -> String {
-        self.cache_key_sources().elaboration.finish()
+        self.cache_hash_sources().elaboration.finish()
     }
 
     /// The hash of the settings that decide what code the compiler generates: two builds sharing it
@@ -1173,7 +1173,7 @@ impl Configuration {
     /// `test_object_generation_hash_separates_code_generation_settings` gives each setting read
     /// here a value of its own and checks that the hash follows.
     pub fn object_generation_hash(&self) -> String {
-        self.cache_key_sources().object_generation.finish()
+        self.cache_hash_sources().object_generation.finish()
     }
 
     /// The hash of the settings the runtime's object file is compiled under, which names that file:
@@ -1182,7 +1182,7 @@ impl Configuration {
     /// `test_runtime_object_hash_separates_runtime_compilation_settings` gives each setting read
     /// here a value of its own and checks that the hash follows.
     pub fn runtime_object_hash(&self) -> String {
-        self.cache_key_sources().runtime_object.finish()
+        self.cache_hash_sources().runtime_object.finish()
     }
 
     /// Whether the entry point of the program runs the tests rather than `Main::main`, which is

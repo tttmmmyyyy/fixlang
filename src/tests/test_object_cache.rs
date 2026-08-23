@@ -23,7 +23,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
 "#;
 
     /// What `SOURCE` prints: the squares of `0..9` summed.
-    const OUTPUT: &str = "285";
+    const PRINTED_OUTPUT: &str = "285";
 
     /// A directory holding `SOURCE` as the whole of a project, ready to be built in.
     fn project_dir() -> TempDir {
@@ -73,7 +73,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
     fn test_a_build_asked_for_a_dump_writes_it_however_much_is_cached() {
         let dir = project_dir();
         let dir = dir.path();
-        let dumps = dir.join(".fixlang");
+        let dumps_dir = dir.join(".fixlang");
 
         // A dump of one optimization level, so that a dump of another can be told from it.
         run_in(
@@ -81,7 +81,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             dir,
             "the build at -O basic",
         );
-        let dump_at_basic = fs::read_to_string(dumps.join("rc_ir.post.txt"))
+        let dump_at_basic = fs::read_to_string(dumps_dir.join("rc_ir.post.txt"))
             .expect("the build at -O basic should write the RC IR");
 
         // A build of another level that asks for nothing, which is what fills the cache the builds
@@ -98,7 +98,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             dir,
             "the build asked for the RC IR",
         );
-        let dump_at_none = fs::read_to_string(dumps.join("rc_ir.post.txt"))
+        let dump_at_none = fs::read_to_string(dumps_dir.join("rc_ir.post.txt"))
             .expect("the build asked for the RC IR should write it");
         assert_ne!(
             dump_at_basic, dump_at_none,
@@ -117,20 +117,20 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
 
         // `--emit-symbols` renames the symbols of the program, so its object files are its own and
         // the first build asked for it generates them. The second is the one answered from a cache.
-        let asked_for_symbols = |what: &str| {
+        let build_asking_for_symbols = |what: &str| {
             run_in(
                 fix_command_at_opt_level("build", "none").arg("--emit-symbols"),
                 dir,
                 what,
             );
         };
-        asked_for_symbols("the build asked for the symbols");
-        for path in files_ending_in(&dumps, ".symbols.fix") {
+        build_asking_for_symbols("the build asked for the symbols");
+        for path in files_ending_in(&dumps_dir, ".symbols.fix") {
             fs::remove_file(path).expect("failed to remove a symbols dump");
         }
-        asked_for_symbols("the build repeating the one asked for the symbols");
+        build_asking_for_symbols("the build repeating the one asked for the symbols");
         assert!(
-            !files_ending_in(&dumps, ".symbols.fix").is_empty(),
+            !files_ending_in(&dumps_dir, ".symbols.fix").is_empty(),
             "a repeated build asked for the symbols should write them again"
         );
     }
@@ -142,36 +142,36 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dir = project_dir();
         let dir = dir.path();
 
-        let run = run_in(
+        let run_output = run_in(
             &mut fix_command_at_opt_level("run", "none"),
             dir,
             "the run of the program",
         );
         assert!(
-            run.contains(OUTPUT),
+            run_output.contains(PRINTED_OUTPUT),
             "the program should print {}.\n{}",
-            OUTPUT,
-            run
+            PRINTED_OUTPUT,
+            run_output
         );
 
-        let build = run_in(
+        let build_output = run_in(
             fix_command_at_opt_level("build", "none").arg("--verbose"),
             dir,
             "the build after the run",
         );
         assert!(
-            build.contains("Using cached object files."),
+            build_output.contains("Using cached object files."),
             "the build after the run should take the object files the run generated.\n{}",
-            build
+            build_output
         );
 
-        let built = Command::new(dir.join("a.out"))
+        let program_output = Command::new(dir.join("a.out"))
             .current_dir(dir)
             .output()
             .expect("failed to run the program the build produced");
         assert_eq!(
-            String::from_utf8_lossy(&built.stdout).trim(),
-            OUTPUT,
+            String::from_utf8_lossy(&program_output.stdout).trim(),
+            PRINTED_OUTPUT,
             "the program linked from the object files the run generated should print what the run \
              printed"
         );
@@ -185,28 +185,28 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dir = project_dir();
         let dir = dir.path();
 
-        let generated = |output: &str| output.matches("Generating object file for").count();
+        let count_generated_units = |output: &str| output.matches("Generating object file for").count();
 
-        let first = run_in(
+        let first_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),
             dir,
             "the first build",
         );
-        let units = generated(&first);
-        assert!(units > 0, "the first build should generate its units.\n{}", first);
+        let default_units = count_generated_units(&first_output);
+        assert!(default_units > 0, "the first build should generate its units.\n{}", first_output);
 
-        let repeated = run_in(
+        let repeated_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),
             dir,
             "the repeated build",
         );
         assert!(
-            repeated.contains("Using cached object files."),
+            repeated_output.contains("Using cached object files."),
             "a build repeating another takes its object files.\n{}",
-            repeated
+            repeated_output
         );
 
-        let divided = run_in(
+        let divided_output = run_in(
             fix_command_at_opt_level("build", "basic")
                 .args(["--max-cu-size", "1"])
                 .arg("--verbose"),
@@ -214,16 +214,16 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             "the build dividing itself into units of one symbol",
         );
         assert!(
-            !divided.contains("Using cached object files."),
+            !divided_output.contains("Using cached object files."),
             "a build dividing itself differently has object files of its own.\n{}",
-            divided
+            divided_output
         );
         assert!(
-            generated(&divided) > units,
+            count_generated_units(&divided_output) > default_units,
             "a build holding one symbol per unit generates more units than the {} of a build \
              holding the default.\n{}",
-            units,
-            divided
+            default_units,
+            divided_output
         );
     }
 
