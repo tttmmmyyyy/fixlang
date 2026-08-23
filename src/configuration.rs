@@ -1,4 +1,5 @@
 use crate::ast::name::FullName;
+use crate::build::compile_unit::UnitOutput;
 use crate::build::cpu_features::CpuFeatures;
 use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
@@ -18,7 +19,6 @@ use crate::misc::{
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
-use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -855,12 +855,20 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= level
     }
 
-    /// Split the program's symbols into several compilation units, each hashed and cached on its
-    /// own, so that a rebuild regenerates only the units whose inputs changed. A function of a unit
-    /// is externally visible, since another unit calls it. Runs at `Basic` and below; above that the
-    /// program is one unit, which is what lets a pass see all of it at once.
-    pub fn enable_separated_compilation(&self) -> bool {
-        !self.force_all_optimizations() && self.fix_opt_level <= FixOptimizationLevel::Basic
+    /// What each compilation unit's code generation leaves on disk for the link step.
+    ///
+    /// A program is always divided into compilation units, each generated and cached on its own, so
+    /// that a rebuild regenerates only the units whose inputs changed. What the optimization level
+    /// decides is what a unit is compiled into. At `Max` and above a unit is bitcode, and the units
+    /// are merged into one module that is optimized and compiled as a whole, so that the
+    /// optimization still sees the program entire. Below that a unit is an object file, optimized
+    /// on its own, and the linker puts the object files together.
+    pub fn unit_output(&self) -> UnitOutput {
+        if self.runs_from(FixOptimizationLevel::Max) {
+            UnitOutput::Bitcode
+        } else {
+            UnitOutput::ObjectFile
+        }
     }
 
     /// Give each global function a version taking one, two, ... arguments at once, and send every
@@ -1121,21 +1129,6 @@ impl Configuration {
             }
         }
         Ok(command)
-    }
-
-    /// The linkage to give a symbol that other compilation units may call: external where each unit
-    /// is compiled on its own, internal where the program is optimized as a whole.
-    ///
-    /// A symbol this makes external is one another unit may reach, so it is also a reachability root
-    /// of the RC IR (`reachability_roots`). Narrowing what gets external linkage narrows what that
-    /// root set may hold, and a symbol left out of it is one dead-code elimination drops while
-    /// another unit still calls it.
-    pub fn external_if_separated(&self) -> Linkage {
-        if self.enable_separated_compilation() {
-            Linkage::External
-        } else {
-            Linkage::Internal
-        }
     }
 
     /// Instrument the generated program with `sanitizer`.

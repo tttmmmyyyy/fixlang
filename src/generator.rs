@@ -2442,9 +2442,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    // A funptr function is reachable from another compilation unit when compilation is separated;
-    // a closure function is internal, so LLVM resolves a collision between two such names by
-    // renaming one of them.
+    // A funptr function is one of the program's globals, so another compilation unit reaches it by
+    // name and it is external; a closure function is internal to the unit that lifted it, so LLVM
+    // resolves a collision between two such names by renaming one of them.
     //
     // A funptr function is also registered as the value of `name`, because the bodies that call it
     // read it by name. Registering here is what leaves no way to declare one and reach it through a
@@ -2459,7 +2459,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &FullName,
     ) -> FunctionValue<'c> {
         let llvm_fn_ty = lambda_function_type(fn_ty, self);
-        let linkage = if fn_ty.is_funptr() && self.config.enable_separated_compilation() {
+        let linkage = if fn_ty.is_funptr() {
             Linkage::External
         } else {
             Linkage::Internal
@@ -2497,11 +2497,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let acc_fn = self.module.add_function(
-            &acc_fn_name,
-            acc_fn_ty,
-            Some(self.config.external_if_separated()),
-        );
+        let acc_fn = self
+            .module
+            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::External));
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }

@@ -1,5 +1,5 @@
-//! The division of a program into compilation units, each compiled into an object file that is
-//! cached under a hash of everything the code in it is generated from.
+//! The division of a program into compilation units, each generated on its own and cached under a
+//! hash of everything the code in it is generated from.
 
 use crate::ast::name::Name;
 use crate::ast::program::Symbol;
@@ -11,11 +11,29 @@ use rand::Rng;
 use std::fmt;
 use std::path::PathBuf;
 
-/// A set of the program's symbols compiled into one object file, which is cached under
-/// `unit_hash`, so that a rebuild regenerates only the units whose inputs changed.
-///
-/// `Configuration::enable_separated_compilation` decides when the program is divided into several
-/// units; above that, the whole program is one unit.
+/// What a compilation unit's code generation leaves on disk for the link step, as
+/// `Configuration::unit_output` chooses it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UnitOutput {
+    /// An object file, optimized on its own, which the linker puts together with the other units'.
+    ObjectFile,
+    /// LLVM bitcode carrying the unit's code as generation left it, to be merged with the other
+    /// units' into one module that is optimized and compiled as a whole.
+    Bitcode,
+}
+
+impl UnitOutput {
+    /// The extension naming the file this output is written to.
+    fn extension(self) -> &'static str {
+        match self {
+            UnitOutput::ObjectFile => "o",
+            UnitOutput::Bitcode => "bc",
+        }
+    }
+}
+
+/// A set of the program's symbols generated together and cached under `unit_hash`, so that a
+/// rebuild regenerates only the units whose inputs changed.
 pub struct CompileUnit {
     /// The symbols this unit compiles.
     symbols: Vec<Symbol>,
@@ -28,12 +46,12 @@ pub struct CompileUnit {
 }
 
 impl fmt::Display for CompileUnit {
-    /// Writes the unit's hash, how many symbols it holds and the name of the first of them, the
-    /// modules it depends on, and whether its object file is cached.
+    /// Writes the unit's hash, how many symbols it holds and the name of the first of them, and the
+    /// modules it depends on.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "CompileUnit(hash = {}, size = {}, symbols = [{}, ...], dependency = [{}], is_cached = {})",
+            "CompileUnit(hash = {}, size = {}, symbols = [{}, ...], dependency = [{}])",
             self.unit_hash,
             self.symbols.len(),
             if self.symbols.len() > 0 {
@@ -42,7 +60,6 @@ impl fmt::Display for CompileUnit {
                 "N/A".to_string()
             },
             self.dependent_modules.join(", "),
-            self.is_cached()
         )
     }
 }
@@ -69,21 +86,16 @@ impl CompileUnit {
         &self.symbols
     }
 
-    /// Whether this unit's object file is already on disk from an earlier build, so that the build
-    /// links that file and skips generating the unit's code.
-    pub fn is_cached(&self) -> bool {
-        self.object_file_path().exists()
-    }
-
-    /// The path of the file this unit's object code is cached in: `unit_hash` with the extension
-    /// `.o`, under `COMPILATION_UNITS_PATH`. Requires the unit's hash to be set.
-    pub fn object_file_path(&self) -> PathBuf {
+    /// The path of the file this unit's generated code is cached in: `unit_hash` under
+    /// `COMPILATION_UNITS_PATH`, with the extension `output` names. A file already there is one an
+    /// earlier build left, and the build takes it instead of generating the unit again. Requires
+    /// the unit's hash to be set.
+    pub fn output_file_path(&self, output: UnitOutput) -> PathBuf {
         if self.unit_hash.len() == 0 {
             panic!("unit_hash is not set.");
         }
         let mut path = PathBuf::from(COMPILATION_UNITS_PATH);
-        let file_name = self.unit_hash.to_string() + ".o";
-        path.push(file_name);
+        path.push(format!("{}.{}", self.unit_hash, output.extension()));
         path
     }
 
@@ -217,6 +229,32 @@ impl CompileUnit {
 
         units
     }
+}
+
+/// The digest naming the object file the merged units are compiled into. It is taken over the
+/// units' hashes, and a unit's hash covers everything its code is generated from, so two builds
+/// share this digest exactly when they would merge the same bitcode.
+///
+/// The hashes are sorted, so the digest names the set of units rather than the order they are
+/// merged in. Two orders of one set produce object files that hold the same code laid out
+/// differently, and either of them serves the build that asked for the other.
+pub fn merged_units_hash(units: &[CompileUnit]) -> String {
+    let mut unit_hashes = units
+        .iter()
+        .map(|unit| unit.unit_hash())
+        .collect::<Vec<_>>();
+    unit_hashes.sort();
+    md5_hex(&unit_hashes.join(", "))
+}
+
+/// The path of the file the object code compiled from the merged units is cached in: the digest
+/// `merged_units_hash` gives them, with the extension `.o`, under `COMPILATION_UNITS_PATH`. A file
+/// already there is one an earlier build left, and the build links it instead of generating and
+/// merging the units again.
+pub fn merged_object_file_path(merged_units_hash: &str) -> PathBuf {
+    let mut path = PathBuf::from(COMPILATION_UNITS_PATH);
+    path.push(format!("{}.o", merged_units_hash));
+    path
 }
 
 #[cfg(test)]

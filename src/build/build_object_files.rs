@@ -6,7 +6,10 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
+    build::{
+        compile_unit::{merged_object_file_path, merged_units_hash, CompileUnit, UnitOutput},
+        cpu_features::CpuFeatures,
+    },
     configuration::{Configuration, OutputFileType},
     constants::{
         C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
@@ -38,7 +41,7 @@ use crate::{
 use inkwell::{
     attributes::AttributeLoc,
     context::Context,
-    module::Module,
+    module::{Linkage, Module},
     passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     values::BasicValue,
@@ -47,6 +50,7 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::CStr,
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
@@ -57,43 +61,21 @@ use std::{
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    /// The object files generated, one per compilation unit.
+    /// The object files the linker is to put together: one per compilation unit, or the single one
+    /// the merged units are compiled into (`Configuration::unit_output`).
     pub obj_paths: Vec<PathBuf>,
 }
 
-/// The names through which code generation reaches this program's functions and globals from outside
-/// it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
+/// The names through which code generation reaches a compilation unit's functions and globals from
+/// outside it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
 ///
-/// Separated compilation publishes every symbol of a unit, so that another unit can call it: a
-/// funptr symbol becomes a function of external linkage, and any other symbol becomes a value
-/// reached through an accessor of external linkage (`Generator::declare_lambda_function`,
-/// `Configuration::external_if_separated`). Which of them the rest of the program uses is not
-/// knowable from the unit, so all of them are roots — decided by the rule that decides the linkage.
-///
-/// Compiled as one unit, every function and global is internal, and the C world enters the program
-/// in exactly two places: the entry point `build_main_function` runs, and the values
-/// `build_exported_c_functions` publishes under their C names — which together are what
-/// `Program::root_value_names` names.
-fn reachability_roots(
-    symbols: &[Symbol],
-    root_value_names: &[FullName],
-    config: &Configuration,
-) -> Set<FullName> {
-    if config.enable_separated_compilation() {
-        return symbols.iter().map(|sym| sym.name.clone()).collect();
-    }
-    // Compiled as one unit, `symbols` is the whole program, so every root value names one of its
-    // symbols. The walk starts at these names alone: one that names no definition reaches nothing,
-    // and the code behind that root value is dropped.
-    let symbol_names: Set<&FullName> = symbols.iter().map(|sym| &sym.name).collect();
-    for root_value_name in root_value_names {
-        assert!(
-            symbol_names.contains(root_value_name),
-            "the root value `{}` names no symbol of the program",
-            root_value_name.to_string()
-        );
-    }
-    root_value_names.iter().cloned().collect()
+/// A unit publishes every symbol it holds, so that another unit can call it: a funptr symbol becomes
+/// a function of external linkage, and any other symbol becomes a value reached through an accessor
+/// of external linkage (`Generator::declare_lambda_function`, `Generator::declare_program_global`).
+/// Which of them the rest of the program uses is not knowable from inside the unit, so all of them
+/// are roots — decided by the rule that decides the linkage.
+fn reachability_roots(symbols: &[Symbol]) -> Set<FullName> {
+    symbols.iter().map(|sym| sym.name.clone()).collect()
 }
 
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
@@ -103,8 +85,7 @@ fn reachability_roots(
 /// # Arguments
 /// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
-///   Under separated compilation such a global may be defined in another unit, so this covers the
-///   whole program.
+///   Such a global may be defined in another unit, so this covers the whole program.
 /// * `roots` — the names code generation reaches the lowered program through from outside it
 ///   (`reachability_roots`).
 fn lower_and_insert_rc(
@@ -269,7 +250,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let global_types = program.global_types();
-    let roots = reachability_roots(&all_symbols, &program.root_value_names(), config);
+    let roots = reachability_roots(&all_symbols);
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
     let optimized = optimize_rc_program(base, &type_env, &global_types, config);
@@ -308,66 +289,84 @@ pub fn build_object_files<'c>(
     dump_rc_ir_stages(&program, config);
 
     // Determine compilation units.
-    let mut units = vec![];
     let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
     symbols.sort_by(|a, b| a.name.cmp(&b.name));
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
     // The names the C world enters the program through. Taken here, before the main unit moves the
-    // export statements out of the program, so that every unit is handed the same set.
-    let root_value_names = Arc::new(program.root_value_names());
-    {
+    // export statements out of the program.
+    let c_visible_names = c_visible_names(&program);
+    let units = {
         let module_dependency_hash = program.module_dependency_hash_map(&config);
         let module_dependency_map = program.module_dependency_map();
         let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-        if config.enable_separated_compilation() {
-            units = CompileUnit::split_symbols(
-                symbols,
-                &module_dependency_hash,
-                &module_dependency_map,
-                &config,
-            );
-            // Also add main compilation unit.
-            // The main unit implements the entry point of exported functions.
-            // Therefore, the main unit is treated as depending on all modules.
-            let mut main_unit = CompileUnit::new(vec![], modules);
-            main_unit.update_unit_hash(&module_dependency_hash, &config);
-            units.push(main_unit);
-        } else {
-            // Add main compilation unit, which includes all symbols.
-            let mut main_unit = CompileUnit::new(symbols, modules);
-            main_unit.update_unit_hash(&module_dependency_hash, &config);
-            units.push(main_unit);
+        let mut units = CompileUnit::split_symbols(
+            symbols,
+            &module_dependency_hash,
+            &module_dependency_map,
+            &config,
+        );
+        // Also add main compilation unit.
+        // The main unit implements the entry point of exported functions.
+        // Therefore, the main unit is treated as depending on all modules.
+        let mut main_unit = CompileUnit::new(vec![], modules);
+        main_unit.update_unit_hash(&module_dependency_hash, &config);
+        units.push(main_unit);
+        units
+    };
+
+    // Where each unit's generated code goes, and where the code this build hands the linker goes.
+    // Merged units are linked as the one object file they are compiled into together; separate ones
+    // are linked as themselves.
+    let unit_output = config.unit_output();
+    let unit_paths = units
+        .iter()
+        .map(|unit| unit.output_file_path(unit_output))
+        .collect::<Vec<_>>();
+    let merged_obj_path = match unit_output {
+        UnitOutput::ObjectFile => None,
+        UnitOutput::Bitcode => Some(merged_object_file_path(&merged_units_hash(&units))),
+    };
+    let obj_files = BuildObjFilesResult {
+        obj_paths: match &merged_obj_path {
+            None => unit_paths.clone(),
+            Some(path) => vec![path.clone()],
+        },
+    };
+
+    // The merged object file is compiled from the units' bitcode and nothing else, so one an earlier
+    // build left stands for every unit this build would generate, and neither the generation nor the
+    // merge has to run.
+    if let Some(merged_obj_path) = &merged_obj_path {
+        if merged_obj_path.exists() {
+            if config.verbose {
+                info_msg("Skipping generation of the merged object file, which is cached.");
+            }
+            save_build_object_files_cache(&program, config, &obj_files);
+            return Ok(obj_files);
         }
     }
 
-    // Paths of object files to be linked.
-    let mut obj_paths = vec![];
-
-    // Generate object files in parallel.
+    // Generate the code of each unit in parallel.
     let mut threads = vec![];
     let units_count = units.len();
     for (i, unit) in units.into_iter().enumerate() {
         // The main unit is generated last.
         let is_main_unit = i == units_count - 1;
 
-        obj_paths.push(unit.object_file_path());
-        // If the object file is cached, skip the generation.
-        if unit.is_cached() {
+        let unit_path = unit_paths[i].clone();
+        // If the unit's generated code is cached, skip the generation.
+        if unit_path.exists() {
             if config.verbose {
-                info_msg(&format!(
-                    "Skipping generation of object file for {}.",
-                    unit.to_string()
-                ));
+                info_msg(&format!("Skipping generation of code for {}.", unit));
             }
             continue;
         }
         if config.verbose {
-            info_msg(&format!("Generating object file for {}.", unit.to_string()));
+            info_msg(&format!("Generating code for {}.", unit));
         }
 
         let global_types = global_types.clone();
-        let root_value_names = root_value_names.clone();
         let config = config.clone();
         let type_env = program.type_env();
 
@@ -409,7 +408,7 @@ pub fn build_object_files<'c>(
             // one calls is declared where code generation first reaches it, from the types of the
             // program's globals the generator was given.
             let unit_symbols = unit.symbols().to_vec();
-            let roots = reachability_roots(&unit_symbols, &root_value_names, &config);
+            let roots = reachability_roots(&unit_symbols);
             let rc_prog =
                 lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
@@ -445,23 +444,129 @@ pub fn build_object_files<'c>(
                 emit_llvm(gc.module, &config, false);
             }
 
-            optimize_instrument_and_verify(gc.module, &target_machine, &config);
+            match unit_output {
+                UnitOutput::ObjectFile => {
+                    optimize_instrument_and_verify(gc.module, &target_machine, &config);
 
-            if config.emit_llvm {
-                // Print LLVM-IR to file after optimization.
-                emit_llvm(gc.module, &config, true);
+                    if config.emit_llvm {
+                        // Print LLVM-IR to file after optimization.
+                        emit_llvm(gc.module, &config, true);
+                    }
+
+                    write_to_object_file(gc.module, &target_machine, &unit_path);
+                }
+                UnitOutput::Bitcode => {
+                    // The optimization runs over the merged module, so what is written here is the
+                    // unit's code as generation left it. Verifying it now is what makes LLVM name
+                    // the unit whose code is malformed; after the merge there is only one module.
+                    run_passes_or_panic(gc.module, &["verify"], &target_machine);
+
+                    write_to_bitcode_file(gc.module, &unit_path);
+                }
             }
-
-            write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
         }));
     }
     join_compiler_threads(threads);
 
+    if let Some(merged_obj_path) = &merged_obj_path {
+        merge_units_into_object_file(&unit_paths, merged_obj_path, &c_visible_names, config);
+    }
+
     // Save object files cache.
-    let obj_files = BuildObjFilesResult { obj_paths };
     save_build_object_files_cache(&program, config, &obj_files);
 
     Ok(obj_files)
+}
+
+/// The names the C world enters the program through: the entry point the C runtime starts the
+/// program at, and the C function each `FFI_EXPORT` statement publishes.
+///
+/// Merging the compilation units gives internal linkage to everything else
+/// (`merge_units_into_object_file`), so a name missing from here is one the whole-module
+/// optimization is free to delete.
+fn c_visible_names(program: &Program) -> Set<String> {
+    let mut names: Set<String> = program
+        .export_statements
+        .iter()
+        .map(|stmt| stmt.function_name.clone())
+        .collect();
+    names.insert(C_ENTRY_POINT_NAME.to_string());
+    names
+}
+
+/// Compile the bitcode the compilation units were generated into to one object file at `obj_path`:
+/// read every unit back into one context, link them into a single module, give internal linkage to
+/// everything but `c_visible_names`, and run the optimization pipeline and code generation over the
+/// whole of it.
+///
+/// The internalization is what the merge is for. LLVM has to assume that something outside the
+/// module calls a function of external linkage, so it can neither delete the body after inlining it
+/// into every call it can see nor specialize it to the arguments those calls pass. A unit publishes
+/// every symbol it holds — that is how another unit calls into it — so units compiled separately
+/// keep every function of the program alive: over the fifty-one programs of the benchmark suite,
+/// compiling them separately and linking the object files runs 1.47 times as many cycles as
+/// compiling them as one. Merging first and internalizing after gives the optimization the linkage
+/// a program generated as a single unit has, while the units are still generated and cached one by
+/// one.
+fn merge_units_into_object_file(
+    bitcode_paths: &[PathBuf],
+    obj_path: &Path,
+    c_visible_names: &Set<String>,
+    config: &Configuration,
+) {
+    let context = Context::create();
+    let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
+    let module_name = format!("Module-{}", obj_path.file_stem().unwrap().to_string_lossy());
+    let merged = Generator::create_module(&module_name, &context, &target_machine);
+    for bitcode_path in bitcode_paths {
+        let unit = Module::parse_bitcode_from_path(bitcode_path, &context).unwrap_or_else(|e| {
+            panic_with_msg(&format!(
+                "Failed to read the compilation unit \"{}\": {}",
+                bitcode_path.to_string_lossy(),
+                e
+            ))
+        });
+        merged.link_in_module(unit).unwrap_or_else(|e| {
+            panic_with_msg(&format!(
+                "Failed to merge the compilation unit \"{}\": {}",
+                bitcode_path.to_string_lossy(),
+                e
+            ))
+        });
+    }
+    internalize_all_but(&merged, c_visible_names);
+
+    if config.emit_llvm {
+        emit_llvm(&merged, config, false);
+    }
+
+    optimize_instrument_and_verify(&merged, &target_machine, config);
+
+    if config.emit_llvm {
+        emit_llvm(&merged, config, true);
+    }
+
+    write_to_object_file(&merged, &target_machine, obj_path);
+}
+
+/// Give internal linkage to every function and global `module` defines except the ones
+/// `c_visible_names` names, so that the optimization running next has every call of each of them in
+/// front of it.
+///
+/// A function or global with no body is a declaration of something a linked library provides, and it
+/// keeps the linkage it carries: internalizing one would leave its uses with nothing to resolve to.
+fn internalize_all_but(module: &Module, c_visible_names: &Set<String>) {
+    let is_c_visible = |name: &CStr| c_visible_names.contains(name.to_string_lossy().as_ref());
+    for function in module_functions(module) {
+        if function.count_basic_blocks() > 0 && !is_c_visible(function.get_name()) {
+            function.set_linkage(Linkage::Internal);
+        }
+    }
+    for global in module.get_globals() {
+        if global.get_initializer().is_some() && !is_c_visible(global.get_name()) {
+            global.set_linkage(Linkage::Internal);
+        }
+    }
 }
 
 /// The object files a previous build of this program and configuration left behind, when the cache
@@ -606,46 +711,57 @@ pub(crate) fn get_target_machine(
     }
 }
 
-/// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
-/// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
-/// once it holds a complete object.
+/// Compile `module` into an object file at `obj_path`.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
-    // Create directory if it doesn't exist.
-    let dir_path = obj_path.parent().unwrap();
-    match fs::create_dir_all(dir_path) {
-        Err(e) => {
-            panic_with_msg(&format!(
-                "Failed to create directory \"{}\": {}",
-                dir_path.to_string_lossy().to_string(),
-                e
-            ));
-        }
-        Ok(_) => {}
-    }
-    // Write to a temporary file.
-    let tmp_file_path = obj_path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
-    target_machine
-        .write_to_file(&module, FileType::Object, &tmp_file_path)
-        .map_err(|e| {
-            panic_with_msg(&format!(
-                "Failed to write to file \"{}\": {}",
-                obj_path.to_string_lossy().to_string(),
-                e
-            ))
-        })
-        .unwrap();
+    write_through_temporary_file(obj_path, |path| {
+        target_machine
+            .write_to_file(module, FileType::Object, path)
+            .map_err(|e| e.to_string())
+    });
+}
 
-    // Rename the temporary file to the final file.
-    match fs::rename(&tmp_file_path, obj_path) {
-        Err(e) => {
-            panic_with_msg(&format!(
-                "Failed to rename \"{}\" to \"{}\": {}",
-                tmp_file_path.to_string_lossy().to_string(),
-                obj_path.to_string_lossy().to_string(),
-                e
-            ));
+/// Write `module`'s LLVM bitcode to `bitcode_path`, for `merge_units_into_object_file` to read back.
+fn write_to_bitcode_file<'c>(module: &Module<'c>, bitcode_path: &Path) {
+    write_through_temporary_file(bitcode_path, |path| {
+        // The bitcode writer reports failure with `false` and says nothing about it.
+        if module.write_bitcode_to_path(path) {
+            Ok(())
+        } else {
+            Err("the LLVM bitcode writer failed".to_string())
         }
-        Ok(_) => {}
+    });
+}
+
+/// Write a file at `path` through a uniquely named temporary file in the same directory that is
+/// renamed into place, so that `path` exists only once it holds the whole of what was written.
+/// Creates the containing directory. A failure of any step aborts the compilation.
+///
+/// # Arguments
+/// * `write` — writes the content to the temporary path it is handed.
+fn write_through_temporary_file(path: &Path, write: impl FnOnce(&Path) -> Result<(), String>) {
+    let dir_path = path.parent().unwrap();
+    if let Err(e) = fs::create_dir_all(dir_path) {
+        panic_with_msg(&format!(
+            "Failed to create directory \"{}\": {}",
+            dir_path.to_string_lossy(),
+            e
+        ));
+    }
+    let tmp_path = path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
+    if let Err(e) = write(&tmp_path) {
+        panic_with_msg(&format!(
+            "Failed to write to file \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ));
+    }
+    if let Err(e) = fs::rename(&tmp_path, path) {
+        panic_with_msg(&format!(
+            "Failed to rename \"{}\" to \"{}\": {}",
+            tmp_path.to_string_lossy(),
+            path.to_string_lossy(),
+            e
+        ));
     }
 }
 

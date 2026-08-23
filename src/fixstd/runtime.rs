@@ -161,8 +161,7 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
     match mode {
         BuildMode::Declare => {
             if gc.module.get_function(name).is_none() {
-                gc.module
-                    .add_function(name, fn_ty, Some(gc.config.external_if_separated()));
+                gc.module.add_function(name, fn_ty, Some(Linkage::External));
             }
             None
         }
