@@ -17,6 +17,9 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+/// The map the compiler holds its data in. `fxhash` is fast on the short string keys the compiler
+/// looks values up by, and hashes from a fixed seed, at the cost of the resistance to chosen-key
+/// collisions a random seed gives.
 pub type Map<K, V> = FxHashMap<K, V>;
 
 /// A map holding the given key-value pairs. When a key is given more than once, the value that
@@ -29,6 +32,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
+/// The set the compiler holds its data in, hashed by `fxhash` as `Map` is.
 pub type Set<T> = FxHashSet<T>;
 
 /// A set holding the given elements, with an element that appears several times held once.
@@ -161,6 +165,7 @@ pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Res
     Ok(ok_results)
 }
 
+/// The value `o` holds, with a `None` at either level giving `None`.
 pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
     match o {
         Some(o) => o,
@@ -238,7 +243,7 @@ pub fn insert_to_map_vec_many<K: Clone + Eq + Hash, V>(
     }
 }
 
-// A macro to get the name of a function.
+/// The name of the function this macro is expanded in, without the path leading to it.
 #[allow(unused)]
 macro_rules! function_name {
     () => {{
@@ -695,6 +700,8 @@ mod tests {
         );
     }
 
+    /// Every capital opens a word of its own, so a run of capitals comes out as one-letter words,
+    /// and a digit stays in the word it follows.
     #[test]
     fn test_upper_camel_to_lower_snake() {
         assert_eq!(upper_camel_to_lower_snake("HelloWorld"), "hello_world");
@@ -709,6 +716,9 @@ mod tests {
         assert_eq!(upper_camel_to_lower_snake("CUnsignedInt"), "c_unsigned_int");
     }
 
+    /// Characters whose UTF-8 length and UTF-16 width differ — ASCII at one byte and one code unit,
+    /// Japanese at three bytes and one, an emoji at four bytes and two — and a position at or past
+    /// the end of the string, which lands on its length.
     #[test]
     fn test_utf16_pos_to_utf8_byte_pos() {
         // ASCII only
@@ -730,6 +740,9 @@ mod tests {
         assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 4), 6);
     }
 
+    /// The count restarts at each line, so a column means the same in the first line and the last,
+    /// and it runs ahead of the column wherever a character of the line takes two UTF-16 code
+    /// units.
     #[test]
     fn test_char_pos_to_utf16_pos() {
         // ASCII only - single line
@@ -773,8 +786,12 @@ mod tests {
     }
 }
 
-// Convert a UTF-16 code unit position to a UTF-8 byte position in a string.
-// This is useful for converting LSP positions (which use UTF-16) to Rust string indices (which use UTF-8).
+/// The byte offset into `s` of the character standing at `utf16_pos`, a position counted in UTF-16
+/// code units from the start of `s`. A position at or past the end of `s` gives `s.len()`.
+///
+/// # Examples
+/// `utf16_pos_to_utf8_byte_pos("a😀b", 3)` is `5`: the emoji before `b` is two UTF-16 code
+/// units wide and four UTF-8 bytes long.
 pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
     let mut utf16_count = 0;
 
@@ -789,8 +806,13 @@ pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
     s.len()
 }
 
-// Convert character position to UTF-16 code unit position
-// This is useful for converting source span positions (which use character counts) to LSP positions (which use UTF-16).
+/// The offset in UTF-16 code units, from the start of line `line` of `source`, of the character
+/// standing `char_col` characters into that line. Lines and characters are both counted from zero,
+/// and a column past the end of the line gives the whole line's width.
+///
+/// # Examples
+/// In `"a😀b"`, `char_pos_to_utf16_pos(source, 0, 2)` is `3`: the emoji before `b` is one
+/// character and two UTF-16 code units.
 pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usize {
     let mut current_line = 0;
     let mut char_count = 0;
@@ -820,6 +842,8 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
     utf16_count
 }
 
+/// Whether this platform can run a program the compiler built under valgrind. A valgrind setting
+/// given on a platform without it is dropped with a warning.
 pub fn platform_valgrind_supported() -> bool {
     env::consts::OS == "linux"
 }
